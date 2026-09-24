@@ -241,6 +241,77 @@ class PlaybackSubtitleTest {
     }
 
     @Test
+    fun aRendererThatCannotSayItsSizeGetsThePictureUpright() = runTest {
+        // Rule 2 of docs/subtitle-placement.md. A phone recording stored 1920x1080 with a quarter
+        // turn is shown 1080 wide and 1920 high. Text laid out for the stored shape and composited
+        // onto the turned picture came out squashed on one axis and stretched on the other.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 4_000_000,
+                subtitleCues = listOf(cue(1_000, 3_000, "hello")),
+                videoRotationDegrees = 90,
+            ),
+            config = subtitleConfig(),
+        )
+        harness.renderer!!.outputSizeOverride = null
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1500.milliseconds)
+
+        val shown = harness.renderer.overlays.filterNotNull().first { it.images.isNotEmpty() }
+        assertEquals(
+            1080 to 1920,
+            shown.viewportWidth to shown.viewportHeight,
+            "the text was laid out for the stored picture, not for the picture as it is shown",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun theSafeAreaKeepsTextInsideItAndTheOverlayOnTheWholeOutput() = runTest {
+        // Rule 3: the Kotlin tier lays text out in the safe area as if it were the whole output,
+        // and the engine moves the images by the left and top insets. The scripted rasterizer puts
+        // a one-pixel image at the bottom-left of the size it is given, so both steps show.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 6_000_000,
+                subtitleCues = listOf(cue(500, 5_500, "hello")),
+            ),
+            config = subtitleConfig(),
+        )
+        harness.renderer!!.outputSizeOverride = io.github.yuroyami.kiteplayer.VideoSize(1000, 500)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+        val before = harness.renderer.overlays.filterNotNull().last { it.images.isNotEmpty() }
+        assertEquals(0 to 499, before.images.single().let { it.x to it.y }, "no safe area, so the whole output")
+
+        harness.core.post(
+            io.github.yuroyami.kiteplayer.internal.CoreCommand.SetSubtitleSafeArea(
+                io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea(left = 0.1f, top = 0.05f, right = 0.1f, bottom = 0.2f),
+                kotlinx.coroutines.CompletableDeferred(),
+            ),
+        )
+        harness.run(300.milliseconds)
+        val after = harness.renderer.overlays.filterNotNull().last { it.images.isNotEmpty() }
+        assertEquals(
+            1000 to 500,
+            after.viewportWidth to after.viewportHeight,
+            "the overlay must still cover the whole output",
+        )
+        // 100 is the left inset. The safe area starts 25 pixels down and is 375 high, so its
+        // bottom row is 25 + 375 - 1.
+        assertEquals(
+            100 to 399,
+            after.images.single().let { it.x to it.y },
+            "the showing text must move inside the safe area at once",
+        )
+        harness.close()
+    }
+
+    @Test
     fun anUnchangedActiveSetPublishesNothingNew() = runTest {
         val harness = CoreHarness(
             this,

@@ -34,91 +34,107 @@ import kotlin.test.assertTrue
  * the fallback suite's, and pending work never exceeds one frame by construction of the slot.
  */
 
-class AndroidSurfaceOverlayTest {
+/**
+ * The placement contract on the Android surface renderer, through a canvas that records every draw.
+ * The canvas seam takes an overlay image's rectangle in canvas pixels and never turns it, so the
+ * recorded rectangle is where the image lands.
+ */
+class AndroidSurfaceOverlayPlacementTest : OverlayPlacementContractTest() {
 
-    @Test
-    fun anOverlayCompositesAboveThePictureThroughTheFrameTransform() {
-        val target = FakeTarget(canvasWidth = 200, canvasHeight = 100)
-        val renderer = AndroidSurfaceVideoRenderer(
-            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
-            target = target,
-        )
-        try {
-            kotlinx.coroutines.runBlocking {
-                renderer.setOverlay(
-                    io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
-                        images = listOf(
-                            io.github.yuroyami.kiteplayer.spi.OverlayImage(
-                                x = 10,
-                                y = 20,
-                                bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(4, 2, ByteArray(4 * 2 * 4)),
-                            ),
-                        ),
-                        viewportWidth = 100,
-                        viewportHeight = 50,
-                        contentHash = 7L,
-                    ),
-                )
-                // A 100x50 frame fits the 200x100 canvas exactly at 2x scale.
-                renderer.present(TestFrame(width = 100, height = 50), 0L)
-                val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
-                while (target.canvases.lastOrNull()?.drawnOverlays?.isEmpty() != false) {
-                    check(System.nanoTime() < deadline) { "no overlay was composited" }
-                    Thread.sleep(2)
-                }
-            }
-            val draw = target.canvases.last().drawnOverlays.single()
-            assertEquals(20f, draw.left, "x scales by the frame transform")
-            assertEquals(40f, draw.top)
-            assertEquals(8f, draw.drawWidth)
-            assertEquals(4f, draw.drawHeight)
-            assertEquals(7L, draw.contentHash)
+    override fun reportedOutput(scene: Scene): io.github.yuroyami.kiteplayer.VideoSize? {
+        val target = FakeTarget(canvasWidth = scene.outputWidth, canvasHeight = scene.outputHeight)
+        val renderer = renderer(target, blankConverter())
+        return try {
+            runBlocking { renderer.present(sceneFrame(scene), 0L) }
+            awaitPresented(renderer, 1)
+            renderer.outputSize
         } finally {
             renderer.close()
         }
     }
 
-    // Overlay coordinates map into the PRE-turn draw rectangle and turn with the
-    // picture; unrotated they sat on the post-turn rectangle with the wrong scale on both axes.
-    @Test
-    fun aRotatedFrameCarriesItsOverlayThroughTheSameTurn() {
-        val target = FakeTarget(canvasWidth = 90, canvasHeight = 160)
-        val renderer = AndroidSurfaceVideoRenderer(
-            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
-            target = target,
-        )
+    override fun compose(scene: Scene, overlay: io.github.yuroyami.kiteplayer.spi.SubtitleOverlay): Composite {
+        val target = FakeTarget(canvasWidth = scene.outputWidth, canvasHeight = scene.outputHeight)
+        val renderer = renderer(target, blankConverter())
         try {
-            kotlinx.coroutines.runBlocking {
-                renderer.setOverlay(
-                    io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
-                        images = listOf(
-                            io.github.yuroyami.kiteplayer.spi.OverlayImage(
-                                x = 150,
-                                y = 80,
-                                bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(10, 10, ByteArray(10 * 10 * 4)),
-                            ),
-                        ),
-                        viewportWidth = 160,
-                        viewportHeight = 90,
-                        contentHash = 9L,
-                    ),
-                )
-                /* A 160x90 frame turned 90 degrees fills the 90x160 canvas exactly. */
-                renderer.present(TestFrame(width = 160, height = 90, rotationDegrees = 90), 0L)
-                val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
-                while (target.canvases.lastOrNull()?.drawnOverlays?.isEmpty() != false) {
-                    check(System.nanoTime() < deadline) { "no overlay was composited" }
-                    Thread.sleep(2)
+            renderer.setScaleMode(scene.scale)
+            renderer.setTransform(scene.transform)
+            runBlocking {
+                renderer.setOverlay(overlay)
+                renderer.present(sceneFrame(scene), 0L)
+            }
+            // Presented means posted, so every draw on that canvas has finished.
+            awaitPresented(renderer, 1)
+            val canvas = synchronized(target.canvases) { target.canvases.last() }
+            val boxes = overlay.images.indices.map { index ->
+                canvas.drawnOverlays.firstOrNull { it.imageIndex == index }?.let { draw ->
+                    Box(draw.left, draw.top, draw.drawWidth, draw.drawHeight)
                 }
             }
-            val canvas = target.canvases.last()
-            val draw = canvas.drawnOverlays.single()
-            /* Pre-turn rect: drawLeft = -35, drawTop = 35, at 1:1 scale in unrotated space. */
-            assertEquals(115f, draw.left, "x maps into the pre-turn rectangle at unrotated scale")
-            assertEquals(115f, draw.top)
-            assertEquals(10f, draw.drawWidth, "a quarter turn must not squash the overlay")
-            assertEquals(10f, draw.drawHeight)
-            assertEquals(90, canvas.drawnOverlayLayouts.single().rotationDegrees, "the turn rides the draw")
+            return Composite(canvas.width, canvas.height, boxes)
+        } finally {
+            renderer.close()
+        }
+    }
+
+    private fun sceneFrame(scene: Scene) = TestFrame(
+        width = scene.picture.width,
+        height = scene.picture.height,
+        rotationDegrees = scene.rotationDegrees,
+        parNum = scene.picture.pixelAspectNumerator,
+        parDen = scene.picture.pixelAspectDenominator,
+    )
+
+    private fun blankConverter(): (VideoFrame) -> ByteArray = { frame -> ByteArray(frame.size.width * frame.size.height * 4) }
+}
+
+/**
+ * The other Android path: the codec owns the video Surface, so a separate layer draws the
+ * subtitles. That layer is the overlay's output, and only its host knows its size.
+ */
+class AndroidSurfaceSubtitleLayerTest {
+
+    @Test
+    fun aSeparateSubtitleLayerIsSizedByItsHostAndNotByTheVideoCanvas() {
+        val handed = java.util.Collections.synchronizedList(mutableListOf<io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?>())
+        val target = FakeTarget(canvasWidth = 1920, canvasHeight = 1080)
+        val renderer = AndroidSurfaceVideoRenderer(
+            convert = exactConverter(),
+            target = target,
+            overlayConsumer = { handed += it },
+        )
+        try {
+            assertNull(renderer.outputSize, "no host has said how large the subtitle layer is")
+            renderer.setViewport(540, 1200, 2f)
+            assertEquals(io.github.yuroyami.kiteplayer.VideoSize(1080, 2400), renderer.outputSize)
+
+            val overlay = io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+                images = listOf(
+                    io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                        x = 0,
+                        y = 2360,
+                        bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(4, 4, ByteArray(4 * 4 * 4)),
+                    ),
+                ),
+                viewportWidth = 1080,
+                viewportHeight = 2400,
+                contentHash = 3L,
+            )
+            runBlocking {
+                renderer.setOverlay(overlay)
+                renderer.present(TestFrame(width = 1920, height = 1080), 0L)
+            }
+            awaitPresented(renderer, 1)
+            assertEquals(
+                io.github.yuroyami.kiteplayer.VideoSize(1080, 2400),
+                renderer.outputSize,
+                "drawing into the video canvas must not change the size of the subtitle layer",
+            )
+            assertEquals(listOf<io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?>(overlay), handed.toList())
+            assertTrue(
+                target.canvases.all { it.drawnOverlays.isEmpty() },
+                "an overlay handed to the layer must not be drawn into the video as well",
+            )
         } finally {
             renderer.close()
         }
@@ -167,9 +183,9 @@ private class FakeCanvas(override val width: Int, override val height: Int) : Ta
         drawnLayouts += layout
     }
 
+    /** One overlay image as the renderer asked for it: its destination rectangle in canvas pixels. */
     data class OverlayDraw(
-        val width: Int,
-        val height: Int,
+        val imageIndex: Int,
         val left: Float,
         val top: Float,
         val drawWidth: Float,
@@ -189,13 +205,9 @@ private class FakeCanvas(override val width: Int, override val height: Int) : Ta
         drawHeight: Float,
         contentHash: Long,
         imageIndex: Int,
-        layout: FrameLayout,
     ) {
-        drawnOverlays += OverlayDraw(width, height, left, top, drawWidth, drawHeight, contentHash)
-        drawnOverlayLayouts += layout
+        drawnOverlays += OverlayDraw(imageIndex, left, top, drawWidth, drawHeight, contentHash)
     }
-
-    val drawnOverlayLayouts = mutableListOf<FrameLayout>()
 }
 
 private class FakeTarget(

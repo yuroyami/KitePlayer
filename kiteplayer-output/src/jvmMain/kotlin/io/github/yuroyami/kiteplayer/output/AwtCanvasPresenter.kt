@@ -6,6 +6,7 @@ import java.awt.Color
 import java.awt.Graphics2D
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
+import kotlin.math.roundToInt
 
 /**
  * The one place a composed frame reaches an AWT canvas.
@@ -95,19 +96,24 @@ internal class AwtCanvasPresenter {
             RenderingHints.VALUE_INTERPOLATION_BILINEAR,
         )
         g.drawImage(image, layout.left, layout.top, layout.width, layout.height, null)
-        drawOverlay(g, overlay)
+        drawOverlay(g, overlay, canvasWidth, canvasHeight)
     }
 
     /**
-     * Cues are POSITIONED, not scaled.
+     * Cues cover the whole canvas, rule 1 of docs/subtitle-placement.md: the overlay's viewport
+     * maps onto the canvas, each axis on its own, whatever the picture's fit.
      *
-     * An overlay image carries an origin and its pixels, and the rasterizer has already drawn them
-     * for this viewport, so resizing here would soften text that was rendered sharp. This mirrors
-     * what the other renderers do and what the rasterizer contract says.
+     * The engine lays the overlay out for the canvas in device pixels, which is what
+     * [AwtCanvasVideoRenderer.outputSize] reports, so the scale here undoes the screen's own scale
+     * and each overlay pixel lands on one device pixel. An overlay laid out for an older size is
+     * stretched until the engine lays it out again.
      */
-    private fun drawOverlay(g: Graphics2D, overlay: SubtitleOverlay?) {
-        val images = overlay?.images ?: return
-        for (cue in images) {
+    private fun drawOverlay(g: Graphics2D, overlay: SubtitleOverlay?, canvasWidth: Int, canvasHeight: Int) {
+        val active = overlay ?: return
+        if (active.viewportWidth <= 0 || active.viewportHeight <= 0) return
+        val scaleX = canvasWidth.toDouble() / active.viewportWidth
+        val scaleY = canvasHeight.toDouble() / active.viewportHeight
+        for (cue in active.images) {
             val bitmap = cue.bitmap
             if (bitmap.width <= 0 || bitmap.height <= 0) continue
             // The cue contract is PREMULTIPLIED rgba bytes; TYPE_INT_ARGB_PRE is the matching
@@ -128,7 +134,11 @@ internal class AwtCanvasPresenter {
                 target[i] = (a shl 24) or (r shl 16) or (gg shl 8) or b
                 i++
             }
-            g.drawImage(premultiplied, cue.x, cue.y, null)
+            val left = (cue.x * scaleX).roundToInt()
+            val top = (cue.y * scaleY).roundToInt()
+            val right = ((cue.x + bitmap.width) * scaleX).roundToInt()
+            val bottom = ((cue.y + bitmap.height) * scaleY).roundToInt()
+            g.drawImage(premultiplied, left, top, right - left, bottom - top, null)
         }
     }
     }

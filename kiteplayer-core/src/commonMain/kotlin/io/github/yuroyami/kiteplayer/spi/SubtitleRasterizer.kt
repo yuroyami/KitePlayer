@@ -11,10 +11,10 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
  * viewport changes, never per frame, because cues change about once a second and frames sixty
  * times a second.
  *
- * [viewportWidth] and [viewportHeight] are the RENDERER'S SURFACE size, which is what the engine
- * has passed since 2026-08-23. Overlay images are produced against that surface and a renderer
- * composites them in output space, so subtitles stay glued to the picture through letterboxing
- * and rotation.
+ * [viewportWidth] and [viewportHeight] are the size of the area the engine lays text out in: the
+ * renderer's output, less the safe area the application set. The engine moves the images into
+ * output pixels afterwards, and a renderer composites them over its whole output, never over the
+ * picture alone. docs/subtitle-placement.md has the whole rule.
  *
  * Bitmap cues arrive pre-rendered and are POSITIONED, not scaled: an overlay image carries an
  * origin and its pixels, and no implementation resizes them. Giving a bitmap cue a target

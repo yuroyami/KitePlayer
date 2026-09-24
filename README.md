@@ -188,7 +188,7 @@ read it back.
 | Sound | `setVolume`, `setMuted`, `setBalance`, `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), `setVideoEnabled(false)` for audio only |
 | Loudness | `PlayerConfig.audio.volumeCeiling` allows volume up to 2.0 through a limiter. `PlayerConfig.audio.replayGain` applies the file's own ReplayGain tags, off by default |
 | Picture | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan) |
-| Subtitles | `selectTrack`, `selectSecondarySubtitle`, `addExternalSubtitle`, `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, `setSubtitleStyle`, and `subtitleCues` for drawing the lines yourself |
+| Subtitles | `selectTrack`, `selectSecondarySubtitle`, `addExternalSubtitle`, `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, `setSubtitleStyle`, `setSubtitleSafeArea`, and `subtitleCues` for drawing the lines yourself |
 | Sections | `setAbLoop` repeats between two points. `setMarkers` fires an event when playback crosses a position |
 | Chapters | `chapterAt`, `seekToChapter`, `nextChapter`, `previousChapter` |
 | Resume | `memento()` saves item, position, tracks and speed. `restore(memento)` puts them back |
@@ -226,6 +226,9 @@ players in one process work and are tested.
 - On the web, libass is a separate module. `kiteass.mjs` and `kiteass.wasm` come as the `web` zip
   attached to the wasmJs artifact; unpack them beside `index.html`. A browser has no system font,
   so supply fonts as attachments or through `SubtitleConfig.fonts`.
+- `setSubtitleSafeArea` keeps the built-in text out of a display cutout, rounded corners or a
+  control bar. [Subtitle placement](docs/subtitle-placement.md) says where subtitles land on every
+  renderer.
 
 ## Network
 

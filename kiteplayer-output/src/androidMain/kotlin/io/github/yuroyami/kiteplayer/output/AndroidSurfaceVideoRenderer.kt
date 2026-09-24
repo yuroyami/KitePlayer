@@ -172,6 +172,11 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      */
     private val videoColorMatrix = atomic<FloatArray?>(null)
 
+    /** The size of the last canvas the worker locked. The overlay drawn into it covers it whole. */
+    private val lastCanvasSize = atomic<VideoSize?>(null)
+
+    /** The size a host gave through [setViewport], in pixels, or null before it says anything. */
+    private val hostViewport = atomic<VideoSize?>(null)
 
     /** Wakes the worker. Conflated, so a signal sent before it waits is kept rather than lost. */
     private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -452,6 +457,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             // a lock holds whatever was drawn into it two frames ago, and a letterbox that is not
             // cleared shows it.
             canvas.clearToBlack()
+            noteCanvasSize(canvas.width, canvas.height)
             target.setVideoColorMatrix(videoColorMatrix.value)
             val layout = frameLayout(
                 canvas.width, canvas.height, size, rotationDegrees, scaleMode.value,
@@ -464,7 +470,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             } else {
                 canvas.drawFrame(picture, size.width, size.height, layout)
                 overlay.value?.let { active ->
-                    if (active.images.isNotEmpty()) drawOverlay(canvas, active, layout)
+                    if (active.images.isNotEmpty()) drawOverlay(canvas, active)
                 }
             }
         } catch (failure: Throwable) {
@@ -496,31 +502,36 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     }
 
     /**
-     * Draws the overlay's images mapped by the same transform the picture used, so subtitles
-     * stay glued to the video through every letterbox. Overlay coordinates are the engine's
-     * video-display space ([SubtitleOverlay.viewportWidth/Height]).
+     * Draws the overlay over the whole canvas, rule 1 of docs/subtitle-placement.md: its viewport
+     * maps onto the canvas, each axis on its own. The picture's fit, turn, zoom and pan play no
+     * part, because the engine laid the text out upright for this canvas, which [outputSize]
+     * reports.
      */
-    private fun drawOverlay(canvas: TargetCanvas, active: SubtitleOverlay, layout: FrameLayout) {
+    private fun drawOverlay(canvas: TargetCanvas, active: SubtitleOverlay) {
         if (active.viewportWidth <= 0 || active.viewportHeight <= 0) return
-        // Overlay coordinates live in UNROTATED video-display space, so they map into the
-        // PRE-turn draw rectangle and the canvas turn in drawOverlayImage glues them to the
-        // picture. The post-turn rectangle put them at the wrong place with the
-        // wrong scale on both axes whenever the video carried a quarter turn.
-        val scaleX = layout.drawWidth / active.viewportWidth
-        val scaleY = layout.drawHeight / active.viewportHeight
+        val scaleX = canvas.width.toFloat() / active.viewportWidth
+        val scaleY = canvas.height.toFloat() / active.viewportHeight
         for ((imageIndex, image) in active.images.withIndex()) {
             canvas.drawOverlayImage(
                 rgba = image.bitmap.pixels,
                 width = image.bitmap.width,
                 height = image.bitmap.height,
-                left = layout.drawLeft + image.x * scaleX,
-                top = layout.drawTop + image.y * scaleY,
+                left = image.x * scaleX,
+                top = image.y * scaleY,
                 drawWidth = image.bitmap.width * scaleX,
                 drawHeight = image.bitmap.height * scaleY,
                 contentHash = active.contentHash,
                 imageIndex = imageIndex,
-                layout = layout,
             )
+        }
+    }
+
+    /** Remembers the canvas size for [outputSize], allocating only when the size changes. */
+    private fun noteCanvasSize(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
+        val known = lastCanvasSize.value
+        if (known == null || known.width != width || known.height != height) {
+            lastCanvasSize.value = VideoSize(width, height)
         }
     }
 
@@ -599,7 +610,25 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         if (changed && nanos != null) eventFlow.tryEmit(RendererEvent.VsyncChanged(nanos))
     }
 
-    override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
+    /**
+     * The size of the surface the overlay is drawn on, from its host. `KitePlayerView` gives the
+     * size of its subtitle layer here, which only the host knows while the codec owns the video
+     * Surface.
+     */
+    override fun setViewport(width: Int, height: Int, scale: Float) {
+        val pixelWidth = (width * scale).roundToInt()
+        val pixelHeight = (height * scale).roundToInt()
+        hostViewport.value = if (pixelWidth > 0 && pixelHeight > 0) VideoSize(pixelWidth, pixelHeight) else null
+    }
+
+    /**
+     * The size the engine lays subtitles out for, rule 2 of docs/subtitle-placement.md. When a
+     * separate layer draws them, it is the size the host gave through [setViewport]. Otherwise it
+     * is the canvas this renderer draws them into, known from the first frame, and the host's size
+     * before that.
+     */
+    override val outputSize: VideoSize?
+        get() = if (overlayConsumer != null) hostViewport.value else lastCanvasSize.value ?: hostViewport.value
 
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
         scaleMode.value = mode
@@ -873,9 +902,10 @@ internal interface TargetCanvas {
     fun drawFrame(argb: IntArray, sourceWidth: Int, sourceHeight: Int, layout: FrameLayout)
 
     /**
-     * Composites one subtitle image above whatever [drawFrame] painted. [rgba] is straight
-     * non-premultiplied RGBA per the cue contract; the production target premultiplies on
-     * upload and caches by [contentHash] so an unchanged overlay uploads nothing.
+     * Composites one subtitle image above whatever [drawFrame] painted, into the rectangle given
+     * in canvas pixels and never turned. [rgba] is premultiplied RGBA, as the cue contract says;
+     * the production target uploads it as it is and caches it by [contentHash], so an unchanged
+     * overlay uploads nothing.
      */
     fun drawOverlayImage(
         rgba: ByteArray,
@@ -887,7 +917,6 @@ internal interface TargetCanvas {
         drawHeight: Float,
         contentHash: Long,
         imageIndex: Int,
-        layout: FrameLayout,
     )
 }
 
@@ -1029,23 +1058,10 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
             drawHeight: Float,
             contentHash: Long,
             imageIndex: Int,
-            layout: FrameLayout,
         ) {
             val bitmap = overlayBitmapFor(rgba, width, height, contentHash, imageIndex)
             destination.set(left, top, left + drawWidth, top + drawHeight)
-            val saved = canvas.save()
-            try {
-                /* The same turn the picture made: overlay coordinates are mapped
-                 * into the PRE-turn draw rectangle and the canvas turn glues them to the video,
-                 * exactly as drawFrame does. Unrotated they sat on the post-turn rectangle with
-                 * the wrong scale on both axes. */
-                if (layout.rotationDegrees != 0) {
-                    canvas.rotate(layout.rotationDegrees.toFloat(), layout.centerX, layout.centerY)
-                }
-                canvas.drawBitmap(bitmap, null, destination, paint)
-            } finally {
-                canvas.restoreToCount(saved)
-            }
+            canvas.drawBitmap(bitmap, null, destination, paint)
         }
     }
 }

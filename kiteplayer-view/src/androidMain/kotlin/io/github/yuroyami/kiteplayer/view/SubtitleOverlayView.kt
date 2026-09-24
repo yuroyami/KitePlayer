@@ -8,9 +8,11 @@ import android.graphics.RectF
 import android.view.View
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
-import kotlin.math.min
 
-/** Draws the engine's sparse subtitle bitmaps in a transparent layer above the video Surface. */
+/**
+ * Draws the engine's sparse subtitle bitmaps in a transparent layer above the video Surface. The
+ * layer covers the whole player view, so a cue can sit in the bar of a letterboxed picture.
+ */
 internal class SubtitleOverlayView(context: Context) : View(context) {
     private val paint = Paint().apply {
         isAntiAlias = false
@@ -21,7 +23,6 @@ internal class SubtitleOverlayView(context: Context) : View(context) {
     private val bitmaps = mutableListOf<Bitmap?>()
     private var overlay: SubtitleOverlay? = null
     private var bitmapHash: Long = Long.MIN_VALUE
-    private var rotationDegrees: Int = 0
 
     init {
         setWillNotDraw(false)
@@ -34,25 +35,9 @@ internal class SubtitleOverlayView(context: Context) : View(context) {
         invalidate()
     }
 
-    fun setVideoRotation(value: Int) {
-        val normalized = ((value % 360) + 360) % 360
-        if (rotationDegrees == normalized) return
-        rotationDegrees = normalized
-        invalidate()
-    }
-
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val active = overlay ?: return
-        if (active.viewportWidth <= 0 || active.viewportHeight <= 0) return
-        val quarterTurned = rotationDegrees == 90 || rotationDegrees == 270
-        val displayWidth = if (quarterTurned) active.viewportHeight else active.viewportWidth
-        val displayHeight = if (quarterTurned) active.viewportWidth else active.viewportHeight
-        val scale = min(width.toFloat() / displayWidth.toFloat(), height.toFloat() / displayHeight.toFloat())
-        if (!scale.isFinite() || scale <= 0f) return
-        val left = (width - displayWidth * scale) / 2f
-        val top = (height - displayHeight * scale) / 2f
-
         if (bitmapHash != active.contentHash) {
             retireBitmaps()
             active.images.forEach { image -> bitmaps += bitmapFor(image) }
@@ -60,22 +45,8 @@ internal class SubtitleOverlayView(context: Context) : View(context) {
         }
         active.images.forEachIndexed { index, image ->
             val bitmap = bitmaps.getOrNull(index) ?: return@forEachIndexed
-            overlayRect(
-                rotationDegrees = rotationDegrees,
-                viewportWidth = active.viewportWidth,
-                viewportHeight = active.viewportHeight,
-                x = image.x,
-                y = image.y,
-                imageWidth = image.bitmap.width,
-                imageHeight = image.bitmap.height,
-            ).let { rect ->
-                destination.set(
-                    left + rect.left * scale,
-                    top + rect.top * scale,
-                    left + rect.right * scale,
-                    top + rect.bottom * scale,
-                )
-            }
+            val box = overlayDestination(width, height, active, image) ?: return@forEachIndexed
+            destination.set(box.left, box.top, box.right, box.bottom)
             canvas.drawBitmap(bitmap, null, destination, paint)
         }
     }
@@ -117,43 +88,29 @@ internal class SubtitleOverlayView(context: Context) : View(context) {
     }
 }
 
-internal data class OverlayRect(val left: Int, val top: Int, val right: Int, val bottom: Int)
+/** A rectangle of the subtitle layer, in pixels. */
+internal data class OverlayBox(val left: Float, val top: Float, val right: Float, val bottom: Float)
 
-/** Maps the cue centre into display orientation while keeping rasterized text upright and undistorted. */
-internal fun overlayRect(
-    rotationDegrees: Int,
-    viewportWidth: Int,
-    viewportHeight: Int,
-    x: Int,
-    y: Int,
-    imageWidth: Int,
-    imageHeight: Int,
-): OverlayRect = when (rotationDegrees) {
-    90 -> {
-        val centerX = viewportHeight - (y * 2 + imageHeight) / 2
-        val centerY = (x * 2 + imageWidth) / 2
-        OverlayRect(
-            left = centerX - imageWidth / 2,
-            top = centerY - imageHeight / 2,
-            right = centerX - imageWidth / 2 + imageWidth,
-            bottom = centerY - imageHeight / 2 + imageHeight,
-        )
-    }
-    180 -> OverlayRect(
-        left = viewportWidth - x - imageWidth,
-        top = viewportHeight - y - imageHeight,
-        right = viewportWidth - x,
-        bottom = viewportHeight - y,
+/**
+ * Where [image] lands on a layer of [layerWidth] by [layerHeight] pixels, rule 1 of
+ * docs/subtitle-placement.md: the overlay's viewport maps onto the whole layer, each axis on its
+ * own, and nothing turns with the picture. The engine lays the text out upright for this layer,
+ * because the view gives its size to the renderer, so the scale is 1 except for the moment after
+ * a resize. Null when the overlay has no viewport to map from.
+ */
+internal fun overlayDestination(
+    layerWidth: Int,
+    layerHeight: Int,
+    overlay: SubtitleOverlay,
+    image: OverlayImage,
+): OverlayBox? {
+    if (overlay.viewportWidth <= 0 || overlay.viewportHeight <= 0) return null
+    val scaleX = layerWidth.toFloat() / overlay.viewportWidth
+    val scaleY = layerHeight.toFloat() / overlay.viewportHeight
+    return OverlayBox(
+        left = image.x * scaleX,
+        top = image.y * scaleY,
+        right = (image.x + image.bitmap.width) * scaleX,
+        bottom = (image.y + image.bitmap.height) * scaleY,
     )
-    270 -> {
-        val centerX = (y * 2 + imageHeight) / 2
-        val centerY = viewportWidth - (x * 2 + imageWidth) / 2
-        OverlayRect(
-            left = centerX - imageWidth / 2,
-            top = centerY - imageHeight / 2,
-            right = centerX - imageWidth / 2 + imageWidth,
-            bottom = centerY - imageHeight / 2 + imageHeight,
-        )
-    }
-    else -> OverlayRect(x, y, x + imageWidth, y + imageHeight)
 }

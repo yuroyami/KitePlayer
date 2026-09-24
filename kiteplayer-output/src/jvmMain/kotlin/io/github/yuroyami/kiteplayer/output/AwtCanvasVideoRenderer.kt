@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import java.awt.Canvas
 import java.awt.image.BufferedImage
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.roundToInt
 
 /**
  * Fills a packed integer raster with one frame's pixels, one ARGB value per pixel, no row padding.
@@ -146,6 +147,23 @@ public class AwtCanvasVideoRenderer(
     }
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
+
+    /**
+     * The canvas in device pixels: its size times the scale of the screen it is on. The engine lays
+     * subtitles out for this size, rule 2 of docs/subtitle-placement.md, and the presenter draws
+     * them back at one overlay pixel to one device pixel. Null before a canvas with a size exists.
+     */
+    override val outputSize: VideoSize?
+        get() {
+            val target = synchronized(lock) { if (closed) null else canvas } ?: return null
+            val width = target.width
+            val height = target.height
+            if (width <= 0 || height <= 0) return null
+            val transform = target.graphicsConfiguration?.defaultTransform
+            val scaleX = transform?.scaleX?.takeIf { it.isFinite() && it > 0.0 } ?: 1.0
+            val scaleY = transform?.scaleY?.takeIf { it.isFinite() && it > 0.0 } ?: 1.0
+            return VideoSize((width * scaleX).roundToInt(), (height * scaleY).roundToInt())
+        }
 
     override fun setScaleMode(mode: VideoScale) {
         synchronized(lock) { scaleMode = mode }

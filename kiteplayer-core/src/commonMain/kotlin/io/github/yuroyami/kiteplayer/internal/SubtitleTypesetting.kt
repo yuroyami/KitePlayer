@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.spi.OverlayImage
 import io.github.yuroyami.kiteplayer.spi.SubtitleTypesetter
 import io.github.yuroyami.kiteplayer.spi.TypesetFrame
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
+import io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
@@ -30,6 +31,8 @@ internal class TypesetRequest(
     val otherCues: List<SubtitleCue>,
     /** The viewer's override for [otherCues]; the typeset track keeps its authored look. */
     val otherStyle: SubtitleStyleOverride?,
+    /** The safe area [otherCues] are laid out in; the typeset track keeps its author's placement. */
+    val otherSafeArea: SubtitleSafeArea,
     /** The lane epoch this request belongs to; a withdrawal bumps it and orphans the request. */
     val epoch: Long,
 )
@@ -70,10 +73,14 @@ internal class TypesetLane(
     /** Raster lane only: the other cues drawn last time, so a changed secondary lane republishes alone. */
     var publishedOthers: List<SubtitleCue>? = null
 
+    /** Raster lane only: the safe area the other cues were drawn in last time, for the same reason. */
+    var publishedSafeArea: SubtitleSafeArea? = null
+
     /** Actor only: what the last request asked for, to skip a pass that would ask the same. */
     var lastRequestMillis: Long = Long.MIN_VALUE
     var lastRequestFrame: TypesetFrame? = null
     var lastRequestOthers: List<SubtitleCue>? = null
+    var lastRequestSafeArea: SubtitleSafeArea? = null
 
     /** The render job, actor-owned like every other session job. */
     var job: Job? = null

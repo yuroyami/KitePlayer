@@ -115,8 +115,11 @@ public interface VideoRenderer : AutoCloseable {
      * pixellated lettering every other player avoids by rasterising at the size it will actually
      * draw at. A renderer that answers here gets its text drawn at 1:1 instead.
      *
-     * Null keeps the old behaviour, so a renderer that does not know its own size loses nothing.
-     * The engine reads this only when the cue set changes, never per frame.
+     * The engine lays the overlay out for this size, rule 2 of docs/subtitle-placement.md. Null
+     * makes it lay out for the picture's display size, turned upright, which suits a renderer whose
+     * output is the picture itself. A renderer that draws bars of its own must answer, or the
+     * picture-shaped overlay is stretched over an output of another shape. The engine reads this
+     * on its subtitle passes, never per frame, and lays the overlay out again when it changes.
      */
     public val outputSize: io.github.yuroyami.kiteplayer.VideoSize? get() = null
 }
@@ -179,6 +182,10 @@ public sealed interface RendererEvent {
  * viewport changes rather than on every frame. [contentHash] lets a renderer skip re-uploading an
  * unchanged overlay, which is the usual case: subtitles change about once a second and frames arrive
  * sixty times a second.
+ *
+ * A renderer maps the rectangle of [viewportWidth] by [viewportHeight] onto its whole output, each
+ * axis on its own, and draws it unturned above the picture and its bars: rule 1 of
+ * docs/subtitle-placement.md.
  */
 public data class SubtitleOverlay(
     val images: List<OverlayImage>,

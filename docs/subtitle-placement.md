@@ -108,3 +108,20 @@ changes shape, for example after a rotation.
 | `AndroidSurfaceVideoRenderer`, drawing subtitles itself | the Surface | yes, from its first frame |
 | `KitePlayerView` on Android | the view; a separate layer over the whole view draws the subtitles | yes, the view gives its size to the renderer through `setViewport` |
 | `AppKitVideoRenderer`, `UIKitVideoRenderer` | the picture's own image | no, so subtitles stay on the picture |
+
+## How this is checked
+
+`OverlayPlacementContractTest` holds rules 1 and 2 as tests. It lives in
+`kiteplayer-core/src/commonTest`. Each module that draws overlays keeps a copy, because Kotlin
+Multiplatform shares no test code between modules, so change every copy in the same commit. Each
+renderer and view runs the contract through a subclass of its own:
+
+- the AWT renderer, in `kiteplayer-output` `jvmTest`
+- the Core Graphics renderer and the placement function of the Metal renderer, in
+  `kiteplayer-output` `macosArm64Test`
+- the Android surface renderer, through a canvas that records each draw, in `kiteplayer-output`
+  `androidHostTest`
+- the subtitle layer of `KitePlayerView`, in `kiteplayer-view` `androidHostTest`
+
+The engine half of rules 2, 3 and 5 is in `PlaybackSubtitleTest` and `SubtitleTypesettingTest` in
+`kiteplayer-core`.

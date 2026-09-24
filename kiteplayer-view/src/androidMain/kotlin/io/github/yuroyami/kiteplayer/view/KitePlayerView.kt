@@ -30,7 +30,9 @@ import kotlin.math.roundToInt
  * that same renderer generation; temporary backgrounding does not reconstruct the player or decoder.
  *
  * Subtitles use a transparent view above the Surface, so cue changes can redraw while video is paused.
- * The renderer adapter reports subtitle overlays and video geometry through the callbacks supplied by
+ * That view covers the whole player, bars included, and this view gives its size to the renderer
+ * through `setViewport`, so the engine lays the text out for it: docs/subtitle-placement.md. The
+ * renderer adapter reports subtitle overlays and video geometry through the callbacks supplied by
  * this view.
  *
  * Call [release] when the owner is permanently destroyed. An Activity normally does that from
@@ -79,6 +81,7 @@ public open class KitePlayerView @JvmOverloads constructor(
                 )
                 try {
                     renderer.setSurface(surfaceView.holder.surface.takeIf { it.isValid })
+                    reportSubtitleArea(renderer)
                     renderer
                 } catch (configurationFailure: Throwable) {
                     // The renderer has not reached PlayerViewBinding yet, so that binding cannot
@@ -286,6 +289,10 @@ public open class KitePlayerView @JvmOverloads constructor(
         super.onLayout(changed, left, top, right, bottom)
         val availableWidth = width - paddingLeft - paddingRight
         val availableHeight = height - paddingTop - paddingBottom
+        // Subtitles cover the whole padded box, whatever the picture's fit, and the engine lays
+        // them out for exactly this size: rules 1 and 2 of docs/subtitle-placement.md.
+        layoutChild(subtitleView, paddingLeft, paddingTop, availableWidth, availableHeight)
+        binding.activeRenderer?.let { renderer -> reportSubtitleArea(renderer) }
         val picture = videoBounds(availableWidth, availableHeight, videoAspect, videoScale) ?: return
 
         val videoLeft = paddingLeft + picture.left
@@ -293,14 +300,13 @@ public open class KitePlayerView @JvmOverloads constructor(
         // Measured again at the size it is about to get: Fill lays the Surface out LARGER than
         // this view measured it, and a child laid out past its measurement is not a contract.
         layoutChild(surfaceView, videoLeft, videoTop, picture.width, picture.height)
+    }
 
-        // Fill and Stretch push the picture past this view, and the clip crops it. Text must not
-        // go over the edge with it, so subtitles take the part of the picture that stays visible.
-        val textLeft = videoLeft.coerceAtLeast(paddingLeft)
-        val textTop = videoTop.coerceAtLeast(paddingTop)
-        val textRight = (videoLeft + picture.width).coerceAtMost(paddingLeft + availableWidth)
-        val textBottom = (videoTop + picture.height).coerceAtMost(paddingTop + availableHeight)
-        layoutChild(subtitleView, textLeft, textTop, textRight - textLeft, textBottom - textTop)
+    /** Tells [renderer] how large the subtitle layer is, once the layer has a size. */
+    private fun reportSubtitleArea(renderer: AndroidPlayerViewRenderer) {
+        val layerWidth = subtitleView.width
+        val layerHeight = subtitleView.height
+        if (layerWidth > 0 && layerHeight > 0) renderer.setViewport(layerWidth, layerHeight, 1f)
     }
 
     private fun layoutChild(child: View, x: Int, y: Int, childWidth: Int, childHeight: Int) {
@@ -319,7 +325,6 @@ public open class KitePlayerView @JvmOverloads constructor(
             displayAspect
         }
         videoRotation = turn
-        subtitleView.setVideoRotation(turn)
         requestLayout()
     }
 
@@ -347,6 +352,9 @@ public open class KitePlayerView @JvmOverloads constructor(
  * Every call comes from the main thread, so an
  * implementation must never wait on work that needs that thread, and should not wait at all for a
  * non-null Surface.
+ *
+ * The view gives the size of its subtitle layer through `setViewport`. Report that size as
+ * `outputSize`, so the engine lays the subtitles out for the layer: docs/subtitle-placement.md.
  */
 public interface AndroidPlayerViewRenderer : PlayerViewRenderer {
     public fun setSurface(surface: Surface?)

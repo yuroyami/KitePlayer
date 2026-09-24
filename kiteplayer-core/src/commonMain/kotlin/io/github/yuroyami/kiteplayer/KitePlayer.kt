@@ -518,6 +518,16 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Keeps subtitles inside the safe area of the output: [value] holds an inset from each edge,
+     * each a fraction of the output. The built-in text drawing lays cues out inside what is left,
+     * as if it were the whole output, and a typeset ASS track keeps its author's placement. The
+     * active cues re-rasterise immediately. docs/subtitle-placement.md has the whole rule.
+     */
+    public fun setSubtitleSafeArea(value: io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea) {
+        core.post(CoreCommand.SetSubtitleSafeArea(value, CompletableDeferred()))
+    }
+
+    /**
      * Compensates for sound that reaches the ear late: with a positive [value] every video frame
      * is presented that much earlier, which is the whole of what a Bluetooth latency slider
      * needs. The audio samples are never touched, so the change is instant and free, and the

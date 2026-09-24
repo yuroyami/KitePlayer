@@ -131,6 +131,8 @@ internal class MediaScript(
     val videoKeyframesUs: Set<Long>? = null,
     /** True makes the only video stream a still image, which must never carry the timeline. */
     val videoIsCoverArt: Boolean = false,
+    /** The quarter turn the scripted video stream declares, as a phone recording on its side does. */
+    val videoRotationDegrees: Int = 0,
     val seekable: Boolean = true,
     /** Extra container tags, for the suites that read them. Merged over the harness's own three. */
     val containerTags: Map<String, String> = emptyMap(),
@@ -705,6 +707,7 @@ internal class ScriptedSource(
                     videoSize = VideoSize(1920, 1080),
                     frameRate = 1_000_000.0 / script.videoFrameDurationUs,
                     isCoverArt = script.videoIsCoverArt,
+                    rotationDegrees = script.videoRotationDegrees,
                     // A key with no TrackInfo field of its own, so a test can prove the raw tags
                     // travel and not just the two the type happens to parse.
                     metadata = mapOf("handler_name" to "scripted video handler"),

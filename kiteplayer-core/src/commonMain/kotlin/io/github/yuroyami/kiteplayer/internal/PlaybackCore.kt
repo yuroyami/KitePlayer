@@ -619,6 +619,13 @@ internal class PlaybackCore(
     private var subtitlePosition: Float = 1f
 
     /**
+     * The part of the output the Kotlin tier lays text out in, as insets that are fractions of the
+     * output. Typeset tracks keep their author's placement. Actor only.
+     */
+    private var subtitleSafeArea: io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea =
+        io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea.None
+
+    /**
      * Runtime audio timing shift. Positive means the sound reaches the ear late (a Bluetooth
      * stack, a receiver), so the master clock the video chases is read that much AHEAD and every
      * frame is presented earlier by the same amount. The audio samples themselves are never
@@ -1814,6 +1821,12 @@ internal class PlaybackCore(
             }
             is CoreCommand.SetSubtitlePosition -> {
                 subtitlePosition = command.value
+                // Re-rasterised on the very next pass, the same key-drop as a scale change.
+                session?.publishedCueKey = null
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetSubtitleSafeArea -> {
+                subtitleSafeArea = command.value
                 // Re-rasterised on the very next pass, the same key-drop as a scale change.
                 session?.publishedCueKey = null
                 command.reply.complete(Unit)
@@ -4633,9 +4646,9 @@ internal class PlaybackCore(
     }
 
     /**
-     * Rasterises [active] at the video's own display size and hands the overlay to the renderer.
-     * With no platform rasterizer the timing still ran; only the drawing is absent, and the
-     * OutputBackend KDoc says exactly that.
+     * Rasterises [active] for the renderer's output, inside the safe area, and hands the overlay to
+     * the renderer. With no platform rasterizer the timing still ran; only the drawing is absent,
+     * and the OutputBackend KDoc says exactly that.
      */
     private suspend fun publishOverlay(
         session: OpenSession,
@@ -4647,15 +4660,10 @@ internal class PlaybackCore(
         // 40 pixel glyphs blown up by 1.4: the soft, ragged lettering the owner reported on
         // 2026-08-23. Rasterising at the size the renderer draws at makes that scale exactly 1, and
         // the apparent size does not move, because every size in the rasteriser is a fraction of the
-        // canvas height. A renderer that cannot say falls back to the video's own size.
-        val canvas = session.renderer.outputSize
-        val size = session.videoStream?.videoSize
-        val width = canvas?.width?.takeIf { it > 0 }
-            ?: size?.displayWidth?.takeIf { it > 0 }
-            ?: DEFAULT_SUBTITLE_CANVAS_WIDTH
-        val height = canvas?.height?.takeIf { it > 0 }
-            ?: size?.height?.takeIf { it > 0 }
-            ?: DEFAULT_SUBTITLE_CANVAS_HEIGHT
+        // canvas height. A renderer that cannot say falls back to the picture, upright.
+        val (width, height) = subtitleCanvas(session)
+        // Read here, on the actor, because the raster lane below must not read actor state.
+        val safeArea = subtitleSafeArea
         val generation = session.overlayGeneration.incrementAndGet()
         if (active.isEmpty()) {
             // A clear costs no rasterisation; publish it inline so text vanishes on time.
@@ -4673,8 +4681,8 @@ internal class PlaybackCore(
         val cues = active.toList()
         session.rasterJob?.cancel()
         session.rasterJob = scope.launch(dispatchers.raster) {
-            val images = rasterizer.rasterize(
-                applyOverride(cues, subtitleStyle), width, height, subtitleScale, subtitlePosition,
+            val images = rasterizer.rasterizeInSafeArea(
+                safeArea, applyOverride(cues, subtitleStyle), width, height, subtitleScale, subtitlePosition,
             )
             if (session.overlayGeneration.value != generation) return@launch
             session.renderer.setOverlay(
@@ -4792,20 +4800,30 @@ internal class PlaybackCore(
         lane.stage(TypesetOp.Event(packet.copyBytes(), startUs / 1000, durationUs / 1000))
     }
 
+    /**
+     * The size subtitles are laid out for, rule 2 of docs/subtitle-placement.md: the renderer's
+     * output when it reports one, else the picture's display size. The picture is turned upright
+     * when the stream carries a quarter turn, because the renderer shows it that way.
+     */
+    private fun subtitleCanvas(session: OpenSession): Pair<Int, Int> {
+        session.renderer.outputSize?.let { output ->
+            if (output.width > 0 && output.height > 0) return output.width to output.height
+        }
+        val size = session.videoStream?.videoSize
+        val width = size?.displayWidth?.takeIf { it > 0 }
+        val height = size?.height?.takeIf { it > 0 }
+        if (width == null || height == null) return DEFAULT_SUBTITLE_CANVAS_WIDTH to DEFAULT_SUBTITLE_CANVAS_HEIGHT
+        return if (isQuarterTurn(session.videoStream?.rotationDegrees)) height to width else width to height
+    }
+
     /** The geometry the typesetter draws into, from the same canvas rule [publishOverlay] uses. */
     private fun typesetFrame(session: OpenSession): io.github.yuroyami.kiteplayer.spi.TypesetFrame {
-        val canvas = session.renderer.outputSize
+        val (width, height) = subtitleCanvas(session)
         val size = session.videoStream?.videoSize
-        val width = canvas?.width?.takeIf { it > 0 }
-            ?: size?.displayWidth?.takeIf { it > 0 }
-            ?: DEFAULT_SUBTITLE_CANVAS_WIDTH
-        val height = canvas?.height?.takeIf { it > 0 }
-            ?: size?.height?.takeIf { it > 0 }
-            ?: DEFAULT_SUBTITLE_CANVAS_HEIGHT
         var videoWidth = size?.displayWidth?.takeIf { it > 0 } ?: width
         var videoHeight = size?.height?.takeIf { it > 0 } ?: height
         // The renderer turns a sideways recording upright, so the fitted picture is the turned one.
-        if ((session.videoStream?.rotationDegrees ?: 0) % 180 != 0) {
+        if (size != null && isQuarterTurn(session.videoStream?.rotationDegrees)) {
             val turned = videoWidth
             videoWidth = videoHeight
             videoHeight = turned
@@ -4855,15 +4873,16 @@ internal class PlaybackCore(
         val frameElapsed = first || timeMillis < lane.lastRequestMillis ||
             (timeMillis - lane.lastRequestMillis) * 1000 >= intervalUs
         val wanted = lane.hasStaged() || frame != lane.lastRequestFrame || others != lane.lastRequestOthers ||
-            (moved && (frameElapsed || !playing))
+            subtitleSafeArea != lane.lastRequestSafeArea || (moved && (frameElapsed || !playing))
         if (wanted) {
             lane.lastRequestMillis = timeMillis
             lane.lastRequestFrame = frame
             lane.lastRequestOthers = others
+            lane.lastRequestSafeArea = subtitleSafeArea
             requestTypesetRender(
                 session,
                 lane,
-                TypesetRequest(timeMillis, frame, others, subtitleStyle, lane.epoch.value),
+                TypesetRequest(timeMillis, frame, others, subtitleStyle, subtitleSafeArea, lane.epoch.value),
             )
         }
         if (playing) wakeIn(intervalUs.microseconds)
@@ -4905,14 +4924,21 @@ internal class PlaybackCore(
                 lane.running.value = false
                 return
             }
-            if (images == null && request.otherCues == lane.publishedOthers) continue
+            if (
+                images == null && request.otherCues == lane.publishedOthers &&
+                request.otherSafeArea == lane.publishedSafeArea
+            ) continue
             if (images != null) lane.lastImages = images
             lane.publishedOthers = request.otherCues
+            lane.publishedSafeArea = request.otherSafeArea
             val frame = request.frame
             val rasterized = if (request.otherCues.isEmpty()) {
                 emptyList()
             } else {
-                output.subtitleRasterizer?.rasterize(
+                // The typeset images keep the author's placement; the cues beside them keep to the
+                // safe area, rule 3 of docs/subtitle-placement.md.
+                output.subtitleRasterizer?.rasterizeInSafeArea(
+                    request.otherSafeArea,
                     applyOverride(request.otherCues, request.otherStyle),
                     frame.width,
                     frame.height,
@@ -8674,6 +8700,10 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     ) : CoreCommand("setSubtitleStyle", reply)
     class SetSubtitlePosition(val value: Float, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setSubtitlePosition", reply)
+    class SetSubtitleSafeArea(
+        val value: io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea,
+        val reply: CompletableDeferred<Unit>,
+    ) : CoreCommand("setSubtitleSafeArea", reply)
     class SetAudioDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setAudioDelay", reply)
     class AddExternalSubtitle(val source: SubtitleSource, val reply: CompletableDeferred<TrackId>) :
         CoreCommand("addExternalSubtitle", reply)

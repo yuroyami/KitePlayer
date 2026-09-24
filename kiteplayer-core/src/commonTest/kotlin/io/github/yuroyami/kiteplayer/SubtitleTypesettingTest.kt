@@ -332,6 +332,46 @@ class SubtitleTypesettingTest {
     }
 
     @Test
+    fun theSafeAreaMovesTheSecondaryLaneButNotTheTypesetImages() = runTest {
+        // Rule 3 of docs/subtitle-placement.md: a typeset track keeps its author's placement, and
+        // the cues the Kotlin tier draws beside it move inside the safe area, at once.
+        val fake = FakeTypesetter()
+        SubtitleTypesetters.register(FakeProvider { fake })
+        val second = ScriptedSubtitleTrack(index = 7, cues = listOf(cue(1_000, 3_000, "second lane")), language = "fra")
+        val script = MediaScript(
+            durationUs = 6_000_000,
+            subtitleCues = listOf(cue(1_000, 3_000, "typeset me")),
+            subtitleCodec = "ass",
+            subtitleHeader = header,
+            additionalSubtitleTracks = listOf(second),
+        )
+        val harness = CoreHarness(this, script = script, config = config())
+        harness.renderer!!.outputSizeOverride = VideoSize(1000, 500)
+        harness.openWithRenderer()
+        harness.core.selectSecondarySubtitle(TrackId(7))
+        harness.core.play()
+        harness.run(1500.milliseconds)
+        val before = harness.renderer.overlays.filterNotNull().last { it.images.size == 2 }
+        assertEquals(0 to 499, before.images[1].let { it.x to it.y }, "no safe area, so the whole output")
+
+        harness.core.post(
+            io.github.yuroyami.kiteplayer.internal.CoreCommand.SetSubtitleSafeArea(
+                io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea(left = 0.1f, top = 0.05f, right = 0.1f, bottom = 0.2f),
+                kotlinx.coroutines.CompletableDeferred(),
+            ),
+        )
+        harness.run(300.milliseconds)
+        val after = harness.renderer.overlays.filterNotNull().last { it.images.size == 2 }
+        assertEquals(
+            before.images[0].let { it.x to it.y },
+            after.images[0].let { it.x to it.y },
+            "the typeset image must keep its author's place",
+        )
+        assertEquals(100 to 399, after.images[1].let { it.x to it.y }, "the secondary lane must move inside the safe area")
+        harness.close()
+    }
+
+    @Test
     fun fittedMarginsFollowTheScaleMode() {
         // A 4:3 picture on a 16:9 surface sits between two pillars.
         assertContentEquals(intArrayOf(0, 0, 160, 160), fittedMargins(1280, 720, 640, 480, VideoScale.Fit))

@@ -333,9 +333,8 @@ internal class KiteVideoRenderer(
     /**
      * KiteVideo composites overlays in OUTPUT space, mapping the overlay's viewport onto the whole
      * component, so the engine can rasterise text at these pixels and have it drawn at 1:1 instead
-     * of stretched from the video's smaller canvas. A renderer that maps overlays onto the fitted
-     * VIDEO rectangle instead must NOT answer here, which is why the Android surface renderer does
-     * not: an output-sized canvas mapped into the video rectangle would shrink the text.
+     * of stretched from the video's smaller canvas. Every renderer follows the same rule:
+     * docs/subtitle-placement.md.
      */
     override val outputSize: io.github.yuroyami.kiteplayer.VideoSize?
         get() {

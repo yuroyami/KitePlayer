@@ -29,8 +29,8 @@ public final class NeonLoFiAndroidProbe {
         Looper.prepareMainLooper();
         String folder=args[0]; int width=Integer.parseInt(args[1]), height=Integer.parseInt(args[2]), frames=Integer.parseInt(args[3]);
         if (width<32 || height<32 || width>3840 || height>3840 || frames<1 || frames>120) throw new IllegalArgumentException("Invalid probe bounds");
-        OdysseyAndroidProbe.WIDTH=width; OdysseyAndroidProbe.HEIGHT=height;
-        RuntimeShader shader=OdysseyAndroidProbe.read(folder,"neonlofi");
+        ProbeSupport.WIDTH=width; ProbeSupport.HEIGHT=height;
+        RuntimeShader shader=ProbeSupport.read(folder,"neonlofi");
         ImageReader reader=ImageReader.newInstance(width,height,PixelFormat.RGBA_8888,2,
             HardwareBuffer.USAGE_GPU_COLOR_OUTPUT|HardwareBuffer.USAGE_CPU_READ_OFTEN);
         HardwareRenderer renderer=new HardwareRenderer(); RenderNode node=new RenderNode("Neon Lo-Fi offscreen fixture");
@@ -42,14 +42,14 @@ public final class NeonLoFiAndroidProbe {
                 for(String name:properties.stringPropertyNames()) {
                     String[] parts=properties.getProperty(name).split(","); float[] values=new float[parts.length];
                     for(int i=0;i<parts.length;i++) values[i]=Float.parseFloat(parts[i]);
-                    OdysseyAndroidProbe.set(shader,name,values);
+                    ProbeSupport.set(shader,name,values);
                 }
                 float sourceWidth=Float.parseFloat(properties.getProperty("uResolution").split(",")[0]);
                 float sourceHeight=Float.parseFloat(properties.getProperty("uResolution").split(",")[1]);
                 // Preserve the actual fixture's projection when measuring larger same-aspect surfaces.
                 if(Math.abs(width/(float)height-sourceWidth/sourceHeight)>.001f)
                     throw new IllegalArgumentException("Export a reference at the requested aspect ratio first");
-                OdysseyAndroidProbe.set(shader,"uResolution",width,height);
+                ProbeSupport.set(shader,"uResolution",width,height);
                 Bitmap ridge=BitmapFactory.decodeFile(folder+"/neon-"+mode+"-ridges.png");
                 Bitmap bands=BitmapFactory.decodeFile(folder+"/neon-"+mode+"-bands.png");
                 if(ridge==null || bands==null) throw new AssertionError("Missing fixture textures");
@@ -57,7 +57,7 @@ public final class NeonLoFiAndroidProbe {
                 BitmapShader bandShader=new BitmapShader(bands,Shader.TileMode.CLAMP,Shader.TileMode.CLAMP);
                 ridgeShader.setFilterMode(BitmapShader.FILTER_MODE_LINEAR); bandShader.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
                 shader.setInputShader("nRidges",ridgeShader); shader.setInputShader("uBandsTex",bandShader);
-                for(String name:new String[]{"uScopeTex","uPaletteTex","uHistoryTex"}) if(OdysseyAndroidProbe.declares(shader,name)) shader.setInputShader(name,bandShader);
+                for(String name:new String[]{"uScopeTex","uPaletteTex","uHistoryTex"}) if(ProbeSupport.declares(shader,name)) shader.setInputShader(name,bandShader);
                 Mesh[] meshes;
                 try(DataInputStream input=new DataInputStream(new FileInputStream(folder+"/neon-"+mode+"-mesh.bin"))) {
                     // Sky, city, floor and front dressing, then the lamps' light added on top.
@@ -77,7 +77,7 @@ public final class NeonLoFiAndroidProbe {
                         if(image==null) throw new AssertionError("No GPU image, sync="+sync);
                         image.getPlanes()[0].getBuffer().get(0);
                         if(f>=0) cost[f]=(System.nanoTime()-before)/1e6;
-                        if(f==frames-1) last=OdysseyAndroidProbe.pixels(image);
+                        if(f==frames-1) last=ProbeSupport.pixels(image);
                     }
                 }
                 Bitmap result=Bitmap.createBitmap(last,width,height,Bitmap.Config.ARGB_8888);

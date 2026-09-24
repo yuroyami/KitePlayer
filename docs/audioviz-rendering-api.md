@@ -19,77 +19,27 @@ number as a time, and the surface fades by `2^(-dt / half life)`.
   traces previously shown by Scope. `TrailHalfLifeTest` prints the catalogue's half lives and fails
   only on a trail that cannot survive one frame or that holds the picture for seconds.
 
-## One journey through generated shapes
+## Odyssey, a ringed planet
 
-`Odyssey` is one distance field made of districts. Each district is a recipe: eight fold steps
-applied to a point, ending in a box, a sphere or a cross. A step is one operation and three
-numbers. The operations are mirror, box fold, sphere fold, plane fold, scale and shift, Menger
-fold, rotate in the xy plane and rotate in the yz plane. A cavern repeats its shape around the
-eye. A sculpture stands once in the middle of its district, with the sky visible around it.
-Districts are adjacent, finite regions of one field, with physical doorways and shared lighting.
-A ray can see the next district through the current one before the camera gets there. Changing
-districts does not crossfade two pictures or reset the camera.
+`Odyssey` is a giant planet with a ring, drawn by one shader with exact sphere and plane tests:
+each pixel's line of sight meets the planet, the ring plane, the two moons, or nothing. Nothing is
+stepped, so it costs less than a distance-field drawing.
 
-The host composes the recipes. Five templates (sponge, kaleidoscope, folded cavern, foam and
-sculpture) fix most of their operations and give every number a range. A seed drawn at launch
-picks the numbers. The next district mutates one to three steps of the current one, and after
-three to five districts the composer jumps to the template shown least recently. Before a recipe
-is shown, a Kotlin copy of the field samples it along the route, at the full fold depth and at the
-lowest depth the detail control allows, and refuses a recipe that is solid, that is empty (too few
-of its rays reach a surface), or that needs more march steps than the budget. The screening march
-steps the way the shader steps, at rest and at full music. `OdysseyRecipeFieldTest` holds the
-shader to that Kotlin copy on 200 random recipes at two fold depths. Two launches show two
-different worlds; a fixed seed makes the tests repeat.
-
-The shader holds no trigonometry. The host packs rotations as cosine and sine pairs and plane
-folds as unit normals, and it moves the numbers with the music: bass pushes the mirror offsets,
-hits breathe the scale steps and mids turn the rotations. Impact fronts breathe the primitive as
-they travel. The step numbers reach the shader as uniform arrays read with unrolled loop indices,
-which Android accepts; a dynamically indexed uniform array does not compile there.
-
-Odyssey first searches a conservative depth grid at one quarter of the canvas width and height,
-in one 112-step program that reads the field through a distance child compiled at that
-resolution. A native-resolution pass starts behind the nearest neighbouring bound and resolves
-every pixel with the adjustable 64..112 step budget, through a second instance of the child. Each
-recipe carries its own march safety (how much of a distance estimate a ray may trust), and a
-doorway takes the most cautious of the six districts around it. The final pass lights those hits
-with a numerical normal of the whole scene and a glow from the fold trace: the chain records how
-close a point came to a fold axis, and those seams shine on any shape. Colour is never upscaled
-from the depth grid. Measured with the probe on a phone, one coarse program through the child was
-20 to 30 percent faster than seven programs holding the field inline, and trigonometry inside the
-fold steps cost two to four times the frame.
-
-A recipe whose primitive does not reach its own cell wall makes the field overestimate the
-distance near that wall (the field only knows the copy in the point's own cell), so the coarse
-search steps into the neighbour's copy and loses depth at a banked view. The template ranges keep
-the primitives fat for that reason, and `OdysseyWorldTest` checks the coarse depth against a
-full-ray reference for every template, straight and banked.
-
-`./scripts/check-odyssey-android.sh DEVICE_SERIAL` exports the shader strings and twelve composed
-districts, compiles every program with the device's `RuntimeShader`, renders each district,
-compares accelerated depth with a full-ray search, checks that music changes geometry with the
-camera locked, and reports median frame times. Pass `DEVICE_SERIAL 1080 2400 30` for
-phone-resolution timing. Images land under `kiteplayer-audioviz/build/odyssey-android-probe/`.
-Neither the stills nor the timings certify musical response or sustained 60 FPS.
-
-The flight follows an S-shaped route with audible thrust, banked lateral sweeps and changes in
-pitch. Quiet passages slow almost to suspension. Busy audio raises thrust; delivered low/body
-attacks add short acceleration and launch two bounded fronts through the surrounding structure.
-Drops sustain a launch, and breakdowns release speed into a raised view. Motion is integrated in
-seconds and settles between targets, without cuts or orbit resets. Held playback freezes flight
-and stored impulses; reduced motion suppresses camera excursions and impact fronts.
-
-The pattern exposes flight, lens, curvature, banking, camera sweeps, impact waves, recipe detail,
-architecture response, lighting, colour, atmosphere, particles, draw distance and ray-step
-controls. Recipe detail runs four to eight of a recipe's folds. World particles have depth and
-are hidden by nearer surfaces.
-
-For offline listening/viewing checks, `OdysseyPlaybackCaptureTest` accepts `ODYSSEY_PCM`, a path to
-48 kHz mono float32 little-endian samples. It feeds the production analyser and delivered-event
-cursor, skips three seconds of warmup, and saves up to 30 seconds of 384 x 240 frames at 12 FPS in
-`build/odyssey-playback`. This is a CPU-rendered inspection clip, not a playback FPS measurement.
-Normal test runs skip it when no PCM path is supplied. Force the selected test to rerun when only
-the input file changes.
+- The planet always overhangs the frame by about a third, in landscape and in portrait. Its disc
+  radius is measured in the screen's shorter half-side for that reason.
+- Each stripe of latitude is one band's recent past. The host writes a column of stripe levels
+  every eighth of a second of music into a 96 by 24 picture read as a ring buffer, and the clouds
+  glide between columns rather than stepping. Neighbouring stripes stream in opposite directions.
+- The ring has 64 ringlets, one per band now, with dark gaps between them. Where one pixel covers
+  several ringlets, their gaps average out instead of shimmering.
+- The ring's shadow lies on the clouds and the planet's shadow lies across the ring, from the same
+  exact tests. The ring's shadow is the ringlets' average.
+- A new view comes at each section, over one bar: under the ring plane, nearly edge on, or from
+  the night side. A breakdown drifts into the planet's shadow until the next section or drop.
+- On a drop the sun rises over the planet's limb over one beat, after a short flare. When the audio
+  ahead already holds the drop, the sun sets behind the planet over the last bar first.
+- The planet keeps 35 percent of its light in a silence, and the night side is lifted to about
+  four percent by light off the ring.
 
 ## Flat preset catalogue
 

@@ -33,7 +33,7 @@ PY
 work="$(mktemp -d "${TMPDIR:-/tmp}/neonlofi-android.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 javac --release 8 -classpath "$android_jar" -d "$work" \
-    scripts/probes/OdysseyAndroidProbe.java scripts/probes/NeonLoFiAndroidProbe.java
+    scripts/probes/ProbeSupport.java scripts/probes/NeonLoFiAndroidProbe.java
 "$build_tools/d8" --output "$work" "$work"/*.class
 fixture="kiteplayer-audioviz/build/neonlofi-preview/gpu-$view"
 remote=/data/local/tmp/kiteplayer-neonlofi-probe

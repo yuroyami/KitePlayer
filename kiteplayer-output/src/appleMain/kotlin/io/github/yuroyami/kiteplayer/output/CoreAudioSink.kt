@@ -132,6 +132,13 @@ private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
  * therefore leaves this object owning nothing, which is what [retainedResources] reports and what
  * appleTest asserts.
  *
+ * ### A change of the default output
+ *
+ * On macOS the sink uses the DefaultOutput unit, which follows the system default output device by
+ * itself. So an open sink watches the default output and reports each change as
+ * `AudioSinkEvent.DeviceChanged`, which the engine turns into a warning, and it keeps playing. iOS has
+ * no default device of its own: the audio session owns the route.
+ *
  * ### Threading
  *
  * [openWithRing], [start], [stop], [drain] and [setPaused] belong to the session owner, which is the
@@ -146,6 +153,7 @@ public class CoreAudioSink private constructor(
     private val clock: MonotonicClock,
     private val leaseManager: AppleAudioSessionLeaseManager,
     private val destroyer: CoreAudioSinkDestroyer,
+    private val outputDevices: AppleOutputDevices,
 ) : AudioSink, NativeRingAudioSink {
 
     /** Preserves the original clock-first API and uses KitePlayer's managed playback policy. */
@@ -154,21 +162,29 @@ public class CoreAudioSink private constructor(
         clock,
         sharedAppleAudioSessionLeaseManager,
         PlatformCoreAudioSinkDestroyer,
+        platformAppleOutputDevices(),
     )
 
     /** Selects who owns the process-wide iOS audio session while retaining the Apple host clock. */
     public constructor(
         policy: AppleAudioSessionPolicy,
         clock: MonotonicClock = AppleHostClock,
-    ) : this(policy, clock, sharedAppleAudioSessionLeaseManager, PlatformCoreAudioSinkDestroyer)
+    ) : this(
+        policy,
+        clock,
+        sharedAppleAudioSessionLeaseManager,
+        PlatformCoreAudioSinkDestroyer,
+        platformAppleOutputDevices(),
+    )
 
-    /** Test seam for proving session ownership around every C lifecycle exit. */
+    /** Test seam for proving session ownership and device notices around every C lifecycle exit. */
     internal constructor(
         policy: AppleAudioSessionPolicy,
         leaseManager: AppleAudioSessionLeaseManager,
         clock: MonotonicClock = AppleHostClock,
         destroyer: CoreAudioSinkDestroyer = PlatformCoreAudioSinkDestroyer,
-    ) : this(policy, clock, leaseManager, destroyer)
+        outputDevices: AppleOutputDevices = platformAppleOutputDevices(),
+    ) : this(policy, clock, leaseManager, destroyer, outputDevices)
 
     init {
         require(clock === AppleHostClock) {
@@ -207,6 +223,9 @@ public class CoreAudioSink private constructor(
 
     /** Acquired before C creates the device and released only after C destroys it. */
     private var sessionLease: AppleAudioSessionLease? = null
+
+    /** The notice of a change of the system default output, held while the sink is open. */
+    private var deviceWatch: AutoCloseable? = null
 
     private val eventFlow = MutableSharedFlow<AudioSinkEvent>(
         replay = 0,
@@ -335,6 +354,12 @@ public class CoreAudioSink private constructor(
                 ring = NativeRingAddress(attachedRing.rawValue.toLong()),
             )
 
+            // The unit follows the system default output by itself, so a change is a notice for the
+            // application and not a reason to rebuild. The notice arrives on a CoreAudio thread.
+            val watch = outputDevices.watchDefaultOutput { detail ->
+                eventFlow.tryEmit(AudioSinkEvent.DeviceChanged(detail))
+            }
+
             // Published inside the lock, so a diagnostic read from another thread sees either nothing
             // or the complete device/ring/session transaction. Opening itself belongs to the session
             // owner; the lock is here for the readers.
@@ -343,6 +368,7 @@ public class CoreAudioSink private constructor(
                 ring = attachedRing
                 negotiated = created.format
                 sessionLease = acquiredLease
+                deviceWatch = watch
             }
             ownedSink = null
             return handoff
@@ -428,11 +454,19 @@ public class CoreAudioSink private constructor(
             if (handle == null && sessionLease == null) return
             val currentSink = handle
             val currentLease = sessionLease
+            val currentWatch = deviceWatch
             handle = null
             ring = null
             negotiated = null
             sessionLease = null
-            OwnedLifecycle(currentSink, currentLease)
+            deviceWatch = null
+            OwnedLifecycle(currentSink, currentLease, currentWatch)
+        }
+        // The notice goes first, so that no notice reaches a sink whose device is going. A notice
+        // that cannot be withdrawn costs a stale warning at most, so it never stops the teardown.
+        try {
+            owned.watch?.close()
+        } catch (_: Throwable) {
         }
         owned.sink?.let { sink -> destroyer.destroy(sink) }
         owned.lease?.close()
@@ -441,6 +475,7 @@ public class CoreAudioSink private constructor(
     private class OwnedLifecycle(
         val sink: CPointer<kprt_sink>?,
         val lease: AppleAudioSessionLease?,
+        val watch: AutoCloseable?,
     )
 
     /**

@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
@@ -45,8 +47,12 @@ private object WebKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
             )
         }
 
-    /** No browser gives a page a picture-in-picture surface the player itself can drive. */
-    override val supportsPictureInPicture: Boolean = false
+    /**
+     * Whether this browser has either feature `KitePlayerPictureInPicture` can use: the document
+     * window, or the picture in picture of a video element. False in node, which has neither.
+     */
+    override val supportsPictureInPicture: Boolean
+        get() = webHasPictureInPicture()
 
     override fun backendsOrNull(): Backends? = if (availability.isAvailable) {
         Backends(backend = KiteFFmpegMediaBackend(), output = WebOutputBackend)
@@ -54,3 +60,10 @@ private object WebKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
         null
     }
 }
+
+/** The two features `KitePlayerPictureInPicture.createOrNull` looks for, asked of the page's globals. */
+@JsFun(
+    "() => !!globalThis.documentPictureInPicture || " +
+        "(typeof document !== 'undefined' && document.pictureInPictureEnabled === true)",
+)
+private external fun webHasPictureInPicture(): Boolean

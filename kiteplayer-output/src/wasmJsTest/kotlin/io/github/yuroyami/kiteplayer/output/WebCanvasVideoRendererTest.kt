@@ -182,6 +182,59 @@ class WebCanvasVideoRendererTest {
         assertEquals(900, canvasHeightOf(canvas))
         renderer.close()
     }
+
+    /**
+     * Resizing a canvas clears it, and a paused player sends no frame that would paint it again, so
+     * the renderer draws its retained picture itself. Without that, a paused picture moved into a
+     * picture in picture window, or a page resized while paused, stays black.
+     *
+     * Node has no `OffscreenCanvas`, so this installs a stand-in for the stage while it runs, only
+     * where the environment has none. The visible canvas is a recorder either way, so the test
+     * reads which draws happened rather than which pixels.
+     */
+    @Test
+    fun setViewportDrawsTheRetainedPictureAgainAtTheNewSize() = runTest {
+        val installed = installStageCanvasIfMissing()
+        try {
+            val canvas = recordingCanvas()
+            val renderer = WebCanvasVideoRenderer(canvas, painter)
+            assertTrue(renderer.present(CountingFrame(size = VideoSize(640, 360)), 0), "the frame must draw first")
+            assertEquals(1, drawCount(canvas))
+
+            renderer.setViewport(width = 1280, height = 720, scale = 1f)
+
+            assertEquals(2, drawCount(canvas), "the resize must draw the retained picture again")
+            assertEquals(1280.0, lastDrawWidth(canvas), "at the new size")
+            assertEquals(720.0, lastDrawHeight(canvas))
+            renderer.close()
+        } finally {
+            if (installed) removeStageCanvas()
+        }
+    }
+
+    @Test
+    fun setViewportDrawsNothingBeforeThereIsAPicture() {
+        val canvas = recordingCanvas()
+        val renderer = WebCanvasVideoRenderer(canvas, painter)
+        renderer.setViewport(width = 1280, height = 720, scale = 1f)
+        assertEquals(0, drawCount(canvas), "there is no picture to draw yet")
+        renderer.close()
+    }
+
+    @Test
+    fun aClosedRendererDrawsNothingOnResize() = runTest {
+        val installed = installStageCanvasIfMissing()
+        try {
+            val canvas = recordingCanvas()
+            val renderer = WebCanvasVideoRenderer(canvas, painter)
+            assertTrue(renderer.present(CountingFrame(size = VideoSize(640, 360)), 0))
+            renderer.close()
+            renderer.setViewport(width = 1280, height = 720, scale = 1f)
+            assertEquals(1, drawCount(canvas), "a closed renderer has released its picture")
+        } finally {
+            if (installed) removeStageCanvas()
+        }
+    }
 }
 
 @JsFun("() => ({ notACanvas: true })")
@@ -219,3 +272,50 @@ private external fun canvasWidthOf(canvas: JsAny): Int
 
 @JsFun("(c) => c.height")
 private external fun canvasHeightOf(canvas: JsAny): Int
+
+/**
+ * A canvas whose 2d context records every picture drawn onto it: how many, and the size of the last.
+ */
+@JsFun(
+    """() => {
+      const canvas = { width: 640, height: 360, draws: [] };
+      const ctx = {
+        setTransform() {}, clearRect() {}, translate() {}, rotate() {}, putImageData() {},
+        drawImage(image, x, y, w, h) { canvas.draws.push({ w: w, h: h }); },
+        createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+      };
+      canvas.getContext = () => ctx;
+      return canvas;
+    }""",
+)
+private external fun recordingCanvas(): JsAny
+
+@JsFun("(c) => c.draws.length")
+private external fun drawCount(canvas: JsAny): Int
+
+@JsFun("(c) => c.draws.length ? c.draws[c.draws.length - 1].w : -1")
+private external fun lastDrawWidth(canvas: JsAny): Double
+
+@JsFun("(c) => c.draws.length ? c.draws[c.draws.length - 1].h : -1")
+private external fun lastDrawHeight(canvas: JsAny): Double
+
+/**
+ * Gives node a stage canvas for the duration of one test, and answers whether it did. A browser has
+ * a real `OffscreenCanvas`, which is left alone.
+ */
+@JsFun(
+    """() => {
+      if (typeof OffscreenCanvas !== 'undefined') return false;
+      globalThis.OffscreenCanvas = class {
+        constructor(w, h) { this.width = w; this.height = h; }
+        getContext() {
+          return { putImageData() {}, createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }) };
+        }
+      };
+      return true;
+    }""",
+)
+private external fun installStageCanvasIfMissing(): Boolean
+
+@JsFun("() => { delete globalThis.OffscreenCanvas; }")
+private external fun removeStageCanvas()

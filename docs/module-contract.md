@@ -27,6 +27,17 @@ Keep supported target variants consistent along dependency edges. Existing unava
 must continue to answer unavailable honestly; a resolving metadata variant is not playback proof.
 Mobile artifacts are selected for a mobile application by Gradle, not bundled with desktop natives.
 
+On the web, `kiteplayer` also depends on `kiteplayer-view` with `api`. The web part of
+`kiteplayer-view` is `KitePlayerPictureInPicture`, which puts the page's player canvas in a small
+browser window. The class uses the Document Picture-in-Picture window where the browser has one.
+Otherwise it uses the picture in picture of a video element.
+
+On the desktop JVM, `kiteplayer` reaches `kiteplayer-view` through `kiteplayer-view-bindings`.
+There, `KitePlayerPictureInPicture` opens an always-on-top window for a `KitePlayerAwtView`.
+Compose Desktop has no hook for it, because `KitePlayerSurface` does not expose the view that it
+hosts. A Compose app that draws video with `KiteVideo` can open a second
+`Window(alwaysOnTop = true, undecorated = true)` that draws the same `KiteVideoState`.
+
 ## Automatic network transport
 
 A consumer should gain HTTP/HTTPS transport by adding the network module, including when it

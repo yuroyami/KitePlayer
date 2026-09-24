@@ -46,7 +46,7 @@ public open class KitePlayerAwtView : Canvas() {
                     },
                 )
                 try {
-                    renderer.setCanvas(this.takeIf { it.isDisplayable })
+                    renderer.setCanvas(rendererCanvas())
                     renderer
                 } catch (configurationFailure: Throwable) {
                     // Not yet known to PlayerViewBinding, so that binding cannot roll it back.
@@ -114,6 +114,28 @@ public open class KitePlayerAwtView : Canvas() {
         player = null
     }
 
+    /** Whether AWT has given this canvas its peer, as [canvasAvailable] and [canvasLost] report it. */
+    private var hasPeer = false
+
+    /**
+     * The canvas of an open [KitePlayerPictureInPicture] window, or null when none is open.
+     *
+     * While it is set the renderer paints there, and this view's own peer events leave the renderer
+     * where it is. Setting it moves the live renderer at once; clearing it hands the renderer back.
+     */
+    internal var floatingCanvas: Canvas? = null
+        set(value) {
+            if (field === value) return
+            field = value
+            binding.activeRenderer?.setCanvas(rendererCanvas())
+        }
+
+    /**
+     * The canvas the renderer should paint into: the floating window's while one is open, else this
+     * view while it has a peer, else none. Renderer creation and both peer events ask this.
+     */
+    internal fun rendererCanvas(): Canvas? = floatingCanvas ?: this.takeIf { hasPeer }
+
     /** The video's display aspect as the renderer last reported it, or 0 when there is none. */
     public val videoDisplayAspect: Float get() = ledger.displayAspect
 
@@ -146,13 +168,18 @@ public open class KitePlayerAwtView : Canvas() {
      * the lifecycle without a display, which is the only way this is testable on a build machine.
      */
     internal fun canvasAvailable() {
-        binding.activeRenderer?.setCanvas(this)
+        hasPeer = true
+        binding.activeRenderer?.setCanvas(rendererCanvas())
         binding.surfaceReady()
     }
 
-    /** The peer is going away. Fences the renderer off the canvas before returning. */
+    /**
+     * The peer is going away. Fences the renderer off this canvas before returning; a renderer
+     * painting into an open floating window stays there.
+     */
     internal fun canvasLost() {
-        binding.activeRenderer?.setCanvas(null)
+        hasPeer = false
+        binding.activeRenderer?.setCanvas(rendererCanvas())
         binding.surfaceGone()
     }
 }

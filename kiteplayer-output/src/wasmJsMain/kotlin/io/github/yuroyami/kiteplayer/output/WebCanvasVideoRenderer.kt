@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.VideoScale
+import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.VideoTransform
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
@@ -79,6 +80,10 @@ public class WebCanvasVideoRenderer(
     private var overlayHash: Long? = null
     private var closed: Boolean = false
 
+    /** Size and turn of the picture the stage holds, or null while it holds none. */
+    private var retainedSize: VideoSize? = null
+    private var retainedRotation: Int = 0
+
     /** Diagnostics, in the same three counts the Android renderer keeps. */
     public var presentedFrames: Long = 0
         private set
@@ -119,6 +124,9 @@ public class WebCanvasVideoRenderer(
                 failedFrames++
                 return false
             }
+            // Another frame size can give the stage a new, empty canvas, so the retained picture is
+            // forgotten until this frame is committed.
+            if (size != retainedSize) retainedSize = null
             if (!painter.paintRgba(frame, webStageBytes(s))) {
                 failedFrames++
                 return false
@@ -136,20 +144,47 @@ public class WebCanvasVideoRenderer(
                 return false
             }
             webCommitStage(s)
-            webDrawStage(
-                state = s,
-                drawLeft = layout.drawLeft,
-                drawTop = layout.drawTop,
-                drawWidth = layout.drawWidth,
-                drawHeight = layout.drawHeight,
-                centerX = layout.centerX,
-                centerY = layout.centerY,
-                rotation = layout.rotationDegrees,
-            )
+            retainedSize = size
+            retainedRotation = frame.rotationDegrees
+            drawStage(s, layout)
             drawOverlay(s)
             presentedFrames++
             return true
         }
+    }
+
+    private fun drawStage(s: JsAny, layout: FrameLayout) {
+        webDrawStage(
+            state = s,
+            drawLeft = layout.drawLeft,
+            drawTop = layout.drawTop,
+            drawWidth = layout.drawWidth,
+            drawHeight = layout.drawHeight,
+            centerX = layout.centerX,
+            centerY = layout.centerY,
+            rotation = layout.rotationDegrees,
+        )
+    }
+
+    /**
+     * Draws the retained picture and its subtitles again, at the current viewport.
+     *
+     * Resizing a canvas clears it, and a paused player sends no frame that would paint it again. The
+     * stage still holds the last picture, so it is drawn from there, exactly as [present] drew it.
+     */
+    private fun redrawRetained(s: JsAny) {
+        if (closed) return
+        val size = retainedSize ?: return
+        val layout = frameLayout(
+            canvasWidth = viewportWidth,
+            canvasHeight = viewportHeight,
+            size = size,
+            rotationDegrees = retainedRotation,
+            mode = scaleMode,
+            transform = transform,
+        ) ?: return
+        drawStage(s, layout)
+        drawOverlay(s)
     }
 
     /**
@@ -203,6 +238,10 @@ public class WebCanvasVideoRenderer(
      * Leaving the buffer at its 300x150 default and stretching it by CSS is the standard way to get
      * a blurry canvas, and no amount of correct geometry above fixes it. [scale] is the device
      * pixel ratio, so a HiDPI display gets the pixels it actually has.
+     *
+     * Resizing clears the canvas, so the retained picture is drawn again at the new size. That is
+     * what keeps a paused picture on screen when a page moves its canvas into a picture in picture
+     * window and back.
      */
     override fun setViewport(width: Int, height: Int, scale: Float) {
         val s = state ?: return
@@ -211,6 +250,7 @@ public class WebCanvasVideoRenderer(
         viewportWidth = pixelWidth
         viewportHeight = pixelHeight
         webResizeCanvas(s, pixelWidth, pixelHeight)
+        redrawRetained(s)
     }
 
     override fun setScaleMode(mode: VideoScale) {
@@ -232,6 +272,7 @@ public class WebCanvasVideoRenderer(
         closed = true
         overlay = null
         overlayHash = null
+        retainedSize = null
         state?.let(::webReleaseState)
     }
 }

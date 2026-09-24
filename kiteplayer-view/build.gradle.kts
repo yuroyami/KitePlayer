@@ -30,6 +30,12 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
     jvm()
+    // The web carries only its picture in picture class, over the page's own canvas.
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+        nodejs()
+    }
 
     android {
         namespace = "io.github.yuroyami.kiteplayer.view"
@@ -44,6 +50,10 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+        }
+        // The web tests wait for a browser promise, so they need a coroutine test scope.
+        getByName("wasmJsTest").dependencies {
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

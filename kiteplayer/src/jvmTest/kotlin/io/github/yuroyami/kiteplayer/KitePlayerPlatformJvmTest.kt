@@ -1,7 +1,12 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.mobile.mobileBackends
+import io.github.yuroyami.kiteplayer.view.KitePlayerAwtView
+import io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture
+import java.awt.GraphicsEnvironment
+import java.awt.Toolkit
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -27,9 +32,17 @@ class KitePlayerPlatformJvmTest {
         assertNotNull(mobileBackends().backend, "mobileBackends() found no desktop backend")
     }
 
-    /** Not a limitation to fix: no desktop window manager offers a PiP the player could drive. */
+    /**
+     * The desktop answer is the floating window's own: true where the JVM has a screen whose
+     * window system keeps a window on top, false on a headless build machine. So it must agree
+     * with the environment and with whether the floating window can be built at all.
+     */
     @Test
-    fun desktopDeclaresNoPictureInPicture() {
-        assertTrue(!KitePlayerPlatform.supportsPictureInPicture)
+    fun desktopPictureInPictureFollowsTheFloatingWindow() {
+        val environment = !GraphicsEnvironment.isHeadless() && Toolkit.getDefaultToolkit().isAlwaysOnTopSupported
+        assertEquals(environment, KitePlayerPlatform.supportsPictureInPicture, "the answer must follow the screen")
+        KitePlayerPictureInPicture.createOrNull(KitePlayerAwtView()).use { floating ->
+            assertEquals(floating != null, KitePlayerPlatform.supportsPictureInPicture, "the answer must match createOrNull")
+        }
     }
 }

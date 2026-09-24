@@ -105,10 +105,12 @@ kotlin {
             api(project(":kiteplayer-output"))
             api(project(":kiteplayer-view-bindings"))
         }
-        // The web carries the same two, now that both have a wasmJs target.
+        // The web carries the same two, now that both have a wasmJs target, and the view module for
+        // the picture in picture class.
         wasmJsMain.dependencies {
             api(project(":kiteplayer-ffmpeg"))
             api(project(":kiteplayer-output"))
+            api(project(":kiteplayer-view"))
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

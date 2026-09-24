@@ -3,6 +3,8 @@ package io.github.yuroyami.kiteplayer
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
 import io.github.yuroyami.kiteplayer.output.DesktopOutputBackend
 import io.github.yuroyami.kiteffmpeg.FFmpeg
+import java.awt.GraphicsEnvironment
+import java.awt.Toolkit
 
 internal actual val platformKitePlayerDefaults: KitePlayerPlatformDefaults =
     DesktopKitePlayerPlatformDefaults
@@ -34,8 +36,14 @@ private object DesktopKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
             )
     }
 
-    /** No desktop window manager here offers a system picture-in-picture the player can drive. */
-    override val supportsPictureInPicture: Boolean = false
+    /**
+     * Whether `KitePlayerPictureInPicture` can open its floating window here: the JVM has a screen,
+     * and its window system can keep a window above the others. It asks the same two questions as
+     * that class's `createOrNull`, headless first, because a headless JVM has no screen at all.
+     */
+    override val supportsPictureInPicture: Boolean
+        get() = !GraphicsEnvironment.isHeadless() &&
+            runCatching { Toolkit.getDefaultToolkit().isAlwaysOnTopSupported }.getOrDefault(false)
 
     override fun backendsOrNull(): Backends? = if (availability.isAvailable) {
         Backends(backend = KiteFFmpegMediaBackend(), output = DesktopOutputBackend)

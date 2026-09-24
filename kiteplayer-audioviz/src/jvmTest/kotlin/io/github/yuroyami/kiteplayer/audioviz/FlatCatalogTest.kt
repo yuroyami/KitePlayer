@@ -12,7 +12,7 @@ class FlatCatalogTest {
 
     @Test fun onlyTheRetainedPresetsAreSelectable() {
         assertEquals(listOf("Bars", "Ocean Mist", "Gemini", "Bloom", "Pulse", "Contour",
-            "Alchemy", "Plasma", "Nebula Field", "Aurora", "Aurora Field", "Kaleidoscope",
+            "Alchemy", "Plasma", "Nebula Field", "Kaleidoscope",
             "Stereogram", "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Neon Lo-Fi",
             "Marble"), VizCatalog.create().map { it.name })
     }
@@ -21,10 +21,10 @@ class FlatCatalogTest {
         val removed = listOf("Skidmark", "Sunburst", "Blur", "Fountain", "Gravity", "Sparkle",
             "Breath", "Tide", "Lantern", "Nebula", "Smoke", "Reactor", "RingFlight", "Mandala",
             "Drift", "Melt", "Lava", "PrismBurst", "OilSlick", "Ink", "LensRain", "Twist",
-            "FlowField", "Phosphor", "FractalZoom", "BlobField", "Shatter", "RippleWell", "ReactionDiffusion", "SmokeRise", "SmokeVortices")
+            "FlowField", "Phosphor", "FractalZoom", "BlobField", "Shatter", "RippleWell", "ReactionDiffusion", "SmokeRise", "SmokeVortices", "Aurora", "AuroraField")
         val root = "io.github.yuroyami.kiteplayer.audioviz.viz."
         for (name in removed) {
-            val area = if (name == "BlobField") "shader" else "presets"
+            val area = if (name == "BlobField" || name == "AuroraField") "shader" else "presets"
             assertTrue(runCatching { Class.forName("$root$area.$name") }.exceptionOrNull() is ClassNotFoundException,
                 "$name must be deleted, not merely hidden from the picker")
         }

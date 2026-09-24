@@ -1,6 +1,5 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz
 
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Aurora
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fluctus
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Bars
@@ -14,7 +13,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Pulse
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Stereogram
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ThinIce
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Alchemy
-import io.github.yuroyami.kiteplayer.audioviz.viz.shader.AuroraField
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Marble
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NebulaField
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Odyssey
@@ -43,8 +41,6 @@ public object VizCatalog {
         Alchemy(),
         Plasma(),
         NebulaField(),
-        Aurora(),
-        AuroraField(),
         Kaleidoscope(),
         Stereogram(),
         Pipe(),

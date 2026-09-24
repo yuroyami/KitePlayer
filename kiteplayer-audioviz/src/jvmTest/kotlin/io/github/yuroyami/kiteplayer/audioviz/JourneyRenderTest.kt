@@ -8,7 +8,6 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import io.github.yuroyami.kiteplayer.audioviz.viz.*
-import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.*
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.*
 import java.io.File
@@ -38,20 +37,6 @@ class JourneyRenderTest {
         }
         assertTrue(visible > width * height / 100, "$name must remain visible")
         ImageIO.write(with(RenderHarness) { image.toBufferedImage() }, "png", File(directory, "$name.png"))
-    }
-
-    @Test
-    fun pipeFormsRenderAtBothAspectRatios() {
-        for (form in 0..2) {
-            val viz = Pipe()
-            RenderHarness.forEachFrame(viz, 160, 90, 390, VizPalette.Prism, RenderHarness.Song.Lively,
-                beforeDraw = {
-                    viz.params.single { it.name == "Journey" }.value = 0f
-                    viz.params.single { it.name == "Form" }.value = form.toFloat()
-                }) { _, _ -> }
-            snapshot(viz, "pipe-$form")
-            if (form == 0 || form == 2) snapshot(viz, "pipe-$form-portrait", 360, 640)
-        }
     }
 
     @Test

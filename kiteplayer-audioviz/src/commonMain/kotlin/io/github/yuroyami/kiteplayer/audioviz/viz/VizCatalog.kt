@@ -13,7 +13,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Contour
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Gemini
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Kaleidoscope
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.OceanMist
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Pipe
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Plasma
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Pulse
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Stereogram
@@ -21,6 +20,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Alchemy
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.AuroraField
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NebulaField
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Odyssey
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Pipe
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderPreset
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.runtimeShadersSupported
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NeonLoFi

@@ -105,23 +105,20 @@ it is not a picker grouping.
 
 ## Continuous forms and landscape travel
 
-The flat catalogue includes the continuous Pipe preset and the Neon Lo-Fi musical landscape below.
-Their internal changes transform geometry and scene weights without crossfading preset pictures.
+The flat catalogue includes the Neon Lo-Fi musical landscape below. Its internal changes transform
+geometry and scene weights without crossfading preset pictures.
 
 | Catalogue entry | Forms inside it |
 | --- | --- |
-| Pipe | Pipe, Tunnel, Radar's converging horizon planes |
 | Neon Lo-Fi | Highway, mountain pass, city and coast in one musical night drive |
 
 Plasma also remains independently selectable. The other consumed forms have no separate catalogue
-entries or duplicate implementations. Pipe has `Journey` enabled by default; turn
-it off to choose a `Form`. Neon Lo-Fi uses its own `Scene` control, whose default is `Auto`.
-Manual choices still transform continuously.
+entries or duplicate implementations. Neon Lo-Fi uses its own `Scene` control, whose default is
+`Auto`. Manual choices still transform continuously.
 
-
-Pipe keeps its recorded spectrum rings and longitudinal rails while their cross sections become
-hexagonal and then open into broad parallel planes. Gates use the same cross-section transform.
-The default camera has no cuts, and a change of twist direction eases through zero.
+Pipe has no forms to choose. It is one shader: a tube of lit cells whose rings are past spectra.
+At a section the camera cuts to another lane, and on the same frame the cross section starts to
+turn round, square or six-sided over one cycle.
 
 The shared journey director weights destinations by the music and recent visits. It waits between
 changes and eases material weights with zero-velocity arrival. Delivered structural boundaries,

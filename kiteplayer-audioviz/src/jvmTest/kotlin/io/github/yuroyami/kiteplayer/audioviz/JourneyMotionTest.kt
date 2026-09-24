@@ -3,7 +3,6 @@ package io.github.yuroyami.kiteplayer.audioviz
 import io.github.yuroyami.kiteplayer.audioviz.viz.*
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Journey
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.PipeShape
 import kotlin.math.*
 import kotlin.test.*
 
@@ -41,23 +40,6 @@ class JourneyMotionTest {
         assertEquals(1f, journey.weights[1], 0.00001f)
         repeat(60) { journey.advance(journeyState(901 + it, held = true), gestures, FloatArray(5) { 1f }, false, 0) }
         assertContentEquals(previous, journey.weights)
-    }
-
-    @Test
-    fun ringsOpenIntoFlatParallelPlanesWithoutChangingVertexIdentity() {
-        val point = FloatArray(2)
-        var last = FloatArray(2)
-        for (step in 0..1000) {
-            val t = step / 1000f
-            PipeShape.point(point, 1.2f, 3f, 0.6f, floatArrayOf(1f - t, 0f, t))
-            assertTrue(point.all { it.isFinite() })
-            if (step > 0) assertTrue(hypot(point[0] - last[0], point[1] - last[1]) < 0.03f)
-            point.copyInto(last)
-        }
-        for (angle in listOf(0.9f, 1.2f, 1.8f, 2.1f)) {
-            PipeShape.point(point, angle, 3f, 2f, floatArrayOf(0f, 0f, 1f))
-            assertEquals(2.4f, point[1], 0.000001f)
-        }
     }
 
     @Test

@@ -35,10 +35,11 @@ class MediaNotificationLayoutTest {
 
     private fun MediaNotificationLayout.commands() = buttons.map { it.command }
 
+    // The session's custom actions reach the notification inside its content.
     private fun layoutFor(
         content: MediaNotificationContent,
         custom: List<MediaNotificationAction> = emptyList(),
-    ) = mediaNotificationLayout(content, custom)
+    ) = mediaNotificationLayout(content.copy(customActions = custom))
 
     @Test
     fun aLoneItemShowsOnlyPlayOrPause() {
@@ -148,12 +149,16 @@ class MediaNotificationLayoutTest {
             queueIndex = 1,
             queueOrder = listOf(0, 1),
         )
-        val read = snapshot.toMediaNotificationContent(artwork = null)
+        val read = snapshot.toMediaNotificationContent(artwork = null, customActions = listOf(like, shuffle))
         assertEquals("A Holiday", read.title)
         assertEquals("Skullbeatz", read.artist)
         assertTrue(read.hasPrevious)
         assertFalse(read.hasNext)
         assertTrue(read.playing)
+        // The notification shows the session's own buttons, the same list the system controls show.
+        assertEquals(listOf(like, shuffle), read.customActions)
+        val shown = mediaNotificationLayout(read).buttons.mapNotNull { it.customId }
+        assertEquals(listOf("like", "shuffle"), shown)
     }
 
     @Test

@@ -14,9 +14,8 @@ import io.github.yuroyami.kiteplayer.KitePlayerPlatform
  * added and the application registers nothing itself. Zero started activities means the
  * application is in the background.
  *
- * With [BackgroundPolicy.ContinueAudio], sound in the background on Android still needs the
- * application's own foreground service. This handle only parks the picture; it cannot keep a
- * process alive.
+ * With [BackgroundPolicy.ContinueAudio], this handle only parks the picture, so sound in the
+ * background also needs `KitePlayerPlatform.attachMediaNotification` to keep the process alive.
  *
  * @throws IllegalArgumentException when [context] does not belong to an [Application].
  */

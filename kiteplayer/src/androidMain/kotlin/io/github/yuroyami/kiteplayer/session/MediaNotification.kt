@@ -39,13 +39,6 @@ public data class MediaNotificationOptions(
      */
     val contentIntent: PendingIntent? = null,
     /**
-     * Buttons after previous, play or pause and next, in order. The notification shows five
-     * buttons at most. A press calls the handler given to [KitePlayerMediaSession.setCustomActions]
-     * with the button's id. From Android 13 the system media controls take their buttons from the
-     * session instead, so give the session the same actions.
-     */
-    val customActions: List<MediaNotificationAction> = emptyList(),
-    /**
      * How long a paused or finished player keeps the application in the foreground, so a press of
      * play from the lock screen or a headset can still start the sound. media3 uses ten minutes.
      * Zero leaves the foreground at the pause.
@@ -66,7 +59,10 @@ public data class MediaNotificationOptions(
     }
 }
 
-/** A button of the application's own, in the media notification and in the system media controls. */
+/**
+ * A button of the application's own, in the media notification and in the system media controls.
+ * Give them to [KitePlayerMediaSession.setCustomActions]. The notification shows five buttons at most.
+ */
 public data class MediaNotificationAction(
     /** What a press hands back to the handler given to [KitePlayerMediaSession.setCustomActions]. */
     val id: String,
@@ -87,7 +83,8 @@ public data class MediaNotificationAction(
  * the screen.
  *
  * The notification appears when playback starts. It carries the title, the artist, previous, play
- * or pause and next, and the options' own buttons. While the player plays or buffers,
+ * or pause and next, and the buttons given to [KitePlayerMediaSession.setCustomActions], the same
+ * ones the system media controls show. While the player plays or buffers,
  * [KitePlayerMediaService] holds the application in the foreground, so Android does not stop the
  * process. After a pause or at the end of the media it stays there for
  * [MediaNotificationOptions.pausedForegroundTimeout], then leaves the foreground, and the
@@ -171,8 +168,12 @@ internal class MediaNotificationHandle(
         options.contentIntent?.let(session::setSessionActivity)
         onMain { if (!closed) MediaNotificationRegistry.attach(this) }
         scope.launch {
-            combine(session.player.state, session.artworkState) { snapshot, artwork ->
-                snapshot.toMediaNotificationContent(artwork)
+            combine(
+                session.player.state,
+                session.artworkState,
+                session.customActionsState,
+            ) { snapshot, artwork, actions ->
+                snapshot.toMediaNotificationContent(artwork, actions)
             }.distinctUntilChanged().collect { next -> main.post { onContent(next) } }
         }
     }

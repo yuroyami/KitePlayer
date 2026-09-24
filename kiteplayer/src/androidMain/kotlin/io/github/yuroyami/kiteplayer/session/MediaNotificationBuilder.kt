@@ -29,12 +29,17 @@ internal data class MediaNotificationContent(
     val hasPrevious: Boolean,
     val hasNext: Boolean,
     val artwork: Bitmap?,
+    /** The session's own buttons, from [KitePlayerMediaSession.setCustomActions]. */
+    val customActions: List<MediaNotificationAction> = emptyList(),
 ) {
     /** True while the player is trying to play, so the middle button pauses. */
     val playing: Boolean get() = status.isActive
 }
 
-internal fun PlayerSnapshot.toMediaNotificationContent(artwork: Bitmap?): MediaNotificationContent {
+internal fun PlayerSnapshot.toMediaNotificationContent(
+    artwork: Bitmap?,
+    customActions: List<MediaNotificationAction>,
+): MediaNotificationContent {
     val state = toMediaSessionState(Progress())
     return MediaNotificationContent(
         status = status,
@@ -43,6 +48,7 @@ internal fun PlayerSnapshot.toMediaNotificationContent(artwork: Bitmap?): MediaN
         hasPrevious = state.hasPrevious,
         hasNext = state.hasNext,
         artwork = artwork,
+        customActions = customActions,
     )
 }
 
@@ -98,17 +104,14 @@ internal const val MAX_NOTIFICATION_BUTTONS = 5
  * notification shows those transport buttons, which are never more than the three it allows.
  * Buttons past the fifth are left out here rather than by the platform.
  */
-internal fun mediaNotificationLayout(
-    content: MediaNotificationContent,
-    customActions: List<MediaNotificationAction>,
-): MediaNotificationLayout {
+internal fun mediaNotificationLayout(content: MediaNotificationContent): MediaNotificationLayout {
     val transport = buildList {
         if (content.hasPrevious) add(transportButton(MediaNotificationCommand.Previous))
         val middle = if (content.playing) MediaNotificationCommand.Pause else MediaNotificationCommand.Play
         add(transportButton(middle))
         if (content.hasNext) add(transportButton(MediaNotificationCommand.Next))
     }
-    val custom = customActions.mapIndexed { index, action ->
+    val custom = content.customActions.mapIndexed { index, action ->
         MediaNotificationButton(
             MediaNotificationCommand.Custom,
             action.label,
@@ -208,7 +211,7 @@ internal fun buildMediaNotification(
     ongoing: Boolean,
 ): Notification {
     val sdk = Build.VERSION.SDK_INT
-    val layout = mediaNotificationLayout(content, options.customActions)
+    val layout = mediaNotificationLayout(content)
     val builder = Notification.Builder(context, options.channelId)
         .setSmallIcon(options.smallIcon)
         .setContentTitle(content.title)

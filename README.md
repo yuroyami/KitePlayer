@@ -271,8 +271,9 @@ val notification = KitePlayerPlatform.attachMediaNotification(
 )
 ```
 
-- The media notification shows the title, the artist, previous, play or pause, next, and your own
-  buttons. `session.setArtworkLoader` supplies the picture.
+- The media notification shows the title, the artist, previous, play or pause and next. Your own
+  buttons come from `session.setCustomActions`, and the system media controls show the same ones.
+  `session.setArtworkLoader` supplies the picture.
 - While the player plays, the service holds the app in the foreground. After a pause it stays in
   the foreground for ten minutes (`pausedForegroundTimeout`). Then the notification can be swiped
   away, which stops the service and leaves the player paused.

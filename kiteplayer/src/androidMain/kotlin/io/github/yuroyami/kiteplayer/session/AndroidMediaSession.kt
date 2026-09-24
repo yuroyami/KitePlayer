@@ -68,6 +68,9 @@ public class KitePlayerMediaSession(
     /** The activity set with [setSessionActivity], or null. */
     internal val sessionActivityIntent: PendingIntent? get() = sessionActivity
 
+    /** The buttons set with [setCustomActions], which the media notification shows too. */
+    internal val customActionsState: StateFlow<List<MediaNotificationAction>> get() = customActions
+
     /** The same door the system's controllers use, for the media notification's buttons. */
     internal val controls: MediaSession.Callback get() = callback
 
@@ -132,10 +135,9 @@ public class KitePlayerMediaSession(
     /**
      * Buttons of the application's own, such as a like or a shuffle button, in the order given.
      *
-     * The session publishes them to the system media controls, a watch and the car. A press calls
-     * [onAction] on the main thread with the button's id, and so does a press of the same button
-     * in the media notification. From Android 13 the system media controls take their buttons from
-     * here rather than from the notification.
+     * The session publishes them to the system media controls, a watch and the car, and the media
+     * notification shows them after previous, play or pause and next. A press in any of these
+     * calls [onAction] on the main thread with the button's id.
      *
      * @throws IllegalArgumentException when two actions share an id.
      */

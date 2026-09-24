@@ -142,6 +142,7 @@ class AndroidGlRenderQualityDeviceTest {
             debandGrain: Float = 0f,
             debandSeed: Float = 7f,
             bicubic: Boolean = false,
+            linearLight: Boolean = false,
             colourOffset: Float = 0f,
             /** The blit's packed picture controls; when set, it replaces [colourOffset]. */
             adjust: FloatArray? = null,
@@ -184,6 +185,7 @@ class AndroidGlRenderQualityDeviceTest {
             GLES20.glUniform1f(uniform("uDebandGrain"), debandGrain)
             GLES20.glUniform1f(uniform("uDebandSeed"), debandSeed)
             GLES20.glUniform1f(uniform("uBicubic"), if (bicubic) 1f else 0f)
+            GLES20.glUniform1f(uniform("uLinearLight"), if (linearLight) 1f else 0f)
             val position = GLES20.glGetAttribLocation(program, "aPosition")
             val texCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
             GLES20.glEnableVertexAttribArray(position)
@@ -450,6 +452,103 @@ class AndroidGlRenderQualityDeviceTest {
             source,
             gl.render(source, 16, 16, bicubic = true),
             "the kernel must be the identity at 1:1, where every tap sits on a texel centre",
+        )
+    }
+
+    /** One code value as the sRGB curve says it stands for, 0 to 1. */
+    private fun toLight(code: Int): Double {
+        val v = code / 255.0
+        return if (v <= 0.04045) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4)
+    }
+
+    /** Light back to the nearest code value. */
+    private fun toCode(light: Double): Int {
+        val v = light.coerceIn(0.0, 1.0)
+        val encoded = if (v <= 0.0031308) v * 12.92 else 1.055 * Math.pow(v, 1.0 / 2.4) - 0.055
+        return Math.round(encoded * 255.0).toInt()
+    }
+
+    /** Bilinear along one row at the sampler's texel centres, averaging light or code values. */
+    private fun referenceRow(source: IntArray, outWidth: Int, inLight: Boolean): List<Int> =
+        (0 until outWidth).map { x ->
+            val u = (x + 0.5) * source.size / outWidth - 0.5
+            val left = Math.floor(u).toInt()
+            val f = u - left
+            val a = source[left.coerceIn(0, source.size - 1)]
+            val b = source[(left + 1).coerceIn(0, source.size - 1)]
+            if (inLight) toCode((1 - f) * toLight(a) + f * toLight(b)) else Math.round((1 - f) * a + f * b).toInt()
+        }
+
+    /**
+     * The Metal golden for linear-light scaling, on the blit: one white column on black, enlarged
+     * four times. Averaging light puts the line's shoulders far brighter than averaging code
+     * values does, and a pass that compiles and does nothing leaves them where they were.
+     */
+    @Test
+    fun linearLightScalesAThinBrightLineAsLight() = harness { gl ->
+        val size = 8
+        val big = size * 4
+        val column = IntArray(size) { if (it == 3) 255 else 0 }
+        val source = IntArray(size * size) { grey(column[it % size]) }
+        fun row(pixels: IntArray) = (0 until big).map { red(pixels[(big / 2) * big + it]) }
+        val plain = row(gl.render(source, size, size, outputWidth = big, outputHeight = big))
+        val light = row(gl.render(source, size, size, outputWidth = big, outputHeight = big, linearLight = true))
+        fun misses(got: List<Int>, want: List<Int>) = got.indices.filter { abs(got[it] - want[it]) > 1 }
+        val lightReference = referenceRow(column, big, inLight = true)
+        assertTrue(
+            misses(light, lightReference).isEmpty(),
+            "linear light must match the reference averaging light: got $light, want $lightReference",
+        )
+        assertTrue(
+            plain.indices.any { light[it] - plain[it] >= 30 },
+            "linear light left the shoulders where code values put them, so it did nothing: $light",
+        )
+    }
+
+    /** Alternating black and white columns halved: code values average to 128, light to 188. */
+    @Test
+    fun linearLightAveragesAlternatingLinesAsLightWhenHalved() = harness { gl ->
+        val size = 16
+        val half = size / 2
+        val source = IntArray(size * size) { grey(if ((it % size) % 2 == 0) 0 else 255) }
+        val light = gl.render(source, size, size, outputWidth = half, outputHeight = size, linearLight = true)
+        val expected = toCode(0.5)
+        for (x in 0 until half) {
+            val value = red(light[(size / 2) * half + x])
+            assertTrue(abs(value - expected) <= 1, "light averages to $expected, got $value at $x")
+        }
+    }
+
+    /** At 1:1 nothing is scaled, so the trip into light and back must move no level by more than one. */
+    @Test
+    fun linearLightAtNativeSizeKeepsEveryLevel() = harness { gl ->
+        val source = IntArray(256 * 2) { grey(it % 256) }
+        val light = gl.render(source, 256, 2, linearLight = true)
+        val moved = (0 until 256).filter { abs(red(light[it]) - red(source[it])) > 1 }
+        assertTrue(moved.isEmpty(), "the round trip through light moved these levels: $moved")
+    }
+
+    /** With both switches on, the kernel runs over light: unlike over code values, and still steeper than bilinear over light. */
+    @Test
+    fun theKernelRunsOverLightWhenBothAreAsked() = harness { gl ->
+        val size = 16
+        val big = size * 4
+        val source = IntArray(size * size) { grey(if (it % size < size / 2) 40 else 210) }
+        fun row(bicubic: Boolean, linearLight: Boolean): List<Int> {
+            val out = gl.render(
+                source, size, size, outputWidth = big, outputHeight = big, bicubic = bicubic, linearLight = linearLight,
+            )
+            return (0 until big).map { red(out[(big / 2) * big + it]) }
+        }
+        val cubicInCode = row(bicubic = true, linearLight = false)
+        val bilinearInLight = row(bicubic = false, linearLight = true)
+        val cubicInLight = row(bicubic = true, linearLight = true)
+        assertTrue(cubicInLight != cubicInCode, "the kernel over light wrote what it writes over code values")
+        fun steepest(r: List<Int>) = r.zipWithNext().maxOf { (a, b) -> abs(b - a) }
+        assertTrue(
+            steepest(cubicInLight) > steepest(bilinearInLight),
+            "the kernel over light was no steeper than bilinear over light: " +
+                "${steepest(cubicInLight)} against ${steepest(bilinearInLight)}",
         )
     }
 

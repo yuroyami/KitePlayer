@@ -466,6 +466,171 @@ class MetalFrameComposerTest {
         }
     }
 
+    /** One code value as the light sRGB's curve says it stands for, 0 to 1. */
+    private fun toLight(code: Int): Double {
+        val v = code / 255.0
+        return if (v <= 0.04045) v / 12.92 else ((v + 0.055) / 1.055).pow(2.4)
+    }
+
+    /** Light back to the nearest code value. */
+    private fun toCode(light: Double): Int {
+        val v = light.coerceIn(0.0, 1.0)
+        val encoded = if (v <= 0.0031308) v * 12.92 else 1.055 * v.pow(1.0 / 2.4) - 0.055
+        return (encoded * 255.0).roundToInt()
+    }
+
+    /**
+     * The reference scaler: bilinear along one row, at the sampler's own texel centres, averaging
+     * either light or code values. Clamped at the edges, as the sampler is.
+     */
+    private fun referenceRow(source: IntArray, outWidth: Int, inLight: Boolean): List<Int> =
+        (0 until outWidth).map { x ->
+            val u = (x + 0.5) * source.size / outWidth - 0.5
+            val left = kotlin.math.floor(u).toInt()
+            val f = u - left
+            val a = source[left.coerceIn(0, source.size - 1)]
+            val b = source[(left + 1).coerceIn(0, source.size - 1)]
+            if (inLight) {
+                toCode((1 - f) * toLight(a) + f * toLight(b))
+            } else {
+                ((1 - f) * a + f * b).roundToInt()
+            }
+        }
+
+    private fun linearLight(size: Int, scaler: VideoScaler = VideoScaler.Bilinear) = packQualityUniforms(
+        RenderQuality(linearLight = true, scaler = scaler),
+        sourceWidth = size, sourceHeight = size,
+    )
+
+    @Test
+    fun linearLightScalesAThinBrightLineAsLight() {
+        // The golden for linear-light scaling: one white column on black, enlarged four times, and
+        // a reference scaler that averages LIGHT. Averaging code values puts the line's shoulders
+        // at 32 and 96 of 255; averaging light puts them near 99 and 170, which is why thin bright
+        // detail looks dimmer after an ordinary scale. The row is compared pixel by pixel.
+        //
+        // Four times keeps every sampler weight a multiple of an eighth, which the hardware holds
+        // exactly, so the only rounding left is the final write.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val size = 8
+        val big = size * 4
+        val source = IntArray(size) { if (it == 3) 255 else 0 }
+        val frame = TestFrame(size, size, fullRange709())
+        val picture = { lumaNv12(size, size) { x, _ -> source[x] } }
+
+        fun row(bytes: ByteArray) = (0 until big).map { bgraAt(bytes, big, it, big / 2)[1] }
+        val plain = row(render(composer, frame, picture(), targetWidth = big, targetHeight = big))
+        val light = row(
+            render(
+                composer, frame, picture(), targetWidth = big, targetHeight = big,
+                qualityUniforms = linearLight(size),
+            ),
+        )
+
+        fun misses(got: List<Int>, want: List<Int>) = got.indices.filter { abs(got[it] - want[it]) > 1 }
+        val codeReference = referenceRow(source, big, inLight = false)
+        assertEquals(
+            emptyList(),
+            misses(plain, codeReference),
+            "the plain scale must match the reference averaging code values, or the reference is " +
+                "wrong: got $plain, want $codeReference",
+        )
+        val lightReference = referenceRow(source, big, inLight = true)
+        assertEquals(
+            emptyList(),
+            misses(light, lightReference),
+            "linear light must match the reference averaging light: got $light, want $lightReference",
+        )
+        assertTrue(
+            plain.indices.any { light[it] - plain[it] >= 30 },
+            "linear light left the shoulders where code values put them, so it did nothing: $light",
+        )
+    }
+
+    @Test
+    fun linearLightAveragesAlternatingLinesAsLightWhenHalved() {
+        // The downscale half. Alternating black and white columns, halved, put every output pixel
+        // exactly between one black and one white texel. Code values average to 128. Light
+        // averages to half the white's light, which is 188 once written back as a code value.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val size = 16
+        val frame = TestFrame(size, size, fullRange709())
+        val picture = { lumaNv12(size, size) { x, _ -> if (x % 2 == 0) 0 else 255 } }
+        val half = size / 2
+
+        val plain = render(composer, frame, picture(), targetWidth = half, targetHeight = size)
+        val light = render(
+            composer, frame, picture(), targetWidth = half, targetHeight = size,
+            qualityUniforms = linearLight(size),
+        )
+        val expected = toCode(0.5)
+        for (x in 0 until half) {
+            val plainGreen = bgraAt(plain, half, x, size / 2)[1]
+            val lightGreen = bgraAt(light, half, x, size / 2)[1]
+            assertTrue(abs(plainGreen - 128) <= 1, "code values average to 128, got $plainGreen at $x")
+            assertTrue(
+                abs(lightGreen - expected) <= 1,
+                "light averages to $expected, got $lightGreen at $x",
+            )
+        }
+    }
+
+    @Test
+    fun linearLightAtNativeSizeKeepsEveryLevel() {
+        // Nothing is scaled at 1:1, so the trip into half-float light and back must not move a
+        // single level by more than one: every grey from 0 to 255, side by side.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val width = 256
+        val frame = TestFrame(width, 2, fullRange709())
+        val ramp = { lumaNv12(width, 2) { x, _ -> x } }
+        val plain = render(composer, frame, ramp(), targetWidth = width, targetHeight = 2)
+        val light = render(
+            composer, frame, ramp(), targetWidth = width, targetHeight = 2,
+            qualityUniforms = packQualityUniforms(
+                RenderQuality(linearLight = true), sourceWidth = width, sourceHeight = 2,
+            ),
+        )
+        val moved = (0 until width).filter { x ->
+            abs(bgraAt(plain, width, x, 0)[1] - bgraAt(light, width, x, 0)[1]) > 1
+        }
+        assertEquals(emptyList(), moved, "the round trip through light moved these levels")
+    }
+
+    @Test
+    fun theKernelRunsOverLightWhenBothAreAsked() {
+        // With both switches on, the Catmull-Rom kernel must run in the second pass, over light.
+        // Two things show it: the result differs from the same kernel over code values, and it is
+        // still steeper than plain bilinear over light.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val size = 16
+        val big = size * 4
+        val frame = TestFrame(size, size, fullRange709())
+        val picture = { lumaNv12(size, size) { x, _ -> if (x < size / 2) 40 else 210 } }
+        fun row(quality: FloatArray) = render(
+            composer, frame, picture(), targetWidth = big, targetHeight = big, qualityUniforms = quality,
+        ).let { bytes -> (0 until big).map { bgraAt(bytes, big, it, big / 2)[1] } }
+
+        val cubicInCode = row(
+            packQualityUniforms(
+                RenderQuality(scaler = VideoScaler.CatmullRom),
+                sourceWidth = size, sourceHeight = size,
+            ),
+        )
+        val bilinearInLight = row(linearLight(size))
+        val cubicInLight = row(linearLight(size, VideoScaler.CatmullRom))
+        assertTrue(cubicInLight != cubicInCode, "the kernel over light wrote what it writes over code values")
+        fun steepest(r: List<Int>) = r.zipWithNext().maxOf { (a, b) -> abs(b - a) }
+        assertTrue(
+            steepest(cubicInLight) > steepest(bilinearInLight),
+            "the kernel over light was no steeper than bilinear over light: " +
+                "${steepest(cubicInLight)} against ${steepest(bilinearInLight)}",
+        )
+    }
+
     // The Kotlin mirror of the shader's tone-mapping law, for expected values.
     @Test
     fun `dithering off writes exactly the pixels it always did`() {

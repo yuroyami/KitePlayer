@@ -51,9 +51,11 @@ public data class RenderQuality(
     /**
      * Scales in LIGHT-linear space rather than in the transfer curve's space.
      *
-     * More correct, and visibly so on high-contrast edges, but it is the only rung that changes the
-     * shape of the pipeline: it needs a linear intermediate between decode and draw rather than the
-     * single pass the renderers do today.
+     * Averaging code values darkens thin bright detail as a picture is scaled, which shows most on
+     * high-contrast edges such as subtitle text and animation lines. The Metal renderer converts
+     * the picture to light at its own size, in a half-float texture, and scales that. The Android
+     * GPU blit decodes each tap to light before it weighs it. Both use the sRGB curve, and both
+     * leave a picture drawn at its own size within one level of the plain write.
      */
     public val linearLight: Boolean = false,
 ) {

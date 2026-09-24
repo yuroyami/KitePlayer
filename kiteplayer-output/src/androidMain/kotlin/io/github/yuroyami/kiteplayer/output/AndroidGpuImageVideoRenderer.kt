@@ -113,6 +113,7 @@ public class AndroidGpuImageVideoRenderer(
         bridge.debandRange.set(quality.debandRange)
         bridge.debandGrain.set(if (quality.deband) quality.debandGrain / 16384f else 0f)
         bridge.bicubic.set(quality.scaler == io.github.yuroyami.kiteplayer.VideoScaler.CatmullRom)
+        bridge.linearLight.set(quality.linearLight)
     }
 
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
@@ -425,6 +426,9 @@ private class OesRgbaBridge(
 
     /** True runs the Catmull-Rom kernel AND lets the blit enlarge. Read by the blit. */
     val bicubic = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** True scales in linear light: each tap is decoded to light before it is weighted. */
+    val linearLight = java.util.concurrent.atomic.AtomicBoolean(false)
     private val startup = AtomicReference<Result<GlState>>()
     private val ready = CountDownLatch(1)
     @Volatile private var closed = false
@@ -452,6 +456,7 @@ private class OesRgbaBridge(
                         debandRange,
                         debandGrain,
                         bicubic,
+                        linearLight,
                         publish,
                         recordSuperseded,
                         reportFailure,
@@ -608,12 +613,14 @@ internal class GlState private constructor(
     private val debandRange: java.util.concurrent.atomic.AtomicReference<Float>,
     private val debandGrain: java.util.concurrent.atomic.AtomicReference<Float>,
     private val bicubic: java.util.concurrent.atomic.AtomicBoolean,
+    private val linearLight: java.util.concurrent.atomic.AtomicBoolean,
     private val debandThresholdUniform: Int,
     private val debandRangeUniform: Int,
     private val debandGrainUniform: Int,
     private val debandSeedUniform: Int,
     private val sourceSizeUniform: Int,
     private val bicubicUniform: Int,
+    private val linearLightUniform: Int,
 ) : AutoCloseable {
     /** Advances per draw so the debanding ring and its grain do not sit still. */
     private val debandSeed = java.util.concurrent.atomic.AtomicInteger(0)
@@ -744,6 +751,7 @@ internal class GlState private constructor(
             GLES20.glUniform1f(debandGrainUniform, debandGrain.get())
             GLES20.glUniform1f(debandSeedUniform, (debandSeed.getAndIncrement() % 1024).toFloat())
             GLES20.glUniform1f(bicubicUniform, if (bicubic.get()) 1f else 0f)
+            GLES20.glUniform1f(linearLightUniform, if (linearLight.get()) 1f else 0f)
             GLES20.glEnableVertexAttribArray(position)
             GLES20.glEnableVertexAttribArray(texCoord)
             VERTICES.position(0)
@@ -1033,6 +1041,7 @@ internal class GlState private constructor(
             uniform float uDebandGrain;
             uniform float uDebandSeed;
             uniform float uBicubic;
+            uniform float uLinearLight;
             varying vec2 vTexCoord;
             varying vec2 vSourceCoord;
             varying vec2 vStepX;
@@ -1063,6 +1072,18 @@ internal class GlState private constructor(
                 return 32.0 * xb2 + 16.0 * yb2 + 8.0 * xb1 + 4.0 * yb1 + 2.0 * xb0 + yb0;
             }
 
+            /* The sRGB curve, both ways, for linear-light scaling: the same curve the Metal body
+             * uses, so both renderers average the same light. */
+            vec3 kpToLight(vec3 v) {
+                v = clamp(v, 0.0, 1.0);
+                return mix(pow((v + 0.055) / 1.055, vec3(2.4)), v / 12.92, step(v, vec3(0.04045)));
+            }
+
+            vec3 kpFromLight(vec3 light) {
+                light = max(light, 0.0);
+                return mix(1.055 * pow(light, vec3(1.0 / 2.4)) - 0.055, light * 12.92, step(light, vec3(0.0031308)));
+            }
+
             /* Catmull-Rom's weight, B = 0 and C = 0.5, written out. */
             float kpCubicWeight(float x) {
                 float a = abs(x);
@@ -1078,7 +1099,7 @@ internal class GlState private constructor(
              * go negative, the sample lands past the pair, and the kernel silently degrades to the
              * bilinear it exists to replace. It compiles, it costs four taps, it sharpens nothing.
              * Sixteen exact taps are the honest price. */
-            vec4 kpBicubic() {
+            vec4 kpBicubic(float inLight) {
                 vec2 f = fract(vSourceCoord - 0.5);
                 vec2 first = -1.0 - f;
                 vec4 sum = vec4(0.0);
@@ -1089,17 +1110,37 @@ internal class GlState private constructor(
                     for (int i = 0; i < 4; i++) {
                         float dx = first.x + float(i);
                         float w = kpCubicWeight(dx) * wy;
-                        sum += w * texture2D(uTexture, vTexCoord + dx * vStepX + dy * vStepY);
+                        vec4 tap = texture2D(uTexture, vTexCoord + dx * vStepX + dy * vStepY);
+                        if (inLight > 0.5) tap.rgb = kpToLight(tap.rgb);
+                        sum += w * tap;
                         weight += w;
                     }
                 }
                 return sum / weight;
             }
 
+            /* The sampler's bilinear, done by hand on four texel centres so that each tap can be
+             * decoded to light before it is weighted. Weighting light rather than code values is
+             * the whole of linear-light scaling, and it is what the Metal body's second pass does
+             * with the hardware's bilinear over a texture of light. */
+            vec4 kpBilinearLight() {
+                vec2 f = fract(vSourceCoord - 0.5);
+                vec2 near = -f;
+                vec2 far = 1.0 - f;
+                vec3 a = kpToLight(texture2D(uTexture, vTexCoord + near.x * vStepX + near.y * vStepY).rgb);
+                vec3 b = kpToLight(texture2D(uTexture, vTexCoord + far.x * vStepX + near.y * vStepY).rgb);
+                vec3 c = kpToLight(texture2D(uTexture, vTexCoord + near.x * vStepX + far.y * vStepY).rgb);
+                vec3 d = kpToLight(texture2D(uTexture, vTexCoord + far.x * vStepX + far.y * vStepY).rgb);
+                return vec4(mix(mix(a, b, f.x), mix(c, d, f.x), f.y), 1.0);
+            }
+
             void main() {
                 /* Debanding and the kernel are exclusive, and deband wins, which is exactly what
                  * the Metal body does. Keeping the two renderers identical is worth more than
-                 * either of them being individually richer; the combination stays open. */
+                 * either of them being individually richer; the combination stays open. Linear
+                 * light is not exclusive with either: it changes how the centre sample is
+                 * weighted, and the ring replaces it only where the neighbourhood is flat, where
+                 * light and code values average alike. */
                 vec4 c;
                 if (uDebandThreshold > 0.0) {
                     /* One difference from the Metal body, stated rather than hidden: there the
@@ -1107,7 +1148,12 @@ internal class GlState private constructor(
                      * does it. MediaCodec hands this tier an external texture that is already RGB,
                      * so the ring is walked on the converted colour. Same shape, same threshold
                      * law, one conversion later. */
-                    c = texture2D(uTexture, vTexCoord);
+                    if (uLinearLight > 0.5) {
+                        c = kpBilinearLight();
+                        c.rgb = kpFromLight(c.rgb);
+                    } else {
+                        c = texture2D(uTexture, vTexCoord);
+                    }
                     float angle = kpHash(gl_FragCoord.xy, uDebandSeed) * 6.2831853;
                     float ca = cos(angle);
                     float sa = sin(angle);
@@ -1134,7 +1180,11 @@ internal class GlState private constructor(
                         c.rgb = clamp(c.rgb + vec3(g), 0.0, 1.0);
                     }
                 } else if (uBicubic > 0.5) {
-                    c = kpBicubic();
+                    c = kpBicubic(uLinearLight);
+                    if (uLinearLight > 0.5) c.rgb = kpFromLight(c.rgb);
+                } else if (uLinearLight > 0.5) {
+                    c = kpBilinearLight();
+                    c.rgb = kpFromLight(c.rgb);
                 } else {
                     c = texture2D(uTexture, vTexCoord);
                 }
@@ -1195,6 +1245,7 @@ internal class GlState private constructor(
             debandRange: java.util.concurrent.atomic.AtomicReference<Float>,
             debandGrain: java.util.concurrent.atomic.AtomicReference<Float>,
             bicubic: java.util.concurrent.atomic.AtomicBoolean,
+            linearLight: java.util.concurrent.atomic.AtomicBoolean,
             publish: (AndroidGpuImageFrame) -> Unit,
             recordSuperseded: (Long) -> Unit,
             reportFailure: (Throwable) -> Unit,
@@ -1290,6 +1341,7 @@ internal class GlState private constructor(
                 val debandSeedUniform = GLES20.glGetUniformLocation(program, "uDebandSeed")
                 val sourceSizeUniform = GLES20.glGetUniformLocation(program, "uSourceSize")
                 val bicubicUniform = GLES20.glGetUniformLocation(program, "uBicubic")
+                val linearLightUniform = GLES20.glGetUniformLocation(program, "uLinearLight")
                 check(
                     position >= 0 && texCoord >= 0 && sampler >= 0 &&
                         texMatrixUniform >= 0 && sourceSizeUniform >= 0,
@@ -1328,12 +1380,14 @@ internal class GlState private constructor(
                     debandRange = debandRange,
                     debandGrain = debandGrain,
                     bicubic = bicubic,
+                    linearLight = linearLight,
                     debandThresholdUniform = debandThresholdUniform,
                     debandRangeUniform = debandRangeUniform,
                     debandGrainUniform = debandGrainUniform,
                     debandSeedUniform = debandSeedUniform,
                     sourceSizeUniform = sourceSizeUniform,
                     bicubicUniform = bicubicUniform,
+                    linearLightUniform = linearLightUniform,
                 )
                 surfaceTexture.setOnFrameAvailableListener(
                     {

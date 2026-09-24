@@ -30,6 +30,7 @@ import platform.Metal.MTLPixelFormatR8Unorm
 import platform.Metal.MTLPixelFormatRG16Unorm
 import platform.Metal.MTLPixelFormatRG8Unorm
 import platform.Metal.MTLPixelFormatRGBA8Unorm
+import platform.Metal.MTLPixelFormatRGBA16Float
 import platform.Metal.MTLRenderPipelineDescriptor
 import platform.Metal.MTLRenderPipelineStateProtocol
 import platform.Metal.MTLTextureDescriptor
@@ -146,7 +147,7 @@ struct AdjustUniforms {
 };
 
 struct QualityUniforms {
-    int   flags;          // bit 0 dither, bit 1 deband, bit 2 bicubic. 0 is the plain write.
+    int   flags;          // bit 0 dither, bit 1 deband, bit 2 bicubic, bit 3 linear light. 0 is the plain write.
     float ditherScale;    // one output step, so the pattern is exactly +/- half a step
     float debandThreshold;// how flat a neighbourhood must be to count as a band, in 0..1
     float debandRange;    // ring radius at the first iteration, in source pixels
@@ -297,6 +298,19 @@ static inline float4 kp_bicubic(texture2d<float> plane, sampler s, float2 coord,
     /* The weights sum to one analytically; dividing keeps the edges honest, where clamping repeats
      * a texel and the sum is still one but the samples are not what the kernel assumed. */
     return total / max(weightSum, 1e-5);
+}
+
+/* The sRGB curve, both ways. Linear-light scaling decodes the picture to light with it before the
+ * kernel and encodes it again after, so a scale averages light rather than code values. The
+ * round trip at the picture's own size moves no level by more than one step. */
+static inline float3 kp_to_light(float3 v) {
+    v = clamp(v, 0.0, 1.0);
+    return select(pow((v + 0.055) / 1.055, float3(2.4)), v / 12.92, v <= float3(0.04045));
+}
+
+static inline float3 kp_from_light(float3 light) {
+    light = max(light, 0.0);
+    return select(1.055 * pow(light, float3(1.0 / 2.4)) - 0.055, light * 12.92, light <= float3(0.0031308));
 }
 
 // SMPTE ST 2084 (PQ) constants.
@@ -465,10 +479,37 @@ fragment float4 kp_picture(
     if (adj.gammaEnabled != 0) {
         rgb = pow(max(rgb, 0.0), float3(adj.gammaExponent));
     }
+    /* Linear light: this is the first of two passes. The picture goes into a half-float texture
+     * at its own size, as light, and kp_light_scale scales it and dithers it. The composer clears
+     * the dither and kernel bits for this pass, so neither runs twice. */
+    if ((q.flags & 8) != 0) {
+        return float4(kp_to_light(rgb), 1.0);
+    }
     /* Last, after every stage that could have produced an off-grid value: tone mapping, the eq
      * matrix and the YUV conversion all land between output steps, and this is the only place that
      * knows what a step is worth. Clamped again because the pattern can push a 0.0 or a 1.0 out of
      * range by half a step. */
+    if ((q.flags & 1) != 0) {
+        rgb = clamp(kp_dither(rgb, in.position.xy, q.ditherScale), 0.0, 1.0);
+    }
+    return float4(rgb, 1.0);
+}
+
+/* The second pass of linear-light scaling: the picture as light, at its own size, scaled onto the
+ * target by the sampler's bilinear or by the Catmull-Rom kernel, then encoded and dithered. The
+ * kernel's ringing can dip below black, which the encode floors at zero. Debanding ran in the
+ * first pass, and it still wins over the kernel, as it does in kp_picture and in the Android blit,
+ * so the two renderers treat every combination alike. */
+fragment float4 kp_light_scale(
+    VertexOut in [[stage_in]],
+    texture2d<float> light [[texture(0)]],
+    constant QualityUniforms &q [[buffer(3)]]
+) {
+    constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
+    float3 scaled = ((q.flags & 4) != 0 && (q.flags & 2) == 0)
+        ? kp_bicubic(light, s, in.texcoord, float2(light.get_width(), light.get_height())).rgb
+        : light.sample(s, in.texcoord).rgb;
+    float3 rgb = clamp(kp_from_light(scaled), 0.0, 1.0);
     if ((q.flags & 1) != 0) {
         rgb = clamp(kp_dither(rgb, in.position.xy, q.ditherScale), 0.0, 1.0);
     }
@@ -517,6 +558,9 @@ internal fun packQualityUniforms(
     if (quality.scaler == io.github.yuroyami.kiteplayer.VideoScaler.CatmullRom && sized) {
         flags = flags or 4
     }
+    // Linear light takes its intermediate's size from the picture's own textures, so it needs no
+    // source size here.
+    if (quality.linearLight) flags = flags or 8
     val levels = (1 shl targetBits) - 1
     // The thresholds are mpv's units, 1/16384 of full scale, converted here rather than in the
     // shader so the constant is not written twice in two languages.
@@ -686,6 +730,10 @@ internal class MetalColorUniforms private constructor(
 internal class MetalPipelines private constructor(
     val picture: MTLRenderPipelineStateProtocol,
     val overlay: MTLRenderPipelineStateProtocol,
+    /** The picture into a half-float texture of light, the first pass of linear-light scaling. */
+    val lightPicture: MTLRenderPipelineStateProtocol,
+    /** The second pass: that texture scaled onto the target. */
+    val lightScale: MTLRenderPipelineStateProtocol,
 ) {
     companion object {
         private val lock = kotlinx.atomicfu.locks.SynchronizedObject()
@@ -698,6 +746,8 @@ internal class MetalPipelines private constructor(
                     MetalPipelines(
                         picture = device.makePicturePipeline(library, targetFormat),
                         overlay = device.makeOverlayPipeline(library, targetFormat),
+                        lightPicture = device.makePicturePipeline(library, MTLPixelFormatRGBA16Float),
+                        lightScale = device.makeLightScalePipeline(library, targetFormat),
                     )
                 }
             }
@@ -717,6 +767,11 @@ internal fun MTLDeviceProtocol.makePicturePipeline(
     library: MTLLibraryProtocol,
     targetFormat: ULong,
 ): MTLRenderPipelineStateProtocol = makePipeline(library, "kp_picture", targetFormat, blended = false)
+
+internal fun MTLDeviceProtocol.makeLightScalePipeline(
+    library: MTLLibraryProtocol,
+    targetFormat: ULong,
+): MTLRenderPipelineStateProtocol = makePipeline(library, "kp_light_scale", targetFormat, blended = false)
 
 internal fun MTLDeviceProtocol.makeOverlayPipeline(
     library: MTLLibraryProtocol,
@@ -765,6 +820,20 @@ internal fun MTLDeviceProtocol.makePlaneTexture(
     )
     descriptor.usage = MTLTextureUsageShaderRead
     return checkNotNull(newTextureWithDescriptor(descriptor)) { "Metal refused a ${width}x$height plane texture" }
+}
+
+/** The half-float texture that holds the picture as light between the two linear-light passes. */
+internal fun MTLDeviceProtocol.makeLightTexture(width: Int, height: Int): MTLTextureProtocol {
+    val descriptor = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
+        pixelFormat = MTLPixelFormatRGBA16Float,
+        width = width.toULong(),
+        height = height.toULong(),
+        mipmapped = false,
+    )
+    descriptor.usage = MTLTextureUsageRenderTarget or MTLTextureUsageShaderRead
+    // Only the GPU reads and writes it.
+    descriptor.storageMode = platform.Metal.MTLStorageModePrivate
+    return checkNotNull(newTextureWithDescriptor(descriptor)) { "Metal refused a ${width}x$height light texture" }
 }
 
 /** An offscreen render target, which is also what the colour instrument reads back. */

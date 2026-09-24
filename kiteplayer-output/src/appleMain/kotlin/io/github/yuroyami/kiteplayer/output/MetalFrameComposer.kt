@@ -69,6 +69,9 @@ internal class MetalFrameComposer(
     private val picturePipeline = pipelines.picture
     private val overlayPipeline = pipelines.overlay
 
+    /** The picture as light, at its own size, between the two linear-light passes. Reused. */
+    private var lightTexture: MTLTextureProtocol? = null
+
     internal val queue: MTLCommandQueueProtocol =
         checkNotNull(device.newCommandQueue()) { "Metal refused a command queue" }
 
@@ -132,49 +135,44 @@ internal class MetalFrameComposer(
             is MetalPicture.CorePixelBuffer -> hardwareInputs(picture, frame)
         }
 
-        val pass = MTLRenderPassDescriptor()
-        val attachment = pass.colorAttachments.objectAtIndexedSubscript(0u)
-        attachment.texture = target
-        attachment.loadAction = MTLLoadActionClear
-        attachment.storeAction = MTLStoreActionStore
-
         val commands = checkNotNull(queue.commandBuffer()) { "Metal refused a command buffer" }
-        val encoder = checkNotNull(commands.renderCommandEncoderWithDescriptor(pass)) {
-            "Metal refused a render encoder"
-        }
         // Until the completed handler owns it, this function owns the wrapped textures' release:
         // a throw anywhere between wrapping and commit (an encoder refusal, a bad overlay bitmap)
         // must not orphan CVMetalTextureRefs the GPU will never read.
         var releaseHandedOff = false
         try {
+            val flags = qualityUniforms[0].toRawBits()
+            // Linear light: first the picture as light, at its own size, into a half-float
+            // texture, and then that texture scaled onto the target by the second pass.
+            val light = if ((flags and LINEAR_LIGHT_FLAG) != 0) {
+                encodeLightPass(commands, inputs, toneUniforms, adjustUniforms, qualityUniforms, flags)
+            } else {
+                null
+            }
+
+            val pass = MTLRenderPassDescriptor()
+            val attachment = pass.colorAttachments.objectAtIndexedSubscript(0u)
+            attachment.texture = target
+            attachment.loadAction = MTLLoadActionClear
+            attachment.storeAction = MTLStoreActionStore
+            val encoder = checkNotNull(commands.renderCommandEncoderWithDescriptor(pass)) {
+                "Metal refused a render encoder"
+            }
             try {
-                encoder.setRenderPipelineState(picturePipeline)
                 val quad = quadOverride
                     ?: quadUniformsFor(frame, viewportWidth, viewportHeight, scaleMode, videoTransform)
                 quad.usePinned { pinned ->
                     encoder.setVertexBytes(pinned.addressOf(0), (quad.size * 4).toULong(), atIndex = 0u)
                 }
-                val colors = inputs.uniforms
-                colors.usePinned { pinned ->
-                    encoder.setFragmentBytes(pinned.addressOf(0), (colors.size * 4).toULong(), atIndex = 0u)
-                }
-                // Always bound, disabled or not: an unbound constant buffer is undefined
-                // behaviour on some GPUs, and the disabled flag costs the shader one compare.
-                adjustUniforms.usePinned { pinned ->
-                    encoder.setFragmentBytes(pinned.addressOf(0), (adjustUniforms.size * 4).toULong(), atIndex = 1u)
-                }
-                qualityUniforms.usePinned { pinned ->
-                    encoder.setFragmentBytes(pinned.addressOf(0), (qualityUniforms.size * 4).toULong(), atIndex = 3u)
-                }
-                toneUniforms.usePinned { pinned ->
-                    encoder.setFragmentBytes(pinned.addressOf(0), (toneUniforms.size * 4).toULong(), atIndex = 2u)
-                }
-                inputs.textures.forEachIndexed { index, texture ->
-                    encoder.setFragmentTexture(texture, atIndex = index.toULong())
-                }
-                // Unused plane slots still need a bound texture on some GPUs; bind the first again.
-                for (index in inputs.textures.size until 3) {
-                    encoder.setFragmentTexture(inputs.textures.first(), atIndex = index.toULong())
+                if (light != null) {
+                    encoder.setRenderPipelineState(pipelines.lightScale)
+                    qualityUniforms.usePinned { pinned ->
+                        encoder.setFragmentBytes(pinned.addressOf(0), (qualityUniforms.size * 4).toULong(), atIndex = 3u)
+                    }
+                    encoder.setFragmentTexture(light, atIndex = 0u)
+                } else {
+                    encoder.setRenderPipelineState(picturePipeline)
+                    bindPicture(encoder, inputs, toneUniforms, adjustUniforms, qualityUniforms)
                 }
                 encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
 
@@ -209,6 +207,80 @@ internal class MetalFrameComposer(
     /** The most recently committed buffer; the serial queue makes waiting on it wait on all. */
     private var lastCommands: MTLCommandBufferProtocol? = null
 
+    /** Binds the picture's planes and the four uniform blocks that [picturePipeline] reads. */
+    private fun bindPicture(
+        encoder: platform.Metal.MTLRenderCommandEncoderProtocol,
+        inputs: PictureInputs,
+        toneUniforms: FloatArray,
+        adjustUniforms: FloatArray,
+        qualityUniforms: FloatArray,
+    ) {
+        val colors = inputs.uniforms
+        colors.usePinned { pinned ->
+            encoder.setFragmentBytes(pinned.addressOf(0), (colors.size * 4).toULong(), atIndex = 0u)
+        }
+        // Always bound, disabled or not: an unbound constant buffer is undefined
+        // behaviour on some GPUs, and the disabled flag costs the shader one compare.
+        adjustUniforms.usePinned { pinned ->
+            encoder.setFragmentBytes(pinned.addressOf(0), (adjustUniforms.size * 4).toULong(), atIndex = 1u)
+        }
+        qualityUniforms.usePinned { pinned ->
+            encoder.setFragmentBytes(pinned.addressOf(0), (qualityUniforms.size * 4).toULong(), atIndex = 3u)
+        }
+        toneUniforms.usePinned { pinned ->
+            encoder.setFragmentBytes(pinned.addressOf(0), (toneUniforms.size * 4).toULong(), atIndex = 2u)
+        }
+        inputs.textures.forEachIndexed { index, texture ->
+            encoder.setFragmentTexture(texture, atIndex = index.toULong())
+        }
+        // Unused plane slots still need a bound texture on some GPUs; bind the first again.
+        for (index in inputs.textures.size until 3) {
+            encoder.setFragmentTexture(inputs.textures.first(), atIndex = index.toULong())
+        }
+    }
+
+    /**
+     * The first linear-light pass: the whole picture, upright as stored, at the size of its first
+     * plane, converted as usual and written as light into [lightTexture]. The dither and the kernel
+     * wait for the second pass, so their bits are cleared here. Returns the texture.
+     */
+    private fun encodeLightPass(
+        commands: MTLCommandBufferProtocol,
+        inputs: PictureInputs,
+        toneUniforms: FloatArray,
+        adjustUniforms: FloatArray,
+        qualityUniforms: FloatArray,
+        flags: Int,
+    ): MTLTextureProtocol {
+        val plane = inputs.textures.first()
+        val width = plane.width.toInt()
+        val height = plane.height.toInt()
+        val texture = lightTexture?.takeIf { it.width.toInt() == width && it.height.toInt() == height }
+            ?: device.makeLightTexture(width, height).also { lightTexture = it }
+        val pass = MTLRenderPassDescriptor()
+        val attachment = pass.colorAttachments.objectAtIndexedSubscript(0u)
+        attachment.texture = texture
+        // The quad covers every texel, so nothing needs loading.
+        attachment.loadAction = platform.Metal.MTLLoadActionDontCare
+        attachment.storeAction = MTLStoreActionStore
+        val encoder = checkNotNull(commands.renderCommandEncoderWithDescriptor(pass)) {
+            "Metal refused a render encoder for the light pass"
+        }
+        try {
+            encoder.setRenderPipelineState(pipelines.lightPicture)
+            LIGHT_PASS_QUAD.usePinned { pinned ->
+                encoder.setVertexBytes(pinned.addressOf(0), (LIGHT_PASS_QUAD.size * 4).toULong(), atIndex = 0u)
+            }
+            val firstPass = qualityUniforms.copyOf()
+            firstPass[0] = Float.fromBits(flags and (DITHER_FLAG or KERNEL_FLAG).inv())
+            bindPicture(encoder, inputs, toneUniforms, adjustUniforms, firstPass)
+            encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
+        } finally {
+            encoder.endEncoding()
+        }
+        return texture
+    }
+
     /**
      * Releases what the composer owns natively: the CVMetalTextureCache and its nativeHeap
      * holder. The GPU is fenced first by waiting on the last committed buffer,
@@ -219,6 +291,7 @@ internal class MetalFrameComposer(
     fun close() {
         lastCommands?.waitUntilCompleted()
         lastCommands = null
+        lightTexture = null
         textureCache?.let { holder ->
             CVMetalTextureCacheFlush(holder.pointed.value, 0uL)
             holder.pointed.value?.let { CFRelease(it) }
@@ -404,3 +477,11 @@ internal class MetalFrameComposer(
         overlayViewport = viewport
     }
 }
+
+/** The quality flag bits the composer reads. The shader's `QualityUniforms` lists them all. */
+private const val DITHER_FLAG = 1
+private const val KERNEL_FLAG = 4
+private const val LINEAR_LIGHT_FLAG = 8
+
+/** A quad over the whole target with the picture upright as stored: the light pass's geometry. */
+private val LIGHT_PASS_QUAD = floatArrayOf(1f, 1f, 1f, 0f, 0f, 1f, 0f, 0f)

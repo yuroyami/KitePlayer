@@ -43,9 +43,15 @@ class WarningAuditTest {
         PlaybackWarning.ResamplerUnavailable("x"),
         PlaybackWarning.AudioTapFailed("x"),
         PlaybackWarning.RecordingStopped("x.mkv", "x"),
+        PlaybackWarning.SourceReconnecting(1_024, 1, "x"),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
+        is PlaybackWarning.SourceReconnecting -> listOf(
+            "KtorMediaIo.read in :kiteplayer-network, before each reconnect after a failed read, a read " +
+                "timeout or a response that ended early; it reaches the player through MediaIo.setWarningSink, " +
+                "which PlaybackCore.buildSession installs on every reader",
+        )
         is PlaybackWarning.RecordingStopped -> listOf(
             "PlaybackCore.endRecording, when a seek, a queue move or any session end other than " +
                 "stopRecording, stop and close ends a running recording, or the file cannot be finished",

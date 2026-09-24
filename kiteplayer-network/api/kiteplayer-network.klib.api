@@ -244,16 +244,25 @@ final class io.github.yuroyami.kiteplayer.network.xml/XmlException : kotlin/Exce
 }
 
 final class io.github.yuroyami.kiteplayer.network/HttpReaderPolicy { // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy|null[0]
-    constructor <init>(kotlin.time/Duration = ..., kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.<init>|<init>(kotlin.time.Duration;kotlin.time.Duration){}[0]
+    constructor <init>(kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.<init>|<init>(kotlin.time.Duration;kotlin.time.Duration;kotlin.Int;kotlin.time.Duration;kotlin.time.Duration){}[0]
 
     final val connectTimeout // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.connectTimeout|{}connectTimeout[0]
         final fun <get-connectTimeout>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.connectTimeout.<get-connectTimeout>|<get-connectTimeout>(){}[0]
+    final val initialBackoff // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.initialBackoff|{}initialBackoff[0]
+        final fun <get-initialBackoff>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.initialBackoff.<get-initialBackoff>|<get-initialBackoff>(){}[0]
+    final val maxBackoff // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.maxBackoff|{}maxBackoff[0]
+        final fun <get-maxBackoff>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.maxBackoff.<get-maxBackoff>|<get-maxBackoff>(){}[0]
+    final val maxReconnects // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.maxReconnects|{}maxReconnects[0]
+        final fun <get-maxReconnects>(): kotlin/Int // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.maxReconnects.<get-maxReconnects>|<get-maxReconnects>(){}[0]
     final val readTimeout // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.readTimeout|{}readTimeout[0]
         final fun <get-readTimeout>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.readTimeout.<get-readTimeout>|<get-readTimeout>(){}[0]
 
     final fun component1(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.component1|component1(){}[0]
     final fun component2(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.component2|component2(){}[0]
-    final fun copy(kotlin.time/Duration = ..., kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.network/HttpReaderPolicy // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.copy|copy(kotlin.time.Duration;kotlin.time.Duration){}[0]
+    final fun component3(): kotlin/Int // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.component3|component3(){}[0]
+    final fun component4(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.component4|component4(){}[0]
+    final fun component5(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.component5|component5(){}[0]
+    final fun copy(kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.network/HttpReaderPolicy // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.copy|copy(kotlin.time.Duration;kotlin.time.Duration;kotlin.Int;kotlin.time.Duration;kotlin.time.Duration){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.toString|toString(){}[0]
@@ -266,6 +275,7 @@ final class io.github.yuroyami.kiteplayer.network/KtorMediaIo : io.github.yuroya
         final fun <get-size>(): kotlin/Long? // io.github.yuroyami.kiteplayer.network/KtorMediaIo.size.<get-size>|<get-size>(){}[0]
 
     final fun close() // io.github.yuroyami.kiteplayer.network/KtorMediaIo.close|close(){}[0]
+    final fun setWarningSink(kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit>) // io.github.yuroyami.kiteplayer.network/KtorMediaIo.setWarningSink|setWarningSink(kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>){}[0]
     final suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer.network/KtorMediaIo.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
     final suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seek|seek(kotlin.Long){}[0]
 

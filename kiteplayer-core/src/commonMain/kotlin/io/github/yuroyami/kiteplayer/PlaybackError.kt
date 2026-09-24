@@ -209,6 +209,19 @@ public sealed class PlaybackWarning {
         override val message: String get() = "audio underrun, $totalSoFar so far"
     }
 
+    /**
+     * The reader lost its connection to the source at byte [position] and is connecting again,
+     * for the [attempt]-th time in one read. [detail] says what failed. Playback waits meanwhile,
+     * and it fails only when the reader gives up or `BufferPolicy.stallTimeout` passes.
+     */
+    public data class SourceReconnecting(val position: Long, val attempt: Int, val detail: String) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("position" to position.toString(), "attempt" to attempt.toString())
+
+        override val message: String
+            get() = "the connection to the source dropped at byte $position; reconnecting, attempt $attempt: $detail"
+    }
+
     /** An [AudioTap] threw. It was detached so the sound could carry on, and [detail] is what it threw. */
     public data class AudioTapFailed(val detail: String) : PlaybackWarning() {
         override val message: String get() = "an audio tap failed and was detached: $detail"

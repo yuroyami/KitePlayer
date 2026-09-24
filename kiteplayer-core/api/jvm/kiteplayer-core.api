@@ -586,9 +586,14 @@ public abstract interface class io/github/yuroyami/kiteplayer/MediaIo : java/lan
 	public abstract fun getSize ()Ljava/lang/Long;
 	public abstract fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun setWarningSink (Lkotlin/jvm/functions/Function1;)V
 }
 
 public final class io/github/yuroyami/kiteplayer/MediaIo$Companion {
+}
+
+public final class io/github/yuroyami/kiteplayer/MediaIo$DefaultImpls {
+	public static fun setWarningSink (Lio/github/yuroyami/kiteplayer/MediaIo;Lkotlin/jvm/functions/Function1;)V
 }
 
 public final class io/github/yuroyami/kiteplayer/MediaIoDoorsKt {
@@ -700,6 +705,7 @@ public final class io/github/yuroyami/kiteplayer/PipedMediaIo : io/github/yuroya
 	public fun getSize ()Ljava/lang/Long;
 	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun setWarningSink (Lkotlin/jvm/functions/Function1;)V
 	public final fun write ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun write$default (Lio/github/yuroyami/kiteplayer/PipedMediaIo;[BIILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
@@ -1236,6 +1242,23 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ResourcesNotRel
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$SourceReconnecting : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (JILjava/lang/String;)V
+	public final fun component1 ()J
+	public final fun component2 ()I
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (JILjava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$SourceReconnecting;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$SourceReconnecting;JILjava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$SourceReconnecting;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttempt ()I
+	public final fun getDetail ()Ljava/lang/String;
+	public fun getFields ()Ljava/util/Map;
+	public fun getMessage ()Ljava/lang/String;
+	public final fun getPosition ()J
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

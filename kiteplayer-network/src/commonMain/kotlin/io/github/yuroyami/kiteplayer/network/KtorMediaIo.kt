@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.network
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoResolver
+import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
@@ -20,6 +21,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -42,6 +46,13 @@ import kotlinx.coroutines.withTimeoutOrNull
  * Every wait has a limit from [HttpReaderPolicy]: the connection and the response headers of each
  * request, a seek's included, and the next bytes of a response that has started. A wait that
  * passes its limit fails with [KtorMediaIoException].
+ *
+ * A read that fails, times out or meets a response that ended early reconnects, with a `Range`
+ * request at the byte it reached, after a backoff. The answer must start at that byte and belong
+ * to the same file: the request carries `If-Range` with the entity tag of the first response, and
+ * a changed tag or total size fails the read. Each reconnect is reported through [setWarningSink]
+ * as [PlaybackWarning.SourceReconnecting]. A reader whose server has no ranges can start again
+ * only before its first byte.
  */
 public class KtorMediaIo private constructor(
     private val client: HttpClient,
@@ -50,6 +61,8 @@ public class KtorMediaIo private constructor(
     private val requestHeaders: Map<String, String>,
     override val size: Long?,
     override val seekable: Boolean,
+    /** The strong entity tag of the first response, or null. Every ranged request asks for it. */
+    private val entityTag: String?,
     firstBody: ByteReadChannel,
     firstJob: Job,
     private val scope: CoroutineScope,
@@ -57,6 +70,7 @@ public class KtorMediaIo private constructor(
 ) : MediaIo {
 
     private var position = 0L
+    private var warningSink: (PlaybackWarning) -> Unit = {}
     private var body: ByteReadChannel? = firstBody
     private var bodyJob: Job? = firstJob
     private var bodyPosition = 0L
@@ -74,6 +88,31 @@ public class KtorMediaIo private constructor(
     override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
         if (closed) throw KtorMediaIoException("read after close on $uri")
         if (length <= 0) return 0
+        var reconnects = 0
+        while (true) {
+            val failure = try {
+                return readOnce(into, offset, length)
+            } catch (failure: Throwable) {
+                // The caller's own cancellation ends the read. Anything else is the connection's.
+                currentCoroutineContext().ensureActive()
+                failure
+            }
+            if (closed || reconnects >= policy.maxReconnects || !canResumeAfter(failure)) throw failure
+            reconnects++
+            dropBody()
+            warningSink(
+                PlaybackWarning.SourceReconnecting(position, reconnects, failure.message ?: failure.toString()),
+            )
+            delay(policy.backoff(reconnects))
+        }
+    }
+
+    override fun setWarningSink(sink: (PlaybackWarning) -> Unit) {
+        warningSink = sink
+    }
+
+    /** One read from the current response, or from a new one at [position]. */
+    private suspend fun readOnce(into: ByteArray, offset: Int, length: Int): Int {
         val knownSize = size
         if (knownSize != null && position >= knownSize) return -1
         val channel = body?.takeIf { bodyPosition == position } ?: openAt(position)
@@ -81,12 +120,29 @@ public class KtorMediaIo private constructor(
         val pulled = withTimeoutOrNull(policy.readTimeout) { channel.readAvailable(into, offset, length) }
         if (pulled == null) {
             dropBody()
-            throw KtorMediaIoException("no bytes from $uri for ${policy.readTimeout} at byte $position")
+            throw KtorMediaIoException("no bytes from $uri for ${policy.readTimeout} at byte $position", retryable = true)
         }
-        if (pulled < 0) return -1
+        if (pulled < 0) {
+            // A response that ends before the declared size is a dropped connection.
+            if (knownSize != null && position < knownSize) {
+                dropBody()
+                throw KtorMediaIoException("the response from $uri ended at byte $position of $knownSize", retryable = true)
+            }
+            return -1
+        }
         bodyPosition += pulled
         position += pulled
         return pulled
+    }
+
+    /**
+     * True when a reconnect may cure [failure]: a timeout, a dropped connection or a server error,
+     * at a byte that the server can resume from. Without ranges, only a read that has not reached
+     * its first byte can start again.
+     */
+    private fun canResumeAfter(failure: Throwable): Boolean {
+        if (failure is KtorMediaIoException && !failure.retryable) return false
+        return seekable || position == 0L
     }
 
     override suspend fun seek(position: Long) {
@@ -119,14 +175,49 @@ public class KtorMediaIo private constructor(
             try {
                 client.prepareGet(uri) {
                     requestHeaders.forEach { (key, value) -> header(key, value) }
-                    if (target > 0) header(HttpHeaders.Range, "bytes=$target-")
+                    if (target > 0) {
+                        header(HttpHeaders.Range, "bytes=$target-")
+                        // A server that honours this answers with the whole file, not a range, when
+                        // the file changed since the first response.
+                        entityTag?.let { header(HttpHeaders.IfRange, it) }
+                    }
                 }.execute { response ->
                     val ok = response.status == HttpStatusCode.PartialContent ||
                         (target == 0L && response.status == HttpStatusCode.OK)
                     if (!ok) {
+                        val changed = if (entityTag != null && response.status == HttpStatusCode.OK) {
+                            ", so the file changed since it was opened"
+                        } else {
+                            ""
+                        }
                         throw KtorMediaIoException(
-                            "server answered ${response.status} to a ranged read at byte $target of $uri",
+                            "server answered ${response.status} to a ranged read at byte $target of $uri$changed",
+                            // A server error may pass. A refusal, or no ranges at all, will not.
+                            retryable = response.status.value >= 500,
                         )
+                    }
+                    if (target > 0) {
+                        // The bytes must continue where the reader stopped, in the same file, or
+                        // they would splice in the wrong place.
+                        val range = response.headers[HttpHeaders.ContentRange]
+                        val start = range?.substringAfter("bytes ", "")?.substringBefore('-')?.trim()?.toLongOrNull()
+                        if (start != null && start != target) {
+                            throw KtorMediaIoException(
+                                "server answered from byte $start to a ranged read at byte $target of $uri",
+                            )
+                        }
+                        val total = range?.substringAfterLast('/')?.trim()?.toLongOrNull()
+                        if (total != null && size != null && total != size) {
+                            throw KtorMediaIoException(
+                                "the file at $uri changed since it was opened: it had $size bytes and has $total",
+                            )
+                        }
+                        val tag = response.headers[HttpHeaders.ETag]
+                        if (entityTag != null && tag != null && tag != entityTag) {
+                            throw KtorMediaIoException(
+                                "the file at $uri changed since it was opened: its entity tag was $entityTag and is $tag",
+                            )
+                        }
                     }
                     answered.complete(Unit)
                     response.bodyAsChannel().copyTo(pipe)
@@ -147,7 +238,10 @@ public class KtorMediaIo private constructor(
         }
         if (!answeredInTime) {
             dropBody()
-            throw KtorMediaIoException("no answer from $uri within ${policy.connectTimeout} for byte $target")
+            throw KtorMediaIoException(
+                "no answer from $uri within ${policy.connectTimeout} for byte $target",
+                retryable = true,
+            )
         }
         return pipe
     }
@@ -178,7 +272,7 @@ public class KtorMediaIo private constructor(
             val ownsClient = client == null
             val http = client ?: HttpClient()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val probe = CompletableDeferred<Pair<Long?, Boolean>>()
+            val probe = CompletableDeferred<Probe>()
             val pipe = ByteChannel(autoFlush = true)
             val job = scope.launch {
                 try {
@@ -186,17 +280,19 @@ public class KtorMediaIo private constructor(
                         headers.forEach { (key, value) -> header(key, value) }
                         header(HttpHeaders.Range, "bytes=0-")
                     }.execute { response ->
+                        // A weak tag cannot make a range request conditional, so only a strong one is kept.
+                        val tag = response.headers[HttpHeaders.ETag]?.takeUnless { it.startsWith("W/") }
                         when (response.status) {
                             HttpStatusCode.PartialContent -> {
                                 // Content-Range: bytes 0-last/total, total possibly "*".
                                 val total = response.headers[HttpHeaders.ContentRange]
                                     ?.substringAfterLast('/')
                                     ?.toLongOrNull()
-                                probe.complete(total to true)
+                                probe.complete(Probe(total, seekable = true, tag))
                             }
                             HttpStatusCode.OK -> {
                                 val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                                probe.complete(total to false)
+                                probe.complete(Probe(total, seekable = false, tag))
                             }
                             else -> throw KtorMediaIoException("cannot open $uri: ${response.status}")
                         }
@@ -208,7 +304,7 @@ public class KtorMediaIo private constructor(
                     probe.completeExceptionally(failure)
                 }
             }
-            val (size, seekable) = try {
+            val (size, seekable, entityTag) = try {
                 withTimeoutOrNull(policy.connectTimeout) { probe.await() }
                     ?: throw KtorMediaIoException("no answer from $uri within ${policy.connectTimeout}")
             } catch (failure: Throwable) {
@@ -223,6 +319,7 @@ public class KtorMediaIo private constructor(
                 requestHeaders = headers,
                 size = size,
                 seekable = seekable,
+                entityTag = entityTag,
                 firstBody = pipe,
                 firstJob = job,
                 scope = scope,
@@ -232,8 +329,17 @@ public class KtorMediaIo private constructor(
     }
 }
 
+/** What the first response said about the file. */
+private data class Probe(val size: Long?, val seekable: Boolean, val entityTag: String?)
+
 /** A typed failure from the http reader, surfaced to FFmpeg as an I/O error on the read. */
-public class KtorMediaIoException(message: String) : Exception(message)
+public class KtorMediaIoException internal constructor(
+    message: String,
+    /** True when a reconnect may cure it: a timeout, a response that ended early, a server error. */
+    internal val retryable: Boolean,
+) : Exception(message) {
+    public constructor(message: String) : this(message, retryable = false)
+}
 
 /**
  * Explicit HTTP/HTTPS resolver for a shared [HttpClient], default request headers or an

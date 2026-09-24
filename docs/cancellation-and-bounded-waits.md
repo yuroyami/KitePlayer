@@ -101,18 +101,21 @@ This is the recovery scope that #96 records.
 
 1. A failed read, a read timeout or a response that ends before the declared size makes the HTTP
    reader reconnect.
-2. The reconnect is a `Range` request at the byte that the reader had reached. The reader checks
-   that the answer starts at that byte.
-3. Before each reconnect, the reader reports `PlaybackWarning.SourceReconnecting` through
+2. The reconnect is a `Range` request at the byte that the reader had reached. When the first
+   response had a strong entity tag, the request carries it in `If-Range`.
+3. The reader checks that the answer starts at that byte and comes from the same file. A different
+   entity tag or a different total size means that the file changed, and so does a whole-file
+   answer to a request that carried `If-Range`.
+4. Before each reconnect, the reader reports `PlaybackWarning.SourceReconnecting` through
    `MediaIo.setWarningSink`. The engine installs its warning reporter on every reader.
-4. The count of reconnects belongs to one read, so a connection that drops now and then never
+5. The count of reconnects belongs to one read, so a connection that drops now and then never
    uses it up.
-5. A reader fails as before when it cannot resume: the server does not support ranges and bytes
-   were already read, the server refuses the request or answers from a different byte, or the
-   reconnects are used up.
+6. A reader fails as before when it cannot resume: the server does not support ranges and bytes
+   were already read, the server refuses the request or answers from a different byte, the file
+   changed, or the reconnects are used up.
 
 The stall timeout limits all of this. When no bytes arrive for that long, the engine ends the
-session. Entity tags, conditional requests and adaptive bitrate are not part of this scope.
+session. Adaptive bitrate is not part of this scope.
 
 ## What each limit covers
 

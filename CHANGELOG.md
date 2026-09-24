@@ -34,6 +34,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `EUC-KR`, where it used to say `Shift-JIS` or "a EUC or Big5 family encoding". If you match on
   it, match the new names. A custom backend can read these files by implementing the new
   `SubtitleFileParser.decode`; the FFmpeg backend already does.
+- `HttpReaderPolicy` gains `maxReconnects`, `initialBackoff` and `maxBackoff`, which changes the
+  generated data-class methods. Recompile. The HTTP reader now reconnects up to five times in one
+  read when a connection drops. Set `maxReconnects = 0` to fail on the first drop, as before.
 - `kiteplayer-audioviz` has no categories any more. `VizFamily`, `Visualization.family`,
   `VizCatalog.byFamily()` and the category argument of the drawing constructors are gone. Use
   `VizCatalog.create()`, which returns every drawing in one list. Twenty-six drawings were

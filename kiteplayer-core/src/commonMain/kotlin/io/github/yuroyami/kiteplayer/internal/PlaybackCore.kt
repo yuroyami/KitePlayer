@@ -2333,6 +2333,8 @@ internal class PlaybackCore(
         // decoder recovery, a loop and a queue returning to the same item all come back through it,
         // and the reader the previous session was given has been closed since.
         val suppliedIo = resolveMediaIo(item, config.network)
+        // A reader that recovers from a dropped connection says so through the player's warnings.
+        suppliedIo?.setWarningSink { warning -> warn(warning) }
         // Every byte the reader delivers is progress for the stall timeout, so a slow reader that
         // still delivers is never taken for a stalled one.
         val stallWatch = StallWatch(clock)

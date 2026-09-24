@@ -179,6 +179,14 @@ public interface MediaIo : AutoCloseable {
 
     /** Moves the read cursor. Only called when [seekable] is true. */
     public suspend fun seek(position: Long)
+
+    /**
+     * Where this reader reports a problem that it recovered from, such as a dropped connection
+     * that it opened again. The engine installs its warning reporter here before the first read,
+     * and the warnings reach [KitePlayer.events]. The sink may be called from any thread and must
+     * stay cheap. The default ignores it, for a reader with nothing to report.
+     */
+    public fun setWarningSink(sink: (PlaybackWarning) -> Unit) {}
 }
 
 /**

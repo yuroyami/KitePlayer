@@ -40,7 +40,12 @@ class KtorMediaIoTimeoutTest {
         servers.clear()
     }
 
-    private val quick = HttpReaderPolicy(connectTimeout = 500.milliseconds, readTimeout = 500.milliseconds)
+    /** No reconnects: these cases prove the limits themselves, and recovery has its own suite. */
+    private val quick = HttpReaderPolicy(
+        connectTimeout = 500.milliseconds,
+        readTimeout = 500.milliseconds,
+        maxReconnects = 0,
+    )
 
     private fun content(size: Int): ByteArray = ByteArray(size) { i -> ((i * 31 + 7) and 0xFF).toByte() }
 

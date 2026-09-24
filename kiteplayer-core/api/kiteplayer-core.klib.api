@@ -776,6 +776,7 @@ abstract interface io.github.yuroyami.kiteplayer/MediaIo : kotlin/AutoCloseable 
     abstract fun close() // io.github.yuroyami.kiteplayer/MediaIo.close|close(){}[0]
     abstract suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer/MediaIo.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
     abstract suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer/MediaIo.seek|seek(kotlin.Long){}[0]
+    open fun setWarningSink(kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit>) // io.github.yuroyami.kiteplayer/MediaIo.setWarningSink|setWarningSink(kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>){}[0]
 
     final object Companion // io.github.yuroyami.kiteplayer/MediaIo.Companion|null[0]
 }
@@ -3763,6 +3764,29 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased.toString|toString(){}[0]
+    }
+
+    final class SourceReconnecting : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting|null[0]
+        constructor <init>(kotlin/Long, kotlin/Int, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.<init>|<init>(kotlin.Long;kotlin.Int;kotlin.String){}[0]
+
+        final val attempt // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.attempt|{}attempt[0]
+            final fun <get-attempt>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.attempt.<get-attempt>|<get-attempt>(){}[0]
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.detail.<get-detail>|<get-detail>(){}[0]
+        final val fields // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.fields|{}fields[0]
+            final fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.fields.<get-fields>|<get-fields>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.message.<get-message>|<get-message>(){}[0]
+        final val position // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.position|{}position[0]
+            final fun <get-position>(): kotlin/Long // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.position.<get-position>|<get-position>(){}[0]
+
+        final fun component1(): kotlin/Long // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.component1|component1(){}[0]
+        final fun component2(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.component2|component2(){}[0]
+        final fun component3(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.component3|component3(){}[0]
+        final fun copy(kotlin/Long = ..., kotlin/Int = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.copy|copy(kotlin.Long;kotlin.Int;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.toString|toString(){}[0]
     }
 
     final class StartPositionIgnored : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.StartPositionIgnored|null[0]

@@ -7,22 +7,18 @@ import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.get
 import kotlinx.cinterop.plus
 import kotlinx.cinterop.reinterpret
-import io.github.yuroyami.kiteplayer.Generation
-import io.github.yuroyami.kiteplayer.Pts
-import io.github.yuroyami.kiteplayer.VideoSize
-import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
-import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
-import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import platform.AVFoundation.AVQueuedSampleBufferRenderingStatusFailed
 import platform.AVFoundation.AVSampleBufferDisplayLayer
 import platform.AVFoundation.error
+import platform.AVFoundation.sampleBufferRenderer
 import platform.AVFoundation.status
 import platform.CoreVideo.CVPixelBufferGetBaseAddressOfPlane
 import platform.CoreVideo.CVPixelBufferGetBytesPerRowOfPlane
@@ -38,12 +34,16 @@ import platform.CoreVideo.kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
 import platform.CoreVideo.kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
 
 /**
- * The one part of the picture-in-picture path that can be proved without a device.
+ * The parts of the picture in picture path that can be proved without a device.
  *
  * Core Video's 8-bit 4:2:0 is bi-planar and the decoder's is three separate planes, so every
  * software frame is interleaved on the way in. Getting that loop wrong does not crash: it swaps
  * the colours or shears them, which is exactly the sort of thing that only shows up on a phone in
  * somebody's hand. So the interleaving is read back and compared byte for byte here.
+ *
+ * The rest is what reaches the layer: every sample marked to show at once, and the picture as
+ * decoded while there is no text. Burned-in text needs a Metal device, which the iOS simulator does
+ * not give a test process, so `SampleBufferSubtitleTest` proves it on the macOS host.
  */
 class SampleBufferVideoRendererTest {
 
@@ -186,11 +186,10 @@ class SampleBufferVideoRendererTest {
         val layer = AVSampleBufferDisplayLayer()
         val picture = planarPicture()
         val renderer = SampleBufferVideoRenderer(
-            layer = layer,
             resolve = { picture },
-            enqueueOnMain = { block -> block() },
+            sink = LayerSink(layer, onMain = { block -> block() }),
         )
-        assertTrue(renderer.present(FakeFrame(), targetNanos = 0L))
+        assertTrue(renderer.present(SampleTestFrame(), targetNanos = 0L))
         assertEquals(1L, renderer.presentedFrames)
         assertEquals(0L, renderer.failedFrames)
         // Failed is the layer's own verdict on what it was handed, and the only one it reports.
@@ -199,34 +198,120 @@ class SampleBufferVideoRendererTest {
     }
 
     @Test
-    fun `a frame the resolver refuses is counted and closed`() = runBlocking {
-        val frame = FakeFrame()
+    fun theLayersVideoRendererGivenOneRealSampleDoesNotGoToFailed() = runBlocking {
+        val layer = AVSampleBufferDisplayLayer()
+        val picture = planarPicture()
         val renderer = SampleBufferVideoRenderer(
-            layer = AVSampleBufferDisplayLayer(),
+            resolve = { picture },
+            sink = VideoRendererSink(layer.sampleBufferRenderer),
+        )
+        assertTrue(renderer.present(SampleTestFrame(), targetNanos = 0L))
+        val video = layer.sampleBufferRenderer
+        assertTrue(video.status != AVQueuedSampleBufferRenderingStatusFailed, "renderer error: ${video.error}")
+        renderer.close()
+    }
+
+    @Test
+    fun theLayersVideoRendererTakesTheSamplesWhereTheSystemHasOne() {
+        // Every host this runs on is macOS 14 or iOS 17 and later, where the layer has one.
+        assertIs<VideoRendererSink>(sampleSinkFor(AVSampleBufferDisplayLayer()))
+    }
+
+    @Test
+    fun `a frame the resolver refuses is counted and closed`() = runBlocking {
+        val frame = SampleTestFrame()
+        val renderer = SampleBufferVideoRenderer(
             resolve = { null },
-            enqueueOnMain = { block -> block() },
+            sink = LayerSink(AVSampleBufferDisplayLayer(), onMain = { block -> block() }),
         )
         assertFalse(renderer.present(frame, targetNanos = 0L))
         assertEquals(1L, renderer.failedFrames)
         assertTrue(frame.closed, "the renderer owns the frame and closes it even when it refuses")
         renderer.close()
     }
-}
 
-/** The smallest frame the renderer's contract accepts. Its pixels come from the resolver. */
-private class FakeFrame : VideoFrame {
-    var closed: Boolean = false
-        private set
-
-    override val pts: Pts = Pts(0)
-    override val duration: Pts? = null
-    override val size: VideoSize = VideoSize(4, 4)
-    override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p
-    override val colorSpace: ColorSpaceInfo = ColorSpaceInfo(fullRange = true)
-    override val hardwareSurface: HwSurfaceKind? = null
-    override val generation: Generation = Generation.Initial
-
-    override fun close() {
-        closed = true
+    @Test
+    fun everySampleIsMarkedToDisplayImmediately() = runBlocking {
+        val sink = RecordingSampleSink()
+        val picture = planarPicture()
+        val renderer = SampleBufferVideoRenderer(resolve = { picture }, sink = sink)
+        try {
+            repeat(3) { at -> assertTrue(renderer.present(SampleTestFrame(), targetNanos = at * 40_000_000L)) }
+            assertEquals(3, sink.samples.size)
+            sink.samples.forEachIndexed { at, sample ->
+                assertTrue(displaysImmediately(sample), "sample $at is not marked to display at once")
+            }
+        } finally {
+            renderer.close()
+            sink.release()
+        }
     }
+
+    @Test
+    fun withoutTextThePictureReachesTheLayerAsDecoded() = runBlocking {
+        val sink = RecordingSampleSink()
+        val renderer = SampleBufferVideoRenderer(resolve = { redNv12(64, 64) }, sink = sink)
+        try {
+            renderer.setOverlay(noText())
+            assertTrue(renderer.present(SampleTestFrame(64, 64, limited709), targetNanos = 0L))
+            val image = imageOf(sink.samples.single())
+            assertEquals(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, CVPixelBufferGetPixelFormatType(image))
+        } finally {
+            renderer.close()
+            sink.release()
+        }
+    }    @Test
+    fun anOverlayWithoutTextOverAPlainPictureRedrawsNothing() = runBlocking {
+        val sink = RecordingSampleSink()
+        val renderer = SampleBufferVideoRenderer(resolve = { redNv12(64, 64) }, sink = sink)
+        try {
+            assertTrue(renderer.present(SampleTestFrame(64, 64, limited709), targetNanos = 0L))
+            renderer.setOverlay(noText())
+            renderer.setOverlay(null)
+            assertEquals(1, sink.samples.size)
+        } finally {
+            renderer.close()
+            sink.release()
+        }
+    }
+
+    @Test
+    fun withoutAMetalDeviceTheTextIsLeftOutAndThePictureStillShows() = runBlocking {
+        val sink = RecordingSampleSink()
+        val renderer = SampleBufferVideoRenderer(
+            resolve = { redNv12(64, 64) },
+            sink = sink,
+            makeBurner = { null },
+        )
+        try {
+            renderer.setOverlay(whiteSquare())
+            assertTrue(renderer.present(SampleTestFrame(64, 64, limited709), targetNanos = 0L))
+            assertEquals(
+                kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                CVPixelBufferGetPixelFormatType(imageOf(sink.samples.single())),
+            )
+        } finally {
+            renderer.close()
+            sink.release()
+        }
+    }
+
+    @Test
+    fun closeTakesThePictureOffTheLayerAndRefusesLaterFrames() = runBlocking {
+        val sink = RecordingSampleSink()
+        val picture = planarPicture()
+        val renderer = SampleBufferVideoRenderer(resolve = { picture }, sink = sink)
+        try {
+            assertTrue(renderer.present(SampleTestFrame(), targetNanos = 0L))
+            renderer.close()
+            assertEquals(1, sink.flushes)
+            val late = SampleTestFrame()
+            assertFalse(renderer.present(late, targetNanos = 0L))
+            assertTrue(late.closed)
+            assertEquals(1, sink.samples.size, "nothing reaches the layer after close")
+        } finally {
+            sink.release()
+        }
+    }
+
 }

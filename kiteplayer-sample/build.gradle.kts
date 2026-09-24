@@ -37,6 +37,8 @@ kotlin {
         macosArm64Main.dependencies {
             implementation(project(":kiteplayer-ffmpeg"))
             implementation(project(":kiteplayer-output"))
+            // The picture in picture class, for the --pip window.
+            implementation(project(":kiteplayer-view"))
         }
         iosMain.dependencies {
             // The standard runtime carries the default backend, output, network and native view.

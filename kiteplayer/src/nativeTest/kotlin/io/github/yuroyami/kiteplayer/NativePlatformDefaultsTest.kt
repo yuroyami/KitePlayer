@@ -40,8 +40,11 @@ class NativePlatformDefaultsTest {
     }
 
     @Test
-    fun noNativeDesktopClaimsPictureInPicture() {
-        if (Platform.osFamily == OsFamily.IOS) return
-        assertFalse(KitePlayerPlatform.supportsPictureInPicture)
+    fun linuxAndWindowsClaimNoPictureInPicture() {
+        when (Platform.osFamily) {
+            OsFamily.LINUX, OsFamily.WINDOWS -> assertFalse(KitePlayerPlatform.supportsPictureInPicture)
+            // Apple answers the system's own static; ApplePlatformDefaultsTest checks that answer.
+            else -> println("SKIP: ${Platform.osFamily} answers picture in picture from the system")
+        }
     }
 }

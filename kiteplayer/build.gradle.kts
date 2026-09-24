@@ -99,6 +99,10 @@ kotlin {
         iosMain.dependencies {
             api(project(":kiteplayer-view-bindings"))
         }
+        // macOS has no view bindings. It takes the view module for the picture in picture class.
+        macosMain.dependencies {
+            api(project(":kiteplayer-view"))
+        }
         // The desktop default includes the JNI media backend, audio output and native-view adapter.
         jvmMain.dependencies {
             api(project(":kiteplayer-ffmpeg"))

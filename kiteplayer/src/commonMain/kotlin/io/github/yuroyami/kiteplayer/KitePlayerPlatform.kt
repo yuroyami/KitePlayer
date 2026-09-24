@@ -44,8 +44,8 @@ public object KitePlayerPlatform {
     /**
      * Whether this platform can put a player in a picture-in-picture window at all.
      *
-     * iOS answers the system's own static, which needs nothing passed to it. Android cannot answer
-     * properly here because the real question needs a context, so it stays a floor and
+     * iOS and macOS answer the system's own static, which needs nothing passed to it. Android cannot
+     * answer properly here because the real question needs a context, so it stays a floor and
      * `KitePlayerPlatform.supportsPictureInPicture(context)` asks the package manager instead.
      * Everywhere else it is false.
      *

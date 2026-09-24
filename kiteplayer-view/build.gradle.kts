@@ -29,6 +29,8 @@ kotlin {
 
     iosArm64()
     iosSimulatorArm64()
+    // macOS carries only the picture in picture class. Its window lives in kiteplayer-output.
+    macosArm64()
     jvm()
     // The web carries only its picture in picture class, over the page's own canvas.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)

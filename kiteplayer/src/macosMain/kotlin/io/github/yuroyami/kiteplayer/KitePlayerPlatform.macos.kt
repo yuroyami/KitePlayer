@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer
 import io.github.yuroyami.kiteffmpeg.FFmpeg
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
 import io.github.yuroyami.kiteplayer.output.AppleOutputBackend
+import platform.AVKit.AVPictureInPictureController
 
 internal actual val platformKitePlayerDefaults: KitePlayerPlatformDefaults =
     MacosKitePlayerPlatformDefaults
@@ -25,8 +26,13 @@ private object MacosKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
         }
     }
 
-    /** The player drives no system picture-in-picture window on macOS. */
-    override val supportsPictureInPicture: Boolean = false
+    /**
+     * The system's own answer. The window also needs the sample buffer surface: an `AppKitWindow`
+     * built with it, a `SampleBufferVideoRenderer` over its layer, and a
+     * `KitePlayerPictureInPicture` over the same layer.
+     */
+    override val supportsPictureInPicture: Boolean
+        get() = AVPictureInPictureController.isPictureInPictureSupported()
 
     override fun backendsOrNull(): Backends? = if (availability.isAvailable) {
         Backends(backend = KiteFFmpegMediaBackend(), output = AppleOutputBackend)

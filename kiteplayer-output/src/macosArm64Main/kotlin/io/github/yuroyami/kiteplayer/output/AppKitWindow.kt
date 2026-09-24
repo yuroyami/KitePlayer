@@ -3,6 +3,8 @@ package io.github.yuroyami.kiteplayer.output
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import platform.AVFoundation.AVLayerVideoGravityResizeAspect
+import platform.AVFoundation.AVSampleBufferDisplayLayer
 import platform.AppKit.NSApp
 import platform.AppKit.NSApplication
 import platform.AppKit.NSBackingStoreBuffered
@@ -28,6 +30,21 @@ import platform.Foundation.NSMakeRect
 import platform.Foundation.NSNotification
 import platform.darwin.NSObject
 
+/** What an [AppKitWindow] hosts for the picture. */
+public enum class AppKitSurface {
+    /** An image view, for [AppKitVideoRenderer]: the CPU fallback and the reference. */
+    Image,
+
+    /** A [CAMetalLayer], for [MetalVideoRenderer]: the default GPU path. */
+    Metal,
+
+    /**
+     * An `AVSampleBufferDisplayLayer`, for [SampleBufferVideoRenderer]. It is the only layer a
+     * picture in picture controller accepts, so this is the choice when the small window matters.
+     */
+    SampleBuffer,
+}
+
 /**
  * A window to draw video into.
  *
@@ -47,17 +64,31 @@ public class AppKitWindow(
     title: String,
     width: Int,
     height: Int,
-    /**
-     * True hosts a [platform.QuartzCore.CAMetalLayer] instead of the image view, for
-     * [MetalVideoRenderer]. The image view stays the CG fallback's home.
-     */
-    useMetalLayer: Boolean = false,
+    /** What the window hosts for the picture, which decides the renderer that can draw into it. */
+    surface: AppKitSurface,
 ) {
+    /**
+     * The window with an image view, or with a [platform.QuartzCore.CAMetalLayer] when
+     * [useMetalLayer] is true, for [MetalVideoRenderer]. The image view stays the CG fallback's home.
+     */
+    public constructor(
+        title: String,
+        width: Int,
+        height: Int,
+        useMetalLayer: Boolean = false,
+    ) : this(title, width, height, if (useMetalLayer) AppKitSurface.Metal else AppKitSurface.Image)
+
     private val window: NSWindow
     internal val imageView: NSImageView
 
-    /** The layer a [MetalVideoRenderer] draws into; null unless built with `useMetalLayer`. */
+    /** The layer a [MetalVideoRenderer] draws into; null unless built with [AppKitSurface.Metal]. */
     public val metalLayer: platform.QuartzCore.CAMetalLayer?
+
+    /**
+     * The layer a [SampleBufferVideoRenderer] and a picture in picture controller share. Null unless
+     * built with [AppKitSurface.SampleBuffer].
+     */
+    public val sampleBufferLayer: AVSampleBufferDisplayLayer?
 
     /**
      * Called on the main thread when this window is closing, whatever closed it.
@@ -93,26 +124,16 @@ public class AppKitWindow(
         imageView = NSImageView(frame = CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()))
         imageView.imageScaling = NSImageScaleProportionallyUpOrDown
 
-        if (useMetalLayer) {
-            // A layer-hosted view whose backing layer IS the CAMetalLayer. The drawable is sized
-            // in physical pixels, so a Retina window is not half resolution, and the host view
-            // re-sizes it on every live resize and backing-scale change.
-            val layer = platform.QuartzCore.CAMetalLayer()
-            val scale = window.screen?.backingScaleFactor ?: 2.0
-            layer.contentsScale = scale
-            layer.drawableSize = metalDrawableSize(width.toDouble(), height.toDouble(), scale)
-            val host = MetalHostView(
-                frame = CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()),
-                metalLayer = layer,
-            )
-            host.wantsLayer = true
-            host.layer = layer
-            window.contentView = host
-            metalLayer = layer
-        } else {
-            window.contentView = imageView
-            metalLayer = null
-        }
+        val host = surfaceHost(
+            surface = surface,
+            imageView = imageView,
+            width = width.toDouble(),
+            height = height.toDouble(),
+            scale = window.screen?.backingScaleFactor ?: 2.0,
+        )
+        window.contentView = host.view
+        metalLayer = host.metalLayer
+        sampleBufferLayer = host.sampleBufferLayer
 
         window.delegate = closeDelegate
         window.center()
@@ -152,6 +173,49 @@ public class AppKitWindow(
             data2 = 0,
         ) ?: return
         NSApp?.postEvent(wake, atStart = true)
+    }
+}
+
+/** The view a window shows for its surface, and the layer inside it that a renderer draws into. */
+internal class SurfaceHost(
+    val view: NSView,
+    val metalLayer: CAMetalLayer?,
+    val sampleBufferLayer: AVSampleBufferDisplayLayer?,
+)
+
+/**
+ * Builds the content view for [surface], [width] by [height] points at [scale].
+ *
+ * Both layers are the backing layer of their own host view, so they follow the window's size.
+ */
+@OptIn(ExperimentalForeignApi::class)
+internal fun surfaceHost(
+    surface: AppKitSurface,
+    imageView: NSImageView,
+    width: Double,
+    height: Double,
+    scale: Double,
+): SurfaceHost = when (surface) {
+    AppKitSurface.Image -> SurfaceHost(imageView, metalLayer = null, sampleBufferLayer = null)
+    AppKitSurface.Metal -> {
+        // The drawable is sized in physical pixels, so a Retina window is not half resolution, and
+        // the host view re-sizes it on every live resize and backing-scale change.
+        val layer = CAMetalLayer()
+        layer.contentsScale = scale
+        layer.drawableSize = metalDrawableSize(width, height, scale)
+        val host = MetalHostView(frame = CGRectMake(0.0, 0.0, width, height), metalLayer = layer)
+        host.wantsLayer = true
+        host.layer = layer
+        SurfaceHost(host, metalLayer = layer, sampleBufferLayer = null)
+    }
+    AppKitSurface.SampleBuffer -> {
+        // The layer scales the picture itself, keeping its aspect, so the host needs no callbacks.
+        val layer = AVSampleBufferDisplayLayer()
+        layer.videoGravity = AVLayerVideoGravityResizeAspect
+        val host = NSView(frame = CGRectMake(0.0, 0.0, width, height))
+        host.wantsLayer = true
+        host.layer = layer
+        SurfaceHost(host, metalLayer = null, sampleBufferLayer = layer)
     }
 }
 

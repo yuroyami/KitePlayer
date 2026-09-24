@@ -86,4 +86,92 @@ class BackgroundMachineTest {
         applier.handle(foreground = true)
         assertEquals(listOf("pause", "play"), target.calls)
     }
+
+    @Test
+    fun aShowingWindowKeepsVideoWhenTheAppLeaves() {
+        val machine = BackgroundMachine(BackgroundPolicy.ContinueAudio)
+        assertNull(machine.onWindow(showing = true, playing = true, videoEnabled = true).videoEnabled)
+        val away = machine.on(foreground = false, playing = true, videoEnabled = true)
+        assertNull(away.videoEnabled, "the small window still shows the picture")
+    }
+
+    @Test
+    fun theWindowClosingWhileAwayParksVideo() {
+        val machine = BackgroundMachine(BackgroundPolicy.ContinueAudio)
+        machine.onWindow(showing = true, playing = true, videoEnabled = true)
+        machine.on(foreground = false, playing = true, videoEnabled = true)
+        val closed = machine.onWindow(showing = false, playing = true, videoEnabled = true)
+        assertEquals(false, closed.videoEnabled)
+        assertEquals(SessionTransport.None, closed.transport)
+    }
+
+    @Test
+    fun comingBackTurnsOnOnlyWhatThePolicyParked() {
+        val parked = BackgroundMachine(BackgroundPolicy.ContinueAudio)
+        parked.onWindow(showing = true, playing = true, videoEnabled = true)
+        parked.on(foreground = false, playing = true, videoEnabled = true)
+        parked.onWindow(showing = false, playing = true, videoEnabled = true)
+        assertEquals(true, parked.on(foreground = true, playing = true, videoEnabled = false).videoEnabled)
+
+        // Video the application had turned off itself was never parked, so nothing turns it on.
+        val soundOnly = BackgroundMachine(BackgroundPolicy.ContinueAudio)
+        soundOnly.onWindow(showing = true, playing = true, videoEnabled = false)
+        soundOnly.on(foreground = false, playing = true, videoEnabled = false)
+        assertNull(soundOnly.onWindow(showing = false, playing = true, videoEnabled = false).videoEnabled)
+        assertNull(soundOnly.on(foreground = true, playing = true, videoEnabled = false).videoEnabled)
+    }
+
+    @Test
+    fun theWindowOpeningWhileAwayBringsParkedVideoBack() {
+        // An automatic start can open the window after the application has already left.
+        val machine = BackgroundMachine(BackgroundPolicy.ContinueAudio)
+        assertEquals(false, machine.on(foreground = false, playing = true, videoEnabled = true).videoEnabled)
+        assertEquals(true, machine.onWindow(showing = true, playing = true, videoEnabled = false).videoEnabled)
+        assertNull(machine.on(foreground = true, playing = true, videoEnabled = true).videoEnabled)
+    }
+
+    @Test
+    fun theWindowOpeningAndClosingOnScreenChangesNothing() {
+        val machine = BackgroundMachine(BackgroundPolicy.ContinueAudio)
+        assertNull(machine.onWindow(showing = true, playing = true, videoEnabled = true).videoEnabled)
+        assertNull(machine.onWindow(showing = false, playing = true, videoEnabled = true).videoEnabled)
+    }
+
+    @Test
+    fun pauseAllKeepsPlayingWhileTheWindowShows() {
+        val machine = BackgroundMachine(BackgroundPolicy.PauseAll)
+        machine.onWindow(showing = true, playing = true, videoEnabled = true)
+        assertEquals(
+            SessionTransport.None,
+            machine.on(foreground = false, playing = true, videoEnabled = true).transport,
+        )
+        assertEquals(
+            SessionTransport.Pause,
+            machine.onWindow(showing = false, playing = true, videoEnabled = true).transport,
+        )
+        assertEquals(
+            SessionTransport.Resume,
+            machine.on(foreground = true, playing = false, videoEnabled = true).transport,
+        )
+    }
+
+    @Test
+    fun aSecondLeaveInARowKeepsWhatWasParked() {
+        val machine = BackgroundMachine(BackgroundPolicy.ContinueAudio)
+        machine.on(foreground = false, playing = true, videoEnabled = true)
+        assertNull(machine.on(foreground = false, playing = true, videoEnabled = false).videoEnabled)
+        assertEquals(true, machine.on(foreground = true, playing = true, videoEnabled = false).videoEnabled)
+    }
+
+    @Test
+    fun theApplierFollowsTheWindow() {
+        val target = FakeTarget()
+        val applier = BackgroundApplier(target, BackgroundPolicy.ContinueAudio)
+        applier.handleWindow(showing = true)
+        applier.handle(foreground = false)
+        assertEquals(emptyList<String>(), target.calls, "video stays on while the window shows it")
+        applier.handleWindow(showing = false)
+        applier.handle(foreground = true)
+        assertEquals(listOf("video false", "video true"), target.calls)
+    }
 }

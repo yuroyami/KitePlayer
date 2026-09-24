@@ -18,11 +18,15 @@ import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.corePixelBufferOrNull
 import io.github.yuroyami.kiteplayer.ffmpeg.uploadPlanesOrNull
+import io.github.yuroyami.kiteplayer.output.AppKitSurface
 import io.github.yuroyami.kiteplayer.output.AppKitWindow
 import io.github.yuroyami.kiteplayer.output.MetalPicture
+import io.github.yuroyami.kiteplayer.output.MetalPictureResolver
 import io.github.yuroyami.kiteplayer.output.MetalVideoRenderer
 import io.github.yuroyami.kiteplayer.output.AppleHostClock
 import io.github.yuroyami.kiteplayer.output.AppleOutputBackend
+import io.github.yuroyami.kiteplayer.output.SampleBufferVideoRenderer
+import io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -36,6 +40,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import platform.AppKit.NSEvent
+import platform.AppKit.NSEventMaskKeyDown
 import kotlin.system.exitProcess
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -62,13 +68,15 @@ import kotlin.time.Duration.Companion.seconds
 fun main(args: Array<String>) {
     val path = args.firstOrNull { !it.startsWith("--") }
     if (path == null || args.contains("-h") || args.contains("--help")) {
-        println("usage: kiteplayer <media file> [--window] [--no-video] [--seek=<seconds>]")
+        println("usage: kiteplayer <media file> [--window] [--pip] [--no-video] [--seek=<seconds>]")
         println("                 [--loop-for=<seconds>] [--hwdec=off] [--hold-4k]")
         println()
         println("Plays the file and reports the position, the audio to video drift, and the frame")
         println("accounting, all taken from the player's own flows.")
         println()
         println("  --window          open a window and draw the video in it")
+        println("  --pip             open the window over the layer picture in picture takes;")
+        println("                    press P in it to open or close the small window")
         println("  --no-video        play the audio track only")
         println("  --seek=<sec>      once playing, seek to that position and carry on from there")
         println("  --loop-for=<sec>  loop the media (LoopMode.One) and stop after that long")
@@ -78,7 +86,8 @@ fun main(args: Array<String>) {
         exitProcess(if (path == null) 2 else 0)
     }
     val videoEnabled = !args.contains("--no-video")
-    val wantWindow = args.contains("--window")
+    val pictureInPicture = args.contains("--pip")
+    val wantWindow = args.contains("--window") || pictureInPicture
     val seekArgument = args.firstOrNull { it.startsWith("--seek=") }
     val seekTo = seekArgument?.removePrefix("--seek=")?.toDoubleOrNull()?.seconds
     if (seekArgument != null && seekTo == null) {
@@ -93,8 +102,8 @@ fun main(args: Array<String>) {
     }
     val softwareDecode = args.contains("--hwdec=off")
     val hold4k = args.contains("--hold-4k")
-    if (hold4k && !wantWindow) {
-        println("--hold-4k judges the Metal window path, so it needs --window")
+    if (hold4k && (!wantWindow || pictureInPicture)) {
+        println("--hold-4k judges the Metal window path, so it needs --window and not --pip")
         exitProcess(2)
     }
 
@@ -127,30 +136,57 @@ fun main(args: Array<String>) {
             title = path.substringAfterLast('/'),
             width = (size?.displayWidth ?: 1280).coerceAtMost(1600),
             height = (size?.height ?: 720).coerceAtMost(1000),
-            useMetalLayer = true,
+            surface = if (pictureInPicture) AppKitSurface.SampleBuffer else AppKitSurface.Metal,
         )
-        // The Metal renderer is the default; the CG image-view path stays one flag away as
-        // the measured software fallback. The resolver is the consumer-side mapping of the
-        // backend's two frame truths onto the renderer's seam: a VideoToolbox CVPixelBuffer with
-        // no copy, or native-format planes with one memcpy each.
-        val renderer = MetalVideoRenderer(
-            layer = checkNotNull(window.metalLayer) { "the window was built with useMetalLayer" },
-            resolver = { frame ->
-                val decoded = frame as KiteFFmpegVideoFrame
-                decoded.corePixelBufferOrNull()?.let { MetalPicture.CorePixelBuffer(it) }
-                    ?: decoded.uploadPlanesOrNull()?.let { planes ->
-                        MetalPicture.SoftwarePlanes(
-                            width = planes.width,
-                            height = planes.height,
-                            format = planes.format,
-                            planes = planes.planes.map {
-                                MetalPicture.SoftwarePlanes.Plane(it.bytes, it.bytesPerRow, it.rows)
-                            },
-                        )
-                    }
-            },
+        // The resolver is the consumer-side mapping of the backend's two frame truths onto the
+        // renderer's seam: a VideoToolbox CVPixelBuffer with no copy, or native-format planes with
+        // one memcpy each.
+        val resolver = MetalPictureResolver { frame ->
+            val decoded = frame as KiteFFmpegVideoFrame
+            decoded.corePixelBufferOrNull()?.let { MetalPicture.CorePixelBuffer(it) }
+                ?: decoded.uploadPlanesOrNull()?.let { planes ->
+                    MetalPicture.SoftwarePlanes(
+                        width = planes.width,
+                        height = planes.height,
+                        format = planes.format,
+                        planes = planes.planes.map {
+                            MetalPicture.SoftwarePlanes.Plane(it.bytes, it.bytesPerRow, it.rows)
+                        },
+                    )
+                }
+        }
+        // The Metal renderer is the default; the CG image-view path stays one flag away as the
+        // measured software fallback. Picture in picture takes only a sample buffer layer, so
+        // --pip draws through the renderer that feeds one.
+        val metal = if (pictureInPicture) null else MetalVideoRenderer(
+            layer = checkNotNull(window.metalLayer) { "the window was built with the Metal surface" },
+            resolver = resolver,
         )
+        val sampleBufferLayer = window.sampleBufferLayer
+        val sampleBuffer = if (sampleBufferLayer == null) null else SampleBufferVideoRenderer(sampleBufferLayer, resolver)
+        val renderer = metal ?: checkNotNull(sampleBuffer) { "the window was built with the sample buffer surface" }
         player.attachRenderer(renderer)
+        val smallWindow = sampleBufferLayer?.let { KitePlayerPictureInPicture.createOrNull(player, it) }
+        // A local monitor sees the key before the window does, so the plain layer view needs no
+        // key handling of its own.
+        val keys = smallWindow?.let { pip ->
+            NSEvent.addLocalMonitorForEventsMatchingMask(NSEventMaskKeyDown) { event ->
+                if (event?.charactersIgnoringModifiers?.lowercase() == "p") {
+                    when {
+                        pip.isActive -> pip.stop()
+                        pip.isPossible -> pip.start()
+                        else -> println("\npicture in picture is not possible right now")
+                    }
+                    null
+                } else {
+                    event
+                }
+            }
+        }
+        when {
+            smallWindow != null -> println("press P in the window to open or close picture in picture")
+            pictureInPicture -> println("this Mac does not offer picture in picture")
+        }
         val sessionContext = newSingleThreadContext("kiteplayer-sample")
         val session = CoroutineScope(sessionContext)
         // Closing the window means the viewer is done. Without this the run loop keeps going with
@@ -167,14 +203,20 @@ fun main(args: Array<String>) {
                 // Closed before its counters are read, so an image still on its way to the window is
                 // accounted for one way or the other rather than being missed.
                 renderer.close()
-                println("  window drew       ${renderer.presentedFrames} frames")
-                println("  superseded        ${renderer.supersededFrames} (the renderer was the bottleneck)")
-                println("  never drawn       ${renderer.failedFrames}")
-                if (hold4k) {
+                if (metal != null) {
+                    println("  window drew       ${metal.presentedFrames} frames")
+                    println("  superseded        ${metal.supersededFrames} (the renderer was the bottleneck)")
+                    println("  never drawn       ${metal.failedFrames}")
+                }
+                if (sampleBuffer != null) {
+                    println("  layer was given   ${sampleBuffer.presentedFrames} frames")
+                    println("  never given       ${sampleBuffer.failedFrames}")
+                }
+                if (hold4k && metal != null) {
                     val stats = player.stats.value
                     val decoded = stats.decodedVideoFrames
                     val dropped = stats.droppedFramesLate
-                    val failed = renderer.failedFrames
+                    val failed = metal.failedFrames
                     val held = failed == 0L && (decoded == 0L || dropped * 100 < decoded)
                     println(
                         "  4k hold           ${if (held) "PASS" else "FAIL"} " +
@@ -186,6 +228,9 @@ fun main(args: Array<String>) {
             }
         }
         window.runEventLoop()
+        // Back on the main thread, where the picture in picture controller has to be let go.
+        keys?.let { NSEvent.removeMonitor(it) }
+        smallWindow?.close()
         closeAndWait(player)
         holdVerdict?.let { exitProcess(it) }
         return

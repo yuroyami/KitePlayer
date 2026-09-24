@@ -27,6 +27,12 @@ Keep supported target variants consistent along dependency edges. Existing unava
 must continue to answer unavailable honestly; a resolving metadata variant is not playback proof.
 Mobile artifacts are selected for a mobile application by Gradle, not bundled with desktop natives.
 
+On macOS, `kiteplayer` depends on `kiteplayer-view` with `api`. The macOS target of
+`kiteplayer-view` holds only `KitePlayerPictureInPicture`, the class that puts a player in the
+system's small floating window. iOS uses the same class. macOS has no view bindings module, because
+the application owns the window: `AppKitWindow` in `kiteplayer-output`, built with
+`AppKitSurface.SampleBuffer`, hosts the layer that the class needs.
+
 On the web, `kiteplayer` also depends on `kiteplayer-view` with `api`. The web part of
 `kiteplayer-view` is `KitePlayerPictureInPicture`, which puts the page's player canvas in a small
 browser window. The class uses the Document Picture-in-Picture window where the browser has one.

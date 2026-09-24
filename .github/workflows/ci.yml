@@ -567,6 +567,9 @@ jobs:
     name: Android emulator x86_64 (device tests + Android native tests)
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # Report-only until the job has been green twice in a row: the publish workflow runs all of
+    # this file, and an emulator that boots badly must not stop a release before it is trusted.
+    continue-on-error: true
     env:
       # x86_64 because the runner is x86_64, and the emulator refuses an arm64 image on an x86_64
       # host. Google APIs at a recent API level. The arm64 code of every module is not run here.

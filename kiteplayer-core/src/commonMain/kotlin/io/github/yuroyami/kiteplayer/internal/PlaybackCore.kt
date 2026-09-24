@@ -2271,6 +2271,10 @@ internal class PlaybackCore(
             command.reply.complete(Unit)
         } catch (cancellation: CancellationException) {
             throw cancellation
+        } catch (preempted: OpenPreempted) {
+            // The stop or the close is next in the mailbox, and it finds nothing half built.
+            teardownSession()
+            command.reply.completeExceptionally(preemptedByTeardown("open"))
         } catch (failure: Throwable) {
             val error = classify(failure, command.media)
             teardownSession()
@@ -2284,10 +2288,6 @@ internal class PlaybackCore(
      *
      * Open the backend session on the demux worker; choose the default tracks; create the decoders and
      * deselect a stream whose every candidate refuses; open the device and negotiate a format; then, and
-        } catch (preempted: OpenPreempted) {
-            // The stop or the close is next in the mailbox, and it finds nothing half built.
-            teardownSession()
-            command.reply.completeExceptionally(preemptedByTeardown("open"))
      * only then, tell the source which streams to read. Opening fails only when nothing playable is left,
      * because a file with a video track this build cannot decode is still a file whose sound plays.
      */
@@ -2577,6 +2577,7 @@ internal class PlaybackCore(
                 renderer = renderer,
                 negotiatedFormat = negotiated,
                 cachingIo = cachingIo,
+                stallWatch = stallWatch,
             )
         } catch (failure: Throwable) {
             // Newest-first, under NonCancellable: a cancelled open must still release everything
@@ -2590,7 +2591,6 @@ internal class PlaybackCore(
         }
     }
 
-                stallWatch = stallWatch,
     private enum class VideoDecoderSelection { Configured, BackendSoftwareOnly }
 
     private enum class VideoDecoderOrigin { Renderer, Backend }
@@ -2755,19 +2755,6 @@ internal class PlaybackCore(
         }
     }
 
-    /** The deselection detail: the plain sentence plus whatever each candidate actually said. */
-    private fun deselectionDetail(base: String): String =
-        if (decoderCandidateFailures.isEmpty()) base
-        else "$base (${decoderCandidateFailures.joinToString("; ")})"
-
-    private fun choiceFor(change: CoreCommand.SelectTrack, kind: TrackKind, current: Int?): StreamChoice = when {
-        change.kind == kind -> change.track?.let { StreamChoice.At(it.value) } ?: StreamChoice.None
-        current != null -> StreamChoice.At(current)
-        else -> StreamChoice.None
-    }
-
-    private fun StreamChoice.selectedIndex(): Int? = (this as? StreamChoice.At)?.index
-
     /**
      * A stop or a close cancelled a backend open before it returned. Each caller of [buildSession]
      * answers it the way it answers any other preemption.
@@ -2836,6 +2823,19 @@ internal class PlaybackCore(
         if (failure is CancellationException) throw IllegalStateException("the backend open was cancelled", failure)
         throw failure
     }
+
+    /** The deselection detail: the plain sentence plus whatever each candidate actually said. */
+    private fun deselectionDetail(base: String): String =
+        if (decoderCandidateFailures.isEmpty()) base
+        else "$base (${decoderCandidateFailures.joinToString("; ")})"
+
+    private fun choiceFor(change: CoreCommand.SelectTrack, kind: TrackKind, current: Int?): StreamChoice = when {
+        change.kind == kind -> change.track?.let { StreamChoice.At(it.value) } ?: StreamChoice.None
+        current != null -> StreamChoice.At(current)
+        else -> StreamChoice.None
+    }
+
+    private fun StreamChoice.selectedIndex(): Int? = (this as? StreamChoice.At)?.index
 
     /** Language preference first, then the container's default disposition, then the first audio track. */
     /**
@@ -3710,6 +3710,9 @@ internal class PlaybackCore(
                 )
             }
             throw cancellation
+        } catch (preempted: OpenPreempted) {
+            teardownSession()
+            requested.forEach { it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION)) }
         } catch (failure: Throwable) {
             val error = classify(failure, item)
             teardownSession()
@@ -3723,9 +3726,6 @@ internal class PlaybackCore(
      *
      * Doing it here rather than wherever the first reader happens to be is what makes the pass's
      * decisions consistent: the position, the drift and the buffering rule all read the same anchoring.
-        } catch (preempted: OpenPreempted) {
-            teardownSession()
-            requested.forEach { it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION)) }
      */
     private fun handleAudioFill() {
         val session = session ?: return
@@ -4240,6 +4240,7 @@ internal class PlaybackCore(
      */
     private suspend fun handleBuffering() {
         val session = session ?: return
+        if (endStalledSession(session)) return
         if (demuxerRanShort(session)) demuxUnderrunSeen = true else if (wellBuffered(session)) demuxUnderrunSeen = false
         if (!playRequested || status != PlaybackStatus.Playing) return
         if (endOfStream.demuxerEnded) return
@@ -4251,20 +4252,6 @@ internal class PlaybackCore(
         wakeIn(WORKER_POLL)
     }
 
-    /**
-     * Cue timing. Decode work is actor-confined but explicitly budgeted: a dense ASS stream
-        if (endStalledSession(session)) return
-     * cannot keep the pass inside this handler while pause, play, seek or a worker failure waits in
-     * a mailbox. A hit budget reschedules immediately; a mailbox arrival returns at the next
-     * decoder boundary and is drained at the start of the next pass.
-     *
-     * Subtitles follow the measured rule of publishing on changes, never per frame: cues
-     * change about once a second. The raster cost therefore sits on cue edges, and the renderer
-     * skips re-uploading an unchanged overlay by contentHash.
-     */
-    private suspend fun handleSubtitles() {
-        val session = this.session ?: return
-        val decoder = session.subtitleDecoder
     /**
      * Ends the session when the demux lane has waited `BufferPolicy.stallTimeout` for the source
      * without a packet or a byte, and reports [PlaybackError.SourceStalled].
@@ -4294,6 +4281,19 @@ internal class PlaybackCore(
         return true
     }
 
+    /**
+     * Cue timing. Decode work is actor-confined but explicitly budgeted: a dense ASS stream
+     * cannot keep the pass inside this handler while pause, play, seek or a worker failure waits in
+     * a mailbox. A hit budget reschedules immediately; a mailbox arrival returns at the next
+     * decoder boundary and is drained at the start of the next pass.
+     *
+     * Subtitles follow the measured rule of publishing on changes, never per frame: cues
+     * change about once a second. The raster cost therefore sits on cue edges, and the renderer
+     * skips re-uploading an unchanged overlay by contentHash.
+     */
+    private suspend fun handleSubtitles() {
+        val session = this.session ?: return
+        val decoder = session.subtitleDecoder
         val queue = session.subtitleQueue
 
         // The drain half needs a container stream; the timing half below does not: an external
@@ -7951,7 +7951,14 @@ internal class PlaybackCore(
         var negotiatedFormat: AudioFormat?,
         /** Non-null when this open reads through the byte cache; progress reads its window. */
         val cachingIo: CachingMediaIo? = null,
+        /** How long the demux lane has waited for the source; see `BufferPolicy.stallTimeout`. */
+        val stallWatch: StallWatch,
     ) {
+        /**
+         * True once the source answered that it cannot interrupt a stalled read. The session then
+         * keeps waiting, because a teardown around a read that never returns would hang. Actor only.
+         */
+        var stallInterruptRefused: Boolean = false
         private val audioRouting = atomic(
             AudioRouting(audioLane, listOfNotNull(videoQueue, audioLane?.queue)),
         )
@@ -7977,14 +7984,7 @@ internal class PlaybackCore(
 
         /**
          * Pinged when a worker records a first timestamp for a new epoch, and when the schedule
-        /** How long the demux lane has waited for the source; see `BufferPolicy.stallTimeout`. */
-        val stallWatch: StallWatch,
          * releases the frame a one-frame request asked for, so the actor's waits wake when the
-        /**
-         * True once the source answered that it cannot interrupt a stalled read. The session then
-         * keeps waiting, because a teardown around a read that never returns would hang. Actor only.
-         */
-        var stallInterruptRefused: Boolean = false
          * thing happens instead of at their next 50 ms sample. Conflated: one token is enough,
          * every waiter re-reads its own conditions.
          */

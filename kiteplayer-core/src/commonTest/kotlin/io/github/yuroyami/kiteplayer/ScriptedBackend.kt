@@ -388,14 +388,14 @@ internal class FaultPlan(
     /** Reads beyond this count wedge like an uncancellable native read. Null wedges nothing. */
     var readWedgesAfter: Int? = null
 
-    /** False models a source whose interrupt() cannot help. */
-    var interruptSupported: Boolean = true
     /**
      * How many reader reads one packet costs, when the item carries a reader. More than one models a
      * packet that arrives in many small pieces over a slow link.
      */
     var ioReadsPerPacket: Int = 1
 
+    /** False models a source whose interrupt() cannot help. */
+    var interruptSupported: Boolean = true
 
     /** True makes the sink's drain never finish, which the core must bound rather than wait out. */
     var drainHangs: Boolean = false
@@ -499,10 +499,10 @@ internal class ScriptedBackend(
     private val ledger: LeakLedger = LeakLedger(),
     private val faults: FaultPlan = FaultPlan.None,
     private val trace: ScriptTrace = ScriptTrace(),
-) : MediaBackend {
-
     /** The harness clock, so a source can say when a wedge began. Null leaves that unrecorded. */
     private val clock: MonotonicClock? = null,
+) : MediaBackend {
+
     /** Mutable decoder truth used to prove that stats do not retain an open-time hardware claim. */
     val videoDecoderStatus: ScriptedVideoDecoderStatus = ScriptedVideoDecoderStatus()
 
@@ -606,6 +606,7 @@ internal class ScriptedSession(
     videoDecoderStatus: ScriptedVideoDecoderStatus = ScriptedVideoDecoderStatus(),
     /** The engine's byte reader, when the item carried one. Drained a little per packet. */
     private val io: io.github.yuroyami.kiteplayer.MediaIo? = null,
+    clock: MonotonicClock? = null,
 ) : BackendSession {
 
     val scriptedSource: ScriptedSource = ScriptedSource(script, ledger, faults, trace, io, clock)
@@ -619,7 +620,6 @@ internal class ScriptedSession(
     val videoDecoderPolicies: MutableList<HwdecPolicy> = mutableListOf()
 
     override val videoDecoders: List<VideoDecoderFactory> =
-    clock: MonotonicClock? = null,
         listOf(
             ScriptedVideoDecoderFactory(
                 script,
@@ -786,6 +786,10 @@ internal class ScriptedSource(
         private set
     var interruptCalls: Int = 0
         private set
+
+    /** When the first wedge began, by the harness clock. Null until a call wedges. */
+    var wedgedAtNanos: Long? = null
+        private set
     private val interruptGate = kotlinx.coroutines.CompletableDeferred<Unit>()
     private val wedgeReleased = kotlinx.coroutines.CompletableDeferred<Unit>()
 
@@ -801,16 +805,13 @@ internal class ScriptedSource(
         wedgeReleased.complete(Unit)
     }
 
-    /** When the first wedge began, by the harness clock. Null until a call wedges. */
-    var wedgedAtNanos: Long? = null
-        private set
-
     /**
      * Models an uncancellable native call: suspends immune to cancellation until either the
      * interrupt seam fires (the call then fails, a poisoned source) or [releaseWedge] lets it
      * finish normally. Once released, later calls stop wedging.
      */
     private suspend fun wedge(what: String) {
+        if (wedgedAtNanos == null) wedgedAtNanos = clock?.nanos()
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
             while (!interruptGate.isCompleted && !wedgeReleased.isCompleted) {
                 kotlinx.coroutines.delay(10)
@@ -825,7 +826,6 @@ internal class ScriptedSource(
     override fun selectStreams(indices: Set<Int>) {
         if (faults.failSelectStreams) error("scripted selectStreams failure")
         check(selectCalls == 0) { "streams must be selected before the first read" }
-        if (wedgedAtNanos == null) wedgedAtNanos = clock?.nanos()
         require(indices.isNotEmpty()) { "no selectable stream among $indices" }
         require(indices.all { wanted -> streams.any { it.index == wanted } }) {
             "unknown scripted stream in $indices"

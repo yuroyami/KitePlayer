@@ -28,8 +28,10 @@
 #   - `:kiteplayer-ffmpeg` on the iOS simulator: RealMediaSeekTest cannot see the host's testmedia
 #     tree through the simctl spawn boundary, and VideoToolboxDecodeTest needs hardware the
 #     simulator does not have. Four failures, all environment.
-#   - Android DEVICE tests (`connectedAndroidTest`) and the physical-device rows. Those need
-#     hardware and stay owner-gated, tracked in the hardware verification plan.
+#   - Android device tests on real hardware, and the physical-device rows. Those stay
+#     owner-gated, tracked in the hardware verification plan. The android-emulator job runs the
+#     device test sets on an x86_64 emulator, except the classes that need clips on the device;
+#     that job names them.
 #   - `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone`, which have test
 #     TASKS and no test SOURCES. They were named here on the first run and came back NO-SOURCE.
 #     Naming a task that cannot run is how a job looks broader than it is, so they are gone from
@@ -558,6 +560,217 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------------------------
+  # Android, on the SDK's own emulator: the device test sets, and the Kotlin/Native test binaries
+  # of the Android x86_64 target. No third-party action; the SDK's own tools in shell steps.
+  # ---------------------------------------------------------------------------------------------
+  android-emulator:
+    name: Android emulator x86_64 (device tests + Android native tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      # x86_64 because the runner is x86_64, and the emulator refuses an arm64 image on an x86_64
+      # host. Google APIs at a recent API level. The arm64 code of every module is not run here.
+      AVD_PACKAGE: system-images;android-35;google_apis;x86_64
+      # These classes read clips that must be pushed to the device after install, and this job
+      # does not push any yet. They are excluded by name, and the run summary lists them.
+      DEVICE_TESTS_NOT_RUN_HERE: |
+        io.github.yuroyami.kiteplayer.ffmpeg.FormatMatrixDeviceTest
+        io.github.yuroyami.kiteplayer.ffmpeg.TrackSwitchDeviceTest
+        io.github.yuroyami.kiteplayer.ffmpeg.TrackSwitchAudibleDeviceTest
+        io.github.yuroyami.kiteplayer.compose.KiteVideoDeviceTest
+        io.github.yuroyami.kiteplayer.compose.ReopenDeviceTest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-android-emulator-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-android-emulator-
+            konan-linux-x64-
+
+      # The hosted Linux runners have KVM, and only root can open it until this rule is added.
+      - name: Enable hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # sdkmanager can skip a package whose license is not accepted and still exit zero, so the
+      # step checks that the emulator and the image are there. -accel-check fails when KVM is not
+      # usable.
+      - name: Install the emulator and the system image
+        run: |
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          log="$RUNNER_TEMP/sdkmanager.log"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator platform-tools "$AVD_PACKAGE" \
+            < /dev/null > "$log" 2>&1 || { cat "$log"; exit 1; }
+          image="$ANDROID_HOME/$(echo "$AVD_PACKAGE" | tr ';' '/')"
+          [ -x "$ANDROID_HOME/emulator/emulator" ] && [ -d "$image" ] || { cat "$log"; exit 1; }
+          "$ANDROID_HOME/emulator/emulator" -version | head -n 1
+          "$ANDROID_HOME/emulator/emulator" -accel-check
+
+      - name: Create the virtual device
+        run: |
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
+            --name kite --package "$AVD_PACKAGE" --device pixel_6 --force
+
+      # In the background, so that it boots while Gradle builds. The runner stops it when the job
+      # ends.
+      - name: Start the emulator
+        run: |
+          nohup emulator -avd kite -no-window -no-audio -no-boot-anim -no-snapshot \
+            -gpu swiftshader_indirect -accel on > "$RUNNER_TEMP/emulator.log" 2>&1 &
+
+      # BEFORE any Gradle task that could reach compileKiteRtCFor<Target>. See the file header.
+      - name: Warm the Kotlin/Native toolchain
+        run: ./gradlew :kiteplayer-rt:downloadKotlinNativeDistribution --stacktrace
+
+      # Every module that declares androidNativeX64, and the device test sources of every module
+      # that has them. The other three Android native targets are arm or 32-bit, and none of them
+      # runs here.
+      - name: Build the Android native test binaries and the device test sources
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:linkDebugTestAndroidNativeX64 \
+            :kiteplayer-subtitles:linkDebugTestAndroidNativeX64 \
+            :kiteplayer-io:linkDebugTestAndroidNativeX64 \
+            :kiteplayer-rt:linkDebugTestAndroidNativeX64 \
+            :kiteplayer-io:compileAndroidDeviceTestSources \
+            :kiteplayer-output:compileAndroidDeviceTestSources \
+            :kiteplayer-ffmpeg:compileAndroidDeviceTestSources \
+            :kiteplayer-libass:compileAndroidDeviceTestSources \
+            :kiteplayer-compose-video:compileAndroidDeviceTestSources
+
+      - name: Wait for the emulator to finish booting
+        id: boot
+        run: |
+          booted() { [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; }
+          deadline=$((SECONDS + 600))
+          if timeout 600 adb wait-for-device; then
+            until booted || [ "$SECONDS" -ge "$deadline" ]; do sleep 5; done
+          fi
+          if ! booted; then
+            echo "::error::The emulator did not finish booting within ten minutes."
+            tail -n 100 "$RUNNER_TEMP/emulator.log"
+            exit 1
+          fi
+          # Nothing on the screen may animate, lock or sleep while the tests drive activities.
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          adb shell svc power stayon true
+          adb shell input keyevent 82
+          echo "API $(adb shell getprop ro.build.version.sdk | tr -d '\r')," \
+            "ABIs $(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
+
+      # --continue, so that one red module does not hide the counts of the other four. The runner
+      # takes the excluded classes as one comma-separated list.
+      - name: Device tests, every module that has them
+        run: |
+          not_run_here="$(printf '%s' "$DEVICE_TESTS_NOT_RUN_HERE" | paste -sd, -)"
+          ./gradlew --stacktrace --continue \
+            "-Pandroid.testInstrumentationRunnerArguments.notClass=$not_run_here" \
+            :kiteplayer-io:connectedAndroidDeviceTest \
+            :kiteplayer-output:connectedAndroidDeviceTest \
+            :kiteplayer-ffmpeg:connectedAndroidDeviceTest \
+            :kiteplayer-libass:connectedAndroidDeviceTest \
+            :kiteplayer-compose-video:connectedAndroidDeviceTest
+
+      # A test binary runs from its own directory on the device, which is also its TMPDIR. `adb
+      # shell` returns the exit code of the command it ran.
+      - name: Android native tests (androidNativeX64), on the emulator
+        if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
+        run: |
+          set +e
+          mkdir -p "$RUNNER_TEMP/test-logs"
+          status=0
+          for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-rt; do
+            binary="$module/build/bin/androidNativeX64/debugTest/test.kexe"
+            if [ ! -f "$binary" ]; then
+              echo "::error::$module: no test binary at $binary"
+              status=1
+              continue
+            fi
+            dir="/data/local/tmp/kiteplayer/$module"
+            adb shell mkdir -p "$dir"
+            adb push "$binary" "$dir/test.kexe" > /dev/null
+            adb shell chmod 755 "$dir/test.kexe"
+            echo "::group::$module"
+            adb shell "cd $dir && TMPDIR=$dir ./test.kexe" 2>&1 | tee "$RUNNER_TEMP/test-logs/$module.log"
+            code=${PIPESTATUS[0]}
+            echo "::endgroup::"
+            if [ "$code" -ne 0 ]; then
+              echo "::error::$module: the test binary exited with code $code"
+              status=1
+            fi
+          done
+          exit $status
+
+      # A green run must say how many tests ran, not only that none failed. A task or binary that
+      # wrote no results shows "no results".
+      - name: The test counts
+        if: always()
+        run: |
+          python3 - >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          import glob, os, re, xml.etree.ElementTree as ET
+          print("### Android emulator: device tests\n")
+          print("| Test task | Tests | Failed | Skipped |\n|---|---:|---:|---:|")
+          for module in ("kiteplayer-io", "kiteplayer-output", "kiteplayer-ffmpeg",
+                         "kiteplayer-libass", "kiteplayer-compose-video"):
+              files = glob.glob(f"{module}/build/outputs/androidTest-results/connected/**/*.xml",
+                                recursive=True)
+              roots = [ET.parse(f).getroot() for f in files]
+              suites = [s for r in roots for s in ([r] if r.tag == "testsuite" else r.iter("testsuite"))]
+              total = lambda *keys: sum(int(s.get(k, 0)) for s in suites for k in keys)
+              cells = f"{total('tests')} | {total('failures', 'errors')} | {total('skipped')}"
+              print(f"| :{module}:connectedAndroidDeviceTest | {cells if suites else 'no results | |'} |")
+          print("\nNot run here, because they need clips on the device:\n")
+          for name in os.environ["DEVICE_TESTS_NOT_RUN_HERE"].split():
+              print(f"- `{name}`")
+          print("\n### Android emulator: androidNativeX64 test binaries\n")
+          print("| Test binary | Tests | Failed | Skipped |\n|---|---:|---:|---:|")
+          for module in ("kiteplayer-core", "kiteplayer-subtitles", "kiteplayer-io", "kiteplayer-rt"):
+              path = os.path.join(os.environ["RUNNER_TEMP"], "test-logs", f"{module}.log")
+              text = open(path, errors="replace").read() if os.path.exists(path) else ""
+              ran = re.search(r"^\[=+\] (\d+) tests? from .* ran", text, re.M)
+              passed = re.search(r"^\[  PASSED  \] (\d+) tests?", text, re.M)
+              failed = re.search(r"^\[  FAILED  \] (\d+) tests?, listed below", text, re.M)
+              if not ran:
+                  print(f"| {module} | no results | | |")
+                  continue
+              tests, ok, bad = int(ran[1]), int(passed[1]) if passed else 0, int(failed[1]) if failed else 0
+              print(f"| {module} | {tests} | {bad} | {tests - ok - bad} |")
+          EOF
+
+      - name: Collect the emulator log and the device log
+        if: failure()
+        run: |
+          mkdir -p build/emulator-logs
+          cp "$RUNNER_TEMP/emulator.log" build/emulator-logs/ || true
+          cp "$RUNNER_TEMP"/test-logs/*.log build/emulator-logs/ || true
+          timeout 60 adb logcat -d > build/emulator-logs/logcat.txt 2>&1 || true
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-reports
+          path: |
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**
+            build/emulator-logs/**
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
   # Linux, Kotlin/Native. These binaries have been cross-linked on a Mac for months; this is where
   # they actually EXECUTE on a Linux kernel without a container in the way.
   # ---------------------------------------------------------------------------------------------
@@ -614,6 +827,134 @@ jobs:
           path: |
             **/build/reports/tests/**
             **/build/test-results/**
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
+  # Linux arm64, Kotlin/Native, in two jobs. Kotlin/Native ships no compiler for an arm64 Linux
+  # host, so Gradle's linuxArm64Test task cannot run on one. The first job links the test binaries
+  # on x64 Linux; the second executes them on an arm64 runner. scripts/linux-tests.sh does the same
+  # from a Mac, with a container in place of the arm64 runner.
+  # ---------------------------------------------------------------------------------------------
+  linux-arm64-link:
+    name: Linux arm64 (link the Kotlin/Native test binaries on x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-linux-arm64-cross-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-linux-arm64-cross-
+            konan-linux-x64-
+      - name: Warm the Kotlin/Native toolchain
+        run: ./gradlew :kiteplayer-rt:downloadKotlinNativeDistribution --stacktrace
+
+      # Every module that declares linuxArm64. :kiteplayer-ffmpeg is linked and not run, because
+      # its suites read the clips, which are generated on the macOS job only.
+      - name: Link the linuxArm64 test binaries
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:linkDebugTestLinuxArm64 \
+            :kiteplayer-subtitles:linkDebugTestLinuxArm64 \
+            :kiteplayer-io:linkDebugTestLinuxArm64 \
+            :kiteplayer-output:linkDebugTestLinuxArm64 \
+            :kiteplayer-rt:linkDebugTestLinuxArm64 \
+            :kiteplayer-libass:linkDebugTestLinuxArm64 \
+            :kiteplayer:linkDebugTestLinuxArm64 \
+            :kiteplayer-ffmpeg:linkDebugTestLinuxArm64
+
+      - name: Hand the test binaries to the arm64 job
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-test-binaries
+          path: |
+            kiteplayer-core/build/bin/linuxArm64/debugTest/test.kexe
+            kiteplayer-subtitles/build/bin/linuxArm64/debugTest/test.kexe
+            kiteplayer-io/build/bin/linuxArm64/debugTest/test.kexe
+            kiteplayer-output/build/bin/linuxArm64/debugTest/test.kexe
+            kiteplayer-rt/build/bin/linuxArm64/debugTest/test.kexe
+            kiteplayer-libass/build/bin/linuxArm64/debugTest/test.kexe
+            kiteplayer/build/bin/linuxArm64/debugTest/test.kexe
+          retention-days: 1
+          if-no-files-found: error
+
+  linux-arm64-native:
+    name: Linux arm64 (Kotlin/Native, executed on an arm64 runner)
+    needs: linux-arm64-link
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      # The checkout gives each binary the module directory that Gradle's test task runs it in.
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-arm64-test-binaries
+
+      # The environment is the one Gradle's native test task sets, plus TMPDIR, which the suites
+      # need and will not guess. The artifact store drops the executable bit, so it is set here.
+      - name: linuxArm64 tests, media-free modules
+        run: |
+          set +e
+          mkdir -p "$RUNNER_TEMP/test-logs"
+          status=0
+          for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-output \
+                        kiteplayer-rt kiteplayer-libass kiteplayer; do
+            binary="$GITHUB_WORKSPACE/$module/build/bin/linuxArm64/debugTest/test.kexe"
+            if [ ! -f "$binary" ]; then
+              echo "::error::$module: no test binary at $binary"
+              status=1
+              continue
+            fi
+            chmod +x "$binary"
+            echo "::group::$module"
+            (cd "$module" && TMPDIR="$RUNNER_TEMP" KITEPLAYER_TESTMEDIA="$GITHUB_WORKSPACE/testmedia" \
+              "$binary") 2>&1 | tee "$RUNNER_TEMP/test-logs/$module.log"
+            code=${PIPESTATUS[0]}
+            echo "::endgroup::"
+            if [ "$code" -ne 0 ]; then
+              echo "::error::$module: the test binary exited with code $code"
+              status=1
+            fi
+          done
+          exit $status
+
+      # A green run must say how many tests ran, not only that none failed. A binary that printed
+      # no summary, such as one that crashed, shows "no results".
+      - name: The test counts
+        if: always()
+        run: |
+          python3 - >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          import os, re
+          print("### linuxArm64 test binaries, executed on an arm64 runner\n")
+          print("| Test binary | Tests | Failed | Skipped |\n|---|---:|---:|---:|")
+          for module in ("kiteplayer-core", "kiteplayer-subtitles", "kiteplayer-io", "kiteplayer-output",
+                         "kiteplayer-rt", "kiteplayer-libass", "kiteplayer"):
+              path = os.path.join(os.environ["RUNNER_TEMP"], "test-logs", f"{module}.log")
+              text = open(path, errors="replace").read() if os.path.exists(path) else ""
+              ran = re.search(r"^\[=+\] (\d+) tests? from .* ran", text, re.M)
+              passed = re.search(r"^\[  PASSED  \] (\d+) tests?", text, re.M)
+              failed = re.search(r"^\[  FAILED  \] (\d+) tests?, listed below", text, re.M)
+              if not ran:
+                  print(f"| {module} | no results | | |")
+                  continue
+              tests, ok, bad = int(ran[1]), int(passed[1]) if passed else 0, int(failed[1]) if failed else 0
+              print(f"| {module} | {tests} | {bad} | {tests - ok - bad} |")
+          EOF
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-native-logs
+          path: ${{ runner.temp }}/test-logs/
           retention-days: 14
           if-no-files-found: ignore
 

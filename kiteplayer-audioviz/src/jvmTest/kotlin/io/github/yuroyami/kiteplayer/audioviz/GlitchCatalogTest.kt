@@ -1,7 +1,10 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizNeed
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotSame
@@ -10,23 +13,19 @@ import kotlin.test.assertTrue
 class GlitchCatalogTest {
     init { useSkiaGraphics() }
 
-    @Test fun oneIndependentGlitchOffersLayerAndMotionControls() {
+    @Test
+    fun glitchIsOneSelectablePresetWhoseMappingNeedsNoRuntimeShader() {
         val entries = VizCatalog.create().filter { it.name == "Glitch" }
         assertEquals(1, entries.size, "Glitch must be one selectable preset")
-        val a = entries.single()
-        val b = VizCatalog.create().single { it.name == "Glitch" }
-        assertNotSame(a, b)
-        assertTrue(a.paintsWholeScreen)
-        assertTrue(VizNeed.RuntimeShader !in checkNotNull(a.mapping).needs, "All platforms keep the same native geometry")
-        val names = a.params.map { it.name }.toSet()
-        assertTrue(names.containsAll(listOf("Composition", "Response", "Scene changes", "Travel", "Rotation",
-            "Density", "Scale", "Wheel", "Crystals", "Eclipse", "Ribbons", "Tunnel", "Stars",
-            "Colour spread", "Brightness", "Glow", "Chromatic split")))
-        assertEquals(listOf("Auto", "Spectrum", "Crystal", "Ribbon", "Tunnel", "Eclipse"),
-            a.params.single { it.name == "Composition" }.choices)
-        val response = a.params.single { it.name == "Response" }
-        response.value = response.max
-        assertEquals(b.params.single { it.name == "Response" }.default,
-            b.params.single { it.name == "Response" }.value, "Preview controls belong to their own instance")
+        val glitch = entries.single()
+        assertTrue(glitch is Glitch)
+        assertNotSame(glitch, VizCatalog.create().single { it.name == "Glitch" }, "each use gets its own drawing")
+        val mapping = checkNotNull(glitch.mapping)
+        assertTrue(VizNeed.RuntimeShader !in mapping.needs, "the whole picture draws on every platform")
+        assertTrue(VizNeed.ShaderLayers !in mapping.needs, "the datamosh needs no shader, so it runs on software canvases")
+        assertEquals(VizSilence.Still, mapping.silence)
+        val named = listOf(VizDriver.Bands, VizDriver.Waveform, VizDriver.LowHit, VizDriver.BodyHit, VizDriver.HighHit,
+            VizDriver.Pulse, VizDriver.Section, VizDriver.Breakdown, VizDriver.Drop)
+        assertTrue(mapping.drivers.containsAll(named), "the declared drivers ${mapping.drivers} miss ${named - mapping.drivers}")
     }
 }

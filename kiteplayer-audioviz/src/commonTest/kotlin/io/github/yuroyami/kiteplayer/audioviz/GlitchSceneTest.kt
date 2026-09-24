@@ -1,248 +1,269 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizFuture
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene
 import kotlin.math.abs
 import kotlin.math.sin
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
-/** Choreography contracts, independent of renderer, GPU, frame rate and genre. */
+/** The rules of the broken broadcast, checked on its numbers without drawing it. */
 class GlitchSceneTest {
-    @Test fun spectrumRegionsRemainIndependentWithAllTravelStopped() {
-        fun scene(region: Int): GlitchScene {
-            val bands = FloatArray(48) { if (it / 16 == region) 0.8f else 0.1f }
-            return GlitchScene().apply {
-                advance(state(frame(0, bands = bands, low = if (region == 0) 0.8f else 0.1f,
-                    body = if (region == 1) 0.8f else 0.1f,
-                    air = if (region == 2) 0.8f else 0.1f), motion = 0f),
-                    travelSpeed = 0f, rotationSpeed = 0f)
+
+    @Test
+    fun theBarsFillTheWidthAndALoudBandIsWider() {
+        val run = Run()
+        val bands = FloatArray(48) { if (it < 24) 0.45f else 0.02f }
+        repeat(30) { run.next(bands = bands) }
+        val edges = run.scene.edges
+        assertEquals(0f, edges[0])
+        assertEquals(1f, edges[GlitchScene.BARS])
+        for (bar in 0 until GlitchScene.BARS) assertTrue(edges[bar + 1] > edges[bar], "slot $bar has no width")
+        val loud = edges[1] - edges[0]
+        val quiet = edges[GlitchScene.BARS] - edges[GlitchScene.BARS - 1]
+        assertTrue(loud > quiet * 2f, "a loud band takes $loud of the width and a quiet one $quiet")
+    }
+
+    @Test
+    fun theFirstFrameAndASilenceShowTheBarcodeAtThirtyPercentWithAFlatTrace() {
+        val scene = GlitchScene()
+        assertTrue(scene.exposure.all { it == GlitchScene.IDLE_LIGHT }, "the first frame is lit before any music")
+        val run = Run(scene)
+        repeat(240) { run.next(bands = FloatArray(48), level = 0f) }
+        assertTrue(scene.exposure.all { abs(it - GlitchScene.IDLE_LIGHT) < 0.01f }, "silence keeps the idle light")
+        assertTrue(scene.trace.all { it == 0f }, "the trace lies flat in silence")
+        assertEquals(0f, scene.split)
+        assertEquals(0, scene.slices)
+        assertFalse(scene.staticOn)
+        assertFalse(scene.moshing)
+        assertTrue(scene.melt.all { it < 0f })
+        assertTrue(scene.scanStrength < 0.01f, "no scan bar rolls in silence")
+    }
+
+    @Test
+    fun aKickSplitsTheLayersByItsStrengthAndTheyRejoinWithin120Milliseconds() {
+        fun splits(strength: Float): FloatArray {
+            val run = Run()
+            repeat(30) { run.next() }
+            run.next(hits = listOf(AudioEventKind.LowTransient to strength))
+            val out = FloatArray(9)
+            out[0] = run.scene.split
+            for (frame in 1..8) {
+                run.next()
+                out[frame] = run.scene.split
             }
+            return out
         }
-        val low = scene(0); val body = scene(1); val high = scene(2)
-        assertTrue(low.bands[8] > body.bands[8] * 5)
-        assertTrue(body.bands[32] > high.bands[32] * 5)
-        assertTrue(high.bands[56] > low.bands[56] * 5)
-        assertTrue(low.bass > body.bass * 5)
-        assertTrue(body.body > high.body * 5)
-        assertTrue(high.air > low.air * 5)
-        for (scene in listOf(low, body, high)) {
-            assertEquals(0f, scene.travel); assertEquals(0f, scene.turn)
-        }
+        val hard = splits(0.9f)
+        val soft = splits(0.3f)
+        assertTrue(soft[0] > 0f, "a soft kick still splits the layers")
+        assertTrue(hard[0] > soft[0], "a hard kick splits them further: ${hard[0]} against ${soft[0]}")
+        assertTrue(hard[7] < hard[0] * 0.01f, "117 ms after the kick the layers have nearly rejoined")
+        assertEquals(0f, hard[8], "133 ms after the kick the edges are clean")
     }
 
-    @Test fun sustainedTextureDoesNotBecomeATimedCarousel() {
-        val scene = GlitchScene()
-        for (i in 0..3600) scene.advance(state(frame(i * 16_667L), i / 60f))
-        assertEquals(0, scene.transitions)
-        assertEquals(0L, scene.acceptedHits)
-        assertTrue(scene.travel > 0f, "A sustained sound can travel without inventing musical cues")
-    }
-
-    @Test fun genuineTransientsCanRecomposeAnUnstudiedSongAfterResidency() {
-        val active = GlitchScene(); val disabled = GlitchScene()
-        var sequence = 0L
-        for (i in 0..900) {
-            val time = i * 16_667L
-            val events = if (i % 15 == 0) arrayOf(event(sequence++, time, AudioEventKind.LowTransient)) else emptyArray()
-            val sample = state(frame(time, events = events), i / 60f, if (i == 0) 0f else 1f / 60f)
-            active.advance(sample)
-            disabled.advance(sample, changes = 0f)
-            if (i < 360) assertEquals(0, active.transitions, "Fallback scene changes need six seconds of residence")
-        }
-        assertTrue(active.acceptedHits > 30)
-        assertTrue(active.transitions > 0, "Real recurring transients can reorganize the composition")
-        assertEquals(0, disabled.transitions, "Scene change control can hold one composition")
-    }
-
-    @Test fun materialFeatureChangeCanRecomposeWithoutInventingABeat() {
-        val scene = GlitchScene()
-        for (i in 0..480) {
-            scene.advance(state(frame(i * 16_667L, value = if (i < 400) 0.2f else 0.85f,
-                centroid = if (i < 400) 0.1f else 0.9f), i / 60f))
-        }
-        assertEquals(0L, scene.acceptedHits)
-        assertEquals(1, scene.transitions)
-    }
-
-    @Test fun mappedBoundariesRespondOnceAndEnergyRiseIsNotASection() {
-        val scene = GlitchScene()
-        val rise = event(0, 100_000, AudioEventKind.EnergyRise, source = AudioEventSource.SongMap)
-        scene.advance(state(frame(100_000, events = arrayOf(rise)), 0.1f))
-        assertEquals(0, scene.transitions)
-        val uncertain = event(1, 110_000, AudioEventKind.Drop, confidence = 0.59f, source = AudioEventSource.SongMap)
-        scene.advance(state(frame(110_000, events = arrayOf(uncertain)), 0.11f))
-        assertEquals(0, scene.transitions)
-        val drop = event(2, 120_000, AudioEventKind.Drop, source = AudioEventSource.SongMap)
-        scene.advance(state(frame(120_000, events = arrayOf(drop)), 0.12f))
-        assertEquals(1, scene.transitions); assertEquals(4, scene.composition)
-        val before = scene.weights.copyOf()
-        scene.advance(state(frame(130_000, events = arrayOf(drop)), 0.13f))
-        assertEquals(1, scene.transitions)
-        for (i in before.indices) assertTrue(abs(scene.weights[i] - before[i]) < 0.03f)
-        // A different source still cannot interrupt a dissolve twenty milliseconds later.
-        val breakdown = event(0, 140_000, AudioEventKind.Breakdown, source = AudioEventSource.LiveStructure)
-        scene.advance(state(frame(140_000, events = arrayOf(breakdown)), 0.14f))
-        assertEquals(1, scene.transitions); assertEquals(4, scene.composition)
-        for (pts in 200_000L..1_600_000L step 100_000L) scene.advance(state(frame(pts), dt = 0.1f))
-        // The suppressed cue is consumed, not replayed after the cooldown. A fresh cue acts.
-        scene.advance(state(frame(1_620_000, events = arrayOf(breakdown))))
-        assertEquals(1, scene.transitions)
-        val next = event(1, 1_650_000, AudioEventKind.Breakdown, source = AudioEventSource.LiveStructure)
-        scene.advance(state(frame(1_650_000, events = arrayOf(next))))
-        assertEquals(2, scene.transitions); assertEquals(2, scene.composition)
-    }
-
-    @Test fun onePhysicalAttackIsNotDoubledByGenericAndRegionalDetections() {
-        val scene = GlitchScene()
-        val events = arrayOf(
-            event(0, 1_010_000, AudioEventKind.LowTransient, strength = 0.7f),
-            event(1, 1_010_000, AudioEventKind.Onset, strength = 0.7f),
-            event(2, 1_042_000, AudioEventKind.LowTransient, strength = 0.2f),
-        )
-        val sample = state(frame(1_066_667, events = events), 1f)
-        scene.advance(sample)
-        assertEquals(2L, scene.acceptedHits)
-        assertEquals(0.9f, scene.lowAccent, 0.00001f)
-        val before = snapshot(scene)
-        repeat(5) { scene.advance(sample) }
-        assertEquals(before, snapshot(scene), "Echo and front cannot integrate the same instant twice")
-        scene.advance(state(frame(1_083_334, events = events), 1.016667f))
-        assertEquals(2L, scene.acceptedHits, "A new display time cannot replay the same event identity")
-        val travel = scene.travel
-        scene.advance(state(frame(1_083_334,
-            events = arrayOf(event(3, 1_080_000, AudioEventKind.HighTransient))), 1.016667f))
-        assertEquals(travel, scene.travel, "A different frame at one display instant adds no elapsed time")
-        assertEquals(3L, scene.acceptedHits)
-        assertTrue(scene.highAccent > 0.5f)
-    }
-
-    @Test fun heldSelectionSeedsSpectrumAndManualControlsDoNotAdvanceTime() {
-        val scene = GlitchScene()
-        val held = state(frame(1_000_000, value = 0.6f, held = true), 1f)
-        scene.advance(held)
-        assertTrue(scene.bands.all { it == 0.6f })
-        assertTrue(scene.history.all { it > 0.5f })
-        val before = snapshot(scene)
-        repeat(120) { scene.advance(state(frame(1_000_000, value = 0.1f, held = true), 2f + it / 60f)) }
-        assertEquals(before, snapshot(scene))
-        scene.configure(compositionMode = 3, response = 0.5f)
-        assertEquals(3, scene.composition)
-        assertEquals(0.95f, scene.weights[3])
-        assertTrue(scene.bands.all { it == 0.3f })
-        assertEquals(0f, scene.travel); assertEquals(0f, scene.turn)
-        scene.advance(held, response = 1f, compositionMode = 5)
-        assertEquals(2, scene.composition); assertEquals(0.95f, scene.weights[2])
-        assertTrue(scene.bands.all { it == 0.6f })
-        assertEquals(0L, scene.acceptedHits)
-    }
-
-    @Test fun seekAndAnalysisIdentityClearOldAccentsEvenWhilePaused() {
-        val scene = GlitchScene()
-        scene.advance(state(frame(5_000_000,
-            events = arrayOf(event(0, 5_000_000, AudioEventKind.LowTransient))), 1f))
-        assertTrue(scene.lowAccent > 0f)
-        scene.advance(state(frame(1_000_000, value = 0.15f, held = true, revision = 1), 2f))
-        assertEquals(0f, scene.lowAccent); assertEquals(0f, scene.travel)
-        assertEquals(0L, scene.acceptedHits)
-        assertTrue(scene.bands.all { abs(it - 0.15f) < 0.00001f })
-        val current = snapshot(scene)
-        scene.advance(state(frame(5_000_000, value = 1f, revision = 0), 3f))
-        assertEquals(current, snapshot(scene), "A retired revision cannot replace the current seek")
-        scene.advance(state(frame(0, value = 0.2f, held = true, generation = Generation(1)), 4f))
-        assertTrue(scene.bands.all { abs(it - 0.2f) < 0.00001f })
-        assertEquals(0f, scene.turn)
-    }
-
-    @Test fun catchupResetDiscardsOldEventsAndTheRepeatedDeliveryDoesNotResetAgain() {
-        val scene = GlitchScene()
-        val old = event(0, 1_000_000, AudioEventKind.Drop, source = AudioEventSource.SongMap)
-        val sample = frame(1_000_000, events = arrayOf(old), reset = true)
-        scene.advance(state(sample, 1f))
-        assertEquals(0, scene.transitions)
-        val firstTravel = scene.travel
-        scene.advance(state(sample, 1.016667f))
-        assertTrue(scene.travel > firstTravel, "One reset delivery must not erase each subsequent display frame")
-        scene.advance(state(frame(1_016_667, events = arrayOf(old)), 1.033334f))
-        assertEquals(0, scene.transitions)
-    }
-
-    @Test fun missingAnalysisIsNotSilenceOrABreakdownAndReducedMotionRetainsSpectrum() {
-        val scene = GlitchScene()
-        scene.advance(state(frame(0), motion = 0f))
-        assertTrue(scene.bands.sum() > 20f)
-        assertEquals(0f, scene.travel)
-        for (i in 1..120) scene.advance(state(frame(i * 16_667L,
-            available = AnalysisAvailability.Unavailable), i / 60f))
-        assertEquals(0, scene.transitions)
-        assertEquals(0L, scene.acceptedHits)
-        assertTrue(scene.level < 0.001f)
-    }
-
-    @Test fun historyAndContinuousMotionHaveTheSameCadenceAtFifteenThroughOneHundredTwentyHz() {
-        fun run(fps: Int): GlitchScene = GlitchScene().apply {
-            for (i in 0..fps * 4) {
-                val t = i.toFloat() / fps
-                advance(state(frame(i * 1_000_000L / fps, value = 0.2f + t * 0.1f,
-                    density = 0.3f, centroid = 0.3f), t, if (i == 0) 0f else 1f / fps), changes = 0f)
+    @Test
+    fun aSnareTearsThreeToEightSlicesForTwoToFourFrames() {
+        fun tear(strength: Float): Pair<Int, Int> {
+            val run = Run()
+            repeat(30) { run.next() }
+            run.next(hits = listOf(AudioEventKind.BodyTransient to strength))
+            val count = run.scene.slices
+            for (slice in 0 until count) assertTrue(run.scene.sliceShift[slice] != 0f, "slice $slice did not move")
+            var frames = 0
+            while (run.scene.slices > 0 && frames < 20) {
+                frames++
+                run.next()
             }
+            return count to frames
         }
-        val reference = run(60)
-        for (fps in listOf(15, 30, 120)) {
-            val other = run(fps)
-            assertEquals(reference.historySamples, other.historySamples)
-            for (i in reference.history.indices) assertEquals(reference.history[i], other.history[i], 0.00001f)
-            assertEquals(reference.travel, other.travel, 0.015f)
-            assertEquals(reference.turn, other.turn, 0.005f)
-        }
+        assertEquals(3 to 2, tear(0f))
+        assertEquals(8 to 4, tear(1f))
     }
 
-    @Test fun resetReplaysTheSameMusicWithoutKeepingThePreviousComposition() {
-        val scene = GlitchScene()
-        fun run(): List<Float> {
-            for (i in 0..300) scene.advance(state(frame(i * 16_667L,
-                value = 0.5f + 0.25f * sin(i * 0.04f)), i / 60f))
-            return snapshot(scene)
+    @Test
+    fun aHatMeltsOnlyTheBrightestBarsAboveAFixedLevel() {
+        val quietBands = FloatArray(48) { 0.05f }
+        val quiet = Run()
+        repeat(60) { quiet.next(bands = quietBands) }
+        quiet.next(bands = quietBands, hits = listOf(AudioEventKind.HighTransient to 0.9f))
+        assertTrue(quiet.scene.melt.all { it < 0f }, "nothing melts in a passage with no bright bar")
+
+        val loudBands = FloatArray(48) { if (it < 20) 0.3f else 0.05f }
+        val loud = Run()
+        repeat(60) { loud.next(bands = loudBands) }
+        loud.next(bands = loudBands, hits = listOf(AudioEventKind.HighTransient to 0.9f))
+        val melting = (0 until GlitchScene.BARS).filter { loud.scene.melt[it] >= 0f }
+        assertTrue(melting.size in 1..6, "one hat melts a few bars, not ${melting.size}")
+        assertTrue(melting.all { loud.scene.glow[it] >= 0.16f }, "only bright bars melt")
+        repeat(20) { loud.next(bands = loudBands) }
+        assertTrue(loud.scene.melt.all { it < 0f }, "a melt runs out and the bar is clean again")
+    }
+
+    @Test
+    fun aSectionChangesTheChannelBehindThreeFramesOfStatic() {
+        val run = Run()
+        repeat(30) { run.next() }
+        run.next(structure = AudioEventKind.SectionBoundary)
+        assertEquals(1, run.scene.channel)
+        var frames = 0
+        while (run.scene.staticOn && frames < 10) {
+            frames++
+            run.next()
         }
-        val first = run()
+        assertEquals(3, frames, "the static lasts three frames at sixty a second")
+    }
+
+    @Test
+    fun aBreakdownCollapsesIntoALineUntilTheNextSection() {
+        val run = Run()
+        repeat(30) { run.next() }
+        run.next(structure = AudioEventKind.Breakdown)
+        assertTrue(run.scene.breakdown)
+        assertFalse(run.scene.staticOn, "signal loss is not a channel change")
+        repeat(30) { run.next() }
+        assertEquals(1f, run.scene.collapse, 0.001f)
+        assertEquals(0, run.scene.channel)
+        run.next(structure = AudioEventKind.SectionBoundary)
+        assertFalse(run.scene.breakdown)
+        assertEquals(0f, run.scene.collapse)
+        assertEquals(1, run.scene.channel, "the full picture returns on a new channel")
+    }
+
+    @Test
+    fun aDropFreezesTheFrameUntilAFirstBeatAtLeastHalfACycleLater() {
+        val run = Run()
+        repeat(30) { run.next() }
+        run.next(structure = AudioEventKind.Drop)
+        assertTrue(run.scene.moshing)
+        assertTrue(run.scene.takeMoshStart())
+        assertFalse(run.scene.takeMoshStart(), "the frame freezes once")
+        assertFalse(run.scene.staticOn, "the drop is its own moment, with no static")
+        assertEquals(1, run.scene.channel, "the new picture comes on a new channel")
+        var seconds = 0f
+        var moved = 0f
+        while (run.scene.moshing && seconds < 12f) {
+            run.next()
+            seconds += DELTA
+            moved += run.scene.takeMoshSeconds()
+        }
+        val cycle = run.scene.cycleSeconds
+        assertTrue(seconds >= 0.5f * cycle - DELTA, "the datamosh held for $seconds s of a $cycle s cycle")
+        assertTrue(seconds <= 2f * cycle + DELTA, "the datamosh held for $seconds s of a $cycle s cycle")
+        assertTrue(moved > 0f, "the blocks moved while the music played")
+    }
+
+    @Test
+    fun aPausedDatamoshHoldsAndASilenceEndsIt() {
+        val run = Run()
+        repeat(30) { run.next() }
+        run.next(structure = AudioEventKind.Drop)
+        run.scene.takeMoshSeconds()
+        repeat(600) { run.next(held = true) }
+        assertTrue(run.scene.moshing, "a paused player keeps its last picture")
+        assertEquals(0f, run.scene.takeMoshSeconds(), "nothing moves while paused")
+        repeat(240) { run.next(bands = FloatArray(48), level = 0f) }
+        assertFalse(run.scene.moshing, "a silence settles to the clean picture")
+    }
+
+    @Test
+    fun aDropTheQueueAlreadyHoldsStallsThePictureBeforeItLands() {
+        fun changes(ahead: Float?): Int {
+            val run = Run(future = ahead?.let { dropIn(it) })
+            var count = 0
+            var before = run.scene.edges.copyOf()
+            for (frame in 0 until 60) {
+                val bands = FloatArray(48) { band -> 0.2f + 0.15f * sin(frame * 0.4f + band * 0.3f) }
+                run.next(bands = bands)
+                if (!run.scene.edges.contentEquals(before)) count++
+                before = run.scene.edges.copyOf()
+            }
+            return count
+        }
+        val free = changes(null)
+        val stalled = changes(0.3f)
+        assertTrue(free >= 59, "without a queued drop the picture takes every frame, it took $free")
+        assertTrue(stalled < free / 3, "0.3 s before a drop the picture stalls, it still took $stalled of 60")
+    }
+
+    @Test
+    fun resetReplaysTheSameMusicTheSameWay() {
+        val scene = GlitchScene()
+        fun play(): List<Float> {
+            val run = Run(scene)
+            for (frame in 0 until 240) {
+                val bands = FloatArray(48) { band -> 0.25f + 0.2f * sin(frame * 0.1f + band * 0.2f) }
+                val hits = when (frame % 30) {
+                    0 -> listOf(AudioEventKind.LowTransient to 0.8f)
+                    15 -> listOf(AudioEventKind.BodyTransient to 0.6f, AudioEventKind.HighTransient to 0.7f)
+                    else -> emptyList()
+                }
+                run.next(bands = bands, hits = hits, structure = if (frame == 100) AudioEventKind.Drop else null)
+            }
+            return scene.edges.toList() + scene.exposure.toList() + scene.white.toList() + scene.melt.toList() +
+                scene.sliceTop.toList() + scene.sliceShift.toList() +
+                listOf(scene.split, scene.collapse, scene.scanAt, scene.channel.toFloat(), scene.slices.toFloat())
+        }
+        val first = play()
         scene.reset()
-        assertEquals(first, run())
+        assertEquals(first, play())
     }
 
-    @Test fun invalidSpectrumCannotPoisonTheSceneAndLayerWeightsStayBounded() {
-        val scene = GlitchScene()
-        val bands = floatArrayOf(Float.NaN, Float.POSITIVE_INFINITY, -5f, 3f)
-        for (i in 0..120) scene.advance(state(frame(i * 16_667L, bands = bands), i / 60f),
-            response = if (i % 2 == 0) Float.NaN else 2f)
-        assertTrue(snapshot(scene).all { it.isFinite() })
-        assertTrue(scene.bands.all { it in 0f..1f })
-        assertTrue(scene.weights.all { it in 0f..1f })
-        assertTrue(scene.weights.sum() > 1f, "Additive layer strengths are not an opacity crossfade")
+    /** One run of frames at sixty a second, with the gestures the drawing's kit would keep. */
+    private class Run(val scene: GlitchScene = GlitchScene(), private val future: VizFuture? = null) {
+        private val gestures = Gestures()
+        private val random = Rng(5L)
+        private var frame = 0
+        private var sequence = 0L
+
+        fun next(
+            bands: FloatArray = FloatArray(48) { 0.25f },
+            level: Float = 0.5f,
+            hits: List<Pair<AudioEventKind, Float>> = emptyList(),
+            structure: AudioEventKind? = null,
+            held: Boolean = false,
+        ) {
+            frame++
+            val pts = frame * 1_000_000L / 60L
+            val events = ArrayList<DeliveredAudioEvent>()
+            for ((kind, strength) in hits) events += delivered(kind, pts, strength, AudioEventSource.LiveTransient)
+            if (structure != null) events += delivered(structure, pts, 0.7f, AudioEventSource.LiveStructure)
+            val analysis = SpectrumFrame(
+                pts, bands, bands, FloatArray(128), level, level, level, level, 0f, 0f,
+                energy = level, mood = 0.5f, density = 0.4f, held = held,
+                events = AudioEventDelivery(Generation.Initial, 0L, pts, events.toTypedArray()),
+            )
+            val state = VizRenderState(analysis, frame * DELTA, DELTA, VizPalette.Prism, future = future)
+            gestures.update(state)
+            scene.advance(state, gestures, random)
+        }
+
+        private fun delivered(kind: AudioEventKind, pts: Long, strength: Float, source: AudioEventSource) =
+            DeliveredAudioEvent(
+                AudioEvent(Generation.Initial, 0L, ++sequence, AudioDetection(kind, pts, pts, strength, 0.9f, 0.5f), source),
+                0L,
+            )
     }
 
-    private fun snapshot(scene: GlitchScene): List<Float> = scene.bands.toList() + scene.history.toList() +
-        scene.weights.toList() + listOf(scene.level, scene.bass, scene.body, scene.air, scene.lowAccent,
-            scene.bodyAccent, scene.highAccent, scene.pressure, scene.travel, scene.turn, scene.hue,
-            scene.composition.toFloat(), scene.transitions.toFloat(), scene.acceptedHits.toFloat(), scene.historySamples.toFloat())
+    private companion object {
+        const val DELTA = 1f / 60f
 
-    private fun state(frame: SpectrumFrame, time: Float = frame.ptsMicros / 1_000_000f,
-        dt: Float = 1f / 60f, motion: Float = 1f): VizRenderState =
-        VizRenderState(frame, time, dt, VizPalette.Prism).also { it.motionScale = motion }
+        /** A queue that always holds a drop [seconds] ahead. */
+        fun dropIn(seconds: Float): VizFuture = object : VizFuture {
+            private val drop = AudioEvent(Generation.Initial, 0L, 1L,
+                AudioDetection(AudioEventKind.Drop, 0L, 0L, 0.7f, 0.9f, 0.5f), AudioEventSource.LiveStructure)
 
-    private fun frame(pts: Long, value: Float = 0.6f, bands: FloatArray = FloatArray(64) { value },
-        low: Float = value, body: Float = value, air: Float = value,
-        held: Boolean = false, density: Float = 0.35f, centroid: Float = 0.4f,
-        generation: Generation = Generation.Initial, revision: Long = 0L,
-        available: AnalysisAvailability = AnalysisAvailability.Ready,
-        events: Array<AudioEvent>? = null, reset: Boolean = false): SpectrumFrame =
-        SpectrumFrame(pts, bands, bands, FloatArray(0), value, low, body, air, 0f, 0f,
-            energy = value, mood = 0.4f, density = density, centroid = centroid,
-            generation = generation, analysisRevision = revision, held = held, availability = available,
-            events = events?.let { AudioEventDelivery(generation, revision, pts,
-                it.map { event -> DeliveredAudioEvent(event, 0L) }.toTypedArray(), reset = reset) })
-
-    private fun event(sequence: Long, pts: Long, kind: AudioEventKind, strength: Float = 0.8f,
-        confidence: Float = 0.9f, source: AudioEventSource = AudioEventSource.LiveTransient): AudioEvent =
-        AudioEvent(Generation.Initial, 0L, sequence, AudioDetection(kind, pts, pts, strength, confidence, 0.8f), source)
+            override fun at(secondsAhead: Float): SpectrumFrame? = null
+            override val nextOnsetSeconds: Float get() = -1f
+            override fun nextEvent(kind: AudioEventKind): UpcomingAudioEvent? =
+                if (kind == AudioEventKind.Drop) UpcomingAudioEvent(drop, seconds) else null
+        }
+    }
 }

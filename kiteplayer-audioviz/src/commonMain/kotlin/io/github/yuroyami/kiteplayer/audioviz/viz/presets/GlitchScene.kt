@@ -1,352 +1,457 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 
-import io.github.yuroyami.kiteplayer.Generation
-import io.github.yuroyami.kiteplayer.audioviz.*
-import io.github.yuroyami.kiteplayer.audioviz.viz.DisplayStep
+import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
+import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.audioviz.viz.WaveformResampler
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
-import kotlin.math.*
+import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
+import kotlin.math.exp
+import kotlin.math.floor
+import kotlin.math.pow
+import kotlin.math.roundToInt
+import kotlin.math.tanh
 
-/** Audio-owned choreography shared by every layer. Geometry never advances this state. */
+/**
+ * The broken broadcast of [Glitch] as numbers: where the bars stand and how much light each gives,
+ * the trace, and which faults break the picture at this instant.
+ *
+ * Nothing here draws, so the rules of the picture can be checked without a canvas. [GlitchGeometry]
+ * turns it into shapes and [GlitchFields] into the frozen frame of a datamosh and the static.
+ */
 internal class GlitchScene {
-    val bands = FloatArray(64)
-    /** Newest first, sampled on a 30 Hz media-time lattice rather than once per display frame. */
-    val history = FloatArray(64)
-    /** Independent additive strengths: wheel, crystal, eclipse, ribbon, tunnel. */
-    val weights = RECIPES[0].copyOf()
-    var level = 0f; private set
-    var bass = 0f; private set
-    var body = 0f; private set
-    var air = 0f; private set
-    var lowAccent = 0f; private set
-    var bodyAccent = 0f; private set
-    var highAccent = 0f; private set
-    var pressure = 0f; private set
-    /** Scene units and radians, integrated from audible time. Hue is a turn in 0..1. */
-    var travel = 0f; private set
-    var turn = 0f; private set
-    var hue = 0.04f; private set
-    /** Target dominant layer, using the same indices as [weights]. */
-    var composition = 0; private set
-    var transitions = 0; private set
-    var acceptedHits = 0L; private set
-    var historySamples = 0L; private set
 
-    private val gestures = Gestures()
-    private val step = DisplayStep()
-    private val measured = FloatArray(64)
-    private val smoothBands = FloatArray(64)
-    private val sequences = LongArray(AudioEventSource.entries.size) { -1L }
-    private val rawTimes = LongArray(AudioEventKind.entries.size) { Long.MIN_VALUE }
-    private val previousScalar = FloatArray(3)
-    private val recentKinds = IntArray(12)
-    private val recentTimes = LongArray(12) { Long.MIN_VALUE }
-    private val recentApplied = Array(12) { FloatArray(3) }
-    private var recentAt = 0
-    private var generation: Generation? = null
-    private var revision = -1L
-    private var lastReset: AudioEventDelivery? = null
-    private var lastPts = Long.MIN_VALUE
-    private var previousHistoryPts = Long.MIN_VALUE
-    private var previousHistory = 0f
-    private var nextHistoryTick = Long.MIN_VALUE
-    private var initialized = false
-    private var mode = 0
-    private var baseLevel = 0f
-    private var baseBass = 0f
-    private var baseBody = 0f
-    private var baseAir = 0f
-    private var basePressure = 0f
-    private var response = 1f
-    private var residence = 0f
-    private var hitBudget = 0f
-    private var referenceLevel = 0f
-    private var referenceCentroid = 0f
-    private var referenceDensity = 0f
+    /** Where each bar's slot starts, as a share of the width. The last entry is 1. */
+    val edges = FloatArray(BARS + 1)
 
-    fun advance(state: VizRenderState, response: Float = 1f, changes: Float = 1f,
-        travelSpeed: Float = 1f, rotationSpeed: Float = 1f, compositionMode: Int = 0) {
-        val frame = state.frame
-        val old = generation
-        // A late read from a retired analysis cannot erase the current picture.
-        if (old != null && (frame.generation < old ||
-                frame.generation == old && frame.analysisRevision < revision)) return
-        val resetDelivery = frame.events?.takeIf { it.reset && it !== lastReset }
-        val discontinuity = frame.hasTimestamp && lastPts != Long.MIN_VALUE &&
-            (frame.ptsMicros < lastPts || frame.ptsMicros - lastPts > 750_000L)
-        if (old != frame.generation || revision != frame.analysisRevision || discontinuity || resetDelivery != null) {
-            clear()
-            generation = frame.generation; revision = frame.analysisRevision
-            lastReset = resetDelivery
-        }
-        configure(compositionMode, response)
-        val elapsed = step.of(state)
-        if (elapsed == null) { expose(); return }
-        val dt = elapsed.coerceIn(0f, 0.25f)
-        val ready = frame.availability == AnalysisAvailability.Ready
-        if (frame.hasTimestamp) lastPts = frame.ptsMicros
-        val first = !initialized && ready
-        if (first) {
-            initialized = true
-            resample(frame.bands)
-            measured.copyInto(smoothBands)
-            baseLevel = unit(frame.level); baseBass = unit(frame.bass)
-            baseBody = unit(frame.mid); baseAir = unit(frame.treble)
-            basePressure = pressureOf(frame)
-            rememberContrast(frame)
-        }
-        if (frame.held) {
-            if (first) history.fill(historyValue(frame))
-            expose()
-            return
-        }
-        gestures.update(state)
-        val audible = if (ready) unit(frame.audible) else 0f
-        if (ready) resample(frame.bands) else measured.fill(0f)
-        for (i in bands.indices) smoothBands[i] = follow(smoothBands[i], measured[i], dt)
-        baseLevel = follow(baseLevel, if (ready) unit(frame.level) else 0f, dt)
-        baseBass = follow(baseBass, if (ready) unit(frame.bass) else 0f, dt)
-        baseBody = follow(baseBody, if (ready) unit(frame.mid) else 0f, dt)
-        baseAir = follow(baseAir, if (ready) unit(frame.treble) else 0f, dt)
-        basePressure = approach(basePressure, if (ready) pressureOf(frame) else 0f, dt, 0.28f)
-        lowAccent *= exp(-dt * 5f)
-        bodyAccent *= exp(-dt * 7f)
-        highAccent *= exp(-dt * 11f)
-        hitBudget *= exp(-dt / 12f)
-        if (ready) sampleHistory(frame)
-        val motion = finite(state.motionScale, 0f, 1f)
-        if (ready && audible > 0f) {
-            consumeHits(frame, motion)
-            residence += dt * audible
-            val changeRate = finite(changes, 0f, 2f)
-            if (mode == 0 && changeRate > 0f) {
-                val contrast = abs(unit(frame.level) - referenceLevel) * 0.6f +
-                    abs(unit(frame.centroid) - referenceCentroid) * 0.65f +
-                    abs(unit(frame.density) - referenceDensity) * 0.5f
-                val evidence = residence >= 6f / changeRate &&
-                    (hitBudget >= 8f / changeRate || contrast > 0.22f)
-                // React to the first structural cue immediately, then let the visible dissolve
-                // establish itself before another cue can request a different destination.
-                val structural = gestures.section && (transitions == 0 || residence >= 1.4f)
-                if (structural || evidence) {
-                    choose(frame, gestures.drop, gestures.breakdown)
-                    rememberContrast(frame)
-                    residence = 0f; hitBudget = 0f
-                }
-            }
-            val rate = 0.10f + 0.45f * basePressure + 0.30f * baseLevel + 0.15f * lowAccent
-            travel += dt * audible * motion * finite(travelSpeed, 0f, 3f) * rate
-            turn += dt * audible * motion * finite(rotationSpeed, 0f, 3f) *
-                (0.045f + 0.12f * basePressure + 0.06f * baseAir)
-            val colourRate = 0.006f + 0.018f * basePressure + 0.009f * baseAir
-            hue = (hue + dt * audible * motion * colourRate) % 1f
-        }
-        val recipe = RECIPES[composition]
-        for (i in weights.indices) weights[i] = approach(weights[i], recipe[i], dt, 0.7f)
-        expose()
+    /** How much light each bar gives, in linear light: [IDLE_LIGHT] in silence, 1 at the loudest. */
+    val exposure = FloatArray(BARS) { IDLE_LIGHT }
+
+    /** How far each bar has gone to white, 0 to 1. Only a loud band of loud music gets there. */
+    val white = FloatArray(BARS)
+
+    /** The waveform across the width, 1 being full scale. */
+    val trace = FloatArray(TRACE_POINTS)
+
+    /** How much light the trace gives, in linear light. */
+    var traceExposure: Float = TRACE_IDLE
+        private set
+
+    /** How many channel changes there have been. It picks the colour set. */
+    var channel: Int = 0
+        private set
+
+    /** The middle of the scan bar, as a share of the height. */
+    var scanAt: Float = -SCAN_HALF
+        private set
+
+    /** How much the scan bar lifts the bars, 0 in silence. */
+    var scanStrength: Float = 0f
+        private set
+
+    /** How far the colour layers stand apart, as a share of the width. */
+    var split: Float = 0f
+        private set
+
+    /** How many slices are torn sideways now, and where: tops and heights in shares of the height. */
+    var slices: Int = 0
+        private set
+    val sliceTop = FloatArray(MOST_SLICES)
+    val sliceHeight = FloatArray(MOST_SLICES)
+
+    /** How far each slice is torn, as a share of the width. */
+    val sliceShift = FloatArray(MOST_SLICES)
+
+    /** How far each bar's melt has run, 0 to 1, or -1 for a bar that is not melting. */
+    val melt = FloatArray(BARS) { -1f }
+
+    /** A number per melting bar, so its streaks keep their places while it melts. */
+    val meltSeed = IntArray(BARS)
+
+    /** How far a melt's streaks may fall: 1 normally, small under reduced motion. */
+    var fall: Float = 1f
+        private set
+
+    /** Whether the fine static of a channel change covers the picture. */
+    val staticOn: Boolean get() = staticLeft > EPSILON
+
+    /** Where the static's noise sits this frame, as shares of its tile. */
+    var staticX: Float = 0f
+        private set
+    var staticY: Float = 0f
+        private set
+
+    /** How far the picture has collapsed into the line of a breakdown, 0 to 1. */
+    var collapse: Float = 0f
+        private set
+
+    /** True from a breakdown until the next section. */
+    var breakdown: Boolean = false
+        private set
+
+    /** True while a datamosh holds the picture. */
+    var moshing: Boolean = false
+        private set
+
+    /** How far a datamosh block may move: 1 normally, near 0 under reduced motion. */
+    var moshMotion: Float = 1f
+        private set
+
+    /** Seconds of one visual cycle, a bar when the pulse is known. */
+    var cycleSeconds: Float = 2f
+        private set
+
+    /** How loud each band has been lately. The datamosh reads it for its column speeds. */
+    val glow = FloatArray(BARS)
+
+    private val shape = FloatArray(BARS)
+    private val weight = FloatArray(BARS)
+    private val scope = FloatArray(TRACE_POINTS)
+    private val resampler = WaveformResampler()
+    private var splitFrom = 0f
+    private var splitAge = SPLIT_SECONDS
+    private var sliceAge = TEAR_GAP
+    private var sliceSeconds = 0f
+    private var staticLeft = 0f
+    private var collapseAge = 0f
+    private var scanPhase = 0f
+    private var wrapped = false
+    private var moshAge = 0f
+    private var moshPending = 0f
+    private var moshStarting = false
+    private var refreshCredit = 1f
+
+    init {
+        layoutEvenly()
     }
 
-    /** A deliberate paused selection applies at once without adding time or replaying sound. */
-    fun configure(compositionMode: Int, response: Float = 1f) {
-        this.response = finite(response, 0f, 2f)
-        expose()
-        val requested = compositionMode.coerceIn(0, 5)
-        if (requested == mode) return
-        mode = requested
-        if (requested != 0) {
-            composition = MODE_TARGET[requested]
-            RECIPES[composition].copyInto(weights)
-            residence = 0f; hitBudget = 0f
+    /** Moves the picture on by one frame. [gestures] must already have read this frame. */
+    fun advance(state: VizRenderState, gestures: Gestures, random: Rng) {
+        val dt = state.deltaSeconds.within(0f, MOST_STEP)
+        val step = state.stepSeconds.within(0f, MOST_STEP)
+        val motion = state.motionScale.within(0f, 1f)
+        cycleSeconds = gestures.cycleSeconds.within(0.5f, 8f)
+        val bands = state.frame.bands
+        for (bar in 0 until BARS) {
+            val value = if (bands.isEmpty()) 0f else bands.sampleAt(bar / (BARS - 1f)).within(0f, 1f)
+            shape[bar] = follow(shape[bar], value, dt, WIDTH_RISE, WIDTH_FALL)
+            glow[bar] = follow(glow[bar], value, dt, GLOW_RISE, GLOW_FALL)
         }
+        roll(state, gestures, step, dt)
+        breakOnHits(gestures, random, dt, motion)
+        changeChannel(state, gestures, random, dt, motion)
+        mosh(gestures, step, motion)
+        if (refreshed(state, dt)) present(state)
     }
 
-    private fun consumeHits(frame: SpectrumFrame, motion: Float) {
-        val delivery = frame.events
-        if (delivery != null) {
-            if (delivery.generation != frame.generation || delivery.analysisRevision != frame.analysisRevision) return
-            for (i in 0 until delivery.size) {
-                val item = delivery[i]
-                val event = item.event
-                if (event.generation != frame.generation || event.analysisRevision != frame.analysisRevision) continue
-                val source = event.source.ordinal
-                if (event.sequence <= sequences[source]) continue
-                sequences[source] = event.sequence
-                if (!delivery.reset) accept(event.detection, motion, item.lateByMicros)
-            }
-        } else if (frame.detections != null) {
-            val detections = frame.detections
-            for (i in 0 until detections.size) {
-                val d = detections[i]
-                if (d.ptsMicros <= rawTimes[d.kind.ordinal]) continue
-                rawTimes[d.kind.ordinal] = d.ptsMicros
-                accept(d, motion, 0L)
-            }
-        } else {
-            // Hand-authored frames have no event identity. Only rising scalar attacks are edges.
-            val low = unit(frame.kick); val mid = unit(frame.snare); val high = unit(frame.hat)
-            scalarHit(0, low, motion); scalarHit(1, mid, motion); scalarHit(2, high, motion)
-        }
+    /** True once when a datamosh has started and its first frame still has to be frozen. */
+    fun takeMoshStart(): Boolean {
+        val starting = moshStarting
+        moshStarting = false
+        return starting
     }
 
-    private fun scalarHit(region: Int, value: Float, motion: Float) {
-        if (value > previousScalar[region] + 0.01f) {
-            apply(region, value * motion)
-            acceptedHits++; hitBudget += 0.4f + 0.6f * value
-        }
-        previousScalar[region] = value
-    }
-
-    private fun accept(d: AudioDetection, motion: Float, lateMicros: Long) {
-        if (!d.isHit || !d.strength.isFinite() || !d.confidence.isFinite()) return
-        val region = when (d.kind) {
-            AudioEventKind.LowTransient -> 0
-            AudioEventKind.BodyTransient -> 1
-            AudioEventKind.HighTransient -> 2
-            else -> -1
-        }
-        val kind = if (region < 0) 8 else 1 shl region
-        val strength = unit(d.strength) * exp(-lateMicros.coerceAtLeast(0L) / 1_000_000f * 7f)
-        // One generic onset and its regional descriptions are one physical accent. Two records
-        // of the same region remain separate even when a low frame rate batches them together.
-        var slot = -1
-        for (i in recentTimes.indices) if (recentTimes[i] != Long.MIN_VALUE &&
-            abs(recentTimes[i] - d.ptsMicros) <= 25_000L && recentKinds[i] and kind == 0) {
-            slot = i; break
-        }
-        if (slot < 0) {
-            slot = recentAt; recentAt = (recentAt + 1) % recentTimes.size
-            recentTimes[slot] = d.ptsMicros; recentKinds[slot] = 0
-            recentApplied[slot].fill(0f)
-            acceptedHits++; hitBudget += 0.4f + 0.6f * strength
-        }
-        recentKinds[slot] = recentKinds[slot] or kind
-        // An unclassified onset occupies all three channels gently. A regional refinement only
-        // supplies the missing part of that channel, so it cannot stack two full impulses.
-        for (channel in 0..2) if (region < 0 || region == channel) {
-            val wanted = strength * if (region < 0) 0.28f else 1f
-            val added = max(0f, wanted - recentApplied[slot][channel])
-            recentApplied[slot][channel] = max(recentApplied[slot][channel], wanted)
-            apply(channel, added * motion)
-        }
-    }
-
-    private fun apply(region: Int, amount: Float) {
-        when (region) {
-            0 -> lowAccent = (lowAccent + amount).coerceAtMost(1f)
-            1 -> bodyAccent = (bodyAccent + amount).coerceAtMost(1f)
-            else -> highAccent = (highAccent + amount).coerceAtMost(1f)
-        }
-    }
-
-    private fun choose(frame: SpectrumFrame, drop: Boolean, breakdown: Boolean) {
-        var selected = composition
-        if (breakdown) selected = if (composition == 2) 3 else 2
-        else if (drop) selected = if (composition == 4) 0 else 4
-        else {
-            var best = -1f
-            for (i in weights.indices) {
-                if (i == composition) continue
-                val affinity = when (i) {
-                    0 -> 0.32f + unit(frame.bass) * 0.35f + unit(frame.density) * 0.18f
-                    1 -> 0.24f + unit(frame.mid) * 0.55f + bodyAccent * 0.20f
-                    2 -> 0.24f + unit(frame.bass) * 0.40f + (1f - unit(frame.density)) * 0.28f
-                    3 -> 0.28f + unit(frame.mid) * 0.45f + unit(frame.width) * 0.30f
-                    else -> 0.15f + unit(frame.density) * 0.55f + unit(frame.energy) * 0.30f
-                }
-                val variety = 0.84f + ((transitions * 7 + i * 3) % 5) * 0.08f
-                if (affinity * variety > best) { best = affinity * variety; selected = i }
-            }
-        }
-        if (selected != composition) { composition = selected; transitions++ }
-    }
-
-    private fun rememberContrast(frame: SpectrumFrame) {
-        referenceLevel = unit(frame.level); referenceCentroid = unit(frame.centroid)
-        referenceDensity = unit(frame.density)
-    }
-
-    private fun sampleHistory(frame: SpectrumFrame) {
-        if (!frame.hasTimestamp) return
-        val pts = frame.ptsMicros
-        val value = historyValue(frame)
-        val tick = floor(pts / 1_000_000.0 * 30).toLong()
-        if (previousHistoryPts == Long.MIN_VALUE) {
-            history[0] = value; historySamples++
-            nextHistoryTick = tick + 1
-        } else if (pts > previousHistoryPts) {
-            // Capped work after a stall; no unbounded catch-up or display-rate-dependent shifting.
-            val first = max(nextHistoryTick, tick - history.size + 1)
-            for (at in first..tick) {
-                val micros = at * (1_000_000.0 / 30)
-                val mix = ((micros - previousHistoryPts) / (pts - previousHistoryPts)).toFloat().coerceIn(0f, 1f)
-                for (i in history.lastIndex downTo 1) history[i] = history[i - 1]
-                history[0] = previousHistory + (value - previousHistory) * mix
-                historySamples++
-            }
-            nextHistoryTick = tick + 1
-        }
-        previousHistoryPts = pts; previousHistory = value
-    }
-
-    private fun resample(source: FloatArray) {
-        if (source.isEmpty()) { measured.fill(0f); return }
-        val width = source.size.toFloat() / measured.size
-        for (i in measured.indices) {
-            val a = i * width; val b = (i + 1) * width
-            var sum = 0f
-            for (j in floor(a).toInt() until ceil(b).toInt()) {
-                val overlap = (min(b, j + 1f) - max(a, j.toFloat())).coerceAtLeast(0f)
-                sum += unit(source[j.coerceIn(source.indices)]) * overlap
-            }
-            measured[i] = (sum / width).coerceIn(0f, 1f)
-        }
-    }
-
-    private fun expose() {
-        for (i in bands.indices) bands[i] = (smoothBands[i] * response).coerceIn(0f, 1f)
-        level = (baseLevel * response).coerceIn(0f, 1f)
-        bass = (baseBass * response).coerceIn(0f, 1f)
-        body = (baseBody * response).coerceIn(0f, 1f)
-        air = (baseAir * response).coerceIn(0f, 1f)
-        pressure = (basePressure * response).coerceIn(0f, 1f)
-    }
-
-    private fun clear() {
-        bands.fill(0f); history.fill(0f); measured.fill(0f); smoothBands.fill(0f)
-        lowAccent = 0f; bodyAccent = 0f; highAccent = 0f
-        baseLevel = 0f; baseBass = 0f; baseBody = 0f; baseAir = 0f; basePressure = 0f
-        level = 0f; bass = 0f; body = 0f; air = 0f; pressure = 0f
-        travel = 0f; turn = 0f; hue = 0.04f; residence = 0f; hitBudget = 0f
-        initialized = false; lastPts = Long.MIN_VALUE; previousHistoryPts = Long.MIN_VALUE
-        nextHistoryTick = Long.MIN_VALUE; previousHistory = 0f
-        sequences.fill(-1L); rawTimes.fill(Long.MIN_VALUE); previousScalar.fill(0f)
-        recentTimes.fill(Long.MIN_VALUE); recentKinds.fill(0)
-        recentApplied.forEach { it.fill(0f) }; recentAt = 0
-        composition = if (mode == 0) 0 else MODE_TARGET[mode]
-        RECIPES[composition].copyInto(weights)
-        transitions = 0; acceptedHits = 0L; historySamples = 0L
-        gestures.reset(); step.reset()
+    /** The audible seconds the datamosh has moved since this was last asked. */
+    fun takeMoshSeconds(): Float {
+        val seconds = moshPending
+        moshPending = 0f
+        return seconds
     }
 
     fun reset() {
-        mode = 0; clear(); generation = null; revision = -1L; lastReset = null; response = 1f
+        shape.fill(0f)
+        glow.fill(0f)
+        exposure.fill(IDLE_LIGHT)
+        white.fill(0f)
+        trace.fill(0f)
+        melt.fill(-1f)
+        meltSeed.fill(0)
+        layoutEvenly()
+        traceExposure = TRACE_IDLE
+        channel = 0
+        scanAt = -SCAN_HALF
+        scanStrength = 0f
+        split = 0f
+        splitFrom = 0f
+        splitAge = SPLIT_SECONDS
+        slices = 0
+        sliceAge = TEAR_GAP
+        sliceSeconds = 0f
+        fall = 1f
+        staticLeft = 0f
+        staticX = 0f
+        staticY = 0f
+        collapse = 0f
+        collapseAge = 0f
+        breakdown = false
+        scanPhase = 0f
+        wrapped = false
+        moshing = false
+        moshMotion = 1f
+        moshAge = 0f
+        moshPending = 0f
+        moshStarting = false
+        cycleSeconds = 2f
+        refreshCredit = 1f
     }
 
-    private companion object {
-        val MODE_TARGET = intArrayOf(0, 0, 1, 3, 4, 2)
-        val RECIPES = arrayOf(
-            floatArrayOf(0.90f, 0f, 0.82f, 0.24f, 0.10f),
-            floatArrayOf(0.20f, 0.95f, 0.36f, 0.18f, 0f),
-            floatArrayOf(0.15f, 0.10f, 0.95f, 0.28f, 0f),
-            floatArrayOf(0.15f, 0.18f, 0.24f, 0.95f, 0.08f),
-            floatArrayOf(0.12f, 0.25f, 0.24f, 0.10f, 0.90f),
-        )
-        fun unit(value: Float): Float = finite(value, 0f, 1f)
-        fun finite(value: Float, low: Float, high: Float): Float = if (value.isFinite()) value.coerceIn(low, high) else low
-        fun follow(from: Float, to: Float, dt: Float): Float = approach(from, to, dt, if (to > from) 0.035f else 0.16f)
-        fun approach(from: Float, to: Float, dt: Float, seconds: Float): Float = from + (to - from) * (1f - exp(-dt / seconds))
-        fun historyValue(frame: SpectrumFrame): Float = 0.4f * unit(frame.level) + 0.6f * unit(frame.mid)
-        fun pressureOf(frame: SpectrumFrame): Float = (unit(frame.density) * 0.38f +
-            unit(frame.flatness) * 0.22f + unit(frame.energy) * 0.24f + unit(frame.novelty / 4f) * 0.16f).coerceIn(0f, 1f)
+    /**
+     * The scan bar's own clock: it moves by audible time, so a pause or a silence holds it, and it
+     * leans into the pulse when one is known. Its wrap is the first beat a datamosh ends on.
+     */
+    private fun roll(state: VizRenderState, gestures: Gestures, step: Float, dt: Float) {
+        val before = scanPhase
+        var phase = scanPhase + step / cycleSeconds
+        if (gestures.pulseUsable && step > 0f) {
+            var error = gestures.cyclePhase - (phase - floor(phase))
+            if (error > 0.5f) error -= 1f
+            if (error < -0.5f) error += 1f
+            phase += error * (1f - exp(-step / SCAN_PULL_SECONDS))
+        }
+        phase -= floor(phase)
+        wrapped = phase < before - 0.5f
+        scanPhase = phase
+        scanAt = -SCAN_HALF + phase * (1f + 2f * SCAN_HALF)
+        // Presence keeps its level while paused, so a paused picture keeps its scan bar.
+        scanStrength = follow(scanStrength, state.presence, dt, SCAN_RISE, SCAN_FALL)
+    }
+
+    /** A kick splits the colour layers, a snare tears slices sideways, a hat melts the brightest bars. */
+    private fun breakOnHits(gestures: Gestures, random: Rng, dt: Float, motion: Float) {
+        splitAge += dt
+        if (gestures.kicks > 0) {
+            val wanted = SPLIT_MOST * (0.3f + 0.7f * gestures.kick.within(0f, 1f)) * motion
+            if (wanted >= split) {
+                splitFrom = wanted
+                splitAge = 0f
+            }
+        }
+        val left = 1f - splitAge / SPLIT_SECONDS
+        split = if (left > 0f) splitFrom * left * left else 0f
+
+        sliceAge += dt
+        if (gestures.snares > 0 && sliceAge >= TEAR_GAP) {
+            val hit = gestures.snare.within(0f, 1f)
+            slices = (3 + (5f * hit).roundToInt()).coerceIn(3, MOST_SLICES)
+            sliceSeconds = (2 + (2f * hit).roundToInt()) / 60f
+            sliceAge = 0f
+            for (slice in 0 until slices) {
+                sliceHeight[slice] = 0.02f + 0.09f * random.next()
+                sliceTop[slice] = random.next() * (1f - sliceHeight[slice])
+                val reach = (0.03f + 0.12f * hit * (0.4f + 0.6f * random.next())) * motion
+                sliceShift[slice] = if (random.next() < 0.5f) -reach else reach
+            }
+        }
+        if (slices > 0 && sliceAge >= sliceSeconds - EPSILON) slices = 0
+
+        fall = motion
+        for (bar in 0 until BARS) {
+            if (melt[bar] < 0f) continue
+            melt[bar] += dt / MELT_SECONDS
+            if (melt[bar] >= 1f) melt[bar] = -1f
+        }
+        if (gestures.hats > 0) {
+            // The brightest bars above a fixed level, so a quiet passage melts fewer of them.
+            val count = (1.5f + 3f * gestures.hatAccent).roundToInt().coerceIn(1, MOST_MELTS)
+            for (pick in 0 until count) {
+                var best = -1
+                for (bar in 0 until BARS) {
+                    if (melt[bar] >= 0f || glow[bar] < MELT_LEVEL) continue
+                    if (best < 0 || glow[bar] > glow[best]) best = bar
+                }
+                if (best < 0) break
+                melt[best] = 0f
+                meltSeed[best] = (random.next() * 65_535f).toInt()
+            }
+        }
+    }
+
+    /**
+     * A breakdown collapses the picture into a line until the next section. Any other section is a
+     * channel change: three sixtieths of a second of static, and the next colour set. A section that
+     * lands with a drop changes the colours without the static, because the datamosh is the moment.
+     */
+    private fun changeChannel(state: VizRenderState, gestures: Gestures, random: Rng, dt: Float, motion: Float) {
+        staticLeft -= dt
+        if (gestures.breakdown) {
+            breakdown = true
+            collapseAge = 0f
+        } else if (gestures.turn && state.frame.audible > 0f) {
+            breakdown = false
+            channel++
+            // Under reduced motion the colours change without the static, which is a rapid cut.
+            if (!gestures.surge && !moshing && motion >= 1f) staticLeft = STATIC_SECONDS
+        }
+        if (staticOn) {
+            staticX = random.next()
+            staticY = random.next()
+        }
+        // The frame of the breakdown already counts, and the picture folds fast then settles, like
+        // an old set switching off.
+        collapseAge += dt
+        val left = 1f - (collapseAge / COLLAPSE_SECONDS).within(0f, 1f)
+        collapse = if (breakdown) 1f - left * left * left else 0f
+    }
+
+    /**
+     * A drop freezes the frame and its blocks slide down their columns until the first beat after at
+     * least half a cycle. It moves by audible time, so a pause holds it and a silence ends it.
+     */
+    private fun mosh(gestures: Gestures, step: Float, motion: Float) {
+        moshMotion = motion * motion
+        if (gestures.surge && !moshing) {
+            moshing = true
+            moshStarting = true
+            moshAge = 0f
+            moshPending = 0f
+            return
+        }
+        if (!moshing) return
+        moshAge += step
+        moshPending += step
+        val ended = (wrapped && moshAge >= MOSH_LEAST * cycleSeconds) || moshAge >= MOSH_MOST * cycleSeconds
+        if (ended || gestures.silence) {
+            moshing = false
+            moshStarting = false
+            moshPending = 0f
+        }
+    }
+
+    /**
+     * Whether the picture takes this frame's music. It always does, except in the second before a
+     * drop that the queue already holds: there it refreshes less and less often, the way a stream
+     * stalls, until the drop freezes it.
+     */
+    private fun refreshed(state: VizRenderState, dt: Float): Boolean {
+        val until = state.future?.nextEvent(AudioEventKind.Drop)?.secondsUntil ?: -1f
+        if (moshing || until < 0f || until > BUILD_SECONDS) {
+            refreshCredit = 1f
+            return true
+        }
+        val near = 1f - until / BUILD_SECONDS
+        refreshCredit += dt * (STUTTER_FROM + (STUTTER_TO - STUTTER_FROM) * near)
+        if (refreshCredit < 1f) return false
+        refreshCredit = (refreshCredit - 1f).coerceAtMost(1f)
+        return true
+    }
+
+    /** Lays the bars out by loudness, lights them, and reads the trace. */
+    private fun present(state: VizRenderState) {
+        var total = 0f
+        for (bar in 0 until BARS) {
+            weight[bar] = WIDTH_FLOOR + (1f - WIDTH_FLOOR) * response(shape[bar]).pow(WIDTH_POWER)
+            total += weight[bar]
+        }
+        var at = 0f
+        for (bar in 0 until BARS) {
+            edges[bar] = at / total
+            at += weight[bar]
+        }
+        edges[BARS] = 1f
+        // Light follows the shared lift, so the flash guard reaches every bar.
+        val lift = state.lift.within(0f, 1f)
+        for (bar in 0 until BARS) {
+            exposure[bar] = IDLE_LIGHT + (1f - IDLE_LIGHT) * lift * response(glow[bar])
+            // White needs a band that is high in any song, not merely the loudest of a quiet one.
+            val peak = ((glow[bar] - WHITE_FROM) / (WHITE_TO - WHITE_FROM)).within(0f, 1f)
+            white[bar] = lift * peak * peak * (3f - 2f * peak)
+        }
+        traceExposure = TRACE_IDLE + (1f - TRACE_IDLE) * lift
+        val frame = state.frame
+        resampler.resample(frame.scope, scope)
+        val gain = frame.waveformGain.within(0f, MOST_GAIN)
+        // A soft limit, so a loud wave rounds off instead of showing flat tops.
+        for (point in trace.indices) trace[point] = TRACE_CLIP * tanh((scope[point] * gain).within(-8f, 8f) / TRACE_CLIP)
+    }
+
+    private fun layoutEvenly() {
+        for (bar in 0..BARS) edges[bar] = bar / BARS.toFloat()
+    }
+
+    internal companion object {
+        const val BARS = 64
+        const val TRACE_POINTS = 128
+        const val MOST_SLICES = 8
+
+        /**
+         * The least time from one tear to the next. A backbeat snare always tears, but a body hit on
+         * every eighth note would keep the picture torn, and between faults it has to be clean.
+         */
+        const val TEAR_GAP = 0.25f
+
+        /** How much light the bars give in silence and in the first frame, in linear light. */
+        const val IDLE_LIGHT = 0.3f
+
+        /** How much light the trace gives in silence. */
+        const val TRACE_IDLE = 0.42f
+
+        /** A band at this height or above answers in full. *Judgement.* */
+        const val FULL_LEVEL = 0.5f
+
+        /** The quietest slot against the loudest, like the narrow and wide bars of a barcode. */
+        const val WIDTH_FLOOR = 0.25f
+        const val WIDTH_POWER = 1.3f
+
+        /** Widths follow the bands fast; light follows them slower, so a kick pumps no flash train. */
+        const val WIDTH_RISE = 0.03f
+        const val WIDTH_FALL = 0.14f
+        const val GLOW_RISE = 0.05f
+        const val GLOW_FALL = 0.4f
+
+        /**
+         * A band this high starts to go white and one at [WHITE_TO] is white. Few bands reach these
+         * heights under the shared gain, so only the peaks of loud music turn white. *Judgement.*
+         */
+        const val WHITE_FROM = 0.55f
+        const val WHITE_TO = 0.85f
+
+        /**
+         * The widest split of the colour layers, as a share of the width, and how long it lasts. It
+         * is about a third of a loud bar, so the fringes sit on the edges and the middle keeps its colour.
+         */
+        const val SPLIT_MOST = 0.007f
+        const val SPLIT_SECONDS = 0.12f
+
+        /**
+         * How long a melt runs, the level a bar needs to melt, and how many one hit may melt. A melt
+         * is shorter than the gap between off-beat hats, so the bars come back clean between them.
+         */
+        const val MELT_SECONDS = 0.18f
+        const val MELT_LEVEL = 0.16f
+        const val MOST_MELTS = 6
+
+        /** Three frames at sixty a second. */
+        const val STATIC_SECONDS = 3f / 60f
+
+        /** How long the picture takes to collapse into the line of a breakdown. */
+        const val COLLAPSE_SECONDS = 0.28f
+
+        /** Half the scan bar's height, as a share of the screen, and how fast it appears and goes. */
+        const val SCAN_HALF = 0.07f
+        const val SCAN_RISE = 0.3f
+        const val SCAN_FALL = 0.6f
+        const val SCAN_PULL_SECONDS = 0.5f
+
+        /** A datamosh lasts at least half a cycle and at most two. */
+        const val MOSH_LEAST = 0.5f
+        const val MOSH_MOST = 2f
+
+        /** How early a queued drop starts the stall, and how often the picture refreshes during it. */
+        const val BUILD_SECONDS = 1f
+        const val STUTTER_FROM = 20f
+        const val STUTTER_TO = 5f
+
+        const val TRACE_CLIP = 1.4f
+        const val MOST_GAIN = 16f
+        const val MOST_STEP = 0.25f
+        const val EPSILON = 0.0005f
+
+        /** How strongly a band at [level] answers, 0 to 1. */
+        fun response(level: Float): Float = (level / FULL_LEVEL).within(0f, 1f).pow(0.6f)
+
+        private fun follow(from: Float, to: Float, dt: Float, rise: Float, fall: Float): Float =
+            from + (to - from) * (1f - exp(-dt / if (to > from) rise else fall))
+
+        private fun Float.within(low: Float, high: Float): Float = if (isFinite()) coerceIn(low, high) else low
     }
 }

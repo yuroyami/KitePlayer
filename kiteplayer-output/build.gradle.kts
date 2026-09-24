@@ -29,9 +29,15 @@ kotlin {
         // Declaring the block is what switches tracking on.
     }
 
-    macosArm64()
-    iosArm64()
-    iosSimulatorArm64()
+    // A Metal drawable's presented handler and presented time are missing from the Kotlin/Native
+    // platform bindings, so one small Objective-C helper reaches them. See the def file.
+    listOf(macosArm64(), iosArm64(), iosSimulatorArm64()).forEach { target ->
+        target.compilations.getByName("main").cinterops {
+            create("kitemetal") {
+                defFile(project.file("src/nativeInterop/cinterop/kitemetal.def"))
+            }
+        }
+    }
     // The Kotlin/Native desktops carry the common surface and NO output backend, and that is the
     // decision rather than a gap waiting to be filled. Desktop is the JVM here: it has an audio
     // device, a video view and https, and it already plays the whole conformance matrix. Writing

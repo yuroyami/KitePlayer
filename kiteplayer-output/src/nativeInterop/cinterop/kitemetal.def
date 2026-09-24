@@ -1,0 +1,28 @@
+# The presented handler and the presented time of a Metal drawable.
+#
+# Both are in Metal's MTLDrawable.h, and neither is in the Kotlin/Native platform bindings, which
+# carry only `present` and `presentAtTime`. This def adds one inline function that registers a
+# handler and hands it the drawable's presented time. It lists no header, so it binds nothing from
+# Metal itself: the drawable type comes from the platform bindings.
+language = Objective-C
+package = io.github.yuroyami.kiteplayer.output.metal
+compilerOpts = -fobjc-arc
+---
+#import <Metal/Metal.h>
+#import <TargetConditionals.h>
+
+/* Calls `handler` once the display shows `drawable`, with the time it was shown in host-clock
+ * seconds, or zero when the drawable was dropped. The handler runs on a Metal thread.
+ *
+ * The iOS Simulator SDK leaves both members out of its headers, so there this registers nothing
+ * and the renderer reports no presented time. */
+static inline void kite_metal_on_presented(id<MTLDrawable> drawable, void (^handler)(double seconds)) {
+#if TARGET_OS_SIMULATOR
+    (void)drawable;
+    (void)handler;
+#else
+    [drawable addPresentedHandler:^(id<MTLDrawable> shown) {
+        handler(shown.presentedTime);
+    }];
+#endif
+}

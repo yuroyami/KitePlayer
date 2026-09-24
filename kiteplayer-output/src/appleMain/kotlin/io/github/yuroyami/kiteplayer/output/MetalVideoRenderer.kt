@@ -208,6 +208,15 @@ public class MetalVideoRenderer public constructor(
                 eventFlow.tryEmit(RendererEvent.SurfaceLost("CAMetalLayer produced no drawable"))
                 return
             }
+            // Registered before the encode commits the drawable, which is when Metal requires it.
+            // The handler hears when the display really showed the drawable, so the event carries
+            // the display's own time instead of an estimate taken after the blit.
+            val pts = frame.pts
+            io.github.yuroyami.kiteplayer.output.metal.kite_metal_on_presented(drawable) { seconds ->
+                presentedNanos(seconds)?.let { atNanos ->
+                    eventFlow.tryEmit(RendererEvent.FramePresented(pts, atNanos = atNanos, exact = true))
+                }
+            }
             val width = viewportWidth.value.takeIf { it > 0 }
                 ?: layer.drawableSize.useContents { width }.toInt().coerceAtLeast(1)
             val height = viewportHeight.value.takeIf { it > 0 }
@@ -395,3 +404,11 @@ public class MetalVideoRenderer public constructor(
         }
     }
 }
+
+/**
+ * A drawable's presented time as [AppleHostClock] nanoseconds, or null when the drawable was never
+ * shown. Metal reports the time in seconds of the same host clock that `CACurrentMediaTime` reads,
+ * and zero for a drawable that the display dropped.
+ */
+internal fun presentedNanos(seconds: Double): Long? =
+    if (seconds > 0.0 && seconds.isFinite()) (seconds * 1e9).toLong() else null

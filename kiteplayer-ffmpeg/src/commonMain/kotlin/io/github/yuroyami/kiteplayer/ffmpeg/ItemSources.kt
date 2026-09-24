@@ -2,6 +2,10 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteffmpeg.MediaSource
 import io.github.yuroyami.kiteplayer.MediaItem
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -19,6 +23,11 @@ internal class OpenedItem(val source: MediaSource, val bridge: BlockingMediaIo?)
  * item's own reader when it has one, then from a descriptor the item names when it can be read by
  * position, otherwise from the URL fallback: FFmpeg's own protocols on the URI. The caller closes
  * the source.
+ *
+ * Cancelling the calling coroutine ends an open that reads through the item's reader: the bridge
+ * is interrupted, FFmpeg fails the open, and this throws a `CancellationException` rather than a
+ * media error. An open through the URL fallback cannot be reached that way, because FFmpeg's
+ * interrupt exists only on the source that the open returns.
  */
 internal suspend fun openItem(item: MediaItem): OpenedItem {
     val options = preOpenOptions(item)
@@ -30,11 +39,42 @@ internal suspend fun openItem(item: MediaItem): OpenedItem {
         // The custom AVIO bridge: the reader carries the media, with no path and no FFmpeg protocol.
         io != null -> {
             val bridge = BlockingMediaIo(io)
-            OpenedItem(MediaSource.open(bridge, options), bridge)
+            val source = try {
+                interruptedWhenCancelled(bridge) { MediaSource.open(bridge, options) }
+            } catch (failure: Throwable) {
+                // FFmpeg reports the interrupted read as a broken input. A cancelled open is a
+                // cancellation, and the caller must see one.
+                currentCoroutineContext().ensureActive()
+                throw failure
+            }
+            if (!currentCoroutineContext().isActive) {
+                // FFmpeg finished with what it had read before the cancellation reached it.
+                source.close()
+                currentCoroutineContext().ensureActive()
+            }
+            OpenedItem(source, bridge)
         }
         // No protocol reads the descriptor now, so no protocol is left to consume its key.
         descriptor != null -> OpenedItem(MediaSource.open(descriptor, options - "fd"), null)
         else -> OpenedItem(openUrlFallback(item.uri, options), null)
+    }
+}
+
+/**
+ * Runs [open] with [bridge] interrupted the moment the calling coroutine is cancelled. The open
+ * blocks this thread inside FFmpeg, so the cancellation cannot arrive any other way.
+ */
+private suspend inline fun <T> interruptedWhenCancelled(bridge: BlockingMediaIo, open: () -> T): T {
+    val caller = currentCoroutineContext()[Job] ?: return open()
+    // A child job completes as soon as its parent is cancelled, even while this thread is blocked
+    // below, and its handler runs on the thread that cancelled. Completing it afterwards detaches
+    // it, so the caller's job can finish.
+    val link = Job(caller)
+    link.invokeOnCompletion { cause -> if (cause != null) bridge.interrupt() }
+    try {
+        return open()
+    } finally {
+        link.complete()
     }
 }
 

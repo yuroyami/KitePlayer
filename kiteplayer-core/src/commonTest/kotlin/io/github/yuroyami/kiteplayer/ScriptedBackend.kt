@@ -517,6 +517,14 @@ internal class ScriptedBackend(
     var openFailure: Throwable? = null
 
     /**
+     * How many reads [open] makes from the item's reader before it returns, the way a demuxer reads
+     * while it discovers the streams. A reader that hangs then holds the open.
+     */
+    var readsDuringOpen: Int = 0
+
+    private val openScratch = ByteArray(4096)
+
+    /**
      * A ten-line SRT-only parser for the external-subtitle tests. The real WebVTT and
      * SubRip parsers live in kiteplayer-subtitles, above this module's dependency arrow; the
      * engine's contract only needs A parser here, and the format goldens live with the real ones.
@@ -571,6 +579,7 @@ internal class ScriptedBackend(
         // exercised rather than assumed: without this, anything measuring what a source delivered
         // measures a reader nobody ever called.
         val io = media.io?.open()
+        repeat(readsDuringOpen) { io?.read(openScratch, 0, openScratch.size) }
         return ScriptedSession(script, ledger, faults, trace, videoDecoderStatus, io, clock)
             .also { sessions += it }
     }

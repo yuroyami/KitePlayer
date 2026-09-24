@@ -177,9 +177,10 @@ public data class BufferPolicy(
      * How long a read may wait without progress before the session ends with
      * [PlaybackError.SourceStalled]. [Duration.INFINITE] waits for ever.
      *
-     * The count runs only while the engine waits for the source: a packet read, or the read of an
-     * external subtitle file. A packet from the source or bytes from the item's [MediaIo] start it
-     * again, so a slow source that still delivers never stalls.
+     * The count runs only while the engine waits for the source: a packet read, an open that
+     * reads through a [MediaIo], or the read of an external subtitle file. A packet from the source
+     * or bytes from the reader start it again, so a slow source that still delivers never stalls.
+     * An open through the backend's own protocols is bounded by their timeouts instead.
      * An external subtitle file that stalls is skipped with a warning instead. Ending a read needs
      * a source that can interrupt; the FFmpeg backend can.
      */

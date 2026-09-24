@@ -79,6 +79,9 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -2268,6 +2271,10 @@ internal class PlaybackCore(
      *
      * Open the backend session on the demux worker; choose the default tracks; create the decoders and
      * deselect a stream whose every candidate refuses; open the device and negotiate a format; then, and
+        } catch (preempted: OpenPreempted) {
+            // The stop or the close is next in the mailbox, and it finds nothing half built.
+            teardownSession()
+            command.reply.completeExceptionally(preemptedByTeardown("open"))
      * only then, tell the source which streams to read. Opening fails only when nothing playable is left,
      * because a file with a video track this build cannot decode is still a file whose sound plays.
      */
@@ -2328,11 +2335,10 @@ internal class PlaybackCore(
         val sessionIo = cachingIo ?: watchedIo
         val effectiveItem = if (sessionIo == null) item else item.copy(io = { sessionIo })
         val backendSession = try {
-            acquireAcrossContext(
-                context = dispatchers.demux,
-                acquire = { backend.open(effectiveItem) },
-                closeAbandoned = { it.close() },
-            ) ?: error("a media backend returned no session")
+            // Only an open that reads through the engine's reader shows its progress, so only such
+            // an open can stall. The backend's own protocols carry their own timeouts instead.
+            val stallLimit = if (sessionIo != null) config.buffer.stallTimeout else Duration.INFINITE
+            openBackendSession(effectiveItem, stallWatch, stallLimit)
         } catch (failure: Throwable) {
             // Every reader on this path is the engine's, whoever supplied the factory, so an open
             // that never produced a session closes it here. The backend's own unwind may have got
@@ -2748,6 +2754,75 @@ internal class PlaybackCore(
     }
 
     private fun StreamChoice.selectedIndex(): Int? = (this as? StreamChoice.At)?.index
+
+    /**
+     * A stop or a close cancelled a backend open before it returned. Each caller of [buildSession]
+     * answers it the way it answers any other preemption.
+     */
+    private class OpenPreempted : Exception("a stop or a close preempted the backend open")
+
+    /**
+     * Opens the backend session on the demux lane, as a job that this actor can cancel.
+     *
+     * The open used to run inline, so a stop or a close waited behind an open that hung. The actor
+     * now reads its mailbox while it waits. A stop or a close cancels the open, and so does
+     * [stallLimit] when the open waits that long for the engine's reader without a byte. A backend
+     * whose open blocks a thread has to let that cancellation reach its read, as the FFmpeg
+     * backend's blocking bridge does.
+     *
+     * After a cancel the actor still waits for the open to end. The demux lane and the reader belong
+     * to the open until it returns, and a close under a read is the one thing a blocking bridge must
+     * never meet. A session that the open built anyway is closed here.
+     *
+     * @throws OpenPreempted when a stop or a close cancelled the open.
+     * @throws PlaybackException with [PlaybackError.SourceStalled] when the open stalled.
+     */
+    private suspend fun openBackendSession(item: MediaItem, watch: StallWatch, stallLimit: Duration): BackendSession {
+        var outcome: Result<BackendSession>? = null
+        var abandoned: Throwable? = null
+        try {
+            supervisorScope {
+                watch.begin()
+                val opening = launch(dispatchers.demux) {
+                    outcome = try {
+                        Result.success(backend.open(item))
+                    } catch (failure: Throwable) {
+                        Result.failure(failure)
+                    }
+                }
+                try {
+                    while (!opening.isCompleted) {
+                        if (abandoned == null) {
+                            val stalledFor = watch.stalledFor() ?: Duration.ZERO
+                            abandoned = when {
+                                preempted() -> OpenPreempted()
+                                stalledFor >= stallLimit ->
+                                    PlaybackException(PlaybackError.SourceStalled(item.uri, stalledFor))
+                                else -> null
+                            }
+                            if (abandoned != null) opening.cancel()
+                        }
+                        // Woken by the open's end, or by the poll that reads the mailbox again.
+                        withTimeoutOrNull(WORKER_POLL) { opening.join() }
+                    }
+                } finally {
+                    watch.end()
+                }
+            }
+        } finally {
+            val built = outcome?.getOrNull()
+            if (built != null && (abandoned != null || !currentCoroutineContext().isActive)) {
+                withContext(dispatchers.demux + NonCancellable) { runCatching { built.close() } }
+            }
+        }
+        abandoned?.let { throw it }
+        val result = outcome ?: error("the backend open ended without an answer")
+        val failure = result.exceptionOrNull() ?: return result.getOrThrow()
+        // A cancellation that this actor did not ask for is a failed open. Rethrown as it is, the
+        // loop would take it for the actor's own cancellation and stop.
+        if (failure is CancellationException) throw IllegalStateException("the backend open was cancelled", failure)
+        throw failure
+    }
 
     /** Language preference first, then the container's default disposition, then the first audio track. */
     /**
@@ -3635,6 +3710,9 @@ internal class PlaybackCore(
      *
      * Doing it here rather than wherever the first reader happens to be is what makes the pass's
      * decisions consistent: the position, the drift and the buffering rule all read the same anchoring.
+        } catch (preempted: OpenPreempted) {
+            teardownSession()
+            requested.forEach { it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION)) }
      */
     private fun handleAudioFill() {
         val session = session ?: return
@@ -3785,13 +3863,17 @@ internal class PlaybackCore(
         val epoch = requestedEpoch
         val durationUs = recovery.duration?.micros ?: Long.MAX_VALUE
         val target = Pts(requestedTarget.micros.coerceIn(0L, durationUs.coerceAtLeast(0L)))
-        val rebuilt = buildSession(
-            item = recovery.item,
-            videoChoice = recovery.video,
-            audioChoice = recovery.audio,
-            subtitleChoice = recovery.subtitle,
-            videoSelection = VideoDecoderSelection.BackendSoftwareOnly,
-        )
+        val rebuilt = try {
+            buildSession(
+                item = recovery.item,
+                videoChoice = recovery.video,
+                audioChoice = recovery.audio,
+                subtitleChoice = recovery.subtitle,
+                videoSelection = VideoDecoderSelection.BackendSoftwareOnly,
+            )
+        } catch (preempted: OpenPreempted) {
+            return null
+        }
         session = rebuilt
         verifyRecoveredTracks(recovery, rebuilt)
         if (preempted()) {

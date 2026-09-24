@@ -237,8 +237,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
   call, proven by disassembly through the render check script, and nothing managed ever runs on the
   device thread. The Kotlin ring is the C ring's differential oracle; never delete the portable
   implementation.
-- The blocking web reader's use of a blocking call is safe only because close never queues behind
-  the demux lane. That reasoning is load bearing; re-check it before touching either side.
+- The JVM and native `BlockingMediaIo` reader's use of a blocking call is safe only because close
+  never queues behind the demux lane. That reasoning is load bearing; re-check it before touching
+  either side. The web reader refuses instead of blocking.
 - libass' change detection compares against the last frame it drew for a track WITH events. A
   track flushed to no events skips that bookkeeping, so the first render after events come back
   reports "unchanged" against the picture from before the flush. The C driver tracks what it last

@@ -10,7 +10,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import io.github.yuroyami.kiteplayer.audioviz.viz.DisplayStep
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
-import io.github.yuroyami.kiteplayer.audioviz.viz.ShortFftAnalyser
 import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
@@ -20,6 +19,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
+import io.github.yuroyami.kiteplayer.audioviz.viz.WebAudioAnalyser
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan
@@ -48,7 +48,7 @@ import kotlin.random.Random
  *
  * Deviations from the original:
  * - The page's analyser (FFT 256, smoothing 0.8, -100 to -30 dB) is rebuilt from the player's spectrum
- *   by [ShortFftAnalyser], on a 44.1 kHz layout. On two test songs its `volume` averaged within 2
+ *   by [WebAudioAnalyser], on a 44.1 kHz layout. On two test songs its `volume` averaged within 2
  *   percent of Chrome's.
  * - The 20 ms reads, the 20 ms turns and the 100 ms background run on heard seconds, not on timers,
  *   so the picture stands still while the music is paused or silent.
@@ -92,7 +92,7 @@ internal class Honeycomb : Visualization {
     )
 
     /** The page's analyser: `fftSize = 256`, and the Web Audio defaults for the rest. */
-    internal val analyser = ShortFftAnalyser(fftSize = 256, smoothing = 0.8f, minDecibels = -100f, maxDecibels = -30f)
+    internal val analyser = WebAudioAnalyser(fftSize = 256, smoothing = 0.8f, minDecibels = -100f, maxDecibels = -30f)
 
     /** `audioSource.volume`: the sum of bins 0 to 79, taken at each read. */
     internal var volume: Int = 0

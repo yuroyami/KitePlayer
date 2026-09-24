@@ -66,7 +66,7 @@ from the original.
 | Musical Spectrum | ShowCQTBar | Muhammad Faiz | [page](https://mfcc64.github.io/html5-showcqtbar/), [code](https://github.com/mfcc64/html5-showcqtbar) | None for the page. The transform is written from its formulas; no LGPL engine code is copied. |
 | Muser | Muser | Jon Shamir | [page](https://jonshamir.github.io/muser/), [code](https://github.com/jonshamir/muser) | MIT |
 
-Threads is named Threads because the catalogue's Silk is Matt DesLauriers' piece.
+Tariq Soliman's Silk is named Threads here, because the catalogue's Silk is Matt DesLauriers' piece.
 
 The category contract has been removed: custom `Visualization` implementations no longer declare
 `family`; `VizFamily` and `VizCatalog.byFamily()` are no longer exposed. Clients that used those
@@ -89,13 +89,6 @@ uses its own `Scene` control, whose default is `Auto`. Manual choices still tran
 Pipe has no forms to choose. It is one shader: a tube of lit cells whose rings are past spectra.
 At a section the camera cuts to another lane, and on the same frame the cross section starts to
 turn round, square or six-sided over one cycle.
-
-The shared journey director weights destinations by the music and recent visits. It waits between
-changes and eases material weights with zero-velocity arrival. Delivered structural boundaries,
-sustained feature contrast and accumulated musical activity can invite a new destination. A
-confident, identity-matched boundary in the prestudied lookahead can start preparation 1.2 seconds
-early. Continuous exploration is an artistic choice, not a claimed beat or section detection.
-There is no fixed ordered loop. Pause freezes the journey, and reduced motion damps its travel.
 
 Neon Lo-Fi replaces Terrain March. It is a drive at dusk: an indigo sky over a rose horizon, a gold
 to coral sun, black hills and twelve black towers, and terraces with black faces and cyan to
@@ -144,7 +137,7 @@ when retargeted. Manual regions bypass the dwell only. Forward motion ranges fro
 units/second before controls, with bounded acceleration; Flight speed zero stops world progression.
 Local bands, window groups, ribbons and attack cues continue working. Pause freezes the world,
 history and finishing grain. Silence settles the foreground/travel within about three seconds.
-Reduced motion scales travel, bank, bob, weather phase and travelling accents without removing
+Reduced motion scales travel, bank, weather phase and travelling accents without removing
 local spectrum response.
 
 The thirteen parameters are Scene, Spectrum floor, Musical mountains, Brightness, Tape finish,

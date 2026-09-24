@@ -98,8 +98,8 @@ class FluctusTest {
         val arrays = listOf(surface.height, surface.worldX, surface.worldY, surface.worldZ,
             surface.projectedX, surface.projectedY, surface.shadowX, surface.shadowY)
         val indices = surface.indices
-        assertEquals(2_601, surface.height.size)
-        assertEquals(15_000, indices.size)
+        assertEquals(FluctusSurface.VERTICES, surface.height.size)
+        assertEquals(FluctusSurface.TRIANGLES * 3, indices.size)
         repeat(120) { frame ->
             surface.advance(state(frame, region = frame % 4), deformation = 2.5f,
                 drift = 2f, rotation = 2f, wireMode = frame % 3)
@@ -114,7 +114,7 @@ class FluctusTest {
             surface.projectedX, surface.projectedY, surface.shadowX, surface.shadowY)
         arrays.zip(current).forEach { (before, after) -> assertSame(before, after) }
         assertSame(indices, surface.indices)
-        assertTrue(indices.all { it in 0 until 2_601 }, "Every triangle stays inside the bounded vertex array")
+        assertTrue(indices.all { it in 0 until FluctusSurface.VERTICES }, "Every triangle stays inside the bounded vertex array")
     }
 
     @Test

@@ -5,11 +5,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import io.github.yuroyami.kiteplayer.audioviz.viz.*
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
@@ -43,20 +40,21 @@ internal class Fluctus : Layered(
     private val paletteBlend = VizParam("Palette blend", 0f, 1f, 0f)
     override val params: List<VizParam> = listOf(relief, flow, rotation, scale, tilt, wire, shadow, paletteBlend)
     internal val surface = FluctusSurface()
-    private val mesh = TriangleMesh(maxVertices = FluctusSurface.VERTICES, maxIndices = 15_000)
+    private val mesh = TriangleMesh(maxVertices = FluctusSurface.VERTICES, maxIndices = FluctusSurface.TRIANGLES * 3)
     private val lattice = Path()
-    private val shadowMask by lazy { FluctusShadow() }
+    private val shadowOutline = FluctusShadow()
 
     override fun advance(state: VizRenderState) {
         surface.advance(state, relief.value, flow.value, rotation.value, wire.value.toInt())
     }
 
+    /** The floor and its horizon. They are smooth, so the echo layer's resolution is enough. */
     override fun DrawScope.drawEcho(state: VizRenderState) {
+        val light = state.lightScale.coerceIn(0f, 1f)
+        val floor = floorColour(light)
+        drawRect(floor)
         surface.configure(relief.value, wire.value.toInt())
         surface.project(size.width, size.height, scale.value, tilt.value)
-        val light = state.lightScale.coerceIn(0f, 1f)
-        val floor = Color(0.977f * light, 0.969f * light, 0.994f * light)
-        drawRect(floor)
         val horizon = surface.horizon.coerceIn(0f, size.height)
         if (horizon > 0f) drawRect(
             Brush.verticalGradient(0f to floor,
@@ -65,7 +63,14 @@ internal class Fluctus : Layered(
                 1f to Color(0.710f * light, 0.748f * light, 0.936f * light), endY = horizon),
             size = Size(size.width, horizon),
         )
-        if (shadow.value > 0f) shadowMask.run { draw(surface, shadow.value, light, floor) }
+    }
+
+    /** The shadow and the sheet, in the front layer at the screen's own resolution. */
+    override fun DrawScope.drawTop(state: VizRenderState) {
+        surface.configure(relief.value, wire.value.toInt())
+        surface.project(size.width, size.height, scale.value, tilt.value)
+        val light = state.lightScale.coerceIn(0f, 1f)
+        if (shadow.value > 0f) shadowOutline.run { draw(surface, shadow.value, light) }
         mesh.clear()
         for (i in surface.height.indices) {
             var r = surface.red[i]; var g = surface.green[i]; var b = surface.blue[i]
@@ -90,11 +95,15 @@ internal class Fluctus : Layered(
                 lattice.moveTo(surface.projectedX[a], surface.projectedY[a])
                 lattice.lineTo(surface.projectedX[b], surface.projectedY[b])
             }
-            for (row in 0..50) for (column in 0..50) {
-                val a = row * 51 + column
-                if (column < 50) edge(a, a + 1)
-                if (row < 50) edge(a, a + 51)
-                if (column < 50 && row < 50) edge(a + 1, a + 51)
+            // The page's lattice has 50 cells a side, so every second line of the finer grid is
+            // drawn, with the page's diagonals.
+            val side = FluctusSurface.SIDE
+            val last = FluctusSurface.SEGMENTS
+            for (row in 0..last step LATTICE_STEP) for (column in 0..last step LATTICE_STEP) {
+                val a = row * side + column
+                if (column < last) edge(a, a + LATTICE_STEP)
+                if (row < last) edge(a, a + LATTICE_STEP * side)
+                if (column < last && row < last) edge(a + LATTICE_STEP, a + LATTICE_STEP * side)
             }
             val base = Color(0.51f, 0.48f, 0.81f)
             val accent = state.palette.cycled(0.3f, saturation = 0.38f, value = 1f)
@@ -107,93 +116,100 @@ internal class Fluctus : Layered(
     }
 
     override fun onReset() { surface.reset() }
+
+    private companion object {
+        /** Grid lines between two lattice lines: the finer grid has twice the page's cells. */
+        const val LATTICE_STEP = FluctusSurface.SEGMENTS / 50
+
+        fun floorColour(light: Float) = Color(0.977f * light, 0.969f * light, 0.994f * light)
+    }
 }
 
-/** A union coverage mask: intersecting folds cast one shadow, never dark triangle seams. */
+/**
+ * The sheet's shadow on the floor: the outline of its edge cast from the light above, filled, with
+ * a soft rim at the screen's own resolution.
+ *
+ * The page's shadow map drew the shadow from the sheet's triangles even while the sheet showed as
+ * a lattice, so the shadow is solid in both. The outline is filled as a fan round its middle, and a
+ * deformed edge can fold back on itself for a few pixels, which would lay two triangles of the fan
+ * over each other and draw a dark line. So the outline's points are taken in order of their angle
+ * round the middle, and the soft rim runs outward along the same rays, so every triangle keeps to
+ * its own wedge and no pixel is covered twice.
+ */
 private class FluctusShadow {
-    private val width = 192
-    private val height = 128
-    private val image = PixelImage(width, height)
-    private val mask = FloatArray(width * height)
-    private val blurred = FloatArray(width * height)
-    private val x = FloatArray(FluctusSurface.VERTICES)
-    private val y = FloatArray(FluctusSurface.VERTICES)
+    private val edge = IntArray(4 * FluctusSurface.SEGMENTS)
+    private val x = FloatArray(edge.size)
+    private val y = FloatArray(edge.size)
+    private val angle = FloatArray(edge.size)
 
-    fun DrawScope.draw(surface: FluctusSurface, strength: Float, light: Float, floor: Color) {
-        var left = Float.POSITIVE_INFINITY; var top = left
-        var right = Float.NEGATIVE_INFINITY; var bottom = right
-        for (i in x.indices) {
-            left = min(left, surface.shadowX[i]); right = max(right, surface.shadowX[i])
-            top = min(top, surface.shadowY[i]); bottom = max(bottom, surface.shadowY[i])
-        }
-        val padding = (right - left) * 0.025f + 2f
-        left = floor(left - padding); top = floor(top - padding)
-        right = ceil(right + padding); bottom = ceil(bottom + padding)
-        val w = (right - left).coerceAtLeast(1f); val h = (bottom - top).coerceAtLeast(1f)
-        for (i in x.indices) {
-            x[i] = (surface.shadowX[i] - left) / w * (width - 1)
-            y[i] = (surface.shadowY[i] - top) / h * (height - 1)
-        }
-        mask.fill(0f)
-        for (at in surface.indices.indices step 3) {
-            val a = surface.indices[at]; val b = surface.indices[at + 1]; val c = surface.indices[at + 2]
-            if (surface.wireMix < 1f) triangle(a, b, c, 1f - surface.wireMix)
-            if (surface.wireMix > 0f) {
-                line(a, b, surface.wireMix); line(b, c, surface.wireMix); line(c, a, surface.wireMix)
-            }
-        }
-        // A fixed two-pixel penumbra only on the shadow, never on the sheet.
-        for (row in 0 until height) for (col in 0 until width) {
-            var sum = 0f
-            for (dx in -2..2) sum += mask[row * width + (col + dx).coerceIn(0, width - 1)]
-            blurred[row * width + col] = sum / 5f
-        }
-        for (row in 0 until height) for (col in 0 until width) {
-            var sum = 0f
-            for (dy in -2..2) sum += blurred[(row + dy).coerceIn(0, height - 1) * width + col]
-            val opacity = (sum / 5f * strength * 0.52f).coerceIn(0f, 0.82f)
-            val r = floor.red + (0.39f * light - floor.red) * opacity
-            val g = floor.green + (0.45f * light - floor.green) * opacity
-            val b = floor.blue + (0.72f * light - floor.blue) * opacity
-            image.pixels[row * width + col] = Color(r, g, b).toArgb()
-        }
-        image.upload()
-        drawImage(image.image, dstOffset = IntOffset(left.toInt(), top.toInt()),
-            dstSize = IntSize(w.toInt(), h.toInt()), filterQuality = FilterQuality.Low)
+    /** The outline's points in order of angle. Kept between frames, so the sort starts almost done. */
+    private val order = IntArray(edge.size) { it }
+    private val mesh = TriangleMesh(maxVertices = edge.size * 2 + 1, maxIndices = edge.size * 9)
+
+    init {
+        // Round the sheet's edge once: along the first row, down the last column, back along the
+        // last row and up the first column.
+        val segments = FluctusSurface.SEGMENTS
+        val side = FluctusSurface.SIDE
+        var at = 0
+        for (column in 0 until segments) edge[at++] = column
+        for (row in 0 until segments) edge[at++] = row * side + segments
+        for (column in segments downTo 1) edge[at++] = segments * side + column
+        for (row in segments downTo 1) edge[at++] = row * side
     }
 
-    private fun triangle(a: Int, b: Int, c: Int, coverage: Float) {
-        val ax = x[a]; val ay = y[a]; val bx = x[b]; val by = y[b]; val cx = x[c]; val cy = y[c]
-        val area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-        if (abs(area) < 0.0001f) return
-        val minX = floor(min(ax, min(bx, cx))).toInt().coerceIn(0, width - 1)
-        val maxX = ceil(max(ax, max(bx, cx))).toInt().coerceIn(0, width - 1)
-        val minY = floor(min(ay, min(by, cy))).toInt().coerceIn(0, height - 1)
-        val maxY = ceil(max(ay, max(by, cy))).toInt().coerceIn(0, height - 1)
-        for (row in minY..maxY) for (col in minX..maxX) {
-            val px = col + 0.5f; val py = row + 0.5f
-            val u = ((bx - px) * (cy - py) - (by - py) * (cx - px)) / area
-            val v = ((cx - px) * (ay - py) - (cy - py) * (ax - px)) / area
-            if (u >= 0f && v >= 0f && u + v <= 1.0001f) {
-                val index = row * width + col
-                mask[index] = max(mask[index], coverage)
-            }
+    fun DrawScope.draw(surface: FluctusSurface, strength: Float, light: Float) {
+        var centreX = 0f
+        var centreY = 0f
+        var left = Float.POSITIVE_INFINITY
+        var right = Float.NEGATIVE_INFINITY
+        for (i in edge.indices) {
+            x[i] = surface.shadowX[edge[i]]
+            y[i] = surface.shadowY[edge[i]]
+            centreX += x[i]; centreY += y[i]
+            left = min(left, x[i]); right = max(right, x[i])
         }
+        centreX /= edge.size
+        centreY /= edge.size
+        for (i in edge.indices) angle[i] = atan2(y[i] - centreY, x[i] - centreX)
+        for (i in 1 until order.size) {
+            val moving = order[i]
+            var j = i - 1
+            while (j >= 0 && angle[order[j]] > angle[moving]) {
+                order[j + 1] = order[j]
+                j--
+            }
+            order[j + 1] = moving
+        }
+        // The page's soft shadow map blurred its edge by about two percent of the sheet.
+        val soft = max(2f, (right - left) * SOFT_SHARE)
+        val opacity = (strength * SHADOW_OPACITY).coerceIn(0f, SHADOW_MOST)
+        val inside = Color(0.39f * light, 0.45f * light, 0.72f * light, opacity).toArgb()
+        val outside = Color(0.39f * light, 0.45f * light, 0.72f * light, 0f).toArgb()
+        mesh.clear()
+        val middle = mesh.vertex(centreX, centreY, inside)
+        val first = mesh.vertexCount
+        for (i in order.indices) {
+            val at = order[i]
+            val dx = x[at] - centreX
+            val dy = y[at] - centreY
+            val reach = sqrt(dx * dx + dy * dy)
+            val out = if (reach > 1e-3f) soft / reach else 0f
+            mesh.vertex(x[at], y[at], inside)
+            mesh.vertex(x[at] + dx * out, y[at] + dy * out, outside)
+        }
+        for (i in edge.indices) {
+            val a = first + i * 2
+            val b = first + ((i + 1) % edge.size) * 2
+            mesh.triangle(middle, a, b)
+            mesh.quad(a, b, b + 1, a + 1)
+        }
+        drawMesh(mesh)
     }
 
-    private fun line(a: Int, b: Int, coverage: Float) {
-        val dx = x[b] - x[a]; val dy = y[b] - y[a]
-        val steps = ceil(max(abs(dx), abs(dy)) * 2f).toInt().coerceAtLeast(1)
-        for (s in 0..steps) {
-            val px = x[a] + dx * s / steps; val py = y[a] + dy * s / steps
-            val ix = px.toInt(); val iy = py.toInt()
-            for (oy in 0..1) for (ox in 0..1) {
-                val col = ix + ox; val row = iy + oy
-                if (col !in 0 until width || row !in 0 until height) continue
-                val weight = (1f - abs(px - col)) * (1f - abs(py - row))
-                val index = row * width + col
-                mask[index] = max(mask[index], weight * coverage)
-            }
-        }
+    private companion object {
+        const val SOFT_SHARE = 0.02f
+        const val SHADOW_OPACITY = 0.52f
+        const val SHADOW_MOST = 0.82f
     }
 }

@@ -11,6 +11,11 @@ import kotlin.math.*
  * Reference: https://github.com/JordanMachado/fluctus (PlaneAudio and Webgl).
  * Geometry, pose and spatial FFT packing follow that reference. The static field and colour
  * grade are procedural replacements for its image assets, not copies of those assets.
+ *
+ * Two changes from the reference, both for a phone's screen: the grid has 100 by 100 cells where
+ * the page had 50 by 50, so the sheet stays smooth drawn large, and the camera frames the sheet at
+ * [SHEET_SHARE] of the frame's width, looking down at it and its shadow, where the page's camera
+ * sat 220 units away and showed a sheet about an eighth of a landscape frame.
  */
 internal class FluctusSurface {
     val height = FloatArray(VERTICES)
@@ -24,11 +29,11 @@ internal class FluctusSurface {
     val red = FloatArray(VERTICES)
     val green = FloatArray(VERTICES)
     val blue = FloatArray(VERTICES)
-    val indices = IntArray(15_000)
-    val order = IntArray(5_000) { it }
+    val indices = IntArray(TRIANGLES * 3)
+    val order = IntArray(TRIANGLES) { it }
     private val depth = FloatArray(VERTICES)
-    private val triangleDepth = FloatArray(5_000)
-    private val sortScratch = IntArray(5_000)
+    private val triangleDepth = FloatArray(TRIANGLES)
+    private val sortScratch = IntArray(TRIANGLES)
     private val staticField = FloatArray(VERTICES)
     private val spectrum = FluctusSpectrum()
     private val step = DisplayStep()
@@ -152,15 +157,16 @@ internal class FluctusSurface {
     }
 
     fun project(width: Float, height: Float, zoom: Float = 1f, tiltDegrees: Float = 0f) {
-        // Keep the original vertical lens in landscape; fit both sheet and shadow in portrait.
-        val fit = min(1f, width / height.coerceAtLeast(1f) / 1.15f)
-        val distance = 220f / (zoom * fit).coerceAtLeast(0.1f)
-        val angle = tiltDegrees * PI.toFloat() / 180f
-        scene.lens(Size(width, height), fovDegrees = 50f, near = 1f, far = 10_000f)
-        // The camera orbit stops above the floor; looking up from beneath it would put the
-        // ground shadow into the sky, especially when portrait framing increases the distance.
-        scene.camera(0f, (sin(angle) * distance).coerceAtLeast(-35f),
-            cos(angle) * distance, 0f, 0f, 0f)
+        // The page's lens, 50 degrees high, at the distance where the sheet spans SHEET_SHARE of
+        // the frame's width.
+        val focal = height * 0.5f / tan(FOV_DEGREES * 0.5f * PI.toFloat() / 180f)
+        val distance = focal * SHEET_SPAN / (SHEET_SHARE * width.coerceAtLeast(1f)) / zoom.coerceAtLeast(0.1f)
+        val angle = (ELEVATION_DEGREES + tiltDegrees) * PI.toFloat() / 180f
+        scene.lens(Size(width, height), fovDegrees = FOV_DEGREES, near = 1f, far = 10_000f)
+        // The camera looks down at a point between the sheet and its shadow. Its orbit stops above
+        // the floor; looking up from beneath it would put the ground shadow into the sky.
+        scene.camera(0f, (AIM_Y + sin(angle) * distance).coerceAtLeast(-35f),
+            cos(angle) * distance, 0f, AIM_Y, 0f)
         scene.project(0f, -50f, -4_000f)
         horizon = scene.screenY
         for (index in 0 until VERTICES) {
@@ -204,9 +210,29 @@ internal class FluctusSurface {
     }
 
     companion object {
-        const val SEGMENTS = 50
+        const val SEGMENTS = 100
         const val SIDE = SEGMENTS + 1
         const val VERTICES = SIDE * SIDE
+        const val TRIANGLES = SEGMENTS * SEGMENTS * 2
+
+        /** The page's vertical field of view. */
+        const val FOV_DEGREES = 50f
+
+        /**
+         * The share of the frame's width the sheet spans on average as it turns, and the width in
+         * units that the distance is worked out for. The span is larger than the sheet's 100 units
+         * because its near edge is closer than the point the camera looks at; it was measured.
+         */
+        const val SHEET_SHARE = 0.7f
+        const val SHEET_SPAN = 155f
+
+        /**
+         * Where the camera looks, between the sheet at 20 and the floor at -50, and how far above
+         * that point it sits, in degrees. With the sheet this large, the near edge of its shadow
+         * runs off the bottom of a landscape frame, as a close camera over a floor would show it.
+         */
+        const val AIM_Y = -8f
+        const val ELEVATION_DEGREES = 20f
 
         private fun smooth(low: Float, high: Float, value: Float): Float {
             val t = ((value - low) / (high - low)).coerceIn(0f, 1f)

@@ -1,8 +1,6 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Aurora
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Shatter
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.RippleWell
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fluctus
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ReactionDiffusion
@@ -16,6 +14,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.OceanMist
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Plasma
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Pulse
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Stereogram
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ThinIce
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Alchemy
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.AuroraField
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NebulaField
@@ -50,10 +49,9 @@ public object VizCatalog {
         Kaleidoscope(),
         Stereogram(),
         Pipe(),
-        Shatter(),
+        ThinIce(),
         Fluctus(),
         Glitch(),
-        RippleWell(),
         Odyssey(),
         NeonLoFi(),
         ReactionDiffusion(),

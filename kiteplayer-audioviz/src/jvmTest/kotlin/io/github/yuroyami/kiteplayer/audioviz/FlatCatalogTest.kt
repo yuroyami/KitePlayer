@@ -13,7 +13,7 @@ class FlatCatalogTest {
     @Test fun onlyTheRetainedPresetsAreSelectable() {
         assertEquals(listOf("Bars", "Ocean Mist", "Gemini", "Bloom", "Pulse", "Contour",
             "Alchemy", "Plasma", "Nebula Field", "Aurora", "Aurora Field", "Kaleidoscope",
-            "Stereogram", "Pipe", "Shatter", "Fluctus", "Glitch", "Ripple Well", "Odyssey", "Neon Lo-Fi",
+            "Stereogram", "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Neon Lo-Fi",
             "Reaction Diffusion", "Smoke Rise"), VizCatalog.create().map { it.name })
     }
 
@@ -21,7 +21,7 @@ class FlatCatalogTest {
         val removed = listOf("Skidmark", "Sunburst", "Blur", "Fountain", "Gravity", "Sparkle",
             "Breath", "Tide", "Lantern", "Nebula", "Smoke", "Reactor", "RingFlight", "Mandala",
             "Drift", "Melt", "Lava", "PrismBurst", "OilSlick", "Ink", "LensRain", "Twist",
-            "FlowField", "Phosphor", "FractalZoom", "BlobField")
+            "FlowField", "Phosphor", "FractalZoom", "BlobField", "Shatter", "RippleWell")
         val root = "io.github.yuroyami.kiteplayer.audioviz.viz."
         for (name in removed) {
             val area = if (name == "BlobField") "shader" else "presets"

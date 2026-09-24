@@ -48,4 +48,4 @@ class ScreenMotionTest {
 }
 
 /** Drawings with a deliberate preference for either lively or quiet music. */
-private val DIRECTOR_ONLY = setOf("Shatter")
+private val DIRECTOR_ONLY = emptySet<String>()

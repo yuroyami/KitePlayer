@@ -145,8 +145,7 @@ class ContactSheetTest {
     private fun paletteFor(visualization: Visualization): VizPalette = when (visualization.name) {
         "Bars", "Ocean Mist", "Stereogram" -> VizPalette.Classic
         "Contour", "Fluctus" -> VizPalette.Fire
-        "Shatter" -> VizPalette.Ambience
-        "Ripple Well", "Reaction Diffusion", "Smoke Rise" -> VizPalette.Vapor
+        "Reaction Diffusion", "Smoke Rise" -> VizPalette.Vapor
         else -> VizPalette.Prism
     }
 

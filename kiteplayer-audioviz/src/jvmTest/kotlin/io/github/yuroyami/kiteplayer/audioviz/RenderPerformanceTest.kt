@@ -23,7 +23,7 @@ class RenderPerformanceTest {
         useSkiaGraphics()
         val song = RenderHarness.player(RenderHarness.Song.Lively, 5f)
         val frames = List(24) { song.next(1f / 60f) }
-        for (name in listOf("Alchemy", "Ripple Well")) {
+        for (name in listOf("Alchemy", "Thin Ice")) {
             for (post in listOf(false, true)) {
                 val drawing = VizCatalog.create().first { it.name == name }
                 drawing.restart()

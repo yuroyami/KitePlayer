@@ -16,6 +16,7 @@ import io.ktor.server.routing.routing
 import io.ktor.utils.io.ByteWriteChannel
 import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -123,7 +124,13 @@ class KtorMediaIoResilienceTest {
             override suspend fun writeTo(channel: ByteWriteChannel) {
                 channel.writeFully(bytes.copyOfRange(from, minOf(from + sent, bytes.size)))
                 channel.flush()
-                if (drop) throw IllegalStateException("the test server drops the connection")
+                if (drop) {
+                    // The headers and the bytes must reach the client before the connection drops.
+                    // A drop before the client has any answer is a different case: a client may
+                    // then retry the request by itself, and on a slow machine the open timed out.
+                    delay(DROP_AFTER)
+                    throw IllegalStateException("the test server drops the connection")
+                }
                 awaitCancellation()
             }
         }
@@ -163,7 +170,8 @@ class KtorMediaIoResilienceTest {
     @Test
     fun aDroppedConnectionResumesAtTheByteItReached() = runBlocking {
         val url = serve { range -> if (range == "bytes=0-") respondPart(range, sent = 80_000, drop = true) else respondRange(range) }
-        val io = KtorMediaIo.open(url, policy = quick)
+        // A read timeout longer than the server's wait before it drops, so this is a drop and not a stall.
+        val io = KtorMediaIo.open(url, policy = quick.copy(readTimeout = 2.seconds))
         io.setWarningSink { warnings += it }
         try {
             val read = withTimeout(20.seconds) { readAll(io) }
@@ -312,5 +320,10 @@ class KtorMediaIoResilienceTest {
             listOf(500.milliseconds, 1.seconds, 2.seconds, 4.seconds, 4.seconds),
             (1..5).map { policy.backoff(it) },
         )
+    }
+
+    private companion object {
+        /** How long a dropping test server waits after its bytes, so the client has them first. */
+        val DROP_AFTER = 300.milliseconds
     }
 }

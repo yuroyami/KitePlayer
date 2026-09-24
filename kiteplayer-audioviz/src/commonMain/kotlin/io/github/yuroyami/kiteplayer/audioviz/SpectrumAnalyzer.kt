@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.ChannelLayout
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
+import io.github.yuroyami.kiteplayer.audioviz.viz.StereoHistory
 import kotlin.concurrent.Volatile
 import kotlin.math.exp
 import kotlin.math.sqrt
@@ -78,6 +79,9 @@ public class SpectrumAnalyzer(
     internal var analysisRevision: Long = 0L
 
     private val magnitudes = FloatArray(usableBins)
+
+    /** The last seconds of the input as a stereo pair, for a drawing that analyses raw samples. */
+    internal val stereoHistory = StereoHistory(sampleRate)
 
     private var kickPulse = 0f
     private var snarePulse = 0f
@@ -161,6 +165,7 @@ public class SpectrumAnalyzer(
                 analyse(channels)
             }
         }
+        stereoHistory.write(interleaved, frames, channels, startMicros, analysisRevision)
     }
 
     /**
@@ -212,6 +217,7 @@ public class SpectrumAnalyzer(
         samplesSinceAnalysis = 0
         samplesSeen = 0
         startMicros = null
+        stereoHistory.reset()
         latest = SpectrumFrame.silent(bandCount, scopePoints)
     }
 
@@ -447,6 +453,7 @@ public class SpectrumAnalyzer(
             width = smoothWidth,
             scopeLeft = readChannel(ringLeft, stereoStart),
             scopeRight = readChannel(ringRight, stereoStart),
+            stereoHistory = stereoHistory,
         )
         onAnalysis?.invoke(frame)
         latest = frame

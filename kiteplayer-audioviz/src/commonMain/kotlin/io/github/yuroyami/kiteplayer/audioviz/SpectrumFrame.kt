@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.audioviz.viz.StereoHistory
 import kotlin.math.sqrt
 
 /**
@@ -174,6 +175,8 @@ public class SpectrumFrame internal constructor(
     public val structure: AudioDetections? = null,
     /** The key supported by pitched audio, separately timed, or null when unknown. */
     public val key: KeyEstimate? = null,
+    /** The analyser's stereo sample history, for a drawing that analyses raw samples itself. */
+    internal val stereoHistory: StereoHistory? = null,
 ) {
     /** Conservative primitive payload charge; shared legacy array aliases are charged once. */
     internal val retainedPayloadBytes: Long
@@ -313,6 +316,7 @@ public class SpectrumFrame internal constructor(
             rhythm = pulseEstimate,
             structure = structure,
             key = key,
+            stereoHistory = stereoHistory,
         )
     }
 
@@ -396,6 +400,7 @@ public class SpectrumFrame internal constructor(
         rhythm = rhythm,
         structure = structure,
         key = key,
+        stereoHistory = stereoHistory,
     )
 
     /** Keep every delivered record while providing the old strongest-hit projection for envelopes. */

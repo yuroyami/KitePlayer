@@ -3,8 +3,6 @@ package io.github.yuroyami.kiteplayer.audioviz.viz
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Aurora
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fluctus
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ReactionDiffusion
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.SmokeRise
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Bars
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Bloom
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Contour
@@ -17,6 +15,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Stereogram
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ThinIce
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Alchemy
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.AuroraField
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Marble
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NebulaField
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Odyssey
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Pipe
@@ -54,8 +53,7 @@ public object VizCatalog {
         Glitch(),
         Odyssey(),
         NeonLoFi(),
-        ReactionDiffusion(),
-        SmokeRise(),
+        Marble(),
     ).filter { it.canRunHere() }
 
     /** The former public catalogue name resolves to the single replacement. */

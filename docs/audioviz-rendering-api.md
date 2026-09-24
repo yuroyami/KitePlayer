@@ -205,24 +205,23 @@ cost or app cadence. Neither that script nor an APK build establishes ten-minute
 performance. Current implementation evidence and pending physical checks are indexed in
 [`audioviz-revamp/neonlofi-implementation-report.md`](../audioviz-revamp/neonlofi-implementation-report.md).
 
-## Smoke shaped by moving horizons
+## Marbled ink
 
-`Smoke Rise` absorbs the former `Stable Fluids` catalogue entry. It retains its rising smoke,
-moving emitters, directional lighting and embers. Two invisible moving sinks are enabled by
-default. There are no drawn discs, rings, rims or accretion sprites: their visible form comes
-entirely from the surrounding smoke gathering, stretching, bending and disappearing.
+`Marble` replaces `Reaction Diffusion` and `Smoke Rise`. It keeps its tray on the processor, in
+grids of 160 by 90 cells: three inks, and the two chemicals of a Gray-Scott reaction that grows
+lace inside the ink.
 
-The existing 128 x 72 velocity solver supplies circulation and the wakes of the moving centres.
-Its incompressible projection removes inward divergence, so a separate density-transport step
-follows that solve. Backward characteristics and their compression Jacobian concentrate existing
-density outside each horizon. Inward travel slows at the shoulder; smoke crossing into the interior
-is absorbed. No density or light is manufactured to illustrate the boundary. Local lensing bends
-both density sampling and its colour field, while embers follow the force and fade through the
-same absorbing interior. This is an artistic fluid model, not a general-relativistic solver.
+- The drums drop ink. A drop moves every point outside it outward, so older ink closes into rings
+  round the new drop, as paint does on a marbling tray.
+- Up to five point vortices stir the tray. Their flow has no divergence, so the ink keeps its area
+  as it is combed.
+- The inks and the chemicals are carried along the flow before each reaction step, so the swirls
+  never smear into a blur.
 
-Travel integrates an audible rate driven by activity and density, so equally loud calm and busy
-passages have different momentum. Low/body transients add a decaying accent. Pause freezes smoke
-and travel; reduced motion suppresses travel and the added fluid transport and forces.
+A shader draws the result. It reads the grids smoothly and cuts each ink edge at half strength, one
+pixel wide, from the local slope, so the edges are sharp curves at native resolution although the
+grid is small. The same slope lights the ink from the upper left. Where runtime shaders cannot run,
+the same grids are drawn stretched over the screen. Pause and silence freeze the tray.
 
 Controls include zero, one or two black holes, influence size, travel speed, curl, attraction,
 lensing and horizon absorption, plus smoke density, directional detail, brightness, embers,

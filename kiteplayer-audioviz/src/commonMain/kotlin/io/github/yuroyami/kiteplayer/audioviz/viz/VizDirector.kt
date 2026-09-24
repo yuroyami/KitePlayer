@@ -267,11 +267,13 @@ public class VizDirector(
      * Picks from the right shelf, avoiding anything shown lately.
      *
      * Falls back to the whole catalogue when a shelf is empty or everything on it has been seen
-     * recently, because showing something twice is better than showing nothing.
+     * recently, because showing something twice is better than showing nothing. The drawing on
+     * screen is never a candidate while another exists, or the boundary would change nothing.
      */
     private fun pick(bucket: VizEnergy): Visualization {
-        val shelf = catalogue.filter { it.bucket == bucket && it.name !in recent }
-        val from = shelf.ifEmpty { catalogue.filter { it.name !in recent } }.ifEmpty { catalogue }
+        val others = catalogue.filter { it.name != current.name }.ifEmpty { catalogue }
+        val shelf = others.filter { it.bucket == bucket && it.name !in recent }
+        val from = shelf.ifEmpty { others.filter { it.name !in recent } }.ifEmpty { others }
         return from[(nextRandom() * from.size).toInt().coerceIn(0, from.size - 1)]
     }
 

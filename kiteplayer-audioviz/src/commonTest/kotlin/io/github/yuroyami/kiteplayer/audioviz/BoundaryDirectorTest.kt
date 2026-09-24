@@ -17,9 +17,9 @@ class BoundaryDirectorTest {
             beatConfidence = if (tracked) 0.99f else 0f, barPhase = time % 2f / 2f,
             phrasePhase = time % 8f / 8f, drop = rise, breakdown = rise)
 
-    /** [frame] with one accepted section boundary delivered in it. */
-    private fun boundary(frame: SpectrumFrame): SpectrumFrame {
-        val hit = AudioEvent(frame.generation, frame.analysisRevision, 0L,
+    /** [frame] with one accepted section boundary delivered in it, the [sequence]th of its history. */
+    private fun boundary(frame: SpectrumFrame, sequence: Long = 0L): SpectrumFrame {
+        val hit = AudioEvent(frame.generation, frame.analysisRevision, sequence,
             AudioDetection(AudioEventKind.SectionBoundary, frame.ptsMicros, frame.ptsMicros, 0.5f, 0.9f, 0.5f))
         return frame.withDeliveredEvents(AudioEventDelivery(frame.generation, frame.analysisRevision,
             frame.ptsMicros, arrayOf(DeliveredAudioEvent(hit, 0L))))
@@ -40,6 +40,43 @@ class BoundaryDirectorTest {
             !director.changing
         }
         assertEquals(emptyList<Long>(), kept, "the first boundary kept the opening drawing for these seeds")
+    }
+
+    /**
+     * Every boundary changes the drawing while another one exists.
+     *
+     * Three drawings are fewer than the director remembers, so after two changes every drawing was
+     * shown lately, and the fallback to the whole catalogue must still leave out the one on screen.
+     */
+    @Test
+    fun everyBoundaryChangesTheDrawingInASmallCatalogue() {
+        val three = VizCatalog.create().take(3)
+        val kept = ArrayList<String>()
+        for (seed in 0L until 16L) {
+            val director = VizDirector(three, seed = seed, minimumHoldSeconds = 0f)
+            var time = 0f
+            for (index in 0L until 8L) {
+                val before = director.current.name
+                director.advance(boundary(frame(time), sequence = index), 1f / 60f)
+                if (!director.changing) kept += "seed $seed, boundary $index kept $before"
+                // A change without a usable tempo lasts 1.6 seconds, so it has finished after two.
+                repeat(120) {
+                    time += 1f / 60f
+                    director.advance(frame(time), 1f / 60f)
+                }
+                assertFalse(director.changing, "the change did not finish")
+            }
+        }
+        assertEquals(emptyList<String>(), kept, "these boundaries changed nothing")
+    }
+
+    @Test
+    fun oneDrawingIsKeptAtEveryBoundary() {
+        val one = VizCatalog.create().take(1)
+        val director = VizDirector(one, seed = 3L, minimumHoldSeconds = 0f)
+        director.advance(boundary(frame(0f)), 1f / 60f)
+        assertFalse(director.changing)
+        assertEquals(one[0], director.current)
     }
 
     @Test

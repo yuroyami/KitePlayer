@@ -5,15 +5,22 @@ import androidx.compose.ui.graphics.toArgb
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.*
 import kotlin.math.*
 
-/** Opaque, depth-ordered terraces. Treble is beside the road, bass outside: bass cannot hide quieter lanes. */
+/**
+ * Opaque, depth-ordered terraces with black faces and neon edges, cyan near the viewer and magenta
+ * toward the horizon. A terrace's top lights in its edge colour while its band is loud, and a kick
+ * flashes the nearest edges. Treble is beside the road, bass outside: bass cannot hide quieter lanes.
+ */
 internal class NeonLoFiFloor {
     val mesh = TriangleMesh(14_000, 21_000)
     private val points = FloatArray(16)
-    private val edgeColors = IntArray(16)
-    private val tops = IntArray(16)
-    private val fronts = IntArray(16)
-    private val sides = IntArray(16)
-    internal fun faceColor(lane: Int, face: Int): Int = when (face) { 0 -> tops[lane]; 1 -> fronts[lane]; else -> sides[lane] }
+    private val edgeColors = IntArray(ROWS * 16)
+    private val tops = IntArray(ROWS * 16)
+    private val fronts = IntArray(ROWS * 16)
+    private val sides = IntArray(ROWS * 16)
+    internal fun faceColor(lane: Int, face: Int, row: Int = 0): Int {
+        val at = row * 16 + lane
+        return when (face) { 0 -> tops[at]; 1 -> fronts[at]; else -> sides[at] }
+    }
     var triangles = 0; private set
     var copiedBytes = 0; private set
     var portable = false
@@ -29,22 +36,27 @@ internal class NeonLoFiFloor {
         val start = floor((flight.travel + 1.8) / stride).toFloat() * stride
         val pixelCore = max(0.7f, min(width, height) / 650f)
         val neon = world.controls[11]
-        for (i in 0 until lanes) {
-            val band = 15 - i * 16 / lanes
-            val t = 0.22f + band / 15f * 0.75f
-            val a = if (t < 0.5f) 0 else 1; val b = a + 1
-            val mix = if (t < 0.5f) t * 2f else (t - 0.5f) * 2f
-            edgeColors[i] = paint.mix(a, b, mix, (0.55f + world.lanes[band] * 0.85f + world.impulses[band] * world.controls[10] * 0.8f) * neon).toArgb()
-            tops[i] = paint.mix(a, b, mix, 0.19f + world.lanes[band] * 0.16f).toArgb()
-            fronts[i] = paint.mix(a, b, mix, 0.05f + world.lanes[band] * 0.06f).toArgb()
-            sides[i] = paint.mix(a, b, mix, 0.08f + world.lanes[band] * 0.09f).toArgb()
-        }
+        val face = paint.packed(NeonLoFiPaint.INK, 1f)
         for (row in rows - 1 downTo 0) {
             val z0 = max(start + row * stride, flight.travel.toFloat() + 1.8f)
             val z1 = start + (row + 1) * stride - 0.04f
             if (z1 <= z0) continue
             val distance = (z0 + z1) * 0.5f - flight.travel.toFloat()
             val fade = NeonLoFiHistory.smooth(52f, 37f, distance)
+            // Cyan near the viewer, magenta toward the horizon; a kick flashes the nearest rows.
+            val far = (distance / 48f).coerceIn(0f, 1f)
+            val flash = world.kick * world.controls[10] * 1.6f * (1f - NeonLoFiHistory.smooth(6f, 16f, distance))
+            for (i in 0 until lanes) {
+                val band = 15 - i * 16 / lanes
+                val level = world.lanes[band]
+                val lit = NeonLoFiHistory.smooth(0.18f, 0.55f, level)
+                val at = row * 16 + i
+                edgeColors[at] = paint.mix(NeonLoFiPaint.NEAR, NeonLoFiPaint.FAR, far,
+                    (0.7f + 0.9f * level + world.impulses[band] * world.controls[10] * 0.8f + flash) * neon).toArgb()
+                tops[at] = if (lit > 0.01f) paint.mix(NeonLoFiPaint.NEAR, NeonLoFiPaint.FAR, far, 0.6f * lit * neon).toArgb() else face
+                fronts[at] = face
+                sides[at] = face
+            }
             for (side in intArrayOf(-1, 1)) for (lane in lanes - 1 downTo 0) {
                 var h = 0f
                 for (b in lane * 16 / lanes until (lane + 1) * 16 / lanes) h += world.floorHeight(15 - b, (z0 + z1) * 0.5f)
@@ -64,21 +76,22 @@ internal class NeonLoFiFloor {
                 flight.project(flight.road(z1) + inner * side, 0f, z1, width, height, points, 12)
                 if ((0..6 step 2).all { points[it] < -4f } || (0..6 step 2).all { points[it] > width + 4f }) continue
                 // A face at an equal/lower depth is submitted later. Each cell is opaque even in silence.
+                val at = row * 16 + lane
                 if (h < flight.height) {
-                    face(0, 2, 4, 6, tops[lane])
-                    line(points[4], points[5], points[6], points[7], pixelCore, edgeColors[lane])
+                    face(0, 2, 4, 6, tops[at])
+                    line(points[4], points[5], points[6], points[7], pixelCore, edgeColors[at])
                 }
-                face(0, 6, 12, 8, sides[lane])
-                face(0, 8, 10, 2, fronts[lane])
-                line(points[0], points[1], points[6], points[7], pixelCore, edgeColors[lane])
-                var frontEdge = edgeColors[lane]
+                face(0, 6, 12, 8, sides[at])
+                face(0, 8, 10, 2, fronts[at])
+                line(points[0], points[1], points[6], points[7], pixelCore, edgeColors[at])
+                var frontEdge = edgeColors[at]
                 // A hit travels through its frequency region; a stopped/reduced-motion view keeps the local crest.
                 if (!portable && world.controls[10] > 0f && flight.motion > 0f) {
                     for (accent in world.accents) {
                         if (accent.age >= 2.5f || abs(distance - (3f + accent.age * 19f * flight.motion)) > stride * 0.55f) continue
                         val band = 15 - lane * 16 / lanes
                         if (accent.region == 0 && band >= 4 || accent.region == 1 && band !in 4..9 || accent.region == 2 && band < 10) continue
-                        frontEdge = paint.mix(band * 2 / 16, 3, 0.35f,
+                        frontEdge = paint.mix(NeonLoFiPaint.NEAR, NeonLoFiPaint.WHITE, 0.35f,
                             0.8f + accent.strength * world.controls[10] * exp(-accent.age * 1.1f)).toArgb()
                         break
                     }
@@ -114,7 +127,7 @@ internal class NeonLoFiFloor {
             world.flight.project(x, 0f, z, w, h, points, 0)
             world.flight.project(x + side * 0.3f, y, z, w, h, points, 2)
             val distanceFade = NeonLoFiHistory.smooth(1.8f, 9f, z - world.flight.travel.toFloat())
-            val color = paint.color(1, 0.55f * intensity, distanceFade).toArgb()
+            val color = paint.color(NeonLoFiPaint.FAR, 0.55f * intensity, distanceFade).toArgb()
             line(points[0], points[1], points[2], points[3], max(core, h / (z - world.flight.travel.toFloat()) * 0.035f), color)
             val crownX = points[2]; val crownY = points[3]
             for (frond in 0..5) {
@@ -131,4 +144,5 @@ internal class NeonLoFiFloor {
         }
     }
     fun DrawScope.draw() { drawMesh(mesh) }
+    companion object { const val ROWS = 12 }
 }

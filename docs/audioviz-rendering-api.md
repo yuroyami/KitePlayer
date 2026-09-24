@@ -127,10 +127,29 @@ confident, identity-matched boundary in the prestudied lookahead can start prepa
 early. Continuous exploration is an artistic choice, not a claimed beat or section detection.
 There is no fixed ordered loop. Pause freezes the journey, and reduced motion damps its travel.
 
-Neon Lo-Fi replaces Terrain March. One analytic shader draws the native-resolution sky, striped
-sun, prepared ridge profiles, road/grid and optional coast reflection. Four bounded mesh batches
-supply stars, a world-anchored city, opaque spectrum terraces/palms and rain. There is no terrain
-height march, rolling terrain tile, depth/refinement chain or underwater volume.
+Neon Lo-Fi replaces Terrain March. It is a drive at dusk: an indigo sky over a rose horizon, a gold
+to coral sun, black hills and twelve black towers, and terraces with black faces and cyan to
+magenta neon edges. One analytic shader draws the native-resolution sky, the sun, the prepared ridge
+profiles, the road and the optional coast. Five bounded mesh batches supply the stars and the
+shooting star, the towers and the world-anchored city, the opaque spectrum terraces and palms, the
+lamp posts and rain, and the lamps' added light. There is no terrain height march, rolling terrain
+tile, depth/refinement chain or underwater volume.
+
+- The sun has eight gaps, one per pair of display lanes, bass at the bottom. A gap is as wide as its
+  band is loud; silence leaves thin, even gaps.
+- Each tower belongs to one note name, C to B from left to right, and its windows light while that
+  note sounds.
+- With a supported pulse the road passes one lane dash a beat, and so one lamp pair a bar. Without
+  one, the mood sets the pace.
+- A kick pulses the sun and the road's edges and flashes the nearest terrace edges. A snare sends a
+  shooting star, one a bar at most, and a hat makes the stars twinkle.
+- A breakdown brings rain and a wet road that mirrors the sun and the lamps, until the next section
+  or drop. On the coast, the stripes of light on the sea are the waveform.
+- A drop lifts the view off the road for one cycle: the horizon drops, the terraces spread out below
+  like a lit map, and the sun stands whole. It lands on the first beat after that cycle. Under
+  reduced motion the camera stays down and only the sun closes.
+- The scene keeps 40 percent of its light in a silence, and the display transfer rolls bright light
+  off on its brightest channel, so a bright colour keeps its hue.
 
 Each shoulder has sixteen lanes over twelve depth rows and a protected 7.2-unit road corridor.
 The complete input spectrum is area-aggregated into the display lanes with the shared analysis

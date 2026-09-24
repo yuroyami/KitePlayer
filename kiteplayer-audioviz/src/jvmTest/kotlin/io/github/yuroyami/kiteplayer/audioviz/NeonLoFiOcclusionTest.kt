@@ -58,7 +58,7 @@ class NeonLoFiOcclusionTest {
                             else -> z in z0..z1 && yy in 0f..h
                         }
                         if (!valid) return
-                        closest = distance; expected = floor.faceColor(lane, face)
+                        closest = distance; expected = floor.faceColor(lane, face, row)
                         // Measure distance to the actual projected edges. A world-z margin is not
                         // a screen-space margin under perspective, especially near the horizon.
                         fun corner(at: Int, local: Float, yy: Float, zz: Float) =

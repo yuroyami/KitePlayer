@@ -60,16 +60,18 @@ public final class NeonLoFiAndroidProbe {
                 for(String name:new String[]{"uScopeTex","uPaletteTex","uHistoryTex"}) if(OdysseyAndroidProbe.declares(shader,name)) shader.setInputShader(name,bandShader);
                 Mesh[] meshes;
                 try(DataInputStream input=new DataInputStream(new FileInputStream(folder+"/neon-"+mode+"-mesh.bin"))) {
-                    int count=input.readInt(); if(count!=4) throw new IOException("Expected four mesh submissions");
+                    // Sky, city, floor and front dressing, then the lamps' light added on top.
+                    int count=input.readInt(); if(count!=5) throw new IOException("Expected five mesh submissions");
                     meshes=new Mesh[count]; for(int i=0;i<count;i++) meshes[i]=new Mesh(input);
                 }
                 double[] cost=new double[frames]; int[] last=null;
                 Paint background=new Paint(); background.setShader(shader); Paint meshPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
+                Paint glowPaint=new Paint(Paint.ANTI_ALIAS_FLAG); glowPaint.setBlendMode(BlendMode.PLUS);
                 for(int f=-5;f<frames;f++) {
                     long before=System.nanoTime(); RecordingCanvas canvas=node.beginRecording(width,height);
                     canvas.drawRect(0,0,width,height,background);
                     canvas.save(); canvas.scale(width/sourceWidth,height/sourceHeight);
-                    for(Mesh mesh:meshes) mesh.draw(canvas,meshPaint); canvas.restore(); node.endRecording();
+                    for(int m=0;m<meshes.length;m++) meshes[m].draw(canvas,m==4?glowPaint:meshPaint); canvas.restore(); node.endRecording();
                     int sync=renderer.createRenderRequest().setWaitForPresent(true).syncAndDraw();
                     try(android.media.Image image=reader.acquireNextImage()) {
                         if(image==null) throw new AssertionError("No GPU image, sync="+sync);

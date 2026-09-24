@@ -66,7 +66,8 @@ class NeonLoFiLightTest {
             previous = c.red
             val guarded = VizRenderState(frame, i / 4f, 0.25f, neutral).also { it.lightScale = 0.5f }
             paint.prepare(guarded, world)
-            assertEquals(world.controls[3] * lightFor(frame.energy) * 0.5f, paint.exposure, 0.000001f)
+            val loud = frame.energy.coerceIn(0f, 1f).pow(0.6f)
+            assertEquals(world.controls[3] * (NeonLoFiPaint.IDLE_LIGHT + (1f - NeonLoFiPaint.IDLE_LIGHT) * loud) * 0.5f, paint.exposure, 0.000001f)
         }
     }
 }

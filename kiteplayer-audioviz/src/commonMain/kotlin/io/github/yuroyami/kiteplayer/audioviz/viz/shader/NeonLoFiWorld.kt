@@ -16,6 +16,20 @@ internal class NeonLoFiWorld {
     val profile = FloatArray(512)
     val accents = Array(8) { Accent() }
     val controls = floatArrayOf(0f, 1f, 1f, 1f, 0.5f, 1f, 1f, 1f, 0.6f, 1f, 0.7f, 1f, 1.1f)
+    /** The sun's gaps, bass at the bottom: each is two lanes of the spectrum. */
+    val gaps = FloatArray(GAPS)
+    /** How strongly each note name, C to B, sounds now: the twelve towers' windows. */
+    val notes = FloatArray(12)
+    /** The waveform now, 0 to 1 either side of a half: the coast's reflection stripes. */
+    val wave = FloatArray(NeonLoFiHistory.PROFILE) { 0.5f }
+    /** A kick's pulse, and a hat's twinkle, each fading within a fraction of a second. */
+    var kick = 0f; private set
+    var hat = 0f; private set
+    /** A shooting star's age in seconds, below zero when none is in the sky, and where it started. */
+    var starAge = -1f; private set
+    var starSeed = 0f; private set
+    private var sinceStar = 99f
+    private var barSeconds = 2f
     private val wanted = FloatArray(16)
     var slowLevel = 0f; private set
     var bass = 0f; private set
@@ -34,6 +48,8 @@ internal class NeonLoFiWorld {
     var available = false; private set
     private var quiet = 0f
     private var rainWanted = false
+    /** A breakdown's rain, which lasts until the next section or drop, however loud the music is. */
+    private var breakdownRain = false
     private var lastEvents: AudioEventDelivery? = null
     private val seen = arrayOfNulls<AudioEvent>(96)
     private var seenAt = 0
@@ -51,7 +67,7 @@ internal class NeonLoFiWorld {
         val applied = FloatArray(16)
     }
 
-    fun advance(state: VizRenderState, values: FloatArray, layout: Float) {
+    fun advance(state: VizRenderState, values: FloatArray, layout: Float, beatSeconds: Float = 0f) {
         if (state.timeSeconds == lastTime && state.frame === lastFrame) return
         val dt = if (state.timeSeconds == lastTime) 0f else state.deltaSeconds.coerceIn(0f, 0.25f)
         lastTime = state.timeSeconds; lastFrame = state.frame
@@ -78,6 +94,11 @@ internal class NeonLoFiWorld {
         for (a in accents) a.age += dt
         release *= exp(-dt * 2.5f)
         retreat *= exp(-dt * 0.25f)
+        kick *= exp(-dt / 0.18f)
+        hat *= exp(-dt / 0.3f)
+        sinceStar += dt * audible
+        if (starAge >= 0f) { starAge += dt; if (starAge > STAR_SECONDS) starAge = -1f }
+        barSeconds = if (beatSeconds > 0.15f) beatSeconds * 4f else 2f
         var structural = false
         val delivery = f.events
         if (available && audible > 0f && delivery != null && delivery !== lastEvents && !delivery.reset) {
@@ -96,8 +117,8 @@ internal class NeonLoFiWorld {
                     }
                     if (d.kind == AudioEventKind.Breakdown) {
                         retreat = max(retreat, d.strength * 0.7f)
-                        if (layout > 0.2f) rainWanted = true
-                    }
+                        breakdownRain = true
+                    } else breakdownRain = false
                 }
             }
         }
@@ -122,14 +143,30 @@ internal class NeonLoFiWorld {
         flight.layout = if (layoutInitialized) NeonLoFiFlight.approach(flight.layout, layout, dt, 0.7f) else layout
         layoutInitialized = true
         flight.motion = state.motionScale.coerceIn(0f, 1f)
-        flight.advance(dt, audible, if (available) f.mood else 0f, controls[6] * (1f - 0.45f * retreat), f.pulse)
+        flight.advance(dt, audible, if (available) f.mood else 0f, controls[6] * (1f - 0.45f * retreat), f.pulse, beatSeconds)
+        // The sun's gaps are the spectrum, two lanes a gap. Silence closes them to thin, even lines.
+        for (g in 0 until GAPS) gaps[g] = NeonLoFiFlight.approach(gaps[g], 0.5f * (lanes[g * 2] + lanes[g * 2 + 1]) * audible, dt, 0.06f)
+        // A tower's windows light while its note sounds: each note against the loudest one now.
+        val chroma = f.chroma
+        var loudest = 0f
+        for (n in 0 until min(12, chroma.size)) loudest = max(loudest, chroma[n])
+        for (n in 0..11) {
+            val share = if (available && loudest > 0.05f && n < chroma.size) chroma[n] / loudest else 0f
+            val lit = ((share - 0.55f) / 0.35f).coerceIn(0f, 1f) * audible
+            notes[n] = NeonLoFiFlight.approach(notes[n], lit, dt, if (lit > notes[n]) 0.04f else 0.25f)
+        }
+        if (available && audible > 0f && f.scope.size > 1) {
+            val gain = f.waveformGain
+            for (i in wave.indices) wave[i] = (0.5f + 0.5f * f.scope[i * (f.scope.size - 1) / (wave.size - 1)] * gain).coerceIn(0f, 1f)
+        }
         if (available && audible > 0f) regions.advance(dt, audible, controls[0].toInt() - 1,
             controls[5], layout, f.energy, f.density, f.centroid, structural)
         time += dt * audible * state.motionScale
         if (available && audible > 0f && f.energy < 0.22f && f.density < 0.2f && layout > 0.45f) rainWanted = true
         if (available && f.energy > 0.42f) rainWanted = false
-        val targetRain = if (audible > 0f && rainWanted) 0.65f else 0f
-        rain = NeonLoFiFlight.approach(rain, targetRain, dt, if (quiet > 0f) 0.45f else if (targetRain > rain) 8f else 14f)
+        val targetRain = if (audible > 0f && (rainWanted || breakdownRain)) 0.65f else 0f
+        // A breakdown's rain arrives within a bar or so; a quiet passage's gathers slowly.
+        rain = NeonLoFiFlight.approach(rain, targetRain, dt, if (quiet > 0f) 0.45f else if (targetRain > rain) (if (breakdownRain) 1.5f else 8f) else 14f)
         if (quiet > 3f) { flight.advance(0.25f, 0f, 0f, 0f, 0f); for (a in accents) a.age = 10f }
     }
 
@@ -138,6 +175,14 @@ internal class NeonLoFiWorld {
         val region = when (d.kind) { AudioEventKind.LowTransient -> 0; AudioEventKind.BodyTransient -> 1
             AudioEventKind.HighTransient -> 2; else -> 3 }
         val strength = d.strength * exp(-lateness * 5f)
+        when (region) {
+            0 -> kick = max(kick, strength)
+            // A snare sends a shooting star across the sky, one a bar at most.
+            1 -> if (sinceStar >= barSeconds && starAge < 0f) {
+                starAge = 0f; sinceStar = 0f; starSeed = NeonLoFiDecor.hash(eventCount.toFloat(), 5f)
+            }
+            2 -> hat = max(hat, strength)
+        }
         // Generic and regional descriptions of one attack share a bounded visual accent.
         val compound = accents.firstOrNull { it.age < 2.5f && abs(it.timestamp - d.ptsMicros) <= 25_000L }
         val accent = compound ?: accents.firstOrNull { it.age >= 2.5f }
@@ -155,6 +200,11 @@ internal class NeonLoFiWorld {
         }
     }
 
+    companion object {
+        const val GAPS = 8
+        const val STAR_SECONDS = 0.9f
+    }
+
     fun floorHeight(lane: Int, worldZ: Float, edge: Float = 1f): Float {
         val regional = when { lane < 4 -> bass; lane < 10 -> body; else -> air }
         val local = lanes[lane] * 0.72f + slowLanes[lane] * 0.18f + regional * 0.10f
@@ -168,7 +218,9 @@ internal class NeonLoFiWorld {
         seen.fill(null); seenAt = 0; flight.reset(); regions.reset(); quiet = 0f; time = 0f
         eventCount = 0; compoundCount = 0; acceptedStrength = 0f; rain = 0f; rainWanted = false
         slowLevel = 0f; bass = 0f; air = 0f; body = 0f; texture = 0f; retreat = 0f; wanted.fill(0f)
+        gaps.fill(0f); notes.fill(0f); wave.fill(0.5f); kick = 0f; hat = 0f; starAge = -1f; sinceStar = 99f
         profileRevision++; projectedRevision = -1L; lastEvents = null; release = 0f; layoutInitialized = false
+        breakdownRain = false
     }
     fun reset() {
         history.clear(); clearActors(); epoch = history.epoch; lastFrame = null; lastTime = Float.NaN

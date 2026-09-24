@@ -11,10 +11,19 @@ internal class NeonLoFiFlight {
     var layout = 0.37f
     var motion = 1f
     var phase = 0f; private set
-    val height: Float get() = 1.6f + bob
+    /** How far the view has lifted off the road, 0 to 1: the drop's lift-off, set once a frame. */
+    var lift = 0f
+    val height: Float get() = 1.6f + bob + LIFT_HEIGHT * lift
+    /** The horizon's height as a share of the screen. It drops away as the view lifts off. */
+    val horizon: Float get() = HORIZON + LIFT_HORIZON * lift
 
-    fun advance(dt: Float, audible: Float, mood: Float, speed: Float, pulse: Float) {
-        val target = if (audible > 0f) (6f + 18f * mood) * speed * motion else 0f
+    /**
+     * With a beat to follow, the road passes one lane dash a beat, and so one lamp pair a bar.
+     * Without one, the mood sets the pace.
+     */
+    fun advance(dt: Float, audible: Float, mood: Float, speed: Float, pulse: Float, beatSeconds: Float = 0f) {
+        val cruise = if (beatSeconds > 0.15f) DASH / beatSeconds else 6f + 18f * mood
+        val target = if (audible > 0f) cruise * speed * motion else 0f
         // Flight speed and zero motion are explicit stops, not long braking distances.
         velocity = if (speed == 0f || motion == 0f) 0f else approach(velocity, target.coerceIn(0f, 48f), dt, 0.7f)
         travel += velocity * dt
@@ -22,11 +31,12 @@ internal class NeonLoFiFlight {
         phase += dt * audible * motion
         val targetBank = (-slope(travel.toFloat() + 15f) * 0.55f).coerceIn(-0.075f, 0.075f) * motion
         bank = approach(bank, targetBank * audible, dt, 1.2f)
-        bob = approach(bob, sin(phase * 1.6f) * 0.035f * pulse * motion * audible, dt, 0.25f)
+        // The camera holds still on the beat: the music moves the scene, not the view.
+        bob = 0f
     }
     fun road(z: Float): Float = 2.2f * sin(z * 0.009f + layout * 4f) + 0.7f * sin(z * 0.023f + layout * 9f)
     fun slope(z: Float): Float = 0.0198f * cos(z * 0.009f + layout * 4f) + 0.0161f * cos(z * 0.023f + layout * 9f)
-    fun reset() { travel = 0.0; velocity = 0f; bank = 0f; bob = 0f; phase = 0f }
+    fun reset() { travel = 0.0; velocity = 0f; bank = 0f; bob = 0f; phase = 0f; lift = 0f }
 
     /** Road-local point, with a restrained bank around a fixed, readable horizon. */
     fun project(x: Float, y: Float, z: Float, width: Float, heightPx: Float, into: FloatArray, offset: Int = 0) {
@@ -36,13 +46,19 @@ internal class NeonLoFiFlight {
         val dy = (height - y) * focal / distance
         val c = cos(bank); val s = sin(bank)
         into[offset] = width * 0.5f + dx * c - dy * s
-        into[offset + 1] = heightPx * HORIZON + dx * s + dy * c
+        into[offset + 1] = heightPx * horizon + dx * s + dy * c
     }
     fun laneWidth(aspect: Float): Float = ((aspect * 18f / (2f * min(FOCAL, aspect * 0.19f)) - CORRIDOR - 1f) / 16f).coerceIn(0.5f, 1.55f)
     fun horizontalFocal(width: Float, height: Float): Float = min(height * FOCAL, width * 0.19f)
     companion object {
         const val FOCAL = 0.714074f // 70 degree vertical field of view.
         const val HORIZON = 0.48f
+        /** One lane dash in world distance; a lamp pair stands every [LAMP_EVERY] of them. */
+        const val DASH = 7f
+        const val LAMP_EVERY = 4
+        /** How high the view rises on a lift-off, and how far down the screen the horizon drops. */
+        const val LIFT_HEIGHT = 26f
+        const val LIFT_HORIZON = 0.14f
         const val CORRIDOR = 3.6f // 7.2-wide swept clearance, in road-local coordinates.
         fun approach(value: Float, target: Float, dt: Float, seconds: Float): Float =
             value + (target - value) * (1f - exp(-dt / seconds))

@@ -94,6 +94,14 @@ public class WebCanvasVideoRenderer(
     private val _events = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 8)
     override val events: Flow<RendererEvent> = _events
 
+    /**
+     * The canvas's backing store, in device pixels: the size [setViewport] set, or the canvas's own
+     * size before that. The engine lays subtitles out for it, so text lands in the bars and at the
+     * canvas's own pixel size (docs/subtitle-placement.md, rule 2).
+     */
+    override val outputSize: VideoSize?
+        get() = if (state != null && viewportWidth > 0 && viewportHeight > 0) VideoSize(viewportWidth, viewportHeight) else null
+
     /** Software only. A browser's own hardware decoder is WebCodecs' path and does not arrive here. */
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 
@@ -189,10 +197,11 @@ public class WebCanvasVideoRenderer(
     }
 
     /**
-     * Subtitles, drawn above the picture in output pixels and NOT with the picture's transform.
+     * Subtitles, drawn above the picture and the bars, NOT with the picture's transform.
      *
-     * They are laid out for the viewport already, which is what `SubtitleOverlay` carrying its own
-     * viewport size means, so rotating or zooming them with the video would rotate the text too.
+     * The overlay's viewport maps onto the whole canvas, each axis on its own (rule 1 of
+     * docs/subtitle-placement.md). The engine lays it out for [outputSize], so the scale is 1 except
+     * between a resize and the engine's next layout.
      *
      * Uploaded only when [SubtitleOverlay.contentHash] changes, and each image crosses in ONE call:
      * its pixels are a Kotlin `ByteArray`, and Kotlin/Wasm has no typed-array bridge, so the bytes
@@ -222,7 +231,9 @@ public class WebCanvasVideoRenderer(
             }
             overlayHash = current.contentHash
         }
-        webPaintOverlay(s)
+        val scaleX = if (current.viewportWidth > 0) viewportWidth.toFloat() / current.viewportWidth else 1f
+        val scaleY = if (current.viewportHeight > 0) viewportHeight.toFloat() / current.viewportHeight else 1f
+        webPaintOverlay(s, scaleX, scaleY)
     }
 
     /**
@@ -388,15 +399,15 @@ private external fun webOverlayBytes(handle: JsAny?, packed: String)
 @JsFun("(s, h) => { if (h) { h.ctx.putImageData(h.image, 0, 0); s.overlay.push(h); } }")
 private external fun webOverlayCommit(state: JsAny, handle: JsAny?)
 
-/** Straight over the picture, untransformed: the overlay was laid out in output pixels already. */
+/** Over the picture, untransformed, with the overlay's viewport scaled onto the whole canvas. */
 @JsFun(
-    """(s) => {
+    """(s, sx, sy) => {
       const g = s.ctx;
       g.setTransform(1, 0, 0, 1, 0, 0);
-      for (const o of s.overlay) g.drawImage(o.canvas, o.x, o.y);
+      for (const o of s.overlay) g.drawImage(o.canvas, o.x * sx, o.y * sy, o.canvas.width * sx, o.canvas.height * sy);
     }""",
 )
-private external fun webPaintOverlay(state: JsAny)
+private external fun webPaintOverlay(state: JsAny, scaleX: Float, scaleY: Float)
 
 @JsFun("(s) => { s.overlay = []; }")
 private external fun webClearOverlay(state: JsAny)

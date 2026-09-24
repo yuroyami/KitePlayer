@@ -274,6 +274,8 @@ final class io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer : io.git
 
     final val events // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.events|{}events[0]
         final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.events.<get-events>|<get-events>(){}[0]
+    final val outputSize // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.outputSize|{}outputSize[0]
+        final fun <get-outputSize>(): io.github.yuroyami.kiteplayer/VideoSize? // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.outputSize.<get-outputSize>|<get-outputSize>(){}[0]
 
     final var failedFrames // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.failedFrames|{}failedFrames[0]
         final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]

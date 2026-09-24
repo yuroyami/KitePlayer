@@ -105,6 +105,7 @@ changes shape, for example after a rotation.
 | `MetalVideoRenderer` | the layer's drawable, or the viewport that its host sets | yes |
 | `KiteVideo`, the Compose video composable | the composable | yes |
 | `AwtCanvasVideoRenderer` | the canvas | yes, in device pixels |
+| `WebCanvasVideoRenderer` | the canvas | yes, in device pixels, from `setViewport` or the canvas's own size |
 | `AndroidSurfaceVideoRenderer`, drawing subtitles itself | the Surface | yes, from its first frame |
 | `KitePlayerView` on Android | the view; a separate layer over the whole view draws the subtitles | yes, the view gives its size to the renderer through `setViewport` |
 | `AppKitVideoRenderer`, `UIKitVideoRenderer` | the picture's own image | no, so subtitles stay on the picture |
@@ -117,6 +118,8 @@ Multiplatform shares no test code between modules, so change every copy in the s
 renderer and view runs the contract through a subclass of its own:
 
 - the AWT renderer, in `kiteplayer-output` `jvmTest`
+- the web canvas renderer, through a canvas that records each draw, in `kiteplayer-output`
+  `wasmJsTest`, in Node and in a browser
 - the Core Graphics renderer and the placement function of the Metal renderer, in
   `kiteplayer-output` `macosArm64Test`
 - the Android surface renderer, through a canvas that records each draw, in `kiteplayer-output`

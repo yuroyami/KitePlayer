@@ -60,7 +60,8 @@ public fun interface WebFramePainter {
  * This is the first web renderer tier: a canvas under the Compose controls, not the single Compose surface where
  * clip, alpha and rotation apply to the video pixels themselves. That is tier two and is not this.
  * There is also no hardware path: the wasm decoder is software by construction, so
- * [supportedHardwareSurfaces] is empty and always will be on this renderer.
+ * [supportedHardwareSurfaces] is empty and always will be on this renderer. The picture controls in
+ * [io.github.yuroyami.kiteplayer.VideoAdjustments] are not applied either.
  *
  * Not thread-safe, and on the web that is not a constraint: there are no threads. `present` is
  * already `suspend` and runs on the event loop with no worker, no dispatcher and no `runBlocking`.

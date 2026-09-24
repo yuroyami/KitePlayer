@@ -7,6 +7,7 @@ import android.opengl.EGLDisplay
 import android.opengl.EGLSurface
 import android.opengl.GLES20
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.yuroyami.kiteplayer.VideoAdjustments
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.nio.ByteBuffer
@@ -14,6 +15,7 @@ import java.nio.ByteOrder
 import kotlin.math.abs
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -141,6 +143,8 @@ class AndroidGlRenderQualityDeviceTest {
             debandSeed: Float = 7f,
             bicubic: Boolean = false,
             colourOffset: Float = 0f,
+            /** The blit's packed picture controls; when set, it replaces [colourOffset]. */
+            adjust: FloatArray? = null,
             repeat: Int = 1,
         ): IntArray {
             require(source.size == sourceWidth * sourceHeight)
@@ -161,9 +165,19 @@ class AndroidGlRenderQualityDeviceTest {
             GLES20.glUniform1i(uniform("uTexture"), 0)
             GLES20.glUniformMatrix4fv(uniform("uTexMatrix"), 1, false, IDENTITY_4X4, 0)
             GLES20.glUniform2f(uniform("uSourceSize"), sourceWidth.toFloat(), sourceHeight.toFloat())
-            GLES20.glUniformMatrix3fv(uniform("uColorMatrix"), 1, false, IDENTITY_3X3, 0)
-            GLES20.glUniform3f(uniform("uColorOffset"), colourOffset, colourOffset, colourOffset)
-            GLES20.glUniform1f(uniform("uColorEnabled"), if (colourOffset != 0f) 1f else 0f)
+            if (adjust != null) {
+                // Exactly the blit's upload of GlState.packGlAdjust.
+                GLES20.glUniformMatrix3fv(uniform("uColorMatrix"), 1, false, adjust, 0)
+                GLES20.glUniform3f(uniform("uColorOffset"), adjust[9], adjust[10], adjust[11])
+                GLES20.glUniform1f(uniform("uColorEnabled"), adjust[12])
+                GLES20.glUniform1f(uniform("uGammaExponent"), adjust[13])
+                GLES20.glUniform1f(uniform("uGammaEnabled"), adjust[14])
+            } else {
+                GLES20.glUniformMatrix3fv(uniform("uColorMatrix"), 1, false, IDENTITY_3X3, 0)
+                GLES20.glUniform3f(uniform("uColorOffset"), colourOffset, colourOffset, colourOffset)
+                GLES20.glUniform1f(uniform("uColorEnabled"), if (colourOffset != 0f) 1f else 0f)
+                GLES20.glUniform1f(uniform("uGammaEnabled"), 0f)
+            }
             GLES20.glUniform1f(uniform("uDitherStep"), ditherStep)
             GLES20.glUniform1f(uniform("uDebandThreshold"), debandThreshold)
             GLES20.glUniform1f(uniform("uDebandRange"), debandRange)
@@ -436,6 +450,32 @@ class AndroidGlRenderQualityDeviceTest {
             source,
             gl.render(source, 16, 16, bicubic = true),
             "the kernel must be the identity at 1:1, where every tap sits on a texel centre",
+        )
+    }
+
+    /**
+     * The gamma golden, with the Metal golden's numbers: grey 128 with gamma 2 writes 180 on every
+     * channel within one level. The uniforms come from [GlState.packGlAdjust], so the pack and the
+     * shader are proven together, and a curve that compiles but never runs leaves 128 here.
+     */
+    @Test
+    fun gammaTwoLiftsMidGreyTo180AndGammaOneIsBitExact() = harness { gl ->
+        val source = IntArray(8 * 8) { grey(128) }
+        val curved = gl.render(source, 8, 8, adjust = GlState.packGlAdjust(VideoAdjustments(gamma = 2f)))
+        val channels = curved.flatMap { listOf(red(it), (it ushr 16) and 0xFF, (it ushr 8) and 0xFF) }
+        assertTrue(
+            channels.all { abs(it - 180) <= 1 },
+            "gamma 2 must lift grey 128 to 180 within 1, got ${channels.distinct().sorted()}",
+        )
+        // A gamma of 1 packs to null, which the blit uploads as both steps off.
+        assertNull(GlState.packGlAdjust(VideoAdjustments(gamma = 1f)), "a gamma of 1 must pack to off")
+        assertContentEquals(source, gl.render(source, 8, 8), "the untouched write must be the source")
+        // Beside a live matrix, a gamma of 1 must still skip the curve: brightness through the pack
+        // writes the same bytes as the same lift through the plain matrix upload.
+        assertContentEquals(
+            gl.render(source, 8, 8, colourOffset = 0.1f),
+            gl.render(source, 8, 8, adjust = GlState.packGlAdjust(VideoAdjustments(brightness = 0.1f))),
+            "a gamma of 1 changed a picture the matrix alone had already written",
         )
     }
 }

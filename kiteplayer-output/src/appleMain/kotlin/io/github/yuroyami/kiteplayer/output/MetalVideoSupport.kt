@@ -141,6 +141,8 @@ struct AdjustUniforms {
     float m[9];         // row-major 3x3 over unit-domain RGB: the engine's one colour-matrix law
     float offset[3];    // unit-domain translation per channel
     int   enabled;      // 0 skips the multiply entirely, keeping identity bit-exact for the instrument
+    float gammaExponent;// one over the gamma control, the power each channel is raised to
+    int   gammaEnabled; // 0 skips the power curve entirely, for the same reason as enabled
 };
 
 struct QualityUniforms {
@@ -457,6 +459,12 @@ fragment float4 kp_picture(
             adj.m[6] * p.x + adj.m[7] * p.y + adj.m[8] * p.z + adj.offset[2]
         ), 0.0, 1.0);
     }
+    /* The gamma curve, on the matrix's output and only when asked, so a gamma of 1 writes the
+     * same bits as before. The floor at zero is for the kernel, whose ringing can dip below
+     * black, where the power is undefined. */
+    if (adj.gammaEnabled != 0) {
+        rgb = pow(max(rgb, 0.0), float3(adj.gammaExponent));
+    }
     /* Last, after every stage that could have produced an off-grid value: tone mapping, the eq
      * matrix and the YUV conversion all land between output steps, and this is the only place that
      * knows what a step is worth. Clamped again because the pattern can push a 0.0 or a 1.0 out of
@@ -477,10 +485,11 @@ fragment float4 kp_overlay(
 """
 
 /**
- * AdjustUniforms with enabled=0: the shader skips the multiply, keeping the unadjusted path
- * bit-exact for the colour instrument. One shared array, because it never changes.
+ * AdjustUniforms with both flags 0: the shader skips the multiply and the gamma curve, keeping
+ * the unadjusted path bit-exact for the colour instrument. One shared array, because it never
+ * changes.
  */
-internal val DISABLED_ADJUST_UNIFORMS: FloatArray = FloatArray(13)
+internal val DISABLED_ADJUST_UNIFORMS: FloatArray = FloatArray(15)
 
 /** ToneUniforms with mode=0: the SDR path skips tone mapping entirely, bit-exact. */
 internal val DISABLED_TONE_UNIFORMS: FloatArray = FloatArray(4)
@@ -571,17 +580,22 @@ internal fun packToneUniforms(colorSpace: ColorSpaceInfo): FloatArray {
 }
 
 /**
- * Packs the engine's one colour-matrix law into the shader's AdjustUniforms layout: nine
- * row-major 3x3 coefficients, three unit-domain offsets, and the enabled flag as int bits. The
- * 4x5 matrix's alpha row and column are dropped because the shader owns alpha as constant 1.
+ * Packs the engine's one colour-matrix law and its gamma curve into the shader's AdjustUniforms
+ * layout: nine row-major 3x3 coefficients, three unit-domain offsets, the matrix flag as int bits,
+ * then the curve's exponent (one over gamma) and its own flag. The 4x5 matrix's alpha row and
+ * column are dropped because the shader owns alpha as constant 1. Each step has its own flag, so
+ * a neutral step is skipped even when the other one runs.
  */
 internal fun packAdjustUniforms(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments): FloatArray {
     if (adjustments.isIdentity) return DISABLED_ADJUST_UNIFORMS
     val m = adjustments.toColorMatrix()
+    val matrixNeutral = adjustments.copy(gamma = 1f).isIdentity
     return floatArrayOf(
         m[0], m[1], m[2], m[5], m[6], m[7], m[10], m[11], m[12],
         m[4], m[9], m[14],
-        Float.fromBits(1),
+        Float.fromBits(if (matrixNeutral) 0 else 1),
+        1f / adjustments.gamma,
+        Float.fromBits(if (adjustments.gamma != 1f) 1 else 0),
     )
 }
 

@@ -394,7 +394,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Sets the live picture controls: brightness, contrast, saturation and hue, mpv's `eq`.
+     * Sets the live picture controls: brightness, contrast, saturation, hue and gamma, mpv's `eq`.
      *
      * Legal at any time, renderer attached or not, exactly like [setVideoScale]: the value
      * belongs to the player, every renderer is told it on attach, and a change lands on the very
@@ -402,7 +402,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * [VideoAdjustments.Identity] to reset. Published as [PlayerSnapshot.videoAdjustments].
      *
      * @throws IllegalArgumentException outside the documented ranges: brightness -1..1,
-     *         contrast 0..2, saturation 0..2, hue -180..180, all finite.
+     *         contrast 0..2, saturation 0..2, hue -180..180, all finite. Gamma needs no check
+     *         here, because [VideoAdjustments] refuses a gamma outside 0.5..2 when it is built.
      */
     public fun setVideoAdjustments(value: VideoAdjustments) {
         require(value.brightness.isFinite() && value.brightness in -1f..1f) {

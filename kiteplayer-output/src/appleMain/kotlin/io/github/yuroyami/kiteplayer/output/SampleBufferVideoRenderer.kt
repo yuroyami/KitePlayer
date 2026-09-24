@@ -98,6 +98,9 @@ import platform.posix.memcpy
  *
  * Formats: NV12, planar 4:2:0 whose chroma is interleaved on the way in, and BGRA. Anything else
  * is refused, which the engine counts as a dropped frame rather than a failure.
+ *
+ * The picture controls in [io.github.yuroyami.kiteplayer.VideoAdjustments] are not applied here:
+ * the layer shows the decoded picture as it is.
  */
 public class SampleBufferVideoRenderer internal constructor(
     private val resolve: MetalPictureResolver,

@@ -2,17 +2,18 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.VideoAdjustments
 import io.github.yuroyami.kiteplayer.VideoTransform
+import kotlin.math.pow
 
 /**
  * The picture controls and framing law for the UIKit and AppKit CPU fallbacks.
  *
  * Both fallbacks draw with Core Graphics rather than a shader, so the same law the Metal path
- * packs into uniforms is written here once for bytes and Core Graphics rectangles. Gamma stays
- * absent by design, exactly as [VideoAdjustments] says.
+ * packs into uniforms is written here once for bytes and Core Graphics rectangles. These
+ * fallbacks are the correctness reference the Metal renderer is checked against.
  */
 
 /**
- * Applies [VideoAdjustments.toColorMatrix] to tightly packed RGBA bytes.
+ * Applies [VideoAdjustments.toColorMatrix], then the gamma curve, to tightly packed RGBA bytes.
  *
  * Returns [rgba] itself for the neutral value, so an untouched picture copies nothing. Alpha is
  * carried through: the matrix's alpha row is identity and these buffers are opaque anyway.
@@ -24,19 +25,41 @@ internal fun adjustRgba(rgba: ByteArray, adjustments: VideoAdjustments): ByteArr
     val offsetR = m[4] * 255f
     val offsetG = m[9] * 255f
     val offsetB = m[14] * 255f
+    val curve = if (adjustments.gamma != 1f) gammaCurve(adjustments.gamma) else null
     val out = ByteArray(rgba.size)
     var at = 0
     while (at + 3 < rgba.size) {
         val r = (rgba[at].toInt() and 0xFF).toFloat()
         val g = (rgba[at + 1].toInt() and 0xFF).toFloat()
         val b = (rgba[at + 2].toInt() and 0xFF).toFloat()
-        out[at] = clampToByte(m[0] * r + m[1] * g + m[2] * b + offsetR)
-        out[at + 1] = clampToByte(m[5] * r + m[6] * g + m[7] * b + offsetG)
-        out[at + 2] = clampToByte(m[10] * r + m[11] * g + m[12] * b + offsetB)
+        out[at] = toByte(m[0] * r + m[1] * g + m[2] * b + offsetR, curve)
+        out[at + 1] = toByte(m[5] * r + m[6] * g + m[7] * b + offsetG, curve)
+        out[at + 2] = toByte(m[10] * r + m[11] * g + m[12] * b + offsetB, curve)
         out[at + 3] = rgba[at + 3]
         at += 4
     }
     return out
+}
+
+/** Gamma lookup steps: sixteen per input level, so a whole level lands exactly on a step. */
+private const val GAMMA_STEPS = 4080
+
+/**
+ * The gamma curve as a lookup over 0..255, built once per picture. A power per channel per pixel
+ * would cost more than the rest of this pass together, and the table is a few thousand of them.
+ */
+private fun gammaCurve(gamma: Float): FloatArray {
+    val exponent = 1.0 / gamma
+    return FloatArray(GAMMA_STEPS + 1) { step ->
+        (255.0 * (step.toDouble() / GAMMA_STEPS).pow(exponent)).toFloat()
+    }
+}
+
+/** The matrix's result as a byte, through the gamma curve when there is one. */
+private fun toByte(value: Float, curve: FloatArray?): Byte {
+    if (curve == null) return clampToByte(value)
+    val clamped = value.coerceIn(0f, 255f)
+    return clampToByte(curve[(clamped * (GAMMA_STEPS / 255f) + 0.5f).toInt()])
 }
 
 private fun clampToByte(value: Float): Byte {

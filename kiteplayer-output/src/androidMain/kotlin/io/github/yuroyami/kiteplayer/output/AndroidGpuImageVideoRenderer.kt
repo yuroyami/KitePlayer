@@ -598,6 +598,8 @@ internal class GlState private constructor(
     private val colorMatrixUniform: Int,
     private val colorOffsetUniform: Int,
     private val colorEnabledUniform: Int,
+    private val gammaExponentUniform: Int,
+    private val gammaEnabledUniform: Int,
     /** The packed colour law, written by setAdjustments on any thread. */
     private val adjust: AtomicReference<FloatArray?>,
     private val ditherStep: java.util.concurrent.atomic.AtomicReference<Float>,
@@ -721,10 +723,13 @@ internal class GlState private constructor(
             val packed = adjust.get()
             if (packed == null) {
                 GLES20.glUniform1f(colorEnabledUniform, 0f)
+                GLES20.glUniform1f(gammaEnabledUniform, 0f)
             } else {
                 GLES20.glUniformMatrix3fv(colorMatrixUniform, 1, false, packed, 0)
                 GLES20.glUniform3f(colorOffsetUniform, packed[9], packed[10], packed[11])
-                GLES20.glUniform1f(colorEnabledUniform, 1f)
+                GLES20.glUniform1f(colorEnabledUniform, packed[12])
+                GLES20.glUniform1f(gammaExponentUniform, packed[13])
+                GLES20.glUniform1f(gammaEnabledUniform, packed[14])
             }
             // The source's own size, which is what makes a tap offset mean one SOURCE texel
             // rather than one output texel. The vertex half turns it into the two step vectors.
@@ -1020,6 +1025,8 @@ internal class GlState private constructor(
             uniform mat3 uColorMatrix;
             uniform vec3 uColorOffset;
             uniform float uColorEnabled;
+            uniform float uGammaExponent;
+            uniform float uGammaEnabled;
             uniform float uDitherStep;
             uniform float uDebandThreshold;
             uniform float uDebandRange;
@@ -1134,6 +1141,12 @@ internal class GlState private constructor(
                 if (uColorEnabled > 0.5) {
                     c.rgb = clamp(uColorMatrix * c.rgb + uColorOffset, 0.0, 1.0);
                 }
+                /* The gamma curve, on the matrix's output and only when asked, so a gamma of 1
+                 * writes the same bits as before. The floor at zero is for the kernel, whose
+                 * ringing can dip below black, where the power is undefined. */
+                if (uGammaEnabled > 0.5) {
+                    c.rgb = pow(max(c.rgb, 0.0), vec3(uGammaExponent));
+                }
                 /* Last, and only when asked: one output step of centred ordered noise, the same
                  * amplitude and the same centring law as the Metal path. Zero is the
                  * plain write, bit for bit. */
@@ -1151,10 +1164,11 @@ internal class GlState private constructor(
         const val TEST_FRAGMENT_SHADER = PLAIN_SAMPLER_HEADER + FRAGMENT_BODY
 
         /**
-         * The Android half: the engine's ONE colour-matrix law, packed for the blit.
-         * Nine COLUMN-major 3x3 values plus three unit-domain offsets, exactly the Metal
-         * pack transposed, because GLES2 refuses transpose=true. Null means disabled, which
-         * keeps the untouched path bit-exact.
+         * The Android half: the engine's ONE colour-matrix law and its gamma curve, packed for
+         * the blit. Nine COLUMN-major 3x3 values, three unit-domain offsets and the matrix flag,
+         * exactly the Metal pack transposed, because GLES2 refuses transpose=true. Then the
+         * curve's exponent, one over gamma, and its own flag. Null means both are disabled,
+         * which keeps the untouched path bit-exact.
          */
         fun packGlAdjust(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments): FloatArray? {
             if (adjustments.isIdentity) return null
@@ -1164,6 +1178,9 @@ internal class GlState private constructor(
                 m[1], m[6], m[11],
                 m[2], m[7], m[12],
                 m[4], m[9], m[14],
+                if (adjustments.copy(gamma = 1f).isIdentity) 0f else 1f,
+                1f / adjustments.gamma,
+                if (adjustments.gamma != 1f) 1f else 0f,
             )
         }
 
@@ -1264,6 +1281,8 @@ internal class GlState private constructor(
                 val colorMatrixUniform = GLES20.glGetUniformLocation(program, "uColorMatrix")
                 val colorOffsetUniform = GLES20.glGetUniformLocation(program, "uColorOffset")
                 val colorEnabledUniform = GLES20.glGetUniformLocation(program, "uColorEnabled")
+                val gammaExponentUniform = GLES20.glGetUniformLocation(program, "uGammaExponent")
+                val gammaEnabledUniform = GLES20.glGetUniformLocation(program, "uGammaEnabled")
                 val ditherStepUniform = GLES20.glGetUniformLocation(program, "uDitherStep")
                 val debandThresholdUniform = GLES20.glGetUniformLocation(program, "uDebandThreshold")
                 val debandRangeUniform = GLES20.glGetUniformLocation(program, "uDebandRange")
@@ -1300,6 +1319,8 @@ internal class GlState private constructor(
                     colorMatrixUniform = colorMatrixUniform,
                     colorOffsetUniform = colorOffsetUniform,
                     colorEnabledUniform = colorEnabledUniform,
+                    gammaExponentUniform = gammaExponentUniform,
+                    gammaEnabledUniform = gammaEnabledUniform,
                     adjust = adjust,
                     ditherStep = ditherStep,
                     ditherStepUniform = ditherStepUniform,

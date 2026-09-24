@@ -5,16 +5,22 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * The picture controls a viewer expects from a real player: brightness, contrast, saturation and
- * hue, live, without touching the decoder (mpv's `eq`). The engine owns the value and every
- * attached renderer is told it, exactly like [VideoScale]; the renderers apply it as one colour
- * matrix per drawn frame, which is why a change is instant and free of pipeline work.
+ * The picture controls a viewer expects from a real player: brightness, contrast, saturation, hue
+ * and gamma, live, without touching the decoder (mpv's `eq`). The engine owns the value and every
+ * attached renderer is told it, exactly like [VideoScale]; the renderers apply it per drawn frame,
+ * which is why a change is instant and free of pipeline work.
  *
- * All four compose into a single affine colour transform, and [toColorMatrix] is the ONE place
- * that transform is written down, so no two renderers can disagree about what saturation means.
+ * Brightness, contrast, saturation and hue compose into a single affine colour transform, and
+ * [toColorMatrix] is the ONE place that transform is written down, so no two renderers can
+ * disagree about what saturation means. [gamma] is a power curve, which no matrix can express, so
+ * it is a second step that runs on the matrix's output.
  *
- * Gamma is deliberately absent: it is not affine, so it cannot ride this matrix, and a control
- * honoured by some renderers and ignored by others would be worse than none.
+ * Not every renderer can apply every control:
+ * - The Metal renderer, the Android GPU image renderer and the Apple Core Graphics renderers apply
+ *   all five.
+ * - The Android view renderer and the Compose video draw apply the matrix through the platform's
+ *   own colour filter. That filter has no power curve, so they ignore [gamma].
+ * - The desktop AWT renderer, the web canvas renderer and the sample-buffer renderer apply none.
  */
 public data class VideoAdjustments(
     /** Additive lift, -1 to 1. 0 is neutral; positive lightens. */
@@ -25,16 +31,26 @@ public data class VideoAdjustments(
     val saturation: Float = 1f,
     /** Rotation about the luma axis in degrees, -180 to 180. 0 is neutral. */
     val hueDegrees: Float = 0f,
+    /** Power curve on each channel, 0.5 to 2. 1 is neutral; above 1 lifts the mid tones. */
+    val gamma: Float = 1f,
 ) {
-    /** True for the neutral value, which renderers use to skip the multiply entirely. */
+    init {
+        require(gamma.isFinite() && gamma in 0.5f..2f) { "gamma must be within 0.5..2, was $gamma" }
+    }
+
+    /** True for the neutral value, which renderers use to skip every step entirely. */
     public val isIdentity: Boolean
-        get() = brightness == 0f && contrast == 1f && saturation == 1f && hueDegrees == 0f
+        get() = brightness == 0f && contrast == 1f && saturation == 1f && hueDegrees == 0f &&
+            gamma == 1f
 
     /**
-     * The whole adjustment as one 4x5 row-major colour matrix over non-premultiplied RGBA in the
-     * UNIT domain: `r' = m[0]r + m[1]g + m[2]b + m[3]a + m[4]`, rows r, g, b, a. Offsets are in
-     * 0..1; a consumer whose convention offsets in 0..255 (Android's ColorMatrix, Compose's)
-     * multiplies the fifth column by 255 and changes nothing else.
+     * Brightness, contrast, saturation and hue as one 4x5 row-major colour matrix over
+     * non-premultiplied RGBA in the UNIT domain: `r' = m[0]r + m[1]g + m[2]b + m[3]a + m[4]`, rows
+     * r, g, b, a. Offsets are in 0..1; a consumer whose convention offsets in 0..255 (Android's
+     * ColorMatrix, Compose's) multiplies the fifth column by 255 and changes nothing else.
+     *
+     * [gamma] is not in the matrix. A renderer that applies it raises each channel of the matrix's
+     * clamped output to the power `1 / gamma`.
      *
      * Order, applied to a pixel: saturation and hue about the luma axis first, then contrast
      * about mid-grey, then the brightness lift. Grey stays grey under saturation and hue alone,

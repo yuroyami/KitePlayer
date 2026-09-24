@@ -99,6 +99,7 @@ public data class PlayerMemento(
         put("adjust.contrast", videoAdjustments.contrast.toString())
         put("adjust.saturation", videoAdjustments.saturation.toString())
         put("adjust.hueDegrees", videoAdjustments.hueDegrees.toString())
+        put("adjust.gamma", videoAdjustments.gamma.toString())
         put("quality.dither", renderQuality.dither.toString())
         put("quality.deband", renderQuality.deband.toString())
         put("quality.debandThreshold", renderQuality.debandThreshold.toString())
@@ -196,6 +197,7 @@ public data class PlayerMemento(
                     contrast = properties["adjust.contrast"]?.toFloat() ?: 1f,
                     saturation = properties["adjust.saturation"]?.toFloat() ?: 1f,
                     hueDegrees = properties["adjust.hueDegrees"]?.toFloat() ?: 0f,
+                    gamma = properties["adjust.gamma"]?.toFloat() ?: 1f,
                 ),
                 renderQuality = RenderQuality(
                     dither = properties["quality.dither"]?.toBooleanStrict() ?: false,

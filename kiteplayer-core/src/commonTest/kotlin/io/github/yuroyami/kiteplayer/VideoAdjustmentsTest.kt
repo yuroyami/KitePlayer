@@ -2,7 +2,10 @@ package io.github.yuroyami.kiteplayer
 
 import kotlin.math.abs
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -90,5 +93,29 @@ class VideoAdjustmentsTest {
             assertEquals(0f, matrix[19], "alpha row offset")
             assertEquals(0f, matrix[3], "no colour row reads alpha")
         }
+    }
+
+    @Test
+    fun gammaOutsideItsRangeThrowsAtConstruction() {
+        for (gamma in listOf(0.49f, 2.01f, 0f, -1f, Float.NaN, Float.POSITIVE_INFINITY)) {
+            assertFailsWith<IllegalArgumentException>("gamma $gamma must be refused") {
+                VideoAdjustments(gamma = gamma)
+            }
+        }
+        // Both ends of the range are legal.
+        assertEquals(0.5f, VideoAdjustments(gamma = 0.5f).gamma)
+        assertEquals(2f, VideoAdjustments(gamma = 2f).gamma)
+    }
+
+    @Test
+    fun gammaCountsForIdentityAndStaysOutOfTheMatrix() {
+        assertTrue(VideoAdjustments(gamma = 1f).isIdentity, "a gamma of 1 is neutral")
+        val curved = VideoAdjustments(gamma = 2f)
+        assertFalse(curved.isIdentity, "a gamma of 2 is not neutral, so no renderer may skip it")
+        assertContentEquals(
+            VideoAdjustments.Identity.toColorMatrix(),
+            curved.toColorMatrix(),
+            "gamma is a power curve after the matrix and must not change the matrix",
+        )
     }
 }

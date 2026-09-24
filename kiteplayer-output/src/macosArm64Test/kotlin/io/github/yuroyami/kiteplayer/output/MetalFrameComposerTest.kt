@@ -357,6 +357,115 @@ class MetalFrameComposerTest {
         )
     }
 
+    /** Full range, so a luma byte of v renders as v on every channel before any adjustment. */
+    private fun fullRange709() = ColorSpaceInfo(
+        matrix = ColorMatrix.Bt709,
+        primaries = ColorPrimaries.Bt709,
+        transfer = ColorTransfer.Bt709,
+        fullRange = true,
+    )
+
+    @Test
+    fun gammaTwoLiftsMidGreyTo180AndGammaOneIsBitExact() {
+        // The golden for the power curve. Full-range grey 128 is 0.502 on every channel, and
+        // 0.502 to the power 1/2 is 0.708, which is 180.7 of 255. A curve that compiles and is
+        // never applied leaves 128 here, which is the failure this test exists to catch.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val frame = TestFrame(64, 64, fullRange709())
+        val grey = { solidNv12(64, 64, y = 128, cb = 128, cr = 128) }
+
+        val plain = render(composer, frame, grey())
+        assertEquals(128, bgraAt(plain, 64, 32, 32)[1], "the untouched full-range grey must be 128")
+
+        val curved = render(
+            composer, frame, grey(),
+            adjustUniforms = packAdjustUniforms(io.github.yuroyami.kiteplayer.VideoAdjustments(gamma = 2f)),
+        )
+        val pixel = bgraAt(curved, 64, 32, 32)
+        for (channel in 0..2) {
+            assertTrue(
+                abs(pixel[channel] - 180) <= 1,
+                "gamma 2 must lift grey 128 to 180 within 1, channel $channel was ${pixel.toList()}",
+            )
+        }
+
+        val neutral = render(
+            composer, frame, grey(),
+            adjustUniforms = packAdjustUniforms(io.github.yuroyami.kiteplayer.VideoAdjustments(gamma = 1f)),
+        )
+        assertTrue(plain.contentEquals(neutral), "gamma 1 must write the untouched picture byte for byte")
+    }
+
+    @Test
+    fun gammaPacksItsOwnExponentAndFlagBesideTheMatrix() {
+        // The layout the shader reads: nine matrix words, three offsets, the matrix flag, then the
+        // exponent and the gamma flag. Each step has its own flag, so a gamma of 1 skips the curve
+        // even while the matrix runs, and a gamma alone skips the matrix.
+        val curveOnly = packAdjustUniforms(io.github.yuroyami.kiteplayer.VideoAdjustments(gamma = 2f))
+        assertEquals(15, curveOnly.size, "the adjust block must carry the gamma words")
+        assertEquals(0, curveOnly[12].toRawBits(), "a gamma alone must leave the matrix step off")
+        assertEquals(0.5f, curveOnly[13], "the exponent is one over gamma")
+        assertEquals(1, curveOnly[14].toRawBits(), "a gamma of 2 must turn the curve on")
+
+        val matrixOnly = packAdjustUniforms(io.github.yuroyami.kiteplayer.VideoAdjustments(brightness = 0.25f))
+        assertEquals(1, matrixOnly[12].toRawBits(), "brightness must turn the matrix step on")
+        assertEquals(0, matrixOnly[14].toRawBits(), "a gamma of 1 must leave the curve off")
+        assertEquals(15, DISABLED_ADJUST_UNIFORMS.size, "the disabled block must match the shader's struct")
+    }
+
+    @Test
+    fun metalGammaAgreesWithTheCoreGraphicsFallback() {
+        // The Core Graphics fallback is the correctness reference, so the GPU curve is checked
+        // against it over every 8-bit grey: the plain Metal render of a ramp goes through the CPU
+        // law, and must land within one level of what the shader writes for the same settings.
+        // The contrast case also pins the ORDER: the matrix first, then the curve on its output.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val width = 256
+        val frame = TestFrame(width, 2, fullRange709())
+        val ramp = { lumaNv12(width, 2) { x, _ -> x } }
+        val plain = render(composer, frame, ramp(), targetWidth = width, targetHeight = 2)
+        for (x in 0 until width) {
+            assertEquals(x, bgraAt(plain, width, x, 0)[1], "the plain ramp must be the identity at $x")
+        }
+
+        for (adjustments in listOf(
+            io.github.yuroyami.kiteplayer.VideoAdjustments(gamma = 2f),
+            io.github.yuroyami.kiteplayer.VideoAdjustments(gamma = 0.5f),
+            io.github.yuroyami.kiteplayer.VideoAdjustments(contrast = 1.3f, gamma = 1.5f),
+        )) {
+            val gpu = render(
+                composer, frame, ramp(), targetWidth = width, targetHeight = 2,
+                adjustUniforms = packAdjustUniforms(adjustments),
+            )
+            // Grey, so the BGRA and RGBA orders hold the same three values.
+            val cpu = adjustRgba(plain, adjustments)
+            val misses = (0 until width).filter { x ->
+                abs(bgraAt(gpu, width, x, 0)[1] - bgraAt(cpu, width, x, 0)[1]) > 1
+            }
+            assertEquals(
+                emptyList(),
+                misses,
+                "Metal and the CPU fallback disagree by more than one level for $adjustments at " +
+                    misses.take(8).joinToString { x ->
+                        "$x: gpu ${bgraAt(gpu, width, x, 0)[1]} cpu ${bgraAt(cpu, width, x, 0)[1]}"
+                    },
+            )
+        }
+        // The CPU golden on its own, for the same grey the GPU golden uses.
+        val cpuGrey = adjustRgba(
+            byteArrayOf(128.toByte(), 128.toByte(), 128.toByte(), -1),
+            io.github.yuroyami.kiteplayer.VideoAdjustments(gamma = 2f),
+        )
+        for (channel in 0..2) {
+            assertTrue(
+                abs((cpuGrey[channel].toInt() and 0xFF) - 180) <= 1,
+                "the CPU curve must lift 128 to 180 within 1, got ${cpuGrey.map { it.toInt() and 0xFF }}",
+            )
+        }
+    }
+
     // The Kotlin mirror of the shader's tone-mapping law, for expected values.
     @Test
     fun `dithering off writes exactly the pixels it always did`() {

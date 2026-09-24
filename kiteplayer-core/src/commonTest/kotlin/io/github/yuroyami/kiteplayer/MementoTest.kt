@@ -252,7 +252,7 @@ class MementoTest {
             subtitleStyle = SubtitleStyleOverride(fontFamily = "Serif", bold = true, primaryColor = -1),
             videoScale = VideoScale.Stretch,
             videoTransform = VideoTransform(aspectOverride = 2.35f, zoom = 1.1f),
-            videoAdjustments = VideoAdjustments(saturation = 0.5f),
+            videoAdjustments = VideoAdjustments(saturation = 0.5f, gamma = 1.6f),
             renderQuality = RenderQuality(dither = true, scaler = VideoScaler.CatmullRom),
             videoEnabled = false,
         )

@@ -63,7 +63,7 @@ public class KiteFFmpegMediaBackend(
         // match the headers KiteFFmpeg was compiled against, so every open fails and retrying is pointless.
         // Mapping it here is what stops the engine from reporting it as SourceUnavailable, which would
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
-        val source = mappingFFmpegRuntimeRejection { KiteFFmpegSource(openSource(media)) }
+        val source = mappingFFmpegRuntimeRejection { openItem(media).let { KiteFFmpegSource(it.source, it.bridge) } }
         source.onWarning = onWarning
         source.videoFilterDescription = media.videoFilter
         // The option echo's honest half: a key the demuxer never consumed did nothing,

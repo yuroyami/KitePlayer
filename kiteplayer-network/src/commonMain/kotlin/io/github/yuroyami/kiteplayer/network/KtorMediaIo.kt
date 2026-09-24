@@ -21,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Media bytes over http and https through Ktor (the Ktor half): the engine's
@@ -37,6 +38,10 @@ import kotlinx.coroutines.launch
  * Threading is [MediaIo]'s own contract: demux worker only, one call at a time. The streaming
  * body rides its own coroutine writing into a bounded pipe, so memory stays flat however far
  * the server runs ahead.
+ *
+ * Every wait has a limit from [HttpReaderPolicy]: the connection and the response headers of each
+ * request, a seek's included, and the next bytes of a response that has started. A wait that
+ * passes its limit fails with [KtorMediaIoException].
  */
 public class KtorMediaIo private constructor(
     private val client: HttpClient,
@@ -48,6 +53,7 @@ public class KtorMediaIo private constructor(
     firstBody: ByteReadChannel,
     firstJob: Job,
     private val scope: CoroutineScope,
+    private val policy: HttpReaderPolicy,
 ) : MediaIo {
 
     private var position = 0L
@@ -71,7 +77,12 @@ public class KtorMediaIo private constructor(
         val knownSize = size
         if (knownSize != null && position >= knownSize) return -1
         val channel = body?.takeIf { bodyPosition == position } ?: openAt(position)
-        val pulled = channel.readAvailable(into, offset, length)
+        // A response that stops sending is a failure, not a wait for ever.
+        val pulled = withTimeoutOrNull(policy.readTimeout) { channel.readAvailable(into, offset, length) }
+        if (pulled == null) {
+            dropBody()
+            throw KtorMediaIoException("no bytes from $uri for ${policy.readTimeout} at byte $position")
+        }
         if (pulled < 0) return -1
         bodyPosition += pulled
         position += pulled
@@ -95,12 +106,15 @@ public class KtorMediaIo private constructor(
         if (ownsClient) client.close()
     }
 
-    /** One ranged GET at [target], streamed through a bounded pipe. */
-    private fun openAt(target: Long): ByteReadChannel {
+    /**
+     * One ranged GET at [target], streamed through a bounded pipe. Returns once the response has
+     * begun, which [HttpReaderPolicy.connectTimeout] bounds: that is what limits a seek.
+     */
+    private suspend fun openAt(target: Long): ByteReadChannel {
         if (closed) throw KtorMediaIoException("openAt after close on $uri")
-        body?.cancel()
-        bodyJob?.cancel()
+        dropBody()
         val pipe = ByteChannel(autoFlush = true)
+        val answered = CompletableDeferred<Unit>()
         bodyJob = scope.launch {
             try {
                 client.prepareGet(uri) {
@@ -114,16 +128,36 @@ public class KtorMediaIo private constructor(
                             "server answered ${response.status} to a ranged read at byte $target of $uri",
                         )
                     }
+                    answered.complete(Unit)
                     response.bodyAsChannel().copyTo(pipe)
                     pipe.close()
                 }
             } catch (failure: Throwable) {
+                answered.completeExceptionally(failure)
                 pipe.close(failure)
             }
         }
         body = pipe
         bodyPosition = target
+        val answeredInTime = try {
+            withTimeoutOrNull(policy.connectTimeout) { answered.await() } != null
+        } catch (failure: Throwable) {
+            dropBody()
+            throw failure
+        }
+        if (!answeredInTime) {
+            dropBody()
+            throw KtorMediaIoException("no answer from $uri within ${policy.connectTimeout} for byte $target")
+        }
         return pipe
+    }
+
+    /** Gives up the current response. The next read opens a new one at [position]. */
+    private fun dropBody() {
+        body?.cancel()
+        bodyJob?.cancel()
+        body = null
+        bodyJob = null
     }
 
     public companion object {
@@ -132,12 +166,14 @@ public class KtorMediaIo private constructor(
          * body becomes the first stream, so a plain open costs exactly one request.
          *
          * A null [client] creates a private one from the platform engine on the classpath and
-         * closes it with the reader; a shared client stays the caller's to close.
+         * closes it with the reader; a shared client stays the caller's to close. [policy] limits
+         * every wait, this probe's included.
          */
         public suspend fun open(
             uri: String,
             client: HttpClient? = null,
             headers: Map<String, String> = emptyMap(),
+            policy: HttpReaderPolicy = HttpReaderPolicy(),
         ): KtorMediaIo {
             val ownsClient = client == null
             val http = client ?: HttpClient()
@@ -173,7 +209,8 @@ public class KtorMediaIo private constructor(
                 }
             }
             val (size, seekable) = try {
-                probe.await()
+                withTimeoutOrNull(policy.connectTimeout) { probe.await() }
+                    ?: throw KtorMediaIoException("no answer from $uri within ${policy.connectTimeout}")
             } catch (failure: Throwable) {
                 scope.cancel()
                 if (ownsClient) http.close()
@@ -189,6 +226,7 @@ public class KtorMediaIo private constructor(
                 firstBody = pipe,
                 firstJob = job,
                 scope = scope,
+                policy = policy,
             )
         }
     }
@@ -198,7 +236,8 @@ public class KtorMediaIo private constructor(
 public class KtorMediaIoException(message: String) : Exception(message)
 
 /**
- * Explicit HTTP/HTTPS resolver for a shared [HttpClient] or default request headers. Install
+ * Explicit HTTP/HTTPS resolver for a shared [HttpClient], default request headers or an
+ * [HttpReaderPolicy] of its own; the automatic provider uses the default policy. Install
  * it as [io.github.yuroyami.kiteplayer.NetworkConfig.ioResolver]; other URIs pass to the backend.
  * Adding this module already supplies automatic transport for standard opens, whose private
  * clients close with each reader. Use this resolver when the application owns a shared client
@@ -212,6 +251,8 @@ public class KtorMediaIoException(message: String) : Exception(message)
 public class KtorMediaIoResolver(
     private val client: HttpClient? = null,
     private val headers: Map<String, String> = emptyMap(),
+    /** How long each reader that this resolver makes waits for the server. */
+    private val policy: HttpReaderPolicy = HttpReaderPolicy(),
 ) : MediaIoResolver, AutoCloseable {
 
     private var created: HttpClient? = null
@@ -225,7 +266,7 @@ public class KtorMediaIoResolver(
         if (!uri.isHttpUri()) return null
         val itemNames = headers.keys.map { it.lowercase() }.toSet()
         val merged = this.headers.filterKeys { it.lowercase() !in itemNames } + headers
-        return KtorMediaIo.open(uri, shared, merged)
+        return KtorMediaIo.open(uri, shared, merged, policy)
     }
 
     /** Closes the client this resolver created, if it ever created one. Idempotent. */

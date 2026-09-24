@@ -68,13 +68,17 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         // The same open KiteFFmpegMediaBackend.open runs. This factory once dropped headers,
         // openOptions, formatHint and videoFilter and skipped the FFmpeg identity mapping, so the
         // documented SPI door behaved differently from the backend door for the same MediaItem.
-        val source = mappingFFmpegRuntimeRejection { KiteFFmpegSource(openSource(media)) }
+        val source = mappingFFmpegRuntimeRejection { openItem(media).let { KiteFFmpegSource(it.source, it.bridge) } }
         source.videoFilterDescription = media.videoFilter
         return source
     }
 }
 
-public class KiteFFmpegSource internal constructor(private val source: MediaSource) : PlayerMediaSource, RecordingCapable {
+public class KiteFFmpegSource internal constructor(
+    private val source: MediaSource,
+    /** The bridge that reads the item's own reader, when it has one. [interrupt] must reach it too. */
+    private val bridge: BlockingMediaIo? = null,
+) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null
 
@@ -216,6 +220,9 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
         // A single volatile write on the format context; KiteFFmpeg documents this as
         // the one member callable while another thread is blocked in a read or seek.
         source.interrupt()
+        // KiteFFmpeg reads that flag before it calls the bridge, never while the bridge waits
+        // inside the item's reader, so the bridge ends that wait itself.
+        bridge?.interrupt()
         return true
     }
 

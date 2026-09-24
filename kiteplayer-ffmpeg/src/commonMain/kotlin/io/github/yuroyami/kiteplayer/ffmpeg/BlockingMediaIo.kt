@@ -26,4 +26,12 @@ internal expect class BlockingMediaIo(io: MediaIo) : MediaByteSource {
     override fun read(into: ByteArray, offset: Int, length: Int): Int
     override fun seek(position: Long)
     override fun close()
+
+    /**
+     * Ends the read or seek in flight and makes every later one fail at once. FFmpeg's own
+     * interrupt flag cannot do this, because FFmpeg reads that flag before it calls the bridge and
+     * never while the bridge waits. One way, because the source this bridge feeds is being given
+     * up. Safe from any thread.
+     */
+    fun interrupt()
 }

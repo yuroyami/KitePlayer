@@ -25,10 +25,11 @@ set -euo pipefail
 #
 # Compared at the MAJOR, because that is the boundary the oracles move on: 8.0 and 8.1.2 produce the
 # same reference PCM, and 9.0 trims 384 trailing AAC frames that 8.x keeps. The player decodes
-# through KiteFFmpeg's own FFmpeg 8.x, so an oracle from another major is a different answer, and
-# a minor bump that once changed packet interleaving was answered by making that test robust. When
-# KiteFFmpeg moves to the next major, this number and CI's versioned formula move with it.
-EXPECTED_FFMPEG_SERIES=8
+# through KiteFFmpeg's own FFmpeg 9.x (KiteFFmpeg 0.3.0 carries 9.0.2), so an oracle from another
+# major is a different answer, and a minor bump that once changed packet interleaving was answered
+# by making that test robust. When KiteFFmpeg moves to the next major, this number and CI's ffmpeg
+# formula move with it.
+EXPECTED_FFMPEG_SERIES=9
 
 # Field 3 of ffmpeg's first line, reduced to the major. The regex tolerates a leading "n" and any
 # build suffix, so "8.0", "8.1.2" and "n8.0-static" all answer 8.

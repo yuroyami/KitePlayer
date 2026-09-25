@@ -88,14 +88,6 @@ Each line is something that bit someone. Delete a line when it stops being true.
   Adding a member to an interface in one module changes the dump of every published module that
   implements it, because the override joins their public surface too. The host gate catches it, one
   commit later than the change.
-- The Linux JVM step fails 19 of 91 with `kitecodec_jni is neither on java.library.path nor bundled
-  at /kiteffmpeg-native/linux-arm64` when the container script runs on an Apple-silicon Mac. The
-  published kiteffmpeg 0.2.0 JVM artifact bundles a JNI library for macos-arm64 only, and
-  `scripts/verify-central-consumer.sh` lists what each published artifact carries. Nothing in this
-  repository can fix it; resume with `--from=windows` and say so. This does NOT apply to CI: its
-  Linux JVM job runs only the media-free modules, which never load that library, so
-  `Linux x64 (JVM + Android host tests)` passing is the norm. Do not warn that a push will go red
-  because of this; it was predicted twice on 2026-09-20 and CI was green both times.
 
 ### Tests that fail for reasons that are not bugs
 

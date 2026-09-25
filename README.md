@@ -357,8 +357,10 @@ deepest automated coverage. A Kotlin/Native app on macOS gets its player from
 `KitePlayerPlatform.createOrNull()` and attaches a renderer from `kiteplayer-output`. Linux and
 Windows native have no audio output and no HTTPS, so there `createOrNull()` returns null. Pass
 `KiteFFmpegMediaBackend()` and your own `OutputBackend` to `KitePlayer.create` instead.
-The desktop JVM works on macOS arm64 only for now: the KiteFFmpeg 0.2.0 JVM artifact bundles only
-that native library, and the player cannot fill that gap.
+On the desktop JVM, the KiteFFmpeg 0.3.0 artifact carries the native library for macOS arm64,
+Linux x64, Linux arm64 and Windows x64. macOS arm64 plays. On Linux arm64 the whole FFmpeg backend
+suite passes in a container, which has no audio device, so that proves decoding only. Windows has
+been linked, not run.
 
 Every CI run of the format matrix writes a conformance table, uploaded as the
 `conformance-macos-host` artifact and printed in the run summary. It lists each clip, what was
@@ -369,7 +371,7 @@ asked of it, and what happened.
 - Adaptive streaming. Single file HTTP and HTTPS with an in-memory byte cache is there. HLS and
   DASH with bitrate switching and persistent caching are not.
 - Linux audio output. The engine plays; there is no ALSA sink.
-- Desktop JVM outside macOS arm64, see above.
+- Desktop JVM sound on Linux and Windows, which has not met a real audio device, see above.
 - A stable API. Public declarations are checked against committed ABI dumps, so a change fails
   the build here rather than surprising you. That is visibility, not a promise.
 - AV1 on the web. Native targets have dav1d with full SIMD, and hardware AV1 where it exists. The

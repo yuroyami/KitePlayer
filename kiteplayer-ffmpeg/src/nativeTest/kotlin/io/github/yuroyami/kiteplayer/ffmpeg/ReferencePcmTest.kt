@@ -273,9 +273,10 @@ class ReferencePcmTest {
     /**
      * Compares the engine's output against the reference, value for value from the first one.
      *
-     * No alignment search. Both sides decode the same file through the same libavcodec, which applies
-     * the container's own priming trim on both, so frame zero is frame zero. An offset would be a real
-     * defect, and hiding one behind a search is how a pipeline ends up half a buffer late.
+     * No alignment search. Both sides apply the container's own priming trim, so frame zero is frame
+     * zero. An offset would be a real defect, and hiding one behind a search is how a pipeline ends up
+     * half a buffer late. The AAC reference is cut at the content's length, because FFmpeg 9 trims the
+     * last frame's padding and the ffmpeg that writes the reference may be older.
      */
     private fun assertMatchesReferencePcm(label: String, produced: FloatArray, reference: FloatArray) {
         assertEquals(

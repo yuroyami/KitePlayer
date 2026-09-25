@@ -305,8 +305,9 @@ ffmpeg -v error -y -filter_complex "$six;[fl][fr][fc][lfe][sl][sr]join=inputs=6:
   -map "[a]" -c:a pcm_f32le surround51side.wav
 # The oracle for the whole audio pipeline: FFmpeg's own downmix of the same decoded file. Float
 # output means swresample does not normalise the matrix, so these samples are exactly
-# FL + 0.7071*FC + 0.7071*SL and the mirror of it on the right.
-ffmpeg -v error -y -i surround51.mp4 -ac 2 -f f32le surround51-stereo.f32le
+# FL + 0.7071*FC + 0.7071*SL and the mirror of it on the right. Cut at the content's three seconds:
+# FFmpeg 9 trims the padding of the last AAC frame and an older ffmpeg keeps it, 384 frames here.
+ffmpeg -v error -y -i surround51.mp4 -ac 2 -t 3 -f f32le surround51-stereo.f32le
 ffmpeg -v error -y -i surround51side.wav -ac 2 -f f32le surround51side-stereo.f32le
 
 echo "5.1 carrying content ONLY in the LFE, to settle the downmix's LFE policy"

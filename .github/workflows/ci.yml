@@ -302,7 +302,7 @@ jobs:
 
       - name: Upload the conformance report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: conformance-macos-host
           path: kiteplayer-ffmpeg/build/reports/conformance/*.md
@@ -311,7 +311,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-host-reports
           # test-results carries the XML, and the XML carries stdout, stderr and the message of a
@@ -395,7 +395,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-simulator-reports
           # test-results carries the XML, and the XML carries stdout, stderr and the message of a
@@ -473,7 +473,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tvos-watchos-simulator-reports
           path: |
@@ -551,7 +551,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-jvm-android-reports
           # test-results carries the XML, and the XML carries stdout, stderr and the message of a
@@ -767,7 +767,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-emulator-reports
           path: |
@@ -825,7 +825,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-native-reports
           # test-results carries the XML, and the XML carries stdout, stderr and the message of a
@@ -879,7 +879,7 @@ jobs:
             :kiteplayer-ffmpeg:linkDebugTestLinuxArm64
 
       - name: Hand the test binaries to the arm64 job
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-arm64-test-binaries
           path: |
@@ -958,7 +958,7 @@ jobs:
 
       - name: Upload test logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-arm64-native-logs
           path: ${{ runner.temp }}/test-logs/
@@ -1006,7 +1006,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-native-reports
           # test-results carries the XML, and the XML carries stdout, stderr and the message of a
@@ -1084,7 +1084,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-reports
           # test-results carries the XML, and the XML carries stdout, stderr and the message of a

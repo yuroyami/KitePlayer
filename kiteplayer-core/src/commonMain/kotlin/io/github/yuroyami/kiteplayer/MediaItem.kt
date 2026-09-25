@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.redactUri
 import kotlin.time.Duration
 
 /** What to play. */
@@ -116,8 +117,31 @@ public data class MediaItem(
         }
     }
 
-    /** A short label for logs and for a UI that has nothing better to show. */
-    val label: String get() = uri.substringAfterLast('/').ifEmpty { uri }
+    /**
+     * A short label for logs and for a UI that has nothing better to show: the file name alone.
+     * The query and the fragment are dropped, because that is where a signed URL keeps its
+     * signature, and the lock screen shows this label when the item has no title.
+     */
+    val label: String get() = redactUri(uri)
+
+    /**
+     * The item without its secrets: the URI cut to [label], and header and option names without
+     * their values. An `Authorization` header or a signed URL in a printed item is a leaked
+     * credential, and items get printed into logs.
+     */
+    @OptIn(KitePlayerLowLevelApi::class)
+    override fun toString(): String = buildString {
+        append("MediaItem(").append(label)
+        if (headers.isNotEmpty()) append(", headers=").append(headers.keys)
+        if (externalSubtitles.isNotEmpty()) append(", externalSubtitles=").append(externalSubtitles.size)
+        if (videoFilter != null) append(", videoFilter=").append(videoFilter)
+        if (startPosition != null) append(", startPosition=").append(startPosition)
+        if (io != null) append(", io")
+        if (formatHint != null) append(", formatHint=").append(formatHint)
+        if (openOptions.isNotEmpty()) append(", openOptions=").append(openOptions.keys)
+        if (demux != DemuxPolicy()) append(", demux=").append(demux)
+        append(")")
+    }
 }
 
 /**

@@ -1057,8 +1057,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * backends by name, tracks and selections, the three published snapshots, the KD artifacts
      * attached to the session, and the bounded warning history. Safe from any thread at any
      * moment, including after a failure, which is when it is usually wanted.
+     *
+     * Every URI is cut to its file name and option values are left out, because a dump gets logged
+     * and a signed URL or an Authorization header in it is a credential.
      */
-    public fun diagnosticsDump(): String = core.diagnosticsDump()
+    public fun diagnosticsDump(): String = core.diagnosticsDump(redactPaths = true)
 
     /**
      * The last warnings this player emitted, oldest first, capped.

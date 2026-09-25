@@ -86,7 +86,7 @@ public class KtorMediaIo private constructor(
     private var closed = false
 
     override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
-        if (closed) throw KtorMediaIoException("read after close on $uri")
+        if (closed) throw KtorMediaIoException("read after close")
         if (length <= 0) return 0
         var reconnects = 0
         while (true) {
@@ -120,7 +120,7 @@ public class KtorMediaIo private constructor(
         val pulled = withTimeoutOrNull(policy.readTimeout) { channel.readAvailable(into, offset, length) }
         if (pulled == null) {
             dropBody()
-            throw KtorMediaIoException("no bytes from $uri for ${policy.readTimeout} at byte $position", retryable = true)
+            throw KtorMediaIoException("no bytes for ${policy.readTimeout} at byte $position", retryable = true)
         }
         if (pulled < 0) {
             // A response that ends before the declared size is a dropped connection.

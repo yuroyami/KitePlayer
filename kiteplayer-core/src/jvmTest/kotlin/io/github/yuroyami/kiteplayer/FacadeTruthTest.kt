@@ -56,6 +56,26 @@ class FacadeTruthTest {
     }
 
     @Test
+    fun thePublicDumpKeepsNoQueryStringAndNoOptionValue() = runTest {
+        // Apps log the dump, so it redacts like the bundle; only the engine's own dump keeps values.
+        val harness = CoreHarness(this)
+        harness.attachRenderer()
+        harness.core.open(
+            MediaItem(
+                "scripted://host/folder/movie.mp4?X-Goog-Signature=SECRET",
+                openOptions = mapOf("headers" to "Authorization: Bearer SECRET"),
+            ),
+        )
+        harness.run(100.milliseconds)
+
+        val dump = player(harness).diagnosticsDump()
+        assertFalse("SECRET" in dump, "no credential may survive in the public dump")
+        assertTrue("movie.mp4" in dump, "the media stays identifiable by its basename")
+        assertTrue("headers" in dump, "which options were set is still reportable")
+        harness.close()
+    }
+
+    @Test
     fun `the dump echoes open options and the queue`() = runTest {
         val harness = CoreHarness(this)
         harness.attachRenderer()

@@ -713,6 +713,7 @@ public final class io/github/yuroyami/kiteplayer/PipedMediaIo : io/github/yuroya
 public abstract class io/github/yuroyami/kiteplayer/PlaybackError {
 	public fun getCause ()Ljava/lang/Throwable;
 	public abstract fun getMessage ()Ljava/lang/String;
+	public final fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackError$AudioDeviceUnavailable : io/github/yuroyami/kiteplayer/PlaybackError {
@@ -724,7 +725,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$AudioDeviceUnavai
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackError$ConfigurationInvalid : io/github/yuroyami/kiteplayer/PlaybackError {
@@ -736,7 +736,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$ConfigurationInva
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackError$DecoderFailed : io/github/yuroyami/kiteplayer/PlaybackError {
@@ -753,7 +752,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$DecoderFailed : i
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackError$DecoderUnavailable : io/github/yuroyami/kiteplayer/PlaybackError {
@@ -767,7 +765,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$DecoderUnavailabl
 	public final fun getKind ()Lio/github/yuroyami/kiteplayer/TrackKind;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackError$Internal : io/github/yuroyami/kiteplayer/PlaybackError {
@@ -782,7 +779,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$Internal : io/git
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackError$NoPlayableStream : io/github/yuroyami/kiteplayer/PlaybackError {
@@ -794,7 +790,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$NoPlayableStream 
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getStreams ()Ljava/util/List;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackError$NotMedia : io/github/yuroyami/kiteplayer/PlaybackError {
@@ -809,7 +804,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$NotMedia : io/git
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getUri ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackError$RuntimeCompromised : io/github/yuroyami/kiteplayer/PlaybackError {
@@ -821,7 +815,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$RuntimeCompromise
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackError$SourceStalled : io/github/yuroyami/kiteplayer/PlaybackError {
@@ -835,7 +828,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$SourceStalled : i
 	public final fun getStalledFor-UwyO8pc ()J
 	public final fun getUri ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackError$SourceUnavailable : io/github/yuroyami/kiteplayer/PlaybackError {
@@ -852,7 +844,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$SourceUnavailable
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getUri ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackException : java/lang/Exception {
@@ -952,6 +943,7 @@ public final class io/github/yuroyami/kiteplayer/PlaybackStatus : java/lang/Enum
 public abstract class io/github/yuroyami/kiteplayer/PlaybackWarning {
 	public fun getFields ()Ljava/util/Map;
 	public abstract fun getMessage ()Ljava/lang/String;
+	public final fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioDeviceChanged : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -963,7 +955,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioDeviceChan
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioDeviceUnderrun : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -975,7 +966,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioDeviceUnde
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioDrainIncomplete : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -987,7 +977,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioDrainIncom
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioLatencyUnreliable : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -999,7 +988,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioLatencyUnr
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioSourceFormatChanged : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1018,7 +1006,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioSourceForm
 	public final fun getToChannels ()I
 	public final fun getToSampleRate ()I
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioTapFailed : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1030,7 +1017,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioTapFailed 
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioUnderrun : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1042,7 +1028,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioUnderrun :
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getTotalSoFar ()J
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$BadTimestamps : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1054,7 +1039,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$BadTimestamps :
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ChannelLayoutUnknown : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1068,7 +1052,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ChannelLayoutUn
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ColorApproximated : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1080,7 +1063,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ColorApproximat
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$CommandRefused : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1094,7 +1076,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$CommandRefused 
 	public final fun getMember ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ContainerDeclarationDiverged : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1112,7 +1093,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ContainerDeclar
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getStreamIndex ()I
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$FrameDropping : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1125,7 +1105,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$FrameDropping :
 	public fun getFields ()Ljava/util/Map;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$HardwareDecodeUnavailable : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1139,7 +1118,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$HardwareDecodeU
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getReason ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$HdrToneMapped : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1154,7 +1132,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$HdrToneMapped :
 	public final fun getStreamIndex ()I
 	public final fun getTransfer ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$NoRenderSurface : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1166,7 +1143,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$NoRenderSurface
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$OptionsUnused : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1178,7 +1154,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$OptionsUnused :
 	public final fun getKeys ()Ljava/util/List;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$PathologicalInterleaving : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1192,7 +1167,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$PathologicalInt
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getStarvedTrack-fQpssaM ()I
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$RecordingStopped : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1206,7 +1180,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$RecordingStoppe
 	public final fun getPath ()Ljava/lang/String;
 	public final fun getReason ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$RendererFailed : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1218,7 +1191,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$RendererFailed 
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ResamplerUnavailable : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1231,7 +1203,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ResamplerUnavai
 	public fun getFields ()Ljava/util/Map;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ResourcesNotReleased : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1243,7 +1214,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ResourcesNotRel
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$SourceReconnecting : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1260,7 +1230,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$SourceReconnect
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getPosition ()J
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$StartPositionIgnored : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1274,7 +1243,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$StartPositionIg
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getRequested-UwyO8pc ()J
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$StartupIncomplete : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1286,7 +1254,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$StartupIncomple
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$SubtitleCharsetGuessed : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1303,7 +1270,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$SubtitleCharset
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getUri ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$SubtitleSourceUnreadable : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1317,7 +1283,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$SubtitleSourceU
 	public final fun getReason ()Ljava/lang/String;
 	public final fun getUri ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TonemappingUnavailable : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1329,7 +1294,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TonemappingUnav
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TrackDeselected : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1344,7 +1308,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TrackDeselected
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getTrack-fQpssaM ()I
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TypesetterUnavailable : io/github/yuroyami/kiteplayer/PlaybackWarning {
@@ -1359,7 +1322,6 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TypesetterUnava
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getProvider ()Ljava/lang/String;
 	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/PlayerConfig {

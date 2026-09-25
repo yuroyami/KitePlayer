@@ -1,5 +1,8 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.redactUri
+import io.github.yuroyami.kiteplayer.internal.redactUrisIn
+
 /**
  * A failure that stopped playback.
  *
@@ -13,13 +16,19 @@ public sealed class PlaybackError {
     public abstract val message: String
     public open val cause: Throwable? = null
 
+    /**
+     * The type and the [message], with every URI cut to its file name. Final, so no subclass prints
+     * its fields: a data class would print a signed URL whole, and errors are what apps log.
+     */
+    final override fun toString(): String = "${this::class.simpleName}: ${redactUrisIn(message)}"
+
     /** The bytes could not be reached at all: no such file, refused connection, permission denied. */
     public data class SourceUnavailable(
         val uri: String,
         override val cause: Throwable?,
         val detail: String? = null,
     ) : PlaybackError() {
-        override val message: String get() = "cannot open $uri" + (detail?.let { ": $it" } ?: "")
+        override val message: String get() = "cannot open ${redactUri(uri)}" + (detail?.let { ": ${redactUrisIn(it)}" } ?: "")
     }
 
     /**
@@ -28,12 +37,12 @@ public sealed class PlaybackError {
      * The same media may play when the network recovers.
      */
     public data class SourceStalled(val uri: String, val stalledFor: kotlin.time.Duration) : PlaybackError() {
-        override val message: String get() = "no data from $uri for $stalledFor"
+        override val message: String get() = "no data from ${redactUri(uri)} for $stalledFor"
     }
 
     /** The bytes were reached and are not media the demuxer recognises. */
     public data class NotMedia(val uri: String, val detail: String? = null) : PlaybackError() {
-        override val message: String get() = "not a recognised media format: $uri"
+        override val message: String get() = "not a recognised media format: ${redactUri(uri)}"
     }
 
     /** The container was read and holds nothing this build can play. */
@@ -137,6 +146,9 @@ public class PlaybackException(public val error: PlaybackError) : Exception(erro
  */
 public sealed class PlaybackWarning {
     public abstract val message: String
+
+    /** The type and the [message], with every URI cut to its file name, as for [PlaybackError]. */
+    final override fun toString(): String = "${this::class.simpleName}: ${redactUrisIn(message)}"
 
     /**
      * The warning as key and value pairs, for a structured log sink.
@@ -411,7 +423,7 @@ public sealed class PlaybackWarning {
         val uri: String,
         val reason: String,
     ) : PlaybackWarning() {
-        override val message: String get() = "the external subtitle $uri was skipped: $reason"
+        override val message: String get() = "the external subtitle ${redactUri(uri)} was skipped: ${redactUrisIn(reason)}"
     }
 
     /**
@@ -432,9 +444,9 @@ public sealed class PlaybackWarning {
         val detected: String? = null,
     ) : PlaybackWarning() {
         override val message: String get() = if (detected != null) {
-            "$uri looks like $detected, which could not be decoded; read as $charset instead"
+            "${redactUri(uri)} looks like $detected, which could not be decoded; read as $charset instead"
         } else {
-            "$uri declares no encoding and is not UTF-8; read as $charset, which may be wrong"
+            "${redactUri(uri)} declares no encoding and is not UTF-8; read as $charset, which may be wrong"
         }
     }
 

@@ -3211,6 +3211,8 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
     open val cause // io.github.yuroyami.kiteplayer/PlaybackError.cause|{}cause[0]
         open fun <get-cause>(): kotlin/Throwable? // io.github.yuroyami.kiteplayer/PlaybackError.cause.<get-cause>|<get-cause>(){}[0]
 
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.toString|toString(){}[0]
+
     final class AudioDeviceUnavailable : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.<init>|<init>(kotlin.String){}[0]
 
@@ -3223,7 +3225,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.toString|toString(){}[0]
     }
 
     final class ConfigurationInvalid : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.ConfigurationInvalid|null[0]
@@ -3238,7 +3239,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackError.ConfigurationInvalid // io.github.yuroyami.kiteplayer/PlaybackError.ConfigurationInvalid.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.ConfigurationInvalid.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.ConfigurationInvalid.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.ConfigurationInvalid.toString|toString(){}[0]
     }
 
     final class DecoderFailed : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed|null[0]
@@ -3259,7 +3259,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Throwable? = ...): io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed // io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed.copy|copy(kotlin.String;kotlin.String;kotlin.Throwable?){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed.toString|toString(){}[0]
     }
 
     final class DecoderUnavailable : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable|null[0]
@@ -3277,7 +3276,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ..., io.github.yuroyami.kiteplayer/TrackKind = ...): io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.copy|copy(kotlin.String;io.github.yuroyami.kiteplayer.TrackKind){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.toString|toString(){}[0]
     }
 
     final class Internal : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.Internal|null[0]
@@ -3295,7 +3293,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ..., kotlin/Throwable? = ...): io.github.yuroyami.kiteplayer/PlaybackError.Internal // io.github.yuroyami.kiteplayer/PlaybackError.Internal.copy|copy(kotlin.String;kotlin.Throwable?){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.Internal.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.Internal.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.Internal.toString|toString(){}[0]
     }
 
     final class NoPlayableStream : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.NoPlayableStream|null[0]
@@ -3310,7 +3307,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> = ...): io.github.yuroyami.kiteplayer/PlaybackError.NoPlayableStream // io.github.yuroyami.kiteplayer/PlaybackError.NoPlayableStream.copy|copy(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.NoPlayableStream.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.NoPlayableStream.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.NoPlayableStream.toString|toString(){}[0]
     }
 
     final class NotMedia : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.NotMedia|null[0]
@@ -3328,7 +3324,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/PlaybackError.NotMedia // io.github.yuroyami.kiteplayer/PlaybackError.NotMedia.copy|copy(kotlin.String;kotlin.String?){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.NotMedia.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.NotMedia.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.NotMedia.toString|toString(){}[0]
     }
 
     final class RuntimeCompromised : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised|null[0]
@@ -3343,7 +3338,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised // io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised.toString|toString(){}[0]
     }
 
     final class SourceStalled : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.SourceStalled|null[0]
@@ -3361,7 +3355,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ..., kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer/PlaybackError.SourceStalled // io.github.yuroyami.kiteplayer/PlaybackError.SourceStalled.copy|copy(kotlin.String;kotlin.time.Duration){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.SourceStalled.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.SourceStalled.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.SourceStalled.toString|toString(){}[0]
     }
 
     final class SourceUnavailable : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.SourceUnavailable|null[0]
@@ -3382,7 +3375,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ..., kotlin/Throwable? = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/PlaybackError.SourceUnavailable // io.github.yuroyami.kiteplayer/PlaybackError.SourceUnavailable.copy|copy(kotlin.String;kotlin.Throwable?;kotlin.String?){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.SourceUnavailable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.SourceUnavailable.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.SourceUnavailable.toString|toString(){}[0]
     }
 }
 
@@ -3391,6 +3383,8 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         abstract fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.message.<get-message>|<get-message>(){}[0]
     open val fields // io.github.yuroyami.kiteplayer/PlaybackWarning.fields|{}fields[0]
         open fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.fields.<get-fields>|<get-fields>(){}[0]
+
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.toString|toString(){}[0]
 
     final class AudioDeviceChanged : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged.<init>|<init>(kotlin.String){}[0]
@@ -3404,7 +3398,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged.toString|toString(){}[0]
     }
 
     final class AudioDeviceUnderrun : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun|null[0]
@@ -3419,7 +3412,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.toString|toString(){}[0]
     }
 
     final class AudioDrainIncomplete : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDrainIncomplete|null[0]
@@ -3434,7 +3426,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDrainIncomplete // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDrainIncomplete.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDrainIncomplete.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDrainIncomplete.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDrainIncomplete.toString|toString(){}[0]
     }
 
     final class AudioLatencyUnreliable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioLatencyUnreliable|null[0]
@@ -3449,7 +3440,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AudioLatencyUnreliable // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioLatencyUnreliable.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioLatencyUnreliable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioLatencyUnreliable.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioLatencyUnreliable.toString|toString(){}[0]
     }
 
     final class AudioSourceFormatChanged : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged|null[0]
@@ -3475,7 +3465,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.copy|copy(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.toString|toString(){}[0]
     }
 
     final class AudioTapFailed : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed|null[0]
@@ -3490,7 +3479,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.toString|toString(){}[0]
     }
 
     final class AudioUnderrun : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioUnderrun|null[0]
@@ -3505,7 +3493,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/Long = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AudioUnderrun // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioUnderrun.copy|copy(kotlin.Long){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioUnderrun.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioUnderrun.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioUnderrun.toString|toString(){}[0]
     }
 
     final class BadTimestamps : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.BadTimestamps|null[0]
@@ -3520,7 +3507,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.BadTimestamps // io.github.yuroyami.kiteplayer/PlaybackWarning.BadTimestamps.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.BadTimestamps.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.BadTimestamps.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.BadTimestamps.toString|toString(){}[0]
     }
 
     final class ChannelLayoutUnknown : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.ChannelLayoutUnknown|null[0]
@@ -3538,7 +3524,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/Int = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.ChannelLayoutUnknown // io.github.yuroyami.kiteplayer/PlaybackWarning.ChannelLayoutUnknown.copy|copy(kotlin.Int;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ChannelLayoutUnknown.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ChannelLayoutUnknown.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ChannelLayoutUnknown.toString|toString(){}[0]
     }
 
     final class ColorApproximated : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated|null[0]
@@ -3553,7 +3538,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.toString|toString(){}[0]
     }
 
     final class CommandRefused : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused|null[0]
@@ -3571,7 +3555,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.copy|copy(kotlin.String;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.toString|toString(){}[0]
     }
 
     final class ContainerDeclarationDiverged : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged|null[0]
@@ -3595,7 +3578,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/Int = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.copy|copy(kotlin.Int;kotlin.String;kotlin.String;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.toString|toString(){}[0]
     }
 
     final class FrameDropping : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping|null[0]
@@ -3612,7 +3594,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/Int = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping.copy|copy(kotlin.Int){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping.toString|toString(){}[0]
     }
 
     final class HardwareDecodeUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.HardwareDecodeUnavailable|null[0]
@@ -3630,7 +3611,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.HardwareDecodeUnavailable // io.github.yuroyami.kiteplayer/PlaybackWarning.HardwareDecodeUnavailable.copy|copy(kotlin.String;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.HardwareDecodeUnavailable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.HardwareDecodeUnavailable.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.HardwareDecodeUnavailable.toString|toString(){}[0]
     }
 
     final class HdrToneMapped : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped|null[0]
@@ -3650,7 +3630,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.copy|copy(kotlin.String;kotlin.Int){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.toString|toString(){}[0]
     }
 
     final class NoRenderSurface : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.NoRenderSurface|null[0]
@@ -3665,7 +3644,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.NoRenderSurface // io.github.yuroyami.kiteplayer/PlaybackWarning.NoRenderSurface.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.NoRenderSurface.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.NoRenderSurface.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.NoRenderSurface.toString|toString(){}[0]
     }
 
     final class OptionsUnused : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused|null[0]
@@ -3680,7 +3658,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin.collections/List<kotlin/String> = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.copy|copy(kotlin.collections.List<kotlin.String>){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.toString|toString(){}[0]
     }
 
     final class PathologicalInterleaving : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving|null[0]
@@ -3698,7 +3675,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(io.github.yuroyami.kiteplayer/TrackId = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.copy|copy(io.github.yuroyami.kiteplayer.TrackId;kotlin.Int){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.toString|toString(){}[0]
     }
 
     final class RecordingStopped : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped|null[0]
@@ -3716,7 +3692,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.copy|copy(kotlin.String;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.toString|toString(){}[0]
     }
 
     final class RendererFailed : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.RendererFailed|null[0]
@@ -3731,7 +3706,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.RendererFailed // io.github.yuroyami.kiteplayer/PlaybackWarning.RendererFailed.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.RendererFailed.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.RendererFailed.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.RendererFailed.toString|toString(){}[0]
     }
 
     final class ResamplerUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.ResamplerUnavailable|null[0]
@@ -3748,7 +3722,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.ResamplerUnavailable // io.github.yuroyami.kiteplayer/PlaybackWarning.ResamplerUnavailable.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ResamplerUnavailable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ResamplerUnavailable.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ResamplerUnavailable.toString|toString(){}[0]
     }
 
     final class ResourcesNotReleased : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased|null[0]
@@ -3763,7 +3736,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased.toString|toString(){}[0]
     }
 
     final class SourceReconnecting : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting|null[0]
@@ -3786,7 +3758,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/Long = ..., kotlin/Int = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.copy|copy(kotlin.Long;kotlin.Int;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting.toString|toString(){}[0]
     }
 
     final class StartPositionIgnored : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.StartPositionIgnored|null[0]
@@ -3804,7 +3775,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin.time/Duration = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.StartPositionIgnored // io.github.yuroyami.kiteplayer/PlaybackWarning.StartPositionIgnored.copy|copy(kotlin.time.Duration;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.StartPositionIgnored.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.StartPositionIgnored.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.StartPositionIgnored.toString|toString(){}[0]
     }
 
     final class StartupIncomplete : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete|null[0]
@@ -3819,7 +3789,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.toString|toString(){}[0]
     }
 
     final class SubtitleCharsetGuessed : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed|null[0]
@@ -3840,7 +3809,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.copy|copy(kotlin.String;kotlin.String;kotlin.String?){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.toString|toString(){}[0]
     }
 
     final class SubtitleSourceUnreadable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleSourceUnreadable|null[0]
@@ -3858,7 +3826,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleSourceUnreadable // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleSourceUnreadable.copy|copy(kotlin.String;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleSourceUnreadable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleSourceUnreadable.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleSourceUnreadable.toString|toString(){}[0]
     }
 
     final class TonemappingUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable|null[0]
@@ -3873,7 +3840,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable.toString|toString(){}[0]
     }
 
     final class TrackDeselected : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected|null[0]
@@ -3893,7 +3859,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(io.github.yuroyami.kiteplayer/TrackId = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.copy|copy(io.github.yuroyami.kiteplayer.TrackId;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.toString|toString(){}[0]
     }
 
     final class TypesetterUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.TypesetterUnavailable|null[0]
@@ -3913,7 +3878,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.TypesetterUnavailable // io.github.yuroyami.kiteplayer/PlaybackWarning.TypesetterUnavailable.copy|copy(kotlin.String;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.TypesetterUnavailable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.TypesetterUnavailable.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.TypesetterUnavailable.toString|toString(){}[0]
     }
 }
 

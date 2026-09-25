@@ -6572,12 +6572,12 @@ internal class PlaybackCore(
         // Internal rather than AudioDeviceUnavailable, which carries no cause: the subsystem is
         // named in the detail and the original throwable survives, which a support bundle needs.
         openStage == OpenStage.Output -> PlaybackError.Internal(
-            "the audio output could not be built for ${item.uri}: ${failure.message}",
+            "the audio output could not be built for ${redactUri(item.uri)}: ${failure.message?.let(::redactUrisIn)}",
             failure,
         )
         else -> PlaybackError.Internal(
-            "the playback session failed while ${openStage.describe()} for ${item.uri}: " +
-                "${failure.message}",
+            "the playback session failed while ${openStage.describe()} for ${redactUri(item.uri)}: " +
+                "${failure.message?.let(::redactUrisIn)}",
             failure,
         )
     }

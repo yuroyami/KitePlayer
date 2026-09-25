@@ -15,6 +15,9 @@ public class MediaItemBuilder internal constructor(private val uri: String) {
     private var formatHint: String? = null
     private val openOptions = LinkedHashMap<String, String>()
     private var demux = DemuxPolicy()
+    private var title: String? = null
+    private var artist: String? = null
+    private var album: String? = null
 
     /** Adds one request header. See [MediaItem.headers]. */
     public fun header(name: String, value: String) {
@@ -83,6 +86,21 @@ public class MediaItemBuilder internal constructor(private val uri: String) {
         demux = demux.copy(skipInitialBytes = count)
     }
 
+    /** See [MediaItem.title]. */
+    public fun title(text: String) {
+        title = text
+    }
+
+    /** See [MediaItem.artist]. */
+    public fun artist(text: String) {
+        artist = text
+    }
+
+    /** See [MediaItem.album]. */
+    public fun album(text: String) {
+        album = text
+    }
+
     @OptIn(KitePlayerLowLevelApi::class)
     internal fun build(): MediaItem = MediaItem(
         uri = uri,
@@ -94,6 +112,9 @@ public class MediaItemBuilder internal constructor(private val uri: String) {
         formatHint = formatHint,
         openOptions = openOptions.toMap(),
         demux = demux,
+        title = title,
+        artist = artist,
+        album = album,
     )
 }
 

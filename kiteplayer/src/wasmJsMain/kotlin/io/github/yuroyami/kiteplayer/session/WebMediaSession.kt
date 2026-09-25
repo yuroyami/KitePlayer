@@ -23,10 +23,14 @@ import kotlin.time.Duration.Companion.seconds
  * overlay appears only if the page also plays through such an element.
  *
  * Artwork is a URL here, because that is the only form a browser takes. Close it with the player.
+ *
+ * @param skipInterval how far the skip back and skip forward actions move when the browser names no
+ *        offset of its own. Positive.
  */
 public class KitePlayerMediaSession(
     private val player: KitePlayer,
     session: JsAny? = navigatorMediaSession(),
+    private val skipInterval: Duration = 15.seconds,
 ) : AutoCloseable {
 
     private val bridge: WebMediaSessionBridge? = session?.let(::WebMediaSessionBridge)

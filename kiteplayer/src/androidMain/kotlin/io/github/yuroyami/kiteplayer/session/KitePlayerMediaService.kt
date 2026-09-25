@@ -17,6 +17,7 @@ import android.os.IBinder
  * ```xml
  * <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
  * <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+ * <uses-permission android:name="android.permission.WAKE_LOCK" />
  *
  * <application>
  *     <service
@@ -25,6 +26,8 @@ import android.os.IBinder
  *         android:foregroundServiceType="mediaPlayback" />
  * </application>
  * ```
+ *
+ * `WAKE_LOCK` is for [MediaNotificationOptions.wakeLocks]. Without it, pass `WakeLockPolicy.None`.
  *
  * The library merges none of this into the application's manifest, so an application that never
  * plays in the background carries neither the permissions nor the service. The service is not

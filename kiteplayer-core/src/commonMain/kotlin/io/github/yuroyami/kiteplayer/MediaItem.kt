@@ -94,6 +94,15 @@ public data class MediaItem(
      * low latency, and bytes to skip at the start. The default changes nothing. See [DemuxPolicy].
      */
     val demux: DemuxPolicy = DemuxPolicy(),
+    /**
+     * The title the lock screen, the notification and the car show for this item. Null falls back
+     * to the file's own title tag, then to [label]. Nothing else reads it.
+     */
+    val title: String? = null,
+    /** The line under [title] on those screens. Null falls back to the file's artist tag. */
+    val artist: String? = null,
+    /** The album line, where a screen shows one. Null falls back to the file's album tag. */
+    val album: String? = null,
 ) {
     public companion object {}
 

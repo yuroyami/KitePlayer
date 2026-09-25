@@ -169,13 +169,13 @@ final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotli
     final fun close() // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.close|close(){}[0]
 
     // Targets: [ios]
-    constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer, kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer;kotlin.time.Duration){}[0]
 
     // Targets: [ios]
     final fun setArtwork(platform.UIKit/UIImage?) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.setArtwork|setArtwork(platform.UIKit.UIImage?){}[0]
 
     // Targets: [wasmJs]
-    constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer, kotlin.js/JsAny? = ...) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer;kotlin.js.JsAny?){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer, kotlin.js/JsAny? = ..., kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer;kotlin.js.JsAny?;kotlin.time.Duration){}[0]
 
     // Targets: [wasmJs]
     final fun setArtwork(kotlin/String?) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.setArtwork|setArtwork(kotlin.String?){}[0]

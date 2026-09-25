@@ -50,6 +50,12 @@ public data class MediaNotificationOptions(
      * notification is still posted, but nothing then keeps the process alive.
      */
     val onForegroundRefused: ((Throwable) -> Unit)? = null,
+    /**
+     * What stays awake while the player plays or buffers, so a stream keeps loading after the
+     * screen turns off. See [WakeLockPolicy]. A lock needs the `WAKE_LOCK` permission in the
+     * manifest, which [KitePlayerMediaService] shows. media3 calls this the wake mode.
+     */
+    val wakeLocks: WakeLockPolicy = WakeLockPolicy.Network,
 ) {
     init {
         require(smallIcon != 0) { "the notification needs a small icon" }
@@ -57,6 +63,25 @@ public data class MediaNotificationOptions(
         require(notificationId != 0) { "Android refuses notification id 0 for a foreground service" }
         require(!pausedForegroundTimeout.isNegative()) { "the paused foreground timeout cannot be negative" }
     }
+}
+
+/**
+ * What the media notification keeps awake while the player plays or buffers.
+ *
+ * Once the screen is off, Android may put the processor to sleep and Wi-Fi into power saving. Sound
+ * that is already playing keeps the processor awake, but a stream that is waiting for data does
+ * not, and after `BufferPolicy.stallTimeout` without data the session ends. The locks are held only
+ * while the player plays or buffers, never while it is paused.
+ */
+public enum class WakeLockPolicy {
+    /** Holds nothing. */
+    None,
+
+    /** Keeps the processor awake. Enough for media on the device. */
+    Local,
+
+    /** Keeps the processor awake and Wi-Fi at full power. For media streamed over the network. */
+    Network,
 }
 
 /**

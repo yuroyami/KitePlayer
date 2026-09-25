@@ -48,9 +48,13 @@ import kotlin.time.DurationUnit
  * The audio session category the card needs is already the one the player's own output sets, so
  * nothing has to change there. The application still declares the background audio capability
  * itself if it wants the card to survive locking the screen.
+ *
+ * @param skipInterval how far the skip back and skip forward buttons move, on the lock screen, the
+ *        control centre, CarPlay and a headset. Positive.
  */
 public class KitePlayerMediaSession(
     private val player: KitePlayer,
+    private val skipInterval: Duration = 15.seconds,
 ) : AutoCloseable {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)

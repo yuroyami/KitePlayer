@@ -77,7 +77,8 @@ public final class io/github/yuroyami/kiteplayer/session/InterruptionPolicy {
 }
 
 public final class io/github/yuroyami/kiteplayer/session/KitePlayerMediaSession : java/lang/AutoCloseable {
-	public fun <init> (Lio/github/yuroyami/kiteplayer/KitePlayer;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/KitePlayer;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/KitePlayer;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
 	public final fun getPlatformToken ()Ljava/lang/Object;
 	public final fun isAvailable ()Z

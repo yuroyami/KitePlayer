@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Mirrors [player] into Android's media session and routes the buttons back.
@@ -35,11 +36,15 @@ import kotlin.time.Duration.Companion.milliseconds
  * this session to `KitePlayerPlatform.attachMediaNotification`.
  *
  * Close it with the player.
+ *
+ * @param skipInterval how far the skip back and skip forward buttons move, on the lock screen, the
+ *        notification, a headset and a car. Positive.
  */
 public class KitePlayerMediaSession(
     internal val player: KitePlayer,
     context: Context,
     tag: String = "KitePlayer",
+    private val skipInterval: Duration = 15.seconds,
 ) : AutoCloseable {
 
     private val session = MediaSession(context.applicationContext, tag)

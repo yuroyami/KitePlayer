@@ -15,7 +15,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
-import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.DecoderId
 import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
@@ -70,7 +70,7 @@ class DecoderFallbackTest {
         }
         val decoder = requireNotNull(h.open(autoSelection()))
         assertDelivered(decoder, h.packet(1, keyframe = true), 1)
-        assertEquals(listOf(CodecId.H264MediaCodec, null), h.opens)
+        assertEquals(listOf(DecoderId.H264MediaCodec, null), h.opens)
         assertEquals(1, h.warnings.size)
         assertEquals(HwdecStatus.Software, decoder.hardware)
         assertDelivered(decoder, h.packet(2), 2)
@@ -84,7 +84,7 @@ class DecoderFallbackTest {
             hardwareFactory = { throw IllegalStateException("no codec") }
         }
         val decoder = requireNotNull(h.open(autoSelection()))
-        assertEquals(listOf(CodecId.H264MediaCodec, null), h.opens)
+        assertEquals(listOf(DecoderId.H264MediaCodec, null), h.opens)
         assertEquals(1, h.warnings.size)
         assertEquals(HwdecStatus.Software, decoder.hardware)
         decoder.close()
@@ -354,7 +354,7 @@ class DecoderFallbackTest {
     fun requireReturnsNullOnOpenRefusalAndPropagatesRuntimeFailureWithoutSoftware() = runTest {
         val refused = Harness().apply { hardwareFactory = { error("refused") } }
         assertNull(refused.open(requireSelection()))
-        assertEquals(listOf<CodecId?>(CodecId.H264MediaCodec), refused.opens)
+        assertEquals(listOf<DecoderId?>(DecoderId.H264MediaCodec), refused.opens)
         assertTrue(refused.warnings.isEmpty())
         refused.assertLedgerZero()
 
@@ -366,7 +366,7 @@ class DecoderFallbackTest {
         val original = assertFailsWith<DecoderBoom> { decoder.send(packet) }
         packet.close()
         assertEquals("send 1", original.message)
-        assertEquals(listOf<CodecId?>(CodecId.H264MediaCodec), runtime.opens)
+        assertEquals(listOf<DecoderId?>(DecoderId.H264MediaCodec), runtime.opens)
         decoder.close()
         runtime.assertLedgerZero()
     }
@@ -377,7 +377,7 @@ class DecoderFallbackTest {
         val decoder = requireNotNull(
             h.open(DecoderSelection(null, mayFallback = false, requiresHardware = false)),
         )
-        assertEquals(listOf<CodecId?>(null), h.opens)
+        assertEquals(listOf<DecoderId?>(null), h.opens)
         decoder.close()
         h.assertLedgerZero()
     }
@@ -639,13 +639,13 @@ class DecoderFallbackTest {
     }
 
     private fun autoSelection(): DecoderSelection = DecoderSelection(
-        HardwareRoute.NamedDecoder(CodecId.H264MediaCodec, HwdecKind.MediaCodec),
+        HardwareRoute.NamedDecoder(DecoderId.H264MediaCodec, HwdecKind.MediaCodec),
         mayFallback = true,
         requiresHardware = false,
     )
 
     private fun requireSelection(): DecoderSelection = DecoderSelection(
-        HardwareRoute.NamedDecoder(CodecId.H264MediaCodec, HwdecKind.MediaCodec),
+        HardwareRoute.NamedDecoder(DecoderId.H264MediaCodec, HwdecKind.MediaCodec),
         mayFallback = false,
         requiresHardware = true,
     )
@@ -653,7 +653,7 @@ class DecoderFallbackTest {
 
 private class Harness {
     val ledger = OwnershipLedger()
-    val opens = mutableListOf<CodecId?>()
+    val opens = mutableListOf<DecoderId?>()
     val warnings = mutableListOf<PlaybackWarning>()
     val hardwareStatus = HwdecStatus.HardwareWithDownload(HwdecKind.MediaCodec)
     var warningSink: (PlaybackWarning) -> Unit = {}

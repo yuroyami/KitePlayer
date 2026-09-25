@@ -2,7 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.DecoderId
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 
 /**
@@ -41,7 +41,7 @@ internal actual fun platformDecoderSelection(codec: String, policy: HwdecPolicy)
 private fun String.videoToolboxRoute(): HardwareRoute? = when (trim().lowercase()) {
     "h264", "avc1", "hevc", "h265", "hev1" ->
         HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox)
-    "av1" -> HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox, decoder = CodecId("av1"))
+    "av1" -> HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox, decoder = DecoderId("av1"))
     else -> null
 }
 
@@ -67,10 +67,10 @@ private fun String.videoToolboxRoute(): HardwareRoute? = when (trim().lowercase(
  *
  * A refusal at open is ordinary and handled: the factory reopens on the native decoder and warns once.
  */
-internal actual fun platformAudioDecoder(codec: String): CodecId? = when (codec.trim().lowercase()) {
-    "aac" -> CodecId("aac_at")
-    "alac" -> CodecId("alac_at")
-    "ac3" -> CodecId("ac3_at")
-    "eac3" -> CodecId("eac3_at")
+internal actual fun platformAudioDecoder(codec: String): DecoderId? = when (codec.trim().lowercase()) {
+    "aac" -> DecoderId("aac_at")
+    "alac" -> DecoderId("alac_at")
+    "ac3" -> DecoderId("ac3_at")
+    "eac3" -> DecoderId("eac3_at")
     else -> null
 }

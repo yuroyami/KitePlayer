@@ -40,7 +40,7 @@ import io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration
 import io.github.yuroyami.kiteplayer.spi.Vp9Level
 import io.github.yuroyami.kiteplayer.spi.Vp9Profile
 import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
-import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.DecoderId
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 import io.github.yuroyami.kiteffmpeg.dsl.DecoderOptions
 import io.github.yuroyami.kiteffmpeg.MediaSource
@@ -291,7 +291,7 @@ public class KiteFFmpegSource internal constructor(
     internal fun openDecoder(
         index: Int,
         lowDelay: Boolean,
-        decoder: CodecId? = null,
+        decoder: DecoderId? = null,
         options: DecoderOptions? = null,
         hardwareAccel: HardwareAccel? = null,
     ): StreamDecoder = source.openDecoder(
@@ -311,7 +311,7 @@ public class KiteFFmpegSource internal constructor(
      */
     internal fun newVideoDecoder(
         stream: PlayerStreamInfo,
-        decoder: CodecId? = null,
+        decoder: DecoderId? = null,
         hardwareAccel: HardwareAccel? = null,
         hardware: HwdecStatus = HwdecStatus.Software,
         continuity: VideoDecoderContinuity = VideoDecoderContinuity(),
@@ -338,7 +338,7 @@ public class KiteFFmpegSource internal constructor(
      */
     internal fun newAudioDecoder(
         stream: PlayerStreamInfo,
-        decoder: CodecId? = null,
+        decoder: DecoderId? = null,
     ): AudioDecoder =
         KiteFFmpegAudioDecoder(
             decoder = openDecoder(stream.index, lowDelay = true, decoder = decoder),

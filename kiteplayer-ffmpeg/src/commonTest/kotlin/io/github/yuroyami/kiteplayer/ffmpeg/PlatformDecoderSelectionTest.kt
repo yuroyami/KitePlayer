@@ -2,7 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.DecoderId
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 
 class PlatformDecoderSelectionTest {
 
-    private val mediaCodec = HardwareRoute.NamedDecoder(CodecId.H264MediaCodec, HwdecKind.MediaCodec)
+    private val mediaCodec = HardwareRoute.NamedDecoder(DecoderId.H264MediaCodec, HwdecKind.MediaCodec)
     private val videoToolbox = HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox)
 
     @Test

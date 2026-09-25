@@ -2,7 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.DecoderId
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 
 /**
@@ -16,7 +16,7 @@ internal sealed class HardwareRoute {
     abstract val kind: HwdecKind
 
     internal data class NamedDecoder(
-        val decoder: CodecId,
+        val decoder: DecoderId,
         override val kind: HwdecKind,
     ) : HardwareRoute()
 
@@ -27,7 +27,7 @@ internal sealed class HardwareRoute {
          * The decoder to attach [accel] to, by name, or null for the one FFmpeg finds first for
          * the codec. Needed when that first one cannot take the attach, as dav1d cannot for AV1.
          */
-        val decoder: CodecId? = null,
+        val decoder: DecoderId? = null,
     ) : HardwareRoute()
 }
 
@@ -53,7 +53,7 @@ internal expect fun platformDecoderSelection(codec: String, policy: HwdecPolicy)
  *
  * [codec] is FFmpeg's decoder short name, the same string the video table matches on.
  */
-internal expect fun platformAudioDecoder(codec: String): CodecId?
+internal expect fun platformAudioDecoder(codec: String): DecoderId?
 
 /**
  * The policy table shared by the platform actuals and its exhaustive common test.

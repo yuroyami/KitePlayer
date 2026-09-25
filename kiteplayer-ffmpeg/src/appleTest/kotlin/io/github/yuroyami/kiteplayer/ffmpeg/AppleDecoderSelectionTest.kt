@@ -2,7 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.DecoderId
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,7 +21,7 @@ class AppleDecoderSelectionTest {
 
     /** By name, because FFmpeg finds dav1d first for AV1 and dav1d cannot take the attach. */
     private val videoToolboxAv1 =
-        HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox, decoder = CodecId("av1"))
+        HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox, decoder = DecoderId("av1"))
 
     private fun routeOf(codec: String, policy: HwdecPolicy = HwdecPolicy.Auto): HardwareRoute? =
         platformDecoderSelection(codec, policy).hardware
@@ -81,7 +81,7 @@ class AppleDecoderSelectionTest {
             "ac3" to "ac3_at",
             "eac3" to "eac3_at",
         ).forEach { (codec, expected) ->
-            assertEquals(CodecId(expected), platformAudioDecoder(codec), "$codec must name $expected")
+            assertEquals(DecoderId(expected), platformAudioDecoder(codec), "$codec must name $expected")
         }
 
         // Deliberate omissions, each for a reason recorded next to the table itself.

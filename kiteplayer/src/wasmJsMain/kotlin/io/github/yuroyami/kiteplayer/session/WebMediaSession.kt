@@ -33,6 +33,10 @@ public class KitePlayerMediaSession(
     private val skipInterval: Duration = 15.seconds,
 ) : AutoCloseable {
 
+    init {
+        require(skipInterval.isPositive()) { "the skip interval must be positive, was $skipInterval" }
+    }
+
     private val bridge: WebMediaSessionBridge? = session?.let(::WebMediaSessionBridge)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val artwork = MutableStateFlow<String?>(null)
@@ -58,8 +62,8 @@ public class KitePlayerMediaSession(
         bridge.onAction("stop") { _, _ -> player.pause() }
         bridge.onAction("nexttrack") { _, _ -> scope.launch { runCatching { player.next() } } }
         bridge.onAction("previoustrack") { _, _ -> scope.launch { runCatching { player.previous() } } }
-        bridge.onAction("seekforward") { _, offset -> skipBy(if (offset > 0.0) offset.seconds else SKIP) }
-        bridge.onAction("seekbackward") { _, offset -> skipBy(-(if (offset > 0.0) offset.seconds else SKIP)) }
+        bridge.onAction("seekforward") { _, offset -> skipBy(if (offset > 0.0) offset.seconds else skipInterval) }
+        bridge.onAction("seekbackward") { _, offset -> skipBy(-(if (offset > 0.0) offset.seconds else skipInterval)) }
         bridge.onAction("seekto") { time, _ ->
             if (time >= 0.0) scope.launch { runCatching { player.seek(time.seconds) } }
         }
@@ -83,7 +87,4 @@ public class KitePlayerMediaSession(
         bridge?.clear()
     }
 
-    private companion object {
-        val SKIP = 15.seconds
-    }
 }

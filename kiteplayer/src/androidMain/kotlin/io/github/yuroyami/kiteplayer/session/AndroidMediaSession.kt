@@ -47,6 +47,10 @@ public class KitePlayerMediaSession(
     private val skipInterval: Duration = 15.seconds,
 ) : AutoCloseable {
 
+    init {
+        require(skipInterval.isPositive()) { "the skip interval must be positive, was $skipInterval" }
+    }
+
     private val session = MediaSession(context.applicationContext, tag)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val artwork = MutableStateFlow<Bitmap?>(null)
@@ -226,8 +230,8 @@ public class KitePlayerMediaSession(
             scope.launch { runCatching { player.previous() } }
         }
 
-        override fun onFastForward() = skipBy(SKIP)
-        override fun onRewind() = skipBy(-SKIP)
+        override fun onFastForward() = skipBy(skipInterval)
+        override fun onRewind() = skipBy(-skipInterval)
 
         override fun onCustomAction(action: String, extras: Bundle?) {
             customActionHandler?.invoke(action)
@@ -241,9 +245,6 @@ public class KitePlayerMediaSession(
         }
     }
 
-    private companion object {
-        val SKIP = 15_000.milliseconds
-    }
 }
 
 /** A new item, or new tags on the same one, is what makes the artwork loader run again. */

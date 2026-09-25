@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.session
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -135,8 +136,15 @@ public fun KitePlayerPlatform.attachMediaNotification(
         "the manifest does not declare io.github.yuroyami.kiteplayer.session.KitePlayerMediaService; " +
             "the class documentation has the declaration"
     }
+    check(options.wakeLocks == WakeLockPolicy.None || grants(application, Manifest.permission.WAKE_LOCK)) {
+        "the manifest does not declare android.permission.WAKE_LOCK, which MediaNotificationOptions.wakeLocks " +
+            "needs; declare it, or pass WakeLockPolicy.None"
+    }
     return MediaNotificationHandle(session, application, options)
 }
+
+private fun grants(context: Context, permission: String): Boolean =
+    context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
 private fun declaresMediaService(context: Context): Boolean {
     val component = ComponentName(context, KitePlayerMediaService::class.java)
@@ -171,6 +179,7 @@ internal class MediaNotificationHandle(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val timer = Runnable { decide(MediaNotificationEvent.TimerFired) }
     private val launchApp: PendingIntent? by lazy { MediaNotificationIntents.launchApp(context) }
+    private val wakeLocks = PlaybackWakeLocks.forPolicy(context, options.wakeLocks)
 
     // Main thread only, from here down.
     private var mode = MediaNotificationMode.Hidden
@@ -246,6 +255,7 @@ internal class MediaNotificationHandle(
             if (closed) return@onMain
             decide(MediaNotificationEvent.Closed)
             closed = true
+            wakeLocks.release()
             main.removeCallbacks(timer)
             MediaNotificationRegistry.detach(this)
         }
@@ -255,6 +265,7 @@ internal class MediaNotificationHandle(
         if (closed) return
         val previous = content
         content = next
+        wakeLocks.onActive(next.playing)
         // Playback starting again is a new chance for a foreground that Android refused.
         if (next.playing && previous?.playing != true) refused = false
         when (previous?.status) {

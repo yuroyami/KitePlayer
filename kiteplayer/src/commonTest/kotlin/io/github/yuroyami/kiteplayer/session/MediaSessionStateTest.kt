@@ -29,9 +29,10 @@ class MediaSessionStateTest {
         queueOrder: List<Int> = emptyList(),
         loop: LoopMode = LoopMode.Off,
         metadata: Map<String, String> = emptyMap(),
+        media: MediaItem = MediaItem(uri = "/films/holiday.mkv"),
     ) = PlayerSnapshot(
         status = status,
-        media = MediaItem(uri = "/films/holiday.mkv"),
+        media = media,
         duration = 60.seconds,
         seekable = true,
         metadata = metadata,
@@ -102,6 +103,34 @@ class MediaSessionStateTest {
     fun `the album artist stands in when there is no artist`() {
         val state = snapshot(metadata = mapOf("album_artist" to "A Band")).toMediaSessionState(Progress())
         assertEquals("A Band", state.artist)
+    }
+
+    @Test
+    fun theItemsOwnTitleArtistAndAlbumWinOverTheTags() {
+        val state = snapshot(
+            metadata = mapOf("title" to "Tag title", "artist" to "Tag artist", "album" to "Tag album"),
+            media = MediaItem(uri = "/films/holiday.mkv", title = "Lesson 3", artist = "Maths", album = "Grade 6"),
+        ).toMediaSessionState(Progress())
+        assertEquals("Lesson 3", state.title)
+        assertEquals("Maths", state.artist)
+        assertEquals("Grade 6", state.album)
+    }
+
+    @Test
+    fun anItemWithoutItsOwnNamesStillReadsTheTags() {
+        val state = snapshot(
+            metadata = mapOf("title" to "Tag title", "artist" to "Tag artist"),
+            media = MediaItem(uri = "/films/holiday.mkv", album = "Grade 6"),
+        ).toMediaSessionState(Progress())
+        assertEquals("Tag title", state.title)
+        assertEquals("Tag artist", state.artist)
+        assertEquals("Grade 6", state.album)
+    }
+
+    @Test
+    fun aSignedUrlWithNoTagsShowsItsFileNameWithoutTheSignature() {
+        val signed = MediaItem(uri = "https://storage.example/lessons/lesson-3.mp4?X-Goog-Signature=SECRET")
+        assertEquals("lesson-3.mp4", snapshot(media = signed).toMediaSessionState(Progress()).title)
     }
 
     private fun phaseOf(status: PlaybackStatus) = snapshot(status = status).toMediaSessionState(Progress()).phase

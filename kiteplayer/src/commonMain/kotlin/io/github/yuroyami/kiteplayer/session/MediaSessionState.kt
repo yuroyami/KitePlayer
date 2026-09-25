@@ -43,8 +43,9 @@ public enum class MediaSessionPhase { Playing, Paused, Buffering, Stopped }
 /**
  * Reads a snapshot and a progress sample into the state a platform session wants.
  *
- * [PlayerSnapshot.metadata] carries the container's own tags, and the file name stands in when it
- * has no title. Next and previous follow the play order, so they answer for what the listener is
+ * The item's own [io.github.yuroyami.kiteplayer.MediaItem.title], artist and album come first, then
+ * the container's tags in [PlayerSnapshot.metadata], and the file name stands in when neither names
+ * a title. Next and previous follow the play order, so they answer for what the listener is
  * actually hearing rather than for the list order, and looping the whole queue makes both true.
  * Opening counts as buffering, and idle, ended and failed all count as stopped.
  */
@@ -61,9 +62,9 @@ public fun PlayerSnapshot.toMediaSessionState(progress: Progress): MediaSessionS
         speed = speed,
         canSeek = seekable,
         hasVideo = videoSize != null,
-        title = metadata.tag("title") ?: media?.label,
-        artist = metadata.tag("artist") ?: metadata.tag("album_artist"),
-        album = metadata.tag("album"),
+        title = media?.title ?: metadata.tag("title") ?: media?.label,
+        artist = media?.artist ?: metadata.tag("artist") ?: metadata.tag("album_artist"),
+        album = media?.album ?: metadata.tag("album"),
         hasNext = hasNeighbourInPlayOrder(1),
         hasPrevious = hasNeighbourInPlayOrder(-1),
     )

@@ -149,6 +149,9 @@ public data class MediaItem(
         if (formatHint != null) append(", formatHint=").append(formatHint)
         if (openOptions.isNotEmpty()) append(", openOptions=").append(openOptions.keys)
         if (demux != DemuxPolicy()) append(", demux=").append(demux)
+        if (title != null) append(", title=").append(title)
+        if (artist != null) append(", artist=").append(artist)
+        if (album != null) append(", album=").append(album)
         append(")")
     }
 }

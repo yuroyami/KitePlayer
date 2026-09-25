@@ -57,6 +57,10 @@ public class KitePlayerMediaSession(
     private val skipInterval: Duration = 15.seconds,
 ) : AutoCloseable {
 
+    init {
+        require(skipInterval.isPositive()) { "the skip interval must be positive, was $skipInterval" }
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val commands = MPRemoteCommandCenter.sharedCommandCenter()
     private val infoCenter = MPNowPlayingInfoCenter.defaultCenter()
@@ -142,8 +146,8 @@ public class KitePlayerMediaSession(
     }
 
     private fun wireCommands() {
-        commands.skipForwardCommand.preferredIntervals = listOf(NSNumber.numberWithDouble(SKIP_SECONDS))
-        commands.skipBackwardCommand.preferredIntervals = listOf(NSNumber.numberWithDouble(SKIP_SECONDS))
+        commands.skipForwardCommand.preferredIntervals = listOf(NSNumber.numberWithDouble(skipInterval.toDouble(DurationUnit.SECONDS)))
+        commands.skipBackwardCommand.preferredIntervals = listOf(NSNumber.numberWithDouble(skipInterval.toDouble(DurationUnit.SECONDS)))
 
         handle(commands.playCommand) { player.play() }
         handle(commands.pauseCommand) { player.pause() }
@@ -154,8 +158,8 @@ public class KitePlayerMediaSession(
         handle(commands.stopCommand) { player.pause() }
         handle(commands.nextTrackCommand) { scope.launch { runCatching { player.next() } } }
         handle(commands.previousTrackCommand) { scope.launch { runCatching { player.previous() } } }
-        handle(commands.skipForwardCommand) { skipBy(SKIP_SECONDS.seconds) }
-        handle(commands.skipBackwardCommand) { skipBy(-SKIP_SECONDS.seconds) }
+        handle(commands.skipForwardCommand) { skipBy(skipInterval) }
+        handle(commands.skipBackwardCommand) { skipBy(-skipInterval) }
 
         val seek = commands.changePlaybackPositionCommand
         val seekHandler: (MPRemoteCommandEvent?) -> MPRemoteCommandHandlerStatus = { event ->
@@ -192,7 +196,4 @@ public class KitePlayerMediaSession(
         infoCenter.nowPlayingInfo = null
     }
 
-    private companion object {
-        const val SKIP_SECONDS = 15.0
-    }
 }

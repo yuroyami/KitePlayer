@@ -42,6 +42,77 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `VizCatalog.create()`, which returns every drawing in one list. Twenty-six drawings were
   removed, so an app that saved the name of one of them finds no match and needs a fallback.
 
+- `BufferPolicy` gains `stallTimeout`, 30 seconds by default, which changes the generated
+  data-class methods. Recompile. A session whose source sends nothing for that long now ends with
+  the new `PlaybackError.SourceStalled`, where it used to wait in Buffering until closed. Set
+  `Duration.INFINITE` for the old wait, and handle `SourceStalled` in a `when` without `else`.
+- `VideoAdjustments` gains `gamma`, which changes the generated data-class methods. Recompile.
+- `MediaItem` gains `title`, `artist` and `album`, and each `KitePlayerMediaSession` gains
+  `skipInterval`. Both change generated methods or signatures. Recompile.
+- `attachMediaNotification` now holds wake locks while the player plays or buffers, and refuses a
+  manifest without `android.permission.WAKE_LOCK`. Declare the permission, or pass
+  `wakeLocks = WakeLockPolicy.None` to hold nothing, as before.
+- `MediaItem.label` drops the query and the fragment, and `diagnosticsDump()` now redacts URIs and
+  option values as `supportBundle()` does. A printed `PlaybackError`, `PlaybackWarning` or
+  `MediaItem` shows no URL query and no header value. Read `uri` for the full URI.
+- KitePlayer builds on KiteFFmpeg 0.3.0. Code that also calls KiteFFmpeg directly names a decoder
+  with `DecoderId` and an encoder with `EncoderId`, apart from the format's `CodecId`.
+
+### Added
+
+- The `kiteplayer-io` module of input doors: files and streams on the JVM, file paths on Apple and
+  Linux, content URIs and bundled assets on Android, and a bounded pipe for media that arrives by
+  push.
+- `MediaItem.demux`, typed settings for opening a container, and the `mediaItem { }` builder.
+- `MediaItem.title`, `artist` and `album`, which the lock screen, the notification and the car show
+  before the file's own tags.
+- Background playback on Android with the library's own `KitePlayerMediaService` and media
+  notification. The notification shows the session's custom actions, and holds the processor and
+  Wi-Fi awake while the player plays or buffers (`WakeLockPolicy`).
+- `skipInterval` on `KitePlayerMediaSession`, for the skip buttons on Android, iOS and the web.
+- Picture in picture on the desktop JVM, in the browser and on macOS, in step with playback.
+- `BufferPolicy.stallTimeout`, which ends a session whose source stops answering. Every network wait
+  is bounded, and an interrupt ends a read that waits in a reader.
+- `AudioConfig.resampler`, and `KiteFFmpegResampler`, which runs FFmpeg's libswresample.
+- Japanese, Chinese and Korean subtitle files are read in their own encodings.
+- Subtitles are placed over the whole output on every renderer, inside an optional safe area.
+- `VideoAdjustments.gamma`, and stepping a paused player back one frame.
+- Recording what the player reads into a Matroska file, and a timeline a profiler can open.
+- Scaling in linear light on both GPU renderers, and each Metal frame's presented time.
+- A warning when the default audio output changes on macOS.
+- The HTTP reader reconnects a dropped read at the byte it reached, up to five times.
+- 32-bit ARM Android phones get every native library KitePlayer needs, because KiteFFmpeg 0.3.0
+  adds one to its Android AAR. Not yet run on a 32-bit device.
+- The audio visualiser has one flat catalogue with Glitch, Fluctus, Twin Bloom and ten credited
+  ports: Silk, Honeycomb, Fracture, Lines, Threads, Fireworks, Muser, Wavy Spiral, Musical Spectrum
+  and Iris. A stills tool renders any drawing at chosen seconds of a real song.
+
+### Fixed
+
+- The position no longer jumps ahead by the paused time after a resume, and each forward step
+  shows exactly the next frame.
+- Video coded as RGB plays, and Identity video converts as its planes.
+- A caller's descriptor is read by position, so no open moves its offset.
+- VideoToolbox attaches to FFmpeg's own AV1 decoder on Apple.
+- Every part of an FFmpeg source closes even when one part fails.
+- A stop or a cancelled open ends an open whose reader hangs.
+- The audio ring refuses to build where its counters would take a lock.
+- The iOS audio session turns on again when playback resumes after a phone call.
+- A signed URL's query and a request header's value no longer reach a label, a message, a
+  printout or the diagnostics dump.
+- The Android libass libraries are aligned for 16 KB pages whatever NDK builds them, and the
+  newest NDK is picked by its version, not by its folder name.
+
+### Changed
+
+- KitePlayer builds on KiteFFmpeg 0.3.0, with FFmpeg 9.0.2.
+- The visualiser drawings Kaleidoscope, Ocean Mist, Contour, Glitch, Nebula Field, Pipe, Alchemy,
+  Neon Lo-Fi and Odyssey were rebuilt. Shatter and Ripple Well became Thin Ice, Reaction Diffusion
+  and Smoke Rise became Marble, and Aurora and Aurora Field left the catalogue.
+- CI builds and launches the iOS sample app, runs the tvOS, watchOS, Linux arm64 and Android device
+  tests, and fails when a published artifact grows past its baseline or a hot path gets ten times
+  slower.
+
 ## [0.0.26] - 2026-09-20
 
 ### Added

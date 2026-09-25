@@ -24,7 +24,8 @@ Things people build with it:
 KitePlayer does not wrap ExoPlayer, AVPlayer or libmpv. Seeking, audio and video sync and the
 state machine live in one Kotlin engine, so they behave the same on every platform. FFmpeg comes
 through [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg) and is compiled into the artifacts.
-You do not install FFmpeg, add a Gradle plugin or touch linker settings.
+You do not install FFmpeg or add a Gradle plugin. An iOS app that links a static framework adds a
+few system frameworks to its linker flags; [iOS](#ios) lists them.
 
 > **Early software.** KitePlayer is 0.0.x. It plays real media on Android, iOS, macOS and the
 > desktop JVM, and it runs inside a shipping app. The public API will still change. Read
@@ -72,6 +73,21 @@ kiteplayer-audioviz                  optional audio visualiser over Kite3D
 ```
 
 [Modules](#modules) says what each one is for.
+
+### iOS
+
+A dynamic framework needs nothing more, because Kotlin links it and brings the system frameworks
+with it. A static framework (`isStatic = true`) is linked by Xcode instead, so add this to Other
+Linker Flags:
+
+```text
+-ObjC -lz -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework VideoToolbox -framework AudioToolbox
+```
+
+KitePlayer times playback with `mach_absolute_time`, which Apple lists as a system boot time API.
+Declare it in the app's `PrivacyInfo.xcprivacy`: the category is
+`NSPrivacyAccessedAPICategorySystemBootTime` and the reason is `35F9.1`, time measured between
+events inside the app.
 
 ## Play something
 
@@ -253,6 +269,7 @@ Android stops a process that plays in the background unless a foreground service
 ```xml
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
 
 <application>
     <service
@@ -274,9 +291,16 @@ val notification = KitePlayerPlatform.attachMediaNotification(
 )
 ```
 
-- The media notification shows the title, the artist, previous, play or pause and next. Your own
-  buttons come from `session.setCustomActions`, and the system media controls show the same ones.
-  `session.setArtworkLoader` supplies the picture.
+- The media notification shows the title, the artist, previous, play or pause and next. Set
+  `title`, `artist` and `album` on the `MediaItem` to choose them; otherwise they come from the
+  file's tags and then its file name. Your own buttons come from `session.setCustomActions`, and
+  the system media controls show the same ones. `session.setArtworkLoader` supplies the picture.
+- The skip back and skip forward buttons move 15 seconds. Pass `skipInterval` to
+  `KitePlayerMediaSession` for another interval.
+- While the player plays or buffers, the notification keeps the processor and Wi-Fi awake, so a
+  stream keeps loading with the screen off. That needs the `WAKE_LOCK` permission above. Pick
+  another `wakeLocks` policy in `MediaNotificationOptions`, or `WakeLockPolicy.None` to hold
+  nothing.
 - While the player plays, the service holds the app in the foreground. After a pause it stays in
   the foreground for ten minutes (`pausedForegroundTimeout`). Then the notification can be swiped
   away, which stops the service and leaves the player paused.
@@ -344,8 +368,6 @@ asked of it, and what happened.
 
 - Adaptive streaming. Single file HTTP and HTTPS with an in-memory byte cache is there. HLS and
   DASH with bitrate switching and persistent caching are not.
-- Audio resampling quality. Rate conversion is linear interpolation, which dulls the top end of
-  music. libswresample replaces it before 1.0.
 - Linux audio output. The engine plays; there is no ALSA sink.
 - Desktop JVM outside macOS arm64, see above.
 - A stable API. Public declarations are checked against committed ABI dumps, so a change fails

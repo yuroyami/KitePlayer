@@ -120,7 +120,13 @@ abstract class BuildLibassJniTask : DefaultTask() {
                 // Nothing may be left dangling: a missing symbol in a .so surfaces as a dlopen
                 // failure on a user's device rather than as a build error here.
                 "-Wl,--no-undefined",
-            )
+            ) + if (abi.sixteenKibPages) {
+                // Android 15 devices with 16 KB pages load only a library aligned for them. A new
+                // enough NDK aligns by default; the flags keep an older one from breaking it silently.
+                listOf("-Wl,-z,max-page-size=16384", "-Wl,-z,common-page-size=16384")
+            } else {
+                emptyList()
+            }
             run(command)
             logger.lifecycle("[kiteplayer-libass] ${abi.abiDirName}/${destination.name} built")
         }
@@ -135,12 +141,16 @@ abstract class BuildLibassJniTask : DefaultTask() {
         }
     }
 
-    /** One Android ABI: what the NDK calls it, what the AAR calls it, and where its chain sits. */
+    /**
+     * One Android ABI: what the NDK calls it, what the AAR calls it, where its chain sits, and
+     * whether its library is aligned for 16 KB pages, which only 64-bit devices use.
+     */
     data class AndroidAbi(
         val abiDirName: String,
         val ndkTarget: String,
         val depsDirName: String,
         val gradleSuffix: String,
+        val sixteenKibPages: Boolean,
     )
 
     companion object {
@@ -151,9 +161,9 @@ abstract class BuildLibassJniTask : DefaultTask() {
          * target for it.
          */
         val ABIS: List<AndroidAbi> = listOf(
-            AndroidAbi("arm64-v8a", "aarch64-linux-android24", "android-arm64", "AndroidArm64"),
-            AndroidAbi("armeabi-v7a", "armv7a-linux-androideabi24", "android-arm32", "AndroidArm32"),
-            AndroidAbi("x86_64", "x86_64-linux-android24", "android-x64", "AndroidX64"),
+            AndroidAbi("arm64-v8a", "aarch64-linux-android24", "android-arm64", "AndroidArm64", sixteenKibPages = true),
+            AndroidAbi("armeabi-v7a", "armv7a-linux-androideabi24", "android-arm32", "AndroidArm32", sixteenKibPages = false),
+            AndroidAbi("x86_64", "x86_64-linux-android24", "android-x64", "AndroidX64", sixteenKibPages = true),
         )
 
     }

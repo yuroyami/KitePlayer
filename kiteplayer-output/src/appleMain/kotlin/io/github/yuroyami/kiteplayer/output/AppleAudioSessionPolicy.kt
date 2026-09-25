@@ -19,6 +19,12 @@ internal interface AppleAudioSessionController {
 
 internal fun interface AppleAudioSessionLease {
     fun close()
+
+    /**
+     * Turns the session on again before playback resumes. iOS turns an app's session off when an
+     * interruption such as a phone call begins, and nothing turns it back on by itself.
+     */
+    fun reactivate() = Unit
 }
 
 internal expect fun platformAppleAudioSessionController(): AppleAudioSessionController
@@ -56,6 +62,17 @@ internal class AppleAudioSessionLeaseManager(
         return ManagedLease(this)
     }
 
+    /**
+     * Activates the session again while a managed lease is held. A refusal is not thrown: the
+     * device start that follows reports whatever still stops playback.
+     */
+    fun reactivate() {
+        synchronized(lock) {
+            if (leases == 0) return
+            runCatching { controller.setActive(active = true, notifyOthers = false) }
+        }
+    }
+
     private fun release() {
         synchronized(lock) {
             check(leases > 0) { "an Apple audio-session lease was released without being acquired" }
@@ -79,6 +96,10 @@ internal class AppleAudioSessionLeaseManager(
                 }
             }
             if (release) manager.release()
+        }
+
+        override fun reactivate() {
+            if (!synchronized(this) { closed }) manager.reactivate()
         }
     }
 

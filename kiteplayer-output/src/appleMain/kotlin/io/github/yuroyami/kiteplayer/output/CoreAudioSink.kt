@@ -402,6 +402,7 @@ public class CoreAudioSink private constructor(
 
     override suspend fun start() {
         val sink = handle ?: error("start was called before open")
+        sessionLease?.reactivate()
         callAndCheck("starting the audio device") { status -> kprt_sink_start(sink, status) }
     }
 
@@ -424,6 +425,8 @@ public class CoreAudioSink private constructor(
     /** Stopping the unit keeps the device open, so nothing buffered is lost and resuming is quick. */
     override suspend fun setPaused(paused: Boolean): Boolean {
         val sink = handle ?: return false
+        // After a phone call iOS leaves the session off, and the device does not start without it.
+        if (!paused) sessionLease?.reactivate()
         callAndCheck(if (paused) "pausing the audio device" else "resuming the audio device") { status ->
             kprt_sink_set_paused(sink, if (paused) 1 else 0, status)
         }

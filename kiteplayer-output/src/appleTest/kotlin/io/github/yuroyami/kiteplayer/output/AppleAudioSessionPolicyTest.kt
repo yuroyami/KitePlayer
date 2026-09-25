@@ -42,6 +42,48 @@ class AppleAudioSessionPolicyTest {
     }
 
     @Test
+    fun aManagedLeaseActivatesTheSessionAgainOnResume() {
+        val controller = RecordingAppleAudioSessionController()
+        val manager = AppleAudioSessionLeaseManager(controller)
+        val lease = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback)
+
+        lease.reactivate()
+        assertEquals(
+            listOf("category:playback:moviePlayback:none", "active:true:none", "active:true:none"),
+            controller.calls,
+        )
+
+        lease.close()
+        lease.reactivate()
+        assertEquals("active:false:notifyOthers", controller.calls.last(), "a closed lease activates nothing")
+    }
+
+    @Test
+    fun aRefusedReactivationIsLeftForTheDeviceStartToReport() {
+        // The first activation, at acquire, succeeds; the second, at resume, is refused.
+        var activations = 0
+        val controller = object : AppleAudioSessionController {
+            override fun setPlaybackCategory() = Unit
+            override fun setActive(active: Boolean, notifyOthers: Boolean) {
+                if (active && ++activations == 2) throw PlannedAppleAudioSessionFailure()
+            }
+        }
+        val manager = AppleAudioSessionLeaseManager(controller)
+        val lease = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback)
+        lease.reactivate()
+        assertEquals(2, activations)
+        assertEquals(1, manager.activeLeaseCount, "the lease stays held after a refused reactivation")
+    }
+
+    @Test
+    fun anApplicationManagedLeaseLeavesTheSessionToTheApplication() {
+        val controller = RecordingAppleAudioSessionController()
+        val lease = AppleAudioSessionLeaseManager(controller).acquire(AppleAudioSessionPolicy.ApplicationManaged)
+        lease.reactivate()
+        assertEquals(emptyList(), controller.calls)
+    }
+
+    @Test
     fun `activation failure rolls back the lease count and the next acquire retries`() {
         val controller = RecordingAppleAudioSessionController(failActivationCount = 1)
         val manager = AppleAudioSessionLeaseManager(controller)

@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 The entries under a version are drafted by `scripts/release-notes.sh`, which groups the commits since the previous tag by their prefix. `publish.yml` refuses a version that has no section here.
 
-## [Unreleased]
+## [0.0.27] - 2026-09-25
 
 ### Upgrading from 0.0.26
 

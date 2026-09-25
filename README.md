@@ -35,13 +35,13 @@ few system frameworks to its linker flags; [iOS](#ios) lists them.
 
 ```kotlin
 /** Native views, no Compose. The default stack. */
-implementation("io.github.yuroyami:kiteplayer:0.0.26")
+implementation("io.github.yuroyami:kiteplayer:0.0.27")
 
 /** Compose. Everything above, plus both Compose video paths. */
-implementation("io.github.yuroyami:kiteplayer-compose:0.0.26")
+implementation("io.github.yuroyami:kiteplayer-compose:0.0.27")
 
 /** Optional, next to either line: an audio visualiser for files with no picture, in Compose. */
-implementation("io.github.yuroyami:kiteplayer-audioviz:0.0.26")
+implementation("io.github.yuroyami:kiteplayer-audioviz:0.0.27")
 ```
 
 Put the line in `commonMain.dependencies`, or in the `dependencies` block of an Android-only app.

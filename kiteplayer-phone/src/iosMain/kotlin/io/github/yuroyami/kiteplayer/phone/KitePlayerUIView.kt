@@ -9,8 +9,15 @@ import platform.CoreGraphics.CGRectZero
 import platform.UIKit.UIColor
 import platform.UIKit.UIView
 
-/** Use [io.github.yuroyami.kiteplayer.view.KitePlayerUIView] from `kiteplayer-view`. */
-@Deprecated("Use KitePlayerUIView from kiteplayer-view")
+/**
+ * Use [io.github.yuroyami.kiteplayer.view.KitePlayerUIView] from `kiteplayer-view`, and call
+ * `installMobileRenderer()` from `kiteplayer` on it. This view installs that renderer by itself;
+ * the replacement draws nothing until it has one.
+ */
+@Deprecated(
+    "Use KitePlayerUIView from kiteplayer-view and call installMobileRenderer() from kiteplayer on it. " +
+        "Without that call the new view plays the audio and draws nothing.",
+)
 public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
     private val delegate = io.github.yuroyami.kiteplayer.view.KitePlayerUIView().apply {
         installMobileRenderer()

@@ -130,7 +130,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - uses: actions/cache@v4
         with:
           path: ~/.konan
@@ -337,7 +337,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - uses: actions/cache@v4
         with:
           path: ~/.konan
@@ -423,7 +423,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - uses: actions/cache@v4
         with:
           path: ~/.konan
@@ -495,7 +495,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       # AGP's own build cache. The SDK itself is NOT cached here: the runner image ships it, and
       # ${{ env.ANDROID_SDK_ROOT }} does not resolve in a `with:` block, because the env context
       # holds only workflow-declared variables and not the runner's own. A path written that way
@@ -592,7 +592,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - uses: actions/cache@v4
         with:
           path: ~/.konan
@@ -791,7 +791,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - uses: actions/cache@v4
         with:
           path: ~/.konan
@@ -853,7 +853,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - uses: actions/cache@v4
         with:
           path: ~/.konan
@@ -979,7 +979,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - uses: actions/cache@v4
         with:
           path: ~/.konan
@@ -1032,10 +1032,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       # :kiteplayer-libass's web tests import the real kiteass.mjs, which this job links with
       # emscripten from the wasm32 chain (downloaded from the KiteFFmpeg release like the others).
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: mymindstorm/setup-emsdk@6ab9eb1bda2574c4ddb79809fc9247783eaf9021 # v14
         with:
           version: latest
       # Kotlin/JS and Kotlin/Wasm fetch their own node and yarn into ~/.gradle, then populate

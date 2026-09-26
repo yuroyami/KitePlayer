@@ -3919,6 +3919,7 @@ final object io.github.yuroyami.kiteplayer/KiteLog { // io.github.yuroyami.kitep
 
     final fun install(io.github.yuroyami.kiteplayer/KiteLog.Sink?) // io.github.yuroyami.kiteplayer/KiteLog.install|install(io.github.yuroyami.kiteplayer.KiteLog.Sink?){}[0]
     final fun installStructured(io.github.yuroyami.kiteplayer/KiteLog.StructuredSink?) // io.github.yuroyami.kiteplayer/KiteLog.installStructured|installStructured(io.github.yuroyami.kiteplayer.KiteLog.StructuredSink?){}[0]
+    final fun log(kotlin/String, kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // io.github.yuroyami.kiteplayer/KiteLog.log|log(kotlin.String;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
 
     abstract fun interface Sink { // io.github.yuroyami.kiteplayer/KiteLog.Sink|null[0]
         abstract fun log(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/KiteLog.Sink.log|log(kotlin.String;kotlin.String){}[0]

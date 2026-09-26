@@ -395,6 +395,8 @@ public final class io/github/yuroyami/kiteplayer/KiteLog {
 	public final fun getRedactUris ()Z
 	public final fun install (Lio/github/yuroyami/kiteplayer/KiteLog$Sink;)V
 	public final fun installStructured (Lio/github/yuroyami/kiteplayer/KiteLog$StructuredSink;)V
+	public final fun log (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)V
+	public static synthetic fun log$default (Lio/github/yuroyami/kiteplayer/KiteLog;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;ILjava/lang/Object;)V
 	public final fun setRedactUris (Z)V
 }
 

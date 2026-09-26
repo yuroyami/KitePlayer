@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.KitePlayerPlatform
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +55,9 @@ public data class MediaNotificationOptions(
     /**
      * What stays awake while the player plays or buffers, so a stream keeps loading after the
      * screen turns off. See [WakeLockPolicy]. A lock needs the `WAKE_LOCK` permission in the
-     * manifest, which [KitePlayerMediaService] shows. media3 calls this the wake mode.
+     * manifest, which [KitePlayerMediaService] shows. Without the permission the notification holds
+     * nothing, as with [WakeLockPolicy.None], and says so once through `KiteLog`. media3 calls this
+     * the wake mode.
      */
     val wakeLocks: WakeLockPolicy = WakeLockPolicy.Network,
 ) {
@@ -118,10 +121,14 @@ public data class MediaNotificationAction(
  * Removing the application from the recent apps screen does the same unless the player is
  * playing. Idle and a failure remove the notification.
  *
- * The application declares the service and two permissions in its manifest;
+ * The application declares the service and its permissions in its manifest;
  * [KitePlayerMediaService] shows how. Android 13 and later do not need the notification
  * permission for a media session's notification. One notification shows at a time: attaching
  * again closes the one before. Close it before the session.
+ *
+ * A manifest without `android.permission.WAKE_LOCK` does not stop the attach. The notification
+ * then holds no wake lock, whatever [MediaNotificationOptions.wakeLocks] asks, and `KiteLog`
+ * receives one line that says so.
  *
  * @throws IllegalStateException when the application's manifest does not declare
  *         [KitePlayerMediaService].
@@ -136,11 +143,16 @@ public fun KitePlayerPlatform.attachMediaNotification(
         "the manifest does not declare io.github.yuroyami.kiteplayer.session.KitePlayerMediaService; " +
             "the class documentation has the declaration"
     }
-    check(options.wakeLocks == WakeLockPolicy.None || grants(application, Manifest.permission.WAKE_LOCK)) {
-        "the manifest does not declare android.permission.WAKE_LOCK, which MediaNotificationOptions.wakeLocks " +
-            "needs; declare it, or pass WakeLockPolicy.None"
+    if (options.wakeLocks == WakeLockPolicy.None || grants(application, Manifest.permission.WAKE_LOCK)) {
+        return MediaNotificationHandle(session, application, options)
     }
-    return MediaNotificationHandle(session, application, options)
+    // A throw here broke every app that upgraded without editing its manifest (#205).
+    KiteLog.log(
+        "MediaNotification",
+        "the manifest does not declare android.permission.WAKE_LOCK, so the notification holds no wake lock; " +
+            "declare it for MediaNotificationOptions.wakeLocks = ${options.wakeLocks}",
+    )
+    return MediaNotificationHandle(session, application, options.copy(wakeLocks = WakeLockPolicy.None))
 }
 
 private fun grants(context: Context, permission: String): Boolean =

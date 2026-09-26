@@ -27,7 +27,8 @@ import android.os.IBinder
  * </application>
  * ```
  *
- * `WAKE_LOCK` is for [MediaNotificationOptions.wakeLocks]. Without it, pass `WakeLockPolicy.None`.
+ * `WAKE_LOCK` is for [MediaNotificationOptions.wakeLocks]. Without it the notification holds no wake
+ * lock and says so through `KiteLog`.
  *
  * The library merges none of this into the application's manifest, so an application that never
  * plays in the background carries neither the permissions nor the service. The service is not

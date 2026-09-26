@@ -6,6 +6,8 @@
          session's notification needs no notification permission on Android 13 and later. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- The notification keeps the processor and Wi-Fi awake while the song plays or loads. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <application
         android:label="@string/app_name"
         android:extractNativeLibs="false"

@@ -298,9 +298,9 @@ val notification = KitePlayerPlatform.attachMediaNotification(
 - The skip back and skip forward buttons move 15 seconds. Pass `skipInterval` to
   `KitePlayerMediaSession` for another interval.
 - While the player plays or buffers, the notification keeps the processor and Wi-Fi awake, so a
-  stream keeps loading with the screen off. That needs the `WAKE_LOCK` permission above. Pick
-  another `wakeLocks` policy in `MediaNotificationOptions`, or `WakeLockPolicy.None` to hold
-  nothing.
+  stream keeps loading with the screen off. That needs the `WAKE_LOCK` permission above. Without
+  the permission the notification holds nothing and says so through `KiteLog`. Pick another
+  `wakeLocks` policy in `MediaNotificationOptions`, or `WakeLockPolicy.None` to hold nothing.
 - While the player plays, the service holds the app in the foreground. After a pause it stays in
   the foreground for ten minutes (`pausedForegroundTimeout`). Then the notification can be swiped
   away, which stops the service and leaves the player paused.

@@ -77,7 +77,11 @@ public object KiteLog {
         if (sink != null) installed.value = null
     }
 
-    internal fun log(tag: String, message: String, fields: Map<String, String> = emptyMap()) {
+    /**
+     * Sends one line to the installed sink, redacted as [redactUris] says, and does nothing while no
+     * sink is installed. The engine and KitePlayer's other modules log through this call.
+     */
+    public fun log(tag: String, message: String, fields: Map<String, String> = emptyMap()) {
         val structured = installedStructured.value
         val plain = installed.value
         if (structured == null && plain == null) return

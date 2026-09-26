@@ -1,7 +1,7 @@
 [versions] #######################################################################################
 # Toolchain. Kept in lock-step with KiteImage / KiteAudio / KiteFFmpeg / KitePDF so the Kite
 # lineage builds with one shared stack. Values are pushed here by KiteVersions.
-kotlin = "2.4.10"
+kotlin = "2.4.20"
 agp = "9.4.0"
 vanniktechPublish = "0.37.0"
 dokka = "2.2.0"

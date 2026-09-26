@@ -21,6 +21,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -320,6 +322,83 @@ class KtorMediaIoResilienceTest {
             assertNull(ifRanges().last(), "without a tag there is nothing to make the request conditional on")
         } finally {
             io.close()
+        }
+    }
+
+    // RFC 9110, 14.4: only Content-Range proves where a 206 body starts (#283).
+    @Test
+    fun anOpenAnsweredFromAnotherByteIsRefused() = runBlocking {
+        val url = serve { _ ->
+            response.header(HttpHeaders.ContentRange, "bytes 100-199/${bytes.size}")
+            respondBytes(bytes.copyOfRange(100, 200), status = HttpStatusCode.PartialContent)
+        }
+        val failure = assertFailsWith<KtorMediaIoException> { KtorMediaIo.open(url, policy = quick) }
+        assertTrue("range" in failure.message.orEmpty(), "the failure must name the range: ${failure.message}")
+    }
+
+    @Test
+    fun aResumedRangeWithoutContentRangeIsRefused() = runBlocking {
+        val url = serve { range ->
+            if (range == "bytes=0-") {
+                respondPart(range, sent = 80_000, drop = true)
+            } else {
+                respondBytes(bytes.copyOfRange(start(range), bytes.size), status = HttpStatusCode.PartialContent)
+            }
+        }
+        val io = KtorMediaIo.open(url, policy = quick)
+        try {
+            val out = ByteArray(bytes.size)
+            var at = 0
+            val failure = withTimeout(20.seconds) {
+                assertFailsWith<KtorMediaIoException> {
+                    while (at < out.size) {
+                        val r = io.read(out, at, out.size - at)
+                        check(r > 0) { "short read at $at (got $r)" }
+                        at += r
+                    }
+                }
+            }
+            assertTrue("Content-Range" in failure.message.orEmpty(), "the failure must name the header: ${failure.message}")
+            assertContentEquals(bytes.copyOf(at), out.copyOf(at), "every byte read came from the proven answer")
+        } finally {
+            io.close()
+        }
+    }
+
+    @OptIn(ExperimentalAtomicApi::class)
+    @Test
+    fun aRewindToAFileThatChangedIsRefused() = runBlocking {
+        // The same size, a new tag and new bytes, and a server that answers a changed file in full.
+        val version = AtomicReference("\"a\"")
+        val url = serve { range ->
+            if (version.load() == "\"a\"") {
+                respondRange(range, tag = version.load())
+            } else {
+                response.header(HttpHeaders.ETag, version.load())
+                respondBytes(ByteArray(bytes.size) { 7 }, status = HttpStatusCode.OK)
+            }
+        }
+        val io = KtorMediaIo.open(url, policy = quick)
+        try {
+            assertTrue(io.read(ByteArray(1_000), 0, 1_000) > 0)
+            version.store("\"b\"")
+            io.seek(0)
+            val failure = withTimeout(20.seconds) {
+                assertFailsWith<KtorMediaIoException> { io.read(ByteArray(10), 0, 10) }
+            }
+            assertTrue("changed" in failure.message.orEmpty(), "the failure must say the file changed: ${failure.message}")
+            assertEquals("\"a\"", ifRanges().last(), "the rewind asks for the version it opened")
+        } finally {
+            io.close()
+        }
+    }
+
+    @Test
+    fun contentRangeParsingFollowsTheRfc() {
+        assertEquals(ContentRange(0, 99, 200), parseContentRange("bytes 0-99/200"))
+        assertEquals(ContentRange(5, 9, null), parseContentRange("bytes 5-9/*"))
+        for (bad in listOf(null, "", "bytes", "bytes 9-5/200", "bytes 0-200/200", "items 0-9/10", "bytes -5/10", "bytes 0-9")) {
+            assertNull(parseContentRange(bad), "\"$bad\" must not parse")
         }
     }
 

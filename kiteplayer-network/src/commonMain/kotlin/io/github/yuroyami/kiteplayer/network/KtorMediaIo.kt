@@ -179,12 +179,11 @@ public class KtorMediaIo private constructor(
             try {
                 client.prepareGet(uri) {
                     requestHeaders.forEach { (key, value) -> header(key, value) }
-                    if (target > 0) {
-                        header(HttpHeaders.Range, "bytes=$target-")
-                        // A server that honours this answers with the whole file, not a range, when
-                        // the file changed since the first response.
-                        entityTag?.let { header(HttpHeaders.IfRange, it) }
-                    }
+                    // A rewind to zero asks for a range too, so its answer is checked like any other.
+                    header(HttpHeaders.Range, "bytes=$target-")
+                    // A server that honours this answers with the whole file, not a range, when
+                    // the file changed since the first response.
+                    entityTag?.let { header(HttpHeaders.IfRange, it) }
                 }.execute { response ->
                     val ok = response.status == HttpStatusCode.PartialContent ||
                         (target == 0L && response.status == HttpStatusCode.OK)
@@ -200,28 +199,33 @@ public class KtorMediaIo private constructor(
                             retryable = response.status.value >= 500,
                         )
                     }
-                    if (target > 0) {
-                        // The bytes must continue where the reader stopped, in the same file, or
-                        // they would splice in the wrong place.
-                        val range = response.headers[HttpHeaders.ContentRange]
-                        val start = range?.substringAfter("bytes ", "")?.substringBefore('-')?.trim()?.toLongOrNull()
-                        if (start != null && start != target) {
+                    // The bytes must start where the reader stands, in the same file, or they would
+                    // splice in the wrong place (#283). RFC 9110, 14.4: Content-Range names the
+                    // range the body holds, so a 206 without a valid one proves nothing.
+                    val total = if (response.status == HttpStatusCode.PartialContent) {
+                        val range = parseContentRange(response.headers[HttpHeaders.ContentRange])
+                            ?: throw KtorMediaIoException(
+                                "server answered a ranged read at byte $target of $shown with no valid Content-Range",
+                            )
+                        if (range.first != target) {
                             throw KtorMediaIoException(
-                                "server answered from byte $start to a ranged read at byte $target of $shown",
+                                "server answered from byte ${range.first} to a ranged read at byte $target of $shown",
                             )
                         }
-                        val total = range?.substringAfterLast('/')?.trim()?.toLongOrNull()
-                        if (total != null && size != null && total != size) {
-                            throw KtorMediaIoException(
-                                "the file at $shown changed since it was opened: it had $size bytes and has $total",
-                            )
-                        }
-                        val tag = response.headers[HttpHeaders.ETag]
-                        if (entityTag != null && tag != null && tag != entityTag) {
-                            throw KtorMediaIoException(
-                                "the file at $shown changed since it was opened: its entity tag was $entityTag and is $tag",
-                            )
-                        }
+                        range.complete
+                    } else {
+                        response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                    }
+                    if (size != null && total != size) {
+                        throw KtorMediaIoException(
+                            "the file at $shown changed since it was opened: it had $size bytes and has ${total ?: "an unknown size"}",
+                        )
+                    }
+                    val tag = response.headers[HttpHeaders.ETag]
+                    if (entityTag != null && tag != null && tag != entityTag) {
+                        throw KtorMediaIoException(
+                            "the file at $shown changed since it was opened: its entity tag was $entityTag and is $tag",
+                        )
                     }
                     answered.complete(Unit)
                     response.bodyAsChannel().copyTo(pipe)
@@ -290,11 +294,16 @@ public class KtorMediaIo private constructor(
                         val tag = response.headers[HttpHeaders.ETag]?.takeUnless { it.startsWith("W/") }
                         when (response.status) {
                             HttpStatusCode.PartialContent -> {
-                                // Content-Range: bytes 0-last/total, total possibly "*".
-                                val total = response.headers[HttpHeaders.ContentRange]
-                                    ?.substringAfterLast('/')
-                                    ?.toLongOrNull()
-                                probe.complete(Probe(total, seekable = true, tag))
+                                // Content-Range: bytes 0-last/total, total possibly "*". A range that
+                                // does not start at zero would be read as the start of the file (#283).
+                                val range = parseContentRange(response.headers[HttpHeaders.ContentRange])
+                                if (range == null || range.first != 0L) {
+                                    throw KtorMediaIoException(
+                                        "cannot open $shown: it answered the read from byte 0 with the range " +
+                                            "${response.headers[HttpHeaders.ContentRange]}",
+                                    )
+                                }
+                                probe.complete(Probe(range.complete, seekable = true, tag))
                             }
                             HttpStatusCode.OK -> {
                                 val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
@@ -394,3 +403,21 @@ public class KtorMediaIoResolver(
  * credential.
  */
 internal fun shownUri(uri: String): String = MediaItem(uri).label
+
+/** A `Content-Range: bytes first-last/complete` header. [complete] is null for an unknown length. */
+internal data class ContentRange(val first: Long, val last: Long, val complete: Long?)
+
+/** Parses [header] as RFC 9110, 14.4 defines a byte range, or returns null when it is missing or malformed. */
+internal fun parseContentRange(header: String?): ContentRange? {
+    val value = header?.trim() ?: return null
+    if (!value.startsWith("bytes ", ignoreCase = true)) return null
+    val spec = value.substring("bytes ".length).trim()
+    val range = spec.substringBefore('/', missingDelimiterValue = "")
+    val completeText = spec.substringAfter('/', missingDelimiterValue = "").trim()
+    val first = range.substringBefore('-', missingDelimiterValue = "").trim().toLongOrNull() ?: return null
+    val last = range.substringAfter('-', missingDelimiterValue = "").trim().toLongOrNull() ?: return null
+    if (first < 0 || last < first) return null
+    val complete = if (completeText == "*") null else completeText.toLongOrNull() ?: return null
+    if (complete != null && last >= complete) return null
+    return ContentRange(first, last, complete)
+}

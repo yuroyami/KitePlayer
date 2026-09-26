@@ -69,9 +69,10 @@ public interface AudioSink : AutoCloseable {
      * corrects. Report what the platform actually says, and declare how much it can be trusted
      * through [latencyQuality].
      *
-     * No engine code reads this. The audio clock is anchored from the deadline the render callback
-     * carries, which needs no latency figure, so this exists for diagnostics and for a later sink
-     * that has no such callback. Not implemented yet.
+     * The engine reads it for `PlaybackStats.audioLatency`, from its own thread while the device
+     * thread renders, so an implementation must be safe to call concurrently with the render. The
+     * audio clock is anchored from the deadline the render callback carries, which needs no
+     * latency figure.
      */
     public fun latencyNanos(): Long
 

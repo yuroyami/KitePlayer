@@ -64,8 +64,9 @@ internal interface AudioTrackDriver {
 
 /**
  * SCRATCH holder by contract: a driver may reuse one instance across polls, so the
- * caller reads the fields before its next driver call and never retains the object. Mutable
- * for the same reason; the sink's wrap extension writes framePosition in place.
+ * caller reads the fields before its next driver call and never retains the object. The sink
+ * calls the driver and copies the pair out under one lock, because two of its threads read
+ * timestamps. Mutable so each reader can keep a holder of its own.
  */
 internal class DriverTimestamp(var framePosition: Long = 0L, var nanoTime: Long = 0L)
 

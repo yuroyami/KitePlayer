@@ -119,7 +119,22 @@ private class FakeAudioTrackDriver(
         return n
     }
 
-    override fun timestamp(): DriverTimestamp? = timestampAnswer
+    /** How many threads are inside [timestamp] now, and the most there ever were at once. */
+    private val insideTimestamp = AtomicInteger()
+    val mostInsideTimestamp = AtomicInteger()
+
+    /** Holds each [timestamp] call this long, so two overlapping callers would meet inside it. */
+    @Volatile var timestampHoldMillis = 0L
+
+    override fun timestamp(): DriverTimestamp? {
+        mostInsideTimestamp.accumulateAndGet(insideTimestamp.incrementAndGet(), ::maxOf)
+        try {
+            if (timestampHoldMillis > 0) Thread.sleep(timestampHoldMillis)
+            return timestampAnswer
+        } finally {
+            insideTimestamp.decrementAndGet()
+        }
+    }
     override fun playbackHeadPosition(): Int = headAnswer
 }
 
@@ -477,6 +492,23 @@ class AudioTrackSinkTest {
         while (callback.invocations.get() <= before) Thread.sleep(1)
         s.stop()
         s.close()
+    }
+
+    // The writer reads a timestamp for every block while the actor reads one for the stats, through
+    // the driver's one scratch holder (#261).
+    @Test
+    fun `the writer and a latency reader never read the driver timestamp at once`() = runBlocking {
+        val driver = FakeAudioTrackDriver()
+        driver.timestampAnswer = DriverTimestamp(framePosition = 0L, nanoTime = 1L)
+        driver.timestampHoldMillis = 1
+        val s = sink(driver)
+        s.open(stereo48k, FullBlockCallback())
+        s.start()
+        assertTrue(driver.writeEntered.await(5, TimeUnit.SECONDS), "the writer must be writing")
+        repeat(200) { s.latencyNanos() }
+        s.stop()
+        s.close()
+        assertEquals(1, driver.mostInsideTimestamp.get(), "two threads read the driver's timestamp at once")
     }
 
     // A track that stops pulling at the end leaves the writer blocked in write. The engine bounds

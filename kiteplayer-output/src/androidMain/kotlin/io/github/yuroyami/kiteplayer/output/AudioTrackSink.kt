@@ -443,7 +443,7 @@ public class AudioTrackSink internal constructor(
     /* ── Deadline and clock arithmetic (step 6), package-private for the host clock suite. ─ */
 
     private fun deadlineForBlock(d: AudioTrackDriver, format: AudioFormat): Long {
-        val ts = readTimestamp(d)
+        val ts = readTimestamp(d, writerTimestamp)
         if (ts != null && acceptTimestamp(ts)) {
             timestampSourceObserved = "timestamp"
             return timestampDeadline(
@@ -463,18 +463,27 @@ public class AudioTrackSink internal constructor(
      * The one place a driver timestamp is read. Legacy HALs feed AudioTimestamp from a
      * 32-bit counter, so the position wraps at about 24.85 hours at 48 kHz exactly like the
      * playback head; the same extension law covers it. A position already past 32 bits is a
-     * genuine 64-bit counter and passes through untouched. The driver's holder is scratch by
-     * contract, so the extension writes in place and nothing allocates per poll.
+     * genuine 64-bit counter and passes through untouched.
+     *
+     * The driver fills one scratch holder, and two threads read through it: the writer for every
+     * block's deadline, and the actor through [latencyNanos] for the stats. So the driver call and
+     * the copy happen under [headLock], into a holder each reader owns, and a (position, time) pair
+     * is never mixed from two readings (#261). Nothing allocates per poll.
      */
-    private fun readTimestamp(d: AudioTrackDriver): DriverTimestamp? {
-        val ts = d.timestamp() ?: return null
-        /* Under headLock like the head's own wrap state: the writer reads this
-         * per block and the public latencyNanos may read it from any thread. */
+    private fun readTimestamp(d: AudioTrackDriver, into: DriverTimestamp): DriverTimestamp? {
         synchronized(headLock) {
-            ts.framePosition = extendTimestampFrames(ts.framePosition, tsState)
+            val ts = d.timestamp() ?: return null
+            into.framePosition = extendTimestampFrames(ts.framePosition, tsState)
+            into.nanoTime = ts.nanoTime
         }
-        return ts
+        return into
     }
+
+    /** The writer thread's own copy of a driver timestamp. */
+    private val writerTimestamp = DriverTimestamp()
+
+    /** The copy [latencyNanos] reads, from whatever thread calls it. */
+    private val latencyTimestamp = DriverTimestamp()
 
     private val tsState = WrapState()
 
@@ -505,7 +514,7 @@ public class AudioTrackSink internal constructor(
     }
 
     private fun newestPlayedPosition(d: AudioTrackDriver): Long {
-        val ts = readTimestamp(d)
+        val ts = readTimestamp(d, latencyTimestamp)
         return if (ts != null && ts.framePosition in 0..submittedFrames) {
             ts.framePosition
         } else {

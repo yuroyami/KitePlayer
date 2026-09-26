@@ -37,5 +37,6 @@ public data class MediaInspection(
  *
  * @throws PlaybackException when the media cannot be reached or is not media.
  */
+@Throws(Exception::class)
 public suspend fun inspect(media: MediaItem, backend: MediaBackend): MediaInspection =
     inspectMedia(backend, media)

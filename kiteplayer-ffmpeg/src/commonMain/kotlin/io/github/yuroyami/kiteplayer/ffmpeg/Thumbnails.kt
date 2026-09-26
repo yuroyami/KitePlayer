@@ -36,6 +36,7 @@ public object Thumbnails {
      * @throws IllegalArgumentException for an item with no video stream, or a [maxWidth] below one
      * @throws io.github.yuroyami.kiteffmpeg.FFmpegException when the open, a seek or a decode fails
      */
+    @Throws(Exception::class)
     public suspend fun at(
         item: MediaItem,
         positions: List<Duration>,

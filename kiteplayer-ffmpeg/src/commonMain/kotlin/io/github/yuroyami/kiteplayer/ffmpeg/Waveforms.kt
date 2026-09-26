@@ -32,6 +32,7 @@ public object Waveforms {
      *         stream, or a stream whose duration is unknown and so cannot be divided
      * @throws io.github.yuroyami.kiteffmpeg.FFmpegException when the open or the decode fails
      */
+    @Throws(Exception::class)
     public suspend fun of(item: MediaItem, buckets: Int = 1000, stream: TrackId? = null): Waveform {
         require(buckets > 0) { "buckets must be positive, was $buckets" }
         openSource(item).use { source ->

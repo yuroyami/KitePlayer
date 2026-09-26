@@ -263,6 +263,7 @@ public class KtorMediaIo private constructor(
          * closes it with the reader; a shared client stays the caller's to close. [policy] limits
          * every wait, this probe's included.
          */
+        @Throws(Exception::class)
         public suspend fun open(
             uri: String,
             client: HttpClient? = null,

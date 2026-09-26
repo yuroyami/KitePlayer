@@ -16,6 +16,7 @@ public object AudioAnalysis {
      * @throws IllegalArgumentException for an item with no audio stream
      * @throws io.github.yuroyami.kiteffmpeg.FFmpegException when the open or the decode fails
      */
+    @Throws(Exception::class)
     public suspend fun measureLoudness(item: MediaItem): LoudnessResult {
         openSource(item).use { source ->
             val stream = source.primaryAudio

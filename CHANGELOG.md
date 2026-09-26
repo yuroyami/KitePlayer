@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 The entries under a version are drafted by `scripts/release-notes.sh`, which groups the commits since the previous tag by their prefix. `publish.yml` refuses a version that has no section here.
 
+## [Unreleased]
+
+### Upgrading
+
+- Swift and Objective-C: every `KitePlayer` call that can fail now declares `@Throws`, so a
+  failure arrives as an error instead of ending the app (#204). The suspend calls convert any
+  `Exception`. The setters, `play`, `pause`, `seekLater` and the renderer and tap calls throw on a
+  closed player or a bad argument, so Swift now calls them with `try`. Java callers of
+  `KitePlayer.create` handle the checked `PlaybackException`.
+- `attachMediaNotification` no longer refuses a manifest without `android.permission.WAKE_LOCK`.
+  It holds no wake lock then and says so through `KiteLog`, which is now public (#205).
+
 ## [0.0.27] - 2026-09-25
 
 ### Upgrading from 0.0.26

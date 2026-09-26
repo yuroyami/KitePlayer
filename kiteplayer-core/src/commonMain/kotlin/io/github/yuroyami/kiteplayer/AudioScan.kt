@@ -65,6 +65,7 @@ public class AudioScanResult internal constructor(
  * @throws IllegalArgumentException when [track] is not an audio track of [media], or it has none.
  * @throws UnsupportedOperationException when no decoder accepts the track.
  */
+@Throws(Exception::class)
 public suspend fun scanAudio(
     media: MediaItem,
     backend: MediaBackend,

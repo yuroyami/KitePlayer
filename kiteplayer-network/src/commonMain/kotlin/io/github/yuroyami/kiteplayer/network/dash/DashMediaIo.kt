@@ -186,6 +186,7 @@ public object Dash {
      * [readerPolicy] limits the wait: a server that sends no headers within its connect timeout,
      * or no bytes within its read timeout, fails the call with [KtorMediaIoException].
      */
+    @Throws(Exception::class)
     public suspend fun manifest(
         mpdUrl: String,
         client: HttpClient,
@@ -208,6 +209,7 @@ public object Dash {
      * [DashMediaIo] stream over [client]. The item's uri stays the manifest's, for labels.
      * [readerPolicy] limits the manifest fetch and every segment fetch, as in [manifest].
      */
+    @Throws(Exception::class)
     public suspend fun mediaItemFor(
         mpdUrl: String,
         client: HttpClient,

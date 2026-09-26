@@ -111,6 +111,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws PlaybackException when the media cannot be reached, is not media, holds nothing this build
      *         can decode, or no audio device could be opened for a file with no video to fall back on.
      */
+    @Throws(Exception::class)
     public suspend fun open(media: MediaItem) {
         core.open(media)
     }
@@ -122,6 +123,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * starts as soon as every selected stream can supply it. A caller that wants to know when that
      * happened watches [state].
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun play() {
         core.play()
     }
@@ -132,6 +134,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * The engine freezes its clocks only after the device is quiet and its last anchor has been consumed,
      * so resuming does not jump.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun pause() {
         core.pause()
     }
@@ -150,6 +153,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *         seek changed nothing: playback continues at the old position.
      * @throws UnsupportedOperationException when the source is not seekable.
      */
+    @Throws(Exception::class)
     public suspend fun seek(to: Duration, mode: SeekMode = SeekMode.Precise) {
         val result = core.seek(Pts.ofDuration(validPosition(to, "seek")), mode)
         if (result is SeekResult.Rejected) throw IllegalStateException(result.reason)
@@ -167,6 +171,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws IllegalArgumentException when [to] is infinite or negative.
      * @throws IllegalStateException after terminal close has been requested.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun seekLater(to: Duration, mode: SeekMode = SeekMode.KeyframeThenRefine) {
         core.seekLater(Pts.ofDuration(validPosition(to, "seekLater")), mode)
     }
@@ -176,6 +181,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * Preempts an open, a seek or a drain that is still running. Idempotent.
      */
+    @Throws(Exception::class)
     public suspend fun stop() {
         core.stop()
     }
@@ -202,6 +208,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * [PlaybackWarning.CommandRefused] on [events] and the warning history: this member does
      * not wait for the engine, so a throw could never reach its caller.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSpeed(value: Double) {
         require(value.isFinite() && value >= SPEED_MIN && value <= SPEED_MAX) {
             "speed must be within $SPEED_MIN..$SPEED_MAX, was $value"
@@ -223,6 +230,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * the same way on an unseekable source; at 1.0 the two mechanisms are the same bypass and
      * the change is free. Published as [PlayerSnapshot.preservePitch].
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setPreservePitch(value: Boolean) {
         core.post(CoreCommand.SetPreservePitch(value, CompletableDeferred()))
     }
@@ -241,6 +249,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @throws IllegalArgumentException when [value] is not finite or is outside 0 to the ceiling.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVolume(value: Float) {
         val ceiling = core.volumeCeiling
         require(value.isFinite() && value >= 0f && value <= ceiling) {
@@ -264,6 +273,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @throws IllegalArgumentException when [value] is not finite or is outside -1 to 1.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setBalance(value: Float) {
         require(value.isFinite() && value >= -1f && value <= 1f) {
             "balance must be between -1 and 1, was $value"
@@ -287,6 +297,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * Parked frames are not counted as drops. A drop means the engine could not keep up, and this
      * is a decision.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoEnabled(enabled: Boolean) {
         core.post(CoreCommand.SetVideoEnabled(enabled, CompletableDeferred()))
     }
@@ -305,6 +316,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @throws IllegalArgumentException when [fade] is negative, or an [SleepTimer.After] is not in the future.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSleepTimer(timer: SleepTimer?, fade: Duration = DEFAULT_SLEEP_FADE) {
         core.post(CoreCommand.SetSleepTimer(timer, fade, CompletableDeferred()))
     }
@@ -319,11 +331,13 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * inaudible, and interpolating twenty coefficients per sample to avoid it would cost more than
      * the filter does.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setEqualizer(settings: EqualizerSettings) {
         core.post(CoreCommand.SetEqualizer(settings, CompletableDeferred()))
     }
 
     /** Silences the sound without losing the [setVolume] setting. Ramped the same way. */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setMuted(value: Boolean) {
         core.post(CoreCommand.SetMuted(value, CompletableDeferred()))
     }
@@ -335,6 +349,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * With a queue of one, or plain [open]-ed media, it repeats the current item exactly like
      * [LoopMode.One], which is what a whole queue of one means.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setLoop(mode: LoopMode) {
         core.post(CoreCommand.SetLoop(mode, CompletableDeferred()))
     }
@@ -352,6 +367,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * An item added later joins the order somewhere after the one playing rather than always
      * last. [seed] makes the order reproducible, which is what a test or a shared session needs.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setShuffle(enabled: Boolean, seed: Long? = null) {
         core.post(CoreCommand.SetShuffle(enabled, seed, CompletableDeferred()))
     }
@@ -373,6 +389,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws IllegalArgumentException when a point is negative, when [b] alone is given, or
      *         when [b] is not after [a].
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setAbLoop(a: Duration?, b: Duration? = null) {
         require(a != null || b == null) { "an A-B loop needs its A; B alone is not a loop" }
         require(a == null || a >= Duration.ZERO) { "A must not be negative, was $a" }
@@ -389,6 +406,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * renderer is told it on attach. Pixel aspect and container rotation are honoured in every
      * mode. The current mode is published as [PlayerSnapshot.videoScale].
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoScale(mode: VideoScale) {
         core.post(CoreCommand.SetVideoScale(mode, CompletableDeferred()))
     }
@@ -405,6 +423,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *         contrast 0..2, saturation 0..2, hue -180..180, all finite. Gamma needs no check
      *         here, because [VideoAdjustments] refuses a gamma outside 0.5..2 when it is built.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoAdjustments(value: VideoAdjustments) {
         require(value.brightness.isFinite() && value.brightness in -1f..1f) {
             "brightness must be within -1..1, was ${value.brightness}"
@@ -432,6 +451,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @throws IllegalArgumentException on a non-finite or negative debanding parameter.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setRenderQuality(value: RenderQuality) {
         require(value.debandThreshold.isFinite() && value.debandThreshold >= 0f) {
             "the deband threshold must be finite and not negative, was ${value.debandThreshold}"
@@ -458,6 +478,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws IllegalArgumentException outside the documented ranges: aspect 0.1..10 (or null),
      *         zoom 0.25..4, pan -1..1 on each axis, all finite.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoTransform(value: VideoTransform) {
         val aspect = value.aspectOverride
         require(aspect == null || (aspect.isFinite() && aspect in 0.1f..10f)) {
@@ -475,6 +496,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * Shifts subtitle timing by [value]. Positive shows cues later. Applies to the cues already
      * on screen at the next pass, no reopen and no reselection.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSubtitleDelay(value: Duration) {
         core.post(CoreCommand.SetSubtitleDelay(value, CompletableDeferred()))
     }
@@ -485,6 +507,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @throws IllegalArgumentException unless finite and greater than zero.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSubtitleScale(value: Float) {
         require(value.isFinite() && value > 0f) { "subtitle scale must be finite and positive, was $value" }
         core.post(CoreCommand.SetSubtitleScale(value, CompletableDeferred()))
@@ -497,6 +520,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * author's. Applies to the text showing now, not just to the next cue. Bitmap subtitles are
      * untouched. [PlayerSnapshot.subtitleStyle] reports what is set.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSubtitleStyle(override: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?) {
         core.post(CoreCommand.SetSubtitleStyle(override, CompletableDeferred()))
     }
@@ -511,6 +535,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @throws IllegalArgumentException unless finite and within 0.1 to 1.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSubtitlePosition(value: Float) {
         require(value.isFinite() && value in 0.1f..1f) {
             "subtitle position must be within 0.1..1, was $value"
@@ -524,6 +549,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * as if it were the whole output, and a typeset ASS track keeps its author's placement. The
      * active cues re-rasterise immediately. docs/subtitle-placement.md has the whole rule.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSubtitleSafeArea(value: io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea) {
         core.post(CoreCommand.SetSubtitleSafeArea(value, CompletableDeferred()))
     }
@@ -534,6 +560,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * needs. The audio samples are never touched, so the change is instant and free, and the
      * picture walks over smoothly within a frame or two rather than jumping.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setAudioDelay(value: Duration) {
         core.post(CoreCommand.SetAudioDelay(value, CompletableDeferred()))
     }
@@ -556,6 +583,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *         parses to no cues; the message says which.
      * @throws PlaybackException when the reopen the selection needed failed.
      */
+    @Throws(Exception::class)
     public suspend fun addExternalSubtitle(source: SubtitleSource): TrackId =
         core.addExternalSubtitle(source)
 
@@ -571,6 +599,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws IllegalArgumentException for an empty list or a start index outside it.
      * @throws PlaybackException when the starting item cannot be opened, exactly like [open].
      */
+    @Throws(Exception::class)
     public suspend fun openQueue(items: List<MediaItem>, startIndex: Int = 0) {
         core.openQueue(items, startIndex)
     }
@@ -581,6 +610,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws IllegalStateException with no queue, or at the last item unless [LoopMode.All]
      *         makes the ends meet.
      */
+    @Throws(Exception::class)
     public suspend fun next() {
         core.queueNext()
     }
@@ -591,6 +621,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws IllegalStateException with no queue, or at the first item unless [LoopMode.All]
      *         makes the ends meet.
      */
+    @Throws(Exception::class)
     public suspend fun previous() {
         core.queuePrevious()
     }
@@ -608,11 +639,13 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *         upper bound is inclusive, because one past the end is where an append goes.
      * @throws IllegalStateException when nothing is open at all.
      */
+    @Throws(Exception::class)
     public suspend fun addToQueue(items: List<MediaItem>, index: Int? = null) {
         core.addToQueue(items, index)
     }
 
     /** Inserts one item. See the list overload for everything else. */
+    @Throws(Exception::class)
     public suspend fun addToQueue(item: MediaItem, index: Int? = null) {
         core.addToQueue(listOf(item), index)
     }
@@ -630,6 +663,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws IllegalStateException when nothing is open at all.
      * @throws PlaybackException when the item that took its place could not be opened.
      */
+    @Throws(Exception::class)
     public suspend fun removeFromQueue(index: Int) {
         core.removeFromQueue(index)
     }
@@ -643,6 +677,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws IllegalArgumentException for an index outside the queue.
      * @throws IllegalStateException when nothing is open at all.
      */
+    @Throws(Exception::class)
     public suspend fun moveInQueue(from: Int, to: Int) {
         core.moveInQueue(from, to)
     }
@@ -652,6 +687,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @throws IllegalStateException when nothing is open at all.
      */
+    @Throws(Exception::class)
     public suspend fun clearQueue() {
         core.clearQueue()
     }
@@ -684,6 +720,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws UnsupportedOperationException with no selected video track, and going backward on a
      *         source that cannot seek.
      */
+    @Throws(Exception::class)
     public suspend fun stepFrame(direction: StepDirection = StepDirection.Forward) {
         core.stepFrame(direction)
     }
@@ -709,6 +746,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *         cannot seek, or when the presented frame is hardware-opaque with no readable
      *         planes (the direct MediaCodec tier; the software and download paths both capture).
      */
+    @Throws(Exception::class)
     public suspend fun captureFrame(withSubtitles: Boolean = false): CapturedFrame =
         core.captureFrame(withSubtitles)
 
@@ -733,11 +771,13 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *         records on every platform except the web, where a page has no file to write.
      * @throws IllegalArgumentException when the file at [path] cannot be created.
      */
+    @Throws(Exception::class)
     public suspend fun startRecording(path: String) {
         core.startRecording(path)
     }
 
     /** Stops the recording and finishes its file. Does nothing when no recording runs. */
+    @Throws(Exception::class)
     public suspend fun stopRecording() {
         core.stopRecording()
     }
@@ -757,6 +797,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws IllegalArgumentException when [index] is outside the chapter table, including for
      *         media with no chapters.
      */
+    @Throws(Exception::class)
     public suspend fun seekToChapter(index: Int) {
         val chapters = state.value.chapters
         require(index in chapters.indices) {
@@ -769,6 +810,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * Seeks to the start of the chapter after the one holding the current position, with [seek]'s
      * contract. Does nothing at the last chapter, and in media with no chapter table.
      */
+    @Throws(Exception::class)
     public suspend fun nextChapter() {
         val here = position()
         val next = state.value.chapters.filter { it.start > here }.minByOrNull { it.start } ?: return
@@ -782,6 +824,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * the last chapter to have started counts as the current one. Does nothing in media with no
      * chapter table.
      */
+    @Throws(Exception::class)
     public suspend fun previousChapter() {
         val here = position()
         val chapters = state.value.chapters
@@ -799,6 +842,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * the engine and replaced wholesale, so an empty list clears them. They belong to the player
      * rather than to the item: a new item starts with every marker armed.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setMarkers(markers: List<Marker>) {
         core.post(CoreCommand.SetMarkers(markers, CompletableDeferred()))
     }
@@ -852,6 +896,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @throws IllegalArgumentException when the memento's queue is empty or its index is outside it.
      */
+    @Throws(Exception::class)
     public suspend fun restore(memento: PlayerMemento) {
         require(memento.queue.isNotEmpty()) { "a memento with no queue has nowhere to go back to" }
         require(memento.queueIndex in memento.queue.indices) {
@@ -912,6 +957,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @throws PlaybackException when the media cannot be reached or is not media.
      */
+    @Throws(Exception::class)
     public suspend fun inspect(media: MediaItem): MediaInspection = core.inspect(media)
 
     /**
@@ -926,6 +972,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * the same item share the work. Each one opens its own session, so an item whose reader refuses
      * a second concurrent open cannot be scanned this way.
      */
+    @Throws(Exception::class)
     public suspend fun scanAudio(
         media: MediaItem,
         track: TrackId? = null,
@@ -958,6 +1005,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws UnsupportedOperationException for a container switch on a source that cannot seek,
      *         and for a container subtitle track when the backend decodes no subtitle format.
      */
+    @Throws(Exception::class)
     public suspend fun selectTrack(kind: TrackKind, track: TrackId?): TrackChange =
         core.selectTrack(kind, track)
 
@@ -969,6 +1017,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * allowed on either slot. Selecting the track that already fills the other slot throws
      * [IllegalArgumentException]. [Tracks.selectedSecondarySubtitle] reports the selection.
      */
+    @Throws(Exception::class)
     public suspend fun selectSecondarySubtitle(track: TrackId?): TrackChange =
         core.selectSecondarySubtitle(track)
 
@@ -992,11 +1041,13 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * relies on the renderer's own close being safe against a submission in flight, which the one in
      * `kiteplayer-output` is.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun attachRenderer(renderer: VideoRenderer) {
         core.post(CoreCommand.AttachRenderer(renderer, CompletableDeferred()))
     }
 
     /** Detaches the current renderer. Playback continues without a picture. See [attachRenderer]. */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun detachRenderer() {
         core.post(CoreCommand.DetachRenderer(null, CompletableDeferred()))
     }
@@ -1005,6 +1056,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * Detaches [expected] only while it is still the attached renderer; a stale call is a no-op.
      * This is the safe form for presentation code whose teardown can race a newer attach.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun detachRenderer(expected: VideoRenderer) {
         core.post(CoreCommand.DetachRenderer(expected, CompletableDeferred()))
     }
@@ -1016,11 +1068,13 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * The call returns as soon as the request is queued. [AudioTap] says when and where it is called.
      */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun attachAudioTap(tap: AudioTap) {
         core.post(CoreCommand.AttachAudioTap(tap, CompletableDeferred()))
     }
 
     /** Stops handing audio to [tap]. A tap that is not attached is ignored. */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun detachAudioTap(tap: AudioTap) {
         core.post(CoreCommand.DetachAudioTap(tap, CompletableDeferred()))
     }
@@ -1049,6 +1103,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws PlaybackException with [PlaybackError.RuntimeCompromised] for every compromised outcome
      *         the core can report instead of a completed close.
      */
+    @Throws(Exception::class)
     public suspend fun closeAndAwait() {
         core.closeAndAwait()
     }
@@ -1120,6 +1175,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
          * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] when no media backend or no
          *         output backend was supplied.
          */
+        @Throws(PlaybackException::class)
         public fun create(config: PlayerConfig = PlayerConfig()): KitePlayer {
             val backend = config.backends.backend ?: throw PlaybackException(
                 PlaybackError.ConfigurationInvalid(

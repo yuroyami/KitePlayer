@@ -43,6 +43,7 @@ public class PipedMediaIo(capacityChunks: Int = 16) : MediaIo {
      * @throws kotlinx.coroutines.CancellationException after the engine closed the reader, so a
      *         producer coroutine ends quietly.
      */
+    @Throws(Exception::class)
     public suspend fun write(bytes: ByteArray, offset: Int = 0, length: Int = bytes.size - offset) {
         require(offset in 0..bytes.size && length >= 0 && length <= bytes.size - offset) {
             "Write slice is outside the source array"

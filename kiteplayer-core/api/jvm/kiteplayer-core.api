@@ -71,8 +71,6 @@ public final class io/github/yuroyami/kiteplayer/AudioPlayback : java/lang/AutoC
 	public final fun setReplayGain (F)V
 	public final fun setSpeed (D)V
 	public final fun setVolume (F)V
-	public final fun submit-0bCLQ8Q (Lio/github/yuroyami/kiteplayer/Pts;[FILkotlin/jvm/functions/Function0;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun submit-0bCLQ8Q$default (Lio/github/yuroyami/kiteplayer/AudioPlayback;Lio/github/yuroyami/kiteplayer/Pts;[FILkotlin/jvm/functions/Function0;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun submitDecoded-rkBLMoA (Lio/github/yuroyami/kiteplayer/Pts;[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;Lkotlin/jvm/functions/Function0;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun submitDecoded-rkBLMoA$default (Lio/github/yuroyami/kiteplayer/AudioPlayback;Lio/github/yuroyami/kiteplayer/Pts;[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;Lkotlin/jvm/functions/Function0;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }

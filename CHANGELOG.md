@@ -66,6 +66,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   arrives late, such as Bluetooth latency, needs a negative value. The behaviour is unchanged.
   Both delays, `SubtitleConfig.delay` and `restore` now refuse a value that is not finite or is
   more than `KitePlayer.DELAY_MAX`, one hour, either way (#219).
+- `AudioPlayback.submit` is internal. It wrote straight into the ring and skipped the channel
+  mix, the rate conversion, the tempo stage, the equaliser, the balance and the ReplayGain. Feed
+  decoded audio through `submitDecoded`, which runs all of them (#220).
 
 ## [0.0.27] - 2026-09-25
 

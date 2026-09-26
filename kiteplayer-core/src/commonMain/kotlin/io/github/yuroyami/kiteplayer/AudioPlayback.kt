@@ -36,9 +36,9 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * ### Threading
  *
- * [submit] and [submitDecoded] belong to one coroutine, the audio feeder, because it is the ring's
- * single producer, and the conversion stage behind [submitDecoded] belongs to the same coroutine. The
- * device's real-time callback is the single consumer and touches nothing else in this class, so
+ * [submitDecoded] belongs to one coroutine, the audio feeder, because it is the ring's single
+ * producer, and the conversion stage behind it belongs to the same coroutine. The device's real-time
+ * callback is the single consumer and touches nothing else in this class, so
  * neither side takes a lock.
  *
  * [anchorClock], [position], [buffered], [underruns] and the [speed] setter are guarded by one
@@ -49,8 +49,8 @@ import kotlin.time.Duration.Companion.milliseconds
  * [speed] is a plain read of one value and needs nothing.
  *
  * [open], [play], [pause], [flush], [drain], [endOfStream] and [close] are thread confined to the
- * session owner instead. [submit] and [submitDecoded] run on the feed worker, and each reads the
- * ring FIELD under the lock, so the rule is one sentence again: any member that
+ * session owner instead. [submitDecoded] runs on the feed worker and reads the ring FIELD under
+ * the lock, so the rule is one sentence again: any member that
  * may run beside another thread touches that field only under the lock. A lock cannot be held across a suspension point, so the suspending ones
  * could not be guarded even in principle, and their contract is confinement. The core's session
  * actor is that owner. The seek path already depends on this: the ring's own flush requires both
@@ -265,10 +265,13 @@ public class AudioPlayback(
     }
 
     /**
-     * Hands decoded audio over, suspending until all of it has been accepted.
+     * Writes samples that are already in the negotiated format straight into the ring, suspending
+     * until all of them have been accepted.
      *
-     * Suspending here is the backpressure that paces decoding to playback. The caller does not need
-     * to know how full the device is.
+     * It skips every stage that [submitDecoded] runs: the channel mix, the rate conversion, the
+     * tempo stage, the equaliser, the balance and the ReplayGain. Only the volume and the mute
+     * still apply, because they live on the ring's read side. [submitDecoded] is its only caller
+     * outside the tests.
      *
      * @param pts the media timestamp of the first frame, when the decoder gave one. Passing null is
      *        normal for buffers that continue from the previous one.
@@ -281,7 +284,7 @@ public class AudioPlayback(
      *        mid-buffer and calling it again would replay samples the ring already took and run
      *        the conversion state twice.
      */
-    public suspend fun submit(
+    internal suspend fun submit(
         pts: Pts?,
         interleaved: FloatArray,
         frames: Int,
@@ -316,22 +319,27 @@ public class AudioPlayback(
     }
 
     /**
-     * Converts decoded audio into the negotiated format and hands it over.
+     * Hands decoded audio over, suspending until all of it has been accepted.
      *
-     * [submit] takes samples that are already in the negotiated format. This takes them in
-     * [sourceFormat], which is what the decoder said it produced, and runs the audio path's
-     * conversion stage first: the channel mix, then the rate conversion, then volume. A decoder
-     * feeding a device that took a different layout or a different rate has to come through here,
-     * because nothing else in the player converts anything.
+     * The samples arrive in [sourceFormat], which is what the decoder said it produced, and run
+     * through the whole audio path before they reach the ring: the channel mix, the rate
+     * conversion, the tempo stage, the equaliser, the balance and the ReplayGain. This is the one
+     * feed, so every setting of this class acts on what arrives here.
+     *
+     * Suspending here is the backpressure that paces decoding to playback. The caller does not
+     * need to know how full the device is.
      *
      * The stage is keyed on [sourceFormat] against the format it was built for, so a decoder that
      * changes format mid-stream gets a new one on the buffer that changed rather than one buffer
      * later. When [sourceFormat] already is the negotiated format every stage is a copy and the cost
      * is one pass over the samples.
      *
-     * @param pts the media timestamp of the first frame, as in [submit].
+     * @param pts the media timestamp of the first frame, when the decoder gave one. Passing null is
+     *        normal for buffers that continue from the previous one.
      * @param interleaved channel-interleaved float samples in [sourceFormat].
      * @param frames sample frames in [interleaved], meaning one value per channel each.
+     * @param abort polled while the ring is full. Returning true gives up the rest of the buffer,
+     *        and the caller is expected to flush, as a seek does.
      */
     public suspend fun submitDecoded(
         pts: Pts?,
@@ -632,6 +640,13 @@ public class AudioPlayback(
             wantedReplayGain.value = value
         }
 
+    /** The ten-band equaliser. Flat by default, and free while it is. */
+    public var equalizer: EqualizerSettings
+        get() = wantedEqualizer.value
+        set(value) {
+            wantedEqualizer.value = value
+        }
+
     /**
      * Stereo balance: -1 is hard left, 0 is centre, 1 is hard right.
      *
@@ -649,13 +664,6 @@ public class AudioPlayback(
      * once and left, unlike the volume, which lives on the ring's read side precisely so that it
      * is heard within one device period.
      */
-    /** The ten-band equaliser. Flat by default, and free while it is. */
-    public var equalizer: EqualizerSettings
-        get() = wantedEqualizer.value
-        set(value) {
-            wantedEqualizer.value = value
-        }
-
     public var balance: Float
         get() = wantedBalance.value
         set(value) {
@@ -665,15 +673,15 @@ public class AudioPlayback(
             wantedBalance.value = value
         }
 
+    /** The settings last written into the current pipeline, so an unchanged one is not rebuilt. */
+    private var appliedEqualizer: EqualizerSettings? = null
+
     /**
      * Folds the replay gain and the balance into the pipeline's one per-channel stage.
      *
      * Reasserted per buffer for the reason the rate is: a pipeline rebuilt for a format change
      * starts at unity, and neither setting is carried across the rebuild by anything else.
      */
-    /** The settings last written into the current pipeline, so an unchanged one is not rebuilt. */
-    private var appliedEqualizer: EqualizerSettings? = null
-
     private fun applyTrim(stage: AudioPipeline) {
         val gain = wantedReplayGain.value
         val balanceNow = wantedBalance.value

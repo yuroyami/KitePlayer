@@ -46,7 +46,7 @@ internal actual object SongMapFiles {
 
     actual fun write(path: String, bytes: ByteArray): Boolean {
         val separator = path.lastIndexOf('/')
-        if (separator > 0) mkdir(path.substring(0, separator), DIRECTORY_MODE)
+        if (separator > 0) makeDirectories(path.substring(0, separator))
         val partial = "$path.part"
         val file = fopen(partial, "wb") ?: return false
         val written = try {
@@ -88,6 +88,16 @@ internal actual object SongMapFiles {
             closedir(handle)
         }
         return found.sortedBy { it.first }.map { it.second }
+    }
+
+    /** Creates [directory] and every missing level above it. A level that exists is left alone. */
+    private fun makeDirectories(directory: String) {
+        var end = directory.indexOf('/', startIndex = 1)
+        while (end > 0) {
+            mkdir(directory.substring(0, end), DIRECTORY_MODE)
+            end = directory.indexOf('/', end + 1)
+        }
+        mkdir(directory, DIRECTORY_MODE)
     }
 
     /** 0777, cut down by the process umask, which is what an application's own directory wants. */

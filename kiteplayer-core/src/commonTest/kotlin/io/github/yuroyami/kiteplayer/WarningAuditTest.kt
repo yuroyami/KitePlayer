@@ -132,7 +132,6 @@ class WarningAuditTest {
             "the audio path's layout negotiation, when a mask is absent and the count is guessed (D30)",
         )
         is PlaybackWarning.BadTimestamps -> listOf(
-            "PlaybackCore's seek machine, when a quiescence deadline forces an abort",
             "the timeline paths that compensate for non-monotonic or missing timestamps",
         )
         is PlaybackWarning.TrackDeselected -> listOf(
@@ -157,6 +156,7 @@ class WarningAuditTest {
             "PlaybackCore's SetSpeed and SetPreservePitch handlers, refusing a live change on an unseekable source",
             "PlaybackCore's AttachRenderer and DetachRenderer handlers, when the scheduler never quiesced",
             "PlaybackCore.handleLoop, skipping the repeat an unseekable source cannot make",
+            "PlaybackCore.runSeek, when a worker did not park and the seek was aborted",
         )
     }
 

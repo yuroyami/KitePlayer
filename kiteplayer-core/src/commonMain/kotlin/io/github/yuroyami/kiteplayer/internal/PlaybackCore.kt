@@ -5732,6 +5732,7 @@ internal class PlaybackCore(
         session.pictureHoldsPosition = false
 
         // 1
+        val previousEpoch = requestedEpoch
         requestedEpoch = requestedEpoch.next()
         val epoch = requestedEpoch
         seekPhase = SeekPhase.Flushing
@@ -5747,19 +5748,23 @@ internal class PlaybackCore(
         // 2
         session.schedulerMode.value = SCHEDULER_IDLE
         session.sink?.stop()
-        val quiescent = quiesceWorkers(session)
-        if (!quiescent) {
+        val unparked = unparkedWorkers(session)
+        if (unparked.isNotEmpty()) {
             // Quiescence is the precondition of every mutation below. Without it, flushing a
             // decoder or clearing a queue mutates state a still-running worker may be using, so
             // the seek aborts as a transaction instead of continuing on best effort. The workers
             // are released so playback continues at the old position, and every waiting caller
             // gets an explicit rejection rather than a fabricated success.
-            val reason = "a worker did not reach a quiescent boundary within $QUIESCE_DEADLINE; the seek was aborted"
-            warn(PlaybackWarning.BadTimestamps(reason))
+            val workers = if (unparked.size == 1) "the ${unparked[0]} worker" else "the ${unparked.joinToString()} workers"
+            val reason = "$workers did not park within $QUIESCE_DEADLINE; the seek was aborted"
+            warn(PlaybackWarning.CommandRefused("seek", reason))
             seekPhase = SeekPhase.Idle
             session.discardBeforeUs.value = Long.MIN_VALUE
             session.landsBeforeTarget.value = false
-            releaseWorkers(session, epoch)
+            // Nothing was flushed to the new epoch, so the queues and decoders still carry the old
+            // one. Released into the new epoch, every packet and frame was refused for ever (#200).
+            requestedEpoch = previousEpoch
+            releaseWorkers(session, previousEpoch)
             resolveSeekReplies(SeekResult.Rejected(reason))
             if (!playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Paused)
             return
@@ -5963,17 +5968,17 @@ internal class PlaybackCore(
         }
     }
 
-    private suspend fun quiesceWorkers(session: OpenSession): Boolean {
+    private suspend fun quiesceWorkers(session: OpenSession): Boolean = unparkedWorkers(session).isEmpty()
+
+    /** Parks every worker and returns the names of those that missed the deadline. */
+    private suspend fun unparkedWorkers(session: OpenSession): List<String> {
         // Every flag first, then every acknowledgement: the workers park in parallel, so the whole
         // pipeline costs one worker's residual nap rather than the sum of all of them.
         val workers = session.workers
         for (worker in workers) worker.requestQuiesce()
-        var quiescent = true
-        for (worker in workers) {
-            if (!worker.awaitQuiesced(QUIESCE_DEADLINE)) quiescent = false
-        }
+        val unparked = workers.filterNot { worker -> worker.awaitQuiesced(QUIESCE_DEADLINE) }.map { it.name }
         seekFlushCycles++
-        return quiescent
+        return unparked
     }
 
     /**

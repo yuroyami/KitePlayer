@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
 import io.github.yuroyami.kiteplayer.internal.AudioRingHandle
 import io.github.yuroyami.kiteplayer.internal.MediaClock
 import io.github.yuroyami.kiteplayer.internal.ClockSnapshot
+import io.github.yuroyami.kiteplayer.internal.OpenedAudioPath
 import io.github.yuroyami.kiteplayer.internal.TempoStage
 import io.github.yuroyami.kiteplayer.internal.framesToMicros
 import io.github.yuroyami.kiteplayer.internal.openAudioPath
@@ -41,12 +42,13 @@ import kotlin.time.Duration.Companion.milliseconds
  * callback is the single consumer and touches nothing else in this class, so
  * neither side takes a lock.
  *
- * [anchorClock], [position], [buffered], [underruns] and the [speed] setter are guarded by one
- * internal lock. The first two write the media clock, which has one writer by design, and a player
- * reports progress from a thread that is not the one driving playback: two callers re-anchoring the
- * same clock at once is what the lock is for. [buffered] and [underruns] take it for a second reason
- * that came with the C callback: they read the ring, and the ring can now be memory [close] frees. Reading
- * [speed] is a plain read of one value and needs nothing.
+ * [anchorClock], [position], [buffered], [underruns], the [speed] setter and every gain change are
+ * guarded by one internal lock. The first two write the media clock, which has one writer by
+ * design, and a player reports progress from a thread that is not the one driving playback: two
+ * callers re-anchoring the same clock at once is what the lock is for. [buffered] and [underruns]
+ * take it for a second reason that came with the C callback: they read the ring, and the ring can
+ * now be memory [close] frees. A gain change writes into the ring, so it takes the lock for the
+ * same reason. Reading [speed] is a plain read of one value and needs nothing.
  *
  * [open], [play], [pause], [flush], [drain], [endOfStream] and [close] are thread confined to the
  * session owner instead. [submitDecoded] runs on the feed worker and reads the ring FIELD under
@@ -86,6 +88,10 @@ public class AudioPlayback(
      * decides is `openAudioPath`, and nothing else in this file changes with the answer.
      */
     private var ring: AudioRingHandle? = null
+
+    /** Opens the device and the ring behind it. A test replaces it to supply its own ring. */
+    internal var openPath: suspend (AudioSink, AudioFormat, (AudioFormat) -> Int) -> OpenedAudioPath =
+        ::openAudioPath
 
     private val mediaClock = MediaClock(clock)
 
@@ -231,14 +237,15 @@ public class AudioPlayback(
         // The device and the ring, opened together, because the ring's format is the format the device
         // accepted and its capacity depends on that format and on the device's own period. Which kind
         // of ring comes back is the sink's choice; see `openAudioPath`.
-        val opened = openAudioPath(sink, request) { negotiated ->
+        val opened = openPath(sink, request) { negotiated ->
             max(
                 sink.deviceBufferFrames * DEVICE_BUFFER_MULTIPLE,
                 negotiated.framesIn(Pts(bufferDuration.inWholeMicroseconds)),
             )
         }
         val negotiated = opened.format
-        ring = opened.ring
+        // Under the lock, like every write of the field that a member on another thread reads.
+        synchronized(lock) { ring = opened.ring }
         format = negotiated
         // The gain is the ring's now, so a path opened while muted or turned down must start there
         // rather than at unity. Without this, opening a file at volume 0 plays one ramp of
@@ -708,14 +715,15 @@ public class AudioPlayback(
     /**
      * Hands the ring the one number it walks towards: the volume, or silence when muted.
      *
-     * The ring reads the field under its own atomic, so this needs no ordering of its own. The
-     * `ring` FIELD is read under the lock for the same reason every other member does it: a member
-     * that may run beside [close] must not load the reference in the same instant close is clearing
-     * it. With no path open the value is simply stored, and [open] pushes it into the fresh ring.
+     * The whole call runs under the lock [close] takes, so a gain change in flight finishes before
+     * close clears the field and the sink frees a C ring, and one that arrives later finds no ring.
+     * The target is computed inside too, so the last change to take the lock is the one the ring
+     * keeps. With no path open the value is simply stored, and [open] pushes it into the fresh
+     * ring.
      */
-    private fun pushGain() {
+    private fun pushGain(): Unit = synchronized(lock) {
         val target = if (wantedMute.value) 0f else wantedVolume.value * fadeLevel.value * duckLevel.value
-        synchronized(lock) { ring }?.setGain(target)
+        ring?.setGain(target)
     }
 
     /**
@@ -806,13 +814,13 @@ public class AudioPlayback(
         // at it is a dangling pointer waiting for a reader. Dropping it first also costs the device
         // nothing, because a callback that finds no ring writes silence, which is what closing means.
         //
-        // UNDER THE LOCK, and this is not tidiness. [position], [anchorClock], [buffered] and
-        // [underruns] are documented safe from any thread and all four read this field. While the
-        // ring was always a managed object, a reader that had already loaded the reference was
-        // merely reading a ring nobody would use again. Now it can be a pointer that
-        // `sink.close()` frees, and clearing the field first narrows that window without closing
-        // it: a reader already inside `anchor()` is still there. Proved rather than argued, with
-        // AddressSanitizer over the two C calls in that order:
+        // UNDER THE LOCK, and this is not tidiness. [position], [anchorClock], [buffered],
+        // [underruns] and every gain change are documented safe from any thread and all of them use
+        // this field. While the ring was always a managed object, a reader that had already loaded
+        // the reference was merely reading a ring nobody would use again. Now it can be a pointer
+        // that `sink.close()` frees, and clearing the field first narrows that window without
+        // closing it: a reader already inside `anchor()` is still there. Proved rather than argued,
+        // with AddressSanitizer over the two C calls in that order:
         // `heap-use-after-free ... READ of size 8 ... in kprt_ring_anchor ... freed by ...
         // kprt_sink_destroy`. Taking the lock here is what orders the two, because every
         // cross-thread reader takes it: a reader in flight finishes before the field is cleared,

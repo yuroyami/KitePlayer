@@ -3260,7 +3260,7 @@ internal class PlaybackCore(
     }
 
     private suspend fun withdrawSubtitleOverlay(session: OpenSession) {
-        session.rasterJob?.cancel()
+        val rasterPublished = retireRasterJob(session)
         // The typeset lane's images are withdrawn with the rest: orphan every request first, then
         // wait for a render in flight, so nothing lands after the clear below.
         val typesetPublished = session.typeset?.let { lane ->
@@ -3268,7 +3268,7 @@ internal class PlaybackCore(
             lane.job?.let { job -> job.cancel(); runCatching { job.join() } }
             lane.published.getAndSet(false)
         } ?: false
-        if (session.publishedCueKey != null || typesetPublished) {
+        if (session.publishedCueKey != null || typesetPublished || rasterPublished) {
             session.renderer.setOverlay(
                 SubtitleOverlay(
                     images = emptyList(),
@@ -4681,7 +4681,10 @@ internal class PlaybackCore(
         val safeArea = subtitleSafeArea
         val generation = session.overlayGeneration.incrementAndGet()
         if (active.isEmpty()) {
-            // A clear costs no rasterisation; publish it inline so text vanishes on time.
+            // A clear costs no rasterisation; publish it inline so text vanishes on time. The
+            // generation already moved, so the wait covers only a raster already past its check.
+            session.rasterJob?.let { job -> job.cancel(); runCatching { job.join() } }
+            session.rasterJob = null
             session.renderer.setOverlay(
                 SubtitleOverlay(emptyList(), width, height, contentHash = generation),
             )
@@ -4709,6 +4712,24 @@ internal class PlaybackCore(
                 ),
             )
         }
+    }
+
+    /**
+     * Orphans the Kotlin tier's raster job and waits for it, the way the typeset lane is retired, so
+     * no raster publication lands after the clear that follows (#223). The generation moves first:
+     * a job before its check drops itself, and a job past it finishes publishing before the join
+     * returns. Cancelling alone cannot stop that second job, because no renderer's publish suspends
+     * where a cancellation could reach it.
+     *
+     * @return true when a raster job existed, so its text may be on screen.
+     */
+    private suspend fun retireRasterJob(session: OpenSession): Boolean {
+        val job = session.rasterJob ?: return false
+        session.overlayGeneration.incrementAndGet()
+        job.cancel()
+        runCatching { job.join() }
+        session.rasterJob = null
+        return true
     }
 
     /**
@@ -6502,8 +6523,8 @@ internal class PlaybackCore(
                 lane.epoch.incrementAndGet()
                 lane.job?.let { job -> job.cancel(); runCatching { job.join() } }
             }
-            if (session.publishedCueKey != null || session.typeset?.published?.value == true) {
-                session.rasterJob?.cancel()
+            val rasterPublished = retireRasterJob(session)
+            if (session.publishedCueKey != null || session.typeset?.published?.value == true || rasterPublished) {
                 session.renderer.setOverlay(
                     SubtitleOverlay(
                         images = emptyList(),
@@ -6535,9 +6556,7 @@ internal class PlaybackCore(
             runCatching { session.source.interrupt() }
             session.workers.forEach { worker -> runCatching { worker.quiesce(QUIESCE_DEADLINE) } }
             session.jobs.forEach { it.cancel() }
-            session.rasterJob?.cancel()
             session.jobs.forEach { runCatching { it.join() } }
-            session.rasterJob?.let { runCatching { it.join() } }
             session.typeset?.let { lane ->
                 session.typeset = null
                 release("subtitle typesetter") { withContext(dispatchers.raster) { lane.close() } }

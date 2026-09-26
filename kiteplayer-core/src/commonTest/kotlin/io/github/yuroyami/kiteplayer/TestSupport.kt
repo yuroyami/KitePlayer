@@ -147,6 +147,11 @@ internal class RecordingRenderer(
      * clock this is a virtual wait, so a slow renderer costs the suite nothing in real seconds.
      */
     private val presentDuration: Duration = Duration.ZERO,
+    /**
+     * How long an overlay with text takes to publish, and nothing can cancel that wait. It models
+     * the Compose renderer, which builds its images before it publishes them.
+     */
+    private val overlayPublishDuration: Duration = Duration.ZERO,
 ) : VideoRenderer {
 
     private val received = mutableListOf<Presentation>()
@@ -208,6 +213,11 @@ internal class RecordingRenderer(
     val overlays: MutableList<SubtitleOverlay?> = mutableListOf()
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
+        if (overlayPublishDuration > Duration.ZERO && overlay != null && overlay.images.isNotEmpty()) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                kotlinx.coroutines.delay(overlayPublishDuration)
+            }
+        }
         overlays += overlay
     }
 

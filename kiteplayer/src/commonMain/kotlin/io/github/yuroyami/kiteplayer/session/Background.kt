@@ -104,6 +104,43 @@ internal class BackgroundMachine(private val policy: BackgroundPolicy) {
     }
 }
 
+/**
+ * Whether any activity is on screen, from start and stop callbacks alone.
+ *
+ * A handle attached after an activity started never saw that start, so counting from zero
+ * missed every transition after it (#281). This keeps the activities it saw start, by identity,
+ * plus [startedBeforeAttach] for the ones it did not: a stop of an activity it never saw start
+ * is one of those. A stop for a configuration change, such as a rotation, is followed by the new
+ * activity's start and is not a trip to the background.
+ *
+ * The answer starts as "on screen", which is what [BackgroundMachine] assumes too.
+ */
+internal class StartedActivities(private var startedBeforeAttach: Boolean) {
+    private val seen = HashSet<Any>()
+    private var announced = true
+
+    private val onScreen: Boolean get() = seen.isNotEmpty() || startedBeforeAttach
+
+    /** An activity started. Returns the new answer when it changed, else null. */
+    fun onStarted(activity: Any): Boolean? {
+        seen += activity
+        return change()
+    }
+
+    /** An activity stopped. Returns the new answer when it changed, else null. */
+    fun onStopped(activity: Any, changingConfiguration: Boolean): Boolean? {
+        if (!seen.remove(activity)) startedBeforeAttach = false
+        return if (changingConfiguration) null else change()
+    }
+
+    private fun change(): Boolean? {
+        val now = onScreen
+        if (now == announced) return null
+        announced = now
+        return now
+    }
+}
+
 /** Turns background decisions into calls. */
 internal class BackgroundApplier(
     private val target: SessionTarget,

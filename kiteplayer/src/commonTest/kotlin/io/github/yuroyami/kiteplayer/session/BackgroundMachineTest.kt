@@ -187,4 +187,45 @@ class BackgroundMachineTest {
         applier.handle(foreground = true)
         assertEquals(listOf("video false", "video true"), target.calls)
     }
+
+    // Attached from onResume or a composable, after the activity already started (#281).
+    @Test
+    fun aHandleAttachedAfterTheStartSeesEveryLaterTransition() {
+        val activities = StartedActivities(startedBeforeAttach = true)
+        val first = Any()
+        assertEquals(false, activities.onStopped(first, changingConfiguration = false), "the first stop is the trip away")
+        assertEquals(true, activities.onStarted(first), "and the next start the return")
+        assertEquals(false, activities.onStopped(first, changingConfiguration = false))
+        assertEquals(true, activities.onStarted(first))
+    }
+
+    @Test
+    fun aHandleAttachedBeforeAnyStartSeesEveryTransition() {
+        val activities = StartedActivities(startedBeforeAttach = false)
+        val first = Any()
+        assertNull(activities.onStarted(first), "the application is assumed on screen from the start")
+        assertEquals(false, activities.onStopped(first, changingConfiguration = false))
+        assertEquals(true, activities.onStarted(first))
+    }
+
+    @Test
+    fun aRotationIsNotATripToTheBackground() {
+        val activities = StartedActivities(startedBeforeAttach = true)
+        val old = Any()
+        val new = Any()
+        assertNull(activities.onStopped(old, changingConfiguration = true), "a rotation stop left the screen")
+        assertNull(activities.onStarted(new), "the rotated activity came back from nowhere")
+        assertEquals(false, activities.onStopped(new, changingConfiguration = false))
+    }
+
+    @Test
+    fun anActivityOnTopOfAnEarlierOneKeepsTheApplicationOnScreen() {
+        // The earlier one started before the handle; the new one starts before the earlier stops.
+        val activities = StartedActivities(startedBeforeAttach = true)
+        val earlier = Any()
+        val later = Any()
+        assertNull(activities.onStarted(later))
+        assertNull(activities.onStopped(earlier, changingConfiguration = false), "the later activity is still on screen")
+        assertEquals(false, activities.onStopped(later, changingConfiguration = false))
+    }
 }

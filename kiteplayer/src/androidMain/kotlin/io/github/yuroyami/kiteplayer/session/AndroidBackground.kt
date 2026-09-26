@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.session
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.os.Bundle
@@ -10,9 +11,10 @@ import io.github.yuroyami.kiteplayer.KitePlayerPlatform
 /**
  * Stops [player] decoding video for a screen nobody is looking at.
  *
- * Counts started activities through the application's own callbacks, so no lifecycle library is
- * added and the application registers nothing itself. Zero started activities means the
- * application is in the background.
+ * Follows started activities through the application's own callbacks, so no lifecycle library is
+ * added and the application registers nothing itself. No started activity means the application
+ * is in the background. Attaching after an activity started, from `onResume` or from a composable,
+ * works too: the process importance at attach time says whether one was already on screen.
  *
  * With [BackgroundPolicy.ContinueAudio], this handle only parks the picture, so sound in the
  * background also needs `KitePlayerPlatform.attachMediaNotification` to keep the process alive.
@@ -36,15 +38,16 @@ private class AndroidBackgroundHandle(
 ) : AutoCloseable {
 
     private val applier = BackgroundApplier(PlayerSessionTarget(player), policy)
-    private var startedActivities = 0
+    private val activities = StartedActivities(startedBeforeAttach = activityOnScreenNow())
+    private var closed = false
 
     private val callbacks = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityStarted(activity: Activity) {
-            if (startedActivities++ == 0) applier.handle(foreground = true)
+            activities.onStarted(activity)?.let { applier.handle(foreground = it) }
         }
 
         override fun onActivityStopped(activity: Activity) {
-            if (--startedActivities == 0) applier.handle(foreground = false)
+            activities.onStopped(activity, activity.isChangingConfigurations)?.let { applier.handle(foreground = it) }
         }
 
         override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
@@ -59,6 +62,19 @@ private class AndroidBackgroundHandle(
     }
 
     override fun close() {
+        if (closed) return
+        closed = true
         application.unregisterActivityLifecycleCallbacks(callbacks)
     }
+}
+
+/**
+ * Whether an activity of this process is on screen now. A foreground service alone reports a
+ * lower importance than these two, so a playing media notification does not count.
+ */
+private fun activityOnScreenNow(): Boolean {
+    val info = ActivityManager.RunningAppProcessInfo()
+    ActivityManager.getMyMemoryState(info)
+    return info.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND ||
+        info.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
 }

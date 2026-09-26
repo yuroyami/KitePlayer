@@ -1562,11 +1562,16 @@ internal class PlaybackCore(
                     )
                 else -> null
             }
+            // The same status rule as Open: replacing what plays needs an explicit stop (#256).
             is CoreCommand.OpenQueue -> when {
                 command.items.isEmpty() -> IllegalArgumentException("openQueue needs at least one item")
                 command.startIndex !in command.items.indices -> IllegalArgumentException(
                     "startIndex ${command.startIndex} is outside the queue of ${command.items.size}",
                 )
+                status != PlaybackStatus.Idle && status != PlaybackStatus.Ended && status != PlaybackStatus.Failed ->
+                    IllegalStateException(
+                        "openQueue is legal from Idle, Ended and Failed; the player is $status, so call stop() first",
+                    )
                 else -> null
             }
             is CoreCommand.EditQueue -> queueEditRejection(command.edit)

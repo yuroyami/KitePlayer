@@ -666,7 +666,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * and the moving [PlayerSnapshot.queueIndex]. A plain [open] replaces the queue with the one
      * item it names.
      *
+     * Legal from Idle, Ended and Failed, like [open]: replacing what is playing needs an explicit
+     * [stop] first. [next] and [previous] move within an open queue, and [addToQueue] and the
+     * other queue edits change it, without a stop.
+     *
      * @throws IllegalArgumentException for an empty list or a start index outside it.
+     * @throws IllegalStateException when the player is not Idle, Ended or Failed.
      * @throws PlaybackException when the starting item cannot be opened, exactly like [open].
      */
     @Throws(Exception::class)

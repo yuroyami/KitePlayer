@@ -69,6 +69,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `AudioPlayback.submit` is internal. It wrote straight into the ring and skipped the channel
   mix, the rate conversion, the tempo stage, the equaliser, the balance and the ReplayGain. Feed
   decoded audio through `submitDecoded`, which runs all of them (#220).
+- `openQueue` now refuses to replace a session that is not Idle, Ended or Failed, with
+  `IllegalStateException`, as `open` always did. Call `stop()` first. `restore` already does (#256).
 
 ## [0.0.27] - 2026-09-25
 

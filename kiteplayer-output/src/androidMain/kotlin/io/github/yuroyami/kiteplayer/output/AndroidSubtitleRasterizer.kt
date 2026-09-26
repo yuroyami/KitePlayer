@@ -62,14 +62,8 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
                         }
                     }
                 is SubtitleCue.Bitmap -> cue.regions.forEach { region ->
-                    // Authored pixels: scale placement from the authored canvas to the viewport.
-                    val sx = viewportWidth.toFloat() / region.canvasWidth.coerceAtLeast(1)
-                    val sy = viewportHeight.toFloat() / region.canvasHeight.coerceAtLeast(1)
-                    images += OverlayImage(
-                        x = (region.x * sx).toInt(),
-                        y = (region.y * sy).toInt(),
-                        bitmap = region.bitmap,
-                    )
+                    // Origin and extent both scale from the authored canvas to the viewport.
+                    regionImage(region, viewportWidth, viewportHeight)?.let { images += it }
                 }
             }
         }

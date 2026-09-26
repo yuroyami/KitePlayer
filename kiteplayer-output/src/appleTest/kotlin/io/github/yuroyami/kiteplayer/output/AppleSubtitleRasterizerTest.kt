@@ -1,10 +1,12 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.subtitle.BitmapRegion
 import io.github.yuroyami.kiteplayer.subtitle.CueAlignment
 import io.github.yuroyami.kiteplayer.subtitle.CueLayout
 import io.github.yuroyami.kiteplayer.subtitle.CueStacking
 import io.github.yuroyami.kiteplayer.subtitle.CueStyle
 import io.github.yuroyami.kiteplayer.subtitle.CueWrap
+import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
 import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import kotlin.test.Test
@@ -88,6 +90,23 @@ class AppleSubtitleRasterizerTest {
         val top = placed(CueAlignment.TopLeft, 0.25f, 0.25f)
         assertEquals(160, top.x, "an \\an7 anchor puts the left edge on the point")
         assertEquals(90, top.y, "an \\an7 anchor puts the top edge on the point")
+    }
+
+    // A pre-rendered region scales its extent with its origin, as on the desktop and Android.
+    @Test
+    fun aBitmapRegionScalesItsExtentWithItsOrigin() {
+        val region = BitmapRegion(
+            x = 100, y = 50, width = 4, height = 4,
+            canvasWidth = 320, canvasHeight = 180,
+            bitmap = RgbaBitmap(4, 4, ByteArray(4 * 4 * 4) { 0x7F }),
+        )
+        val image = AppleSubtitleRasterizer().rasterize(
+            cues = listOf(SubtitleCue.Bitmap(0, 1_000_000, listOf(region))),
+            viewportWidth = 640,
+            viewportHeight = 360,
+            fontScale = 1f,
+        ).single()
+        assertEquals(listOf(200, 100, 8, 8), listOf(image.x, image.y, image.bitmap.width, image.bitmap.height))
     }
 
     @Test

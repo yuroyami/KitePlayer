@@ -272,7 +272,11 @@ class DesktopSubtitleRasterizerTest {
         val image = rasterize(SubtitleCue.Bitmap(0, 1_000_000, listOf(region))).single()
         assertEquals(200, image.x, "authored x scales from the 320-wide canvas to the 640-wide viewport")
         assertEquals(100, image.y, "authored y scales from the 180-tall canvas to the 360-tall viewport")
-        assertTrue(image.bitmap.pixels === pixels, "authored pixels pass through untouched")
+        assertEquals(8, image.bitmap.width, "the extent scales with the origin")
+        assertEquals(8, image.bitmap.height, "the extent scales with the origin")
+        val authored = region.copy(canvasWidth = 640, canvasHeight = 360)
+        val same = rasterize(SubtitleCue.Bitmap(0, 1_000_000, listOf(authored))).single()
+        assertTrue(same.bitmap.pixels === pixels, "at the authored size the pixels pass through untouched")
     }
 
     @Test

@@ -83,6 +83,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `KitePlayerUIView` build what a screen reader says. `FloatingWindowOptions.labels` names the
   desktop floating window's menu. Each options class changes its generated data-class methods, so
   recompile (#266).
+- `XmlMini` and `XmlElement` in `kiteplayer-network` are internal. They are the DASH parser's own
+  reader and were never meant as a general XML API. `XmlException` stays public, because
+  `DashManifestParser.parse` throws it for a malformed manifest (#274).
 
 ## [0.0.27] - 2026-09-25
 

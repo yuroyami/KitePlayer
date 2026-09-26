@@ -28,7 +28,9 @@ public interface VideoDecoderFactory {
     public val name: String
 }
 
+/** Decodes one video stream: packets in through [send], frames out through [receive]. The engine closes it. */
 public interface VideoDecoder : AutoCloseable {
+    /** Whether this decoder runs in hardware or in software, which the playback statistics report. */
     public val hardware: HwdecStatus
 
     /**
@@ -71,16 +73,22 @@ public interface VideoDecoder : AutoCloseable {
     public suspend fun flush(newGeneration: Generation)
 }
 
+/** Creates audio decoders. The engine tries the factories in order and uses the first one that answers. */
 public interface AudioDecoderFactory {
+    /** Null when this factory cannot handle the stream. The engine then tries the next candidate. */
     public suspend fun create(stream: PlayerStreamInfo): AudioDecoder?
+    /** For logs and for the warning emitted when a candidate is skipped. */
     public val name: String
 }
 
+/** Decodes one audio stream: packets in through [send], PCM out through [receive]. The engine closes it. */
 public interface AudioDecoder : AutoCloseable {
     /** What this decoder produces. May change mid-stream, which the engine handles. */
     public val outputFormat: AudioFormat
 
+    /** Offers a packet, or null to start the drain. False means receive before offering again, as for [VideoDecoder.send]. */
     public suspend fun send(packet: PlayerPacket?): Boolean
+    /** The next decoded buffer, or null when more input is needed. The caller closes it. */
     public suspend fun receive(): AudioBuffer?
 
     /** True once [receive] has reported the end of the stream. See [VideoDecoder.isDrained]. */
@@ -99,7 +107,9 @@ public interface AudioDecoder : AutoCloseable {
  * which draws them.
  */
 public interface SubtitleDecoderFactory {
+    /** Null when this factory cannot handle the stream. The engine then tries the next candidate. */
     public suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder?
+    /** For logs and for the warning emitted when a candidate is skipped. */
     public val name: String
 }
 
@@ -108,6 +118,7 @@ public interface SubtitleDecoderFactory {
  * it on every seek; see [SubtitleDecoderFactory].
  */
 public interface SubtitleDecoder : AutoCloseable {
+    /** Offers a packet, or null to start the drain. False means receive before offering again, as for [VideoDecoder.send]. */
     public suspend fun send(packet: PlayerPacket?): Boolean
 
     /**
@@ -128,12 +139,15 @@ public interface SubtitleDecoder : AutoCloseable {
  * One second of 48 kHz stereo float is 384 KB, against 187 MB for a second of 1080p60 video.
  */
 public interface AudioBuffer : AutoCloseable {
+    /** The media time of the first sample frame. */
     public val pts: Pts
+    /** The rate, the channels and the sample format of this buffer. */
     public val format: AudioFormat
 
     /** Sample frames in this buffer. One frame is one sample for every channel. */
     public val frameCount: Int
 
+    /** The epoch the packets were offered in. See [VideoDecoder.flush]. */
     public val generation: Generation
 
     /**
@@ -145,6 +159,7 @@ public interface AudioBuffer : AutoCloseable {
     public fun copyChannel(channel: Int, into: FloatArray, offset: Int = 0)
 }
 
+/** The shape of PCM: [sampleRate] sample frames a second, each holding [channels] samples of [sampleFormat]. */
 public data class AudioFormat(
     val sampleRate: Int,
     val channels: Int,
@@ -162,16 +177,19 @@ public data class AudioFormat(
      */
     val channelLayoutMask: Long? = null,
 ) {
+    /** Bytes in one sample frame, one sample for every channel. */
     public val bytesPerFrame: Int get() = channels * sampleFormat.bytes
 
     /** Duration of [frames] sample frames at this rate. */
     public fun durationOf(frames: Int): Pts =
         Pts(if (sampleRate == 0) 0 else frames.toLong() * 1_000_000L / sampleRate)
 
+    /** Sample frames in [duration] at this rate, rounded down. */
     public fun framesIn(duration: Pts): Int =
         (duration.micros * sampleRate / 1_000_000L).toInt()
 }
 
+/** How one sample is stored: [bytes] wide, as a float when [isFloat] and as a signed integer otherwise. */
 public enum class SampleFormat(public val bytes: Int, public val isFloat: Boolean) {
     S16(2, false),
     S24(3, false),
@@ -196,7 +214,9 @@ public enum class ChannelLayout {
     Unknown,
     ;
 
+    /** Layouts from channel counts. */
     public companion object {
+        /** The usual layout for [channels]: 1 is mono, 2 stereo, 4 quad, 6 is 5.1 and 8 is 7.1. Any other count is [Unknown]. */
         public fun forChannelCount(channels: Int): ChannelLayout = when (channels) {
             1 -> Mono
             2 -> Stereo

@@ -23,12 +23,14 @@ public data class DashManifest(
     val baseUrl: String,
 )
 
+/** One `Period` of a manifest, with its BaseURL already resolved. */
 public data class DashPeriod(
     val baseUrl: String,
     val durationMicros: Long?,
     val adaptationSets: List<DashAdaptationSet>,
 )
 
+/** One `AdaptationSet`: the interchangeable representations of one kind of content. */
 public data class DashAdaptationSet(
     val contentType: String?,
     val mimeType: String?,
@@ -36,6 +38,7 @@ public data class DashAdaptationSet(
     val representations: List<DashRepresentation>,
 )
 
+/** One `Representation`: one encoding of the content, with its segments addressed by a template or a list. */
 public data class DashRepresentation(
     val id: String?,
     val bandwidth: Long,
@@ -51,6 +54,7 @@ public data class DashRepresentation(
     val initializationUrl: String?,
 )
 
+/** A `SegmentTemplate`, merged from every level that declares one, the lowest level winning each attribute. */
 public data class DashSegmentTemplate(
     val initialization: String?,
     val media: String?,
@@ -97,6 +101,7 @@ public data class DashUrlPolicy(
     /** Whether every resolved URL must share the manifest's scheme, host and port. */
     val sameOriginOnly: Boolean = false,
 ) {
+    /** The two policies most callers want. */
     public companion object {
         /** http and https, no downgrade, cross-origin allowed. */
         public val Default: DashUrlPolicy = DashUrlPolicy()
@@ -109,6 +114,7 @@ public data class DashUrlPolicy(
 /** A URL a manifest asked for and [DashUrlPolicy] refused. */
 public class DashUrlRefusedException(message: String) : IllegalArgumentException(message)
 
+/** Parses a DASH MPD into a [DashManifest]. */
 public object DashManifestParser {
 
     /**

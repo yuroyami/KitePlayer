@@ -203,6 +203,11 @@ public data class BufferPolicy(
     }
 }
 
+/**
+ * How the player handles sound: which track to pick, the pitch law, the downmix, the volume
+ * ceiling, the equaliser, ReplayGain and the resampler. A fresh player starts from these values,
+ * and the setters on [KitePlayer] change most of them while it plays.
+ */
 public data class AudioConfig(
     /** Preferred language tags, best first, matched against the container's track languages. */
     val preferredLanguages: List<String> = emptyList(),
@@ -295,6 +300,7 @@ public data class EqualizerSettings(
     /** True when this changes nothing, in which case the engine skips the filters entirely. */
     public val isFlat: Boolean get() = preampDb == 0f && gainsDb.all { it == 0f }
 
+    /** The band layout, and the setting that changes nothing. */
     public companion object {
         /**
          * The band centres in Hz, in order.

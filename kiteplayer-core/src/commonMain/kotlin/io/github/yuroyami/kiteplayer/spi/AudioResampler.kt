@@ -63,5 +63,6 @@ public interface AudioResampler : AutoCloseable {
  * with no implementation on one platform may throw there.
  */
 public fun interface AudioResamplerFactory {
+    /** A resampler from [inputRate] to [outputRate] for [channels] interleaved channels. */
     public fun create(inputRate: Int, outputRate: Int, channels: Int): AudioResampler
 }

@@ -176,6 +176,7 @@ private suspend fun fetchBounded(
     body.await()
 }
 
+/** Opens DASH presentations: fetches a manifest, and builds a playable item from it. */
 public object Dash {
 
     /**

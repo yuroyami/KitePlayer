@@ -14,15 +14,19 @@ import io.github.yuroyami.kiteplayer.VideoSize
  * WebCodecs-fed source and a scripted test fake all sit behind the same interface.
  */
 public interface MediaSourceFactory {
+    /** Opens [media] and returns a cursor at its start. Throws when the media cannot be read. */
     public suspend fun open(media: MediaItem): PlayerMediaSource
 }
 
+/** A packet cursor over one opened item. The engine closes it with its session. */
 public interface PlayerMediaSource : AutoCloseable {
+    /** Every stream the container declares, including streams this build cannot decode. */
     public val streams: List<PlayerStreamInfo>
 
     /** Null when unknown, for example a live stream. */
     public val duration: Pts?
 
+    /** False when the source can only read forward, such as a live stream. The engine then refuses seeks. */
     public val seekable: Boolean
 
     /** Container-level tags. Never trusted, always reported. */
@@ -53,6 +57,7 @@ public interface PlayerMediaSource : AutoCloseable {
      */
     public val streamDivergences: List<StreamDivergence> get() = emptyList()
 
+    /** The container's chapters, in order. Empty when it has none. */
     public val chapters: List<Chapter>
 
     /**
@@ -121,6 +126,7 @@ public interface PlayerMediaSource : AutoCloseable {
     public suspend fun seekToKeyframe(target: Pts): Pts?
 }
 
+/** What the container declares about one stream. */
 public data class PlayerStreamInfo(
     val index: Int,
     val kind: TrackKind,
@@ -224,6 +230,7 @@ public data class PlayerStreamInfo(
     }
 }
 
+/** The VP9 profile, level, bit depth and chroma subsampling the container declares. A null field was not declared. */
 public data class Vp9CodecConfiguration(
     val profile: Vp9Profile?,
     val level: Vp9Level?,
@@ -231,6 +238,7 @@ public data class Vp9CodecConfiguration(
     val chromaSubsampling: Vp9ChromaSubsampling?,
 )
 
+/** A VP9 profile. [number] is its number in the VP9 bitstream specification. */
 public enum class Vp9Profile(public val number: Int) {
     Profile0(0),
     Profile1(1),
@@ -238,6 +246,7 @@ public enum class Vp9Profile(public val number: Int) {
     Profile3(3),
 }
 
+/** A VP9 level. [code] is the level times ten, as a codec string writes it. */
 public enum class Vp9Level(public val code: Int) {
     Level1(10),
     Level1_1(11),
@@ -255,12 +264,14 @@ public enum class Vp9Level(public val code: Int) {
     Level6_2(62),
 }
 
+/** Bits per sample. */
 public enum class Vp9BitDepth(public val bits: Int) {
     Eight(8),
     Ten(10),
     Twelve(12),
 }
 
+/** The chroma subsampling. [code] names it with the usual digits, such as 420. */
 public enum class Vp9ChromaSubsampling(public val code: Int) {
     Monochrome(400),
     Yuv420(420),
@@ -276,17 +287,21 @@ public enum class Vp9ChromaSubsampling(public val code: Int) {
  * into the explicit copy provided by [copyBytes].
  */
 public interface PlayerPacket : AutoCloseable {
+    /** The stream this packet belongs to, as [PlayerStreamInfo.index]. */
     public val streamIndex: Int
 
     /** Null when the container gave none, which is normal and not an error. */
     public val pts: Pts?
+    /** The decode time. Null when the container gave none. */
     public val dts: Pts?
 
     /** Null when the container gave none. */
     public val duration: Pts?
 
+    /** True when a decoder can start at this packet. */
     public val isKeyframe: Boolean
 
+    /** The size of the compressed payload. */
     public val sizeBytes: Int
 
     /**
@@ -308,7 +323,9 @@ public interface PlayerPacket : AutoCloseable {
  * the file extensions font files actually carry.
  */
 public class MediaAttachment(
+    /** The name the container stored the file under. */
     public val fileName: String,
+    /** The media type the container declares, when it declares one. */
     public val mimeType: String?,
     /** SHARED, not copied: a font can be megabytes and is read once. Treat it as read-only. */
     public val data: ByteArray,

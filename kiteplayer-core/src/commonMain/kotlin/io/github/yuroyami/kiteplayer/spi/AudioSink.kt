@@ -40,6 +40,7 @@ public interface AudioSink : AutoCloseable {
      */
     public suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat
 
+    /** Starts the device pulling samples through the render callback. */
     public suspend fun start()
 
     /** Stops and discards everything unplayed. This is the seek path. */
@@ -76,6 +77,7 @@ public interface AudioSink : AutoCloseable {
      */
     public fun latencyNanos(): Long
 
+    /** How far [latencyNanos] can be trusted. */
     public val latencyQuality: LatencyQuality
 
     /**
@@ -107,8 +109,11 @@ public interface AudioSink : AutoCloseable {
     public val events: Flow<AudioSinkEvent>
 }
 
+/** Creates the audio sink of a session. An [OutputBackend] carries one. */
 public interface AudioSinkFactory {
+    /** A new sink that is not open yet. The engine opens it, and closes it when the session ends. */
     public suspend fun create(): AudioSink
+    /** For logs and diagnostics. */
     public val name: String
 }
 
@@ -151,6 +156,7 @@ public interface AudioSinkFactory {
  *         [AudioSinkBuffer.writeSilence] is what a sink writes it with.
  */
 public fun interface AudioRenderCallback {
+    /** Writes up to [frames] sample frames into [destination], whose last frame becomes audible at [deadlineNanos]. */
     public fun onRender(destination: AudioSinkBuffer, frames: Int, deadlineNanos: Long): Int
 }
 
@@ -165,6 +171,7 @@ public fun interface AudioRenderCallback {
  * uses, including a future AAudio one, and because it is how the portable ring is tested.
  */
 public interface AudioSinkBuffer {
+    /** The layout of the device buffer, which is the format the sink accepted at open. */
     public val format: AudioFormat
 
     /**
@@ -180,6 +187,7 @@ public interface AudioSinkBuffer {
     public fun writeSilence(frameOffset: Int, frames: Int)
 }
 
+/** What a sink reports about its device, on [AudioSink.events]. */
 public sealed interface AudioSinkEvent {
     /** The device ran dry. The engine warns (`AudioDeviceUnderrun`), once per session; it does not rebuffer on it. */
     public data class Underrun(val detail: String) : AudioSinkEvent

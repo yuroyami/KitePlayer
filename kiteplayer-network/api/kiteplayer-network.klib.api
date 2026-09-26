@@ -223,23 +223,6 @@ final class io.github.yuroyami.kiteplayer.network.dash/DashUrlRefusedException :
     constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.network.dash/DashUrlRefusedException.<init>|<init>(kotlin.String){}[0]
 }
 
-final class io.github.yuroyami.kiteplayer.network.xml/XmlElement { // io.github.yuroyami.kiteplayer.network.xml/XmlElement|null[0]
-    constructor <init>(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String>, kotlin.collections/List<io.github.yuroyami.kiteplayer.network.xml/XmlElement>, kotlin/String) // io.github.yuroyami.kiteplayer.network.xml/XmlElement.<init>|<init>(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.xml.XmlElement>;kotlin.String){}[0]
-
-    final val attributes // io.github.yuroyami.kiteplayer.network.xml/XmlElement.attributes|{}attributes[0]
-        final fun <get-attributes>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer.network.xml/XmlElement.attributes.<get-attributes>|<get-attributes>(){}[0]
-    final val children // io.github.yuroyami.kiteplayer.network.xml/XmlElement.children|{}children[0]
-        final fun <get-children>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.xml/XmlElement> // io.github.yuroyami.kiteplayer.network.xml/XmlElement.children.<get-children>|<get-children>(){}[0]
-    final val name // io.github.yuroyami.kiteplayer.network.xml/XmlElement.name|{}name[0]
-        final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.network.xml/XmlElement.name.<get-name>|<get-name>(){}[0]
-    final val text // io.github.yuroyami.kiteplayer.network.xml/XmlElement.text|{}text[0]
-        final fun <get-text>(): kotlin/String // io.github.yuroyami.kiteplayer.network.xml/XmlElement.text.<get-text>|<get-text>(){}[0]
-
-    final fun attr(kotlin/String): kotlin/String? // io.github.yuroyami.kiteplayer.network.xml/XmlElement.attr|attr(kotlin.String){}[0]
-    final fun child(kotlin/String): io.github.yuroyami.kiteplayer.network.xml/XmlElement? // io.github.yuroyami.kiteplayer.network.xml/XmlElement.child|child(kotlin.String){}[0]
-    final fun children(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.xml/XmlElement> // io.github.yuroyami.kiteplayer.network.xml/XmlElement.children|children(kotlin.String){}[0]
-}
-
 final class io.github.yuroyami.kiteplayer.network.xml/XmlException : kotlin/Exception { // io.github.yuroyami.kiteplayer.network.xml/XmlException|null[0]
     constructor <init>(kotlin/String, kotlin/Int) // io.github.yuroyami.kiteplayer.network.xml/XmlException.<init>|<init>(kotlin.String;kotlin.Int){}[0]
 
@@ -308,13 +291,6 @@ final object io.github.yuroyami.kiteplayer.network.dash/Dash { // io.github.yuro
 final object io.github.yuroyami.kiteplayer.network.dash/DashManifestParser { // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser|null[0]
     final fun parse(kotlin/String, kotlin/String, io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy = ...): io.github.yuroyami.kiteplayer.network.dash/DashManifest // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser.parse|parse(kotlin.String;kotlin.String;io.github.yuroyami.kiteplayer.network.dash.DashUrlPolicy){}[0]
     final fun segmentPlan(io.github.yuroyami.kiteplayer.network.dash/DashManifest, io.github.yuroyami.kiteplayer.network.dash/DashPeriod, io.github.yuroyami.kiteplayer.network.dash/DashRepresentation, io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy = ...): io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser.segmentPlan|segmentPlan(io.github.yuroyami.kiteplayer.network.dash.DashManifest;io.github.yuroyami.kiteplayer.network.dash.DashPeriod;io.github.yuroyami.kiteplayer.network.dash.DashRepresentation;io.github.yuroyami.kiteplayer.network.dash.DashUrlPolicy){}[0]
-}
-
-final object io.github.yuroyami.kiteplayer.network.xml/XmlMini { // io.github.yuroyami.kiteplayer.network.xml/XmlMini|null[0]
-    final const val MAX_DEPTH // io.github.yuroyami.kiteplayer.network.xml/XmlMini.MAX_DEPTH|{}MAX_DEPTH[0]
-        final fun <get-MAX_DEPTH>(): kotlin/Int // io.github.yuroyami.kiteplayer.network.xml/XmlMini.MAX_DEPTH.<get-MAX_DEPTH>|<get-MAX_DEPTH>(){}[0]
-
-    final fun parse(kotlin/String): io.github.yuroyami.kiteplayer.network.xml/XmlElement // io.github.yuroyami.kiteplayer.network.xml/XmlMini.parse|parse(kotlin.String){}[0]
 }
 
 final const val io.github.yuroyami.kiteplayer.network.dash/MAX_MANIFEST_BYTES // io.github.yuroyami.kiteplayer.network.dash/MAX_MANIFEST_BYTES|{}MAX_MANIFEST_BYTES[0]

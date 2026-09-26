@@ -82,8 +82,11 @@ public fun interface SubtitleFileParser {
  * created from the factories are the engine's to close, and it closes them before this.
  */
 public interface BackendSession : AutoCloseable {
+    /** The packet cursor over the opened item. */
     public val source: PlayerMediaSource
+    /** Video decoder factories, best first. Empty when this backend decodes no video. */
     public val videoDecoders: List<VideoDecoderFactory>
+    /** Audio decoder factories, best first. Empty when this backend decodes no audio. */
     public val audioDecoders: List<AudioDecoderFactory>
 
     /**

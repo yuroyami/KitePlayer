@@ -21,6 +21,7 @@ public interface OutputBackend {
     /** The time base the sink reports on, and the one every engine timing rule reads. */
     public val clock: MonotonicClock
 
+    /** Creates the sink that reports on [clock]. */
     public val audioSink: AudioSinkFactory
 
     /**
@@ -39,6 +40,8 @@ public interface OutputBackend {
  * [create] owns the renderer and closes it.
  */
 public interface VideoRendererFactory {
+    /** A new renderer. The caller owns it and closes it. */
     public suspend fun create(): VideoRenderer
+    /** For logs and diagnostics. */
     public val name: String
 }

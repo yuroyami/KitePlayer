@@ -126,6 +126,7 @@ public interface VideoRenderer : AutoCloseable {
     public val outputSize: io.github.yuroyami.kiteplayer.VideoSize? get() = null
 }
 
+/** What a renderer reports about itself on [VideoRenderer.events]. */
 public sealed interface RendererEvent {
     /** The surface went away. Playback continues without picture. */
     public data class SurfaceLost(val detail: String) : RendererEvent
@@ -206,6 +207,7 @@ public data class SubtitleOverlay(
     val contentHash: Long,
 )
 
+/** One image of a subtitle overlay, with its top left corner at [x] and [y] in output pixels. */
 public data class OverlayImage(
     val x: Int,
     val y: Int,

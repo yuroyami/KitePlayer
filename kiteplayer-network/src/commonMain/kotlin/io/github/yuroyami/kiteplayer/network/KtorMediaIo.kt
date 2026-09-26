@@ -262,6 +262,7 @@ public class KtorMediaIo private constructor(
         bodyJob = null
     }
 
+    /** Opens readers. */
     public companion object {
         /**
          * Probes [uri] and returns a reader positioned at byte zero. The probe's own response
@@ -353,6 +354,7 @@ public class KtorMediaIoException internal constructor(
     /** True when a reconnect may cure it: a timeout, a response that ended early, a server error. */
     internal val retryable: Boolean,
 ) : Exception(message) {
+    /** A failure that a reconnect cannot cure. */
     public constructor(message: String) : this(message, retryable = false)
 }
 

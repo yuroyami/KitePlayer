@@ -23,13 +23,17 @@ import io.github.yuroyami.kiteplayer.VideoSize
  * when it fails.
  */
 public interface VideoFrame : AutoCloseable {
+    /** The media time at which this frame is shown. */
     public val pts: Pts
 
     /** The decoder's own duration for this frame, when it has one. */
     public val duration: Pts?
 
+    /** The size the frame is stored at, before [rotationDegrees] turns it. */
     public val size: VideoSize
+    /** How the pixels are laid out in memory. */
     public val pixelFormat: PlayerPixelFormat
+    /** The colour metadata a renderer must honour. */
     public val colorSpace: ColorSpaceInfo
 
     /**
@@ -64,6 +68,7 @@ public interface VideoFrame : AutoCloseable {
  * This is not the render path. Every method here copies.
  */
 public interface SoftwareReadableFrame : VideoFrame {
+    /** How many planes [copyPlane] can read. */
     public val planeCount: Int
 
     /**
@@ -76,14 +81,20 @@ public interface SoftwareReadableFrame : VideoFrame {
      */
     public fun planeStride(index: Int): Int
 
+    /** Rows in plane [index]. A subsampled chroma plane has fewer rows than the picture. */
     public fun planeHeight(index: Int): Int
 
+    /** Copies plane [index] into [into] from [offset]: [planeStride] times [planeHeight] bytes. */
     public fun copyPlane(index: Int, into: ByteArray, offset: Int = 0)
 }
 
+/** A pixel layout the engine models. */
 public enum class PlayerPixelFormat(
+    /** Planes in memory. */
     public val planes: Int,
+    /** Significant bits in each sample. */
     public val bitsPerComponent: Int,
+    /** True for luma and chroma formats, planar or semi-planar, and false for packed RGB. */
     public val isPlanarYuv: Boolean,
 ) {
     Yuv420p(3, 8, true),
@@ -102,6 +113,7 @@ public enum class PlayerPixelFormat(
     Opaque(0, 0, false),
     ;
 
+    /** True when a sample carries more than eight bits. */
     public val isTenBitOrMore: Boolean get() = bitsPerComponent > 8
 }
 
@@ -149,6 +161,7 @@ public data class ColorSpaceInfo(
     public val allSpecified: Boolean
         get() = matrixSpecified && primariesSpecified && transferSpecified && rangeSpecified
 
+    /** The values a decoder reports when the source says nothing. */
     public companion object {
         /** What a decoder should report when the container said nothing. See [guessFor]. */
         public val Unspecified: ColorSpaceInfo = ColorSpaceInfo(
@@ -193,6 +206,7 @@ public data class ColorSpaceInfo(
     }
 }
 
+/** How Y, Cb and Cr derive from R, G and B, with the matrices ITU-T H.273 names. */
 public enum class ColorMatrix {
     Unspecified,
     Bt601,
@@ -210,6 +224,7 @@ public enum class ColorMatrix {
     Identity,
 }
 
+/** The red, green and blue the picture was mastered with, as ITU-T H.273 names them. */
 public enum class ColorPrimaries {
     Unspecified,
     Bt601,
@@ -225,6 +240,7 @@ public enum class ColorPrimaries {
     DisplayP3,
 }
 
+/** How coded values map to light, with the transfer characteristics ITU-T H.273 names. */
 public enum class ColorTransfer {
     Unspecified,
     Bt601,
@@ -245,6 +261,7 @@ public enum class ColorTransfer {
     Hlg,
 }
 
+/** Where a subsampled chroma sample sits relative to the luma samples it covers. */
 public enum class ChromaLocation { Unspecified, Left, Center, TopLeft, Top, BottomLeft, Bottom }
 
 /**

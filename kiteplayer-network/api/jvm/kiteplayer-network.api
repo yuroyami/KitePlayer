@@ -239,25 +239,8 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashUrlRefusedExce
 	public fun <init> (Ljava/lang/String;)V
 }
 
-public final class io/github/yuroyami/kiteplayer/network/xml/XmlElement {
-	public fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;)V
-	public final fun attr (Ljava/lang/String;)Ljava/lang/String;
-	public final fun child (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/network/xml/XmlElement;
-	public final fun children (Ljava/lang/String;)Ljava/util/List;
-	public final fun getAttributes ()Ljava/util/Map;
-	public final fun getChildren ()Ljava/util/List;
-	public final fun getName ()Ljava/lang/String;
-	public final fun getText ()Ljava/lang/String;
-}
-
 public final class io/github/yuroyami/kiteplayer/network/xml/XmlException : java/lang/Exception {
 	public fun <init> (Ljava/lang/String;I)V
 	public final fun getOffset ()I
-}
-
-public final class io/github/yuroyami/kiteplayer/network/xml/XmlMini {
-	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/network/xml/XmlMini;
-	public static final field MAX_DEPTH I
-	public final fun parse (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/network/xml/XmlElement;
 }
 

@@ -10,20 +10,24 @@ package io.github.yuroyami.kiteplayer.network.xml
  * unread, and processing instructions are ignored. A malformed document throws
  * [XmlException] with the UTF-16 character offset, never a silent partial tree.
  */
-public class XmlElement(
-    public val name: String,
-    public val attributes: Map<String, String>,
-    public val children: List<XmlElement>,
-    public val text: String,
+internal class XmlElement(
+    val name: String,
+    val attributes: Map<String, String>,
+    val children: List<XmlElement>,
+    val text: String,
 ) {
-    public fun children(name: String): List<XmlElement> = children.filter { it.name == name }
-    public fun child(name: String): XmlElement? = children.firstOrNull { it.name == name }
-    public fun attr(name: String): String? = attributes[name]
+    fun children(name: String): List<XmlElement> = children.filter { it.name == name }
+    fun child(name: String): XmlElement? = children.firstOrNull { it.name == name }
+    fun attr(name: String): String? = attributes[name]
 }
 
+/**
+ * Malformed XML in a DASH manifest. `DashManifestParser.parse` throws it, with the UTF-16 character
+ * [offset] where the parser stopped.
+ */
 public class XmlException(message: String, public val offset: Int) : Exception("$message at offset $offset")
 
-public object XmlMini {
+internal object XmlMini {
 
     /**
      * How deep a document may nest before the parser refuses.
@@ -33,10 +37,10 @@ public object XmlMini {
      * in this module missed it and it came out of the player as a crash instead of a refusal.
      * Real DASH nests under ten levels; this ceiling is far above any honest document.
      */
-    public const val MAX_DEPTH: Int = 256
+    const val MAX_DEPTH: Int = 256
 
     /** Parses one document and returns its root element. */
-    public fun parse(text: String): XmlElement {
+    fun parse(text: String): XmlElement {
         val parser = Parser(text)
         parser.skipProlog()
         val root = parser.parseElement()

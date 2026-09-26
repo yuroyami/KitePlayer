@@ -10,14 +10,24 @@ import kotlin.time.Duration.Companion.microseconds
 
 /**
  * A file drawn as [peaks] and [rms], one entry per bucket of [bucketDuration], both in 0..1 and
- * mono-mixed. A bucket nothing was decoded into reads zero in both. Two waveforms are equal only
- * when they are the same object, since the arrays are arrays.
+ * mono-mixed. A bucket nothing was decoded into reads zero in both. Two waveforms are equal when
+ * every field is, the contents of both arrays included.
  */
 public data class Waveform(
     val bucketDuration: Duration,
     val peaks: FloatArray,
     val rms: FloatArray,
-)
+) {
+    override fun equals(other: Any?): Boolean =
+        this === other || other is Waveform && bucketDuration == other.bucketDuration &&
+            peaks.contentEquals(other.peaks) && rms.contentEquals(other.rms)
+
+    override fun hashCode(): Int {
+        var result = bucketDuration.hashCode()
+        result = 31 * result + peaks.contentHashCode()
+        return 31 * result + rms.contentHashCode()
+    }
+}
 
 /** Audio apps draw the file. This decodes it into the shape they draw. */
 public object Waveforms {

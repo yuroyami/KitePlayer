@@ -11,8 +11,7 @@ import kotlin.time.Duration
 
 /**
  * One preview image: a complete file in [format], [width] by [height] pixels, taken at
- * [position]. Two thumbnails are equal only when they are the same object, since [bytes] is an
- * array.
+ * [position]. Two thumbnails are equal when every field is, the contents of [bytes] included.
  */
 public data class Thumbnail(
     val position: Duration,
@@ -20,7 +19,19 @@ public data class Thumbnail(
     val height: Int,
     val bytes: ByteArray,
     val format: SnapshotFormat,
-)
+) {
+    override fun equals(other: Any?): Boolean =
+        this === other || other is Thumbnail && position == other.position && width == other.width &&
+            height == other.height && format == other.format && bytes.contentEquals(other.bytes)
+
+    override fun hashCode(): Int {
+        var result = position.hashCode()
+        result = 31 * result + width
+        result = 31 * result + height
+        result = 31 * result + bytes.contentHashCode()
+        return 31 * result + format.hashCode()
+    }
+}
 
 /** Seek previews and library grids: images at positions, scaled and encoded in one call. */
 public object Thumbnails {

@@ -71,6 +71,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   decoded audio through `submitDecoded`, which runs all of them (#220).
 - `openQueue` now refuses to replace a session that is not Idle, Ended or Failed, with
   `IllegalStateException`, as `open` always did. Call `stop()` first. `restore` already does (#256).
+- `Thumbnail` and `Waveform` compare their arrays by content, so two results with the same bytes
+  or buckets are equal and hash the same (#264).
 
 ## [0.0.27] - 2026-09-25
 

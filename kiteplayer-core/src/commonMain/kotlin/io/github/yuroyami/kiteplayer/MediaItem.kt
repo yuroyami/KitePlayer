@@ -62,12 +62,13 @@ public data class MediaItem(
      */
     val io: MediaIoFactory? = null,
     /**
-     * A hint for the demuxer, for example "mpegts", when the bytes have no recognisable header.
-     * Almost never needed. Probing is reliable.
+     * The name of the only demuxer the open may use, for example "mpegts". Almost never needed.
+     * Probing is reliable.
      *
-     * Respelled by the FFmpeg backend as a `format_whitelist` of exactly this name, which is
-     * what forcing a demuxer means to libavformat: probing is confined to the named format and
-     * the open FAILS rather than falling back when the bytes are not that format. A
+     * Respelled by the FFmpeg backend as a `format_whitelist` of exactly this name. FFmpeg checks
+     * that list after it probes, so the hint refuses the open when the probe finds another format,
+     * but it does not choose one: input with nothing to probe, such as raw PCM or raw video, still
+     * does not open. Forcing a demuxer needs a media library release that can pass one (#234). A
      * `format_whitelist` key in [openOptions] as well refuses the open.
      */
     val formatHint: String? = null,

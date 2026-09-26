@@ -11,6 +11,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.junit.Rule
@@ -510,6 +511,25 @@ class DesktopAudioSinkTest {
         assertEquals(2, s.open(stereo48k, FullBlockCallback()).channels)
         assertFalse(probed, "stereo must not be probed")
         s.close()
+    }
+
+    // A device that stops pulling at the end leaves the writer blocked in write. The engine bounds
+    // the drain with a coroutine timeout, which a blocking join could never let fire (#222).
+    @Test
+    fun `a drain whose writer is blocked ends at the caller's timeout and releases the writer`() = runBlocking {
+        val s = sink()
+        s.open(stereo48k, FullBlockCallback())
+        driver.blockWrites = true
+        s.start()
+        assertTrue(driver.writeEntered.await(10, TimeUnit.SECONDS), "the writer never reached a write")
+        val started = System.nanoTime()
+        val drained = withTimeoutOrNull(300) { s.drain() }
+        val tookMillis = (System.nanoTime() - started) / 1_000_000
+        assertEquals(null, drained, "the drain cannot finish while the device pulls nothing")
+        assertTrue(tookMillis < 2_000, "the drain must end at the timeout, took $tookMillis ms")
+        assertTrue(driver.countOf("stop") >= 1, "the blocked write is released the way stop releases it")
+        s.close()
+        assertTrue(driver.postCloseCalls.isEmpty(), "nothing touched the line after close: ${driver.postCloseCalls}")
     }
 
     // a short POSITIVE return is also how the line hands a write back at an

@@ -9,7 +9,9 @@ import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
 import io.github.yuroyami.kiteplayer.spi.AudioSinkEvent
 import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 
@@ -251,7 +253,20 @@ public class DesktopAudioSink internal constructor(
         /* The writer keeps pulling until the callback's first short return, submits that final
          * tail and exits; then the LINE's own drain plays the queue out, which is the whole
          * reason javax.sound.sampled has one. */
-        joinWriterOutsideLock()
+        try {
+            awaitWriterExit()
+        } catch (cancellation: CancellationException) {
+            /* The caller's deadline passed, which a device that stopped pulling causes. A join
+             * here blocked the engine for ever (#222); the writer is released as stop() releases
+             * it, and the next stop or close does the rest. */
+            synchronized(lifecycle) {
+                writerRun = false
+                d.stop()
+                draining = false
+            }
+            joinWriterOutsideLock()
+            throw cancellation
+        }
         d.drain()
         synchronized(lifecycle) {
             draining = false
@@ -328,6 +343,13 @@ public class DesktopAudioSink internal constructor(
     private fun joinWriterOutsideLock() {
         val t = synchronized(lifecycle) { writer }
         t?.join()
+        synchronized(lifecycle) { if (writer === t) writer = null }
+    }
+
+    /** [joinWriterOutsideLock] that suspends between checks, so a caller's timeout can end it. */
+    private suspend fun awaitWriterExit() {
+        val t = synchronized(lifecycle) { writer }
+        while (t?.isAlive == true) delay(WRITER_EXIT_POLL_MILLIS)
         synchronized(lifecycle) { if (writer === t) writer = null }
     }
 
@@ -478,6 +500,9 @@ public class DesktopAudioSink internal constructor(
     internal companion object {
         internal fun framesToNanos(frames: Long, sampleRate: Int): Long =
             if (sampleRate <= 0) 0 else frames * 1_000_000_000L / sampleRate
+
+        /** How often a drain checks that the writer ended. */
+        private const val WRITER_EXIT_POLL_MILLIS = 5L
     }
 
     /**

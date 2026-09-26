@@ -12,6 +12,8 @@ import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 
 /**
  * The Android audio output: one `AudioTrack` in MODE_STREAM behind the engine's pull contract.
@@ -237,7 +239,21 @@ public class AudioTrackSink internal constructor(
         synchronized(lifecycle) {
             draining = true
         }
-        joinWriterOutsideLock()
+        try {
+            awaitWriterExit()
+        } catch (cancellation: CancellationException) {
+            /* The caller's deadline passed, which a track that stopped pulling causes. A join
+             * here blocked the engine for ever (#222); the writer is released as stop() releases
+             * it, and the next stop or close does the rest. */
+            synchronized(lifecycle) {
+                writerRun = false
+                d.pause()
+                d.stop()
+                draining = false
+            }
+            joinWriterOutsideLock()
+            throw cancellation
+        }
         /* Bounded poll until everything submitted is audible: the queue is at most the device
          * buffer plus one block, so the bound is that duration plus scheduling slack. */
         val format = accepted ?: return
@@ -330,6 +346,13 @@ public class AudioTrackSink internal constructor(
     private fun joinWriterOutsideLock() {
         val t = synchronized(lifecycle) { writer }
         t?.join()
+        synchronized(lifecycle) { if (writer === t) writer = null }
+    }
+
+    /** [joinWriterOutsideLock] that suspends between checks, so a caller's timeout can end it. */
+    private suspend fun awaitWriterExit() {
+        val t = synchronized(lifecycle) { writer }
+        while (t?.isAlive == true) delay(WRITER_EXIT_POLL_MILLIS)
         synchronized(lifecycle) { if (writer === t) writer = null }
     }
 
@@ -505,6 +528,9 @@ public class AudioTrackSink internal constructor(
     }
 
     internal companion object {
+
+        /** How often a drain checks that the writer ended. */
+        private const val WRITER_EXIT_POLL_MILLIS = 5L
 
         /** `deadline = ts.nanoTime + duration(submitted + requested - ts.framePosition)`. */
         internal fun timestampDeadline(

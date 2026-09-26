@@ -10,6 +10,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -476,6 +477,26 @@ class AudioTrackSinkTest {
         while (callback.invocations.get() <= before) Thread.sleep(1)
         s.stop()
         s.close()
+    }
+
+    // A track that stops pulling at the end leaves the writer blocked in write. The engine bounds
+    // the drain with a coroutine timeout, which a blocking join could never let fire (#222).
+    @Test
+    fun `a drain whose writer is blocked ends at the caller's timeout and releases the writer`() = runBlocking {
+        val driver = FakeAudioTrackDriver()
+        driver.blockWrites = true
+        val s = sink(driver)
+        s.open(stereo48k, FullBlockCallback())
+        s.start()
+        assertTrue(driver.writeEntered.await(5, TimeUnit.SECONDS), "the writer must be inside a blocking write")
+        val started = System.nanoTime()
+        val drained = withTimeoutOrNull(300) { s.drain() }
+        val tookMillis = (System.nanoTime() - started) / 1_000_000
+        assertEquals(null, drained, "the drain cannot finish while the track pulls nothing")
+        assertTrue(tookMillis < 2_000, "the drain must end at the timeout, took $tookMillis ms")
+        assertTrue(synchronized(driver.calls) { "pause" in driver.calls }, "the blocked write is released")
+        s.close()
+        assertEquals(emptyList(), synchronized(driver.calls) { driver.postReleaseCalls.toList() })
     }
 
     @Test

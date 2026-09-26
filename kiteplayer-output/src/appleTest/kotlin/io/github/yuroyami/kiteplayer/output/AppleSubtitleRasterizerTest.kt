@@ -15,8 +15,8 @@ import kotlin.test.assertTrue
 /**
  * The CoreText rasterizer proved with real text: a cue
  * becomes pixels, lands where the Android arithmetic would put it, and the outline colour is
- * present beside the fill. Placement equality with Android is BY CONSTRUCTION (the same code,
- * mirrored); these arms hold the Apple half to it.
+ * present beside the fill. Placement comes from `cueOrigin`, which the desktop and Android
+ * rasterizers use as well; these arms hold the Apple half to it.
  */
 class AppleSubtitleRasterizerTest {
 
@@ -64,6 +64,30 @@ class AppleSubtitleRasterizerTest {
             image.x in 0..(640 - image.bitmap.width),
             "the cue is horizontally outside the viewport at x=${image.x}",
         )
+    }
+
+    // An authored position is the anchor the alignment names, as on the desktop and Android.
+    @Test
+    fun aPositionedCueIsAnchoredOnTheAuthoredPoint() {
+        fun placed(alignment: CueAlignment, x: Float, y: Float) = AppleSubtitleRasterizer().rasterize(
+            cues = listOf(
+                SubtitleCue.Text(
+                    startMicros = 0,
+                    endMicros = 1_000_000,
+                    spans = listOf(StyledSpan("pos", CueStyle())),
+                    layout = CueLayout(alignment = alignment, positionX = x, positionY = y),
+                ),
+            ),
+            viewportWidth = 640,
+            viewportHeight = 360,
+            fontScale = 1f,
+        ).single()
+        val bottom = placed(CueAlignment.BottomCenter, 0.5f, 0.5f)
+        assertEquals(320 - (bottom.bitmap.width - shadowPad) / 2, bottom.x, "an \\an2 anchor centres the text on the point")
+        assertEquals(180 - (bottom.bitmap.height - shadowPad), bottom.y, "an \\an2 anchor puts the bottom of the text on the point")
+        val top = placed(CueAlignment.TopLeft, 0.25f, 0.25f)
+        assertEquals(160, top.x, "an \\an7 anchor puts the left edge on the point")
+        assertEquals(90, top.y, "an \\an7 anchor puts the top edge on the point")
     }
 
     @Test

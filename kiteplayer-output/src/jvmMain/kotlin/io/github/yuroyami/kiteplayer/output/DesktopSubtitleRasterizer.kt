@@ -189,45 +189,13 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
             g.dispose()
         }
 
-        val marginXPx = (viewportWidth * layoutSpec.marginLeft).toInt()
-        val marginYPx = (viewportHeight * layoutSpec.marginVertical).toInt()
-        // An authored position is the cue's ANCHOR point, oriented by the alignment:
-        // \pos with \an2 puts the bottom-centre of the text on the point, not its top-left.
-        val x = layoutSpec.positionX?.let { fraction ->
-            val anchor = (fraction * viewportWidth).toInt()
-            when (layoutSpec.alignment) {
-                CueAlignment.BottomLeft, CueAlignment.MiddleLeft, CueAlignment.TopLeft -> anchor
-                CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight -> anchor - width
-                else -> anchor - width / 2
-            }
-        } ?: when (layoutSpec.alignment) {
-            CueAlignment.BottomLeft, CueAlignment.MiddleLeft, CueAlignment.TopLeft -> marginXPx
-            CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight ->
-                viewportWidth - marginXPx - width
-            else -> (viewportWidth - width) / 2
-        }
-        val y = layoutSpec.positionY?.let { fraction ->
-            val anchor = (fraction * viewportHeight).toInt()
-            when (layoutSpec.alignment) {
-                CueAlignment.TopLeft, CueAlignment.TopCenter, CueAlignment.TopRight -> anchor
-                CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight ->
-                    anchor - height / 2
-                else -> anchor - height
-            }
-        } ?: when (layoutSpec.alignment) {
-            CueAlignment.TopLeft, CueAlignment.TopCenter, CueAlignment.TopRight -> marginYPx
-            CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight ->
-                (viewportHeight - height) / 2
-            // The implicit bottom stack anchors at the viewer's sub-position: 1.0 is the plain
-            // bottom edge, smaller lifts the stack. Explicit positions above are the author's
-            // word and never move with it, exactly mpv's sub-pos rule.
-            else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
-        }
+        // Shared by every rasterizer, so a cue lands in the same place on every platform.
+        val origin = cueOrigin(layoutSpec, viewportWidth, viewportHeight, width, height, position, stackedBottom)
         // Placement above measured the TEXT box; the shadow's and the box's extra pixels hang
         // off it, so the words do not move when either is switched on.
         return OverlayImage(
-            x = x - shadow.origin - boxPad,
-            y = y - shadow.origin - boxPad,
+            x = origin.x - shadow.origin - boxPad,
+            y = origin.y - shadow.origin - boxPad,
             bitmap = RgbaBitmap(image.width, image.height, premultipliedRgba(image)),
         )
     }

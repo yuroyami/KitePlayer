@@ -6,13 +6,21 @@ import android.os.ParcelFileDescriptor
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 private fun tempFileOf(bytes: ByteArray): File =
     File.createTempFile("kiteplayer-io", ".bin").apply {
@@ -67,5 +75,29 @@ class PipeDeviceTest : ForwardMediaIoContractTest() {
             assertFalse(reader.seekable)
             assertFailsWith<UnsupportedOperationException> { reader.seek(0) }
         }
+    }
+}
+
+/** A pipe whose writer stays open after the bytes it sent. A cancelled read must end (#276). */
+class StalledPipeDeviceTest {
+
+    @Test
+    fun aCancelledReadOnAPipeWithAnOpenWriterEnds() = runBlocking {
+        val (readSide, writeSide) = ParcelFileDescriptor.createPipe()
+        val writer = ParcelFileDescriptor.AutoCloseOutputStream(writeSide)
+        writer.write(ByteArray(100) { it.toByte() })
+        writer.flush()
+        val reader = AssetFileDescriptor(readSide, 0, AssetFileDescriptor.UNKNOWN_LENGTH).toMediaIo()
+        val buffer = ByteArray(64)
+        var received = 0
+        while (received < 100) received += reader.read(buffer, 0, buffer.size)
+
+        val read = launch(Dispatchers.Default) { reader.read(buffer, 0, buffer.size) }
+        delay(200)
+        assertTrue(read.isActive, "the read waits for bytes the writer never sends")
+        withTimeout(2.seconds) { read.cancelAndJoin() }
+        assertFailsWith<IllegalStateException> { reader.read(buffer, 0, buffer.size) }
+        reader.close()
+        writer.close()
     }
 }

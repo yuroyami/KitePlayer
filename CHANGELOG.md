@@ -25,6 +25,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `PlayerMemento` gains `queueOrder`, which changes the generated data-class methods. Recompile.
   `PlayerMemento.FORMAT_VERSION` is 4, and a build older than this one refuses a memento that this
   one wrote. The text form now also carries each item's title, artist and album (#214).
+- `PlayerSnapshot` gains `playRequested`, which changes the generated data-class methods.
+  Recompile. The media session guards now pause or duck a player that is buffering, or that is
+  opening the next queue item while playing, as well as one that is playing (#226).
 
 ## [0.0.27] - 2026-09-25
 

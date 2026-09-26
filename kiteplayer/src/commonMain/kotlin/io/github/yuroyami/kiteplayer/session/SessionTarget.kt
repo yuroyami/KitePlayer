@@ -32,7 +32,9 @@ internal fun KitePlayer.pauseFromRemote() {
 }
 
 internal class PlayerSessionTarget(private val player: KitePlayer) : SessionTarget {
-    override val playing: Boolean get() = player.state.value.status == PlaybackStatus.Playing
+    // Buffering and a queue's next open count: the engine starts the sound by itself once data
+    // arrives, so a guard that waited for Playing let it start over a call (#226).
+    override val playing: Boolean get() = player.state.value.playRequested
     override val volume: Float get() = player.state.value.volume
     override val videoEnabled: Boolean get() = player.state.value.videoEnabled
     override fun play() = player.playFromRemote()

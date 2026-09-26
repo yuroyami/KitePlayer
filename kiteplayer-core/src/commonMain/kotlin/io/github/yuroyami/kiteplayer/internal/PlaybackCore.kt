@@ -606,6 +606,19 @@ internal class PlaybackCore(
     private var tracks: Tracks = Tracks.Empty
     private var lastError: PlaybackError? = null
     private var playRequested = false
+
+    /**
+     * True while a queue move opens the next item with play carried over. An open clears
+     * [playRequested] until it lands, and this keeps the intent published meanwhile (#226).
+     */
+    private var openCarriesPlay = false
+
+    /** [PlayerSnapshot.playRequested]: playing, buffering, or opening with play carried over. */
+    private fun publishedPlayIntent(): Boolean = when (status) {
+        PlaybackStatus.Playing, PlaybackStatus.Buffering -> true
+        PlaybackStatus.Opening -> openCarriesPlay
+        else -> false
+    }
     private var loop: LoopMode = LoopMode.Off
 
     /** Once per media: handleLoop refusing an unseekable repeat runs on every Ended pass. */
@@ -5356,7 +5369,12 @@ internal class PlaybackCore(
         if (queueItems.size <= 1) return
         val next = neighbourInOrder(1) ?: return
         queueIndex = next
-        runOpen(CoreCommand.Open(queueItems[next], CompletableDeferred()))
+        openCarriesPlay = true
+        try {
+            runOpen(CoreCommand.Open(queueItems[next], CompletableDeferred()))
+        } finally {
+            openCarriesPlay = false
+        }
         // An open ends paused by contract; a queue that was playing keeps playing through it.
         playRequested = true
     }
@@ -5547,7 +5565,12 @@ internal class PlaybackCore(
         }
         val wasPlaying = playRequested
         queueIndex = target
-        runOpen(CoreCommand.Open(queueItems[target], reply))
+        openCarriesPlay = wasPlaying
+        try {
+            runOpen(CoreCommand.Open(queueItems[target], reply))
+        } finally {
+            openCarriesPlay = false
+        }
         playRequested = wasPlaying
     }
 
@@ -6504,6 +6527,7 @@ internal class PlaybackCore(
             shuffle = shuffleEnabled,
             queueOrder = queueOrder,
             markers = markers,
+            playRequested = publishedPlayIntent(),
         )
     }
 
@@ -6844,6 +6868,7 @@ internal class PlaybackCore(
             shuffle = shuffleEnabled,
             queueOrder = queueOrder,
             markers = markers,
+            playRequested = publishedPlayIntent(),
         )
         publishProgressAndStats()
     }

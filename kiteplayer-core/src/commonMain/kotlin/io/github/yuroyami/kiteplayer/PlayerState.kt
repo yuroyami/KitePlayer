@@ -125,6 +125,13 @@ public data class PlayerSnapshot(
      * read it to show what is coming next.
      */
     val queueOrder: List<Int> = emptyList(),
+    /**
+     * True while the player means to make sound: while it plays, while it buffers, and while a
+     * queue that was playing opens its next item. [status] says whether sound comes out now; this
+     * says whether it will once the pipeline can supply it. A guard that pauses for a call or for
+     * headphones coming out reads this, not [status] alone.
+     */
+    val playRequested: Boolean = false,
 )
 
 /**

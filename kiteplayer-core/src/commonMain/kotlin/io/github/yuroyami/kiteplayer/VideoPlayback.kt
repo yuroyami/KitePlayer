@@ -310,13 +310,15 @@ public class VideoPlayback(
             return present(frameTimerNanos, masterClock)
         }
 
-        val shown = queue.shown
-        val measuredUs = if (shown != null && shown.generation == next.generation) {
-            next.pts.micros - shown.pts.micros
+        // Measured from the last frame given a slot, shown or dropped, because the timer already
+        // covers a dropped frame's slot (#198).
+        val previous = queue.scheduled
+        val measuredUs = if (previous != null && previous.generation == next.generation) {
+            next.pts.micros - previous.pts.micros
         } else {
             null
         }
-        val nominalUs = durations.estimate(measuredUs, shown?.duration?.micros ?: next.duration?.micros)
+        val nominalUs = durations.estimate(measuredUs, previous?.duration?.micros ?: next.duration?.micros)
 
         val videoNow = videoClock.nowOrNull()
         val delayUs = SyncLaw.targetDelayUs(nominalUs, videoNow, masterClock, maxFrameDurationUs)
@@ -334,6 +336,10 @@ public class VideoPlayback(
         if (delayUs > 0 && now - frameTimerNanos > SyncLaw.FRAME_TIMER_RESYNC_US * 1_000) {
             frameTimerNanos = now
         }
+        // The frame whose slot this is sets the video clock whether it is shown or dropped, as
+        // ffplay's update_video_pts does before its drop decision. Otherwise the frame after a drop
+        // is synced against the frame still on screen, one period behind the schedule (#198).
+        videoClock.set(next.pts, generation)
 
         // Late drop: only when a frame after this one has also come due, so dropping cannot leave the
         // screen empty.

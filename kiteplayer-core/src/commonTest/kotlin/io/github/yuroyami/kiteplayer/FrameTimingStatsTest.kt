@@ -40,11 +40,13 @@ class FrameTimingStatsTest {
         // A renderer that takes 3 ms to draw. The schedule aims each frame at a target instant and
         // the clock is read after present returns, so the lateness is the draw time plus however
         // late the wake-up was. The scheduler waits in whole virtual milliseconds, so the wake-up
-        // can trail the target by under a millisecond; nothing else may move the figure.
+        // can trail the target by under a millisecond; nothing else may move the figure. Video is
+        // the master here, because an audio clock's catch-up shows two frames at one target and a
+        // drop then presents the next frame late on purpose, which is lateness of another kind.
         val harness = CoreHarness(
             this,
             renderer = RecordingRenderer(presentDuration = 3.milliseconds),
-            config = PlayerConfig(statsInterval = 200.milliseconds),
+            config = PlayerConfig(statsInterval = 200.milliseconds, syncMode = SyncMode.VideoMaster),
         )
         harness.openWithRenderer()
         harness.core.play()

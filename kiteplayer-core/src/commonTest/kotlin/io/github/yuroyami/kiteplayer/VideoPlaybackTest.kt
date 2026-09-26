@@ -33,6 +33,28 @@ class VideoPlaybackTest {
         dropPolicy = FrameDropPolicy.LateOnly,
     )
 
+    // A dropped frame still took its slot, so the frame after it is one period away, not two (#198).
+    @Test
+    fun `the frame after a late drop is timed from the dropped frame`() = runTest {
+        val clock = TestClock()
+        val renderer = RecordingRenderer()
+        val video = playback(renderer, clock)
+        listOf(0L, 40L, 80L, 120L).forEach { video.submit(FakeVideoFrame(pts(it))) }
+
+        video.tick(null)
+        clock.advance(85.milliseconds)
+        // 40 and 80 are both due, so 40 is dropped.
+        video.tick(null)
+        assertEquals(1, video.droppedFrames, "the late frame was not dropped, so this proves nothing")
+        // Frame 80's slot, 80 ms, is already past: it presents now instead of waiting 35 ms.
+        val wait = video.tick(null)
+
+        assertEquals(listOf(pts(0), pts(80)), renderer.timestamps, "the frame after the drop waited an extra period")
+        assertEquals(80.milliseconds.inWholeNanoseconds, renderer.targets[1], "it is aimed at its own slot")
+        assertEquals(1, video.droppedFrames)
+        assertEquals(true, wait < 40.milliseconds, "the schedule stayed a period behind: waits $wait")
+    }
+
     @Test
     fun `the drop deadline is the duration of the candidate frame`() = runTest {
         val clock = TestClock()
@@ -217,10 +239,10 @@ class VideoPlaybackTest {
         val renderer = RecordingRenderer()
         val video = playback(renderer, clock)
 
-        // Presented and dropped.
+        // Presented and dropped. At 85 ms only the frame at 40 ms is past its slot.
         listOf(0L, 40L, 80L, 120L).forEach { video.submit(FakeVideoFrame(pts(it), ledger = ledger)) }
         video.tick(null)
-        clock.advance(130.milliseconds)
+        clock.advance(85.milliseconds)
         video.tick(null)
         assertEquals(1, video.droppedFrames)
         video.tick(null)

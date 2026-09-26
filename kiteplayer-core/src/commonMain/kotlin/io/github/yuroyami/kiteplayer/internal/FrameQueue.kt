@@ -44,6 +44,12 @@ internal class FrameQueue(private val capacity: Int) {
 
     /** What the frame currently on screen is. Metadata only: the frame itself left with [advance]. */
     private var lastShown: ShownFrame? = null
+
+    /**
+     * The last frame the schedule took a slot for, shown or dropped. The next frame's duration is
+     * measured from this one: measured from the shown frame, a drop cost a whole period (#198).
+     */
+    private var lastScheduled: ShownFrame? = null
     private var closed = false
 
     private val notEmpty = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -125,6 +131,9 @@ internal class FrameQueue(private val capacity: Int) {
     /** What is on screen, as numbers. Null before the first [advance] and after a flush. */
     val shown: ShownFrame? get() = synchronized(lock) { lastShown }
 
+    /** The last frame given a slot by [advance] or [dropNext]. Null before the first and after a flush. */
+    val scheduled: ShownFrame? get() = synchronized(lock) { lastScheduled }
+
     /**
      * Hands the next frame to the caller and keeps a record of what it was.
      *
@@ -138,15 +147,25 @@ internal class FrameQueue(private val capacity: Int) {
         val nowShown = synchronized(lock) {
             val next = pending.removeFirstOrNull() ?: return null
             lastShown = ShownFrame(next.pts, next.duration, next.generation)
+            lastScheduled = lastShown
             next
         }
         hasSpace.trySend(Unit)
         return nowShown
     }
 
-    /** Discards the next frame without showing it. Used by the late drop. */
+    /**
+     * Discards the next frame without showing it. Used by the late drop.
+     *
+     * The frame still took its slot, so it becomes [scheduled], while [shown] stays on the frame
+     * that is on screen.
+     */
     fun dropNext(): Boolean {
-        val dropped = synchronized(lock) { pending.removeFirstOrNull() } ?: return false
+        val dropped = synchronized(lock) {
+            val frame = pending.removeFirstOrNull() ?: return false
+            lastScheduled = ShownFrame(frame.pts, frame.duration, frame.generation)
+            frame
+        }
         dropped.close()
         hasSpace.trySend(Unit)
         return true
@@ -180,6 +199,7 @@ internal class FrameQueue(private val capacity: Int) {
             val all = pending.toList()
             pending.clear()
             lastShown = null
+            lastScheduled = null
             all
         }
         toClose.forEach { it.close() }
@@ -208,6 +228,7 @@ internal class FrameQueue(private val capacity: Int) {
             val all = pending.toList()
             pending.clear()
             lastShown = null
+            lastScheduled = null
             all
         }
         toClose.forEach { it.close() }

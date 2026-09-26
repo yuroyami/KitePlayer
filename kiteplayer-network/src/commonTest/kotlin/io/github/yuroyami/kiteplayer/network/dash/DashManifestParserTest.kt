@@ -4,7 +4,9 @@ import io.github.yuroyami.kiteplayer.network.xml.XmlMini
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /** The XML reader and the MPD parser against real-world manifest shapes. */
@@ -317,5 +319,35 @@ class DashManifestParserTest {
             """.trimIndent(),
         )
         assertEquals(listOf("http://cdn.test/vod/t-0.m4s", "http://cdn.test/vod/t-2000.m4s"), plan.mediaUrls)
+    }
+
+    /**
+     * An adaptation set's timeline is read once. Every representation without a template of its
+     * own shares the set's template, so the parsed manifest grows with the document rather than
+     * with representations times timeline entries.
+     */
+    @Test
+    fun representationsThatInheritATimelineShareOneTemplate() {
+        val timeline = "<S d=\"1\"/>".repeat(1_000)
+        val representations = (0 until 500).joinToString("") { "<Representation id=\"r$it\" bandwidth=\"1\"/>" }
+        val manifest = DashManifestParser.parse(
+            "<MPD type=\"static\" mediaPresentationDuration=\"PT1000S\"><Period><AdaptationSet>" +
+                "<SegmentTemplate media=\"s-${'$'}Number${'$'}.m4s\" timescale=\"1\">" +
+                "<SegmentTimeline>$timeline</SegmentTimeline></SegmentTemplate>" +
+                representations +
+                "<Representation id=\"own\" bandwidth=\"1\"><SegmentTemplate startNumber=\"7\"/></Representation>" +
+                "</AdaptationSet></Period></MPD>",
+            "http://cdn.test/vod/manifest.mpd",
+        )
+        val set = manifest.periods.single().adaptationSets.single()
+        val setTemplate = checkNotNull(set.segmentTemplate)
+        assertEquals(1_000, setTemplate.timeline.size)
+        val inheriting = set.representations.dropLast(1)
+        assertEquals(500, inheriting.size)
+        for (rep in inheriting) assertSame(setTemplate, rep.segmentTemplate, "representation ${rep.id}")
+        val own = checkNotNull(set.representations.last().segmentTemplate)
+        assertNotSame(setTemplate, own)
+        assertEquals(7L, own.startNumber, "its own attribute wins")
+        assertSame(setTemplate.timeline, own.timeline, "the timeline it inherits is the set's, not a copy")
     }
 }

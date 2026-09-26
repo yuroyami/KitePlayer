@@ -135,6 +135,7 @@ public object DashManifestParser {
         val duration = root.attr("mediaPresentationDuration")?.let(::parseIsoDurationMicros)
         val periods = root.children("Period").map { period ->
             val periodBase = resolveBaseUrl(mpdBase, period, policy)
+            val periodTemplate = TemplateLevel.under(null, period)
             DashPeriod(
                 baseUrl = periodBase,
                 durationMicros = period.attr("duration")?.let(::parseIsoDurationMicros),
@@ -142,12 +143,16 @@ public object DashManifestParser {
                     // Each level's BaseURL resolves against the level above it: MPD, Period,
                     // AdaptationSet, Representation (ISO/IEC 23009-1, 5.6.4).
                     val setBase = resolveBaseUrl(periodBase, set, policy)
+                    // Read once per set, not once per representation: a set can hold many
+                    // representations, and each lookup walks the set's children.
+                    val setTemplate = TemplateLevel.under(periodTemplate, set)
+                    val setSegmentList = set.child("SegmentList")
                     DashAdaptationSet(
                         contentType = set.attr("contentType"),
                         mimeType = set.attr("mimeType"),
-                        segmentTemplate = mergedTemplate(period, set),
+                        segmentTemplate = setTemplate?.template,
                         representations = set.children("Representation").map { rep ->
-                            parseRepresentation(rep, setBase, period, set, policy)
+                            parseRepresentation(rep, setBase, set, setSegmentList, setTemplate, policy)
                         },
                     )
                 },
@@ -159,12 +164,13 @@ public object DashManifestParser {
     private fun parseRepresentation(
         rep: XmlElement,
         setBase: String,
-        period: XmlElement,
         set: XmlElement,
+        setSegmentList: XmlElement?,
+        setTemplate: TemplateLevel?,
         policy: DashUrlPolicy,
     ): DashRepresentation {
         val repBase = resolveBaseUrl(setBase, rep, policy)
-        val segmentList = rep.child("SegmentList") ?: set.child("SegmentList")
+        val segmentList = rep.child("SegmentList") ?: setSegmentList
         return DashRepresentation(
             id = rep.attr("id"),
             bandwidth = rep.attr("bandwidth")?.toLongOrNull() ?: 0L,
@@ -173,7 +179,7 @@ public object DashManifestParser {
             width = rep.attr("width")?.toIntOrNull(),
             height = rep.attr("height")?.toIntOrNull(),
             baseUrl = repBase,
-            segmentTemplate = mergedTemplate(period, set, rep),
+            segmentTemplate = TemplateLevel.under(setTemplate, rep)?.template,
             segmentUrls = segmentList?.children("SegmentURL")
                 ?.mapNotNull { it.attr("media") }
                 ?.map { resolveUrl(repBase, it, policy) }
@@ -184,33 +190,57 @@ public object DashManifestParser {
     }
 
     /**
-     * The SegmentTemplate in force at the deepest of [levels], Period first, or null when no level
-     * has one. A lower level overrides only the attributes it sets, and its own SegmentTimeline
-     * replaces the one above it (ISO/IEC 23009-1, 5.3.9.1).
+     * The SegmentTemplate in force at one level: Period, AdaptationSet or Representation. A lower
+     * level overrides only the attributes it sets, and its own SegmentTimeline replaces the one
+     * above it (ISO/IEC 23009-1, 5.3.9.1).
+     *
+     * A level without a template of its own is its parent, the same object. So a timeline is read
+     * once, and every representation that inherits it shares one [template].
      */
-    private fun mergedTemplate(vararg levels: XmlElement): DashSegmentTemplate? {
-        val templates = levels.mapNotNull { it.child("SegmentTemplate") }
-        if (templates.isEmpty()) return null
-        fun attr(name: String): String? = templates.lastOrNull { it.attr(name) != null }?.attr(name)
-        val timeline = templates.lastOrNull { it.child("SegmentTimeline") != null }?.child("SegmentTimeline")
-        return DashSegmentTemplate(
-            initialization = attr("initialization"),
-            media = attr("media"),
-            startNumber = attr("startNumber")?.toLongOrNull() ?: 1L,
-            // Refused here rather than at the division that uses it: `timescale="0"` used to reach
-            // `duration * 1_000_000 / timescale` and raise an untyped ArithmeticException.
-            timescale = (attr("timescale")?.toLongOrNull() ?: 1L).also {
-                require(it > 0) { "SegmentTemplate timescale must be positive, not $it" }
-            },
-            duration = attr("duration")?.toLongOrNull(),
-            timeline = timeline?.children("S")?.map { s ->
-                DashTimelineEntry(
-                    t = s.attr("t")?.toLongOrNull(),
-                    d = s.attr("d")?.toLongOrNull() ?: 0L,
-                    r = s.attr("r")?.toLongOrNull() ?: 0L,
+    private class TemplateLevel(
+        private val initialization: String?,
+        private val media: String?,
+        private val startNumber: String?,
+        private val timescale: String?,
+        private val duration: String?,
+        private val timeline: List<DashTimelineEntry>?,
+    ) {
+        /** Built on first use, so a level that only passes attributes down is never checked alone. */
+        val template: DashSegmentTemplate by lazy {
+            DashSegmentTemplate(
+                initialization = initialization,
+                media = media,
+                startNumber = startNumber?.toLongOrNull() ?: 1L,
+                // Refused here rather than at the division that uses it: `timescale="0"` used to
+                // reach `duration * 1_000_000 / timescale` and raise an untyped ArithmeticException.
+                timescale = (timescale?.toLongOrNull() ?: 1L).also {
+                    require(it > 0) { "SegmentTemplate timescale must be positive, not $it" }
+                },
+                duration = duration?.toLongOrNull(),
+                timeline = timeline ?: emptyList(),
+            )
+        }
+
+        companion object {
+            /** The level [element] makes under [parent], or [parent] itself when [element] has no template. */
+            fun under(parent: TemplateLevel?, element: XmlElement): TemplateLevel? {
+                val own = element.child("SegmentTemplate") ?: return parent
+                return TemplateLevel(
+                    initialization = own.attr("initialization") ?: parent?.initialization,
+                    media = own.attr("media") ?: parent?.media,
+                    startNumber = own.attr("startNumber") ?: parent?.startNumber,
+                    timescale = own.attr("timescale") ?: parent?.timescale,
+                    duration = own.attr("duration") ?: parent?.duration,
+                    timeline = own.child("SegmentTimeline")?.children("S")?.map { s ->
+                        DashTimelineEntry(
+                            t = s.attr("t")?.toLongOrNull(),
+                            d = s.attr("d")?.toLongOrNull() ?: 0L,
+                            r = s.attr("r")?.toLongOrNull() ?: 0L,
+                        )
+                    } ?: parent?.timeline,
                 )
-            } ?: emptyList(),
-        )
+            }
+        }
     }
 
     /**

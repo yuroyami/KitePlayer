@@ -39,18 +39,50 @@ internal object XmlMini {
      */
     const val MAX_DEPTH: Int = 256
 
-    /** Parses one document and returns its root element. */
-    fun parse(text: String): XmlElement {
-        val parser = Parser(text)
+    /**
+     * The longest document the parser reads, in UTF-16 code units. The DASH door refuses a manifest
+     * over 8 MiB before it gets here, and 8 MiB of UTF-8 never decodes to more code units than this.
+     */
+    const val MAX_LENGTH: Int = 8 * 1024 * 1024
+
+    /** How many attributes one element may carry. A DASH element carries a few dozen at most. */
+    const val MAX_ELEMENT_ATTRIBUTES: Int = 128
+
+    /** How many attributes one document may carry in all. */
+    const val MAX_ATTRIBUTES: Int = 1024 * 1024
+
+    /** How many elements one document may hold. */
+    const val MAX_ELEMENTS: Int = 256 * 1024
+
+    /** The ceilings one parse runs under. The defaults are the constants above; tests pass smaller ones. */
+    class Limits(
+        val maxLength: Int = MAX_LENGTH,
+        val maxElementAttributes: Int = MAX_ELEMENT_ATTRIBUTES,
+        val maxAttributes: Int = MAX_ATTRIBUTES,
+        val maxElements: Int = MAX_ELEMENTS,
+    )
+
+    /**
+     * Parses one document and returns its root element. Every step moves forward through [text],
+     * so the time a parse takes grows with the length of the document and nothing else. A document
+     * past one of [limits] is refused with [XmlException].
+     */
+    fun parse(text: CharSequence, limits: Limits = Limits()): XmlElement {
+        if (text.length > limits.maxLength) {
+            throw XmlException("the document is longer than ${limits.maxLength} characters", limits.maxLength)
+        }
+        val parser = Parser(text, limits)
         parser.skipProlog()
         val root = parser.parseElement()
         parser.skipMisc()
         return root
     }
 
-    private class Parser(private val s: String) {
+    private class Parser(private val s: CharSequence, private val limits: Limits) {
         var at = 0
         private var depth = 0
+        private var elementCount = 0
+        private var attributeCount = 0
 
         fun skipProlog() {
             while (true) {
@@ -80,6 +112,9 @@ internal object XmlMini {
             if (++depth > MAX_DEPTH) {
                 throw XmlException("nested past $MAX_DEPTH elements, which no real manifest does", at)
             }
+            if (++elementCount > limits.maxElements) {
+                throw XmlException("more than ${limits.maxElements} elements, which no real manifest has", at)
+            }
             try {
                 return parseElementBody()
             } finally {
@@ -91,6 +126,7 @@ internal object XmlMini {
             expect('<')
             val name = readName()
             val attributes = mutableMapOf<String, String>()
+            var ownAttributes = 0
             while (true) {
                 skipWhitespace()
                 when {
@@ -103,6 +139,14 @@ internal object XmlMini {
                         break
                     }
                     else -> {
+                        // Both counts come before the map sees the name, so one element's map
+                        // never holds more than the limit on any target.
+                        if (++ownAttributes > limits.maxElementAttributes) {
+                            throw XmlException("an element carries more than ${limits.maxElementAttributes} attributes", at)
+                        }
+                        if (++attributeCount > limits.maxAttributes) {
+                            throw XmlException("more than ${limits.maxAttributes} attributes in the document", at)
+                        }
                         val attrName = readName()
                         skipWhitespace(); expect('='); skipWhitespace()
                         attributes[attrName] = readQuoted()
@@ -134,7 +178,7 @@ internal object XmlMini {
                     else -> {
                         val next = s.indexOf('<', at)
                         val end = if (next < 0) s.length else next
-                        textParts.append(decodeEntities(s.substring(at, end)))
+                        textParts.append(decodeEntities(at, end))
                         at = end
                     }
                 }
@@ -155,36 +199,69 @@ internal object XmlMini {
             at++
             val end = s.indexOf(quote, at)
             if (end < 0) throw XmlException("unterminated attribute value", at)
-            val raw = s.substring(at, end)
+            val value = decodeEntities(at, end)
             at = end + 1
-            return decodeEntities(raw)
+            return value
         }
 
-        private fun decodeEntities(raw: String): String {
-            if ('&' !in raw) return raw
-            val out = StringBuilder(raw.length)
-            var i = 0
-            while (i < raw.length) {
-                val c = raw[i]
+        /**
+         * The characters from [start] to [end] with their entity references decoded.
+         *
+         * XML 1.0, section 4.1, makes a reference an `&`, a name or `#` and digits, then a `;`. So
+         * the search for the `;` stops at the first character that cannot be part of a reference.
+         * That character is never an `&`, so each character is read at most twice and the decode
+         * takes time in proportion to its length. A reference this reader does not know stays
+         * literal.
+         */
+        private fun decodeEntities(start: Int, end: Int): String {
+            var i = start
+            while (i < end && s[i] != '&') i++
+            if (i == end) return s.substring(start, end)
+            val out = StringBuilder(end - start)
+            out.append(s, start, i)
+            while (i < end) {
+                val c = s[i]
                 if (c != '&') { out.append(c); i++; continue }
-                val semi = raw.indexOf(';', i + 1)
-                if (semi < 0) { out.append(c); i++; continue }
-                val entity = raw.substring(i + 1, semi)
-                val decoded = when {
-                    entity == "amp" -> "&"
-                    entity == "lt" -> "<"
-                    entity == "gt" -> ">"
-                    entity == "quot" -> "\""
-                    entity == "apos" -> "'"
-                    entity.startsWith("#x") || entity.startsWith("#X") ->
-                        entity.drop(2).toIntOrNull(16)?.let(::codePointToString)
-                    entity.startsWith("#") ->
-                        entity.drop(1).toIntOrNull()?.let(::codePointToString)
-                    else -> null
-                }
-                if (decoded == null) { out.append(c); i++ } else { out.append(decoded); i = semi + 1 }
+                var stop = i + 1
+                while (stop < end && isReferenceChar(s[stop])) stop++
+                val decoded = if (stop < end && s[stop] == ';') decodeReference(i + 1, stop) else null
+                if (decoded == null) { out.append(c); i++ } else { out.append(decoded); i = stop + 1 }
             }
             return out.toString()
+        }
+
+        /** The characters of the references this reader decodes: ASCII letters, digits and `#`. */
+        private fun isReferenceChar(c: Char): Boolean =
+            c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '#'
+
+        /** The text of the reference named between [from] and [to], or null when it is not one this reader knows. */
+        private fun decodeReference(from: Int, to: Int): String? = when {
+            nameIs(from, to, "amp") -> "&"
+            nameIs(from, to, "lt") -> "<"
+            nameIs(from, to, "gt") -> ">"
+            nameIs(from, to, "quot") -> "\""
+            nameIs(from, to, "apos") -> "'"
+            to - from > 2 && s[from] == '#' && (s[from + 1] == 'x' || s[from + 1] == 'X') ->
+                codePointAt(from + 2, to, 16)?.let(::codePointToString)
+            to - from > 1 && s[from] == '#' -> codePointAt(from + 1, to, 10)?.let(::codePointToString)
+            else -> null
+        }
+
+        private fun nameIs(from: Int, to: Int, name: String): Boolean {
+            if (to - from != name.length) return false
+            for (k in name.indices) if (s[from + k] != name[k]) return false
+            return true
+        }
+
+        /** The number written in [radix] between [from] and [to], or null past the last code point or on any other character. */
+        private fun codePointAt(from: Int, to: Int, radix: Int): Int? {
+            var value = 0
+            for (k in from until to) {
+                val digit = s[k].digitToIntOrNull(radix) ?: return null
+                value = value * radix + digit
+                if (value > 0x10FFFF) return null
+            }
+            return value
         }
 
         /**

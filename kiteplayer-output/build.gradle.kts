@@ -65,7 +65,7 @@ kotlin {
      * tests drive the real ones on the named emulator. */
     android {
         namespace = "io.github.yuroyami.kiteplayer.output"
-        compileSdk = 36
+        compileSdk = 37
         minSdk = 26
         withHostTest {}
         withDeviceTestBuilder {

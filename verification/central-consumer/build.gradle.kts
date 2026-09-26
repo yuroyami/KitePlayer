@@ -12,7 +12,7 @@ kotlin {
     jvm()
     android {
         namespace = "io.github.yuroyami.kiteplayer.verification.central"
-        compileSdk = 36
+        compileSdk = 37
         minSdk = 26
     }
     sourceSets {

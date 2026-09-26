@@ -32,7 +32,7 @@ kotlin {
 
     android {
         namespace = "io.github.yuroyami.kiteplayer.io"
-        compileSdk = 36
+        compileSdk = 37
         minSdk = 26
         withHostTest {}
         // The device tests see commonTest, so the contract tests run against the real descriptor classes.

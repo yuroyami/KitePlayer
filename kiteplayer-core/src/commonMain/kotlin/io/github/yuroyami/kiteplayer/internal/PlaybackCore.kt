@@ -546,6 +546,36 @@ internal class PlaybackCore(
         publishSnapshot()
     }
 
+    /**
+     * Puts back the subtitle state that a rebuild does not carry (#212).
+     *
+     * A rebuild replaces the track table with the container's own and starts a session with an
+     * empty secondary slot. This re-adds the external rows, re-applies the external primary
+     * selection, and selects [secondary] again with a fresh decoder. Running it twice is harmless,
+     * which matters because a decoder recovery inside a track change runs it once for each.
+     */
+    private suspend fun restoreSubtitleState(secondary: TrackId?) {
+        val missing = externalSubtitleTracks.filter { external -> tracks.all.none { it.id == external.id } }
+        if (missing.isNotEmpty()) tracks = tracks.copy(all = tracks.all + missing.map { it.info })
+        val primary = pendingExternalSubtitle ?: selectedExternalSubtitle
+        pendingExternalSubtitle = null
+        if (primary != null && isExternalSubtitle(primary)) applyExternalSubtitle(primary)
+        if (secondary == null || tracks.selectedSecondarySubtitle == secondary) return
+        // The command's own path, so the restored slot gets exactly what a caller's selection gets.
+        // It answers before it returns on every path that does not throw.
+        val reply = CompletableDeferred<TrackChange>()
+        applySecondarySubtitle(CoreCommand.SelectSecondarySubtitle(secondary, reply))
+        val outcome = if (reply.isCompleted) runCatching { reply.await() } else null
+        val change = outcome?.getOrNull()
+        if (change !is TrackChange.Applied) {
+            selectedExternalSubtitle2 = null
+            val reason = (change as? TrackChange.Discarded)?.reason
+                ?: outcome?.exceptionOrNull()?.message
+                ?: "the selection was not answered"
+            warn(PlaybackWarning.TrackDeselected(secondary, "the secondary subtitle could not follow the rebuild: $reason"))
+        }
+    }
+
     /** Swaps the timed cue table in place: no container reopen, one publish. */
     private suspend fun applyExternalSubtitle(target: TrackId?) {
         val active = session ?: return
@@ -3644,6 +3674,7 @@ internal class PlaybackCore(
         }
         val at = currentPosition()
         val wasPlaying = playRequested
+        val secondaryBefore = tracks.selectedSecondarySubtitle
         val video = choiceFor(requested, TrackKind.Video, current.videoStream?.index)
         val audio = choiceFor(requested, TrackKind.Audio, current.audioStream?.index)
         // An external subtitle target means NO container stream: the rebuild deselects
@@ -3698,15 +3729,9 @@ internal class PlaybackCore(
                 pendingSeek = SeekRequest(SeekTarget.Absolute(at), SeekMode.Precise)
             }
             playRequested = wasPlaying
-            // The rebuild replaced the track table; the synthetic external rows and any waiting
-            // external selection re-apply on top of it.
-            if (externalSubtitleTracks.isNotEmpty()) {
-                tracks = tracks.copy(all = tracks.all + externalSubtitleTracks.map { it.info })
-            }
-            pendingExternalSubtitle?.let { waiting ->
-                pendingExternalSubtitle = null
-                applyExternalSubtitle(waiting)
-            }
+            // The rebuild replaced the track table and started an empty secondary slot. The
+            // external rows and both subtitle selections go back on top of it.
+            restoreSubtitleState(secondaryBefore)
             refreshTypesetting()
             setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
             // Published before the replies, as the in-place audio and subtitle changes do. The
@@ -3891,6 +3916,8 @@ internal class PlaybackCore(
         val epoch = requestedEpoch
         val durationUs = recovery.duration?.micros ?: Long.MAX_VALUE
         val target = Pts(requestedTarget.micros.coerceIn(0L, durationUs.coerceAtLeast(0L)))
+        // Read before buildSession replaces the table it lives in.
+        val secondaryBefore = tracks.selectedSecondarySubtitle
         val rebuilt = try {
             buildSession(
                 item = recovery.item,
@@ -3960,6 +3987,10 @@ internal class PlaybackCore(
             teardownSession()
             return null
         }
+        // The same subtitle state an ordinary rebuild puts back: external rows, both selections,
+        // and the typesetter for the primary track.
+        restoreSubtitleState(secondaryBefore)
+        refreshTypesetting()
         warn(
             PlaybackWarning.HardwareDecodeUnavailable(
                 recovery.codec,

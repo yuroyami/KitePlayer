@@ -156,6 +156,32 @@ class SubtitleTypesettingTest {
         assertTrue(fake.closed, "closing the player did not close the typesetter")
     }
 
+    // A hardware decoder recovery rebuilds the session and must start a lane on it again (#212).
+    @Test
+    fun aDecoderRecoveryKeepsTheTypesetter() = runTest {
+        val provider = FakeProvider { FakeTypesetter() }
+        SubtitleTypesetters.register(provider)
+        val harness = CoreHarness(
+            this,
+            script = assScript(),
+            faults = FaultPlan().apply { videoDecodeFailsAfterFrames = 12 },
+            config = config().copy(hardwareDecode = HwdecPolicy.Auto),
+        )
+        harness.backend.videoDecoderStatus.value = HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1500.milliseconds)
+
+        assertEquals(2, harness.backend.openCalls, "the decoder never failed, so this proves nothing")
+        assertEquals("test.typesetter", harness.core.snapshots.value.subtitleTypesetter)
+        assertEquals(2, provider.created, "the recovered session has no typesetting lane")
+        assertTrue(
+            harness.output.rasterizedCueTexts.none { it.contains("typeset me") },
+            "the Kotlin tier drew a track the typesetter owns",
+        )
+        harness.close()
+    }
+
     @Test
     fun typesettingOffKeepsTheKotlinTier() = runTest {
         val provider = FakeProvider { FakeTypesetter() }

@@ -88,6 +88,34 @@ val publicationReadiness = tasks.register<CheckPublicationReadinessTask>("checkP
 
 
 /**
+ * One sentence per published module for its POM, which Maven Central, IDE tooltips and dependency
+ * scanners show. `kiteplayer` itself takes `DESCRIPTION` from gradle.properties (#265).
+ */
+val moduleDescriptions: Map<String, String> = mapOf(
+    ":kiteplayer-compose" to "KitePlayer for Compose Multiplatform: the default playback stack of kiteplayer plus both " +
+        "Compose video paths and the switch between them.",
+    ":kiteplayer-compose-ui" to "KitePlayer's Compose presentation only: KitePlayerVideo and both video paths, with no " +
+        "player factory and no network.",
+    ":kiteplayer-compose-interop" to "KitePlayer's Compose video path that hosts the platform's native video view.",
+    ":kiteplayer-compose-video" to "KitePlayer's Compose video path that Compose draws itself.",
+    ":kiteplayer-audioviz" to "An audio visualiser for KitePlayer: independent drawings in one catalogue, palettes, " +
+        "and a director that changes drawings with the music.",
+    ":kiteplayer-view" to "KitePlayer's native video views for Android, iOS and the desktop JVM.",
+    ":kiteplayer-view-bindings" to "The FFmpeg adapters that KitePlayer's native video views need.",
+    ":kiteplayer-core" to "KitePlayer's playback engine and its service interfaces, in Kotlin, depending on coroutines only.",
+    ":kiteplayer-ffmpeg" to "KitePlayer's media source and decoders over KiteFFmpeg, with snapshots, thumbnails and waveforms.",
+    ":kiteplayer-network" to "HTTP and HTTPS transport for KitePlayer through Ktor. It registers itself.",
+    ":kiteplayer-io" to "Input doors for KitePlayer: JVM files, paths, channels and streams, Android content URIs " +
+        "and assets, and file paths and URLs on Apple and Linux.",
+    ":kiteplayer-libass" to "The libass typesetter for ASS and SSA subtitles in KitePlayer. It registers itself.",
+    ":kiteplayer-output" to "KitePlayer's platform audio output, render support and subtitle rasterisers.",
+    ":kiteplayer-subtitles" to "SubRip, WebVTT and ASS dialogue parsers for KitePlayer, in Kotlin.",
+    ":kiteplayer-rt" to "KitePlayer's real-time audio ring, in C. It comes with kiteplayer-core on native targets; " +
+        "never add it yourself.",
+    ":kiteplayer-phone" to "Deprecated: kiteplayer plus kiteplayer-view. Depend on kiteplayer or kiteplayer-compose instead.",
+)
+
+/**
  * What each published module embeds under a licence of its own, beside the Apache-2.0 that covers
  * this repository's code. The texts ship in the JVM and Android artifacts, and NOTICE lists them.
  */
@@ -135,7 +163,10 @@ subprojects {
             }
             pom {
                 name.set(publishingProject.name)
-                description.set(rootProject.providers.gradleProperty("DESCRIPTION"))
+                description.set(
+                    moduleDescriptions[publishingPath]?.let { rootProject.provider { it } }
+                        ?: rootProject.providers.gradleProperty("DESCRIPTION"),
+                )
                 url.set("https://github.com/yuroyami/KitePlayer")
                 licenses {
                     license {

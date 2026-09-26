@@ -703,7 +703,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * or this build has no platform rasterizer; the pixels are unaffected either way, so a caller
      * composites when it wants them burned in.
      *
-     * @throws IllegalStateException when nothing is open.
+     * @throws IllegalStateException when nothing is open, when the media has ended (seek first), and
+     *         when stop, close, a new open or a track change ends the media before a frame arrives.
      * @throws UnsupportedOperationException with no selected video track, when a paused source
      *         cannot seek, or when the presented frame is hardware-opaque with no readable
      *         planes (the direct MediaCodec tier; the software and download paths both capture).

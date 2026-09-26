@@ -5356,6 +5356,12 @@ internal class PlaybackCore(
                 reply.completeExceptionally(IllegalStateException("captureFrame needs an open media item with video"))
             active.videoStream == null ->
                 reply.completeExceptionally(UnsupportedOperationException("captureFrame needs a selected video track"))
+            // Neither branch below can present a frame here: a precise seek to the end lands past
+            // the last frame, and a playing schedule has nothing left to present (#197).
+            status == PlaybackStatus.Ended ->
+                reply.completeExceptionally(
+                    IllegalStateException("the media has ended, so no frame is left to capture; seek first"),
+                )
             !playRequested && !active.source.seekable ->
                 reply.completeExceptionally(
                     UnsupportedOperationException(
@@ -6392,6 +6398,10 @@ internal class PlaybackCore(
         // Every path that retires a session comes through here: the next queue item, a video track
         // switch, a failure. None of them is an end the caller asked for.
         endRecording(detached, reason = "the player closed the media being recorded")
+        // An armed capture waits for a frame that this session will never present (#197).
+        detached.video?.captureRequest?.getAndSet(null)?.completeExceptionally(
+            IllegalStateException("the media was closed before captureFrame got a frame"),
+        )
         // The retiring worker keeps its old identity even if its final callback is still running.
         tapsDiscontinuous(active = null)
         // No session, no cues. A stop or a close that left the last line published would have an

@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer
 
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlin.math.abs
@@ -52,6 +53,45 @@ class StepCaptureTest {
         harness.core.play()
         harness.run(200.milliseconds)
         assertFailsWith<IllegalStateException> { harness.core.stepFrame() }
+        harness.close()
+    }
+
+    @Test
+    fun `an armed capture fails when stop tears the session down`() = runTest {
+        val harness = CoreHarness(this)
+        harness.openWithRenderer()
+        harness.run(200.milliseconds)
+        // Paused: the capture arms and queues a precise seek, and stop runs before that seek.
+        val capture = async(start = CoroutineStart.UNDISPATCHED) { runCatching { harness.core.captureFrame() } }
+        harness.core.stop()
+        harness.run(5.seconds)
+        assertTrue(capture.isCompleted, "the capture must not wait for ever after stop")
+        assertTrue(capture.await().exceptionOrNull() is IllegalStateException)
+        harness.close()
+    }
+
+    @Test
+    fun `an armed capture fails when close tears the session down`() = runTest {
+        val harness = CoreHarness(this)
+        harness.openWithRenderer()
+        harness.run(200.milliseconds)
+        val capture = async(start = CoroutineStart.UNDISPATCHED) { runCatching { harness.core.captureFrame() } }
+        harness.close()
+        assertTrue(capture.isCompleted, "the capture must not outlive close")
+        assertTrue(capture.await().exceptionOrNull() is IllegalStateException)
+    }
+
+    @Test
+    fun `a capture after the media ended fails at once`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 1_000_000))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(3.seconds)
+        assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
+        val capture = async { runCatching { harness.core.captureFrame() } }
+        harness.run(1.seconds)
+        assertTrue(capture.isCompleted, "a capture at the end must not wait for a frame that never comes")
+        assertTrue(capture.await().exceptionOrNull() is IllegalStateException)
         harness.close()
     }
 

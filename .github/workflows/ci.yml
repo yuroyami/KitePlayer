@@ -131,7 +131,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-macos-arm64-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -338,7 +338,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-ios-sim-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -424,7 +424,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-tvos-watchos-sim-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -500,7 +500,7 @@ jobs:
       # ${{ env.ANDROID_SDK_ROOT }} does not resolve in a `with:` block, because the env context
       # holds only workflow-declared variables and not the runner's own. A path written that way
       # expands to "/platforms" and silently caches nothing.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.android/build-cache
           key: android-build-cache-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -593,7 +593,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-android-emulator-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -792,7 +792,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-linux-x64-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -854,7 +854,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-linux-arm64-cross-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -980,7 +980,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-mingw-x64-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -1041,7 +1041,7 @@ jobs:
       # Kotlin/JS and Kotlin/Wasm fetch their own node and yarn into ~/.gradle, then populate
       # node_modules from the committed lockfile. Uncached that is a download plus an install on
       # every single run of this job, which was the largest fixed cost here.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/nodejs

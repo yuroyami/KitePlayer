@@ -139,7 +139,10 @@ public class VizRenderState(
     public val frame: SpectrumFrame,
     /** Seconds since this visualiser started. Use it for anything that must never stop. */
     public val timeSeconds: Float,
-    /** Seconds since the previous drawn frame. Move particles by this, not by a fixed step. */
+    /**
+     * Seconds since the surface's previous step. Move particles by this, not by a fixed step. It is 0
+     * when the surface draws the same step again, so no stretch of time is counted twice.
+     */
     public val deltaSeconds: Float,
     public val palette: VizPalette,
     /**

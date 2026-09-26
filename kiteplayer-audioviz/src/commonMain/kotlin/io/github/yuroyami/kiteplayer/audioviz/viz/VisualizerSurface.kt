@@ -5,8 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
@@ -46,8 +47,9 @@ import kotlin.math.pow
  * card rather than the processor. Two bitmaps are kept and swapped, because a frame cannot safely be
  * read and written at once.
  *
- * [frame] is a function so the newest analysis is read in the drawing pass. [future] is optional and
- * lets a drawing see the audio that has been analysed but not yet played.
+ * [frame] is a function, read once per step of the surface's own clock, so a change of analysis does
+ * not redraw the surface by itself. [future] is optional and lets a drawing see the audio that has
+ * been analysed but not yet played.
  */
 @Composable
 @AudioVizAuthoringApi
@@ -79,6 +81,7 @@ public fun VisualizerSurface(
     visible: Boolean = true,
 ) {
     val renderQuality = quality ?: remember { RenderQuality() }
+    val clock = remember { VizClock() }
     if (!visible) {
         Canvas(modifier.fillMaxSize()) { drawRect(palette.background) }
         return
@@ -86,16 +89,16 @@ public fun VisualizerSurface(
     val motion = if (reducedMotion) REDUCED_MOTION else 1f
     val flashes = if (reducedMotion) 0 else FLASHES_PER_SECOND
     if (!post) {
-        VisualizerCanvas(visualization, frame, palette, modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond, motion, flashes)
+        VisualizerCanvas(visualization, frame, palette, clock, modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond, motion, flashes)
         return
     }
     PostProcessedBox(
         spec = { if (post) visualization.post.masked(switches).calmed(reducedMotion) else PostSpec.Off },
-        frame = frame,
+        frame = { clock.tick?.frame ?: frame() },
         modifier = modifier,
         stats = stats,
     ) {
-        VisualizerCanvas(visualization, frame, palette, Modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond, motion, flashes)
+        VisualizerCanvas(visualization, frame, palette, clock, Modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond, motion, flashes)
     }
 }
 
@@ -105,6 +108,7 @@ private fun VisualizerCanvas(
     visualization: Visualization,
     frame: () -> SpectrumFrame,
     palette: VizPalette,
+    clock: VizClock,
     modifier: Modifier = Modifier,
     future: VizFuture? = null,
     stats: RenderStats? = null,
@@ -115,50 +119,35 @@ private fun VisualizerCanvas(
 ) {
     val guard = remember(flashesPerSecond) { FlashGuard(flashesPerSecond) }
     val calmReading = remember { CalmReading() }
-    val buffers = remember { FeedbackBuffers() }
+    // Buffers of its own for each drawing, so no redraw lays another drawing's echoes under it.
+    val buffers = remember(visualization) { FeedbackBuffers() }
     val fade = remember { PaletteFade() }
-    var timeSeconds by remember { mutableFloatStateOf(0f) }
-    var musicTime by remember { mutableFloatStateOf(0f) }
-    var deltaSeconds by remember { mutableFloatStateOf(0f) }
+    // Read at every step, so a replaced analysis source is followed without restarting the drawing.
+    val currentFrame by rememberUpdatedState(frame)
 
     LaunchedEffect(visualization, framesPerSecond) {
         visualization.restart()
         buffers.discard()
-        var previousNanos = 0L
-        var waiting = 0f
-        val every = if (framesPerSecond > 0) 1f / framesPerSecond else 0f
-        while (true) {
-            withFrameNanos { nowNanos ->
-                if (previousNanos != 0L) {
-                    waiting += ((nowNanos - previousNanos) / 1_000_000_000.0).toFloat()
-                    // Held back until a whole frame at the chosen rate has passed.
-                    if (waiting >= every) {
-                        // Clamped, so a stalled window does not teleport every particle off screen.
-                        deltaSeconds = waiting.coerceIn(0f, 0.1f)
-                        timeSeconds += deltaSeconds
-                        // The music clock slows in a quiet passage and stops in silence.
-                        musicTime += deltaSeconds * frame().motionRate
-                        waiting = 0f
-                    }
-                }
-                previousNanos = nowNanos
-            }
-        }
+        clock.run(framesPerSecond, { currentFrame() })
     }
 
     Canvas(modifier) {
-        // Redraws follow this canvas's own ticks. Reading the shared analysis without observing it
-        // keeps a throttled preview from redrawing, and advancing its drawing, on every change.
-        val heard = Snapshot.withoutReadObservation { frame() }
+        // The step is all that moves here, so this canvas redraws at its own rate however often the
+        // shared analysis changes.
+        val tick = clock.tick
+        val fresh = clock.firstDraw(tick)
+        // A redraw of a step already drawn passes no time, so nothing below counts it twice.
+        val deltaSeconds = if (fresh) tick?.deltaSeconds ?: 0f else 0f
+        val heard = tick?.frame ?: Snapshot.withoutReadObservation { frame() }
         val current = calmReading.of(heard, motionScale, deltaSeconds)
         // The palette asked for, faded in over eight usable pulses or three seconds, leaning towards the key.
         val shown = fade.advance(palette, current, deltaSeconds)
         val state = VizRenderState(
             frame = current,
-            timeSeconds = timeSeconds,
+            timeSeconds = tick?.timeSeconds ?: 0f,
             deltaSeconds = deltaSeconds,
             palette = shown,
-            musicTime = musicTime,
+            musicTime = tick?.musicTime ?: 0f,
             future = future,
         )
         state.motionScale = motionScale
@@ -167,6 +156,13 @@ private fun VisualizerCanvas(
         if (trail <= 0f) {
             composeFrame(visualization, state, null, stats)
             return@Canvas
+        }
+        // A redraw of the same step shows the echo layer that step already rendered.
+        if (!fresh) {
+            buffers.previous()?.let {
+                composeFrame(visualization, state, it, stats)
+                return@Canvas
+            }
         }
 
         // A drawing that blooms is already soft, so its buffer runs at a fraction of the canvas.
@@ -183,11 +179,91 @@ private fun VisualizerCanvas(
             drawEchoLayer(visualization, state, previous, stats)
         }
         quality?.let {
-            it.afterFrame(started.elapsedNow().inWholeMicroseconds / 1000f, deltaSeconds)
+            if (fresh) it.afterFrame(started.elapsedNow().inWholeMicroseconds / 1000f, deltaSeconds)
             stats?.scale = it.stepped
         }
         composeFrame(visualization, state, target, stats)
         buffers.swap()
+    }
+}
+
+/**
+ * One step of a surface's clock: the reading it draws from and the times it draws at.
+ *
+ * A frame draws from the newest step alone, so the analysis cannot redraw a surface between steps,
+ * and a redraw of a step already drawn passes no time.
+ */
+private class VizTick(
+    /** Counts the steps, so a redraw of this one can be told from a new one. */
+    val serial: Long,
+    val frame: SpectrumFrame,
+    val timeSeconds: Float,
+    val deltaSeconds: Float,
+    val musicTime: Float,
+)
+
+/** The steps of one surface's clock, and which of them was drawn last. */
+private class VizClock {
+    /** The newest step, or null before the first. Snapshot state, so a new step redraws the surface. */
+    var tick: VizTick? by mutableStateOf(null)
+        private set
+    private var drawn = 0L
+
+    /**
+     * Steps every display frame, or at [framesPerSecond] when that is above 0, until cancelled.
+     * [frame] is read once a step, and [onStep] runs in the same frame callback, before the frame
+     * that shows the step is drawn.
+     */
+    suspend fun run(framesPerSecond: Int, frame: () -> SpectrumFrame, onStep: (VizTick) -> Unit = {}) {
+        val every = if (framesPerSecond > 0) 1f / framesPerSecond else 0f
+        var started = false
+        var previousNanos = 0L
+        var sinceStep = 0f
+        var due = 0f
+        while (true) {
+            withFrameNanos { nowNanos ->
+                if (started) {
+                    val gap = ((nowNanos - previousNanos) / 1_000_000_000.0).toFloat()
+                    sinceStep += gap
+                    due += gap
+                    // On the display frame nearest the time a step is due, so a cap of 30 on a
+                    // 120 Hz screen steps every fourth frame rather than every fifth.
+                    if (due + gap / 2f >= every) {
+                        onStep(step(frame(), sinceStep))
+                        sinceStep = 0f
+                        // The remainder carries, so the steps average the cap, but a stall does not
+                        // turn into a burst of steps.
+                        due = (due - every).coerceIn(-every / 2f, every / 2f)
+                    }
+                }
+                previousNanos = nowNanos
+                started = true
+            }
+        }
+    }
+
+    private fun step(heard: SpectrumFrame, waited: Float): VizTick {
+        val before = tick
+        // Clamped, so a stalled window does not teleport every particle off screen.
+        val delta = waited.coerceIn(0f, 0.1f)
+        val next = VizTick(
+            serial = (before?.serial ?: 0L) + 1L,
+            frame = heard,
+            timeSeconds = (before?.timeSeconds ?: 0f) + delta,
+            deltaSeconds = delta,
+            // The music clock slows in a quiet passage and stops in silence.
+            musicTime = (before?.musicTime ?: 0f) + delta * heard.motionRate,
+        )
+        tick = next
+        return next
+    }
+
+    /** True the first time [tick] is drawn. False for a redraw of the same step, and before any step. */
+    fun firstDraw(tick: VizTick?): Boolean {
+        val serial = tick?.serial ?: 0L
+        if (serial == drawn) return false
+        drawn = serial
+        return true
     }
 }
 
@@ -413,6 +489,16 @@ internal class VizRenderer {
         return target
     }
 
+    /** [render] for a new step, and the frame already rendered for a redraw of the same step. */
+    fun frameFor(
+        fresh: Boolean,
+        into: DrawScope,
+        visualization: Visualization,
+        state: VizRenderState,
+        quality: Float = 1f,
+        stats: RenderStats? = null,
+    ): ImageBitmap? = latest?.takeIf { !fresh } ?: render(into, visualization, state, quality, stats)
+
     fun discard() {
         buffers.discard()
         latest = null
@@ -537,6 +623,7 @@ public fun DirectedVisualizerSurface(
     framesPerSecond: Int = 0,
 ) {
     val renderQuality = quality ?: remember { RenderQuality() }
+    val clock = remember { VizClock() }
     if (!visible) {
         Canvas(modifier.fillMaxSize()) { drawRect(palette.background) }
         return
@@ -545,16 +632,16 @@ public fun DirectedVisualizerSurface(
     val flashes = if (reducedMotion) 0 else FLASHES_PER_SECOND
     director.calmChanges = reducedMotion
     if (!post) {
-        DirectedCanvas(director, frame, palette, framesPerSecond, modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
+        DirectedCanvas(director, frame, palette, clock, framesPerSecond, modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
         return
     }
     PostProcessedBox(
         spec = { if (post) director.current.post.masked(switches).calmed(reducedMotion) else PostSpec.Off },
-        frame = frame,
+        frame = { clock.tick?.frame ?: frame() },
         modifier = modifier,
         stats = stats,
     ) {
-        DirectedCanvas(director, frame, palette, framesPerSecond, Modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
+        DirectedCanvas(director, frame, palette, clock, framesPerSecond, Modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
     }
 }
 
@@ -564,6 +651,7 @@ private fun DirectedCanvas(
     director: VizDirector,
     frame: () -> SpectrumFrame,
     palette: VizPalette,
+    clock: VizClock,
     framesPerSecond: Int,
     modifier: Modifier = Modifier,
     future: VizFuture? = null,
@@ -574,42 +662,30 @@ private fun DirectedCanvas(
 ) {
     val guard = remember(flashesPerSecond) { FlashGuard(flashesPerSecond) }
     val calmReading = remember { CalmReading() }
-    val stage = remember { Stage() }
+    // A replaced director starts afresh: its drawings restart and none of the old one's echoes carry
+    // over. The clock, the palette fade and the flash allowance carry on, as they belong to the screen.
+    val stage = remember(director) { Stage() }
     val blend = remember { TransitionBlend() }
     val fade = remember { PaletteFade() }
-    var timeSeconds by remember { mutableFloatStateOf(0f) }
-    var musicTime by remember { mutableFloatStateOf(0f) }
-    var deltaSeconds by remember { mutableFloatStateOf(0f) }
+    // Read at every step, so a replaced analysis source is followed without restarting anything.
+    val currentFrame by rememberUpdatedState(frame)
 
-    LaunchedEffect(framesPerSecond) {
-        var previousNanos = 0L
-        var waiting = 0f
-        val every = if (framesPerSecond > 0) 1f / framesPerSecond else 0f
-        while (true) {
-            val stepped = withFrameNanos { nowNanos ->
-                var passed = false
-                if (previousNanos != 0L) {
-                    waiting += ((nowNanos - previousNanos) / 1_000_000_000.0).toFloat()
-                    // Held back until a whole frame at the chosen rate has passed, as the plain canvas is.
-                    if (waiting >= every) {
-                        deltaSeconds = waiting.coerceIn(0f, 0.1f)
-                        timeSeconds += deltaSeconds
-                        musicTime += deltaSeconds * frame().motionRate
-                        waiting = 0f
-                        passed = true
-                    }
-                }
-                previousNanos = nowNanos
-                passed
-            }
-            if (stepped) director.advance(frame(), deltaSeconds)
-        }
+    // Keyed on the director, so a replaced one is the one that moves on and the old one stops.
+    LaunchedEffect(director, framesPerSecond) {
+        // Moved on inside the step, from the step's own reading, before the frame that shows it.
+        clock.run(framesPerSecond, { currentFrame() }) { director.advance(it.frame, it.deltaSeconds) }
     }
 
     Canvas(modifier) {
-        val current = calmReading.of(frame(), motionScale, deltaSeconds)
+        // The step is all that moves here, as on the plain canvas: the analysis is not observed.
+        val tick = clock.tick
+        val fresh = clock.firstDraw(tick)
+        // A redraw of a step already drawn passes no time, so nothing below counts it twice.
+        val deltaSeconds = if (fresh) tick?.deltaSeconds ?: 0f else 0f
+        val heard = tick?.frame ?: Snapshot.withoutReadObservation { frame() }
+        val current = calmReading.of(heard, motionScale, deltaSeconds)
         val shown = fade.advance(palette, current, deltaSeconds)
-        val state = VizRenderState(current, timeSeconds, deltaSeconds, shown, musicTime, future)
+        val state = VizRenderState(current, tick?.timeSeconds ?: 0f, deltaSeconds, shown, tick?.musicTime ?: 0f, future)
         state.motionScale = motionScale
         state.lightScale = guard.allowance(lightFor(current.energy), deltaSeconds)
         stage.follow(director)
@@ -620,8 +696,8 @@ private fun DirectedCanvas(
         if (next == null) {
             val started = TimeSource.Monotonic.markNow()
             val trailing = showing.trailAt(current.mood) > 0f
-            val echo = if (trailing) stage.steady.render(this, showing, state, scale, stats) else null
-            if (trailing) {
+            val echo = if (trailing) stage.steady.frameFor(fresh, this, showing, state, scale, stats) else null
+            if (trailing && fresh) {
                 quality?.let {
                     it.afterFrame(started.elapsedNow().inWholeMicroseconds / 1000f, deltaSeconds)
                     stats?.scale = it.stepped
@@ -643,24 +719,24 @@ private fun DirectedCanvas(
                 stage.arriving.inherit(stage.steady.render(this, showing, state, scale))
                 stage.handingOff = false
             }
-            stage.arriving.render(this, next, state, scale, stats)?.let { stretch(it) }
+            stage.arriving.frameFor(fresh, this, next, state, scale, stats)?.let { stretch(it) }
             withAlpha(1f - progress) { with(showing) { drawFront(state) } }
             withAlpha(progress) { with(next) { drawFront(state) } }
             showing.detail?.let { drawDetail(it, state, 1f - progress) }
             next.detail?.let { drawDetail(it, state, progress) }
-            quality?.afterFrame(transitionStarted.elapsedNow().inWholeMicroseconds / 1000f, deltaSeconds)
+            if (fresh) quality?.afterFrame(transitionStarted.elapsedNow().inWholeMicroseconds / 1000f, deltaSeconds)
             return@Canvas
         }
 
         if (blend.canDrawLayers(director.transition)) {
             drawTransitionLayers(
                 blend, director.transition, progress,
-                from = { drawTransitionEcho(stage.steady, showing, state, scale, stats) },
-                to = { drawTransitionEcho(stage.arriving, next, state, scale, stats) },
+                from = { drawTransitionEcho(stage.steady, showing, state, scale, stats, fresh) },
+                to = { drawTransitionEcho(stage.arriving, next, state, scale, stats, fresh) },
             )
         } else {
-            val from = stage.steady.render(this, showing, state, scale, stats)
-            val to = stage.arriving.render(this, next, state, scale, stats)
+            val from = stage.steady.frameFor(fresh, this, showing, state, scale, stats)
+            val to = stage.arriving.frameFor(fresh, this, next, state, scale, stats)
             if (from == null || to == null) return@Canvas
             val brush = blend.prepare(from, to, director.transition, progress, size.width, size.height)
             if (brush != null) {
@@ -674,7 +750,7 @@ private fun DirectedCanvas(
         withAlpha(progress) { with(next) { drawFront(state) } }
         showing.detail?.let { drawDetail(it, state, 1f - progress) }
         next.detail?.let { drawDetail(it, state, progress) }
-        quality?.afterFrame(transitionStarted.elapsedNow().inWholeMicroseconds / 1000f, deltaSeconds)
+        if (fresh) quality?.afterFrame(transitionStarted.elapsedNow().inWholeMicroseconds / 1000f, deltaSeconds)
     }
 }
 
@@ -685,9 +761,10 @@ private fun DrawScope.drawTransitionEcho(
     state: VizRenderState,
     scale: Float,
     stats: RenderStats?,
+    fresh: Boolean,
 ) {
     if (visualization.trailAt(state.mood) > 0f) {
-        renderer.render(this, visualization, state, scale, stats)?.let { stretch(it) }
+        renderer.frameFor(fresh, this, visualization, state, scale, stats)?.let { stretch(it) }
     } else {
         with(visualization) { draw(state) }
     }

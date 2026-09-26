@@ -98,8 +98,6 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame : io.githu
         final fun <get-colorSpace>(): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.colorSpace.<get-colorSpace>|<get-colorSpace>(){}[0]
     final val duration // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.duration|{}duration[0]
         final fun <get-duration>(): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.duration.<get-duration>|<get-duration>(){}[0]
-    final val frame // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.frame|{}frame[0]
-        final fun <get-frame>(): io.github.yuroyami.kiteffmpeg/Frame // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.frame.<get-frame>|<get-frame>(){}[0]
     final val generation // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.generation|{}generation[0]
         final fun <get-generation>(): io.github.yuroyami.kiteplayer/Generation // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.generation.<get-generation>|<get-generation>(){}[0]
     final val hardwareSurface // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.hardwareSurface|{}hardwareSurface[0]
@@ -171,10 +169,6 @@ final object io.github.yuroyami.kiteplayer.ffmpeg/AudioAnalysis { // io.github.y
     final suspend fun measureLoudness(io.github.yuroyami.kiteplayer/MediaItem): io.github.yuroyami.kiteplayer.audio/LoudnessResult // io.github.yuroyami.kiteplayer.ffmpeg/AudioAnalysis.measureLoudness|measureLoudness(io.github.yuroyami.kiteplayer.MediaItem){}[0]
 }
 
-final object io.github.yuroyami.kiteplayer.ffmpeg/AudioSamples { // io.github.yuroyami.kiteplayer.ffmpeg/AudioSamples|null[0]
-    final fun toFloatInterleaved(io.github.yuroyami.kiteffmpeg/Frame): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/AudioSamples.toFloatInterleaved|toFloatInterleaved(io.github.yuroyami.kiteffmpeg.Frame){}[0]
-}
-
 final object io.github.yuroyami.kiteplayer.ffmpeg/Thumbnails { // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnails|null[0]
     final suspend fun at(io.github.yuroyami.kiteplayer/MediaItem, kotlin.collections/List<kotlin.time/Duration>, kotlin/Int = ..., io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat = ...): kotlin.collections/List<io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail> // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnails.at|at(io.github.yuroyami.kiteplayer.MediaItem;kotlin.collections.List<kotlin.time.Duration>;kotlin.Int;io.github.yuroyami.kiteplayer.ffmpeg.SnapshotFormat){}[0]
 }
@@ -223,3 +217,11 @@ final fun (io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame).io.github.
 
 // Targets: [native]
 final fun (io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame).io.github.yuroyami.kiteplayer.ffmpeg/uploadPlanesOrNull(): io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes? // io.github.yuroyami.kiteplayer.ffmpeg/uploadPlanesOrNull|uploadPlanesOrNull@io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame(){}[0]
+
+// Targets: [wasmJs]
+final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegWebPainter : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegWebPainter|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegWebPainter.<init>|<init>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegWebPainter.close|close(){}[0]
+    final fun paint(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin.js/JsAny): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegWebPainter.paint|paint(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.js.JsAny){}[0]
+}

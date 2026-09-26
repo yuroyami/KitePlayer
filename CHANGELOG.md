@@ -50,6 +50,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   approximate. The engine turns it into `PlaybackWarning.ColorApproximated`. A `when` over
   `RendererEvent` that lists every case needs the new branch. The web canvas now uses it to say
   that it shows HDR without tone mapping and converts YCgCo and FCC with a guessed matrix (#228).
+- `kiteplayer-ffmpeg` no longer exposes the media library's `Frame`: `KiteFFmpegVideoFrame.frame`
+  and `AudioSamples` are internal. A web renderer that drew `frame` through `WebRgbaConverter`
+  uses `KiteFFmpegWebPainter` instead (#97).
 
 ## [0.0.27] - 2026-09-25
 

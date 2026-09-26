@@ -3,7 +3,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteffmpeg.Frame
 
 /** Decoded audio in one shape: interleaved floats in -1..1, whatever the codec produced. */
-public object AudioSamples {
+internal object AudioSamples {
 
     /**
      * The frame's samples as interleaved floats, sample by sample with the channels side by side,
@@ -13,7 +13,7 @@ public object AudioSamples {
      *
      * @throws IllegalArgumentException for a sample format no decoder here produces
      */
-    public fun toFloatInterleaved(frame: Frame): FloatArray {
+    fun toFloatInterleaved(frame: Frame): FloatArray {
         val info = frame.info
         val channels = info.channelCount
         val count = info.sampleCount

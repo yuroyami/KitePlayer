@@ -2,11 +2,10 @@
 
 package io.github.yuroyami.kiteplayer.mobile
 
-import io.github.yuroyami.kiteffmpeg.WebRgbaConverter
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoTransform
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegWebPainter
 import io.github.yuroyami.kiteplayer.output.WebCanvasVideoRenderer
 import io.github.yuroyami.kiteplayer.output.WebFramePainter
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
@@ -57,15 +56,15 @@ internal fun webColorLimits(colorSpace: ColorSpaceInfo): List<String> = buildLis
 }
 
 /**
- * Ties one [WebRgbaConverter] to one renderer's life.
+ * Ties one [KiteFFmpegWebPainter] to one renderer's life.
  *
- * The converter holds a scratch buffer sized to the largest frame it has seen, 24.9 MB for 4K, and
+ * The painter holds a scratch buffer sized to the largest frame it has seen, 24.9 MB for 4K, and
  * that memory belongs to the codec module rather than to any collector that could reclaim it. So it
  * is closed with the renderer, explicitly. Everything else is the plain renderer's behaviour.
  */
 private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
 
-    private val converter = WebRgbaConverter()
+    private val webPainter = KiteFFmpegWebPainter()
 
     /** Colour limits met while painting, published beside the plain renderer's own events. */
     private val limits = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 4)
@@ -85,7 +84,6 @@ private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
      * whose message reads differently on every platform.
      */
     private fun paint(frame: VideoFrame, destination: JsAny): Boolean {
-        val kiteCodec = frame as? KiteFFmpegVideoFrame ?: return false
         // Said out loud rather than drawn silently wrong. The engine keeps the first of each per open.
         if (frame.generation != reportedFor) {
             reportedFor = frame.generation
@@ -94,14 +92,14 @@ private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
         for (detail in webColorLimits(frame.colorSpace)) {
             if (reported.add(detail)) limits.tryEmit(RendererEvent.ColorApproximated(detail))
         }
-        return converter.copyInto(kiteCodec.frame, destination)
+        return webPainter.paint(frame, destination)
     }
 
     override fun close() {
         try {
             delegate.close()
         } finally {
-            converter.close()
+            webPainter.close()
         }
     }
 

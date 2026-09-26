@@ -911,7 +911,8 @@ private class KiteFFmpegAudioDecoder(
  * 60 frames a second would cost between 187 MB/s and 1.5 GB/s for nothing.
  */
 public class KiteFFmpegVideoFrame internal constructor(
-    public val frame: KiteFrame,
+    /** The media library's frame. Internal, so no media library type is part of this module's surface. */
+    internal val frame: KiteFrame,
     /** Already on the engine's relative timeline, and synthesised when the decoder gave none. */
     override val pts: Pts,
     override val duration: Pts?,

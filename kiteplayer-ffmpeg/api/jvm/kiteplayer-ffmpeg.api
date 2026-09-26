@@ -3,11 +3,6 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/AudioAnalysis {
 	public final fun measureLoudness (Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
-public final class io/github/yuroyami/kiteplayer/ffmpeg/AudioSamples {
-	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ffmpeg/AudioSamples;
-	public final fun toFloatInterleaved (Lio/github/yuroyami/kiteffmpeg/Frame;)[F
-}
-
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegAudioDecoderFactory : io/github/yuroyami/kiteplayer/spi/AudioDecoderFactory {
 	public fun create (Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getName ()Ljava/lang/String;
@@ -72,7 +67,6 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : i
 	public fun copyPlane (I[BI)V
 	public fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
 	public fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
-	public final fun getFrame ()Lio/github/yuroyami/kiteffmpeg/Frame;
 	public fun getGeneration-exH1Oj8 ()J
 	public fun getHardwareSurface ()Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
 	public final fun getHasPts ()Z

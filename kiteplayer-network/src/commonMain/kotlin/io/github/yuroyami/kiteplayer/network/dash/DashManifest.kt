@@ -123,7 +123,8 @@ public object DashManifestParser {
         val root = XmlMini.parse(xml)
         require(root.name == "MPD") { "not a DASH manifest: root element is <${root.name}>" }
         requireAllowedScheme(manifestUrl, policy)
-        val mpdBase = resolveBaseUrl(directoryOf(manifestUrl), root, policy)
+        // The manifest's own URL is the base. Resolution drops its last path segment and its query.
+        val mpdBase = resolveBaseUrl(manifestUrl, root, policy)
         val isDynamic = root.attr("type") == "dynamic"
         val duration = root.attr("mediaPresentationDuration")?.let(::parseIsoDurationMicros)
         val periods = root.children("Period").map { period ->
@@ -324,37 +325,115 @@ public object DashManifestParser {
         element: XmlElement,
         policy: DashUrlPolicy,
     ): String {
-        val base = element.child("BaseURL")?.text?.takeIf { it.isNotBlank() } ?: return parent
+        val base = element.child("BaseURL")?.text?.trim()?.takeIf { it.isNotEmpty() } ?: return parent
         return resolveUrl(parent, base, policy)
     }
 
     /**
-     * RFC-3986-lite resolution, then [policy].
+     * RFC 3986 resolution (section 5.2), then [policy].
      *
-     * A scheme is detected by its grammar rather than by looking for `://`, which is what let
-     * `file:/etc/passwd` through as a relative path and would have accepted a relative segment
-     * name that happened to contain `://` as absolute.
+     * A reference resolves against the base's path alone: the base's query and fragment never take
+     * part, so a slash inside a signed query cannot pass for a directory. A scheme is detected by
+     * its grammar rather than by looking for `://`, which is what let `file:/etc/passwd` through as
+     * a relative path and would have accepted a relative segment name that happened to contain
+     * `://` as absolute.
      */
     internal fun resolveUrl(
         base: String,
         reference: String,
         policy: DashUrlPolicy = DashUrlPolicy.Default,
     ): String {
-        val resolved = when {
-            schemeOf(reference) != null -> reference
+        val target = split(reference)
+        val resolved = if (target.scheme != null) {
+            target.copy(path = removeDotSegments(target.path))
+        } else {
+            val from = split(base)
             // `//host/path` inherits the manifest's scheme, and refuses when there is none to
             // inherit rather than guessing one.
-            reference.startsWith("//") -> {
-                val scheme = schemeOf(base)
-                    ?: throw DashUrlRefusedException(
-                        "$reference is scheme-relative and the manifest URL $base has no scheme",
-                    )
-                "$scheme:$reference"
+            if (target.authority != null && from.scheme == null) {
+                throw DashUrlRefusedException("$reference is scheme-relative and the manifest URL $base has no scheme")
             }
-            reference.startsWith("/") -> originOf(base) + reference
-            else -> directoryOf(base) + reference
+            when {
+                target.authority != null -> target.copy(scheme = from.scheme, path = removeDotSegments(target.path))
+                target.path.isEmpty() -> from.copy(query = target.query ?: from.query, fragment = target.fragment)
+                target.path.startsWith("/") ->
+                    target.copy(scheme = from.scheme, authority = from.authority, path = removeDotSegments(target.path))
+                else -> target.copy(
+                    scheme = from.scheme,
+                    authority = from.authority,
+                    path = removeDotSegments(merge(from, target.path)),
+                )
+            }
         }
-        return checkAgainst(base, resolved, policy)
+        return checkAgainst(base, resolved.toString(), policy)
+    }
+
+    /** A URI in the five parts of RFC 3986, appendix B. A part that is absent is null. */
+    private data class UriParts(
+        val scheme: String?,
+        val authority: String?,
+        val path: String,
+        val query: String?,
+        val fragment: String?,
+    ) {
+        override fun toString(): String = buildString {
+            if (scheme != null) append(scheme).append(':')
+            if (authority != null) append("//").append(authority)
+            append(path)
+            if (query != null) append('?').append(query)
+            if (fragment != null) append('#').append(fragment)
+        }
+    }
+
+    private fun split(uri: String): UriParts {
+        val scheme = schemeOf(uri)
+        val rest = if (scheme == null) uri else uri.substring(uri.indexOf(':') + 1)
+        val parts = checkNotNull(RELATIVE_PARTS.matchEntire(rest)) { "every string matches this pattern" }.groups
+        return UriParts(
+            scheme = if (scheme == null) null else uri.substring(0, uri.indexOf(':')),
+            authority = parts[2]?.value,
+            path = parts[3]?.value.orEmpty(),
+            query = parts[5]?.value,
+            fragment = parts[7]?.value,
+        )
+    }
+
+    /** The base's path up to its last slash, with [path] after it. RFC 3986, section 5.2.3. */
+    private fun merge(base: UriParts, path: String): String {
+        if (base.authority != null && base.path.isEmpty()) return "/$path"
+        val cut = base.path.lastIndexOf('/')
+        return if (cut < 0) path else base.path.substring(0, cut + 1) + path
+    }
+
+    /** `.` and `..` segments applied and removed. RFC 3986, section 5.2.4. */
+    private fun removeDotSegments(path: String): String {
+        var input = path
+        val output = StringBuilder()
+        fun dropLastSegment() = output.setLength(output.lastIndexOf("/").coerceAtLeast(0))
+        while (input.isNotEmpty()) {
+            when {
+                input.startsWith("../") -> input = input.substring(3)
+                input.startsWith("./") -> input = input.substring(2)
+                input.startsWith("/./") -> input = input.substring(2)
+                input == "/." -> input = "/"
+                input.startsWith("/../") -> {
+                    input = input.substring(3)
+                    dropLastSegment()
+                }
+                input == "/.." -> {
+                    input = "/"
+                    dropLastSegment()
+                }
+                input == "." || input == ".." -> input = ""
+                else -> {
+                    val end = input.indexOf('/', startIndex = 1)
+                    val segment = if (end < 0) input else input.substring(0, end)
+                    output.append(segment)
+                    input = input.substring(segment.length)
+                }
+            }
+        }
+        return output.toString()
     }
 
     /** The whole of [DashUrlPolicy], applied once, at the only place a URL is produced. */
@@ -405,13 +484,10 @@ public object DashManifestParser {
         return url.substring(0, colon).lowercase()
     }
 
-    private fun directoryOf(url: String): String = url.substringBeforeLast('/') + "/"
-
+    /** Scheme and authority, compared case-blind. The port is not normalised, so it must match too. */
     private fun originOf(url: String): String {
-        val schemeEnd = url.indexOf("://")
-        if (schemeEnd < 0) return url.substringBefore('/')
-        val pathStart = url.indexOf('/', schemeEnd + 3)
-        return if (pathStart < 0) url else url.substring(0, pathStart)
+        val parts = split(url)
+        return "${parts.scheme?.lowercase()}://${parts.authority?.lowercase()}"
     }
 
     /**
@@ -433,6 +509,9 @@ public object DashManifestParser {
             (g[7].toDoubleOrNull() ?: 0.0)
         return (total * 1_000_000).toLong()
     }
+
+    /** Appendix B of RFC 3986 without the scheme, which [schemeOf] reads by its grammar first. */
+    private val RELATIVE_PARTS = Regex("""(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#([\s\S]*))?""")
 
     private val ISO_DURATION = Regex(
         """P(?:([0-9.]+)Y)?(?:([0-9.]+)M)?(?:([0-9.]+)W)?(?:([0-9.]+)D)?""" +

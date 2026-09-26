@@ -121,4 +121,61 @@ class DashUrlPolicyTest {
         """.trimIndent()
         assertFailsWith<DashUrlRefusedException> { DashManifestParser.parse(mpd, manifest) }
     }
+
+    // RFC 3986, section 5.4.1, against its own base URI.
+    @Test
+    fun `the RFC 3986 examples resolve as the standard says`() {
+        val base = "http://a/b/c/d;p?q"
+        val expected = listOf(
+            "g" to "http://a/b/c/g",
+            "./g" to "http://a/b/c/g",
+            "g/" to "http://a/b/c/g/",
+            "/g" to "http://a/g",
+            "//g" to "http://g",
+            "?y" to "http://a/b/c/d;p?y",
+            "g?y" to "http://a/b/c/g?y",
+            "#s" to "http://a/b/c/d;p?q#s",
+            "g#s" to "http://a/b/c/g#s",
+            "" to "http://a/b/c/d;p?q",
+            "." to "http://a/b/c/",
+            ".." to "http://a/b/",
+            "../g" to "http://a/b/g",
+            "../.." to "http://a/",
+            "../../g" to "http://a/g",
+            "../../../g" to "http://a/g",
+            "g/./h/../i" to "http://a/b/c/g/i",
+        )
+        for ((reference, resolved) in expected) assertEquals(resolved, resolve(base, reference), "reference '$reference'")
+    }
+
+    @Test
+    fun `a slash in the manifest query or fragment is not a directory`() {
+        val signed = "https://cdn.test/vod/movie.mpd?token=a/b"
+        assertEquals("https://cdn.test/vod/s1.m4s", resolve(signed, "s1.m4s"))
+        assertEquals("https://cdn.test/vod/s1.m4s?sig=c/d", resolve(signed, "s1.m4s?sig=c/d"))
+        assertEquals("https://cdn.test/vod/movie.mpd?x=1", resolve(signed, "?x=1"))
+        assertEquals("https://cdn.test/vod/movie.mpd?token=a/b#t", resolve(signed, "#t"))
+        assertEquals("https://cdn.test/vod/s1.m4s", resolve("https://cdn.test/vod/movie.mpd#part/two", "s1.m4s"))
+    }
+
+    @Test
+    fun `a manifest fetched with a slash in its query plans segments beside it`() {
+        val mpd = """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet contentType="video">
+                        <Representation id="v" bandwidth="1">
+                            <SegmentList>
+                                <SegmentURL media="s1.m4s"/>
+                            </SegmentList>
+                        </Representation>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+        """.trimIndent()
+        val manifest = DashManifestParser.parse(mpd, "https://cdn.test/vod/movie.mpd?token=a/b")
+        val period = manifest.periods.single()
+        val plan = DashManifestParser.segmentPlan(manifest, period, period.adaptationSets.single().representations.single())
+        assertEquals(listOf("https://cdn.test/vod/s1.m4s"), plan.mediaUrls)
+    }
 }

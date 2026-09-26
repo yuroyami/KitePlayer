@@ -4,6 +4,10 @@ package io.github.yuroyami.kiteplayer.libass
 
 import kotlin.js.JsAny
 import kotlin.js.Promise
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlinx.coroutines.await
 
 /**
@@ -14,8 +18,10 @@ import kotlinx.coroutines.await
  * two files come as the `web` zip attached to this module's wasmJs artifact; unpack them beside
  * the page. The first ASS track a player meets starts loading [DEFAULT_URL] on its own, so a page
  * that serves the two files needs no code here. Until the module arrives the track draws nothing:
- * the engine records every call and replays it the moment the module lands, and typesetting
- * begins there. Only a load that fails hands the track to the built-in styling, with a warning.
+ * the engine keeps what it was told and hands it over the moment the module lands, and
+ * typesetting begins there. A load that fails, or that has not finished after ten seconds, hands
+ * the track to the built-in styling, with a warning. A module that lands later still serves the
+ * next player.
  * A page that wants no blank first seconds calls [load] (or [attach] with a module it instantiated
  * itself) before it creates a player; a page that keeps the files elsewhere must.
  *
@@ -28,6 +34,19 @@ public object KiteLibassWeb {
     internal var module: JsAny? = null
     internal var loadFailure: Throwable? = null
     private var loading: Boolean = false
+    private var loadStarted: TimeMark? = null
+
+    /** Bumped by [resetForTesting], so a load started before a reset cannot land after it. */
+    private var loadGeneration: Int = 0
+
+    /** How long a background load may take before pending engines fall back (#291). */
+    internal var loadDeadline: Duration = LOAD_DEADLINE_SECONDS.seconds
+
+    /** The module import. A test replaces it with a promise it controls. */
+    internal var importModule: (String) -> Promise<JsAny> = ::webImportModule
+
+    /** Seconds a background load may take before a waiting track uses the built-in styling. */
+    internal const val LOAD_DEADLINE_SECONDS: Int = 10
 
     public val isLoaded: Boolean get() = module != null
 
@@ -54,27 +73,58 @@ public object KiteLibassWeb {
     /** Fetches and instantiates the module at [url]. Calling twice is a no-op. */
     public suspend fun load(url: String = DEFAULT_URL) {
         if (module != null) return
-        val loaded = webImportModule(url).await<JsAny>()
+        val loaded = importModule(url).await<JsAny>()
         if (module != null) return
         attach(loaded)
     }
 
-    /** Starts [load] without waiting; the pending engine polls the outcome on its next render. */
+    /** Starts [load] without waiting; the pending engine polls the outcome on its next call. */
     internal fun loadInBackground(url: String = DEFAULT_URL) {
         if (module != null || loading || loadFailure != null) return
         loading = true
-        webImportModule(url).then(
+        loadStarted = TimeSource.Monotonic.markNow()
+        val generation = loadGeneration
+        importModule(url).then(
             { loaded ->
-                loading = false
-                runCatching { attach(loaded) }.exceptionOrNull()?.let { loadFailure = it }
+                if (generation == loadGeneration) {
+                    loading = false
+                    // A module that outlived the deadline still lands, for the next player.
+                    runCatching { attach(loaded) }.exceptionOrNull()?.let { loadFailure = it }
+                }
                 null
             },
             { error ->
-                loading = false
-                loadFailure = IllegalStateException("kiteass.mjs could not be loaded from $url: ${webErrorMessage(error)}")
+                if (generation == loadGeneration) {
+                    loading = false
+                    loadFailure = IllegalStateException("kiteass.mjs could not be loaded from $url: ${webErrorMessage(error)}")
+                }
                 null
             },
         )
+    }
+
+    /**
+     * Why a pending engine cannot wait any longer, or null while waiting is still right: a load
+     * that failed, or a background load older than [loadDeadline].
+     */
+    internal fun pendingFailure(): Throwable? {
+        loadFailure?.let { return it }
+        val started = loadStarted ?: return null
+        if (module != null || !loading || started.elapsedNow() < loadDeadline) return null
+        val late = IllegalStateException("kiteass.mjs did not load within $loadDeadline")
+        loadFailure = late
+        return late
+    }
+
+    /** Forgets every module and load, for a test that needs a fresh page. */
+    internal fun resetForTesting() {
+        module = null
+        loadFailure = null
+        loading = false
+        loadStarted = null
+        loadGeneration++
+        loadDeadline = LOAD_DEADLINE_SECONDS.seconds
+        importModule = ::webImportModule
     }
 }
 

@@ -9,9 +9,11 @@ import kotlin.js.JsAny
  * The web half: the shared C driver inside `kiteass.mjs`, reached through its export table.
  *
  * The module arrives asynchronously and a typesetter is asked for synchronously, so an engine may
- * start PENDING: every call is recorded and replayed the moment the module lands, and [render]
- * answers "unchanged" until then. A load that failed surfaces on the next render as an exception,
- * which the engine's lane turns into the fallback to the built-in styling with a warning.
+ * start PENDING: it keeps what it was told as current state and hands that to the module the
+ * moment it lands, and [render] answers "unchanged" until then. A load that failed, a load that
+ * outlived [KiteLibassWeb]'s deadline, or waiting data over [PENDING_BUDGET_BYTES] surfaces on
+ * the next call as an exception, which the engine's lane turns into the fallback to the built-in
+ * styling with a warning.
  *
  * Bytes cross as Latin-1 strings in bulk, both ways: Kotlin/Wasm and the module are separate
  * memories with no typed-array bridge, and a per-byte crossing is the path the web spike measured
@@ -24,24 +26,90 @@ internal actual class LibassEngine private constructor(
     private var self: Int = 0
     private var closed = false
 
-    /** Calls recorded while the module was still loading, replayed once in order. */
-    private val pending = ArrayList<(LibassEngine) -> Unit>()
+    private class PendingOpener(val document: Boolean, val bytes: ByteArray)
+
+    private class PendingEvent(val payload: ByteArray, val startMillis: Long, val durationMillis: Long)
+
+    // What the engine was told while the module loaded, kept as current state and not as a log of
+    // calls. A render per video frame and a clear per seek grew that log without end (#291).
+    private var pendingOpener: PendingOpener? = null
+    private var pendingClearAfterOpener = false
+    private val pendingFonts = LinkedHashMap<String, ByteArray>()
+    private val pendingEvents = ArrayList<PendingEvent>()
+    private var pendingFrame: TypesetFrame? = null
+
+    /** The bytes held for the module, which [PENDING_BUDGET_BYTES] bounds. */
+    internal var pendingBytes: Long = 0
+        private set
+
+    private var overflow: IllegalStateException? = null
 
     private fun ready(): Boolean {
         if (closed) return false
+        overflow?.let { throw it }
         if (module == null) {
-            KiteLibassWeb.loadFailure?.let { throw IllegalStateException(it.message ?: "kiteass.mjs failed to load", it) }
+            KiteLibassWeb.pendingFailure()?.let { throw IllegalStateException(it.message ?: "kiteass.mjs failed to load", it) }
             val landed = KiteLibassWeb.module ?: return false
             module = landed
         }
         if (self == 0) {
             self = kassOpen(module!!)
             check(self != 0) { "libass refused a library instance in the web module" }
-            val replay = pending.toList()
-            pending.clear()
-            replay.forEach { it(this) }
+            replayPending()
         }
         return true
+    }
+
+    /** Hands the module the state it missed, in the order a loaded engine would have seen it. */
+    private fun replayPending() {
+        val fonts = pendingFonts.toList()
+        val opener = pendingOpener
+        val cleared = pendingClearAfterOpener
+        val events = pendingEvents.toList()
+        val frame = pendingFrame
+        dropPending()
+        fonts.forEach { (name, data) -> addFont(name, data) }
+        if (opener != null) {
+            val opened = if (opener.document) openDocument(opener.bytes) else openTrack(opener.bytes)
+            check(opened) { "libass refused the track it was given while the web module loaded" }
+            if (cleared) clearEvents()
+        }
+        events.forEach { addEvent(it.payload, it.startMillis, it.durationMillis) }
+        frame?.let(::setFrame)
+    }
+
+    private fun dropPending() {
+        pendingOpener = null
+        pendingClearAfterOpener = false
+        pendingFonts.clear()
+        pendingEvents.clear()
+        pendingFrame = null
+        pendingBytes = 0
+    }
+
+    private fun dropPendingEvents() {
+        pendingEvents.forEach { pendingBytes -= it.payload.size }
+        pendingEvents.clear()
+    }
+
+    private fun holdPending(bytes: Int) {
+        pendingBytes += bytes
+        if (pendingBytes <= PENDING_BUDGET_BYTES) return
+        dropPending()
+        val refused = IllegalStateException(
+            "the libass web module has not loaded, and the subtitle data waiting for it passed $PENDING_BUDGET_BYTES bytes",
+        )
+        overflow = refused
+        throw refused
+    }
+
+    private fun pendOpener(opener: PendingOpener) {
+        // A new track replaces the old one, and with it every event that was waiting for it.
+        pendingOpener?.let { pendingBytes -= it.bytes.size }
+        dropPendingEvents()
+        pendingClearAfterOpener = false
+        pendingOpener = opener
+        holdPending(opener.bytes.size)
     }
 
     private inline fun <T> withBytes(module: JsAny, bytes: ByteArray, block: (pointer: Int, size: Int) -> T): T {
@@ -57,27 +125,41 @@ internal actual class LibassEngine private constructor(
     }
 
     actual fun openTrack(header: ByteArray): Boolean {
-        if (!ready()) { val copy = header.copyOf(); pending += { it.openTrack(copy) }; return true }
+        if (!ready()) { pendOpener(PendingOpener(document = false, header.copyOf())); return true }
         return withBytes(module!!, header) { p, n -> kassOpenTrack(module!!, self, p, n) != 0 }
     }
 
     actual fun openDocument(script: ByteArray): Boolean {
-        if (!ready()) { val copy = script.copyOf(); pending += { it.openDocument(copy) }; return true }
+        if (!ready()) { pendOpener(PendingOpener(document = true, script.copyOf())); return true }
         return withBytes(module!!, script) { p, n -> kassOpenDocument(module!!, self, p, n) != 0 }
     }
 
     actual fun addEvent(payload: ByteArray, startMillis: Long, durationMillis: Long) {
-        if (!ready()) { val copy = payload.copyOf(); pending += { it.addEvent(copy, startMillis, durationMillis) }; return }
+        if (!ready()) {
+            pendingEvents += PendingEvent(payload.copyOf(), startMillis, durationMillis)
+            holdPending(payload.size)
+            return
+        }
         withBytes(module!!, payload) { p, n -> kassAddEvent(module!!, self, p, n, startMillis.toDouble(), durationMillis.toDouble()) }
     }
 
     actual fun clearEvents() {
-        if (!ready()) { pending += { it.clearEvents() }; return }
+        if (!ready()) {
+            // The waiting events are dropped outright. A clear still matters to the opener: it
+            // flushes a whole document's own events too.
+            dropPendingEvents()
+            if (pendingOpener != null) pendingClearAfterOpener = true
+            return
+        }
         kassClearEvents(module!!, self)
     }
 
     actual fun addFont(name: String, data: ByteArray) {
-        if (!ready()) { val copy = data.copyOf(); pending += { it.addFont(name, copy) }; return }
+        if (!ready()) {
+            pendingFonts.put(name, data.copyOf())?.let { replaced -> pendingBytes -= replaced.size }
+            holdPending(data.size)
+            return
+        }
         val nameBytes = name.encodeToByteArray() + 0
         withBytes(module!!, nameBytes) { namePointer, _ ->
             withBytes(module!!, data) { p, n -> kassAddFont(module!!, self, namePointer, p, n) }
@@ -85,7 +167,7 @@ internal actual class LibassEngine private constructor(
     }
 
     actual fun setFrame(frame: TypesetFrame) {
-        if (!ready()) { pending += { it.setFrame(frame) }; return }
+        if (!ready()) { pendingFrame = frame; return }
         kassSetFrame(
             module!!, self,
             frame.width, frame.height, frame.videoWidth, frame.videoHeight,
@@ -106,7 +188,7 @@ internal actual class LibassEngine private constructor(
     actual override fun close() {
         if (closed) return
         closed = true
-        pending.clear()
+        dropPending()
         val m = module
         if (m != null && self != 0) kassClose(m, self)
         self = 0
@@ -124,6 +206,12 @@ internal actual class LibassEngine private constructor(
         }
 
         actual fun libraryVersion(): Int = KiteLibassWeb.module?.let(::kassLibraryVersion) ?: 0
+
+        /**
+         * The most a pending engine holds for the module, fonts included. A page that loads the
+         * module before it plays never gets near it.
+         */
+        const val PENDING_BUDGET_BYTES: Long = 64L * 1024 * 1024
     }
 }
 

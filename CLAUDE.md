@@ -425,7 +425,9 @@ optimized consumers that reference no network symbol.
 lane, at video frame cadence, and publishes only when libass reports a change. On the web the
 engine is a separate `kiteass.mjs` module the page hosts (delivered as the `web` zip on the wasmJs
 publication; a browser distribution does not inherit library resources); the first ASS track loads
-it from `./kiteass.mjs` and the typesetter stays pending, replaying what it was told, until it lands.
+it from `./kiteass.mjs` and the typesetter stays pending, keeping current state rather than a log
+of calls, until it lands. A load that fails or takes more than ten seconds, or more than 64 MB of
+waiting data, hands the track to the built-in styling.
 
 ## The libass chain
 

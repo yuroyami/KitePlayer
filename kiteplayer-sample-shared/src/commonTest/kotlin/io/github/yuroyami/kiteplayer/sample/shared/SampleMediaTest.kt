@@ -41,7 +41,7 @@ class SampleMediaTest {
     }
 
     @Test
-    fun `every song that is really there is offered, in the order given`() {
+    fun `every song that is really there is offered in the order given`() {
         val media = sampleMedia(requested = null, songs = listOf(song, other), clip = clip) { true }
         assertEquals(listOf(song, other), media.tracks.map { it.path })
         assertEquals(listOf("bad-cat", "acid-tunnel"), media.tracks.map { it.label })

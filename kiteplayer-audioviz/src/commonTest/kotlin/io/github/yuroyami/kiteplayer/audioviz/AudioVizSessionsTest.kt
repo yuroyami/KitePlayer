@@ -46,7 +46,7 @@ class AudioVizSessionsTest {
 
     // Attaching starts the song scanner, so the view's settings must already be in place (#289).
     @Test
-    fun `a view configures the feed before it attaches, and again when it shares one`() {
+    fun `a view configures the feed before it attaches and again when it shares one`() {
         val dispatcher = ManualVizDispatcher()
         val order = ArrayList<String>()
         val sessions = AudioVizSessions<Any>(

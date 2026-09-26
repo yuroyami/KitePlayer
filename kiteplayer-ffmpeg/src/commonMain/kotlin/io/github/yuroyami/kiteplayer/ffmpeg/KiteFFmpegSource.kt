@@ -672,15 +672,21 @@ private class KiteFFmpegVideoDecoder(
                 return null
             }
             val info = raw.info
-            val graph = filterGraph ?: io.github.yuroyami.kiteffmpeg.FilterGraph.buildVideo(
-                description = description,
-                width = info.width,
-                height = info.height,
-                pixelFormat = info.pixelFormat,
-                timeBase = info.timeBase,
-                frameRate = frameRateRational(),
-                sampleAspectRatio = info.sampleAspectRatio,
-            ).also { filterGraph = it }
+            val graph = filterGraph ?: try {
+                io.github.yuroyami.kiteffmpeg.FilterGraph.buildVideo(
+                    description = description,
+                    width = info.width,
+                    height = info.height,
+                    pixelFormat = info.pixelFormat,
+                    timeBase = info.timeBase,
+                    frameRate = frameRateRational(),
+                    sampleAspectRatio = info.sampleAspectRatio,
+                )
+            } catch (failure: Throwable) {
+                // Only feedInput takes the frame, so a graph that cannot be built leaves it here (#263).
+                raw.close()
+                throw failure
+            }.also { filterGraph = it }
             // feedInput owns and closes the raw frame; every output is copied out of the callback.
             graph.feedInput(0, raw) { out -> filteredPending.addLast(out.copy()) }
         }

@@ -293,6 +293,75 @@ class AwtCanvasVideoRendererTest {
         r.close()
     }
 
+    /** A canvas that claims a peer, so a paint reaches the presenter without a window. */
+    private class DisplayableCanvas : java.awt.Canvas() {
+        init {
+            setSize(160, 90)
+        }
+
+        override fun isDisplayable(): Boolean = true
+    }
+
+    /** Counts how many threads are inside it at once, and can hold each paint for a while. */
+    private class CountingPresenter(private val holdMillis: Long) : CanvasPresenter {
+        private val inside = java.util.concurrent.atomic.AtomicInteger()
+        val mostAtOnce = java.util.concurrent.atomic.AtomicInteger()
+        val painting = java.util.concurrent.CountDownLatch(1)
+        val paints = java.util.concurrent.atomic.AtomicInteger()
+
+        override fun present(
+            canvas: java.awt.Canvas,
+            image: BufferedImage,
+            layout: FrameLayout,
+            overlay: io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?,
+        ) {
+            val now = inside.incrementAndGet()
+            mostAtOnce.accumulateAndGet(now, ::maxOf)
+            painting.countDown()
+            if (holdMillis > 0) Thread.sleep(holdMillis)
+            paints.incrementAndGet()
+            inside.decrementAndGet()
+        }
+    }
+
+    // The engine paints from its scheduler while the actor changes the controls (#225).
+    @Test
+    fun `one thread at a time paints, whichever threads ask`() = runTest {
+        val r = renderer()
+        val presenter = CountingPresenter(holdMillis = 0)
+        r.presenter = presenter
+        r.setCanvas(DisplayableCanvas())
+        val toggling = java.util.concurrent.atomic.AtomicBoolean(true)
+        val toggler = kotlin.concurrent.thread {
+            var fill = false
+            while (toggling.get()) {
+                r.setScaleMode(if (fill) io.github.yuroyami.kiteplayer.VideoScale.Fill else io.github.yuroyami.kiteplayer.VideoScale.Fit)
+                fill = !fill
+            }
+        }
+        repeat(200) { r.present(CountingFrame(), 0L) }
+        toggling.set(false)
+        toggler.join()
+        assertTrue(presenter.paints.get() >= 200, "every present painted, painted ${presenter.paints.get()}")
+        assertEquals(1, presenter.mostAtOnce.get(), "two threads drew into one BufferStrategy at once")
+        r.close()
+    }
+
+    // The view hands the canvas back just before AWT destroys the peer (#225).
+    @Test
+    fun `handing the canvas back waits for the paint in flight`() = runTest {
+        val r = renderer()
+        val presenter = CountingPresenter(holdMillis = 200)
+        r.presenter = presenter
+        r.setCanvas(DisplayableCanvas())
+        val painter = kotlin.concurrent.thread { kotlinx.coroutines.runBlocking { r.present(CountingFrame(), 0L) } }
+        assertTrue(presenter.painting.await(5, java.util.concurrent.TimeUnit.SECONDS), "the paint never started")
+        r.setCanvas(null)
+        assertEquals(1, presenter.paints.get(), "setCanvas(null) returned while the paint still drew into the old canvas")
+        painter.join()
+        r.close()
+    }
+
     /**
      * The refresh interval never throws. On a machine with a display it is a plausible
      * interval; on a headless CI JVM it is an honest null. Both are legal, an exception is not.

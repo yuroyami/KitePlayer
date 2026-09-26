@@ -20,13 +20,17 @@ import kotlin.math.roundToInt
  * the strategy's own loop is what makes a present safe against a buffer being restored or lost
  * underneath it.
  */
-internal class AwtCanvasPresenter {
+internal interface CanvasPresenter {
+    fun present(canvas: Canvas, image: BufferedImage, layout: FrameLayout, overlay: SubtitleOverlay?)
+}
+
+internal class AwtCanvasPresenter : CanvasPresenter {
 
     /** The canvas size the current BufferStrategy was built for. See [strategyIsStale]. */
     private var builtWidth: Int = 0
     private var builtHeight: Int = 0
 
-    fun present(
+    override fun present(
         canvas: Canvas,
         image: BufferedImage,
         layout: FrameLayout,

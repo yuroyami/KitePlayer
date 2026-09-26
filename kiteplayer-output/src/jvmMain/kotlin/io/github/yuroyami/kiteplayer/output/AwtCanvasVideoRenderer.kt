@@ -73,8 +73,10 @@ public fun interface AwtFramePainter {
  * counter exists because the view's ledger sums one number across every renderer it builds, and a
  * renderer with nothing to report reports nothing rather than being absent from the sum.
  *
- * Not thread-safe for configuration: [setCanvas], [close] and the picture controls come from the
- * view's thread. [present] may come from the engine's scheduler and is the only member that does.
+ * Every member may be called from any thread, and the engine does so: [present] on its video
+ * scheduler, [setOverlay] on the subtitle raster lane and the actor, the picture controls on the
+ * actor, and a resize on the AWT event thread. One paint lock serialises every draw, and
+ * [setCanvas] and [close] take it too, so a canvas handed back is fenced from the paint in flight.
  */
 public class AwtCanvasVideoRenderer(
     private val painter: AwtFramePainter,
@@ -100,7 +102,26 @@ public class AwtCanvasVideoRenderer(
     private var closed = false
 
     /** Holds the BufferStrategy's own size, which is why it is per renderer and not a singleton. */
-    private val presenter = AwtCanvasPresenter()
+    internal var presenter: CanvasPresenter = AwtCanvasPresenter()
+
+    /**
+     * Held for the whole of a paint, so one thread at a time draws into the one BufferStrategy
+     * (#225). Fair, so a waiting fence goes before the next frame's paint.
+     */
+    private val paintLock = java.util.concurrent.locks.ReentrantLock(true)
+
+    /**
+     * Waits for the paint in flight, then runs [block]. Bounded, because the view calls this under
+     * AWT's tree lock, which a paint that builds a BufferStrategy may want.
+     */
+    private inline fun <T> fenced(block: () -> T): T {
+        val held = paintLock.tryLock(CANVAS_FENCE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        try {
+            return block()
+        } finally {
+            if (held) paintLock.unlock()
+        }
+    }
 
     /**
      * Repaints the retained picture when the canvas changes size.
@@ -182,10 +203,12 @@ public class AwtCanvasVideoRenderer(
      * calls it while AWT is about to destroy the peer.
      */
     public fun setCanvas(canvas: Canvas?) {
-        val previous = synchronized(lock) {
-            val old = this.canvas
-            this.canvas = canvas
-            old
+        val previous = fenced {
+            synchronized(lock) {
+                val old = this.canvas
+                this.canvas = canvas
+                old
+            }
         }
         if (previous !== canvas) {
             previous?.removeComponentListener(resizeListener)
@@ -267,6 +290,16 @@ public class AwtCanvasVideoRenderer(
     }
 
     private fun paintNow() {
+        paintLock.lock()
+        try {
+            paintHeld()
+        } finally {
+            paintLock.unlock()
+        }
+    }
+
+    /** Only with [paintLock] held. */
+    private fun paintHeld() {
         val target: Canvas
         val image: BufferedImage
         val size: VideoSize
@@ -297,6 +330,10 @@ public class AwtCanvasVideoRenderer(
     private fun overlaySnapshot(): SubtitleOverlay? = synchronized(lock) { overlay }
 
     override fun close() {
+        fenced { closeFenced() }
+    }
+
+    private fun closeFenced() {
         val released = synchronized(lock) {
             if (closed) return
             closed = true
@@ -310,3 +347,6 @@ public class AwtCanvasVideoRenderer(
         released?.removeComponentListener(resizeListener)
     }
 }
+
+/** How long [AwtCanvasVideoRenderer.setCanvas] and its close wait for a paint in flight. */
+private const val CANVAS_FENCE_TIMEOUT_MS = 500L

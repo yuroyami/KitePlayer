@@ -1259,6 +1259,7 @@ sealed interface io.github.yuroyami.kiteplayer/TrackChange { // io.github.yuroya
 
 final class io.github.yuroyami.kiteplayer.audio/LoudnessMeter { // io.github.yuroyami.kiteplayer.audio/LoudnessMeter|null[0]
     constructor <init>(kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.audio/LoudnessMeter.<init>|<init>(kotlin.Int;kotlin.Int){}[0]
+    constructor <init>(kotlin/Int, kotlin/Int, kotlin/Long?) // io.github.yuroyami.kiteplayer.audio/LoudnessMeter.<init>|<init>(kotlin.Int;kotlin.Int;kotlin.Long?){}[0]
 
     final fun feed(kotlin/FloatArray, kotlin/Int) // io.github.yuroyami.kiteplayer.audio/LoudnessMeter.feed|feed(kotlin.FloatArray;kotlin.Int){}[0]
     final fun result(): io.github.yuroyami.kiteplayer.audio/LoudnessResult // io.github.yuroyami.kiteplayer.audio/LoudnessMeter.result|result(){}[0]

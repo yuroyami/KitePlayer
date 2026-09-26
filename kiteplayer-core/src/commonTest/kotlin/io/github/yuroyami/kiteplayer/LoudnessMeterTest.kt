@@ -186,6 +186,40 @@ class LoudnessMeterTest {
         )
     }
 
+    /** A 997 Hz tone at 0.1 alone in [channel] for ten seconds, measured with [mask] or none. */
+    private fun toneIn(channel: Int, channels: Int, mask: Long?): Double {
+        val rate = 48_000
+        val frames = rate * 10
+        val samples = FloatArray(frames * channels)
+        for (frame in 0 until frames) {
+            samples[frame * channels + channel] = 0.1f * sin(2.0 * PI * 997.0 * frame / rate).toFloat()
+        }
+        val meter = if (mask == null) LoudnessMeter(rate, channels) else LoudnessMeter(rate, channels, mask)
+        meter.feed(samples, frames)
+        return meter.result().integratedLufs
+    }
+
+    // Each channel is weighted by its speaker, the way ffmpeg 8.0's ebur128 read the same tones (#211).
+    @Test
+    fun `surrounds weigh 1point41 and the LFE nothing whatever the layout`() {
+        val front = toneIn(0, 4, 0x33L)
+        assertEquals(-23.0, front, 0.1, "a front channel is the reference level")
+        assertEquals(-21.5, toneIn(2, 4, 0x33L), 0.1, "quad back left")
+        assertEquals(-21.5, toneIn(3, 5, 0x37L), 0.1, "5.0 back left")
+        assertEquals(-21.5, toneIn(5, 7, 0x70FL), 0.1, "6.1 side left")
+        assertEquals(Double.NEGATIVE_INFINITY, toneIn(3, 7, 0x70FL), "the 6.1 LFE must not be measured")
+        assertEquals(Double.NEGATIVE_INFINITY, toneIn(2, 3, 0xBL), "the 2.1 LFE must not be measured")
+    }
+
+    @Test
+    fun `a source with no mask is weighted by the conventional layout for its count`() {
+        assertEquals(-21.5, toneIn(2, 4, null), 0.1, "four channels are quad, and the third is back left")
+        assertEquals(-21.5, toneIn(5, 7, null), 0.1, "seven channels are 6.1, and the sixth is side left")
+        assertEquals(Double.NEGATIVE_INFINITY, toneIn(3, 7, null), "the 6.1 LFE must not be measured")
+        // A mask that names another number of speakers than the stream has is not trusted.
+        assertEquals(-21.5, toneIn(2, 4, 0x7L), 0.1, "a three speaker mask on four channels falls back to quad")
+    }
+
     @Test
     fun `a meter refuses impossible construction and use after reading`() {
         assertFailsWith<IllegalArgumentException> { LoudnessMeter(0, 2) }

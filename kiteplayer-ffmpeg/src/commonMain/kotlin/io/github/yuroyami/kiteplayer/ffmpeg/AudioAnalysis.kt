@@ -26,7 +26,8 @@ public object AudioAnalysis {
                 frame.use { decoded ->
                     val info = decoded.info
                     if (info.sampleCount == 0) return@use
-                    val active = meter ?: LoudnessMeter(info.sampleRate, info.channelCount).also { meter = it }
+                    val active = meter
+                        ?: LoudnessMeter(info.sampleRate, info.channelCount, info.channelLayoutMask).also { meter = it }
                     active.feed(AudioSamples.toFloatInterleaved(decoded), info.sampleCount)
                 }
             }

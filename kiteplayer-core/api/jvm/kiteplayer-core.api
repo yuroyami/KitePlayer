@@ -2149,6 +2149,7 @@ public final class io/github/yuroyami/kiteplayer/VideoTransform$Companion {
 
 public final class io/github/yuroyami/kiteplayer/audio/LoudnessMeter {
 	public fun <init> (II)V
+	public fun <init> (IILjava/lang/Long;)V
 	public final fun feed ([FI)V
 	public final fun result ()Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;
 }

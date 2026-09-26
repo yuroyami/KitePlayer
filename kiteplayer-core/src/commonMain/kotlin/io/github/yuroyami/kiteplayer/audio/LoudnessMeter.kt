@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.audio
 
+import io.github.yuroyami.kiteplayer.internal.MixLayout
 import kotlin.math.PI
 import kotlin.math.log10
 import kotlin.math.pow
@@ -31,28 +32,34 @@ public data class LoudnessResult(
  * Feed interleaved float samples with [feed] and read [result] once at the end. The meter holds one
  * block of history and nothing else, so a long file costs no more memory than a short one.
  *
- * Channel weighting follows the standard: the front channels count once, the surrounds count 1.41
- * times because sound arriving from behind is heard as louder than the same sound in front, and the
- * LFE is not counted at all. Roles are taken from the channel COUNT, which is what an interleaved
- * buffer can tell us: 1 is mono, 2 is stereo, 6 is the usual 5.1 order with the LFE fourth.
+ * Channel weighting follows the standard, ITU-R BS.1770-4 Annex 1: the front channels count once,
+ * every back and side channel counts 1.41 times because sound arriving from behind is heard as
+ * louder than the same sound in front, and the LFE is not counted at all. FFmpeg's `ebur128` filter
+ * weights the same speakers the same way. Each channel's speaker comes from the layout mask when
+ * the source declares one, and from the conventional layout for the channel count otherwise: 3 is
+ * 2.1, 4 is quad, 5 is 5.0, 6 is 5.1 with side surrounds, 7 is 6.1 and 8 is 7.1.
+ *
+ * @param channelLayoutMask the native-order layout mask of the source, or null when it declared
+ *        none. A mask whose speaker count differs from [channels] is ignored.
  */
 public class LoudnessMeter(
     private val sampleRate: Int,
     private val channels: Int,
+    channelLayoutMask: Long?,
 ) {
+    /** A meter for a source that declared no layout mask. */
+    public constructor(sampleRate: Int, channels: Int) : this(sampleRate, channels, null)
+
     init {
         require(sampleRate > 0) { "a loudness meter needs a real sample rate, was $sampleRate" }
         require(channels in 1..8) { "a loudness meter handles 1 to 8 channels, got $channels" }
     }
 
-    private val weights = FloatArray(channels) { channel ->
-        when {
-            channels == 6 && channel == 3 -> 0.0f
-            channels == 6 && channel >= 4 -> 1.41f
-            channels == 8 && channel == 3 -> 0.0f
-            channels == 8 && channel >= 4 -> 1.41f
-            else -> 1.0f
-        }
+    private val weights: FloatArray = run {
+        val mask = channelLayoutMask?.takeIf { it.countOneBits() == channels }
+            ?: MixLayout.forChannelCount(channels)?.mask
+        val speakers = mask?.let { m -> (0 until 64).filter { bit -> (m shr bit) and 1L == 1L } }
+        FloatArray(channels) { channel -> speakers?.let { weightOf(it[channel]) } ?: 1.0f }
     }
 
     private val preFilter = BiquadCoefficients.preFilter(sampleRate)
@@ -143,6 +150,21 @@ public class LoudnessMeter(
     }
 
     private companion object {
+        /** The LFE and the second LFE, which BS.1770 leaves out. */
+        val LFE_SPEAKERS = setOf(3, 35)
+
+        /**
+         * Back left, back right, back centre, side left, side right, the three top back speakers and
+         * the two surround direct speakers: the set FFmpeg's `ebur128` weights 1.41.
+         */
+        val SURROUND_SPEAKERS = setOf(4, 5, 8, 9, 10, 15, 16, 17, 33, 34)
+
+        fun weightOf(speaker: Int): Float = when (speaker) {
+            in LFE_SPEAKERS -> 0.0f
+            in SURROUND_SPEAKERS -> 1.41f
+            else -> 1.0f
+        }
+
         const val BLOCK_MILLIS = 400
         const val STEP_MILLIS = 100
 

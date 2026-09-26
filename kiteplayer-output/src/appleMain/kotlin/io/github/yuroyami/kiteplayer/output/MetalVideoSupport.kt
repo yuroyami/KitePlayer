@@ -134,7 +134,7 @@ struct ColorUniforms {
     // is not subsampled, which is what makes 4:4:4 correct.
     float chromaOffsetX;
     float chromaOffsetY;
-    float sampleScale;  // normalizes 10-bit payloads to 0..1
+    float sampleScale;  // brings a 10-bit payload to the 8-bit scale once multiplied by 255
     int   mode;         // 0 = three planes, 1 = biplanar, 2 = packed rgba
 };
 
@@ -907,6 +907,17 @@ internal fun chromaSampleOffset(
     return x to y
 }
 
+/**
+ * What a ten-bit sample, read from a sixteen-bit texture as 0 to 1, is multiplied by before the
+ * shader multiplies by 255, for a sample in the low ten bits. Studio levels scale by exactly four
+ * between eight and ten bits (64, 940 and 512 against 16, 235 and 128), as BT.709 and BT.2100 define
+ * the digital codes, and as the software converters do with a two-bit shift.
+ */
+internal const val TEN_BIT_LOW_SCALE: Float = 65535f / 1020f
+
+/** The same for a sample in the high ten bits, P010 and VideoToolbox's ten-bit buffers: a shift of eight. */
+internal const val TEN_BIT_HIGH_SCALE: Float = 65535f / 65280f
+
 internal data class PlaneRecipe(
     val formats: List<ULong>,
     val chromaShiftX: Int,
@@ -926,19 +937,19 @@ internal fun planeRecipeFor(format: PlayerPixelFormat): PlaneRecipe? = when (for
         listOf(MTLPixelFormatR8Unorm, MTLPixelFormatR8Unorm, MTLPixelFormatR8Unorm), 0, 0, 1f, 0,
     )
     // Low-aligned ten bit: the value sits in the low bits of sixteen, so a normalized sample is
-    // value/65535 and the shader multiplies by 65535/1023 to reach 0..1.
+    // value/65535, and the scale brings it to value/4 on the eight-bit scale.
     PlayerPixelFormat.Yuv420p10le -> PlaneRecipe(
-        listOf(MTLPixelFormatR16Unorm, MTLPixelFormatR16Unorm, MTLPixelFormatR16Unorm), 1, 1, 65535f / 1023f, 0,
+        listOf(MTLPixelFormatR16Unorm, MTLPixelFormatR16Unorm, MTLPixelFormatR16Unorm), 1, 1, TEN_BIT_LOW_SCALE, 0,
     )
     PlayerPixelFormat.Yuv422p10le -> PlaneRecipe(
-        listOf(MTLPixelFormatR16Unorm, MTLPixelFormatR16Unorm, MTLPixelFormatR16Unorm), 1, 0, 65535f / 1023f, 0,
+        listOf(MTLPixelFormatR16Unorm, MTLPixelFormatR16Unorm, MTLPixelFormatR16Unorm), 1, 0, TEN_BIT_LOW_SCALE, 0,
     )
     PlayerPixelFormat.Nv12 -> PlaneRecipe(
         listOf(MTLPixelFormatR8Unorm, MTLPixelFormatRG8Unorm), 1, 1, 1f, 1,
     )
-    // High-aligned ten bit (P010): value in the high bits, so the correction is 65535/65472.
+    // High-aligned ten bit (P010): the value sits in the high bits of sixteen.
     PlayerPixelFormat.P010le -> PlaneRecipe(
-        listOf(MTLPixelFormatR16Unorm, MTLPixelFormatRG16Unorm), 1, 1, 65535f / 65472f, 1,
+        listOf(MTLPixelFormatR16Unorm, MTLPixelFormatRG16Unorm), 1, 1, TEN_BIT_HIGH_SCALE, 1,
     )
     PlayerPixelFormat.Rgba -> PlaneRecipe(listOf(MTLPixelFormatRGBA8Unorm), 0, 0, 1f, 2)
     PlayerPixelFormat.Bgra -> PlaneRecipe(listOf(MTLPixelFormatBGRA8Unorm), 0, 0, 1f, 2)

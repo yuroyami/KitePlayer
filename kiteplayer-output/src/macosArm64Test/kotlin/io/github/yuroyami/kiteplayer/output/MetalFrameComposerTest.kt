@@ -51,11 +51,11 @@ class MetalFrameComposerTest {
         height: Int,
         override val colorSpace: ColorSpaceInfo,
         override val rotationDegrees: Int = 0,
+        override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Nv12,
     ) : VideoFrame {
         override val pts: Pts = Pts.Zero
         override val duration: Pts? = null
         override val size: VideoSize = VideoSize(width, height, 1, 1)
-        override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Nv12
         override val hardwareSurface: HwSurfaceKind? = null
         override val generation: Generation = Generation.Initial
         override fun close() = Unit
@@ -77,6 +77,34 @@ class MetalFrameComposerTest {
             planes = listOf(
                 MetalPicture.SoftwarePlanes.Plane(luma, width, height),
                 MetalPicture.SoftwarePlanes.Plane(chroma, width, height / 2),
+            ),
+        )
+    }
+
+    /** A P010 picture: each ten-bit value in the high bits of a little-endian sixteen-bit sample. */
+    private fun solidP010(width: Int, height: Int, y: Int, cb: Int, cr: Int): MetalPicture.SoftwarePlanes {
+        fun put(bytes: ByteArray, at: Int, value: Int) {
+            val sample = value shl 6
+            bytes[at] = (sample and 0xFF).toByte()
+            bytes[at + 1] = (sample shr 8).toByte()
+        }
+        val luma = ByteArray(width * height * 2)
+        for (i in 0 until width * height) put(luma, i * 2, y)
+        // Half the width in Cb and Cr pairs, two bytes each, on half the rows.
+        val chroma = ByteArray(width * height)
+        var i = 0
+        while (i < chroma.size) {
+            put(chroma, i, cb)
+            put(chroma, i + 2, cr)
+            i += 4
+        }
+        return MetalPicture.SoftwarePlanes(
+            width = width,
+            height = height,
+            format = PlayerPixelFormat.P010le,
+            planes = listOf(
+                MetalPicture.SoftwarePlanes.Plane(luma, width * 2, height),
+                MetalPicture.SoftwarePlanes.Plane(chroma, width * 2, height / 2),
             ),
         )
     }
@@ -195,6 +223,33 @@ class MetalFrameComposerTest {
             abs(r - expected[0]) <= 2 && abs(g - expected[1]) <= 2 && abs(b - expected[2]) <= 2,
             "got rgb($r,$g,$b), expected rgb(${expected[0]},${expected[1]},${expected[2]}) within 2",
         )
+    }
+
+    // Studio levels scale by four between eight and ten bits: 64, 940 and 512 are 16, 235 and 128.
+    @Test
+    fun theTenBitRecipesPutStudioCodesOnTheirEightBitValues() {
+        fun eightBit(code: Int, highAligned: Boolean, scale: Float): Float =
+            (if (highAligned) code shl 6 else code) / 65535f * scale * 255f
+        for (format in listOf(PlayerPixelFormat.Yuv420p10le, PlayerPixelFormat.Yuv422p10le, PlayerPixelFormat.P010le)) {
+            val recipe = checkNotNull(planeRecipeFor(format))
+            val high = format == PlayerPixelFormat.P010le
+            for ((code, expected) in listOf(64 to 16f, 940 to 235f, 512 to 128f)) {
+                assertEquals(expected, eightBit(code, high, recipe.sampleScale), 0.01f, "$format code $code")
+            }
+        }
+        // VideoToolbox's ten-bit buffers are high-aligned too, and share the scale.
+        assertEquals(235f, eightBit(940, true, TEN_BIT_HIGH_SCALE), 0.01f)
+    }
+
+    @Test
+    fun tenBitStudioWhiteRendersWhiteAndChromaZeroStaysNeutral() {
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val frame = TestFrame(64, 64, bt(ColorMatrix.Bt709), pixelFormat = PlayerPixelFormat.P010le)
+        val white = bgraAt(render(composer, frame, solidP010(64, 64, y = 940, cb = 512, cr = 512)), 64, 32, 32)
+        assertEquals(listOf(255, 255, 255), listOf(white[2], white[1], white[0]), "ten-bit studio white")
+        val grey = bgraAt(render(composer, frame, solidP010(64, 64, y = 480, cb = 512, cr = 512)), 64, 32, 32)
+        assertTrue(grey[0] == grey[1] && grey[1] == grey[2], "ten-bit chroma zero must be neutral, got bgr ${grey.toList()}")
     }
 
     @Test

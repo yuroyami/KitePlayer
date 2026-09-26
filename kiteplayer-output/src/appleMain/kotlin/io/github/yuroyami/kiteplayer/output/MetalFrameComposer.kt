@@ -378,7 +378,7 @@ internal class MetalFrameComposer(
             -> Triple(listOf(MTLPixelFormatR8Unorm, MTLPixelFormatRG8Unorm), 1f, 1)
             kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
             kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
-            -> Triple(listOf(MTLPixelFormatR16Unorm, MTLPixelFormatRG16Unorm), 65535f / 65472f, 1)
+            -> Triple(listOf(MTLPixelFormatR16Unorm, MTLPixelFormatRG16Unorm), TEN_BIT_HIGH_SCALE, 1)
             kCVPixelFormatType_32BGRA -> Triple(listOf(MTLPixelFormatBGRA8Unorm), 1f, 2)
             else -> error("the Metal renderer cannot wrap CVPixelBuffer format $cvFormat")
         }

@@ -362,10 +362,23 @@ internal class PlaybackCore(
         // The open waits for this file on the actor, so a reader that stops answering would hold
         // the open for ever. The stall timeout bounds each read, and the file is then skipped.
         val stallLimit = config.buffer.stallTimeout
+        // A 0 means "nothing yet, more may come", as MediaIo.read says. Only -1 ends the file, and
+        // a run of zeros shares the same stall bound (#215).
+        var waitingSinceNanos: Long? = null
         while (true) {
             val read = withTimeoutOrNull(stallLimit) { io.read(chunk, 0, chunk.size) }
                 ?: return@use SubtitleBytes.Refused("no bytes arrived for $stallLimit")
-            if (read <= 0) break
+            if (read < 0) break
+            if (read == 0) {
+                val now = clock.nanos()
+                val since = waitingSinceNanos ?: now.also { waitingSinceNanos = it }
+                if ((now - since).nanoseconds >= stallLimit) {
+                    return@use SubtitleBytes.Refused("no bytes arrived for $stallLimit")
+                }
+                delay(SUBTITLE_EMPTY_READ_RETRY)
+                continue
+            }
+            waitingSinceNanos = null
             total += read
             if (total > MAX_SUBTITLE_BYTES) {
                 return@use SubtitleBytes.Refused(
@@ -8345,6 +8358,9 @@ internal class PlaybackCore(
 
         /** Read in blocks rather than one call, because a reader may answer short. */
         const val SUBTITLE_READ_CHUNK: Int = 64 * 1024
+
+        /** How long a subtitle read waits after a reader answers "nothing yet" before it asks again. */
+        val SUBTITLE_EMPTY_READ_RETRY: Duration = 10.milliseconds
 
         /**
          * How far behind the clock a packet has to be before FrameDropPolicy.LateAndDecode throws

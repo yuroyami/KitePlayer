@@ -14,11 +14,11 @@ internal interface SessionTarget {
 
     /** A count that moves with every play, pause, stop, open and queue move a caller makes. */
     val transportMark: Long
-    val volume: Float
     val videoEnabled: Boolean
     fun play()
     fun pause()
-    fun setVolume(value: Float)
+    /** The duck multiplier on top of the volume. 1 is no duck. */
+    fun setDuckLevel(level: Float)
     fun setVideoEnabled(enabled: Boolean)
 }
 
@@ -39,11 +39,10 @@ internal class PlayerSessionTarget(private val player: KitePlayer) : SessionTarg
     // arrives, so a guard that waited for Playing let it start over a call (#226).
     override val playing: Boolean get() = player.state.value.playRequested
     override val transportMark: Long get() = player.transportMark
-    override val volume: Float get() = player.state.value.volume
     override val videoEnabled: Boolean get() = player.state.value.videoEnabled
     override fun play() = player.playFromRemote()
     override fun pause() = player.pauseFromRemote()
-    override fun setVolume(value: Float) = player.setVolume(value)
+    override fun setDuckLevel(level: Float) = player.setDuckLevel(level)
     override fun setVideoEnabled(enabled: Boolean) = player.setVideoEnabled(enabled)
 }
 
@@ -74,10 +73,10 @@ internal class PauseClaim(private val target: SessionTarget) {
 }
 
 /**
- * Turns interruption decisions into calls, and remembers the volume it ducked from.
+ * Turns interruption decisions into calls.
  *
- * The remembered volume is what makes ducking reversible. Reading it back from the player at the
- * moment of the duck, rather than assuming unity, is what keeps a listener's own quiet setting.
+ * A duck is a multiplier on top of the volume, never a write to it, so it only ever lowers the
+ * sound and a volume the listener changes while ducked is still theirs when it ends (#280).
  */
 internal class InterruptionApplier(
     private val target: SessionTarget,
@@ -85,7 +84,7 @@ internal class InterruptionApplier(
 ) {
     private val machine = InterruptionMachine(policy)
     private val claim = PauseClaim(target)
-    private var volumeBeforeDuck: Float? = null
+    private var ducked = false
 
     fun handle(event: InterruptionEvent) {
         val decision = machine.on(event, target.playing)
@@ -96,20 +95,12 @@ internal class InterruptionApplier(
     }
 
     private fun applyDuck(ducked: Boolean) {
-        if (ducked) {
-            if (volumeBeforeDuck == null) {
-                volumeBeforeDuck = target.volume
-                target.setVolume(policy.duckVolume)
-            }
-        } else {
-            volumeBeforeDuck?.let {
-                volumeBeforeDuck = null
-                target.setVolume(it)
-            }
-        }
+        if (ducked == this.ducked) return
+        this.ducked = ducked
+        target.setDuckLevel(if (ducked) policy.duckVolume else 1f)
     }
 
-    /** Gives the volume back on close, so an application that stops listening is not left quiet. */
+    /** Ends a duck on close, so an application that stops listening is not left quiet. */
     fun release() = applyDuck(false)
 }
 

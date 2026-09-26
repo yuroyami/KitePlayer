@@ -31,6 +31,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - A guard that paused for a call or for the screen going off no longer resumes a player that the
   listener or the application played, paused or moved on in the meantime. `KitePlayer.transportMark`
   is the count such a guard compares (#278).
+- `InterruptionPolicy.duckVolume` is now a factor on the listener's volume rather than an absolute
+  volume, and a duck no longer writes the volume: 0.2 plays at a fifth of whatever the listener
+  set, so a duck can only make the sound quieter. `KitePlayer.setDuckLevel` is the new call behind
+  it (#280).
 
 ## [0.0.27] - 2026-09-25
 

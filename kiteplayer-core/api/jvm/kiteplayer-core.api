@@ -464,6 +464,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public static synthetic fun setAbLoop-NKUU228$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lkotlin/time/Duration;Lkotlin/time/Duration;ILjava/lang/Object;)V
 	public final fun setAudioDelay-LRDsOJo (J)V
 	public final fun setBalance (F)V
+	public final fun setDuckLevel (F)V
 	public final fun setEqualizer (Lio/github/yuroyami/kiteplayer/EqualizerSettings;)V
 	public final fun setLoop (Lio/github/yuroyami/kiteplayer/LoopMode;)V
 	public final fun setMarkers (Ljava/util/List;)V

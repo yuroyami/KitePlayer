@@ -2159,6 +2159,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final fun setAbLoop(kotlin.time/Duration?, kotlin.time/Duration? = ...) // io.github.yuroyami.kiteplayer/KitePlayer.setAbLoop|setAbLoop(kotlin.time.Duration?;kotlin.time.Duration?){}[0]
     final fun setAudioDelay(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/KitePlayer.setAudioDelay|setAudioDelay(kotlin.time.Duration){}[0]
     final fun setBalance(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayer.setBalance|setBalance(kotlin.Float){}[0]
+    final fun setDuckLevel(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayer.setDuckLevel|setDuckLevel(kotlin.Float){}[0]
     final fun setEqualizer(io.github.yuroyami.kiteplayer/EqualizerSettings) // io.github.yuroyami.kiteplayer/KitePlayer.setEqualizer|setEqualizer(io.github.yuroyami.kiteplayer.EqualizerSettings){}[0]
     final fun setLoop(io.github.yuroyami.kiteplayer/LoopMode) // io.github.yuroyami.kiteplayer/KitePlayer.setLoop|setLoop(io.github.yuroyami.kiteplayer.LoopMode){}[0]
     final fun setMarkers(kotlin.collections/List<io.github.yuroyami.kiteplayer/Marker>) // io.github.yuroyami.kiteplayer/KitePlayer.setMarkers|setMarkers(kotlin.collections.List<io.github.yuroyami.kiteplayer.Marker>){}[0]

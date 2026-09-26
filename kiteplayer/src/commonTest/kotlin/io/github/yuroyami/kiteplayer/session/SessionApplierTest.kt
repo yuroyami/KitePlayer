@@ -15,34 +15,58 @@ class SessionApplierTest {
         InterruptionApplier(target, policy)
 
     @Test
-    fun `ducking remembers the listener's own volume and gives it back`() {
+    fun `ducking lowers the sound by a factor and lifts it on gain`() {
         val target = FakeTarget(volume = 0.6f)
         val applier = applier(target)
         applier.handle(InterruptionEvent.LostTransientCanDuck)
-        assertEquals(0.2f, target.volume)
+        assertEquals(0.2f, target.duckLevel)
         applier.handle(InterruptionEvent.Gained)
-        assertEquals(0.6f, target.volume)
-        assertEquals(listOf("volume 0.2", "volume 0.6"), target.calls)
+        assertEquals(1f, target.duckLevel)
+        assertEquals(listOf("duck 0.2", "duck 1.0"), target.calls)
+        assertEquals(0.6f, target.volume, "a duck never writes the listener's volume")
     }
 
     @Test
-    fun `a second duckable loss does not overwrite the remembered volume`() {
+    fun `a second duckable loss does not duck twice`() {
         val target = FakeTarget(volume = 0.8f)
         val applier = applier(target)
         applier.handle(InterruptionEvent.LostTransientCanDuck)
         applier.handle(InterruptionEvent.LostTransientCanDuck)
         applier.handle(InterruptionEvent.Gained)
-        assertEquals(0.8f, target.volume)
+        assertEquals(listOf("duck 0.2", "duck 1.0"), target.calls)
     }
 
     @Test
-    fun `a permanent loss while ducked restores the volume before it pauses`() {
+    fun `a permanent loss while ducked lifts the duck before it pauses`() {
         val target = FakeTarget(volume = 0.9f)
         val applier = applier(target)
         applier.handle(InterruptionEvent.LostTransientCanDuck)
         target.calls.clear()
         applier.handle(InterruptionEvent.Lost)
-        assertEquals(listOf("volume 0.9", "pause"), target.calls)
+        assertEquals(listOf("duck 1.0", "pause"), target.calls)
+    }
+
+    // A duck multiplies the volume, so quiet playback gets quieter, never louder (#280).
+    @Test
+    fun `a duck never raises a quiet volume`() {
+        val target = FakeTarget(volume = 0.05f)
+        val applier = applier(target)
+        applier.handle(InterruptionEvent.LostTransientCanDuck)
+        assertEquals(0.05f, target.volume, "the duck wrote the volume")
+        assertEquals(true, target.volume * target.duckLevel <= 0.05f, "the duck made quiet playback louder")
+    }
+
+    @Test
+    fun `a volume the listener sets while ducked survives the end of the duck`() {
+        val target = FakeTarget(volume = 0.5f)
+        val applier = applier(target)
+        applier.handle(InterruptionEvent.LostTransientCanDuck)
+        target.userSetsVolume(0f)
+        applier.handle(InterruptionEvent.Gained)
+        assertEquals(0f, target.volume, "the end of the duck overwrote the listener's own change")
+        applier.handle(InterruptionEvent.LostTransientCanDuck)
+        applier.release()
+        assertEquals(1f, target.duckLevel, "closing left the player ducked")
     }
 
     // A policy resumes only the pause it made (#278).
@@ -68,11 +92,12 @@ class SessionApplierTest {
     }
 
     @Test
-    fun `closing gives the volume back`() {
+    fun `closing lifts the duck`() {
         val target = FakeTarget(volume = 0.5f)
         val applier = applier(target)
         applier.handle(InterruptionEvent.LostTransientCanDuck)
         applier.release()
+        assertEquals(1f, target.duckLevel)
         assertEquals(0.5f, target.volume)
     }
 

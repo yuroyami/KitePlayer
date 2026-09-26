@@ -639,6 +639,9 @@ internal class PlaybackCore(
     /** Whether speed keeps pitch, seeded from config. A live change rides a precise seek like speed. */
     private var preservePitch: Boolean = config.audio.preservePitch
     private var volume: Float = 1.0f
+
+    /** The duck multiplier the session guards set, kept for every audio path this core builds. */
+    private var duckLevel: Float = 1f
     private var muted: Boolean = false
     private var balance: Float = 0f
     private var equalizer: EqualizerSettings = config.audio.equalizer
@@ -1870,6 +1873,11 @@ internal class PlaybackCore(
                 session?.audio?.muted = command.value
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetDuckLevel -> {
+                duckLevel = command.level
+                session?.audio?.setDuckLevel(command.level)
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetVideoScale -> {
                 videoScale = command.mode
                 // Whichever renderer is live learns immediately; the pending one learns so the
@@ -2595,6 +2603,7 @@ internal class PlaybackCore(
                 createdPlayback.preservePitch = preservePitch
                 negotiated = createdPlayback.open(audioDecoder.outputFormat)
                 createdPlayback.volume = volume
+                createdPlayback.setDuckLevel(duckLevel)
                 createdPlayback.muted = muted
                 createdPlayback.replayGain = replayGainFor(audioStream, source.metadata)
                 createdPlayback.balance = balance
@@ -3467,6 +3476,7 @@ internal class PlaybackCore(
             playback.preservePitch = preservePitch
             val negotiated = playback.open(decoder.outputFormat)
             playback.volume = volume
+            playback.setDuckLevel(duckLevel)
             playback.muted = muted
             playback.replayGain = replayGainFor(stream, session?.source?.metadata ?: emptyMap())
             playback.balance = balance
@@ -8865,6 +8875,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         val reply: CompletableDeferred<Unit>,
     ) : CoreCommand("setSleepTimer", reply)
     class SetMuted(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setMuted", reply)
+    class SetDuckLevel(val level: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setDuckLevel", reply)
     class SetLoop(val mode: LoopMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setLoop", reply)
     class SetAbLoop(val a: Duration?, val b: Duration?, val reply: CompletableDeferred<Unit>) : CoreCommand("setAbLoop", reply)
     class SetPreservePitch(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setPreservePitch", reply)

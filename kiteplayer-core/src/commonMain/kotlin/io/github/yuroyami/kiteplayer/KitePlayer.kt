@@ -275,6 +275,20 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Lowers the sound by [level], a factor from 1, no change, down to 0, without touching the
+     * volume. The media session guards use it to duck under a notification: the volume the
+     * listener set, and every control bound to it, stays where it is. A duck multiplies the
+     * volume, so it can only make the sound quieter.
+     *
+     * @throws IllegalArgumentException when [level] is not finite or is outside 0 to 1.
+     */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
+    public fun setDuckLevel(level: Float) {
+        require(level.isFinite() && level in 0f..1f) { "a duck level must be between 0 and 1, was $level" }
+        core.post(CoreCommand.SetDuckLevel(level, CompletableDeferred()))
+    }
+
+    /**
      * Sets the stereo balance: -1 is hard left, 0 is centre, 1 is hard right.
      *
      * An attenuation of the channel being turned away from, never a boost of the other, so a

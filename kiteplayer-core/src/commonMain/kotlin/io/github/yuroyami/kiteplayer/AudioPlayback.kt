@@ -706,7 +706,7 @@ public class AudioPlayback(
      * it. With no path open the value is simply stored, and [open] pushes it into the fresh ring.
      */
     private fun pushGain() {
-        val target = if (wantedMute.value) 0f else wantedVolume.value * fadeLevel.value
+        val target = if (wantedMute.value) 0f else wantedVolume.value * fadeLevel.value * duckLevel.value
         synchronized(lock) { ring }?.setGain(target)
     }
 
@@ -723,6 +723,21 @@ public class AudioPlayback(
     internal fun setFadeLevel(level: Float) {
         require(level.isFinite() && level in 0f..1f) { "a fade level must be between 0 and 1, was $level" }
         fadeLevel.value = level
+        pushGain()
+    }
+
+    /**
+     * A second multiplier on top of the user's volume, for a duck under a notification. Separate
+     * from the fade so the two never overwrite each other, and from [volume] for the reason the
+     * fade is: a duck that wrote the volume raised quiet playback and lost the listener's own
+     * setting (#280).
+     */
+    private val duckLevel = atomic(1f)
+
+    /** Sets the duck multiplier. 1 is no duck. Rides the ring's ramp, so it never clicks. */
+    internal fun setDuckLevel(level: Float) {
+        require(level.isFinite() && level in 0f..1f) { "a duck level must be between 0 and 1, was $level" }
+        duckLevel.value = level
         pushGain()
     }
 

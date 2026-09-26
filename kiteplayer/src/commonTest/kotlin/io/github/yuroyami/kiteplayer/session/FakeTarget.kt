@@ -31,7 +31,8 @@ internal class FakeTarget(
         transportCount++
         playingNow = false
     }
-    override val volume: Float get() = volumeNow
+    /** The listener's own volume. The guards never write it. */
+    val volume: Float get() = volumeNow
     override val videoEnabled: Boolean get() = videoEnabledNow
 
     override fun play() {
@@ -46,9 +47,18 @@ internal class FakeTarget(
         calls += "pause"
     }
 
-    override fun setVolume(value: Float) {
+    /** A volume change the listener made, outside every guard. */
+    fun userSetsVolume(value: Float) {
         volumeNow = value
-        calls += "volume $value"
+    }
+
+    /** The duck multiplier the guard set, 1 when none. */
+    var duckLevel: Float = 1f
+        private set
+
+    override fun setDuckLevel(level: Float) {
+        duckLevel = level
+        calls += "duck $level"
     }
 
     override fun setVideoEnabled(enabled: Boolean) {

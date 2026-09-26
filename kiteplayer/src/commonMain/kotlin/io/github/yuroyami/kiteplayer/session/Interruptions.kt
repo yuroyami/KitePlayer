@@ -10,9 +10,12 @@ package io.github.yuroyami.kiteplayer.session
 public data class InterruptionPolicy(
     /** Pause when the sound is gone for good, for example another app took over playback. */
     val pauseOnLoss: Boolean = true,
-    /** On a short loss that allows quiet playback, drop to [duckVolume] instead of pausing. */
+    /** On a short loss that allows quiet playback, duck by [duckVolume] instead of pausing. */
     val duckOnTransient: Boolean = true,
-    /** The volume to play at while ducked. */
+    /**
+     * The share of the listener's volume that plays while ducked: 0.2 plays at a fifth of it. A
+     * duck only ever lowers the sound, and the listener's own volume setting is left alone.
+     */
     val duckVolume: Float = 0.2f,
     /** Play again after a short loss ends, but only when this policy was the one that paused. */
     val resumeAfterTransient: Boolean = true,

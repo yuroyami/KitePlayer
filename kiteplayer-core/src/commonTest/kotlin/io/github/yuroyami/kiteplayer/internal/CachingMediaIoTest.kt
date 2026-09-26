@@ -92,7 +92,7 @@ class CachingMediaIoTest {
         for (i in 0 until 1_000) {
             assertEquals(contentByte(500_000L + i), bytes[i], "post-seek byte $i wrong")
         }
-        assertEquals(500_000L, cache.windowStartByte.value, "the window must restart at the seek target")
+        assertEquals(500_000L, cache.window.value.start, "the window must restart at the seek target")
     }
 
     @Test
@@ -100,8 +100,7 @@ class CachingMediaIoTest {
         val source = MemorySource(1_000_000)
         val cache = CachingMediaIo(source, policy(chunk = 1024, back = 4096, total = 16384))
         readFully(cache, 200_000)
-        val start = cache.windowStartByte.value
-        val end = cache.windowEndByte.value
+        val (start, end) = cache.window.value
         assertTrue(end - start <= 16384 + 1024, "window ${end - start} bytes exceeds its budget")
         assertTrue(200_000L - start >= 4096, "the back window behind the cursor was evicted")
 

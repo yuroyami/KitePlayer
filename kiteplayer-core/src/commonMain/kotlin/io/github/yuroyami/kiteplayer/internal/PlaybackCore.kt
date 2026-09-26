@@ -6941,8 +6941,9 @@ internal class PlaybackCore(
         if (sizeBytes <= 0L) return emptyList()
         val durationUs = session.source.duration?.micros ?: return emptyList()
         if (durationUs <= 0L) return emptyList()
-        val start = cache.windowStartByte.value
-        val end = cache.windowEndByte.value.coerceAtMost(sizeBytes)
+        val window = cache.window.value
+        val start = window.start
+        val end = window.end.coerceAtMost(sizeBytes)
         if (end <= start) return emptyList()
         fun toTime(byte: Long): Duration = (byte.toDouble() / sizeBytes * durationUs).toLong().microseconds
         return listOf(toTime(start)..toTime(end))

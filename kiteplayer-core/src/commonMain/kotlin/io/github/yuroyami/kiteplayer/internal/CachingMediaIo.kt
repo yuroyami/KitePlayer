@@ -13,13 +13,12 @@ import kotlinx.atomicfu.atomic
  *  - A free seek-back window: a seek landing inside the window is served from RAM with NO
  *    upstream seek, which on http means no new ranged request. This is the piece that makes
  *    scrubbing a network stream tolerable.
- *  - An honest [Progress.bufferedRanges]: the window's byte span, published through
- *    [windowStartByte]/[windowEndByte] and time-mapped by the engine where duration and size
- *    are both known.
+ *  - An honest [Progress.bufferedRanges]: the window's byte span, published through [window]
+ *    and time-mapped by the engine where duration and size are both known.
  *
  * Threading: MediaIo's own contract (demux worker only, one call at a time) is inherited, so
- * the mutable state below needs no lock; the two window atomics exist ONLY so the progress
- * sampler on the actor thread can read a coherent span.
+ * the mutable state below needs no lock; [window] exists ONLY so the progress sampler on the
+ * actor thread can read a coherent span.
  *
  * Honest limits, recorded where they are true: the window is ONE contiguous span, not a set
  * (a far seek resets it, exactly like mpv's cache before ranges), and the forward half fills
@@ -46,9 +45,11 @@ internal class CachingMediaIo(
     private var upstreamPos = 0L
     private var upstreamEof = false
 
-    /** For the progress sampler only; same values as windowStart/windowEnd, cross-thread safe. */
-    val windowStartByte = atomic(0L)
-    val windowEndByte = atomic(0L)
+    /**
+     * For the progress sampler only: windowStart and windowEnd, published as one pair. Two
+     * atomics let a reader take the old start with the new end after a far seek (#262).
+     */
+    val window = atomic(ByteSpan(0L, 0L))
 
     /**
      * Bytes actually pulled from the source, for the stats sampler.
@@ -156,7 +157,9 @@ internal class CachingMediaIo(
     }
 
     private fun publish() {
-        windowStartByte.value = windowStart
-        windowEndByte.value = windowEnd
+        window.value = ByteSpan(windowStart, windowEnd)
     }
 }
+
+/** A byte range, from [start] inclusive to [end] exclusive. */
+internal data class ByteSpan(val start: Long, val end: Long)

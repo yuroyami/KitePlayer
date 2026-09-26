@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.network
 
 import io.github.yuroyami.kiteplayer.MediaIo
+import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.MediaIoResolver
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.ktor.client.HttpClient
@@ -69,6 +70,9 @@ public class KtorMediaIo private constructor(
     private val policy: HttpReaderPolicy,
 ) : MediaIo {
 
+    // What messages name instead of the URI, whose query may carry a signature (#241).
+    private val shown = shownUri(uri)
+
     private var position = 0L
     private var warningSink: (PlaybackWarning) -> Unit = {}
     private var body: ByteReadChannel? = firstBody
@@ -126,7 +130,7 @@ public class KtorMediaIo private constructor(
             // A response that ends before the declared size is a dropped connection.
             if (knownSize != null && position < knownSize) {
                 dropBody()
-                throw KtorMediaIoException("the response from $uri ended at byte $position of $knownSize", retryable = true)
+                throw KtorMediaIoException("the response from $shown ended at byte $position of $knownSize", retryable = true)
             }
             return -1
         }
@@ -146,7 +150,7 @@ public class KtorMediaIo private constructor(
     }
 
     override suspend fun seek(position: Long) {
-        if (closed) throw KtorMediaIoException("seek after close on $uri")
+        if (closed) throw KtorMediaIoException("seek after close on $shown")
         // Lazy: the reposition is real at the next read, which reopens only when the current
         // stream is not already there. The engine's cache absorbs most seeks before this.
         this.position = position
@@ -167,7 +171,7 @@ public class KtorMediaIo private constructor(
      * begun, which [HttpReaderPolicy.connectTimeout] bounds: that is what limits a seek.
      */
     private suspend fun openAt(target: Long): ByteReadChannel {
-        if (closed) throw KtorMediaIoException("openAt after close on $uri")
+        if (closed) throw KtorMediaIoException("openAt after close on $shown")
         dropBody()
         val pipe = ByteChannel(autoFlush = true)
         val answered = CompletableDeferred<Unit>()
@@ -191,7 +195,7 @@ public class KtorMediaIo private constructor(
                             ""
                         }
                         throw KtorMediaIoException(
-                            "server answered ${response.status} to a ranged read at byte $target of $uri$changed",
+                            "server answered ${response.status} to a ranged read at byte $target of $shown$changed",
                             // A server error may pass. A refusal, or no ranges at all, will not.
                             retryable = response.status.value >= 500,
                         )
@@ -203,19 +207,19 @@ public class KtorMediaIo private constructor(
                         val start = range?.substringAfter("bytes ", "")?.substringBefore('-')?.trim()?.toLongOrNull()
                         if (start != null && start != target) {
                             throw KtorMediaIoException(
-                                "server answered from byte $start to a ranged read at byte $target of $uri",
+                                "server answered from byte $start to a ranged read at byte $target of $shown",
                             )
                         }
                         val total = range?.substringAfterLast('/')?.trim()?.toLongOrNull()
                         if (total != null && size != null && total != size) {
                             throw KtorMediaIoException(
-                                "the file at $uri changed since it was opened: it had $size bytes and has $total",
+                                "the file at $shown changed since it was opened: it had $size bytes and has $total",
                             )
                         }
                         val tag = response.headers[HttpHeaders.ETag]
                         if (entityTag != null && tag != null && tag != entityTag) {
                             throw KtorMediaIoException(
-                                "the file at $uri changed since it was opened: its entity tag was $entityTag and is $tag",
+                                "the file at $shown changed since it was opened: its entity tag was $entityTag and is $tag",
                             )
                         }
                     }
@@ -239,7 +243,7 @@ public class KtorMediaIo private constructor(
         if (!answeredInTime) {
             dropBody()
             throw KtorMediaIoException(
-                "no answer from $uri within ${policy.connectTimeout} for byte $target",
+                "no answer from $shown within ${policy.connectTimeout} for byte $target",
                 retryable = true,
             )
         }
@@ -270,6 +274,7 @@ public class KtorMediaIo private constructor(
             headers: Map<String, String> = emptyMap(),
             policy: HttpReaderPolicy = HttpReaderPolicy(),
         ): KtorMediaIo {
+            val shown = shownUri(uri)
             val ownsClient = client == null
             val http = client ?: HttpClient()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -295,7 +300,7 @@ public class KtorMediaIo private constructor(
                                 val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
                                 probe.complete(Probe(total, seekable = false, tag))
                             }
-                            else -> throw KtorMediaIoException("cannot open $uri: ${response.status}")
+                            else -> throw KtorMediaIoException("cannot open $shown: ${response.status}")
                         }
                         response.bodyAsChannel().copyTo(pipe)
                         pipe.close()
@@ -307,7 +312,7 @@ public class KtorMediaIo private constructor(
             }
             val (size, seekable, entityTag) = try {
                 withTimeoutOrNull(policy.connectTimeout) { probe.await() }
-                    ?: throw KtorMediaIoException("no answer from $uri within ${policy.connectTimeout}")
+                    ?: throw KtorMediaIoException("no answer from $shown within ${policy.connectTimeout}")
             } catch (failure: Throwable) {
                 scope.cancel()
                 if (ownsClient) http.close()
@@ -382,3 +387,10 @@ public class KtorMediaIoResolver(
         created = null
     }
 }
+
+/**
+ * [uri] as messages show it: the file name, with no host, query or fragment, as `MediaItem.label`
+ * cuts it. Warnings and exceptions reach application logs, and a signed URL there is a leaked
+ * credential.
+ */
+internal fun shownUri(uri: String): String = MediaItem(uri).label

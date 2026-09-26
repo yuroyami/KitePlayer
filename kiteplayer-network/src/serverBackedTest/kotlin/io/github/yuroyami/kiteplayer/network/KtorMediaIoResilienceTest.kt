@@ -25,6 +25,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -162,6 +163,23 @@ class KtorMediaIoResilienceTest {
             val warning = assertIs<PlaybackWarning.SourceReconnecting>(warnings.single())
             assertEquals(80_000L, warning.position)
             assertEquals(1, warning.attempt)
+        } finally {
+            io.close()
+        }
+    }
+
+    // Apps show and log warning messages, so a signed URL there is a leaked credential (#241).
+    @Test
+    fun aReconnectWarningNamesNoSignedUrl() = runBlocking {
+        val url = serve { range -> if (range == "bytes=0-") respondPart(range, sent = 80_000, drop = true) else respondRange(range) }
+        val io = KtorMediaIo.open("$url?X-Amz-Signature=secret", policy = quick)
+        io.setWarningSink { warnings += it }
+        try {
+            withTimeout(20.seconds) { readAll(io) }
+            val warning = assertIs<PlaybackWarning.SourceReconnecting>(warnings.single())
+            for (text in listOf(warning.message, warning.toString())) {
+                assertFalse("secret" in text || "127.0.0.1" in text, "the warning quotes the URL: $text")
+            }
         } finally {
             io.close()
         }

@@ -231,7 +231,9 @@ public sealed class PlaybackWarning {
             get() = super.fields + mapOf("position" to position.toString(), "attempt" to attempt.toString())
 
         override val message: String
-            get() = "the connection to the source dropped at byte $position; reconnecting, attempt $attempt: $detail"
+            // The detail may quote a signed URL, from this library or from the HTTP engine (#241).
+            get() = "the connection to the source dropped at byte $position; reconnecting, attempt $attempt: " +
+                redactUrisIn(detail)
     }
 
     /** An [AudioTap] threw. It was detached so the sound could carry on, and [detail] is what it threw. */

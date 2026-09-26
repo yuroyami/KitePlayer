@@ -281,6 +281,22 @@ class ExternalSubtitleTest {
      * file parses, instead of chaining it to the selection: the id then comes back while the
      * container's own subtitles are still the selected ones.
      */
+    // A subtitle URI can carry a signed query, and exception messages reach app logs (#241).
+    @Test
+    fun `a subtitle that parses to nothing is named by its file name alone`() = runTest {
+        val dir = kotlin.io.path.createTempDirectory("secret-dir").toFile()
+        val empty = File(dir, "empty.srt").apply { writeText("") }
+        val harness = CoreHarness(this, script = containerScript())
+        harness.attachRenderer()
+        harness.open()
+        val failure = kotlin.test.assertFailsWith<IllegalArgumentException> {
+            harness.core.addExternalSubtitle(SubtitleSource(uri = empty.absolutePath))
+        }
+        val message = failure.message.orEmpty()
+        assertTrue("empty.srt" in message && "secret-dir" !in message, "the message quotes the path: $message")
+        harness.close()
+    }
+
     @Test
     fun `adding a subtitle answers only once it is really the selected one`() = runTest {
         val file = srtFile()

@@ -420,12 +420,12 @@ internal class PlaybackCore(
         val isAss = trimmed.trimStart(' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true)
         val cues = runCatching { parser.parse(trimmed, isVtt) }.getOrElse { failure ->
             return ExternalSubtitleParse.Failed(
-                "the external subtitle file failed to parse: ${sourceFile.uri}${causeDetail(failure)}",
+                "the external subtitle file failed to parse: ${redactUri(sourceFile.uri)}${causeDetail(failure)}",
             )
         }
         if (cues.isEmpty()) {
             return ExternalSubtitleParse.Failed(
-                "the external subtitle file parsed to no cues: ${sourceFile.uri}",
+                "the external subtitle file parsed to no cues: ${redactUri(sourceFile.uri)}",
             )
         }
         return ExternalSubtitleParse.Loaded(

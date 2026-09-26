@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.network.HttpReaderPolicy
 import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
+import io.github.yuroyami.kiteplayer.network.shownUri
 import io.ktor.client.HttpClient
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.HttpResponse
@@ -171,7 +172,7 @@ private suspend fun fetchBounded(
     }
     if (withTimeoutOrNull(reader.connectTimeout) { answered.await() } == null) {
         body.cancel()
-        throw KtorMediaIoException("no answer from $url within ${reader.connectTimeout}")
+        throw KtorMediaIoException("no answer from ${shownUri(url)} within ${reader.connectTimeout}")
     }
     body.await()
 }
@@ -198,8 +199,9 @@ public object Dash {
             // Checked BEFORE the fetch, not after: the point of the policy is that a URL this
             // player will not accept is also a URL it never sends the caller's cookies to.
             DashManifestParser.requireAllowedScheme(mpdUrl, policy)
-            val body = fetchBounded(client, mpdUrl, maxManifestBytes, "the manifest at $mpdUrl", readerPolicy) { status ->
-                "cannot fetch $mpdUrl: $status"
+            val shown = shownUri(mpdUrl)
+            val body = fetchBounded(client, mpdUrl, maxManifestBytes, "the manifest at $shown", readerPolicy) { status ->
+                "cannot fetch $shown: $status"
             }
             DashManifestParser.parse(body.decodeToString(), mpdUrl, policy)
         }
@@ -224,16 +226,16 @@ public object Dash {
         // a player that stops after the pre-roll. Period joining is the adaptive engine's next
         // tier; until it exists the refusal is typed.
         require(manifest.periods.size <= 1) {
-            "$mpdUrl has ${manifest.periods.size} Periods, and this tier plays exactly one; " +
+            "${shownUri(mpdUrl)} has ${manifest.periods.size} Periods, and this tier plays exactly one; " +
                 "multi-period joining is not implemented yet"
         }
         val period = manifest.periods.firstOrNull()
-            ?: throw IllegalArgumentException("$mpdUrl has no Period")
+            ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no Period")
         val adaptationSet = period.adaptationSets.firstOrNull { it.isVideo() }
             ?: period.adaptationSets.firstOrNull()
-            ?: throw IllegalArgumentException("$mpdUrl has no AdaptationSet")
+            ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no AdaptationSet")
         val representation = adaptationSet.representations.maxByOrNull { it.bandwidth }
-            ?: throw IllegalArgumentException("$mpdUrl has no Representation")
+            ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no Representation")
         val plan = DashManifestParser.segmentPlan(manifest, period, representation, policy)
         // A factory, so every open of this item gets its own segment stream. One live reader here
         // meant the second open of the same item -- a track switch, a loop, a queue coming back
@@ -243,8 +245,9 @@ public object Dash {
             uri = mpdUrl,
             io = {
                 DashMediaIo(plan) { url ->
-                    fetchBounded(client, url, maxSegmentBytes, "the segment at $url", readerPolicy) { status ->
-                        "segment fetch failed: $url is $status"
+                    val shown = shownUri(url)
+                    fetchBounded(client, url, maxSegmentBytes, "the segment at $shown", readerPolicy) { status ->
+                        "segment fetch failed: $shown is $status"
                     }
                 }
             },

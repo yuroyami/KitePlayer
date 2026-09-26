@@ -52,18 +52,6 @@ public sealed class PlaybackError {
                 streams.joinToString { "${it.kind}/${it.codec}" }
     }
 
-    /**
-     * Every candidate decoder for a required track refused to open.
-     *
-     * Never produced. A track whose every candidate refuses is deselected with a warning, and an open
-     * fails only when nothing playable is left, which reports [NoPlayableStream] and names every stream.
-     * This is the shape for a caller that asks for one specific track and must be told why it cannot have
-     * it. Not implemented yet.
-     */
-    public data class DecoderUnavailable(val codec: String, val kind: TrackKind) : PlaybackError() {
-        override val message: String get() = "no decoder for $kind stream in $codec"
-    }
-
     /** A decoder opened and then failed in a way that cannot be recovered from. */
     public data class DecoderFailed(
         val codec: String,
@@ -71,19 +59,6 @@ public sealed class PlaybackError {
         override val cause: Throwable? = null,
     ) : PlaybackError() {
         override val message: String get() = "decoder $codec failed: $detail"
-    }
-
-    /**
-     * No audio device could be opened, and the media has no video to fall back to.
-     *
-     * Never produced. A device that refuses during an open fails that open, and the failure is reported
-     * as [SourceUnavailable] with the device's own message inside it, because nothing distinguishes the
-     * two at the point the open unwinds. Telling them apart, and falling back to a silent picture when
-     * there is a picture, needs the device-loss handling in the roadmap.
-     * Not implemented yet.
-     */
-    public data class AudioDeviceUnavailable(val detail: String) : PlaybackError() {
-        override val message: String get() = "no audio device: $detail"
     }
 
     /**

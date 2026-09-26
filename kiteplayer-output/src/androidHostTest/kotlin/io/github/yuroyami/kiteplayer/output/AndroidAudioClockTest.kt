@@ -54,6 +54,5 @@ class AndroidAudioClockTest {
     fun `the backend pairs the AudioTimestamp time base with the AudioTrack sink`() {
         assertSame(AndroidMonotonicClock, AndroidOutputBackend.clock)
         assertEquals("AudioTrack", AndroidOutputBackend.audioSink.name)
-        assertEquals(null, AndroidOutputBackend.videoRenderer)
     }
 }

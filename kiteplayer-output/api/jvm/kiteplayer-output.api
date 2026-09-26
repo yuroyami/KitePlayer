@@ -75,6 +75,5 @@ public final class io/github/yuroyami/kiteplayer/output/DesktopOutputBackend : i
 	public fun getAudioSink ()Lio/github/yuroyami/kiteplayer/spi/AudioSinkFactory;
 	public fun getClock ()Lio/github/yuroyami/kiteplayer/MonotonicClock;
 	public fun getSubtitleRasterizer ()Lio/github/yuroyami/kiteplayer/spi/SubtitleRasterizer;
-	public fun getVideoRenderer ()Lio/github/yuroyami/kiteplayer/spi/VideoRendererFactory;
 }
 

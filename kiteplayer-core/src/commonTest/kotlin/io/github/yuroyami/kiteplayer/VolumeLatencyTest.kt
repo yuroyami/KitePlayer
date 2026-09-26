@@ -84,19 +84,6 @@ class VolumeLatencyTest {
             )
         }
 
-        override fun writePlane(
-            channel: Int,
-            source: FloatArray,
-            sourceOffset: Int,
-            destinationFrameOffset: Int,
-            frames: Int,
-        ) {
-            for (frame in 0 until frames) {
-                scratch[(destinationFrameOffset + frame) * format.channels + channel] =
-                    source[sourceOffset + frame]
-            }
-        }
-
         override fun writeSilence(frameOffset: Int, frames: Int) {
             val base = frameOffset * format.channels
             for (i in 0 until frames * format.channels) scratch[base + i] = 0f

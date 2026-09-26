@@ -10,7 +10,6 @@ import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
 import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer
-import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,7 +35,6 @@ import kotlinx.coroutines.launch
 public object WebOutputBackend : OutputBackend {
     override val clock: MonotonicClock get() = WebMonotonicClock
     override val audioSink: AudioSinkFactory = WebAudioSinkFactory
-    override val videoRenderer: VideoRendererFactory? get() = null
 
     /** No web rasteriser yet; the text subtitle path draws through Compose above this layer. */
     override val subtitleRasterizer: SubtitleRasterizer? get() = null
@@ -210,14 +208,6 @@ private class DiscardBuffer(
         check(sourceOffset + frames * format.channels <= source.size) {
             "interleaved write reads past the end of its source"
         }
-    }
-
-    override fun writePlane(channel: Int, source: FloatArray, sourceOffset: Int, destinationFrameOffset: Int, frames: Int) {
-        check(channel in 0 until format.channels) { "plane $channel is outside ${format.channels} channels" }
-        check(destinationFrameOffset + frames <= capacityFrames) {
-            "plane write of $frames frames at $destinationFrameOffset exceeds $capacityFrames"
-        }
-        check(sourceOffset + frames <= source.size) { "plane write reads past the end of its source" }
     }
 
     override fun writeSilence(frameOffset: Int, frames: Int) {

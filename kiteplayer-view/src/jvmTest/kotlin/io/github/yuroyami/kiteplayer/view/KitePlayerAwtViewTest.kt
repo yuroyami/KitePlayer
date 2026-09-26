@@ -15,7 +15,6 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
-import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import java.awt.Canvas
@@ -234,5 +233,4 @@ private object StubOutputBackend : OutputBackend {
         override val name: String = "stub"
         override suspend fun create(): AudioSink = error("no audio in this test")
     }
-    override val videoRenderer: VideoRendererFactory? = null
 }

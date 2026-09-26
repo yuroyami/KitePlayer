@@ -101,18 +101,6 @@ private class HeardBuffer(override val format: AudioFormat, frames: Int) : Audio
         source.copyInto(values, destinationFrameOffset * format.channels, sourceOffset, end)
     }
 
-    override fun writePlane(
-        channel: Int,
-        source: FloatArray,
-        sourceOffset: Int,
-        destinationFrameOffset: Int,
-        frames: Int,
-    ) {
-        for (frame in 0 until frames) {
-            values[(destinationFrameOffset + frame) * format.channels + channel] = source[sourceOffset + frame]
-        }
-    }
-
     override fun writeSilence(frameOffset: Int, frames: Int) {
         values.fill(0f, frameOffset * format.channels, (frameOffset + frames) * format.channels)
     }

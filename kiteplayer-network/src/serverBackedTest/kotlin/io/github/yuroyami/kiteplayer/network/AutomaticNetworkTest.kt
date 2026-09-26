@@ -13,7 +13,6 @@ import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.BackendSession
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
-import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.response.respondBytes
@@ -68,7 +67,6 @@ class AutomaticNetworkTest {
                     override val name: String = "unused test output"
                     override suspend fun create(): AudioSink = error("fixture never decodes")
                 }
-                override val videoRenderer: VideoRendererFactory? = null
             }
             val player = KitePlayer.create(PlayerConfig(
                 backends = Backends(backend, output),

@@ -6763,8 +6763,8 @@ internal class PlaybackCore(
         failure is PlaybackException -> failure.error
         openStage == OpenStage.Source ->
             PlaybackError.SourceUnavailable(item.uri, failure, failure.message)
-        // Internal rather than AudioDeviceUnavailable, which carries no cause: the subsystem is
-        // named in the detail and the original throwable survives, which a support bundle needs.
+        // The subsystem is named in the detail and the original throwable survives, which a
+        // support bundle needs.
         openStage == OpenStage.Output -> PlaybackError.Internal(
             "the audio output could not be built for ${redactUri(item.uri)}: ${failure.message?.let(::redactUrisIn)}",
             failure,

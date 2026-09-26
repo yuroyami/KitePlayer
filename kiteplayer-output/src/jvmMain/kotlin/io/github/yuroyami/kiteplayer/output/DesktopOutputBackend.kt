@@ -4,7 +4,6 @@ import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer
-import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 
 /**
  * The desktop JVM output half: [DesktopMonotonicClock] paired with
@@ -23,7 +22,6 @@ import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 public object DesktopOutputBackend : OutputBackend {
     override val clock: MonotonicClock get() = DesktopMonotonicClock
     override val audioSink: AudioSinkFactory = DesktopAudioSinkFactory()
-    override val videoRenderer: VideoRendererFactory? get() = null
 
     /** AWT does the line breaking, bidi and shaping; see the rasteriser's own KDoc. */
     override val subtitleRasterizer: SubtitleRasterizer = DesktopSubtitleRasterizer()

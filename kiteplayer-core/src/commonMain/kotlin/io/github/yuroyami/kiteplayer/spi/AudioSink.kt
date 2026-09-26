@@ -176,21 +176,6 @@ public interface AudioSinkBuffer {
      */
     public fun writeInterleaved(source: FloatArray, sourceOffset: Int, destinationFrameOffset: Int, frames: Int)
 
-    /**
-     * Planar write, one channel at a time, for devices that want planes.
-     *
-     * Nothing calls it: the engine's ring is interleaved and writes through [writeInterleaved]. It is
-     * here for a platform whose device buffer is planar.
-     * Not implemented yet.
-     */
-    public fun writePlane(
-        channel: Int,
-        source: FloatArray,
-        sourceOffset: Int,
-        destinationFrameOffset: Int,
-        frames: Int,
-    )
-
     /** Fills [frames] frames from [frameOffset] with silence. */
     public fun writeSilence(frameOffset: Int, frames: Int)
 }

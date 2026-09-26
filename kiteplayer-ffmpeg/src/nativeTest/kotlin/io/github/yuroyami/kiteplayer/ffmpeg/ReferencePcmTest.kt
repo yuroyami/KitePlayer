@@ -87,16 +87,6 @@ private class CollectingBuffer(override val format: AudioFormat, frames: Int) : 
         )
     }
 
-    override fun writePlane(
-        channel: Int,
-        source: FloatArray,
-        sourceOffset: Int,
-        destinationFrameOffset: Int,
-        frames: Int,
-    ) {
-        error("the engine's ring writes interleaved, so a planar write here would mean the path changed")
-    }
-
     override fun writeSilence(frameOffset: Int, frames: Int) {
         samples.fill(0f, frameOffset * format.channels, (frameOffset + frames) * format.channels)
     }

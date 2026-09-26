@@ -296,19 +296,6 @@ internal class InterleavedBlock(
         )
     }
 
-    override fun writePlane(channel: Int, source: FloatArray, sourceOffset: Int, destinationFrameOffset: Int, frames: Int) {
-        check(channel in 0 until format.channels) { "plane $channel is outside ${format.channels} channels" }
-        check(destinationFrameOffset + frames <= capacityFrames) {
-            "plane write of $frames frames at $destinationFrameOffset exceeds $capacityFrames"
-        }
-        check(sourceOffset + frames <= source.size) { "plane write reads past the end of its source" }
-        var destination = destinationFrameOffset * format.channels + channel
-        for (i in 0 until frames) {
-            samples[destination] = source[sourceOffset + i]
-            destination += format.channels
-        }
-    }
-
     override fun writeSilence(frameOffset: Int, frames: Int) {
         check(frameOffset + frames <= capacityFrames) {
             "silence of $frames frames at $frameOffset exceeds $capacityFrames"

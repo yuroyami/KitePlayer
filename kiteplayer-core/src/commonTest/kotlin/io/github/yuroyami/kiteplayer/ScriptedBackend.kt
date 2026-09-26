@@ -21,7 +21,6 @@ import io.github.yuroyami.kiteplayer.spi.SubtitleDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
-import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.awaitCancellation
@@ -1479,25 +1478,16 @@ private class ScriptedSinkBuffer(
         )
     }
 
-    override fun writePlane(
-        channel: Int,
-        source: FloatArray,
-        sourceOffset: Int,
-        destinationFrameOffset: Int,
-        frames: Int,
-    ) = error("the scripted device is interleaved")
-
     override fun writeSilence(frameOffset: Int, frames: Int) {
         val from = frameOffset * format.channels
         data.fill(0f, from, from + frames * format.channels)
     }
 }
 
-/** The output half, scripted: one sink, one clock, and no renderer unless a test provides one. */
+/** The output half, scripted: one sink and one clock. */
 internal class ScriptedOutput(
     override val clock: MonotonicClock,
     val sink: ScriptedSink,
-    override val videoRenderer: VideoRendererFactory? = null,
 ) : OutputBackend {
     /** Cue identities handed to the rasterizer, in publication order. */
     val rasterizedCueTexts: MutableList<List<String>> = mutableListOf()

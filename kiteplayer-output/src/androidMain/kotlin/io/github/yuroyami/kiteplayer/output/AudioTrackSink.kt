@@ -571,11 +571,7 @@ public class AudioTrackSink internal constructor(
         var wrapBase: Long = 0
     }
 
-    /**
-     * The preallocated [AudioSinkBuffer] over the block array. `writePlane` is rejected because
-     * AudioTrack is interleaved; nothing in the engine calls it, and a caller that does must
-     * hear about it loudly rather than play garbage.
-     */
+    /** The preallocated [AudioSinkBuffer] over the block array. */
     private class BlockBuffer(
         override val format: AudioFormat,
         private val data: FloatArray,
@@ -596,16 +592,6 @@ public class AudioTrackSink internal constructor(
                 endIndex = sourceOffset + frames * channels,
             )
         }
-
-        override fun writePlane(
-            channel: Int,
-            source: FloatArray,
-            sourceOffset: Int,
-            destinationFrameOffset: Int,
-            frames: Int,
-        ): Unit = throw UnsupportedOperationException(
-            "AudioTrack is interleaved; writePlane is rejected by contract (S1.c.4 step 4)",
-        )
 
         override fun writeSilence(frameOffset: Int, frames: Int) {
             data.fill(0f, frameOffset * channels, (frameOffset + frames) * channels)

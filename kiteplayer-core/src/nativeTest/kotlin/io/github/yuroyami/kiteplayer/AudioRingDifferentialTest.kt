@@ -168,18 +168,6 @@ class AudioRingDifferentialTest {
             )
         }
 
-        override fun writePlane(
-            channel: Int,
-            source: FloatArray,
-            sourceOffset: Int,
-            destinationFrameOffset: Int,
-            frames: Int,
-        ) {
-            for (i in 0 until frames) {
-                samples[(destinationFrameOffset + i) * format.channels + channel] = source[sourceOffset + i]
-            }
-        }
-
         override fun writeSilence(frameOffset: Int, frames: Int) {
             for (i in 0 until frames * format.channels) {
                 samples[frameOffset * format.channels + i] = 0f

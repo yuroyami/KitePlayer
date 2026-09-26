@@ -179,8 +179,6 @@ final object io.github.yuroyami.kiteplayer.output/AppleOutputBackend : io.github
         final fun <get-clock>(): io.github.yuroyami.kiteplayer/MonotonicClock // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.clock.<get-clock>|<get-clock>(){}[0]
     final val subtitleRasterizer // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.subtitleRasterizer|{}subtitleRasterizer[0]
         final fun <get-subtitleRasterizer>(): io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.subtitleRasterizer.<get-subtitleRasterizer>|<get-subtitleRasterizer>(){}[0]
-    final val videoRenderer // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.videoRenderer|{}videoRenderer[0]
-        final fun <get-videoRenderer>(): io.github.yuroyami.kiteplayer.spi/VideoRendererFactory? // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.videoRenderer.<get-videoRenderer>|<get-videoRenderer>(){}[0]
 }
 
 // Targets: [ios]
@@ -316,6 +314,4 @@ final object io.github.yuroyami.kiteplayer.output/WebOutputBackend : io.github.y
         final fun <get-clock>(): io.github.yuroyami.kiteplayer/MonotonicClock // io.github.yuroyami.kiteplayer.output/WebOutputBackend.clock.<get-clock>|<get-clock>(){}[0]
     final val subtitleRasterizer // io.github.yuroyami.kiteplayer.output/WebOutputBackend.subtitleRasterizer|{}subtitleRasterizer[0]
         final fun <get-subtitleRasterizer>(): io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer? // io.github.yuroyami.kiteplayer.output/WebOutputBackend.subtitleRasterizer.<get-subtitleRasterizer>|<get-subtitleRasterizer>(){}[0]
-    final val videoRenderer // io.github.yuroyami.kiteplayer.output/WebOutputBackend.videoRenderer|{}videoRenderer[0]
-        final fun <get-videoRenderer>(): io.github.yuroyami.kiteplayer.spi/VideoRendererFactory? // io.github.yuroyami.kiteplayer.output/WebOutputBackend.videoRenderer.<get-videoRenderer>|<get-videoRenderer>(){}[0]
 }

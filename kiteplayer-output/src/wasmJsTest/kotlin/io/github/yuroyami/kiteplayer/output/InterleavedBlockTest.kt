@@ -43,14 +43,6 @@ class InterleavedBlockTest {
         assertEquals(listOf(5f, 6f), block.samples.toList())
     }
 
-    /** Planar writes stride by the channel count, which is the whole difference from interleaved. */
-    @Test
-    fun planeWritesStrideByTheChannelCount() {
-        val block = InterleavedBlock(stereo, capacityFrames = 3)
-        block.writePlane(channel = 1, source = floatArrayOf(7f, 8f, 9f), sourceOffset = 0, destinationFrameOffset = 0, frames = 3)
-        assertEquals(listOf(0f, 7f, 0f, 8f, 0f, 9f), block.samples.toList())
-    }
-
     @Test
     fun silenceClearsOnlyTheFramesItWasGiven() {
         val block = InterleavedBlock(stereo, capacityFrames = 3)
@@ -65,12 +57,6 @@ class InterleavedBlockTest {
         val block = InterleavedBlock(stereo, capacityFrames = 2)
         assertFailsWith<IllegalStateException> {
             block.writeInterleaved(FloatArray(6), 0, destinationFrameOffset = 1, frames = 2)
-        }
-        assertFailsWith<IllegalStateException> {
-            block.writePlane(channel = 0, source = FloatArray(4), sourceOffset = 0, destinationFrameOffset = 0, frames = 3)
-        }
-        assertFailsWith<IllegalStateException> {
-            block.writePlane(channel = 2, source = FloatArray(2), sourceOffset = 0, destinationFrameOffset = 0, frames = 2)
         }
         assertFailsWith<IllegalStateException> { block.writeSilence(frameOffset = 1, frames = 2) }
     }

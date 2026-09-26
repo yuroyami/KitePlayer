@@ -388,19 +388,14 @@ public enum class SyncMode {
     /**
      * A wall clock drives playback and audio is resampled to follow it.
      *
-     * Nothing drives playback from an external clock, and nothing resamples audio to follow one.
-     * Not implemented yet.
+     * Not implemented yet, so [KitePlayer.create] refuses it with
+     * [PlaybackError.ConfigurationInvalid] rather than play on the audio clock.
      */
     ExternalMaster,
 }
 
-/**
- * Which clock is actually in charge right now, as opposed to which was requested.
- *
- * [External] is never reported, because [SyncMode.ExternalMaster] is not implemented.
- * Not implemented yet.
- */
-public enum class MasterClock { None, Audio, Video, External }
+/** Which clock is actually in charge right now, as opposed to which was requested. */
+public enum class MasterClock { None, Audio, Video }
 
 /**
  * The evidence behind a sink's audio presentation timing.

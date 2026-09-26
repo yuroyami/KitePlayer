@@ -3,7 +3,9 @@ package io.github.yuroyami.kiteplayer.spi
 import io.github.yuroyami.kiteplayer.MonotonicClock
 
 /**
- * The output half of a platform: one clock, one audio sink factory, and optionally a renderer.
+ * The output half of a platform: one clock, one audio sink factory, and optionally a subtitle
+ * rasterizer. It supplies no video renderer: a renderer needs a surface that only the application
+ * owns, so the application builds one and passes it to `KitePlayer.attachRenderer`.
  *
  * The clock and the sink travel together because they cannot be chosen independently. An audio sink
  * reports when a buffer becomes audible on the platform's own time base, and the engine anchors its
@@ -28,31 +30,13 @@ public interface OutputBackend {
      * still reported. The Android and Apple backends supply real ones.
      */
     public val subtitleRasterizer: SubtitleRasterizer? get() = null
-
-    /**
-     * Where video goes, when the platform can decide that on its own.
-     *
-     * Null is the normal answer for a windowing system: a renderer needs a surface, and only the
-     * application knows which one. The engine plays without a renderer and counts the frames nothing
-     * drew, so a null here costs the picture and nothing else. A renderer can also be attached later,
-     * at any time, while playing.
-     *
-     * Nothing creates a renderer from this yet, and the one output backend that exists answers null,
-     * which is why: on Apple platforms the picture goes into an `NSWindow` the application owns, so
-     * every renderer in this build is built by the application and passed to
-     * `KitePlayer.attachRenderer`. This is the hook for a platform that can decide on its own, for
-     * example a surfaceless offscreen target.
-     */
-    public val videoRenderer: VideoRendererFactory?
 }
 
 /**
- * Creates a [VideoRenderer]. The engine closes what it creates.
+ * Creates a [VideoRenderer] for an application to pass to `KitePlayer.attachRenderer`.
  *
- * Nothing CALLS it. One class implements it, `WebCanvasVideoRendererFactory`, and nothing
- * instantiates that either, so the interface is a declared shape rather than a live path. The
- * engine reaches a renderer through `KitePlayer.attachRenderer` instead. See
- * [OutputBackend.videoRenderer] for why.
+ * The engine never calls it. The web canvas factories implement it, and the application that calls
+ * [create] owns the renderer and closes it.
  */
 public interface VideoRendererFactory {
     public suspend fun create(): VideoRenderer

@@ -1271,7 +1271,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
          * written against. [close] requests that work; [closeAndAwait] proves its completion.
          *
          * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] when no media backend or no
-         *         output backend was supplied.
+         *         output backend was supplied, or when [PlayerConfig.syncMode] is
+         *         [SyncMode.ExternalMaster], which is not implemented yet.
          */
         @Throws(PlaybackException::class)
         public fun create(config: PlayerConfig = PlayerConfig()): KitePlayer {
@@ -1287,6 +1288,14 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
                         "and no audio device. On macOS pass AppleOutputBackend from kiteplayer-output",
                 ),
             )
+            if (config.syncMode == SyncMode.ExternalMaster) {
+                throw PlaybackException(
+                    PlaybackError.ConfigurationInvalid(
+                        "SyncMode.ExternalMaster is not implemented yet, so nothing can follow an external " +
+                            "clock. Use SyncMode.Auto, AudioMaster or VideoMaster",
+                    ),
+                )
+            }
             return KitePlayer(
                 PlaybackCore(
                     config = config,

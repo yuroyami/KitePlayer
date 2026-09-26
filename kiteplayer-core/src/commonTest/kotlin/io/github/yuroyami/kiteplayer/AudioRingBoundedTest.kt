@@ -21,7 +21,6 @@ class AudioRingBoundedTest {
 
     private class NullBuffer(override val format: AudioFormat) : AudioSinkBuffer {
         override fun writeInterleaved(source: FloatArray, sourceOffset: Int, destinationFrameOffset: Int, frames: Int) = Unit
-        override fun writePlane(channel: Int, source: FloatArray, sourceOffset: Int, destinationFrameOffset: Int, frames: Int) = Unit
         override fun writeSilence(frameOffset: Int, frames: Int) = Unit
     }
 

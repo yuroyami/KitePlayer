@@ -13,7 +13,6 @@ import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.BackendSession
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
-import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import kotlinx.coroutines.withTimeout
 
 /** Only core symbols: dependency presence must activate transport even after release optimization. */
@@ -45,7 +44,6 @@ suspend fun runProbe(args: Array<String>) = withTimeout(20_000) {
             override val name: String = "unused probe output"
             override suspend fun create(): AudioSink = error("probe must not create audio")
         }
-        override val videoRenderer: VideoRendererFactory? = null
     }
     val player = KitePlayer.create(PlayerConfig(
         backends = Backends(backend, output),

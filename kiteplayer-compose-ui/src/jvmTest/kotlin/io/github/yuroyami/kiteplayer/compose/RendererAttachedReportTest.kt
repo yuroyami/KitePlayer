@@ -17,7 +17,6 @@ import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.BackendSession
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
-import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -98,5 +97,4 @@ private object StubOutputBackend : OutputBackend {
         override val name: String = "stub"
         override suspend fun create(): AudioSink = error("no audio in this test")
     }
-    override val videoRenderer: VideoRendererFactory? = null
 }

@@ -53,6 +53,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `kiteplayer-ffmpeg` no longer exposes the media library's `Frame`: `KiteFFmpegVideoFrame.frame`
   and `AudioSamples` are internal. A web renderer that drew `frame` through `WebRgbaConverter`
   uses `KiteFFmpegWebPainter` instead (#97).
+- `KitePlayer.create` refuses `SyncMode.ExternalMaster` with `ConfigurationInvalid`, because
+  nothing follows an external clock yet. Members that nothing produced or called are removed:
+  `MasterClock.External`, `PlaybackError.DecoderUnavailable`, `PlaybackError.AudioDeviceUnavailable`,
+  `OutputBackend.videoRenderer` and `AudioSinkBuffer.writePlane`. A custom output backend or
+  audio sink deletes its override of the last two, and a `when` deletes its branch for the other
+  three (#218).
+- `setSleepTimer` throws `IllegalArgumentException` at the call for a negative fade or an `After`
+  that is not in the future, and a refused A-B loop is published as `CommandRefused` (#217).
 
 ## [0.0.27] - 2026-09-25
 

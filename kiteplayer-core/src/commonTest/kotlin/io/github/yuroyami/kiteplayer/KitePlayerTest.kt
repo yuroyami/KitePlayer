@@ -54,6 +54,24 @@ class KitePlayerTest {
         )
     }
 
+    @Test
+    fun `creating a player that follows an external clock is refused`() = runTest {
+        val refused = assertFailsWith<PlaybackException> {
+            KitePlayer.create(
+                PlayerConfig(
+                    syncMode = SyncMode.ExternalMaster,
+                    backends = Backends(
+                        backend = ScriptedBackend(),
+                        output = ScriptedOutput(VirtualClock(testScheduler), ScriptedSink()),
+                    ),
+                ),
+            )
+        }
+        val error = refused.error
+        assertTrue(error is PlaybackError.ConfigurationInvalid, "the mode is a configuration error: $error")
+        assertTrue(error.detail.contains("ExternalMaster"), "the error names the mode: ${error.detail}")
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Input validation, D32.
     // ---------------------------------------------------------------------------------------------

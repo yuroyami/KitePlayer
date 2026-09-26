@@ -349,7 +349,6 @@ final enum class io.github.yuroyami.kiteplayer/LoopMode : kotlin/Enum<io.github.
 
 final enum class io.github.yuroyami.kiteplayer/MasterClock : kotlin/Enum<io.github.yuroyami.kiteplayer/MasterClock> { // io.github.yuroyami.kiteplayer/MasterClock|null[0]
     enum entry Audio // io.github.yuroyami.kiteplayer/MasterClock.Audio|null[0]
-    enum entry External // io.github.yuroyami.kiteplayer/MasterClock.External|null[0]
     enum entry None // io.github.yuroyami.kiteplayer/MasterClock.None|null[0]
     enum entry Video // io.github.yuroyami.kiteplayer/MasterClock.Video|null[0]
 
@@ -549,7 +548,6 @@ abstract interface io.github.yuroyami.kiteplayer.spi/AudioSinkBuffer { // io.git
         abstract fun <get-format>(): io.github.yuroyami.kiteplayer.spi/AudioFormat // io.github.yuroyami.kiteplayer.spi/AudioSinkBuffer.format.<get-format>|<get-format>(){}[0]
 
     abstract fun writeInterleaved(kotlin/FloatArray, kotlin/Int, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.spi/AudioSinkBuffer.writeInterleaved|writeInterleaved(kotlin.FloatArray;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
-    abstract fun writePlane(kotlin/Int, kotlin/FloatArray, kotlin/Int, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.spi/AudioSinkBuffer.writePlane|writePlane(kotlin.Int;kotlin.FloatArray;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
     abstract fun writeSilence(kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.spi/AudioSinkBuffer.writeSilence|writeSilence(kotlin.Int;kotlin.Int){}[0]
 }
 
@@ -595,8 +593,6 @@ abstract interface io.github.yuroyami.kiteplayer.spi/OutputBackend { // io.githu
         abstract fun <get-audioSink>(): io.github.yuroyami.kiteplayer.spi/AudioSinkFactory // io.github.yuroyami.kiteplayer.spi/OutputBackend.audioSink.<get-audioSink>|<get-audioSink>(){}[0]
     abstract val clock // io.github.yuroyami.kiteplayer.spi/OutputBackend.clock|{}clock[0]
         abstract fun <get-clock>(): io.github.yuroyami.kiteplayer/MonotonicClock // io.github.yuroyami.kiteplayer.spi/OutputBackend.clock.<get-clock>|<get-clock>(){}[0]
-    abstract val videoRenderer // io.github.yuroyami.kiteplayer.spi/OutputBackend.videoRenderer|{}videoRenderer[0]
-        abstract fun <get-videoRenderer>(): io.github.yuroyami.kiteplayer.spi/VideoRendererFactory? // io.github.yuroyami.kiteplayer.spi/OutputBackend.videoRenderer.<get-videoRenderer>|<get-videoRenderer>(){}[0]
     open val subtitleRasterizer // io.github.yuroyami.kiteplayer.spi/OutputBackend.subtitleRasterizer|{}subtitleRasterizer[0]
         open fun <get-subtitleRasterizer>(): io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer? // io.github.yuroyami.kiteplayer.spi/OutputBackend.subtitleRasterizer.<get-subtitleRasterizer>|<get-subtitleRasterizer>(){}[0]
 }
@@ -3248,20 +3244,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
 
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.toString|toString(){}[0]
 
-    final class AudioDeviceUnavailable : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable|null[0]
-        constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.<init>|<init>(kotlin.String){}[0]
-
-        final val detail // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.detail|{}detail[0]
-            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.detail.<get-detail>|<get-detail>(){}[0]
-        final val message // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.message|{}message[0]
-            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.message.<get-message>|<get-message>(){}[0]
-
-        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.component1|component1(){}[0]
-        final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.copy|copy(kotlin.String){}[0]
-        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.equals|equals(kotlin.Any?){}[0]
-        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.hashCode|hashCode(){}[0]
-    }
-
     final class ConfigurationInvalid : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.ConfigurationInvalid|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackError.ConfigurationInvalid.<init>|<init>(kotlin.String){}[0]
 
@@ -3294,23 +3276,6 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Throwable? = ...): io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed // io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed.copy|copy(kotlin.String;kotlin.String;kotlin.Throwable?){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed.hashCode|hashCode(){}[0]
-    }
-
-    final class DecoderUnavailable : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable|null[0]
-        constructor <init>(kotlin/String, io.github.yuroyami.kiteplayer/TrackKind) // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.<init>|<init>(kotlin.String;io.github.yuroyami.kiteplayer.TrackKind){}[0]
-
-        final val codec // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.codec|{}codec[0]
-            final fun <get-codec>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.codec.<get-codec>|<get-codec>(){}[0]
-        final val kind // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.kind|{}kind[0]
-            final fun <get-kind>(): io.github.yuroyami.kiteplayer/TrackKind // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.kind.<get-kind>|<get-kind>(){}[0]
-        final val message // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.message|{}message[0]
-            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.message.<get-message>|<get-message>(){}[0]
-
-        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.component1|component1(){}[0]
-        final fun component2(): io.github.yuroyami.kiteplayer/TrackKind // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.component2|component2(){}[0]
-        final fun copy(kotlin/String = ..., io.github.yuroyami.kiteplayer/TrackKind = ...): io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.copy|copy(kotlin.String;io.github.yuroyami.kiteplayer.TrackKind){}[0]
-        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.equals|equals(kotlin.Any?){}[0]
-        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.DecoderUnavailable.hashCode|hashCode(){}[0]
     }
 
     final class Internal : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.Internal|null[0]

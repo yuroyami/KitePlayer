@@ -511,11 +511,7 @@ public class DesktopAudioSink internal constructor(
         private const val WRITER_EXIT_POLL_MILLIS = 5L
     }
 
-    /**
-     * The preallocated [AudioSinkBuffer] over the block array. `writePlane` is rejected because
-     * the wire is interleaved; nothing in the engine calls it, and a caller that does must hear
-     * about it loudly rather than play garbage.
-     */
+    /** The preallocated [AudioSinkBuffer] over the block array. */
     private class BlockBuffer(
         override val format: AudioFormat,
         private val data: FloatArray,
@@ -536,16 +532,6 @@ public class DesktopAudioSink internal constructor(
                 endIndex = sourceOffset + frames * channels,
             )
         }
-
-        override fun writePlane(
-            channel: Int,
-            source: FloatArray,
-            sourceOffset: Int,
-            destinationFrameOffset: Int,
-            frames: Int,
-        ): Unit = throw UnsupportedOperationException(
-            "SourceDataLine is interleaved; writePlane is rejected by contract",
-        )
 
         override fun writeSilence(frameOffset: Int, frames: Int) {
             data.fill(0f, frameOffset * channels, (frameOffset + frames) * channels)

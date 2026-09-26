@@ -3,7 +3,6 @@ package io.github.yuroyami.kiteplayer.output
 import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
-import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 
 /**
  * Apple output: CoreAudio, on CoreAudio's own clock.
@@ -13,10 +12,8 @@ import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
  * instant, so both sides have to read the same time base. Handing the engine one object rather than a
  * clock and a factory separately makes the mismatch unassemblable instead of merely checked.
  *
- * [videoRenderer] is null, and honestly so. On macOS the available renderer draws into an `NSWindow`
- * that only the application can own, so there is nothing for a factory to create without one. iOS has
- * no renderer yet. An application that has a caller-owned renderer builds and attaches it directly,
- * which is legal at any time, including while playing.
+ * It supplies no renderer. A renderer draws into a view or a window that only the application owns,
+ * so the application builds one and attaches it, which is legal at any time, including while playing.
  */
 public object AppleOutputBackend : OutputBackend {
 
@@ -26,8 +23,6 @@ public object AppleOutputBackend : OutputBackend {
         policy = AppleAudioSessionPolicy.ManagedPlayback,
         clock = AppleHostClock,
     )
-
-    override val videoRenderer: VideoRendererFactory? = null
 
     /** CoreText behind the one seam. */
     override val subtitleRasterizer: io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer =

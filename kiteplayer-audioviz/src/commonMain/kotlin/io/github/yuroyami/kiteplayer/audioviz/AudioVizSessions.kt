@@ -84,5 +84,11 @@ internal val playerAudioVizSessions = AudioVizSessions<KitePlayer>(
         player.attachAudioTap(feed)
         feed.startSongScan(PlayerScanSource(player))
     },
-    detach = { player, feed -> player.detachAudioTap(feed) },
+    detach = { player, feed ->
+        try {
+            player.detachAudioTap(feed)
+        } catch (_: IllegalStateException) {
+            // A closed player refuses every command; closing already detached everything.
+        }
+    },
 )

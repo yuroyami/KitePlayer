@@ -8,11 +8,11 @@ import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
-import android.util.Log
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
+import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.VideoSize
@@ -214,7 +214,7 @@ private fun mediaCodecFormat(
 
 private fun refuseMediaCodec(policy: HwdecPolicy, reason: String): VideoDecoder? {
     if (policy == HwdecPolicy.Require) {
-        Log.w(MEDIA_CODEC_LOG_TAG, reason)
+        KiteLog.log(MEDIA_CODEC_LOG_TAG, reason)
         throw IllegalArgumentException(reason)
     }
     return null

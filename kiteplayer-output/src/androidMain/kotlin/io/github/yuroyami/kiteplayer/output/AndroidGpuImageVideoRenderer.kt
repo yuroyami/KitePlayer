@@ -19,8 +19,8 @@ import android.opengl.GLES20
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
-import android.util.Log
 import android.view.Surface
+import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
@@ -248,7 +248,7 @@ public class AndroidGpuImageVideoRenderer(
     private fun bridgeFailed(failure: Throwable) {
         if (closed.value) return
         bridgeFailure.compareAndSet(expect = null, update = failure)
-        Log.e(BRIDGE_LOG_TAG, "Android GPU image bridge failed", failure)
+        KiteLog.log(BRIDGE_LOG_TAG, "Android GPU image bridge failed: ${failure.stackTraceToString()}")
         failed.incrementAndGet()
         eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "the Android GPU image bridge failed"))
     }

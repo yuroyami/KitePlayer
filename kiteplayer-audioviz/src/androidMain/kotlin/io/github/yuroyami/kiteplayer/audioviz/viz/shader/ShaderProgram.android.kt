@@ -7,7 +7,6 @@ import android.graphics.RenderEffect
 import android.graphics.RenderNode
 import android.graphics.RuntimeShader
 import android.os.Build
-import android.util.Log
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
@@ -16,6 +15,7 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.nativeCanvas
+import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
 import kotlin.math.ceil
 
@@ -52,7 +52,7 @@ public actual class ShaderProgram actual constructor(source: String) {
                 built = RuntimeShader(source)
             } catch (failure: Throwable) {
                 message = failure.message ?: "the shader did not compile"
-                Log.e("KitePlayerShader", "Runtime shader compilation failed: $message")
+                KiteLog.log("KitePlayerShader", "Runtime shader compilation failed: $message")
             }
         }
         shader = built

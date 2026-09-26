@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.AudioScanRange
 import io.github.yuroyami.kiteplayer.AudioScanSink
+import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
@@ -199,7 +200,15 @@ internal class SongScanner(
             SongMapCache.put(key, it)
             return install(it, key)
         }
-        val map = SongScanLimiter.mutex.withLock { scan(target) }
+        val map = try {
+            SongScanLimiter.mutex.withLock { scan(target) }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Exception) {
+            // One item that cannot be scanned must not end the scans of every later item.
+            KiteLog.log("SongScanner", "the song scan failed, so this item plays without a song map: $failure")
+            return
+        }
         if (map.complete) {
             SongMapCache.put(key, map)
             offWorker { store().write(key, encodeSongMap(map)) }

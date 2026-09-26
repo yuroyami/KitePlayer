@@ -39,11 +39,15 @@ class SongScannerTest {
         /** A reader that refuses the second concurrent open a range needs. */
         var refuseRanges = false
 
+        /** An item whose every open fails. */
+        var failingUri: String? = null
+
         override suspend fun scan(target: ScanTarget, range: AudioScanRange?, sink: AudioScanSink): ScanOutcome {
             scans++
             started.value++
             ranges += range
             if (refuseRanges && range != null) error("this reader cannot be opened twice")
+            if (target.media.uri == failingUri) error("this item cannot be opened")
             val format = AudioFormat(48_000, 2, SampleFormat.F32)
             val block = FloatArray(2048)
             // A seek lands on a block boundary at or before what was asked for, as a container does.
@@ -174,6 +178,21 @@ class SongScannerTest {
         assertEquals(1, rig.source.cancelled, "the first scan was cancelled")
         assertEquals(2, rig.source.scans)
         assertEquals(1, rig.installs.maps.size, "only the second item's map was installed")
+        rig.close()
+    }
+
+    @Test
+    fun aFailedScanLeavesTheItemWithoutAMapAndTheNextItemIsScanned() {
+        val rig = Rig()
+        rig.source.failingUri = "file:///broken.flac"
+        rig.target(target("file:///broken.flac"))
+        rig.settleAll()
+        assertEquals(1, rig.source.scans)
+        assertTrue(rig.installs.maps.isEmpty(), "the failed item has no map")
+        rig.target(target("file:///second.flac"))
+        rig.settleAll()
+        assertEquals(2, rig.source.scans, "the follower outlived the failure")
+        assertTrue(rig.installs.maps.single().map.complete)
         rig.close()
     }
 

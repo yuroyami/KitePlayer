@@ -446,10 +446,23 @@ The short version:
 
 Apache-2.0. See [NOTICE](NOTICE).
 
-Decoding is done by [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg), which compiles FFmpeg
-into its own artifacts under the LGPL. Shipping LGPL code obliges you to say your app uses FFmpeg
-and to keep its source available; KiteFFmpeg's `NOTICE` states this precisely. `kiteplayer-libass`
-links libass, HarfBuzz, FreeType and FriBidi; their licence texts ship inside the artifact.
+Decoding is done by [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg), which embeds FFmpeg
+(LGPL-2.1-or-later) and dav1d (BSD-2-Clause) in its native libraries. `kiteplayer-libass` embeds
+libass (ISC), HarfBuzz (MIT), FreeType (FreeType License) and FriBidi (LGPL-2.1-or-later), and its
+Windows JVM adapter adds GNU libiconv (LGPL-2.0-or-later). An app that ships these artifacts has
+three LGPL duties for FFmpeg, FriBidi and libiconv:
+
+1. Say that the app uses them, under the LGPL.
+2. Make their source available to your users. KiteFFmpeg's `NOTICE` and this repository's
+   [NOTICE](NOTICE) name where it is.
+3. Let your users relink the app against a modified copy of them, because the artifacts link them
+   statically: into the klibs on native targets, and into the native libraries on the JVM and
+   Android. Publishing your object files, or a written offer to provide them, are the usual
+   routes.
+
+KiteFFmpeg's [licensing guide](https://yuroyami.github.io/KiteFFmpeg/licensing/) explains the
+static linking case in detail. The licence texts ship inside the JVM and Android artifacts under
+`META-INF/licenses/`.
 
 Part of the Kite family: [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg),
 [KiteCore](https://github.com/yuroyami/KiteCore), [KitePDF](https://github.com/yuroyami/KitePDF),

@@ -14,12 +14,13 @@ this repository. KiteFFmpeg in turn links against FFmpeg's libav* libraries
 built with --enable-gpl). FFmpeg is NOT covered by this NOTICE or by
 KitePlayer's Apache-2.0 license, and neither is KiteFFmpeg's own NOTICE.
 
-Depending on the FFmpeg build flavour a consumer links, the linked FFmpeg may
-additionally bundle third-party codec and rendering libraries (SVT-AV1,
-libvpx, libaom, libopus, libmp3lame, libwebp, FreeType, HarfBuzz, FriBidi,
-libass, x264/x265 in the GPL flavour, and others), each under its own
-license. The complete component list, per-component licenses, and the
-distribution obligations they carry are documented at:
+The published KiteFFmpeg artifacts that KitePlayer depends on embed exactly
+two third-party components, statically linked into the native libraries:
+FFmpeg (LGPL-2.1-or-later, https://ffmpeg.org) and dav1d (BSD-2-Clause,
+https://code.videolan.org/videolan/dav1d), its software AV1 decoder. KiteFFmpeg
+publishes no GPL flavour, and nothing else is linked. KiteFFmpeg's NOTICE lists
+them with their versions and the FFmpeg source offer. The per-component
+licenses, and the distribution obligations they carry, are documented at:
 https://yuroyami.github.io/KiteFFmpeg/licensing/
 (source: docs/licensing.md in the KiteFFmpeg repository).
 

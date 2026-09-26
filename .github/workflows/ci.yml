@@ -1038,6 +1038,10 @@ jobs:
       - uses: mymindstorm/setup-emsdk@6ab9eb1bda2574c4ddb79809fc9247783eaf9021 # v14
         with:
           version: latest
+      # The libass suites that need no libass, built by emscripten for wasm32, where size_t is 32
+      # bits wide as on the 32-bit Android ABIs. The macOS C job runs the same suites on the host.
+      - name: kiteplayer-libass C suites on wasm32
+        run: ./kiteplayer-libass/native/scripts/run-c-tests.sh wasm32
       # Kotlin/JS and Kotlin/Wasm fetch their own node and yarn into ~/.gradle, then populate
       # node_modules from the committed lockfile. Uncached that is a download plus an install on
       # every single run of this job, which was the largest fixed cost here.

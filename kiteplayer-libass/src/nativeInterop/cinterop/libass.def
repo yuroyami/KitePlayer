@@ -6,7 +6,7 @@
 # links without knowing the four exist. Its directory differs per target, so it arrives as
 # -libraryPath from the build script rather than from a def line.
 headers = ass/ass.h kite_ass.h
-headerFilter = ass/** kite_ass.h libass_pack_limits.h
+headerFilter = ass/** kite_ass.h kite_font_name.h libass_pack_limits.h
 package = libass
 staticLibraries = libkiteass.a
 

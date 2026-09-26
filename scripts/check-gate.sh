@@ -107,9 +107,12 @@ c_sanitizers() {
         run kiteplayer-rt/native/scripts/build-host.sh "$variant"
         run kiteplayer-rt/native/scripts/run-c-tests.sh "$variant"
     done
-    # The libass C runner builds before running; it requires no native libass installation.
+    # The libass C runner builds before running; it requires no native libass installation. The
+    # wasm32 variant needs emcc, which the web step needs too, and runs the suites where size_t is
+    # 32 bits wide.
     run kiteplayer-libass/native/scripts/run-c-tests.sh plain
     run kiteplayer-libass/native/scripts/run-c-tests.sh asan
+    run kiteplayer-libass/native/scripts/run-c-tests.sh wasm32
 }
 jvm() {
     gradle :kiteplayer-output:jvmTest :kiteplayer-view:jvmTest :kiteplayer-network:jvmTest \

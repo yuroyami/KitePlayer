@@ -259,7 +259,7 @@ abstract class BuildLibassHostJniTask @Inject constructor(
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val sourceFile: RegularFileProperty
 
-    /** `native/src`, for kite_ass.h and libass_pack_limits.h. */
+    /** `native/src`, for kite_ass.h and the headers beside it. */
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val driverDir: DirectoryProperty

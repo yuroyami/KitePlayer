@@ -17,7 +17,8 @@
  * Premultiplied because RgbaBitmap documents premultiplied bytes and every consumer uploads them
  * unconverted. libass colour is RRGGBBAA with AA as TRANSPARENCY (0 opaque), inverted once here,
  * and each channel is scaled by the pixel's own alpha at emit. The size arithmetic goes through
- * libass_pack_limits.h, whose ceiling keeps a hostile script from wrapping a 32-bit size_t.
+ * libass_pack_limits.h, whose ceiling keeps a hostile script from wrapping a 32-bit size_t. The
+ * family name of a font added from memory comes from kite_font_name.h.
  */
 
 #ifndef KITE_ASS_H
@@ -29,6 +30,7 @@
 #include <string.h>
 #include <ass/ass.h>
 
+#include "kite_font_name.h"
 #include "libass_pack_limits.h"
 
 typedef struct kite_ass {
@@ -80,78 +82,6 @@ static inline void kite_ass_apply_fonts(kite_ass *self) {
                   ASS_FONTPROVIDER_AUTODETECT, NULL, 1);
     self->fonts_dirty = 0;
     self->force_next = 1;
-}
-
-static inline uint32_t kite_be32(const unsigned char *p) {
-    return ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) | ((uint32_t) p[2] << 8) | (uint32_t) p[3];
-}
-
-static inline uint16_t kite_be16(const unsigned char *p) {
-    return (uint16_t) (((uint16_t) p[0] << 8) | (uint16_t) p[1]);
-}
-
-/*
- * The family name (name ID 1) of a TrueType, OpenType or collection font, from its own 'name'
- * table, into out (NUL terminated, ASCII only). Returns 0 when the bytes carry none that this
- * reader understands. Windows/Unicode English first, Macintosh Roman second; other platforms and
- * languages are skipped, and a UTF-16 unit above 0xFF is skipped rather than mangled, because the
- * result is matched against the ASCII family names ASS styles carry.
- */
-static inline int kite_ass_family_of(const unsigned char *font, size_t size, char *out, size_t out_size) {
-    if (!font || size < 12 || out_size < 2) return 0;
-    size_t base = 0;
-    if (memcmp(font, "ttcf", 4) == 0) {
-        if (size < 16) return 0;
-        base = kite_be32(font + 12);
-        if (base + 12 > size) return 0;
-    }
-    uint16_t tables = kite_be16(font + base + 4);
-    size_t directory = base + 12;
-    size_t name_offset = 0, name_length = 0;
-    for (uint16_t i = 0; i < tables; i++) {
-        size_t record = directory + (size_t) i * 16;
-        if (record + 16 > size) return 0;
-        if (memcmp(font + record, "name", 4) == 0) {
-            name_offset = kite_be32(font + record + 8);
-            name_length = kite_be32(font + record + 12);
-            break;
-        }
-    }
-    if (name_offset == 0 || name_offset + 6 > size || name_length < 6) return 0;
-    const unsigned char *name = font + name_offset;
-    uint16_t count = kite_be16(name + 2);
-    size_t strings = name_offset + kite_be16(name + 4);
-    int best = 0;
-    for (uint16_t i = 0; i < count; i++) {
-        size_t record = name_offset + 6 + (size_t) i * 12;
-        if (record + 12 > size) break;
-        uint16_t platform = kite_be16(name + 6 + (size_t) i * 12);
-        uint16_t encoding = kite_be16(name + 8 + (size_t) i * 12);
-        uint16_t language = kite_be16(name + 10 + (size_t) i * 12);
-        uint16_t name_id = kite_be16(name + 12 + (size_t) i * 12);
-        uint16_t length = kite_be16(name + 14 + (size_t) i * 12);
-        size_t offset = strings + kite_be16(name + 16 + (size_t) i * 12);
-        if (name_id != 1 || offset + length > size || length == 0) continue;
-        int rank = 0;
-        if (platform == 3 && (encoding == 1 || encoding == 0) && (language & 0xFF) == 0x09) rank = 2;
-        else if (platform == 1 && encoding == 0) rank = 1;
-        if (rank <= best) continue;
-        size_t at = 0;
-        const unsigned char *text = font + offset;
-        if (platform == 3) {
-            for (uint16_t u = 0; u + 1 < length && at + 1 < out_size; u += 2) {
-                if (text[u] == 0 && text[u + 1] >= 0x20 && text[u + 1] < 0x7F) out[at++] = (char) text[u + 1];
-            }
-        } else {
-            for (uint16_t u = 0; u < length && at + 1 < out_size; u++) {
-                if (text[u] >= 0x20 && text[u] < 0x7F) out[at++] = (char) text[u];
-            }
-        }
-        if (at == 0) continue;
-        out[at] = '\0';
-        best = rank;
-    }
-    return best > 0;
 }
 
 static inline kite_ass *kite_ass_open(void) {

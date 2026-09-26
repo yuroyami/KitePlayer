@@ -33,7 +33,7 @@ abstract class BuildLibassJniTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val sourceFile: org.gradle.api.file.RegularFileProperty
 
-    /** `native/src`, for kite_ass.h and libass_pack_limits.h beside the adapter source. */
+    /** `native/src`, for kite_ass.h and the headers beside it, next to the adapter source. */
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val driverHeaders: ConfigurableFileCollection

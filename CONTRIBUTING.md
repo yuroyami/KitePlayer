@@ -108,6 +108,7 @@ that named step; retain the earlier successful logs and rerun affected steps if 
 A resumed run reports its partial coverage. Gradle reuses unchanged outputs. Tier 2 also checks
 publication metadata and dependency hygiene, and builds and runs the libass C suites in plain and
 sanitizer configurations (the driver suite needs Homebrew's libass and says SKIPPED without it).
+The two libass suites that need no libass also run on wasm32 under Node, where `size_t` is 32 bits.
 Docker must be running, an iOS
 simulator runtime must be installed, and the libass module wants the sibling KiteFFmpeg checkout's
 `native-libs/deps/*/ass-chain` installs; without the sibling, the module downloads the chains from

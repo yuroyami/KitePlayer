@@ -66,6 +66,8 @@ internal data class ScriptedAudioTrack(
     val packetSizeBytes: Int = 1024,
     /** False models FFmpeg's routine zero duration: the packet carries a start and no duration. */
     val packetDurationKnown: Boolean = true,
+    /** The stream's own tags, such as a ReplayGain gain that overrides the container's. */
+    val metadata: Map<String, String> = emptyMap(),
 ) {
     fun format(defaultSampleRate: Int, defaultChannels: Int): AudioFormat = AudioFormat(
         sampleRate = sampleRate ?: defaultSampleRate,
@@ -180,6 +182,8 @@ internal class MediaScript(
     val additionalSubtitleTracks: List<ScriptedSubtitleTrack> = emptyList(),
     /** True gives the source the recording capability. It writes nothing and logs each call. */
     val recordable: Boolean = false,
+    /** The first audio stream's own tags. */
+    val audioMetadata: Map<String, String> = emptyMap(),
 ) {
     val videoIndex: Int = 0
     val audioIndex: Int = if (hasVideo) 1 else 0
@@ -197,6 +201,7 @@ internal class MediaScript(
                     sampleRate = sampleRate,
                     channels = channels,
                     isDefault = true,
+                    metadata = audioMetadata,
                 ),
             )
         }
@@ -746,6 +751,7 @@ internal class ScriptedSource(
                     startTime = Pts.Zero,
                     sampleRate = format.sampleRate,
                     channels = format.channels,
+                    metadata = track.metadata,
                 ),
             )
         }

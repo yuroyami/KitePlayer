@@ -3611,6 +3611,10 @@ internal class PlaybackCore(
             session.audio = preparedPath.playback
             session.sink = preparedPath.sink
             session.negotiatedFormat = preparedPath.negotiated
+        } else if (targetStream != null) {
+            // A reused path still carries the previous stream's ReplayGain and peak clamp (#288).
+            // Set here, after the ring flush succeeded, so a refused switch keeps the old gain.
+            session.audio?.replayGain = replayGainFor(targetStream, session.source.metadata)
         }
         targetQueue?.dropBefore(
             commitAt.micros - audioSwitchHistoryUs(),

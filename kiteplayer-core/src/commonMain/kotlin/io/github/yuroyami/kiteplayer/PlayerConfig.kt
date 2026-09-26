@@ -233,7 +233,9 @@ public data class AudioConfig(
      *
      * Off by default: a player changing the level of what it was given, unasked, is a surprise.
      * Turn it on and a quiet album stops playing quiet without the listener touching the volume.
-     * The gain is clamped by the file's own peak so it can never clip; see [ReplayGainMode].
+     * The gain is clamped by the file's own peak so it can never clip. A tag without a peak, which
+     * is every Opus tag, can lower the level but never raise it, and [volumeCeiling] does not widen
+     * the clamp. See [ReplayGainMode].
      */
     val replayGain: ReplayGainMode = ReplayGainMode.Off,
     /** Added to whatever the tag asked for, in dB. The usual taste knob; 0 honours the tag exactly. */

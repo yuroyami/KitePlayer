@@ -3375,8 +3375,8 @@ internal class PlaybackCore(
      *
      * Returns 1 when the feature is off or nothing usable was found, which is also what an
      * unclamped measurement of zero decibels returns; `PlayerSnapshot.appliedReplayGainDb` is what
-     * tells those apart. The clamp uses the volume ceiling, so a boost the consumer has not
-     * allowed cannot arrive through a tag.
+     * tells those apart. The clamp holds the peak at full scale, whatever volume boost the consumer
+     * allowed: the volume stage owns boosting, and it folds loud passages where this could not.
      *
      * [containerTags] is a PARAMETER rather than a read of `session`, and that is not a style
      * choice: both callers run while the session is still being assembled, so the field is null
@@ -3395,7 +3395,6 @@ internal class PlaybackCore(
             mode = mode,
             preampDb = config.audio.replayGainPreampDb,
             fallbackDb = config.audio.replayGainFallbackDb,
-            ceiling = config.audio.volumeCeiling,
         )
     }
 

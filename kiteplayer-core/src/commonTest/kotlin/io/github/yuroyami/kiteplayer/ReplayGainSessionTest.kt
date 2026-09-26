@@ -62,6 +62,19 @@ class ReplayGainSessionTest {
         assertEquals(-6.02f, snapshot.appliedReplayGainDb!!, absoluteTolerance = 0.01f)
     }
 
+    // A volume boost is the volume stage's, and must not widen the ReplayGain clamp (#203).
+    @Test
+    fun `a raised volume ceiling does not let a tag clip`() = runTest {
+        val tags = mapOf("REPLAYGAIN_TRACK_GAIN" to "6.00 dB", "REPLAYGAIN_TRACK_PEAK" to "0.9")
+        val (_, snapshot) = peakHeardWith(
+            PlayerConfig(audio = AudioConfig(replayGain = ReplayGainMode.Track, volumeCeiling = 2f)),
+            tags,
+            this,
+        )
+        // 1 / 0.9 is 0.915 dB: the peak lands on full scale and no higher.
+        assertEquals(0.915f, snapshot.appliedReplayGainDb!!, absoluteTolerance = 0.01f)
+    }
+
     @Test
     fun `the feature off leaves the samples untouched`() = runTest {
         // The default, and the one that must stay bit-exact: a tag nobody asked to honour is a tag

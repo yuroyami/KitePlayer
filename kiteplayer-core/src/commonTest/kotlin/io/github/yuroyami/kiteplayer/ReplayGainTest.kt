@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
  *
  * The parsing is pure and lives here. The clamp is the part worth reading twice: a positive gain
  * applied to a file whose peak is already near full scale would clip, so the gain is reduced until
- * the peak fits under the ceiling. That is why a tag can ask for +6 dB and get less.
+ * the peak fits under full scale. That is why a tag can ask for +6 dB and get less.
  */
 class ReplayGainTest {
 
@@ -104,15 +104,15 @@ class ReplayGainTest {
         val tags = ReplayGainTags(trackGainDb = -6f, albumGainDb = -12f, trackPeak = null, albumPeak = null)
         assertClose(
             0.5012f,
-            replayGainLinear(tags, ReplayGainMode.Track, preampDb = 0f, fallbackDb = 0f, ceiling = 1f),
+            replayGainLinear(tags, ReplayGainMode.Track, preampDb = 0f, fallbackDb = 0f),
         )
         assertClose(
             0.2512f,
-            replayGainLinear(tags, ReplayGainMode.Album, preampDb = 0f, fallbackDb = 0f, ceiling = 1f),
+            replayGainLinear(tags, ReplayGainMode.Album, preampDb = 0f, fallbackDb = 0f),
         )
         assertEquals(
             1f,
-            replayGainLinear(tags, ReplayGainMode.Off, preampDb = 0f, fallbackDb = 0f, ceiling = 1f),
+            replayGainLinear(tags, ReplayGainMode.Off, preampDb = 0f, fallbackDb = 0f),
         )
     }
 
@@ -121,12 +121,12 @@ class ReplayGainTest {
         val trackOnly = ReplayGainTags(trackGainDb = -6f, albumGainDb = null, trackPeak = null, albumPeak = null)
         assertClose(
             0.5012f,
-            replayGainLinear(trackOnly, ReplayGainMode.Album, preampDb = 0f, fallbackDb = 0f, ceiling = 1f),
+            replayGainLinear(trackOnly, ReplayGainMode.Album, preampDb = 0f, fallbackDb = 0f),
         )
         val nothing = ReplayGainTags(null, null, null, null)
         assertClose(
             0.5012f,
-            replayGainLinear(nothing, ReplayGainMode.Track, preampDb = 0f, fallbackDb = -6f, ceiling = 1f),
+            replayGainLinear(nothing, ReplayGainMode.Track, preampDb = 0f, fallbackDb = -6f),
         )
     }
 
@@ -135,26 +135,30 @@ class ReplayGainTest {
         val tags = ReplayGainTags(trackGainDb = -6f, albumGainDb = null, trackPeak = null, albumPeak = null)
         assertClose(
             1f,
-            replayGainLinear(tags, ReplayGainMode.Track, preampDb = 6f, fallbackDb = 0f, ceiling = 1f),
+            replayGainLinear(tags, ReplayGainMode.Track, preampDb = 6f, fallbackDb = 0f),
         )
     }
 
     @Test
     fun `a gain that would clip is reduced until the peak fits`() {
         // The whole reason peaks are in the standard. +6 dB over a file peaking at 0.9 would reach
-        // 1.79, so the gain is cut to exactly what leaves the peak at the ceiling.
+        // 1.79, so the gain is cut to exactly what leaves the peak at full scale.
         val tags = ReplayGainTags(trackGainDb = 6f, albumGainDb = null, trackPeak = 0.9f, albumPeak = null)
-        val gain = replayGainLinear(tags, ReplayGainMode.Track, preampDb = 0f, fallbackDb = 0f, ceiling = 1f)
+        val gain = replayGainLinear(tags, ReplayGainMode.Track, preampDb = 0f, fallbackDb = 0f)
         assertClose(1f / 0.9f, gain)
-        assertClose(1f, gain * 0.9f, message = "the clamped gain must land the peak exactly on the ceiling:")
+        assertClose(1f, gain * 0.9f, message = "the clamped gain must land the peak exactly on full scale:")
     }
 
+    // A tag with no peak says nothing about the room above the material, so it may not boost (#203).
     @Test
-    fun `a raised ceiling lets more of the gain through`() {
-        // With a boost allowed, the same file may use the headroom the ceiling opens.
-        val tags = ReplayGainTags(trackGainDb = 6f, albumGainDb = null, trackPeak = 0.9f, albumPeak = null)
-        val gain = replayGainLinear(tags, ReplayGainMode.Track, preampDb = 0f, fallbackDb = 0f, ceiling = 2f)
-        assertClose(1.9953f, gain, tolerance = 0.001f)
+    fun `a boost with no peak is held at unity`() {
+        val loud = ReplayGainTags(trackGainDb = 40f, albumGainDb = null, trackPeak = null, albumPeak = null)
+        assertEquals(1f, replayGainLinear(loud, ReplayGainMode.Track, preampDb = 0f, fallbackDb = 0f))
+        val r128 = parseReplayGain(container = emptyMap(), stream = mapOf("R128_TRACK_GAIN" to "32767"))
+        assertEquals(1f, replayGainLinear(r128, ReplayGainMode.Track, preampDb = 0f, fallbackDb = 0f))
+        // Lowering the level stays allowed without a peak.
+        val quiet = ReplayGainTags(trackGainDb = -6f, albumGainDb = null, trackPeak = null, albumPeak = null)
+        assertClose(0.5012f, replayGainLinear(quiet, ReplayGainMode.Track, preampDb = 0f, fallbackDb = 0f))
     }
 
     @Test
@@ -163,14 +167,14 @@ class ReplayGainTest {
         val tags = ReplayGainTags(trackGainDb = -12f, albumGainDb = null, trackPeak = 1f, albumPeak = null)
         assertClose(
             0.2512f,
-            replayGainLinear(tags, ReplayGainMode.Track, preampDb = 0f, fallbackDb = 0f, ceiling = 1f),
+            replayGainLinear(tags, ReplayGainMode.Track, preampDb = 0f, fallbackDb = 0f),
         )
     }
 
     @Test
     fun `album mode clamps against the album's own peak`() {
         val tags = ReplayGainTags(trackGainDb = null, albumGainDb = 6f, trackPeak = 0.5f, albumPeak = 0.95f)
-        val gain = replayGainLinear(tags, ReplayGainMode.Album, preampDb = 0f, fallbackDb = 0f, ceiling = 1f)
+        val gain = replayGainLinear(tags, ReplayGainMode.Album, preampDb = 0f, fallbackDb = 0f)
         assertClose(1f / 0.95f, gain)
     }
 }

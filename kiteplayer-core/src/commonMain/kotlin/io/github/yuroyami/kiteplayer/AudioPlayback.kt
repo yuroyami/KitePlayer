@@ -618,7 +618,8 @@ public class AudioPlayback(
      * The ReplayGain to apply to the material, as a linear multiplier. 1 applies nothing.
      *
      * Set by the engine when a track opens, from the container's tags and the configured mode; see
-     * `ReplayGainMode`. Already clamped by the file's own peak, so a value here cannot clip.
+     * `ReplayGainMode`. The engine's values are already clamped by the file's own peak, so they
+     * cannot clip.
      * Applied on the way into the ring, which is right for a per-track constant and wrong for a
      * live control: the volume is the live one and lives on the other side.
      */

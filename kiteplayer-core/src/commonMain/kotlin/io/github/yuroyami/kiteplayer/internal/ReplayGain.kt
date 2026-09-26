@@ -83,20 +83,19 @@ internal fun parseReplayGain(container: Map<String, String>, stream: Map<String,
  *
  * The clamp is the part that matters. A positive gain over material that already peaks near full
  * scale would push samples past it, and the peak in the tag is exactly the number that says by how
- * much. So the gain is reduced until `peak * gain` sits on [ceiling], and a tag asking for +6 dB
+ * much. So the gain is reduced until `peak * gain` sits on full scale, and a tag asking for +6 dB
  * can legitimately deliver less. An attenuation is never touched: turning something down cannot
  * clip, so the clamp must not interfere with it.
  *
- * With no peak in the tags nothing can be clamped, and the gain is applied as asked. That is the
- * standard's own behaviour, and it is why [ceiling] should stay at unity unless a consumer has
- * deliberately allowed a boost.
+ * With no peak in the tags, the material is taken to reach full scale already, so a boost is held
+ * at unity: nothing says how much room there is above it. Opus tags never carry a peak. A volume
+ * boost is the volume stage's job, which folds loud passages, and it never widens this clamp.
  */
 internal fun replayGainLinear(
     tags: ReplayGainTags,
     mode: ReplayGainMode,
     preampDb: Float,
     fallbackDb: Float,
-    ceiling: Float,
 ): Float {
     if (mode == ReplayGainMode.Off) return 1f
 
@@ -110,7 +109,7 @@ internal fun replayGainLinear(
     if (!linear.isFinite() || linear <= 0f) return 1f
     if (linear <= 1f) return linear
 
-    // Only an amplification can clip, and only a peak can say when.
-    val headroom = peak?.takeIf { it > 0f }?.let { ceiling / it } ?: return linear
-    return if (linear > headroom) maxOf(headroom, 0f) else linear
+    // Only an amplification can clip. An unknown peak is taken to be full scale (#203).
+    val knownPeak = peak?.takeIf { it > 0f } ?: return 1f
+    return minOf(linear, 1f / knownPeak)
 }

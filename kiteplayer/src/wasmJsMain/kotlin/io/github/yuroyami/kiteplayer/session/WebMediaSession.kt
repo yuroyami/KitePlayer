@@ -23,6 +23,7 @@ import kotlin.time.Duration.Companion.seconds
  * overlay appears only if the page also plays through such an element.
  *
  * Artwork is a URL here, because that is the only form a browser takes. Close it with the player.
+ * A button press that arrives after the player closed does nothing.
  *
  * @param skipInterval how far the skip back and skip forward actions move when the browser names no
  *        offset of its own. Positive.
@@ -57,9 +58,9 @@ public class KitePlayerMediaSession(
     }
 
     private fun start(bridge: WebMediaSessionBridge) {
-        bridge.onAction("play") { _, _ -> player.play() }
-        bridge.onAction("pause") { _, _ -> player.pause() }
-        bridge.onAction("stop") { _, _ -> player.pause() }
+        bridge.onAction("play") { _, _ -> player.playFromRemote() }
+        bridge.onAction("pause") { _, _ -> player.pauseFromRemote() }
+        bridge.onAction("stop") { _, _ -> player.pauseFromRemote() }
         bridge.onAction("nexttrack") { _, _ -> scope.launch { runCatching { player.next() } } }
         bridge.onAction("previoustrack") { _, _ -> scope.launch { runCatching { player.previous() } } }
         bridge.onAction("seekforward") { _, offset -> skipBy(if (offset > 0.0) offset.seconds else skipInterval) }

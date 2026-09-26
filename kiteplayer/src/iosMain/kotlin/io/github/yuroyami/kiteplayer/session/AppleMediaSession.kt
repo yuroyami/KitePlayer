@@ -43,7 +43,8 @@ import kotlin.time.DurationUnit
  *
  * That card is what the lock screen, the control centre and CarPlay show, and the buttons are what
  * a headset, a steering wheel and a watch send. Both are process-wide on iOS, so build one of
- * these for the player the listener is hearing, and close it before building another.
+ * these for the player the listener is hearing, and close it before building another. A button
+ * press that arrives after the player closed does nothing.
  *
  * The audio session category the card needs is already the one the player's own output sets, so
  * nothing has to change there. The application still declares the background audio capability
@@ -149,13 +150,13 @@ public class KitePlayerMediaSession(
         commands.skipForwardCommand.preferredIntervals = listOf(NSNumber.numberWithDouble(skipInterval.toDouble(DurationUnit.SECONDS)))
         commands.skipBackwardCommand.preferredIntervals = listOf(NSNumber.numberWithDouble(skipInterval.toDouble(DurationUnit.SECONDS)))
 
-        handle(commands.playCommand) { player.play() }
-        handle(commands.pauseCommand) { player.pause() }
+        handle(commands.playCommand) { player.playFromRemote() }
+        handle(commands.pauseCommand) { player.pauseFromRemote() }
         // Buffering counts as playing here: the listener asked for sound, so a toggle means stop.
         handle(commands.togglePlayPauseCommand) {
-            if (player.state.value.status.isActive) player.pause() else player.play()
+            if (player.state.value.status.isActive) player.pauseFromRemote() else player.playFromRemote()
         }
-        handle(commands.stopCommand) { player.pause() }
+        handle(commands.stopCommand) { player.pauseFromRemote() }
         handle(commands.nextTrackCommand) { scope.launch { runCatching { player.next() } } }
         handle(commands.previousTrackCommand) { scope.launch { runCatching { player.previous() } } }
         handle(commands.skipForwardCommand) { skipBy(skipInterval) }

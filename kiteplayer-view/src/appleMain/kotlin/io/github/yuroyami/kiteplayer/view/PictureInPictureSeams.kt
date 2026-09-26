@@ -39,8 +39,17 @@ internal interface PictureInPicturePlayer {
 internal class KitePlayerSeam(private val player: KitePlayer) : PictureInPicturePlayer {
     override val state: StateFlow<PlayerSnapshot> get() = player.state
     override fun position(): Duration = player.position()
-    override fun play() = player.play()
-    override fun pause() = player.pause()
+
+    // The window's button can be pressed after the player closed, when both calls throw, and a
+    // Kotlin exception that leaves an Objective-C callback ends the process.
+    override fun play() {
+        runCatching { player.play() }
+    }
+
+    override fun pause() {
+        runCatching { player.pause() }
+    }
+
     override suspend fun seek(to: Duration) = player.seek(to)
 }
 

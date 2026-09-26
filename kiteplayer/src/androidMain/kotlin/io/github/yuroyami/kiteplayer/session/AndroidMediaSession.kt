@@ -35,7 +35,7 @@ import kotlin.time.Duration.Companion.seconds
  * For the media notification, and for playback that goes on after the app leaves the screen, pass
  * this session to `KitePlayerPlatform.attachMediaNotification`.
  *
- * Close it with the player.
+ * Close it with the player. A button press that arrives after the player closed does nothing.
  *
  * @param skipInterval how far the skip back and skip forward buttons move, on the lock screen, the
  *        notification, a headset and a car. Positive.
@@ -214,12 +214,13 @@ public class KitePlayerMediaSession(
     }
 
     private inner class Callback : MediaSession.Callback() {
-        override fun onPlay() = player.play()
-        override fun onPause() = player.pause()
-        override fun onStop() = player.pause()
+        override fun onPlay() = player.playFromRemote()
+        override fun onPause() = player.pauseFromRemote()
+        override fun onStop() = player.pauseFromRemote()
 
+        // A refused seek throws, and an exception that leaves this scope ends the process.
         override fun onSeekTo(positionMillis: Long) {
-            scope.launch { player.seek(positionMillis.milliseconds) }
+            scope.launch { runCatching { player.seek(positionMillis.milliseconds) } }
         }
 
         override fun onSkipToNext() {

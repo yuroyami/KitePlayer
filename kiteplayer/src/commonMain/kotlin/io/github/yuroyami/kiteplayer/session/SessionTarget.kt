@@ -19,12 +19,24 @@ internal interface SessionTarget {
     fun setVideoEnabled(enabled: Boolean)
 }
 
+/**
+ * Play and pause for a press from outside the application: the lock screen, a headset, a car, the
+ * system. Such a press can arrive after the player closed, when both calls throw, so it is dropped.
+ */
+internal fun KitePlayer.playFromRemote() {
+    runCatching { play() }
+}
+
+internal fun KitePlayer.pauseFromRemote() {
+    runCatching { pause() }
+}
+
 internal class PlayerSessionTarget(private val player: KitePlayer) : SessionTarget {
     override val playing: Boolean get() = player.state.value.status == PlaybackStatus.Playing
     override val volume: Float get() = player.state.value.volume
     override val videoEnabled: Boolean get() = player.state.value.videoEnabled
-    override fun play() = player.play()
-    override fun pause() = player.pause()
+    override fun play() = player.playFromRemote()
+    override fun pause() = player.pauseFromRemote()
     override fun setVolume(value: Float) = player.setVolume(value)
     override fun setVideoEnabled(enabled: Boolean) = player.setVideoEnabled(enabled)
 }

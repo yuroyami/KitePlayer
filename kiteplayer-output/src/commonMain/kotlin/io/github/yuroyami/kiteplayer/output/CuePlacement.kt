@@ -13,6 +13,7 @@ internal class CueOrigin(val x: Int, val y: Int)
  * An authored position is the anchor point that the alignment names: an ASS `\pos` with `\an2`
  * puts the bottom centre of the text on the point, not its top-left corner. Without a position,
  * the alignment picks a margin, and the bottom row stacks upward from the viewer's sub-position.
+ * A positioned box is kept inside the viewport.
  *
  * [width] and [height] are the text box, without the pixels that a shadow or a background box adds.
  * [position] is the viewer's sub-position, where 1 is the bottom edge. [stackedBottom] is how far
@@ -56,5 +57,11 @@ internal fun cueOrigin(
         // and never move with it, which is mpv's sub-pos rule.
         else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
     }
-    return CueOrigin(x, y)
+    // A positioned box stays inside the picture, as the WebVTT processing model requires: a line
+    // at 100 percent would otherwise hang the box below the video. The stack is left alone,
+    // because the viewer's sub-position may move it on purpose.
+    return CueOrigin(
+        x = if (layout.positionX != null) x.coerceIn(0, maxOf(0, viewportWidth - width)) else x,
+        y = if (layout.positionY != null) y.coerceIn(0, maxOf(0, viewportHeight - height)) else y,
+    )
 }

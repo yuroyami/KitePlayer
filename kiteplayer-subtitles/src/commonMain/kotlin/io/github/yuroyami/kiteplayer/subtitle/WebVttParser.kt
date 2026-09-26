@@ -81,16 +81,30 @@ public object WebVttParser {
         val end = timestampToMicros(match.groupValues[2]) ?: return null
         val settings = line.substringAfter(match.groupValues[0], "")
         val align = ALIGN.find(settings)?.groupValues?.get(1)
-        val alignment = when (align) {
-            "start", "left" -> CueAlignment.BottomLeft
-            "end", "right" -> CueAlignment.BottomRight
-            "center", "middle" -> CueAlignment.BottomCenter
+        // The column: left, centre or right.
+        val column = when (align) {
+            "start", "left" -> 0
+            "end", "right" -> 2
+            "center", "middle" -> 1
             else -> null
         }
         // Where the cue sits across the picture and how far down it is. The specification writes
         // both as percentages of the video, which is the same 0 to 1 fraction CueLayout carries.
         val positionX = percentSetting(settings, POSITION)
-        val positionY = percentSetting(settings, LINE)
+        val line = LINE.find(settings)
+        val positionY = line?.groupValues?.get(1)?.toFloatOrNull()?.let { it / 100f }?.takeIf { it in 0f..1f }
+        // The row. A percentage line anchors the edge that its line alignment names, and that is the
+        // top unless the cue says otherwise, so `line:0%` is the top of the picture. Without a line
+        // the cue stays in the bottom row. The line-number form counts text rows, which means
+        // nothing until the text is measured, so it is not read.
+        val lineAlign = line?.groupValues?.get(2)
+        val row = when {
+            positionY == null -> 2
+            lineAlign == "center" -> 1
+            lineAlign == "end" -> 2
+            else -> 0
+        }
+        val alignment = if (column == null && positionY == null) null else ALIGNMENTS[row][column ?: 1]
         val width = percentSetting(settings, SIZE)
         var layout = CueLayout()
         if (alignment != null) layout = layout.copy(alignment = alignment)
@@ -114,13 +128,7 @@ public object WebVttParser {
         )
     }
 
-    /**
-     * A cue setting written as a percentage, as a 0 to 1 fraction.
-     *
-     * Only the percentage forms. `line` also has a line-number form, which is a count of text rows
-     * from the top or the bottom and means nothing until the text has been measured, so it is not
-     * a fraction of the picture and is deliberately not turned into one here.
-     */
+    /** A cue setting written as a percentage, as a 0 to 1 fraction. */
     private fun percentSetting(settings: String, pattern: Regex): Float? =
         pattern.find(settings)?.groupValues?.get(1)?.toFloatOrNull()?.let { it / 100f }?.takeIf {
             it in 0f..1f
@@ -152,11 +160,18 @@ public object WebVttParser {
     private val TIMESTAMP = Regex("""(?:(\d{1,3}):)?(\d{1,2}):(\d{1,2})\.(\d{1,3})""")
     private val ALIGN = Regex("""align:(\S+)""")
     private val POSITION = Regex("""position:(-?[\d.]+)%""")
-    private val LINE = Regex("""line:(-?[\d.]+)%""")
+    private val LINE = Regex("""line:(-?[\d.]+)%(?:,(start|center|end))?""")
     private val SIZE = Regex("""size:(-?[\d.]+)%""")
 
     /** Where a cue sits across the picture when it says nothing: the middle, as the specification says. */
     private const val DEFAULT_POSITION = 0.5f
+
+    /** The alignment for a row (top, middle, bottom) and a column (left, centre, right). */
+    private val ALIGNMENTS = arrayOf(
+        arrayOf(CueAlignment.TopLeft, CueAlignment.TopCenter, CueAlignment.TopRight),
+        arrayOf(CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight),
+        arrayOf(CueAlignment.BottomLeft, CueAlignment.BottomCenter, CueAlignment.BottomRight),
+    )
     private val VOICE_TAG = Regex("""</?v(?:\s[^>]*)?>""")
     private val CLASS_TAG = Regex("""</?c(?:\.[^>]*)?>""")
     private val KARAOKE_TAG = Regex("""<\d{1,3}:?\d{1,2}:\d{1,2}\.\d{1,3}>""")

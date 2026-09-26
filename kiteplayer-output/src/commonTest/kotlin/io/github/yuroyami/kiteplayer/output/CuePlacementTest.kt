@@ -40,6 +40,17 @@ class CuePlacementTest {
     }
 
     @Test
+    fun aPositionedBoxStaysInsideTheViewport() {
+        // A top-anchored box on the bottom edge, and a bottom-anchored one on the top edge.
+        assertEquals(270 to 320, origin(CueAlignment.TopCenter, 0.5f, 1f))
+        assertEquals(270 to 0, origin(CueAlignment.BottomCenter, 0.5f, 0f))
+        // Boxes that would hang off the left and the right edges.
+        assertEquals(0 to 140, origin(CueAlignment.BottomCenter, 0f, 0.5f))
+        assertEquals(0 to 140, origin(CueAlignment.BottomRight, 0f, 0.5f))
+        assertEquals(540 to 140, origin(CueAlignment.BottomLeft, 1f, 0.5f))
+    }
+
+    @Test
     fun withoutAPositionTheAlignmentPicksAMarginAndTheBottomRowStacks() {
         // The default margins are 5 percent: 32 pixels across and 18 down.
         assertEquals(32 to 302, origin(CueAlignment.BottomLeft))

@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.subtitle
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /** Percentages divided by a hundred do not land on exact binary fractions. */
@@ -28,6 +29,20 @@ class WebVttCueSettingsTest {
         val layout = parse("line:10% position:25% size:40%").layout
         assertEquals(0.25f, layout.positionX)
         assertEquals(0.1f, layout.positionY)
+    }
+
+    // The specification's line alignment is start by default, which is the top of a horizontal cue.
+    @Test
+    fun `a percentage line anchors the top of the cue unless it names another edge`() {
+        val top = parse("line:0%").layout
+        assertEquals(CueAlignment.TopCenter, top.alignment)
+        assertEquals(0f, top.positionY)
+        assertEquals(CueAlignment.TopLeft, parse("line:10% align:start").layout.alignment)
+        assertEquals(CueAlignment.TopCenter, parse("line:10%,start").layout.alignment)
+        assertEquals(CueAlignment.MiddleCenter, parse("line:50%,center").layout.alignment)
+        val bottom = parse("line:90%,end align:end").layout
+        assertEquals(CueAlignment.BottomRight, bottom.alignment)
+        assertEquals(0.9f, assertNotNull(bottom.positionY), TOLERANCE)
     }
 
     @Test

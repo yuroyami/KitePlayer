@@ -18,6 +18,12 @@ import kotlin.coroutines.CoroutineContext
 internal expect fun platformPlaybackDispatchers(): PlaybackDispatchers
 
 /**
+ * Where work that blocks its thread runs when it belongs to no player lane, such as an inspect.
+ * The shared IO pool on a threaded target, and the one thread on the web, which refuses blocking.
+ */
+internal expect val blockingWorkDispatcher: kotlinx.coroutines.CoroutineDispatcher
+
+/**
  * Six SERIAL LANES over the runtime's shared pools instead of six owned OS threads.
  *
  * The engine's contracts are about CONFINEMENT, and `limitedParallelism(1)` is confinement:

@@ -10,3 +10,5 @@ import kotlinx.coroutines.Dispatchers
  */
 internal actual fun platformPlaybackDispatchers(): PlaybackDispatchers =
     PlaybackDispatchers.sharing(Dispatchers.Default)
+
+internal actual val blockingWorkDispatcher: kotlinx.coroutines.CoroutineDispatcher get() = Dispatchers.Default

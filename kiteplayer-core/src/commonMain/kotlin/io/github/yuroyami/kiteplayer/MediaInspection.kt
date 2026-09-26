@@ -30,7 +30,10 @@ public data class MediaInspection(
  * length and the tracks of every one of them and wants to play none, and building a player for
  * that would ask a device for an audio route it is never going to use.
  *
- * The session it makes to read the container is closed before this returns.
+ * The session it makes to read the container is closed before this returns, and the reading runs
+ * off the caller's thread. It resolves no reader: an item without its own `io` reaches [backend]
+ * by its URI alone, so an https item needs a reader of its own here. [KitePlayer.inspect] resolves
+ * the reader the way [KitePlayer.open] does.
  *
  * @throws PlaybackException when the media cannot be reached or is not media.
  */

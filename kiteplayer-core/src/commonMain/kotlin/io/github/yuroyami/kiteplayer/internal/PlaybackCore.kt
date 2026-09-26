@@ -902,9 +902,16 @@ internal class PlaybackCore(
 
     /** Reads a file's own facts without opening playback. See [KitePlayer.inspect]. */
     suspend fun inspect(media: MediaItem): MediaInspection {
-        val backend = config.backends.backend
-            ?: throw UnsupportedOperationException("this player was built with no media backend, so it cannot inspect media")
-        return inspectMedia(backend, media)
+        // The backend and the reader open would use, so an item that plays can be inspected (#202).
+        val io = resolveMediaIo(media, config.network)
+        val item = if (io == null) media else media.copy(io = { io })
+        return try {
+            inspectMedia(backend, item)
+        } catch (failure: Throwable) {
+            // A reader the backend never took over is closed here; close tolerates a second call.
+            if (io != null) runCatching { io.close() }
+            throw failure
+        }
     }
 
     suspend fun queueNext() {
@@ -8765,8 +8772,23 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
  * lists rather than devices, so opening and closing one straight away is exactly a probe and costs
  * a container read. That is why this needs nothing new from a backend.
  */
-internal suspend fun inspectMedia(backend: MediaBackend, media: MediaItem): MediaInspection {
-    val session = backend.open(media)
+internal suspend fun inspectMedia(backend: MediaBackend, media: MediaItem): MediaInspection =
+    // A backend open may block its thread, so it never runs on the caller's (#202).
+    withContext(blockingWorkDispatcher) {
+        val session = try {
+            backend.open(media)
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (failure: PlaybackException) {
+            throw failure
+        } catch (failure: Throwable) {
+            // Typed as open types a failure while the source opens, never the backend's own type.
+            throw PlaybackException(PlaybackError.SourceUnavailable(media.uri, failure, failure.message))
+        }
+        readInspection(session)
+    }
+
+private fun readInspection(session: BackendSession): MediaInspection {
     try {
         val source = session.source
         return MediaInspection(

@@ -907,10 +907,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * container is closed before this returns, so calling it while something is playing is safe.
      *
      * It reads the container, so it costs what reaching and parsing a header costs. That is far
-     * less than an open, and it is not free.
+     * less than an open, and it is not free. It reaches the media as [open] does, through the same
+     * reader resolution, and the reading runs off the caller's thread.
      *
      * @throws PlaybackException when the media cannot be reached or is not media.
-     * @throws UnsupportedOperationException when this player was built with no media backend.
      */
     public suspend fun inspect(media: MediaItem): MediaInspection = core.inspect(media)
 

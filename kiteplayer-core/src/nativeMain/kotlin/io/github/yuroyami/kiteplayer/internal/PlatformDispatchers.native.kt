@@ -13,3 +13,5 @@ import kotlinx.coroutines.IO
  */
 internal actual fun platformPlaybackDispatchers(): PlaybackDispatchers =
     SharedLaneDispatchers(calm = Dispatchers.Default, blocking = Dispatchers.IO)
+
+internal actual val blockingWorkDispatcher: kotlinx.coroutines.CoroutineDispatcher get() = Dispatchers.IO

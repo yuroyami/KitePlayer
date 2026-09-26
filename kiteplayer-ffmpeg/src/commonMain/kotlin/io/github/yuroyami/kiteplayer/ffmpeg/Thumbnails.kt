@@ -5,6 +5,8 @@ import io.github.yuroyami.kiteffmpeg.FilterGraph
 import io.github.yuroyami.kiteffmpeg.Frame
 import io.github.yuroyami.kiteffmpeg.Rational
 import io.github.yuroyami.kiteplayer.MediaItem
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration
 
 /**
@@ -28,7 +30,8 @@ public object Thumbnails {
      * [format]. Opens the item once and closes it before returning. Positions are keyframe-snapped
      * the way frame extraction works: the frame at or first after the position, fast rather than
      * exact. A hardware-decoded frame is downloaded first; the scale runs once per call on a graph
-     * built from the first frame's geometry.
+     * built from the first frame's geometry. The work runs off the caller's thread, and a cancel
+     * takes effect between two positions.
      *
      * @throws IllegalArgumentException for an item with no video stream, or a [maxWidth] below one
      * @throws io.github.yuroyami.kiteffmpeg.FFmpegException when the open, a seek or a decode fails
@@ -38,7 +41,7 @@ public object Thumbnails {
         positions: List<Duration>,
         maxWidth: Int = 320,
         format: SnapshotFormat = SnapshotFormat.Jpeg,
-    ): List<Thumbnail> {
+    ): List<Thumbnail> = withContext(blockingWork) {
         require(maxWidth > 0) { "maxWidth must be positive, was $maxWidth" }
         val codec = if (format == SnapshotFormat.Png) CodecId.Png else CodecId.Mjpeg
         openSource(item).use { source ->
@@ -47,7 +50,8 @@ public object Thumbnails {
             val frameRate = stream.video?.frameRate ?: Rational(25, 1)
             var scaler: FilterGraph? = null
             try {
-                return positions.map { position ->
+                return@withContext positions.map { position ->
+                    ensureActive()
                     val decoded = source.extractFrame(position.inWholeMicroseconds, stream)
                     val software = if (decoded.info.isHardware) decoded.use { it.downloadFromHardware() } else decoded
                     val info = software.info

@@ -38,13 +38,18 @@ public object SubRipParser {
      */
     public const val OPEN_CUE_DEFAULT_MICROS: Long = 3_000_000
 
-    /** Parses [text] into cues, sorted by start time. Never throws on malformed input. */
-    public fun parse(text: String): List<SubtitleCue.Text> {
+    /**
+     * Parses [text] into cues, sorted by start time. Never throws on malformed input. A file with
+     * more than 100,000 cues keeps the first 100,000 in file order.
+     */
+    public fun parse(text: String): List<SubtitleCue.Text> = parse(text, MAX_FILE_CUES)
+
+    internal fun parse(text: String, maxCues: Int): List<SubtitleCue.Text> {
         val lines = text.removePrefix("﻿").split(LINE_BREAK)
         val cues = mutableListOf<SubtitleCue.Text>()
 
         var i = 0
-        while (i < lines.size) {
+        while (i < lines.size && cues.size < maxCues) {
             // Find the next timing line. Everything before it that is not a timing line is
             // either an index, a blank, or junk, and none of it matters.
             val timing = parseTiming(lines[i])
@@ -127,16 +132,17 @@ private fun looksLikeIndex(line: String): Boolean =
 
     /** Returns start and end in microseconds, or null when [line] is not a timing line. */
     private fun parseTiming(line: String): Pair<Long, Long>? {
-        val match = TIMING.find(line) ?: return null
-        val start = timestampToMicros(match.groupValues[1]) ?: return null
-        val end = timestampToMicros(match.groupValues[2]) ?: return null
+        val match = findTiming(line, allowComma = true) ?: return null
+        val start = timestampToMicros(match.start) ?: return null
+        val end = timestampToMicros(match.end) ?: return null
         // An end before the start is a broken file. Treat it as an open end rather than
         // discarding the text, and let the track state close it at the next cue.
         return start to if (end > start) end else start
     }
 
     private fun timestampToMicros(raw: String): Long? {
-        val match = TIMESTAMP.matchEntire(raw.trim()) ?: return null
+        if (raw.length > MAX_TIMESTAMP_LENGTH) return null
+        val match = TIMESTAMP.matchEntire(raw) ?: return null
         val hours = match.groupValues[1].ifEmpty { "0" }.toLongOrNull() ?: return null
         val minutes = match.groupValues[2].toLongOrNull() ?: return null
         val seconds = match.groupValues[3].toLongOrNull() ?: return null
@@ -146,8 +152,13 @@ private fun looksLikeIndex(line: String): Boolean =
     }
 
     private val LINE_BREAK = Regex("\r\n|\n|\r")
-    private val TIMING = Regex("""([\d:.,]+)\s*-->\s*([\d:.,]+)""")
     private val TIMESTAMP = Regex("""(?:(\d{1,3}):)?(\d{1,2}):(\d{1,2})[.,](\d{1,3})""")
+
+/**
+ * The most cues one SubRip or WebVTT file yields. Real files hold a few thousand, and this bounds
+ * the memory that a file of tiny cues can take.
+ */
+internal const val MAX_FILE_CUES: Int = 100_000
 
 /**
  * Closes every cue whose end is not after its start at the next DISTINCT start in this list,
@@ -191,15 +202,17 @@ internal object InlineMarkup {
      * The first `\an1` to `\an9` places the cue, `\b`, `\i`, `\u` and `\s` set the style, and
      * every other tag is dropped. An unterminated run stays text, as it does in FFmpeg.
      */
-    fun parse(text: String, braceTags: Boolean): Parsed {
+    fun parse(text: CharSequence, braceTags: Boolean): Parsed {
         if (text.isEmpty()) return Parsed(emptyList(), null)
-        if ('<' !in text && (!braceTags || '{' !in text)) return Parsed(listOf(StyledSpan(text)), null)
+        if ('<' !in text && (!braceTags || '{' !in text)) return Parsed(listOf(StyledSpan(text.toString())), null)
 
         val spans = mutableListOf<StyledSpan>()
         val buffer = StringBuilder()
         var style = CueStyle()
         var alignment: CueAlignment? = null
         val stack = ArrayDeque<CueStyle>()
+        // Cleared once a search finds no `}` after some point: no later run can close then either.
+        var braceRunsClose = braceTags
         var i = 0
 
         fun flush() {
@@ -211,8 +224,9 @@ internal object InlineMarkup {
 
         while (i < text.length) {
             val c = text[i]
-            if (braceTags && c == '{' && text.getOrNull(i + 1) == '\\') {
+            if (braceRunsClose && c == '{' && text.getOrNull(i + 1) == '\\') {
                 val close = text.indexOf('}', i + 2)
+                if (close < 0) braceRunsClose = false
                 if (close > 0) {
                     var next = style
                     for (tag in text.substring(i + 2, close).split('\\')) {

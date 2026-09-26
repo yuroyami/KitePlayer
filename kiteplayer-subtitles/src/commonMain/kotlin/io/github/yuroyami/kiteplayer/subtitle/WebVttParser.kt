@@ -23,13 +23,18 @@ package io.github.yuroyami.kiteplayer.subtitle
  */
 public object WebVttParser {
 
-    /** Parses [text] into cues, sorted by start time. Never throws on malformed input. */
-    public fun parse(text: String): List<SubtitleCue.Text> {
+    /**
+     * Parses [text] into cues, sorted by start time. Never throws on malformed input. A file with
+     * more than 100,000 cues keeps the first 100,000 in file order.
+     */
+    public fun parse(text: String): List<SubtitleCue.Text> = parse(text, MAX_FILE_CUES)
+
+    internal fun parse(text: String, maxCues: Int): List<SubtitleCue.Text> {
         val lines = text.removePrefix("﻿").split(LINE_BREAK)
         val cues = mutableListOf<SubtitleCue.Text>()
 
         var i = 0
-        while (i < lines.size) {
+        while (i < lines.size && cues.size < maxCues) {
             val line = lines[i]
             // Block skips first: NOTE/STYLE/REGION run to the next blank line. The keyword must
             // stand alone or be followed by whitespace: an identifier that merely
@@ -76,10 +81,10 @@ public object WebVttParser {
     private class Timing(val start: Long, val end: Long, val layout: CueLayout)
 
     private fun parseTiming(line: String): Timing? {
-        val match = TIMING.find(line) ?: return null
-        val start = timestampToMicros(match.groupValues[1]) ?: return null
-        val end = timestampToMicros(match.groupValues[2]) ?: return null
-        val settings = line.substringAfter(match.groupValues[0], "")
+        val match = findTiming(line, allowComma = false) ?: return null
+        val start = timestampToMicros(match.start) ?: return null
+        val end = timestampToMicros(match.end) ?: return null
+        val settings = line.substring(match.endIndex)
         val align = ALIGN.find(settings)?.groupValues?.get(1)
         // The column: left, centre or right.
         val column = when (align) {
@@ -135,7 +140,8 @@ public object WebVttParser {
         }
 
     private fun timestampToMicros(raw: String): Long? {
-        val match = TIMESTAMP.matchEntire(raw.trim()) ?: return null
+        if (raw.length > MAX_TIMESTAMP_LENGTH) return null
+        val match = TIMESTAMP.matchEntire(raw) ?: return null
         val hours = match.groupValues[1].ifEmpty { "0" }.toLongOrNull() ?: return null
         val minutes = match.groupValues[2].toLongOrNull() ?: return null
         val seconds = match.groupValues[3].toLongOrNull() ?: return null
@@ -149,14 +155,37 @@ public object WebVttParser {
             line == keyword || line.startsWith("$keyword ") || line.startsWith("$keyword\t")
         }
 
-    /** Voice, class and karaoke-timestamp tags are VTT-only shapes InlineMarkup does not know. */
-    private fun stripVttOnlyTags(body: String): String = body
-        .replace(VOICE_TAG, "")
-        .replace(CLASS_TAG, "")
-        .replace(KARAOKE_TAG, "")
+    /**
+     * Voice, class and karaoke-timestamp tags are VTT-only shapes InlineMarkup does not know. Each
+     * kind goes in its own pass, in that order.
+     */
+    private fun stripVttOnlyTags(body: String): String =
+        stripTags(stripTags(stripTags(body, ::isVoiceTag), ::isClassTag), ::isKaraokeTag)
+
+    /** `<v>`, `</v>` or `<v Speaker>`, given the inside of the tag. */
+    private fun isVoiceTag(text: CharSequence, from: Int, to: Int): Boolean = isNamedTag(text, from, to, 'v') {
+        it.isWhitespace()
+    }
+
+    /** `<c>`, `</c>` or `<c.class>`, given the inside of the tag. */
+    private fun isClassTag(text: CharSequence, from: Int, to: Int): Boolean = isNamedTag(text, from, to, 'c') {
+        it == '.'
+    }
+
+    /** An optional `/`, then [name], then nothing or a character that [opensRest] accepts. */
+    private inline fun isNamedTag(text: CharSequence, from: Int, to: Int, name: Char, opensRest: (Char) -> Boolean): Boolean {
+        var at = from
+        if (at < to && text[at] == '/') at++
+        if (at >= to || text[at] != name) return false
+        at++
+        return at == to || opensRest(text[at])
+    }
+
+    /** A karaoke timestamp such as `00:00:01.000`, given the inside of the tag. */
+    private fun isKaraokeTag(text: CharSequence, from: Int, to: Int): Boolean =
+        to - from <= MAX_TIMESTAMP_LENGTH && KARAOKE_TIME.matches(text.substring(from, to))
 
     private val LINE_BREAK = Regex("\r\n|\n|\r")
-    private val TIMING = Regex("""([\d:.]+)\s*-->\s*([\d:.]+)""")
     private val TIMESTAMP = Regex("""(?:(\d{1,3}):)?(\d{1,2}):(\d{1,2})\.(\d{1,3})""")
     private val ALIGN = Regex("""align:(\S+)""")
     private val POSITION = Regex("""position:(-?[\d.]+)%""")
@@ -172,7 +201,31 @@ public object WebVttParser {
         arrayOf(CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight),
         arrayOf(CueAlignment.BottomLeft, CueAlignment.BottomCenter, CueAlignment.BottomRight),
     )
-    private val VOICE_TAG = Regex("""</?v(?:\s[^>]*)?>""")
-    private val CLASS_TAG = Regex("""</?c(?:\.[^>]*)?>""")
-    private val KARAOKE_TAG = Regex("""<\d{1,3}:?\d{1,2}:\d{1,2}\.\d{1,3}>""")
+    private val KARAOKE_TIME = Regex("""\d{1,3}:?\d{1,2}:\d{1,2}\.\d{1,3}""")
+}
+
+/**
+ * [text] without every `<...>` tag whose inside [isTag] accepts, given the text and the bounds of
+ * that inside. A tag ends at the first `>` after its `<`. The search for that `>` only ever moves
+ * forward, and it stops for good once it finds none, so the pass reads each character a bounded
+ * number of times.
+ */
+internal fun stripTags(text: CharSequence, isTag: (CharSequence, Int, Int) -> Boolean): String {
+    if ('<' !in text) return text.toString()
+    val out = StringBuilder(text.length)
+    var close = text.indexOf('>')
+    var i = 0
+    while (i < text.length) {
+        val c = text[i]
+        if (c == '<' && close >= 0) {
+            if (close <= i) close = text.indexOf('>', i + 1)
+            if (close > i && isTag(text, i + 1, close)) {
+                i = close + 1
+                continue
+            }
+        }
+        out.append(c)
+        i++
+    }
+    return out.toString()
 }

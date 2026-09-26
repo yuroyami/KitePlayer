@@ -14,6 +14,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlin.math.roundToInt
 
 /**
  * The desktop JVM audio output: one `javax.sound.sampled.SourceDataLine` behind the engine's pull
@@ -455,11 +456,16 @@ public class DesktopAudioSink internal constructor(
         heldBlockShort = false
     }
 
-    /** F32 to 16-bit signed little-endian, the one conversion the `AudioSink` contract allows. */
+    /**
+     * F32 to 16-bit signed little-endian, the one conversion the `AudioSink` contract allows.
+     *
+     * The 32768 scale and the rounding are FFmpeg's own, the inverse of how the decode side reads
+     * S16, so a 16-bit source at unity gain reaches the line bit for bit (#260).
+     */
     private fun packBlock(samples: Int) {
         var b = 0
         for (i in 0 until samples) {
-            val v = (blockBuffer[i] * 32767f).toInt().coerceIn(-32768, 32767)
+            val v = (blockBuffer[i] * 32768f).roundToInt().coerceIn(-32768, 32767)
             wireBuffer[b++] = (v and 0xFF).toByte()
             wireBuffer[b++] = ((v shr 8) and 0xFF).toByte()
         }

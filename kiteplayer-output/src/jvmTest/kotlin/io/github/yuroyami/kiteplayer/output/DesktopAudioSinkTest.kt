@@ -284,6 +284,26 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
+    // A 16-bit sample read as s / 32768 must come back as s, not one step closer to zero (#260).
+    @Test
+    fun `sixteen bit samples reach the line bit for bit at unity gain`() = runBlocking {
+        val s = sink()
+        val ramp = IntArray(512 * 2) { i -> listOf(1000, -1000, 1, -1, 32767, -32768, 12345, -12345)[i % 8] }
+        s.open(stereo48k) { destination, frames, _ ->
+            destination.writeInterleaved(FloatArray(frames * 2) { ramp[it % ramp.size] / 32768f }, 0, 0, frames)
+            frames
+        }
+        s.start()
+        awaitUntil("one block on the wire") {
+            synchronized(driver.writtenBytes) { driver.writtenBytes.size } >= 512 * 4
+        }
+        s.stop()
+        for (i in 0 until 512 * 2) {
+            assertEquals(ramp[i], driver.shortAt(i), "sample $i moved on its way to the line")
+        }
+        s.close()
+    }
+
     // The block buffer is preallocated and REUSED, so a short return leaves the previous block's
     // samples in the tail. The first block here is deliberately full and loud, so the tail the
     // second block does not write is dirty; nothing above the sink zeroes it.

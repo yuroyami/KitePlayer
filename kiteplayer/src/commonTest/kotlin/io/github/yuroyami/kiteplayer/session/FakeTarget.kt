@@ -16,17 +16,32 @@ internal class FakeTarget(
     private var playingNow = playing
     private var volumeNow = volume
     private var videoEnabledNow = videoEnabled
+    private var transportCount = 0L
 
     override val playing: Boolean get() = playingNow
+    override val transportMark: Long get() = transportCount
+
+    /** A press the listener made, outside every guard: the lock screen, a headset, the app. */
+    fun userPlays() {
+        transportCount++
+        playingNow = true
+    }
+
+    fun userPauses() {
+        transportCount++
+        playingNow = false
+    }
     override val volume: Float get() = volumeNow
     override val videoEnabled: Boolean get() = videoEnabledNow
 
     override fun play() {
+        transportCount++
         playingNow = true
         calls += "play"
     }
 
     override fun pause() {
+        transportCount++
         playingNow = false
         calls += "pause"
     }

@@ -113,6 +113,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(Exception::class)
     public suspend fun open(media: MediaItem) {
+        transportCommands.incrementAndGet()
         core.open(media)
     }
 
@@ -125,6 +126,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun play() {
+        transportCommands.incrementAndGet()
         core.play()
     }
 
@@ -136,8 +138,19 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun pause() {
+        transportCommands.incrementAndGet()
         core.pause()
     }
+
+    private val transportCommands = kotlinx.atomicfu.atomic(0L)
+
+    /**
+     * A count of the transport commands callers gave: play, pause, stop, and every open or queue
+     * move. It only grows. A guard that pauses the player on its own, for a call or for the screen
+     * going off, reads it right after its pause and resumes later only if the count has not moved,
+     * so it never undoes a play or a pause somebody made in between.
+     */
+    public val transportMark: Long get() = transportCommands.value
 
     /**
      * Seeks and returns when the target frame is on screen, or when a later request replaced this one.
@@ -183,6 +196,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(Exception::class)
     public suspend fun stop() {
+        transportCommands.incrementAndGet()
         core.stop()
     }
 
@@ -622,6 +636,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(Exception::class)
     public suspend fun openQueue(items: List<MediaItem>, startIndex: Int = 0) {
+        transportCommands.incrementAndGet()
         core.openQueue(items, startIndex)
     }
 
@@ -633,6 +648,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(Exception::class)
     public suspend fun next() {
+        transportCommands.incrementAndGet()
         core.queueNext()
     }
 
@@ -644,6 +660,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(Exception::class)
     public suspend fun previous() {
+        transportCommands.incrementAndGet()
         core.queuePrevious()
     }
 

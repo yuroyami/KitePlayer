@@ -87,6 +87,19 @@ class BackgroundMachineTest {
         assertEquals(listOf("pause", "play"), target.calls)
     }
 
+    // The lock screen example: the policy pauses, the listener plays and pauses there (#278).
+    @Test
+    fun aReturnDoesNotResumeAPlayerTheListenerPausedWhileAway() {
+        val target = FakeTarget()
+        val applier = BackgroundApplier(target, BackgroundPolicy.PauseAll)
+        applier.handle(foreground = false)
+        target.userPlays()
+        target.userPauses()
+        target.calls.clear()
+        applier.handle(foreground = true)
+        assertEquals(emptyList(), target.calls, "the listener's own pause was undone on return")
+    }
+
     @Test
     fun aShowingWindowKeepsVideoWhenTheAppLeaves() {
         val machine = BackgroundMachine(BackgroundPolicy.ContinueAudio)

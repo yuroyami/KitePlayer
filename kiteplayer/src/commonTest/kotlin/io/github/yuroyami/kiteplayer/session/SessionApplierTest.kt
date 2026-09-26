@@ -45,6 +45,28 @@ class SessionApplierTest {
         assertEquals(listOf("volume 0.9", "pause"), target.calls)
     }
 
+    // A policy resumes only the pause it made (#278).
+    @Test
+    fun `a regained focus does not resume a player the listener played and paused meanwhile`() {
+        val target = FakeTarget()
+        val applier = applier(target)
+        applier.handle(InterruptionEvent.LostTransient)
+        target.userPlays()
+        target.userPauses()
+        target.calls.clear()
+        applier.handle(InterruptionEvent.Gained)
+        assertEquals(emptyList(), target.calls, "the listener's own pause was undone")
+    }
+
+    @Test
+    fun `a regained focus still resumes a pause nobody touched`() {
+        val target = FakeTarget()
+        val applier = applier(target)
+        applier.handle(InterruptionEvent.LostTransient)
+        applier.handle(InterruptionEvent.Gained)
+        assertEquals(listOf("pause", "play"), target.calls)
+    }
+
     @Test
     fun `closing gives the volume back`() {
         val target = FakeTarget(volume = 0.5f)

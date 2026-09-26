@@ -110,6 +110,7 @@ internal class BackgroundApplier(
     policy: BackgroundPolicy,
 ) {
     private val machine = BackgroundMachine(policy)
+    private val claim = PauseClaim(target)
 
     fun handle(foreground: Boolean) {
         apply(machine.on(foreground, target.playing, target.videoEnabled))
@@ -122,10 +123,6 @@ internal class BackgroundApplier(
 
     private fun apply(decision: BackgroundDecision) {
         decision.videoEnabled?.let(target::setVideoEnabled)
-        when (decision.transport) {
-            SessionTransport.Pause -> target.pause()
-            SessionTransport.Resume -> target.play()
-            SessionTransport.None -> Unit
-        }
+        claim.apply(decision.transport)
     }
 }

@@ -11,6 +11,9 @@ import io.github.yuroyami.kiteplayer.PlaybackStatus
  */
 internal interface SessionTarget {
     val playing: Boolean
+
+    /** A count that moves with every play, pause, stop, open and queue move a caller makes. */
+    val transportMark: Long
     val volume: Float
     val videoEnabled: Boolean
     fun play()
@@ -35,12 +38,39 @@ internal class PlayerSessionTarget(private val player: KitePlayer) : SessionTarg
     // Buffering and a queue's next open count: the engine starts the sound by itself once data
     // arrives, so a guard that waited for Playing let it start over a call (#226).
     override val playing: Boolean get() = player.state.value.playRequested
+    override val transportMark: Long get() = player.transportMark
     override val volume: Float get() = player.state.value.volume
     override val videoEnabled: Boolean get() = player.state.value.videoEnabled
     override fun play() = player.playFromRemote()
     override fun pause() = player.pauseFromRemote()
     override fun setVolume(value: Float) = player.setVolume(value)
     override fun setVideoEnabled(enabled: Boolean) = player.setVideoEnabled(enabled)
+}
+
+/**
+ * Makes a policy's pause and its later resume, and resumes only a pause nobody overrode.
+ *
+ * The count of transport commands is read right after the policy's own pause. A play, a pause, an
+ * open or a queue move after that, by the listener or the application, moves the count, and the
+ * resume that would have undone the policy's pause does nothing instead (#278).
+ */
+internal class PauseClaim(private val target: SessionTarget) {
+    private var markAtPause: Long? = null
+
+    fun apply(transport: SessionTransport) {
+        when (transport) {
+            SessionTransport.Pause -> {
+                target.pause()
+                markAtPause = target.transportMark
+            }
+            SessionTransport.Resume -> {
+                val mark = markAtPause
+                markAtPause = null
+                if (mark != null && mark == target.transportMark) target.play()
+            }
+            SessionTransport.None -> Unit
+        }
+    }
 }
 
 /**
@@ -54,6 +84,7 @@ internal class InterruptionApplier(
     private val policy: InterruptionPolicy,
 ) {
     private val machine = InterruptionMachine(policy)
+    private val claim = PauseClaim(target)
     private var volumeBeforeDuck: Float? = null
 
     fun handle(event: InterruptionEvent) {
@@ -61,11 +92,7 @@ internal class InterruptionApplier(
         // Volume first: a permanent loss arriving while ducked has to give the volume back BEFORE
         // it pauses, or the next press of play is quiet for no reason the listener can see.
         applyDuck(decision.ducked)
-        when (decision.transport) {
-            SessionTransport.Pause -> target.pause()
-            SessionTransport.Resume -> target.play()
-            SessionTransport.None -> Unit
-        }
+        claim.apply(decision.transport)
     }
 
     private fun applyDuck(ducked: Boolean) {

@@ -2139,6 +2139,8 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
         final fun <get-stats>(): kotlinx.coroutines.flow/StateFlow<io.github.yuroyami.kiteplayer/PlaybackStats> // io.github.yuroyami.kiteplayer/KitePlayer.stats.<get-stats>|<get-stats>(){}[0]
     final val subtitleCues // io.github.yuroyami.kiteplayer/KitePlayer.subtitleCues|{}subtitleCues[0]
         final fun <get-subtitleCues>(): kotlinx.coroutines.flow/StateFlow<kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>> // io.github.yuroyami.kiteplayer/KitePlayer.subtitleCues.<get-subtitleCues>|<get-subtitleCues>(){}[0]
+    final val transportMark // io.github.yuroyami.kiteplayer/KitePlayer.transportMark|{}transportMark[0]
+        final fun <get-transportMark>(): kotlin/Long // io.github.yuroyami.kiteplayer/KitePlayer.transportMark.<get-transportMark>|<get-transportMark>(){}[0]
 
     final fun attachAudioTap(io.github.yuroyami.kiteplayer/AudioTap) // io.github.yuroyami.kiteplayer/KitePlayer.attachAudioTap|attachAudioTap(io.github.yuroyami.kiteplayer.AudioTap){}[0]
     final fun attachRenderer(io.github.yuroyami.kiteplayer.spi/VideoRenderer) // io.github.yuroyami.kiteplayer/KitePlayer.attachRenderer|attachRenderer(io.github.yuroyami.kiteplayer.spi.VideoRenderer){}[0]

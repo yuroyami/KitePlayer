@@ -28,6 +28,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `PlayerSnapshot` gains `playRequested`, which changes the generated data-class methods.
   Recompile. The media session guards now pause or duck a player that is buffering, or that is
   opening the next queue item while playing, as well as one that is playing (#226).
+- A guard that paused for a call or for the screen going off no longer resumes a player that the
+  listener or the application played, paused or moved on in the meantime. `KitePlayer.transportMark`
+  is the count such a guard compares (#278).
 
 ## [0.0.27] - 2026-09-25
 

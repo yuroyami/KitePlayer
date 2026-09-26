@@ -2532,8 +2532,8 @@ internal class PlaybackCore(
             // A queue starts at the initial generation, and a rebuild starts at whatever epoch the
             // player has reached. Aligning them here is what stops the demuxer's very first packet
             // from being rejected as stale, which would leave the new session with nothing. A rebuild
-            // realigns the rest of itself afterwards: the recovery reopen flushes its decoders into
-            // the epoch explicitly, and a track change repositions with a seek that does the same.
+            // realigns the rest of itself afterwards: the recovery reopen and the track change both
+            // flush their decoders into the epoch before the workers start.
             val videoQueue = videoStream?.let {
                 PacketQueue(it.index, softLimitUs).also { queue -> queue.flushTo(requestedEpoch) }
             }
@@ -3649,7 +3649,10 @@ internal class PlaybackCore(
             requestedEpoch = requestedEpoch.next()
             var rebuilt = buildSession(item, video, audio, subtitle)
             session = rebuilt
-        rebuilt.videoParked.value = !videoEnabled
+            // Fresh decoders stamp Generation.Initial, and the reposition seek below that would
+            // align them runs only above zero. At zero every frame was dropped as stale (#277).
+            flushDecoders(rebuilt, requestedEpoch)
+            clearBuffers(rebuilt, requestedEpoch)
             rebuilt.videoParked.value = !videoEnabled
             startWorkers(rebuilt)
             var recoveredAndPositioned = false

@@ -631,10 +631,17 @@ internal class PlaybackCore(
     private var equalizer: EqualizerSettings = config.audio.equalizer
     private var videoEnabled: Boolean = config.videoEnabled
 
-    /** The armed sleep timer, its fade length, and the wall instant an [SleepTimer.After] fires at. */
+    /** The armed sleep timer and its fade length. */
     private var sleepTimer: SleepTimer? = null
     private var sleepFade: Duration = Duration.ZERO
-    private var sleepDeadlineNanos: Long = 0L
+
+    /**
+     * What is left of an [SleepTimer.After], and the instant it was last counted down from, or
+     * [NO_POSITION] while playback is not advancing. A remaining time rather than a deadline, so a
+     * pause does not run the timer down (#216).
+     */
+    private var sleepRemainingNanos: Long = 0L
+    private var sleepCountedAtNanos: Long = NO_POSITION
     private var videoScale: VideoScale = VideoScale.Fit
     private var videoAdjustments: VideoAdjustments = VideoAdjustments.Identity
     private var renderQuality: io.github.yuroyami.kiteplayer.RenderQuality = config.renderQuality
@@ -1810,10 +1817,8 @@ internal class PlaybackCore(
             is CoreCommand.SetSleepTimer -> {
                 sleepTimer = command.timer
                 sleepFade = command.fade
-                sleepDeadlineNanos = when (val timer = command.timer) {
-                    is SleepTimer.After -> clock.nanos() + timer.duration.inWholeNanoseconds
-                    else -> 0L
-                }
+                sleepRemainingNanos = (command.timer as? SleepTimer.After)?.duration?.inWholeNanoseconds ?: 0L
+                sleepCountedAtNanos = if (status.isActive) clock.nanos() else NO_POSITION
                 // Any change to the timer starts from full level. Cancelling has to undo a fade
                 // that already started, and so does replacing: a later timer with more time left
                 // than its fade never enters the fade branch, so the old multiplier would stay on
@@ -5232,6 +5237,10 @@ internal class PlaybackCore(
 
     private fun handleLoop() {
         if (status != PlaybackStatus.Ended) return
+        // "Finish this one and stop" outranks every repeat. handleQueueAdvance, later in the same
+        // pass, sees Ended, disarms the timer and withdraws play, and a stopped end is not repeated
+        // on the passes after it (#216).
+        if (sleepTimer == SleepTimer.EndOfItem || !playRequested) return
         // The armed A-B loop owns the end of the media: with no B, or a B past the end,
         // the wrap point IS the end, and the jump back to A restarts playback like a repeat,
         // regardless of LoopMode. An A at or past the duration would land straight back on the
@@ -5294,10 +5303,18 @@ internal class PlaybackCore(
     private suspend fun handleSleepTimer() {
         val timer = sleepTimer ?: return
         val audio = session?.audio
-        if (!status.isActive) return
+        if (!status.isActive) {
+            sleepCountedAtNanos = NO_POSITION
+            return
+        }
+        if (timer is SleepTimer.After) {
+            val now = clock.nanos()
+            if (sleepCountedAtNanos != NO_POSITION) sleepRemainingNanos -= now - sleepCountedAtNanos
+            sleepCountedAtNanos = now
+        }
 
         val remaining: Duration = when (timer) {
-            is SleepTimer.After -> (sleepDeadlineNanos - clock.nanos()).nanoseconds
+            is SleepTimer.After -> sleepRemainingNanos.nanoseconds
             is SleepTimer.At -> timer.position - currentPosition().asDuration
             // Handled by the end-of-stream path, which knows when an item is genuinely over.
             SleepTimer.EndOfItem -> return

@@ -38,6 +38,68 @@ class SleepTimerTest {
         return harness
     }
 
+    // A pause does not run the timer down (#216).
+    @Test
+    fun `paused time does not count against an after timer`() = runTest {
+        val harness = playing(this)
+        harness.setTimer(SleepTimer.After(4.seconds), fade = kotlin.time.Duration.ZERO)
+        harness.run(1.seconds)
+        harness.core.pause()
+        harness.run(10.seconds)
+        harness.core.play()
+        harness.run(2.seconds)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status, "the pause counted against the timer")
+        harness.run(2.seconds)
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status, "the timer never fired after 4 s of play")
+        assertNull(harness.core.snapshots.value.sleepTimer)
+        harness.close()
+    }
+
+    @Test
+    fun `a timer armed while paused waits for play`() = runTest {
+        val harness = playing(this)
+        harness.core.pause()
+        harness.run(100.milliseconds)
+        harness.setTimer(SleepTimer.After(2.seconds), fade = kotlin.time.Duration.ZERO)
+        harness.run(10.seconds)
+        harness.core.play()
+        harness.run(1.seconds)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status, "the timer ran down during the pause")
+        harness.run(2.seconds)
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status, "the timer never fired")
+        harness.close()
+    }
+
+    /** A two second item that ends under [mode], with an end-of-item timer armed. */
+    private suspend fun endOfItemUnder(scope: kotlinx.coroutines.test.TestScope, mode: LoopMode, queue: Int = 1): CoreHarness {
+        val harness = CoreHarness(scope, script = MediaScript(durationUs = 2_000_000))
+        harness.attachRenderer()
+        if (queue > 1) {
+            harness.core.openQueue(List(queue) { MediaItem("scripted://item$it") }, 0)
+        } else {
+            harness.core.open(MediaItem("scripted://media"))
+        }
+        harness.core.setLoop(mode)
+        harness.core.play()
+        harness.run(200.milliseconds)
+        harness.setTimer(SleepTimer.EndOfItem, fade = kotlin.time.Duration.ZERO)
+        return harness
+    }
+
+    // "Finish this one and stop" outranks every repeat (#216).
+    @Test
+    fun `an end of item timer stops a repeating item at its end`() = runTest {
+        for ((mode, queue) in listOf(LoopMode.One to 1, LoopMode.All to 1, LoopMode.One to 3, LoopMode.Off to 1)) {
+            val harness = endOfItemUnder(this, mode, queue)
+            harness.run(6.seconds)
+            val snapshot = harness.core.snapshots.value
+            assertNull(snapshot.sleepTimer, "$mode over $queue: the end-of-item timer was still armed after three lengths")
+            assertEquals(PlaybackStatus.Ended, snapshot.status, "$mode over $queue: playback went on")
+            assertEquals(0, snapshot.queueIndex.coerceAtLeast(0), "$mode over $queue: the queue moved on")
+            harness.close()
+        }
+    }
+
     @Test
     fun `a timer pauses when it fires and leaves the volume where it was`() = runTest {
         val harness = playing(this)

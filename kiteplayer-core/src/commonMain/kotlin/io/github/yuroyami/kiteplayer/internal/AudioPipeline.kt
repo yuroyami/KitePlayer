@@ -271,8 +271,9 @@ internal class AudioPipeline(
      * longer applies. Silence after the end of the media is not an invention, it is the truth, so
      * the filter is drained with it and the tail comes out.
      *
-     * The drained tail still passes the tempo stage and the gain, in that order, exactly as every
-     * other buffer does; a mute or a ramp therefore reaches the tail too.
+     * The drained tail passes the tempo stage, then the equaliser and the trim, exactly as every
+     * other buffer does, so ReplayGain and balance hold to the last sample. Volume and mute live on
+     * the ring's read side, so they reach the tail anyway.
      *
      * Call once, at end of stream, on the feeder that owns this pipeline. Safe to call again: the
      * second call finds nothing queued and answers zero.
@@ -301,6 +302,9 @@ internal class AudioPipeline(
         if (last > 0) total = appendFinished(tempo.output, last, total)
 
         if (total <= 0) return 0
+        // The same last two stages as process, in the same order (#257).
+        equalizer.apply(finished, total)
+        trim.apply(finished, total)
         output = finished
         return total
     }

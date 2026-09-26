@@ -56,6 +56,37 @@ class AudioPipelineTest {
         assertEquals(0, pipeline.finish(), "a second finish has nothing left to give")
     }
 
+    private fun peakOf(pipeline: AudioPipeline, frames: Int, channels: Int): Float {
+        var peak = 0f
+        for (i in 0 until frames * channels) peak = maxOf(peak, kotlin.math.abs(pipeline.output[i]))
+        return peak
+    }
+
+    // A ReplayGain of -6 dB is a trim of one half, and the tail must keep it (#257).
+    @Test
+    fun `the tempo tail keeps the trim`() {
+        val pipeline = AudioPipeline(stereoDevice, stereoDevice)
+        pipeline.speed = 1.5
+        pipeline.trim.setAll(0.5f)
+        val frames = stereoDevice.sampleRate / 10
+        pipeline.process(FloatArray(frames * 2) { 1f }, frames)
+        val tail = pipeline.finish()
+        assertTrue(tail > 0, "the tempo stage held nothing, so this proves nothing")
+        val peak = peakOf(pipeline, tail, 2)
+        assertTrue(peak in 0.45f..0.55f, "the tail skipped the trim: peak $peak, expected about 0.5")
+    }
+
+    @Test
+    fun `the resampler tail keeps the trim`() {
+        val pipeline = AudioPipeline(format(1, 44_100, MixLayout.Mono.mask), format(1, 48_000, null))
+        pipeline.trim.setAll(0.5f)
+        pipeline.process(FloatArray(4410) { 1f }, 4410)
+        val tail = pipeline.finish()
+        assertTrue(tail > 0, "the resampler held nothing, so this proves nothing")
+        val peak = peakOf(pipeline, tail, 1)
+        assertTrue(peak <= 0.6f, "the tail skipped the trim: peak $peak, expected about 0.52")
+    }
+
     @Test
     fun `a downmix with no rate change passes through the mixer and the gain only`() {
         // The RAW policy, so this reads the matrix and not the matrix plus the headroom scaling;

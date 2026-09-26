@@ -23,8 +23,10 @@ import kotlinx.coroutines.launch
  * headphones coming out.
  *
  * Android hands this out as audio focus. The handle asks for focus when playback starts, keeps it
- * across a pause so a call can hand it back, and gives it up when the player goes idle. Close it
- * with the player, or with the Activity that owns it.
+ * across a pause so a call can hand it back, and gives it up when the player goes idle. A denied
+ * request is handled as a loss, so the player does not play without focus, and a play after a
+ * denial or a permanent loss asks again. Close it with the player, or with the Activity that owns
+ * it.
  *
  * The application still declares nothing: no permission and no manifest entry is involved.
  */
@@ -45,8 +47,14 @@ private class AndroidInterruptionHandle(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
+    // The focus callback, the noisy receiver and the status collector run on different threads,
+    // and the lifecycle and the applier are not thread safe, so each call holds its monitor.
+    private fun handle(event: InterruptionEvent) = synchronized(applier) { applier.handle(event) }
+
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
-        interruptionEventFor(change)?.let(applier::handle)
+        // A permanent loss ends this hold: the next play asks again (#282).
+        if (change == AudioManager.AUDIOFOCUS_LOSS) synchronized(lifecycle) { lifecycle.lost() }
+        interruptionEventFor(change)?.let(::handle)
     }
 
     // Left off deliberately: with it on the system converts a duckable loss into a plain one, and
@@ -65,7 +73,7 @@ private class AndroidInterruptionHandle(
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(receivedFrom: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
-                applier.handle(InterruptionEvent.BecameNoisy)
+                handle(InterruptionEvent.BecameNoisy)
             }
         }
     }
@@ -80,8 +88,14 @@ private class AndroidInterruptionHandle(
         }
         scope.launch {
             player.state.map { it.status }.distinctUntilChanged().collect { status ->
-                when (lifecycle.on(status)) {
-                    true -> audioManager.requestAudioFocus(focusRequest)
+                when (synchronized(lifecycle) { lifecycle.on(status) }) {
+                    true -> {
+                        val granted = audioManager.requestAudioFocus(focusRequest) ==
+                            AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                        synchronized(lifecycle) { lifecycle.answered(granted) }
+                        // No focus, no sound: a denied request is a loss, and the policy pauses.
+                        if (!granted) handle(InterruptionEvent.Lost)
+                    }
                     false -> audioManager.abandonAudioFocusRequest(focusRequest)
                     null -> Unit
                 }
@@ -92,8 +106,8 @@ private class AndroidInterruptionHandle(
     override fun close() {
         scope.cancel()
         runCatching { context.unregisterReceiver(noisyReceiver) }
-        if (lifecycle.release()) audioManager.abandonAudioFocusRequest(focusRequest)
-        applier.release()
+        if (synchronized(lifecycle) { lifecycle.release() }) audioManager.abandonAudioFocusRequest(focusRequest)
+        synchronized(applier) { applier.release() }
     }
 }
 

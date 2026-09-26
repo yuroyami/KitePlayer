@@ -107,19 +107,32 @@ internal class InterruptionApplier(
 /**
  * When to ask the platform for the right to make sound and when to give it back.
  *
- * Held from the first request to play until the player goes idle, across a pause. Giving it back
- * at a pause would look tidier and would break resuming after a phone call: the platform only
- * tells a holder that the sound is theirs again.
+ * Held from a granted request until the player goes idle, across a pause. Giving it back at a
+ * pause would look tidier and would break resuming after a phone call: the platform only tells a
+ * holder that the sound is theirs again.
+ *
+ * Only a grant holds it. A denied request, or a permanent loss, leaves nothing held, so the next
+ * play asks again (#282). Not thread safe: a platform guard calls it from one thread at a time.
  */
 internal class SessionFocusLifecycle {
     private var held = false
 
     /** True to request, false to give back, null when nothing needs to change. */
     fun on(status: PlaybackStatus): Boolean? = when (status) {
-        PlaybackStatus.Playing, PlaybackStatus.Buffering -> if (held) null else true.also { held = true }
+        PlaybackStatus.Playing, PlaybackStatus.Buffering -> if (held) null else true
         PlaybackStatus.Idle, PlaybackStatus.Ended, PlaybackStatus.Failed ->
             if (held) false.also { held = false } else null
         PlaybackStatus.Paused, PlaybackStatus.Opening -> null
+    }
+
+    /** The platform's answer to a request [on] asked for. A denial holds nothing. */
+    fun answered(granted: Boolean) {
+        held = granted
+    }
+
+    /** The platform took the sound away for good, so the next play has to ask again. */
+    fun lost() {
+        held = false
     }
 
     /** Gives it back on close, when it was held. */

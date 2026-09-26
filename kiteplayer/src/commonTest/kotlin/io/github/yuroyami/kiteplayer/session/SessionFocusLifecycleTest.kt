@@ -14,14 +14,37 @@ class SessionFocusLifecycleTest {
     fun `playing asks once and asks no more`() {
         val lifecycle = SessionFocusLifecycle()
         assertEquals(true, lifecycle.on(PlaybackStatus.Playing))
+        lifecycle.answered(granted = true)
         assertNull(lifecycle.on(PlaybackStatus.Playing))
         assertNull(lifecycle.on(PlaybackStatus.Buffering))
+    }
+
+    // A denial holds nothing, so the next play asks again (#282).
+    @Test
+    fun `a denied request is asked again at the next play`() {
+        val lifecycle = SessionFocusLifecycle()
+        assertEquals(true, lifecycle.on(PlaybackStatus.Playing))
+        lifecycle.answered(granted = false)
+        assertNull(lifecycle.on(PlaybackStatus.Paused))
+        assertEquals(true, lifecycle.on(PlaybackStatus.Playing), "a play after a denial did not ask again")
+        assertFalse(lifecycle.release(), "a denial left something to give back")
+    }
+
+    @Test
+    fun `a permanent loss is asked again at the next play`() {
+        val lifecycle = SessionFocusLifecycle()
+        lifecycle.on(PlaybackStatus.Playing)
+        lifecycle.answered(granted = true)
+        lifecycle.lost()
+        assertNull(lifecycle.on(PlaybackStatus.Paused))
+        assertEquals(true, lifecycle.on(PlaybackStatus.Playing), "a play after a permanent loss did not ask again")
     }
 
     @Test
     fun `a pause keeps it so a call can hand it back`() {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
+        lifecycle.answered(granted = true)
         assertNull(lifecycle.on(PlaybackStatus.Paused))
         assertNull(lifecycle.on(PlaybackStatus.Playing))
     }
@@ -30,6 +53,7 @@ class SessionFocusLifecycleTest {
     fun `going idle gives it back once`() {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
+        lifecycle.answered(granted = true)
         assertEquals(false, lifecycle.on(PlaybackStatus.Idle))
         assertNull(lifecycle.on(PlaybackStatus.Idle))
     }
@@ -39,6 +63,7 @@ class SessionFocusLifecycleTest {
         for (status in listOf(PlaybackStatus.Ended, PlaybackStatus.Failed)) {
             val lifecycle = SessionFocusLifecycle()
             lifecycle.on(PlaybackStatus.Playing)
+            lifecycle.answered(granted = true)
             assertEquals(false, lifecycle.on(status), "$status")
         }
     }
@@ -55,6 +80,7 @@ class SessionFocusLifecycleTest {
     fun `closing while holding gives it back`() {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
+        lifecycle.answered(granted = true)
         assertTrue(lifecycle.release())
         assertFalse(lifecycle.release())
     }

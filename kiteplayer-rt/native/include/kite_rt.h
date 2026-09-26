@@ -51,11 +51,12 @@
  *    being violated, and the engine treats that commit verdict as the loud programming error it
  *    is.
  *
- * WHO WAITS FOR WHOM. The Kotlin ring publishes its segment ring under one sequence counter
- * whose writer is the feeder and whose reader is the real-time thread, so the real-time thread
- * spins with no bound whenever the feeder is preempted mid-update. That is
+ * WHO WAITS FOR WHOM. The Kotlin ring once published its segment ring under one sequence
+ * counter whose writer was the feeder and whose reader was the real-time thread, so the
+ * real-time thread spun with no bound whenever the feeder was preempted mid-update. That is
  * a priority inversion on a real-time thread, and it has nothing to do with the language: a
- * transliteration would reproduce it. This implementation inverts every such relationship:
+ * transliteration would reproduce it. This implementation inverts every such relationship, and
+ * the Kotlin ring now follows it for the segment ring:
  *
  *  - The anchor seqlock's WRITER is the real-time thread, which never waits. Its reader retries
  *    a bounded 64 times and then keeps its previous reading, counted in

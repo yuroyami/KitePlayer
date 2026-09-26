@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.internal
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
+import kotlinx.atomicfu.AtomicLongArray
 import kotlinx.atomicfu.atomic
 import kotlin.math.abs
 import kotlin.math.max
@@ -31,15 +32,14 @@ import kotlin.math.min
  * not quoted here: a number in a comment is one more thing that can go stale, and the point does not
  * depend on which number it is.
  *
- * ### One thing the C ring does differently on purpose
+ * ### The device thread never waits for the feeder
  *
- * [publishAnchor] below makes the real-time thread the READER of [segmentSeq], whose writer is the
- * feeder, so it spins with no bound whenever the feeder is preempted between its two increments.
- * That is a priority inversion on a real-time thread. It is not fixed here: on
- * js and wasmJs there is no second thread for it to matter on, and changing the publication protocol
- * of the oracle would have meant changing the thing the C ring is measured against in the same
- * change that introduced the C ring. The C implementation inverts every such relationship and
- * counts its give-ups; see `kiteplayer-rt/native/include/kite_rt.h`.
+ * This ring is the device path on Android and on the desktop JVM, so its real-time side follows
+ * the C ring's protocol. Each timestamp segment has its own sequence counter, [publishAnchor] walks
+ * the segments at most once, and a slot that the feeder is changing ends the walk: the anchor is
+ * then dated from the last segment the callback resolved, and [segmentGiveups] counts it. A single
+ * counter over the whole ring once made the callback spin for as long as the feeder was
+ * descheduled between its two stores (#221).
  *
  * ### Why the anchor lives here
  *
@@ -172,11 +172,13 @@ internal class KotlinAudioRing(
     private val ending = atomic(false)
 
     // The feeder's map from absolute frame index to media timestamp, as up to MAX_SEGMENTS ordered
-    // segments. Written by the feeder, read by the callback. Two plain arrays rather than objects,
-    // because the side that reads them is a real-time thread that must not allocate: the sequence
-    // counter below publishes their contents, exactly as `written` publishes the samples in `data`.
-    private val segmentStartFrame = LongArray(MAX_SEGMENTS)
-    private val segmentPtsUs = LongArray(MAX_SEGMENTS)
+    // segments. Written by the feeder, read by the callback. Arrays rather than objects, because the
+    // side that reads them is a real-time thread that must not allocate. Each slot is published by
+    // its own sequence counter, odd while the feeder changes it, and every element is read
+    // atomically so that the closing counter read cannot pass the payload reads.
+    private val segmentStartFrame = AtomicLongArray(MAX_SEGMENTS)
+    private val segmentPtsUs = AtomicLongArray(MAX_SEGMENTS)
+    private val segmentSlotSeq = AtomicLongArray(MAX_SEGMENTS)
 
     /** Segments ever appended. The live segments are the indices from [segmentsRetired] up to this. */
     private val segmentsAppended = atomic(0L)
@@ -184,8 +186,15 @@ internal class KotlinAudioRing(
     /** Segments the device has played past. Only the feeder advances it. */
     private val segmentsRetired = atomic(0L)
 
-    /** Odd while the segment ring is being changed, so a reader knows to look again. */
-    private val segmentSeq = atomic(0L)
+    // The last segment the callback resolved, which dates the anchor when a slot is being changed.
+    // The callback writes these; the flush, run while both sides are quiescent, clears the flag.
+    private val cacheBaseFrame = atomic(0L)
+    private val cacheBasePtsUs = atomic(0L)
+    private val cacheValid = atomic(false)
+    private val segmentGiveupCount = atomic(0L)
+
+    /** Walks that met a slot being changed and dated the anchor from the cache instead. */
+    val segmentGiveups: Long get() = segmentGiveupCount.value
 
     // The callback's answer: the media time at the playhead boundary, and when that boundary is
     // reached. Written by the callback, read by the core.
@@ -281,8 +290,8 @@ internal class KotlinAudioRing(
             // Through framesToMicros and not `delta * 1_000_000L / sampleRate`, which overflows.
             // The naive product overflows a signed 64 bit intermediate at a large frame delta, the
             // same defect once found in KiteFFmpeg's timestamp helpers.
-            val micros = framesToMicros(atFrame - segmentStartFrame[newest], format.sampleRate)
-            if (driftWithinTolerance(segmentPtsUs[newest], micros, ptsUs)) return true
+            val micros = framesToMicros(atFrame - segmentStartFrame[newest].value, format.sampleRate)
+            if (driftWithinTolerance(segmentPtsUs[newest].value, micros, ptsUs)) return true
         }
         return appendSegment(ptsUs, atFrame)
     }
@@ -337,12 +346,21 @@ internal class KotlinAudioRing(
         if (appended - segmentsRetired.value >= MAX_SEGMENTS) return false
 
         val slot = (appended % MAX_SEGMENTS).toInt()
-        segmentSeq.incrementAndGet()
-        segmentStartFrame[slot] = atFrame
-        segmentPtsUs[slot] = ptsUs
+        beginSegmentWrite(slot)
+        segmentStartFrame[slot].value = atFrame
+        segmentPtsUs[slot].value = ptsUs
+        endSegmentWrite(slot)
         segmentsAppended.value = appended + 1
-        segmentSeq.incrementAndGet()
         return true
+    }
+
+    /** Makes [slot]'s counter odd, so the callback does not use it until [endSegmentWrite]. Feeder only. */
+    internal fun beginSegmentWrite(slot: Int) {
+        segmentSlotSeq[slot].incrementAndGet()
+    }
+
+    internal fun endSegmentWrite(slot: Int) {
+        segmentSlotSeq[slot].incrementAndGet()
     }
 
     /**
@@ -363,14 +381,12 @@ internal class KotlinAudioRing(
         val retired = segmentsRetired.value
         var stillNeeded = retired
         while (appended - stillNeeded > 1) {
-            val nextStart = segmentStartFrame[((stillNeeded + 1) % MAX_SEGMENTS).toInt()]
+            val nextStart = segmentStartFrame[((stillNeeded + 1) % MAX_SEGMENTS).toInt()].value
             if (nextStart >= consumedNow) break
             stillNeeded++
         }
         if (stillNeeded == retired) return
-        segmentSeq.incrementAndGet()
         segmentsRetired.value = stillNeeded
-        segmentSeq.incrementAndGet()
     }
 
     /**
@@ -495,34 +511,59 @@ internal class KotlinAudioRing(
      * nothing is published, and the clock keeps reading null, which is the honest answer.
      */
     private fun publishAnchor(lastRealFrame: Long, atNanos: Long) {
-        while (true) {
-            val seq = segmentSeq.value
-            if (seq % 2L != 0L) continue
-            val appended = segmentsAppended.value
-            val retired = segmentsRetired.value
-            if (segmentSeq.value != seq) continue
-            if (appended <= retired) return
-
-            var index = appended - 1
-            while (index > retired && segmentStartFrame[(index % MAX_SEGMENTS).toInt()] > lastRealFrame) {
-                index--
-            }
+        val appended = segmentsAppended.value
+        val retired = segmentsRetired.value
+        var baseFrame = 0L
+        var basePtsUs = 0L
+        var found = false
+        var torn = false
+        // Newest first, each slot tried once: the walk never waits for the feeder.
+        var index = appended - 1
+        while (index >= retired) {
             val slot = (index % MAX_SEGMENTS).toInt()
-            val baseFrame = segmentStartFrame[slot]
-            val basePtsUs = segmentPtsUs[slot]
-            if (segmentSeq.value != seq) continue
-
-            // The same overflow again, and this is the site that matters most: it dates every
-            // anchor the audio clock is built from.
-            val boundaryPtsUs =
-                addSaturating(basePtsUs, framesToMicros(lastRealFrame + 1 - baseFrame, format.sampleRate))
-            anchorSeq.incrementAndGet()
-            anchorPtsUs.value = boundaryPtsUs
-            anchorNanos.value = atNanos
-            anchorValid.value = true
-            anchorSeq.incrementAndGet()
-            return
+            val opening = segmentSlotSeq[slot].value
+            if (opening % 2L != 0L) {
+                torn = true
+                break
+            }
+            val frame = segmentStartFrame[slot].value
+            val pts = segmentPtsUs[slot].value
+            if (segmentSlotSeq[slot].value != opening) {
+                torn = true
+                break
+            }
+            // The oldest live segment dates earlier frames by continuity, so it is used even when
+            // it starts after this frame.
+            if (index > retired && frame > lastRealFrame) {
+                index--
+                continue
+            }
+            baseFrame = frame
+            basePtsUs = pts
+            found = true
+            break
         }
+        if (found) {
+            cacheBaseFrame.value = baseFrame
+            cacheBasePtsUs.value = basePtsUs
+            cacheValid.value = true
+        } else {
+            // No segment at all is the honest "nothing dated yet", not a give-up.
+            if (torn) segmentGiveupCount.value = segmentGiveupCount.value + 1
+            if (!cacheValid.value) return
+            baseFrame = cacheBaseFrame.value
+            basePtsUs = cacheBasePtsUs.value
+        }
+
+        // The same overflow again, and this is the site that matters most: it dates every
+        // anchor the audio clock is built from.
+        val boundaryPtsUs =
+            addSaturating(basePtsUs, framesToMicros(lastRealFrame + 1 - baseFrame, format.sampleRate))
+        anchorSeq.incrementAndGet()
+        anchorPtsUs.value = boundaryPtsUs
+        anchorNanos.value = atNanos
+        anchorValid.value = true
+        anchorSeq.incrementAndGet()
     }
 
     /**
@@ -563,10 +604,10 @@ internal class KotlinAudioRing(
     override fun flush() {
         ending.value = false
         anchorValid.value = false
-        segmentSeq.incrementAndGet()
+        // Left valid, the cache would date fresh samples from the abandoned position.
+        cacheValid.value = false
         segmentsRetired.value = 0
         segmentsAppended.value = 0
-        segmentSeq.incrementAndGet()
         consumed.value = written.value
     }
 

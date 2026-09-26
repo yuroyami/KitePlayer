@@ -1,14 +1,12 @@
 /* The real-time thread must never wait for the feeder, and a give-up must be
  * visible rather than silent.
  *
- * WHAT THE KOTLIN RING DOES. `KotlinAudioRing.publishAnchor` loads `segmentSeq` and
- * `continue`s while it is odd. The class was called `AudioRing` when that was first written
- * and it was later renamed; no line numbers are quoted here on purpose, because they moved with the rename
- * and a stale line number reads as a fact. The writer of that counter is the feeder coroutine. If the feeder is
- * preempted between its two increments, the device thread spins with no bound. The class comment
- * says "No lock anywhere", which is true of mutexes and not of this: it is a priority inversion on
- * a real-time thread, and it is independent of the language, so a transliteration into C would have
- * reproduced it exactly.
+ * WHAT THE KOTLIN RING DID. `KotlinAudioRing.publishAnchor` loaded one ring-wide sequence
+ * counter and retried while it was odd. The writer of that counter was the feeder coroutine, so a
+ * feeder preempted between its two increments left the device thread spinning with no bound: a
+ * priority inversion on a real-time thread, independent of the language, which a transliteration
+ * into C would have reproduced exactly. The Kotlin ring now follows the per-slot protocol this
+ * file tests.
  *
  * WHAT THIS FILE PROVES, and how it avoids proving nothing. A second thread holds one segment
  * slot's sequence number odd, which is precisely the state a preempted feeder leaves behind, and

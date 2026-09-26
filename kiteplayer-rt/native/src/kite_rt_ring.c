@@ -12,12 +12,11 @@
  * underrun counter agree exactly. So every place where this file deliberately DIFFERS is marked,
  * and there are exactly three of them:
  *
- *  1. Who waits. The Kotlin ring makes the real-time thread the reader of a global segment
- *     sequence counter, so it spins with no bound while the feeder is preempted mid-update
- *     Here the segment ring carries one sequence per slot and the
+ *  1. Who gives up reading the anchor. Both rings carry one sequence per segment slot, and the
  *     real-time walk never retries: a torn slot ends the walk, the anchor is dated from a
  *     consumer-private cache, and `segment_giveups` records it. The anchor seqlock's writer is
- *     the real-time thread and its reader gives up after a bounded 64 attempts.
+ *     the real-time thread; here its reader gives up after a bounded 64 attempts, while the
+ *     Kotlin reader, which is ordinary code, retries.
  *  2. The writer's shape. `write(array, offset, frames, pts)` becomes
  *     begin, fill, commit, so the caller's floats land in ring storage once instead of twice.
  *  3. Silence and the sample move are `memset` and `memcpy` rather than scalar loops.

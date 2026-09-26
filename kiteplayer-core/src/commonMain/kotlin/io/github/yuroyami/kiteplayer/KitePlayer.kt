@@ -210,10 +210,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSpeed(value: Double) {
-        require(value.isFinite() && value >= SPEED_MIN && value <= SPEED_MAX) {
-            "speed must be within $SPEED_MIN..$SPEED_MAX, was $value"
-        }
+        checkSpeed(value)
         core.post(CoreCommand.SetSpeed(value, CompletableDeferred()))
+    }
+
+    private fun checkSpeed(value: Double) = require(value.isFinite() && value >= SPEED_MIN && value <= SPEED_MAX) {
+        "speed must be within $SPEED_MIN..$SPEED_MAX, was $value"
     }
 
     /**
@@ -275,10 +277,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setBalance(value: Float) {
-        require(value.isFinite() && value >= -1f && value <= 1f) {
-            "balance must be between -1 and 1, was $value"
-        }
+        checkBalance(value)
         core.post(CoreCommand.SetBalance(value, CompletableDeferred()))
+    }
+
+    private fun checkBalance(value: Float) = require(value.isFinite() && value >= -1f && value <= 1f) {
+        "balance must be between -1 and 1, was $value"
     }
 
     /**
@@ -425,6 +429,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoAdjustments(value: VideoAdjustments) {
+        checkVideoAdjustments(value)
+        core.post(CoreCommand.SetVideoAdjustments(value, CompletableDeferred()))
+    }
+
+    private fun checkVideoAdjustments(value: VideoAdjustments) {
         require(value.brightness.isFinite() && value.brightness in -1f..1f) {
             "brightness must be within -1..1, was ${value.brightness}"
         }
@@ -437,7 +446,6 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         require(value.hueDegrees.isFinite() && value.hueDegrees in -180f..180f) {
             "hue must be within -180..180 degrees, was ${value.hueDegrees}"
         }
-        core.post(CoreCommand.SetVideoAdjustments(value, CompletableDeferred()))
     }
 
     /**
@@ -453,6 +461,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setRenderQuality(value: RenderQuality) {
+        checkRenderQuality(value)
+        core.post(CoreCommand.SetRenderQuality(value, CompletableDeferred()))
+    }
+
+    private fun checkRenderQuality(value: RenderQuality) {
         require(value.debandThreshold.isFinite() && value.debandThreshold >= 0f) {
             "the deband threshold must be finite and not negative, was ${value.debandThreshold}"
         }
@@ -462,7 +475,6 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         require(value.debandGrain.isFinite() && value.debandGrain >= 0f) {
             "the deband grain must be finite and not negative, was ${value.debandGrain}"
         }
-        core.post(CoreCommand.SetRenderQuality(value, CompletableDeferred()))
     }
 
     /**
@@ -480,6 +492,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoTransform(value: VideoTransform) {
+        checkVideoTransform(value)
+        core.post(CoreCommand.SetVideoTransform(value, CompletableDeferred()))
+    }
+
+    private fun checkVideoTransform(value: VideoTransform) {
         val aspect = value.aspectOverride
         require(aspect == null || (aspect.isFinite() && aspect in 0.1f..10f)) {
             "aspectOverride must be within 0.1..10 or null, was $aspect"
@@ -489,7 +506,6 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         }
         require(value.panX.isFinite() && value.panX in -1f..1f) { "panX must be within -1..1, was ${value.panX}" }
         require(value.panY.isFinite() && value.panY in -1f..1f) { "panY must be within -1..1, was ${value.panY}" }
-        core.post(CoreCommand.SetVideoTransform(value, CompletableDeferred()))
     }
 
     /**
@@ -509,9 +525,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSubtitleScale(value: Float) {
-        require(value.isFinite() && value > 0f) { "subtitle scale must be finite and positive, was $value" }
+        checkSubtitleScale(value)
         core.post(CoreCommand.SetSubtitleScale(value, CompletableDeferred()))
     }
+
+    private fun checkSubtitleScale(value: Float) =
+        require(value.isFinite() && value > 0f) { "subtitle scale must be finite and positive, was $value" }
 
     /**
      * Overrides the authored subtitle style with the viewer's own, or clears the override.
@@ -537,10 +556,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSubtitlePosition(value: Float) {
-        require(value.isFinite() && value in 0.1f..1f) {
-            "subtitle position must be within 0.1..1, was $value"
-        }
+        checkSubtitlePosition(value)
         core.post(CoreCommand.SetSubtitlePosition(value, CompletableDeferred()))
+    }
+
+    private fun checkSubtitlePosition(value: Float) = require(value.isFinite() && value in 0.1f..1f) {
+        "subtitle position must be within 0.1..1, was $value"
     }
 
     /**
@@ -889,12 +910,21 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Takes the player back to a [memento]: opens its queue at its index, applies every setting,
-     * seeks to its position, then picks the audio and subtitle tracks by language where the new
+     * Takes the player back to a [memento]: applies every setting, opens its queue at its index,
+     * goes to its position, then picks the audio and subtitle tracks by language where the new
      * container has them. Ends paused, like every open. A track the memento names and the
      * container lacks leaves the container's own choice in place.
      *
-     * @throws IllegalArgumentException when the memento's queue is empty or its index is outside it.
+     * Every setting is checked before anything changes, so a memento this player refuses leaves
+     * the player as it was. The volume is clamped to this player's [AudioConfig.volumeCeiling]
+     * instead, because a memento from a player that allowed a boost is still a place to go back
+     * to. The settings reach the player before the queue opens, so a source that cannot seek still
+     * gets the saved speed; a session that was playing is stopped first for that reason. On such a
+     * source the saved position is skipped and [PlaybackWarning.StartPositionIgnored] says so.
+     *
+     * @throws IllegalArgumentException when the memento's queue is empty, its index is outside it,
+     *         or one of its settings is outside the range its setter accepts.
+     * @throws PlaybackException when the item at the memento's index cannot be opened.
      */
     @Throws(Exception::class)
     public suspend fun restore(memento: PlayerMemento) {
@@ -902,13 +932,25 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         require(memento.queueIndex in memento.queue.indices) {
             "queue index ${memento.queueIndex} is outside a queue of ${memento.queue.size}"
         }
-        openQueue(memento.queue, memento.queueIndex)
+        // All checks first, so a refusal changes nothing (#213).
+        checkSpeed(memento.speed)
+        require(memento.volume.isFinite() && memento.volume >= 0f) {
+            "volume must be finite and not negative, was ${memento.volume}"
+        }
+        checkBalance(memento.balance)
+        checkSubtitleScale(memento.subtitleScale)
+        checkSubtitlePosition(memento.subtitlePosition)
+        checkVideoTransform(memento.videoTransform)
+        checkVideoAdjustments(memento.videoAdjustments)
+        checkRenderQuality(memento.renderQuality)
+
+        // A session still open would take the speed as a live change, which a source that cannot
+        // seek refuses. Stopped, the player keeps each setting for the open that follows.
+        if (state.value.status != PlaybackStatus.Idle) stop()
         setSpeed(memento.speed)
         setPreservePitch(memento.preservePitch)
-        setVolume(memento.volume)
+        setVolume(memento.volume.coerceAtMost(core.volumeCeiling))
         setMuted(memento.muted)
-        setLoop(memento.loop)
-        setShuffle(memento.shuffle)
         setSubtitleDelay(memento.subtitleDelay)
         setAudioDelay(memento.audioDelay)
         setBalance(memento.balance)
@@ -921,7 +963,16 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setVideoAdjustments(memento.videoAdjustments)
         setRenderQuality(memento.renderQuality)
         setVideoEnabled(memento.videoEnabled)
-        if (memento.position > Duration.ZERO) seek(memento.position)
+        openQueue(memento.queue, memento.queueIndex)
+        setLoop(memento.loop)
+        setShuffle(memento.shuffle)
+        if (memento.position > Duration.ZERO) {
+            if (state.value.seekable) {
+                seek(memento.position)
+            } else {
+                core.reportWarning(PlaybackWarning.StartPositionIgnored(memento.position, "this source is not seekable"))
+            }
+        }
 
         val tracks = state.value.tracks
         memento.audioLanguage?.let { language ->

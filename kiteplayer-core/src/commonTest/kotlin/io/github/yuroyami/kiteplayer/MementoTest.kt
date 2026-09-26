@@ -73,6 +73,80 @@ class MementoTest {
         second.close()
     }
 
+    private fun memento(
+        position: kotlin.time.Duration = kotlin.time.Duration.ZERO,
+        speed: Double = 1.0,
+        volume: Float = 1f,
+        balance: Float = 0f,
+        audioLanguage: String? = null,
+    ) = PlayerMemento(
+        queue = listOf(MediaItem("scripted://one")),
+        queueIndex = 0,
+        position = position,
+        speed = speed,
+        preservePitch = true,
+        volume = volume,
+        muted = false,
+        loop = LoopMode.Off,
+        shuffle = false,
+        subtitleDelay = kotlin.time.Duration.ZERO,
+        audioDelay = kotlin.time.Duration.ZERO,
+        audioLanguage = audioLanguage,
+        subtitleLanguage = null,
+        subtitlesOff = false,
+        balance = balance,
+    )
+
+    // A memento from a player that allowed a boost still restores, at this player's ceiling (#213).
+    @Test
+    fun `a volume above this player's ceiling restores at the ceiling`() = runTest {
+        val harness = CoreHarness(this, script = script())
+        val player = KitePlayer(harness.core)
+        harness.attachRenderer()
+        player.restore(memento(volume = 1.5f))
+        harness.run(100.milliseconds)
+        assertEquals(PlaybackStatus.Paused, player.state.value.status)
+        assertEquals(1f, player.state.value.volume, "the volume must be clamped to the default ceiling of 1")
+        harness.close()
+    }
+
+    @Test
+    fun `a setting out of range is refused before anything opens`() = runTest {
+        val harness = CoreHarness(this, script = script())
+        val player = KitePlayer(harness.core)
+        harness.attachRenderer()
+        assertFailsWith<IllegalArgumentException> { player.restore(memento(balance = 2f)) }
+        harness.run(100.milliseconds)
+        assertEquals(PlaybackStatus.Idle, player.state.value.status, "a refused restore opened the queue anyway")
+        assertEquals(0, harness.backend.openCalls, "a refused restore reached the backend")
+        harness.close()
+    }
+
+    @Test
+    fun `an unseekable stream gets its speed and languages and skips its position with a warning`() = runTest {
+        val unseekable = MediaScript(
+            durationUs = 20_000_000,
+            seekable = false,
+            additionalAudioTracks = listOf(
+                ScriptedAudioTrack(index = 3, marker = 0.25f, language = "jpn", title = "audio-B"),
+            ),
+        )
+        val harness = CoreHarness(this, script = unseekable)
+        val player = KitePlayer(harness.core)
+        harness.attachRenderer()
+        player.restore(memento(position = 5.seconds, speed = 1.5, audioLanguage = "jpn"))
+        harness.run(300.milliseconds)
+
+        val snapshot = player.state.value
+        assertEquals(1.5, snapshot.speed, "the saved speed must reach a source that cannot seek")
+        assertEquals("jpn", snapshot.tracks.selectedAudio?.let { snapshot.tracks.find(it) }?.language)
+        assertTrue(
+            harness.core.warningHistory().map { it.warning }.any { it is PlaybackWarning.StartPositionIgnored },
+            "the skipped position must be reported",
+        )
+        harness.close()
+    }
+
     @Test
     fun `properties round trip for items that carry only strings`() {
         val memento = PlayerMemento(

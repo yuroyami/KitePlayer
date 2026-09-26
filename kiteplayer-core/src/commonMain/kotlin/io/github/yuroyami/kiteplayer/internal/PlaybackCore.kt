@@ -6995,6 +6995,9 @@ internal class PlaybackCore(
         emitEvent(PlayerEvent.Warning(warning))
     }
 
+    /** Records a warning the facade decided on, in the same history and event feed. */
+    fun reportWarning(warning: PlaybackWarning) = warn(warning)
+
     /** Warnings this core emitted, oldest first, capped at [WARNING_HISTORY_LIMIT]. */
     fun warningHistory(): List<TimedWarning> =
         kotlinx.atomicfu.locks.synchronized(warningFence) { warningLog.toList() }

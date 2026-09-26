@@ -350,6 +350,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSleepTimer(timer: SleepTimer?, fade: Duration = DEFAULT_SLEEP_FADE) {
+        require(fade >= Duration.ZERO) { "a sleep-timer fade must not be negative, was $fade" }
+        if (timer is SleepTimer.After) {
+            require(timer.duration > Duration.ZERO) { "a sleep timer must be set in the future, was ${timer.duration}" }
+        }
         core.post(CoreCommand.SetSleepTimer(timer, fade, CompletableDeferred()))
     }
 
@@ -415,8 +419,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * [PlayerSnapshot.abLoopB], and they belong to the player, not the media: like [setSpeed]
      * they survive seeks and the next [open].
      *
-     * The jump back is an ordinary precise seek, so the loop needs a seekable source; arming it
-     * while an unseekable one plays is refused.
+     * The jump back is an ordinary precise seek, so the loop needs a seekable source. Arming it
+     * while an unseekable one plays is refused, and the refusal is published as a
+     * [PlaybackWarning.CommandRefused] on [events] and the warning history, because this member
+     * does not wait for the engine. A loop armed earlier stays armed through the open of an
+     * unseekable item, does not run on it, and that open publishes the same warning.
      *
      * @throws IllegalArgumentException when a point is negative, when [b] alone is given, or
      *         when [b] is not after [a].

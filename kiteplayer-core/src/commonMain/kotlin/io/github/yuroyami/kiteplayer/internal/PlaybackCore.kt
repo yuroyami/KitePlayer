@@ -1979,12 +1979,11 @@ internal class PlaybackCore(
                 val active = session
                 // The jump back is an ordinary precise seek, and an unseekable source has no way
                 // to make one: the same refusal, for the same reason, as a live speed change.
+                // Nobody awaits this reply, so the refusal is published as a warning too (#217).
                 if (command.a != null && active != null && !active.source.seekable) {
-                    command.reply.completeExceptionally(
-                        UnsupportedOperationException(
-                            "the A-B loop jumps back by precise seek, and this source is not seekable",
-                        ),
-                    )
+                    val reason = "the A-B loop jumps back by precise seek, and this source is not seekable"
+                    warn(PlaybackWarning.CommandRefused("setAbLoop", reason))
+                    command.reply.completeExceptionally(UnsupportedOperationException(reason))
                 } else {
                     abLoopA = command.a
                     abLoopB = command.b
@@ -2315,6 +2314,16 @@ internal class PlaybackCore(
             // decoded, presented or heard. The exact landing is the second half below, made
             // cheap by this half: the refine walks forward within one group of pictures.
             val startTargetUs = startPositionTargetUs(command.media, built)
+            // A loop armed before this open survives it, but cannot jump back on this source.
+            if (abLoopA != null && !built.source.seekable) {
+                warn(
+                    PlaybackWarning.CommandRefused(
+                        "setAbLoop",
+                        "the armed A-B loop jumps back by precise seek, and this source is not seekable, " +
+                            "so the loop does not run on this item",
+                    ),
+                )
+            }
             if (startTargetUs != null) {
                 withContext(dispatchers.demux) { built.source.seekToKeyframe(Pts(startTargetUs)) }
                 publishedPositionMicros.value = startTargetUs
@@ -4339,7 +4348,7 @@ internal class PlaybackCore(
         // so a wrap is impossible while a seek is in flight and the pass after one starts clean.
         // Playing only: a paused player may be seeked past B and inspected there. The wrap is an
         // ordinary precise seek, so an unseekable source cannot wrap; arming refused the live
-        // case, and a loop armed before such an open simply never fires.
+        // case, and a loop armed before such an open never fires and was warned at the open.
         val loopA = abLoopA
         val loopB = abLoopB
         if (loopA != null && loopB != null && pendingSeek == null &&

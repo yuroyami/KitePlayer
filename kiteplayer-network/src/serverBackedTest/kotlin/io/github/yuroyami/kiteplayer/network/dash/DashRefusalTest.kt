@@ -193,6 +193,24 @@ class DashRefusalTest {
         }
     }
 
+    // The XML reader's own length limit follows the byte ceiling the caller raised.
+    @Test
+    fun aManifestLongerThanTheDefaultParsesUnderARaisedCeiling() = runBlocking {
+        val padding = "x".repeat(9 * 1024 * 1024)
+        val port = serveMpd(
+            "<MPD type=\"static\" mediaPresentationDuration=\"PT2S\"><!--$padding-->" +
+                "<Period><AdaptationSet contentType=\"video\"><Representation id=\"v\" bandwidth=\"1\"/>" +
+                "</AdaptationSet></Period></MPD>",
+        )
+        val client = HttpClient()
+        try {
+            val manifest = Dash.manifest("http://127.0.0.1:$port/movie.mpd", client, maxManifestBytes = 16L shl 20)
+            assertEquals("v", manifest.periods.single().adaptationSets.single().representations.single().id)
+        } finally {
+            client.close()
+        }
+    }
+
     // The resolver owns the client it lazily created, so it must be closeable.
     @Test
     fun theResolverClosesItsOwnClientAndOnlyItsOwn() {

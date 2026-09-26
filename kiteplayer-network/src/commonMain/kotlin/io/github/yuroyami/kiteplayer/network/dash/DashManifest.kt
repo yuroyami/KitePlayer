@@ -119,14 +119,25 @@ public object DashManifestParser {
 
     /**
      * Parses [xml] fetched from [manifestUrl]; the URL anchors every relative BaseURL, and
-     * [policy] decides what the manifest is allowed to point at.
+     * [policy] decides what the manifest is allowed to point at. A document longer than 8 Mi
+     * characters, with more than 262,144 elements or 1,048,576 attributes, or with an element that
+     * carries more than 128 attributes, is refused with
+     * [io.github.yuroyami.kiteplayer.network.xml.XmlException].
      */
     public fun parse(
         xml: String,
         manifestUrl: String,
         policy: DashUrlPolicy = DashUrlPolicy.Default,
+    ): DashManifest = parse(xml, manifestUrl, policy, XmlMini.Limits())
+
+    /** [parse] under [limits], which the DASH door widens to match its own byte ceiling. */
+    internal fun parse(
+        xml: String,
+        manifestUrl: String,
+        policy: DashUrlPolicy,
+        limits: XmlMini.Limits,
     ): DashManifest {
-        val root = XmlMini.parse(xml)
+        val root = XmlMini.parse(xml, limits)
         require(root.name == "MPD") { "not a DASH manifest: root element is <${root.name}>" }
         requireAllowedScheme(manifestUrl, policy)
         // The manifest's own URL is the base. Resolution drops its last path segment and its query.

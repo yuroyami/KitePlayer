@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.network.HttpReaderPolicy
 import io.github.yuroyami.kiteplayer.network.KtorMediaIo
 import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
 import io.github.yuroyami.kiteplayer.network.shownUri
+import io.github.yuroyami.kiteplayer.network.xml.XmlMini
 import io.ktor.client.HttpClient
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.HttpResponse
@@ -186,6 +187,11 @@ public object Dash {
      *
      * [readerPolicy] limits the wait: a server that sends no headers within its connect timeout,
      * or no bytes within its read timeout, fails the call with [KtorMediaIoException].
+     *
+     * A manifest within [maxManifestBytes] is never refused for its length. One with more than
+     * 262,144 elements or 1,048,576 attributes, or with an element that carries more than 128
+     * attributes, is refused with [io.github.yuroyami.kiteplayer.network.xml.XmlException] whatever
+     * the ceiling.
      */
     @Throws(Exception::class)
     public suspend fun manifest(
@@ -203,7 +209,10 @@ public object Dash {
             val body = fetchBounded(client, mpdUrl, maxManifestBytes, "the manifest at $shown", readerPolicy) { status ->
                 "cannot fetch $shown: $status"
             }
-            DashManifestParser.parse(body.decodeToString(), mpdUrl, policy)
+            // UTF-8 never decodes to more UTF-16 code units than it had bytes, so a length limit
+            // equal to the byte ceiling never refuses what the fetch accepted.
+            val lengthLimit = maxManifestBytes.coerceIn(XmlMini.MAX_LENGTH.toLong(), Int.MAX_VALUE.toLong()).toInt()
+            DashManifestParser.parse(body.decodeToString(), mpdUrl, policy, XmlMini.Limits(maxLength = lengthLimit))
         }
 
     /**

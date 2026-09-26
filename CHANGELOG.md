@@ -35,6 +35,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   volume, and a duck no longer writes the volume: 0.2 plays at a fifth of whatever the listener
   set, so a duck can only make the sound quieter. `KitePlayer.setDuckLevel` is the new call behind
   it (#280).
+- SubRip text in braces that starts with a backslash is now read as ASS override tags. The first
+  `{\anN}` places the cue, `{\b}`, `{\i}`, `{\u}` and `{\s}` style it, and other such runs are
+  no longer shown. `SubRipParser.parseCue` returns a cue with that placement, for a caller that
+  used `parseCueBody` on container packets (#231).
+- A WebVTT `line` percentage now anchors the cue's top edge unless its line alignment names the
+  centre or the end, and a positioned cue is kept inside the picture (#229).
 
 ## [0.0.27] - 2026-09-25
 

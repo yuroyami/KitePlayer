@@ -9,7 +9,6 @@ import io.github.yuroyami.kiteplayer.spi.SubtitleDecoder
 import io.github.yuroyami.kiteplayer.spi.SubtitleDecoderFactory
 import io.github.yuroyami.kiteplayer.subtitle.AssParser
 import io.github.yuroyami.kiteplayer.subtitle.AssTrackParser
-import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
 import io.github.yuroyami.kiteplayer.subtitle.SubRipParser
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import io.github.yuroyami.kiteplayer.subtitle.WebVttParser
@@ -27,13 +26,14 @@ internal class KiteFFmpegSubtitleDecoderFactory : SubtitleDecoderFactory {
     override val name: String = "kiteffmpeg-text"
 
     override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? = when (stream.codec) {
-        "subrip", "srt", "text" -> KiteFFmpegTextSubtitleDecoder(SubRipParser::parseCueBody)
+        // The cue, not just its text, so a `{\an8}` in the packet lifts the line as it does in a file.
+        "subrip", "srt", "text" -> KiteFFmpegTextSubtitleDecoder(SubRipParser::parseCue)
         // MP4 timed text is NOT raw UTF-8: a tx3g sample is a 2-byte big-endian text length,
         // that many bytes of UTF-8, then optional style boxes. Decoding the whole payload put
         // the binary length prefix and box bytes into the cue. The styles are
         // dropped for now; the text is exact.
-        "mov_text" -> KiteFFmpegTextSubtitleDecoder(SubRipParser::parseCueBody, extractBody = ::tx3gText)
-        "webvtt" -> KiteFFmpegTextSubtitleDecoder(WebVttParser::parseCueBody)
+        "mov_text" -> KiteFFmpegTextSubtitleDecoder(SubRipParser::parseCue, extractBody = ::tx3gText)
+        "webvtt" -> KiteFFmpegTextSubtitleDecoder(::webVttCue)
         // The Kotlin ASS dialogue tier. The track header, styles included, travels as
         // codec extradata; each packet is one FFmpeg-normalised event line.
         "ass", "ssa" -> KiteFFmpegAssSubtitleDecoder(
@@ -93,7 +93,8 @@ private fun tx3gText(payload: ByteArray): String {
 }
 
 internal class KiteFFmpegTextSubtitleDecoder(
-    private val parseBody: (String) -> List<StyledSpan>,
+    /** A cue from a packet's body and timing, or null when the body holds no text. */
+    private val parseCue: (body: String, startMicros: Long, endMicros: Long) -> SubtitleCue.Text?,
     private val extractBody: (ByteArray) -> String = { it.decodeToString() },
 ) : SubtitleDecoder {
 
@@ -106,16 +107,8 @@ internal class KiteFFmpegTextSubtitleDecoder(
         val start = packet.pts?.micros ?: return true
         val body = extractBody((packet as KiteFFmpegPacket).native.copyBytes())
         if (body.isEmpty()) return true
-        val spans = parseBody(body)
-        if (spans.isEmpty()) return true
         val durationUs = packet.duration?.micros?.takeIf { it > 0 } ?: DEFAULT_HOLD_MICROS
-        pending.addLast(
-            SubtitleCue.Text(
-                startMicros = start,
-                endMicros = start + durationUs,
-                spans = spans,
-            ),
-        )
+        parseCue(body, start, start + durationUs)?.let(pending::addLast)
         return true
     }
 
@@ -139,3 +132,7 @@ internal class KiteFFmpegTextSubtitleDecoder(
         private const val DEFAULT_HOLD_MICROS: Long = 10_000_000L
     }
 }
+
+/** A WebVTT packet's cue. Matroska keeps the cue settings outside the body, so only the text is here. */
+private fun webVttCue(body: String, startMicros: Long, endMicros: Long): SubtitleCue.Text? =
+    WebVttParser.parseCueBody(body).takeIf { it.isNotEmpty() }?.let { SubtitleCue.Text(startMicros, endMicros, it) }

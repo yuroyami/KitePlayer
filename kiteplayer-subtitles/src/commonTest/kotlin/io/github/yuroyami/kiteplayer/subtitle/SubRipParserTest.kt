@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.subtitle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -282,5 +283,51 @@ class SubRipParserTest {
             """.trimIndent(),
         ).single()
         assertEquals("Tom & Jerry say <i> is literal here", cue.plainText)
+    }
+
+    // FFmpeg keeps the first {\an} as the placement and removes every other brace run.
+    @Test
+    fun `an8 in braces lifts the cue to the top and is not shown`() {
+        val cue = parse(
+            """
+            1
+            00:00:01,000 --> 00:00:02,000
+            {\an8}Top line{\an2}
+            """.trimIndent(),
+        ).single()
+        assertEquals("Top line", cue.plainText)
+        assertEquals(CueAlignment.TopCenter, cue.layout.alignment)
+    }
+
+    @Test
+    fun `brace style tags style the text and other brace tags are dropped`() {
+        val cue = parse(
+            """
+            1
+            00:00:01,000 --> 00:00:02,000
+            {\i1}Italic{\i0} plain{\bord3\blur2} {\b1}bold
+            """.trimIndent(),
+        ).single()
+        assertEquals("Italic plain bold", cue.plainText)
+        assertEquals(listOf("Italic", " plain ", "bold"), cue.spans.map { it.text })
+        assertEquals(listOf(true, false, false), cue.spans.map { it.style.italic })
+        assertEquals(listOf(false, false, true), cue.spans.map { it.style.bold })
+        assertEquals(CueAlignment.BottomCenter, cue.layout.alignment)
+    }
+
+    @Test
+    fun `an unterminated brace run stays text`() {
+        val cue = parse("1\n00:00:01,000 --> 00:00:02,000\n{\\an8 never closed\n").single()
+        assertEquals("{\\an8 never closed", cue.plainText)
+        assertEquals(CueAlignment.BottomCenter, cue.layout.alignment)
+    }
+
+    @Test
+    fun `a container packet keeps its placement`() {
+        val cue = SubRipParser.parseCue("{\\an7}Sign", 1_000_000L, 2_000_000L)
+        assertEquals("Sign", cue?.plainText)
+        assertEquals(CueAlignment.TopLeft, cue?.layout?.alignment)
+        assertEquals(listOf("Sign"), SubRipParser.parseCueBody("{\\an7}Sign").map { it.text })
+        assertNull(SubRipParser.parseCue("{\\an8}", 0L, 1L), "a packet with no text is no cue")
     }
 }

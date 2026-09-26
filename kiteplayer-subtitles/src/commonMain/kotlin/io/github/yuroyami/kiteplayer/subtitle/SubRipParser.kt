@@ -20,9 +20,14 @@ package io.github.yuroyami.kiteplayer.subtitle
  * - A final cue with no trailing blank line.
  *
  * The inline markup SubRip files carry in practice is HTML-like: bold, italic, underline, strike
- * and a font colour. Those are parsed into [StyledSpan]s. Anything else is passed through as
- * literal text rather than dropped, because dropping text loses meaning and showing a stray tag
- * only looks untidy.
+ * and a font colour. Those are parsed into [StyledSpan]s. An unknown HTML-like tag is passed
+ * through as literal text rather than dropped, because dropping text loses meaning and showing a
+ * stray tag only looks untidy.
+ *
+ * Many files also carry ASS override tags in braces, above all `{\an8}` to lift a line to the top
+ * when burned-in text covers the bottom. Those are tags, as FFmpeg reads them: the first `\an1` to
+ * `\an9` places the cue, `\b`, `\i`, `\u` and `\s` set the style, and every other `{\...}` run
+ * is dropped.
  */
 public object SubRipParser {
 
@@ -67,14 +72,7 @@ public object SubRipParser {
                 i++
             }
 
-            val spans = InlineMarkup.parse(body.toString().trim()).decodeSpanEntities()
-            if (spans.isNotEmpty()) {
-                cues += SubtitleCue.Text(
-                    startMicros = timing.first,
-                    endMicros = timing.second,
-                    spans = spans,
-                )
-            }
+            parseCue(body.toString(), timing.first, timing.second)?.let { cues += it }
         }
 
         // The open-end resolution: a clamped backwards or zero-length cue closes
@@ -86,8 +84,28 @@ public object SubRipParser {
      * Parses ONE cue's body, the shape a Matroska SubRip track's packets carry: the text alone,
      * timing already on the packet. Same markup rules as whole-file parsing.
      */
-    public fun parseCueBody(body: String): List<StyledSpan> =
-        InlineMarkup.parse(body.trim()).decodeSpanEntities()
+    public fun parseCueBody(body: String): List<StyledSpan> = markup(body).spans
+
+    /**
+     * One cue from its [body] and its timing, placed where a `{\anN}` tag in the body asks. This is
+     * what a Matroska SubRip packet needs, because [parseCueBody] answers the text alone. Null when
+     * the body holds no text.
+     */
+    public fun parseCue(body: String, startMicros: Long, endMicros: Long): SubtitleCue.Text? {
+        val parsed = markup(body)
+        if (parsed.spans.isEmpty()) return null
+        return SubtitleCue.Text(
+            startMicros = startMicros,
+            endMicros = endMicros,
+            spans = parsed.spans,
+            layout = parsed.alignment?.let { CueLayout(alignment = it) } ?: CueLayout(),
+        )
+    }
+
+    private fun markup(body: String): InlineMarkup.Parsed {
+        val parsed = InlineMarkup.parse(body.trim(), braceTags = true)
+        return InlineMarkup.Parsed(parsed.spans.decodeSpanEntities(), parsed.alignment)
+    }
 }
 
 /**
@@ -132,12 +150,6 @@ private fun looksLikeIndex(line: String): Boolean =
     private val TIMESTAMP = Regex("""(?:(\d{1,3}):)?(\d{1,2}):(\d{1,2})[.,](\d{1,3})""")
 
 /**
- * Turns the HTML-like markup found in SubRip and WebVTT files into styled spans.
- *
- * Unknown tags are kept as literal text. That is deliberate: a viewer seeing `<foo>` learns the
- * file is odd, whereas silently deleting content hides a real problem and can remove dialogue.
- */
-/**
  * Closes every cue whose end is not after its start at the next DISTINCT start in this list,
  * which is sorted by start, or at [defaultMicros] past its own start when nothing follows.
  *
@@ -160,15 +172,33 @@ internal fun List<SubtitleCue.Text>.closingOpenEnds(defaultMicros: Long): List<S
     return closed
 }
 
+/**
+ * Turns the HTML-like markup found in SubRip and WebVTT files into styled spans.
+ *
+ * Unknown `<...>` tags are kept as literal text. That is deliberate: a viewer seeing `<foo>` learns
+ * the file is odd, whereas silently deleting content hides a real problem and can remove dialogue.
+ */
 internal object InlineMarkup {
 
-    fun parse(text: String): List<StyledSpan> {
-        if (text.isEmpty()) return emptyList()
-        if ('<' !in text && '{' !in text) return listOf(StyledSpan(text))
+    /** Spans, and the placement that a `{\anN}` tag asked for when one did. */
+    class Parsed(val spans: List<StyledSpan>, val alignment: CueAlignment?)
+
+    /** HTML-like tags only, as WebVTT carries them. */
+    fun parse(text: String): List<StyledSpan> = parse(text, braceTags = false).spans
+
+    /**
+     * [braceTags] also reads `{\...}` runs as ASS override tags, the way SubRip files carry them.
+     * The first `\an1` to `\an9` places the cue, `\b`, `\i`, `\u` and `\s` set the style, and
+     * every other tag is dropped. An unterminated run stays text, as it does in FFmpeg.
+     */
+    fun parse(text: String, braceTags: Boolean): Parsed {
+        if (text.isEmpty()) return Parsed(emptyList(), null)
+        if ('<' !in text && (!braceTags || '{' !in text)) return Parsed(listOf(StyledSpan(text)), null)
 
         val spans = mutableListOf<StyledSpan>()
         val buffer = StringBuilder()
         var style = CueStyle()
+        var alignment: CueAlignment? = null
         val stack = ArrayDeque<CueStyle>()
         var i = 0
 
@@ -181,6 +211,26 @@ internal object InlineMarkup {
 
         while (i < text.length) {
             val c = text[i]
+            if (braceTags && c == '{' && text.getOrNull(i + 1) == '\\') {
+                val close = text.indexOf('}', i + 2)
+                if (close > 0) {
+                    var next = style
+                    for (tag in text.substring(i + 2, close).split('\\')) {
+                        val placed = ALIGNMENT_TAG.matchEntire(tag.trim())
+                        if (placed != null) {
+                            if (alignment == null) alignment = NUMPAD[placed.groupValues[1].toInt() - 1]
+                        } else {
+                            next = override(tag.trim(), next)
+                        }
+                    }
+                    if (next != style) {
+                        flush()
+                        style = next
+                    }
+                    i = close + 1
+                    continue
+                }
+            }
             if (c != '<') {
                 buffer.append(c)
                 i++
@@ -204,7 +254,20 @@ internal object InlineMarkup {
             i = close + 1
         }
         flush()
-        return spans
+        return Parsed(spans, alignment)
+    }
+
+    /** [current] after one ASS override tag. A tag that is not one of the four styles changes nothing. */
+    private fun override(tag: String, current: CueStyle): CueStyle {
+        val match = STYLE_TAG.matchEntire(tag) ?: return current
+        val value = match.groupValues[2].toIntOrNull() ?: 0
+        return when (match.groupValues[1]) {
+            // `\b` also takes a font weight, where 700 is bold.
+            "b" -> current.copy(bold = value == 1 || value >= 700)
+            "i" -> current.copy(italic = value != 0)
+            "u" -> current.copy(underline = value != 0)
+            else -> current.copy(strikeThrough = value != 0)
+        }
     }
 
     /** Returns the new style, or null when [tag] is not recognised. */
@@ -236,6 +299,15 @@ internal object InlineMarkup {
     }
 
     private val KNOWN = setOf("b", "i", "u", "s", "font")
+    private val ALIGNMENT_TAG = Regex("""an([1-9])""")
+    private val STYLE_TAG = Regex("""([bius])(\d*)""")
+
+    /** `\an1` to `\an9`, laid out like a numeric keypad. */
+    private val NUMPAD = arrayOf(
+        CueAlignment.BottomLeft, CueAlignment.BottomCenter, CueAlignment.BottomRight,
+        CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight,
+        CueAlignment.TopLeft, CueAlignment.TopCenter, CueAlignment.TopRight,
+    )
     private val COLOR = Regex("""color\s*=\s*["']?([^"'>\s]+)""", RegexOption.IGNORE_CASE)
     private val NAMED = mapOf(
         "white" to 0xFFFFFFFF.toInt(),

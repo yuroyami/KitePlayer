@@ -24,6 +24,7 @@ final object io.github.yuroyami.kiteplayer.subtitle/SubRipParser { // io.github.
         final fun <get-OPEN_CUE_DEFAULT_MICROS>(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.OPEN_CUE_DEFAULT_MICROS.<get-OPEN_CUE_DEFAULT_MICROS>|<get-OPEN_CUE_DEFAULT_MICROS>(){}[0]
 
     final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.parse|parse(kotlin.String){}[0]
+    final fun parseCue(kotlin/String, kotlin/Long, kotlin/Long): io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text? // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.parseCue|parseCue(kotlin.String;kotlin.Long;kotlin.Long){}[0]
     final fun parseCueBody(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/StyledSpan> // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.parseCueBody|parseCueBody(kotlin.String){}[0]
 }
 

@@ -133,4 +133,11 @@ class WebVttParserTest {
         ).single()
         assertEquals("Tom & Jerry <3", cue.plainText)
     }
+
+    // WebVTT has no brace tags, so braces are text there, unlike in SubRip.
+    @Test
+    fun `braces stay text in WebVTT`() {
+        val cue = WebVttParser.parse("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n{\\an8}Literal\n").single()
+        assertEquals("{\\an8}Literal", cue.plainText)
+    }
 }

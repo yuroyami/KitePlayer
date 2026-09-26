@@ -231,4 +231,91 @@ class DashManifestParserTest {
         }
         assertTrue("timescale must be positive" in refusal.message!!, refusal.message!!)
     }
+
+    private fun onlyPlan(mpd: String): DashSegmentPlan {
+        val manifest = DashManifestParser.parse(mpd, "http://cdn.test/vod/movie.mpd")
+        val period = manifest.periods.single()
+        return DashManifestParser.segmentPlan(manifest, period, period.adaptationSets.single().representations.single())
+    }
+
+    // ISO/IEC 23009-1, 5.6.4: each level's BaseURL resolves against the level above it.
+    @Test
+    fun anAdaptationSetBaseUrlSitsBetweenThePeriodAndTheRepresentation() {
+        val plan = onlyPlan(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet contentType="video">
+                        <BaseURL>video/</BaseURL>
+                        <Representation id="v1" bandwidth="1">
+                            <BaseURL>720p.mp4</BaseURL>
+                        </Representation>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        )
+        assertEquals(listOf("http://cdn.test/vod/video/720p.mp4"), plan.mediaUrls)
+    }
+
+    // ISO/IEC 23009-1, 5.3.9.1: a lower level overrides only the attributes it sets.
+    @Test
+    fun aRepresentationTemplateOverridesOnlyTheAttributesItSets() {
+        val plan = onlyPlan(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet contentType="video">
+                        <SegmentTemplate timescale="1000" duration="2000" initialization="init-${'$'}RepresentationID${'$'}.mp4"/>
+                        <Representation id="v1" bandwidth="1">
+                            <SegmentTemplate media="${'$'}RepresentationID${'$'}-${'$'}Number${'$'}.m4s"/>
+                        </Representation>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        )
+        assertEquals("http://cdn.test/vod/init-v1.mp4", plan.initializationUrl)
+        assertEquals(listOf("http://cdn.test/vod/v1-1.m4s", "http://cdn.test/vod/v1-2.m4s"), plan.mediaUrls)
+    }
+
+    @Test
+    fun aPeriodTemplateReachesItsRepresentations() {
+        val plan = onlyPlan(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <SegmentTemplate media="p-${'$'}Number${'$'}.m4s" timescale="1" duration="2"/>
+                    <AdaptationSet contentType="video">
+                        <Representation id="v1" bandwidth="1"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        )
+        assertEquals(listOf("http://cdn.test/vod/p-1.m4s", "http://cdn.test/vod/p-2.m4s"), plan.mediaUrls)
+    }
+
+    @Test
+    fun aLowerSegmentTimelineReplacesTheOneAbove() {
+        val plan = onlyPlan(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet contentType="video">
+                        <SegmentTemplate media="t-${'$'}Time${'$'}.m4s" timescale="1000">
+                            <SegmentTimeline><S t="0" d="1000" r="3"/></SegmentTimeline>
+                        </SegmentTemplate>
+                        <Representation id="v1" bandwidth="1">
+                            <SegmentTemplate>
+                                <SegmentTimeline><S t="0" d="2000" r="1"/></SegmentTimeline>
+                            </SegmentTemplate>
+                        </Representation>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        )
+        assertEquals(listOf("http://cdn.test/vod/t-0.m4s", "http://cdn.test/vod/t-2000.m4s"), plan.mediaUrls)
+    }
 }

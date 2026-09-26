@@ -189,6 +189,10 @@ final class io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry { // io
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.network.dash/DashUnsupportedException : kotlin/IllegalArgumentException { // io.github.yuroyami.kiteplayer.network.dash/DashUnsupportedException|null[0]
+    constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.network.dash/DashUnsupportedException.<init>|<init>(kotlin.String){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy { // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy|null[0]
     constructor <init>(kotlin.collections/Set<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.<init>|<init>(kotlin.collections.Set<kotlin.String>;kotlin.Boolean;kotlin.Boolean){}[0]
 

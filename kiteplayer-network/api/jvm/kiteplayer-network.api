@@ -208,6 +208,10 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashTimelineEntry 
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/network/dash/DashUnsupportedException : java/lang/IllegalArgumentException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
 public final class io/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy {
 	public static final field Companion Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy$Companion;
 	public fun <init> ()V

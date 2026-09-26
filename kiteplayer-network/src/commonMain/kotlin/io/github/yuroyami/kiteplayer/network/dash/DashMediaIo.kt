@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.network.dash
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.network.HttpReaderPolicy
+import io.github.yuroyami.kiteplayer.network.KtorMediaIo
 import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
 import io.github.yuroyami.kiteplayer.network.shownUri
 import io.ktor.client.HttpClient
@@ -87,14 +88,12 @@ public class DashMediaIo(
 }
 
 /**
- * The one-call DASH door: fetch, parse, pick, play.
- *
- * Representation choice at this tier: the first period's video adaptation set when one
- * exists (audio-only manifests fall back to audio), and the HIGHEST bandwidth representation
- * in it. Stated honestly: a presentation with SEPARATE audio and video adaptation sets plays
- * its video muted, because merging two elementary segment streams is the adaptive engine's
- * next tier, not a byte concatenation.
+ * A manifest that this tier of the DASH door does not play: a live one, one with several Periods,
+ * or one that carries its audio in an adaptation set of its own. It is refused rather than played
+ * wrong, so an application can fall back to another route.
  */
+public class DashUnsupportedException(message: String) : IllegalArgumentException(message)
+
 /** A response that passed the size ceiling before it was fully read. */
 public class DashResponseTooLargeException(message: String) : IllegalStateException(message)
 
@@ -207,9 +206,16 @@ public object Dash {
         }
 
     /**
-     * A playable [MediaItem] for [mpdUrl]: the chosen representation's segments as one
-     * [DashMediaIo] stream over [client]. The item's uri stays the manifest's, for labels.
-     * [readerPolicy] limits the manifest fetch and every segment fetch, as in [manifest].
+     * A playable [MediaItem] for [mpdUrl], over [client]. The item's uri stays the manifest's, for
+     * labels. [readerPolicy] limits the manifest fetch and every later fetch, as in [manifest].
+     *
+     * The door plays one representation: the highest bandwidth one of the first video adaptation
+     * set, or of the first set when there is no video. Its segments play as one [DashMediaIo]
+     * stream. A representation with no segment addressing is one file, and it is read through
+     * [KtorMediaIo] with range requests, so it is seekable and never held in memory whole.
+     *
+     * Throws [DashUnsupportedException] for a live manifest, for more than one Period, and for
+     * audio in an adaptation set of its own, because this tier would play that video silent.
      */
     @Throws(Exception::class)
     public suspend fun mediaItemFor(
@@ -225,17 +231,38 @@ public object Dash {
         // segments, and silently playing period one of an ad-stitched presentation looked like
         // a player that stops after the pre-roll. Period joining is the adaptive engine's next
         // tier; until it exists the refusal is typed.
-        require(manifest.periods.size <= 1) {
-            "${shownUri(mpdUrl)} has ${manifest.periods.size} Periods, and this tier plays exactly one; " +
-                "multi-period joining is not implemented yet"
+        if (manifest.periods.size > 1) {
+            throw DashUnsupportedException(
+                "${shownUri(mpdUrl)} has ${manifest.periods.size} Periods, and this tier plays exactly one; " +
+                    "multi-period joining is not implemented yet",
+            )
         }
         val period = manifest.periods.firstOrNull()
             ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no Period")
-        val adaptationSet = period.adaptationSets.firstOrNull { it.isVideo() }
+        val video = period.adaptationSets.firstOrNull { it.isVideo() }
+        // Merging two elementary streams is not a byte concatenation, so separate audio would be
+        // lost. Refused typed rather than played silent.
+        if (video != null && period.adaptationSets.any { it !== video && it.isAudio() }) {
+            throw DashUnsupportedException(
+                "${shownUri(mpdUrl)} carries its audio in a separate adaptation set, and this tier plays " +
+                    "one set, so its video would play silent",
+            )
+        }
+        val adaptationSet = video
             ?: period.adaptationSets.firstOrNull()
             ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no AdaptationSet")
         val representation = adaptationSet.representations.maxByOrNull { it.bandwidth }
             ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no Representation")
+        if (manifest.isDynamic) {
+            throw DashUnsupportedException("${shownUri(mpdUrl)} is live, and this tier plays on-demand presentations only")
+        }
+        if (representation.segmentTemplate == null && representation.segmentUrls.isEmpty()) {
+            // One file at the representation's base URL. The base is the manifest itself when no
+            // BaseURL names the media, and then there is nothing to play.
+            val file = representation.baseUrl
+            require(file != mpdUrl) { "${shownUri(mpdUrl)} names no media for representation ${representation.id}" }
+            return MediaItem(uri = mpdUrl, io = { KtorMediaIo.open(file, client, policy = readerPolicy) })
+        }
         val plan = DashManifestParser.segmentPlan(manifest, period, representation, policy)
         // A factory, so every open of this item gets its own segment stream. One live reader here
         // meant the second open of the same item -- a track switch, a loop, a queue coming back
@@ -257,4 +284,8 @@ public object Dash {
     private fun DashAdaptationSet.isVideo(): Boolean =
         contentType == "video" || mimeType?.startsWith("video/") == true ||
             representations.any { it.mimeType?.startsWith("video/") == true }
+
+    private fun DashAdaptationSet.isAudio(): Boolean =
+        contentType == "audio" || mimeType?.startsWith("audio/") == true ||
+            representations.any { it.mimeType?.startsWith("audio/") == true }
 }

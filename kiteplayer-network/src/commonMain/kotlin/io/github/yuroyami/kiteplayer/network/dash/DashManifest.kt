@@ -219,8 +219,8 @@ public object DashManifestParser {
         representation: DashRepresentation,
         policy: DashUrlPolicy = DashUrlPolicy.Default,
     ): DashSegmentPlan {
-        require(!manifest.isDynamic) {
-            "live (dynamic) manifests need a live window this tier does not do yet"
+        if (manifest.isDynamic) {
+            throw DashUnsupportedException("live (dynamic) manifests need a live window this tier does not do yet")
         }
         if (representation.segmentUrls.isNotEmpty()) {
             return DashSegmentPlan(representation.initializationUrl, representation.segmentUrls)

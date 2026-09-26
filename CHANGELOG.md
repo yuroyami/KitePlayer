@@ -41,6 +41,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   used `parseCueBody` on container packets (#231).
 - A WebVTT `line` percentage now anchors the cue's top edge unless its line alignment names the
   centre or the end, and a positioned cue is kept inside the picture (#229).
+- `Dash.mediaItemFor` refuses a manifest whose audio sits in an adaptation set of its own with
+  the new `DashUnsupportedException`, instead of playing its video silent. Live and multi-period
+  manifests are refused with the same exception, which extends `IllegalArgumentException`. A
+  representation that is one file now streams with range requests and seeks, and the segment
+  ceiling no longer applies to it (#240).
 
 ## [0.0.27] - 2026-09-25
 

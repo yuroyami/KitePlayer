@@ -184,6 +184,20 @@ class MetalFrameComposerTest {
     }
 
     @Test
+    fun anFccFrameIsConvertedWithTheFccMatrix() {
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        // A saturated studio-range green. ITU-T H.273 FCC: KR 0.30, KB 0.11. BT.709 gives about 216.
+        val bytes = render(composer, TestFrame(64, 64, bt(ColorMatrix.Fcc)), solidNv12(64, 64, y = 145, cb = 54, cr = 34))
+        val (b, g, r, _) = bgraAt(bytes, 64, 32, 32)
+        val expected = expectedRgb(145, 54, 34, rCr = 1.4, gCb = 0.331864, gCr = 0.711864, bCb = 1.78)
+        assertTrue(
+            abs(r - expected[0]) <= 2 && abs(g - expected[1]) <= 2 && abs(b - expected[2]) <= 2,
+            "got rgb($r,$g,$b), expected rgb(${expected[0]},${expected[1]},${expected[2]}) within 2",
+        )
+    }
+
+    @Test
     fun theColourMatrixUniformIsLive() {
         val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
         val composer = MetalFrameComposer(device)

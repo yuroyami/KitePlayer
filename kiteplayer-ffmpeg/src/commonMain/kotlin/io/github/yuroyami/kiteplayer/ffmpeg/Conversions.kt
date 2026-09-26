@@ -385,7 +385,11 @@ private fun packedChromaSampleShift(location: ChromaLocation, subsampleX: Int): 
     return shift * subsampleX
 }
 
-private class PackedCoefficients(
+/**
+ * The matrix, as the numbers a software conversion uses. The common converter and the native one
+ * both read this table, so the two cannot disagree about a matrix.
+ */
+internal class PackedCoefficients(
     val lumaOffset: Int,
     val lumaScale: Double,
     val chromaScale: Double,
@@ -415,6 +419,12 @@ private class PackedCoefficients(
     val chromaZero: Int = 128,
 ) {
     companion object {
+        /**
+         * The coefficients below are the full-range ones from each specification. The two range
+         * scales convert them to studio range, which is what almost all video uses: luma spans 16 to
+         * 235, so it scales by 255/219, and chroma spans 16 to 240, so it scales by 255/224. For
+         * BT.709, 1.5748 times 1.138 is 1.793, the studio-range red-from-Cr figure.
+         */
         fun of(colorSpace: ColorSpaceInfo): PackedCoefficients {
             val offset = if (colorSpace.fullRange) 0 else 16
             val lumaScale = if (colorSpace.fullRange) 1.0 else 255.0 / 219.0
@@ -445,11 +455,18 @@ private class PackedCoefficients(
                     rCb = 0.0, rCr = 1.0, gCb = 0.0, gCr = 0.0, bCb = 1.0, bCr = 0.0,
                     rY = 0.0, gY = 1.0, bY = 0.0, chromaZero = offset,
                 )
-                // BT.709 and the ones that carry no usable answer of their own. Listed rather than
+                // ITU-T H.273, MatrixCoefficients 4: KR 0.30 and KB 0.11, close to BT.601 and far
+                // from BT.709. Some old NTSC material is tagged this way.
+                ColorMatrix.Fcc -> PackedCoefficients(
+                    offset, lumaScale, chromaScale,
+                    rCb = 0.0, rCr = 1.4, gCb = -0.331864, gCr = -0.711864, bCb = 1.78, bCr = 0.0,
+                )
+                // BT.709, and the right default for anything unspecified above standard definition;
+                // ColorInfo.guessFor in KiteFFmpeg applies that guess before this. Listed rather than
                 // caught by an else, so a new entry in the enum is a compile error here instead of
                 // silently becoming BT.709. ICtCp is NOT this transform: its inverse needs the PQ
                 // curve between two matrices, so it is approximated here and the source warns once.
-                ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc, ColorMatrix.ICtCp,
+                ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.ICtCp,
                 -> PackedCoefficients(
                     offset, lumaScale, chromaScale,
                     rCb = 0.0, rCr = 1.5748, gCb = -0.187324, gCr = -0.468124, bCb = 1.8556, bCr = 0.0,

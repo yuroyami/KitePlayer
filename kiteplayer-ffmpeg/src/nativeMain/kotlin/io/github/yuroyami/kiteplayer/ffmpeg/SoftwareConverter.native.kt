@@ -111,7 +111,7 @@ public object SoftwareConverter {
     ) {
         val width = size.width
         val height = size.height
-        val coefficients = Coefficients.of(colorSpace)
+        val coefficients = PackedCoefficients.of(colorSpace)
         val chromaShift = chromaSampleShift(colorSpace.chromaLocation, subsampleX)
         val lastChromaColumn = chromaColumns(width, subsampleX) - 1
 
@@ -146,7 +146,7 @@ public object SoftwareConverter {
     private fun KiteFFmpegVideoFrame.convertNv12(out: ByteArray, layout: SampleLayout) {
         val width = size.width
         val height = size.height
-        val coefficients = Coefficients.of(colorSpace)
+        val coefficients = PackedCoefficients.of(colorSpace)
         // The same rule as the planar path, from the same function. NV12 and P010 are 4:2:0, so the
         // horizontal subsampling that rule is asked about is 1.
         val chromaShift = chromaSampleShift(colorSpace.chromaLocation, subsampleX = 1)
@@ -247,7 +247,7 @@ public object SoftwareConverter {
     private fun writeRgba(
         out: ByteArray,
         index: Int,
-        c: Coefficients,
+        c: PackedCoefficients,
         luma: Int,
         chromaB: Int,
         chromaR: Int,
@@ -324,105 +324,4 @@ public object SoftwareConverter {
      */
     private fun chromaColumns(width: Int, subsampleX: Int): Int =
         (width + (1 shl subsampleX) - 1) shr subsampleX
-
-    /**
-     * The matrix, as the six numbers the conversion actually uses.
-     *
-     * The values are the standard inverse matrices for each colour space. They are written out rather
-     * than derived so that a reader can check them against the specification.
-     */
-    private class Coefficients(
-        val lumaOffset: Int,
-        val lumaScale: Double,
-        val chromaScale: Double,
-        /**
-         * The chroma half of the inverse matrix, all six terms.
-         *
-         * Four were enough while every matrix was a YCbCr one, where red never reads Cb and blue
-         * never reads Cr. YCgCo needs both in both, so it could not be written as four constants
-         * and silently came out as BT.709.
-         */
-        val rCb: Double,
-        val rCr: Double,
-        val gCb: Double,
-        val gCr: Double,
-        val bCb: Double,
-        val bCr: Double,
-        /**
-         * The luma column and the value that stands for zero on the second and third planes.
-         *
-         * Every YCbCr matrix adds all of luma to each colour and centres chroma on 128, which is
-         * what the defaults say. Identity has no luma and no chroma: its planes hold G, B and R,
-         * each one a colour with its own black level, so it needs other values here.
-         */
-        val rY: Double = 1.0,
-        val gY: Double = 1.0,
-        val bY: Double = 1.0,
-        val chromaZero: Int = 128,
-    ) {
-        companion object {
-            /**
-             * The coefficients below are the full-range ones from each specification. The two range
-             * scales convert them to studio range, which is what almost all video uses:
-             *
-             * - Luma spans 16 to 235, so 219 of 255 levels: scale by 255/219, about 1.164.
-             * - Chroma spans 16 to 240, so 224 of 255 levels: scale by 255/224, about 1.138.
-             *
-             * Multiplying out gives the familiar published numbers. For BT.709,
-             * 1.5748 times 1.138 is 1.793, which is the figure the standard studio-range matrix
-             * quotes for the red-from-Cr term.
-             */
-            fun of(colorSpace: ColorSpaceInfo): Coefficients {
-                val offset = if (colorSpace.fullRange) 0 else 16
-                val lumaScale = if (colorSpace.fullRange) 1.0 else 255.0 / 219.0
-                val chromaScale = if (colorSpace.fullRange) 1.0 else 255.0 / 224.0
-
-                return when (colorSpace.matrix) {
-                    ColorMatrix.Bt601, ColorMatrix.Bt470bg, ColorMatrix.Smpte170m -> Coefficients(
-                        offset, lumaScale, chromaScale,
-                        rCb = 0.0, rCr = 1.402, gCb = -0.344136, gCr = -0.714136, bCb = 1.772, bCr = 0.0,
-                    )
-                    // SMPTE 240M is its own matrix and not BT.601 under another name. Its luma
-                    // weights are 0.212 and 0.087, between BT.601's and BT.709's, so borrowing
-                    // BT.601's row shifts every hue on this content by a mean of 7.7 of 255.
-                    ColorMatrix.Smpte240m -> Coefficients(
-                        offset, lumaScale, chromaScale,
-                        rCb = 0.0, rCr = 1.576, gCb = -0.2266, gCr = -0.4769, bCb = 1.826, bCr = 0.0,
-                    )
-                    // Constant luminance is converted with the non-constant luminance row, which is
-                    // an approximation: a correct path needs the whole transfer function, not just a
-                    // matrix. The decoder warns once per stream that it did this, in the same way and
-                    // for the same reason as it warns about HDR.
-                    ColorMatrix.Bt2020Ncl, ColorMatrix.Bt2020Cl -> Coefficients(
-                        offset, lumaScale, chromaScale,
-                        rCb = 0.0, rCr = 1.4746, gCb = -0.164553, gCr = -0.571353, bCb = 1.8814, bCr = 0.0,
-                    )
-                    // R = Y - Cg + Co, G = Y + Cg, B = Y - Cg - Co, with Cg in the Cb slot and
-                    // Co in the Cr slot. Only expressible now that red and blue may read both.
-                    ColorMatrix.YCgCo -> Coefficients(
-                        offset, lumaScale, chromaScale,
-                        rCb = -1.0, rCr = 1.0, gCb = 1.0, gCr = 0.0, bCb = -1.0, bCr = -1.0,
-                    )
-                    // The planes are G, B and R, in the slots Y, Cb and Cr use. No matrix, only a
-                    // plane reorder, and studio range scales all three the way it scales luma.
-                    ColorMatrix.Identity -> Coefficients(
-                        offset, lumaScale, chromaScale = lumaScale,
-                        rCb = 0.0, rCr = 1.0, gCb = 0.0, gCr = 0.0, bCb = 1.0, bCr = 0.0,
-                        rY = 0.0, gY = 1.0, bY = 0.0, chromaZero = offset,
-                    )
-                    // BT.709, and the right default for anything unspecified above standard
-                    // definition. See ColorInfo.guessFor, which KiteFFmpeg applies before this.
-                    // Listed rather than caught by an else, so a new entry in the enum is a compile
-                    // error here instead of silently becoming BT.709. ICtCp is NOT this transform:
-                    // its inverse needs the PQ curve between two matrices, so it is approximated
-                    // here and the source warns once.
-                    ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc, ColorMatrix.ICtCp,
-                    -> Coefficients(
-                        offset, lumaScale, chromaScale,
-                        rCb = 0.0, rCr = 1.5748, gCb = -0.187324, gCr = -0.468124, bCb = 1.8556, bCr = 0.0,
-                    )
-                }
-            }
-        }
-    }
 }

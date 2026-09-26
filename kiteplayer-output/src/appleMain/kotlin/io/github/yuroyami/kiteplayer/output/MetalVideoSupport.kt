@@ -706,11 +706,16 @@ internal class MetalColorUniforms private constructor(
                     rCb = 0f, rCr = 1f, gCb = 0f, gCr = 0f, bCb = 1f, bCr = 0f,
                     rY = 0f, gY = 1f, bY = 0f, chromaZero = offset,
                 )
+                // ITU-T H.273, MatrixCoefficients 4: KR 0.30 and KB 0.11, close to BT.601.
+                ColorMatrix.Fcc -> MetalColorUniforms(
+                    offset, lumaScale, chromaScale,
+                    rCb = 0f, rCr = 1.4f, gCb = -0.331864f, gCr = -0.711864f, bCb = 1.78f, bCr = 0f,
+                )
                 // Listed rather than caught by an else, so a new entry in the enum is a compile
                 // error here instead of silently becoming BT.709. ICtCp is NOT this transform: its
                 // inverse needs the PQ curve between two matrices, so it is approximated here and the
                 // source warns once.
-                ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc, ColorMatrix.ICtCp,
+                ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.ICtCp,
                 -> MetalColorUniforms(
                     offset, lumaScale, chromaScale,
                     rCb = 0f, rCr = 1.5748f, gCb = -0.187324f, gCr = -0.468124f, bCb = 1.8556f, bCr = 0f,

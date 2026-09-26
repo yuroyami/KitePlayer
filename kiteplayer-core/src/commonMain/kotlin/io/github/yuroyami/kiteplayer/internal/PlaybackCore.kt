@@ -335,9 +335,12 @@ internal class PlaybackCore(
             return runCatching { readWholly(reader, source.uri) }
                 .getOrElse { SubtitleBytes.Refused("the address could not be read${causeDetail(it)}") }
         }
-        val bytes = readExternalBytesOrNull(source.uri)
-            ?: return SubtitleBytes.Refused("the file could not be read")
-        return SubtitleBytes.Read(bytes)
+        return when (val file = readExternalFile(source.uri, MAX_SUBTITLE_BYTES)) {
+            is ExternalFile.Read -> SubtitleBytes.Read(file.bytes)
+            ExternalFile.TooLarge ->
+                SubtitleBytes.Refused("it holds more than $MAX_SUBTITLE_BYTES bytes, and a subtitle file that large is not one")
+            ExternalFile.Unreadable -> SubtitleBytes.Refused("the file could not be read")
+        }
     }
 
     /**

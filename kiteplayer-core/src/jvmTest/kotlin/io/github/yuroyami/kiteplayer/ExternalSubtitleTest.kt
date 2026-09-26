@@ -201,6 +201,30 @@ class ExternalSubtitleTest {
         )
         harness.close()
     }
+    // A film picked as the subtitle must not be read into memory whole (#243).
+    @Test
+    fun `a local file over the subtitle size limit is refused before it is read`() = runTest {
+        val big = File.createTempFile("kiteplayer-too-big", ".srt").apply {
+            deleteOnExit()
+            // A valid cue first, so only the size can refuse it.
+            outputStream().use { out ->
+                out.write("1\n00:00:01,000 --> 00:00:02,000\nHello\n\n".toByteArray())
+                out.write(ByteArray(20_972_766) { ' '.code.toByte() })
+            }
+        }
+        val harness = CoreHarness(this)
+        harness.attachRenderer()
+        harness.core.open(MediaItem("scripted://media", externalSubtitles = listOf(SubtitleSource(uri = big.absolutePath))))
+        assertTrue(
+            harness.core.warningHistory().any {
+                it.warning is PlaybackWarning.SubtitleSourceUnreadable && "more than" in it.warning.message
+            },
+            "the file must be refused for its size: ${harness.core.warningHistory().map { it.warning.message }}",
+        )
+        assertTrue(harness.core.snapshots.value.tracks.all.none { it.id.isExternal }, "no track loads from it")
+        harness.close()
+    }
+
     // An id minted by addExternalSubtitle must never collide with a track the open
     // already created. Deriving the id from the LOADED count collided as soon as one declared
     // file had failed, because the open derives ids from the DECLARED index.

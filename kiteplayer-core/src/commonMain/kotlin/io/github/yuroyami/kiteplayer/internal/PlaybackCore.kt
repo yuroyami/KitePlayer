@@ -1081,8 +1081,7 @@ internal class PlaybackCore(
         checkOpenFor("seekLater")
         // The mask is set from this very call, not from the actor's next pass: a fire-and-forget
         // caller polls position() in the gap before the command is drained, and an absolute target
-        // needs no session state to name it. A request the drain drops (unseekable source) is
-        // cleared one pass later by handlePlaybackTime.
+        // needs no session state to name it. A request the drain drops withdraws the mask there.
         maskedSeekTargetMicros.value = maskFor(to)
         commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(to), mode)))
     }
@@ -1584,6 +1583,9 @@ internal class PlaybackCore(
 
     private suspend fun execute(command: CoreCommand) {
         rejectionFor(command)?.let {
+            // The caller's thread set the mask before this refusal. With no session, no pass will
+            // clear it, and position() would answer the refused target (#255).
+            if (command is CoreCommand.Seek) clearSeekMaskUnlessPending()
             command.fail(it)
             return
         }
@@ -1662,7 +1664,12 @@ internal class PlaybackCore(
             is CoreCommand.Seek -> queueSeek(command.request, command.reply)
             is CoreCommand.SeekLater -> if (
                 session?.source?.seekable == true || pendingVideoRecovery != null
-            ) queueSeek(command.request, null)
+            ) {
+                queueSeek(command.request, null)
+            } else {
+                // Dropped: the mask it set on the caller's thread goes with it (#255).
+                clearSeekMaskUnlessPending()
+            }
             is CoreCommand.Stop -> {
                 runStop()
                 command.reply.complete(Unit)
@@ -4210,6 +4217,11 @@ internal class PlaybackCore(
         if (status == PlaybackStatus.Playing || status == PlaybackStatus.Buffering) {
             setStatus(PlaybackStatus.Paused)
         }
+    }
+
+    /** Withdraws the seek mask, unless an accepted request still owns it. */
+    private fun clearSeekMaskUnlessPending() {
+        if (pendingSeek == null) maskedSeekTargetMicros.value = NO_SEEK_MASK
     }
 
     private fun handlePlaybackTime() {

@@ -44,6 +44,25 @@ class AudioVizSessionsTest {
         assertEquals(2, detached)
     }
 
+    // Attaching starts the song scanner, so the view's settings must already be in place (#289).
+    @Test
+    fun `a view configures the feed before it attaches, and again when it shares one`() {
+        val dispatcher = ManualVizDispatcher()
+        val order = ArrayList<String>()
+        val sessions = AudioVizSessions<Any>(
+            attach = { _, _ -> order += "attach" },
+            detach = { _, _ -> },
+            create = { AudioVizFeed(dispatcher) },
+        )
+        val player = Any()
+        val first = sessions.acquire(player) { order += "configure first" }
+        val second = sessions.acquire(player) { order += "configure second" }
+        assertEquals(listOf("configure first", "attach", "configure second"), order)
+        first.close()
+        second.close()
+        dispatcher.runAll()
+    }
+
     @Test
     fun `different players keep independent analysis lifetimes`() {
         val dispatcher = ManualVizDispatcher()

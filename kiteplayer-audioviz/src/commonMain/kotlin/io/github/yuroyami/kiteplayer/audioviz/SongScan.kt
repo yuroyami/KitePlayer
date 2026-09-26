@@ -22,7 +22,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -175,33 +177,47 @@ internal class SongScanner(
     private val store: () -> SongMapStore = { SongMapStore.None },
     private val workers: () -> Int = ::scanWorkerCount,
     private val wait: suspend (kotlin.time.Duration) -> Unit = { delay(it) },
+    /** Emits when [policy] may have changed, so an unchanged item is looked at again (#289). */
+    private val policyChanges: Flow<Any?> = flowOf(Unit),
 ) {
     private var nextIdentity = 1L
     private var scope: CoroutineScope? = null
 
+    /** The item whose map is installed, so a policy change for it needs no second read. */
+    private var mappedIdentity: Any? = null
+
     fun start(scope: CoroutineScope): Job {
         this.scope = scope
         return scope.launch {
-            source.targets
-                .distinctUntilChanged { old, new -> old?.identity == new?.identity }
-                .collectLatest { target -> follow(target) }
+            // Paired with whether the policy allows the item now. A policy change that leaves the
+            // current item's answer alone does not restart its scan.
+            combine(source.targets, policyChanges) { target, _ ->
+                target to (target != null && policy().allows(target.media))
+            }
+                .distinctUntilChanged { old, new -> old.first?.identity == new.first?.identity && old.second == new.second }
+                .collectLatest { (target, _) -> follow(target) }
         }
     }
 
     private suspend fun follow(target: ScanTarget?) {
+        // The item already has its map: a change of policy only governs new reads.
+        if (target != null && target.identity == mappedIdentity) return
         // Whatever map was installed described the previous item or track.
         destination.install(null)
+        mappedIdentity = null
         if (target == null || target.durationMicros == null || !target.seekable) return
         if (!policy().allows(target.media)) return
         wait(settle)
+        // Asked again after every wait: the policy may have been withdrawn meanwhile (#289).
+        if (!policy().allows(target.media)) return
         val key = SongMapCache.key(target)
-        SongMapCache.get(key)?.let { return install(it, key) }
+        SongMapCache.get(key)?.let { return install(it, key, target) }
         kept(key)?.let {
             SongMapCache.put(key, it)
-            return install(it, key)
+            return install(it, key, target)
         }
         val map = try {
-            SongScanLimiter.mutex.withLock { scan(target) }
+            SongScanLimiter.mutex.withLock { if (policy().allows(target.media)) scan(target) else null } ?: return
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (failure: Exception) {
@@ -213,7 +229,7 @@ internal class SongScanner(
             SongMapCache.put(key, map)
             offWorker { store().write(key, encodeSongMap(map)) }
         }
-        install(map, key)
+        install(map, key, target)
     }
 
     /** The stored map for [key], when there is one this release can read. */
@@ -235,7 +251,8 @@ internal class SongScanner(
         }
     }
 
-    private fun install(map: SongMap, key: String) {
+    private fun install(map: SongMap, key: String, target: ScanTarget) {
+        mappedIdentity = target.identity
         val holder = scope
         destination.install(MapInstall(map, key, nextIdentity++) {
             SongMapCache.remove(key)

@@ -34,12 +34,19 @@ internal class AudioVizSessions<K : Any>(
 
     private val active = AtomicReference<List<Entry<K>>>(emptyList())
 
-    fun acquire(key: K): Lease {
+    /**
+     * Shares the feed for [key], or makes one. [configure] runs before a new feed attaches, because
+     * attaching starts its song scanner, and on a shared feed it runs as the newest view's say (#289).
+     */
+    fun acquire(key: K, configure: (AudioVizFeed) -> Unit = {}): Lease {
         while (true) {
             val entries = active.load()
             val found = entries.firstOrNull { it.key === key }
             if (found != null) {
-                if (found.retain()) return lease(found)
+                if (found.retain()) {
+                    configure(found.feed)
+                    return lease(found)
+                }
                 remove(found)
                 continue
             }
@@ -49,6 +56,7 @@ internal class AudioVizSessions<K : Any>(
                 continue
             }
             try {
+                configure(fresh.feed)
                 attach(key, fresh.feed)
             } catch (failure: Throwable) {
                 remove(fresh)

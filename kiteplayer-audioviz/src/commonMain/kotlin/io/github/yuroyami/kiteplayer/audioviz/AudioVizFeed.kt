@@ -52,12 +52,28 @@ internal class AudioVizFeed(
     private var appliedMap: MapInstall? = null
     private var verification: MapVerification? = null
 
-    /** Which items a background scan may read. The newest view to attach sets it. */
+    /** Which items a background scan may read. The newest view to configure it sets it. */
     val scanPolicy = AtomicReference(SongScanPolicy.Default)
 
-    /** Where finished maps are kept between runs. The newest view to attach sets it. */
+    /** Where finished maps are kept between runs. The newest view to configure it sets it. */
     val mapStore = AtomicReference(SongMapStore.None)
     private val scanStarted = AtomicBoolean(false)
+
+    /** Moves whenever [scanPolicy] changes what it allows, so the scanner looks again (#289). */
+    private val policyVersion = kotlinx.coroutines.flow.MutableStateFlow(0L)
+
+    /**
+     * Sets the scan policy and the map store. A policy that allows the same kinds of item as the
+     * current one changes nothing, so a view that builds a new policy on every composition does
+     * not restart a scan. A new store takes the next write.
+     */
+    fun configureScan(policy: SongScanPolicy, store: SongMapStore) {
+        val old = scanPolicy.exchange(policy)
+        mapStore.store(store)
+        val same = old.localFiles == policy.localFiles && old.network == policy.network &&
+            old.customReaders == policy.customReaders
+        if (!same) policyVersion.value++
+    }
 
     /** Hands a finished map to the analysis worker, or removes the current one with null. Any thread. */
     override fun install(install: MapInstall?) {
@@ -68,7 +84,11 @@ internal class AudioVizFeed(
     /** Starts following [source] for song scans, once, for as long as this feed lives. */
     fun startSongScan(source: SongScanSource, scanDispatcher: CoroutineDispatcher = Dispatchers.IO) {
         if (!scanStarted.compareAndSet(false, true) || closed.load()) return
-        SongScanner(source, this, { scanPolicy.load() }, scanDispatcher, store = { mapStore.load() }).start(scope)
+        SongScanner(
+            source, this, { scanPolicy.load() }, scanDispatcher,
+            store = { mapStore.load() },
+            policyChanges = policyVersion,
+        ).start(scope)
     }
 
     private val worker = scope.launch {

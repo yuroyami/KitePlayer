@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +47,9 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
 
     /** Live structural events this view dropped because a complete song map covered their time. */
     public val duplicateEventDiscards: Long get() = eventCursor?.duplicateDiscards ?: 0L
+
+    /** The feed this view reads, or null while unbound. */
+    internal val boundFeed: AudioVizFeed? get() = analysisFeed
 
     internal fun bind(feed: AudioVizFeed?) {
         analysisFeed = feed
@@ -264,15 +268,16 @@ public fun rememberAudioVizState(
         }
     }
     DisposableEffect(player, state) {
-        val lease = playerAudioVizSessions.acquire(player)
-        lease.feed.scanPolicy.store(songScan)
-        lease.feed.mapStore.store(songMapStore)
+        // Configured before a new feed attaches, because attaching starts its scanner (#289).
+        val lease = playerAudioVizSessions.acquire(player) { it.configureScan(songScan, songMapStore) }
         state.bind(lease.feed)
         onDispose {
             state.bind(null)
             lease.close()
         }
     }
+    // A later composition with another policy or store reaches the shared feed as well.
+    SideEffect { state.boundFeed?.configureScan(songScan, songMapStore) }
     return state
 }
 

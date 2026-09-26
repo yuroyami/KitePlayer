@@ -103,13 +103,23 @@ class SongScannerTest {
         val installs = Installs()
         val waits = ArrayList<CompletableDeferred<Unit>>()
         val scope = CoroutineScope(dispatcher + Job())
+        private var policyNow = policy
+        private val policyVersion = MutableStateFlow(0)
 
         init {
-            SongScanner(source, installs, { policy }, dispatcher,
+            SongScanner(source, installs, { policyNow }, dispatcher,
                 store = { store },
                 workers = { workers },
                 wait = { CompletableDeferred<Unit>().also { waits += it }.await() },
+                policyChanges = policyVersion,
             ).start(scope)
+            dispatcher.runAll()
+        }
+
+        /** What a view that configures the feed with [policy] does. */
+        fun policy(policy: SongScanPolicy) {
+            policyNow = policy
+            policyVersion.value++
             dispatcher.runAll()
         }
 
@@ -128,6 +138,47 @@ class SongScannerTest {
 
     @BeforeTest @AfterTest
     fun clearCache() = SongMapCache.clear()
+
+    // A policy the view withdraws while the scanner settles must stop the read (#289).
+    @Test
+    fun aPolicyWithdrawnWhileSettlingReadsNothing() {
+        val rig = Rig()
+        rig.target(target("file:///song.flac"))
+        assertEquals(1, rig.waits.size, "the scanner never started settling, so this proves nothing")
+        rig.policy(SongScanPolicy.Off)
+        rig.settleAll()
+        assertEquals(0, rig.source.scans, "a withdrawn policy still read the item")
+        rig.close()
+    }
+
+    @Test
+    fun aPolicyGrantedLaterScansTheItemAlreadyPlaying() {
+        val rig = Rig(policy = SongScanPolicy.Off)
+        rig.target(target("https://host.test/song.flac"))
+        rig.settleAll()
+        assertEquals(0, rig.source.scans)
+        rig.policy(SongScanPolicy(network = true))
+        rig.settleAll()
+        assertTrue(rig.source.scans > 0, "the item already playing was never looked at again")
+        assertTrue(rig.installs.maps.isNotEmpty(), "and no map was installed")
+        rig.close()
+    }
+
+    @Test
+    fun anEquivalentPolicyDoesNotRestartAScan() {
+        val rig = Rig()
+        val gate = CompletableDeferred<Unit>()
+        rig.source.gate = gate
+        rig.target(target("file:///song.flac"))
+        rig.settleAll()
+        assertEquals(1, rig.source.scans, "the scan never started, so this proves nothing")
+        // Another view's policy that still allows local files.
+        rig.policy(SongScanPolicy(localFiles = true, network = true))
+        assertEquals(0, rig.source.cancelled, "a policy that still allows the item restarted its scan")
+        gate.complete(Unit)
+        rig.dispatcher.runAll()
+        rig.close()
+    }
 
     @Test
     fun aSettledLocalItemIsScannedAndItsCompleteMapInstalled() {

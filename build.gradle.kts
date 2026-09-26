@@ -86,6 +86,27 @@ val publicationReadiness = tasks.register<CheckPublicationReadinessTask>("checkP
     )
 }
 
+
+/**
+ * What each published module embeds under a licence of its own, beside the Apache-2.0 that covers
+ * this repository's code. The texts ship in the JVM and Android artifacts, and NOTICE lists them.
+ */
+val bundledLicenses: Map<String, List<Pair<String, String>>> = mapOf(
+    ":kiteplayer-libass" to listOf(
+        "ISC License (bundled libass)" to "https://github.com/libass/libass/blob/master/COPYING",
+        "MIT License (bundled HarfBuzz)" to "https://github.com/harfbuzz/harfbuzz/blob/main/COPYING",
+        "The FreeType License (bundled FreeType)" to
+            "https://gitlab.freedesktop.org/freetype/freetype/-/blob/master/docs/FTL.TXT",
+        "GNU Lesser General Public License, Version 2.1 or later (bundled FriBidi)" to
+            "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt",
+        "GNU Lesser General Public License, Version 2.0 or later (bundled GNU libiconv, Windows JVM adapter)" to
+            "https://www.gnu.org/licenses/old-licenses/lgpl-2.0.txt",
+    ),
+    ":kiteplayer-subtitles" to listOf(
+        "BSD 3-Clause License (bundled WHATWG encoding tables)" to "https://encoding.spec.whatwg.org/",
+    ),
+)
+
 subprojects {
     val publishingProject = this
     val publishingPath = path
@@ -115,6 +136,14 @@ subprojects {
                         name.set("Apache License 2.0")
                         url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
                         distribution.set("repo")
+                    }
+                    // Licence scanners read the POM, not NOTICE, so what a module embeds is named here (#248).
+                    bundledLicenses[publishingPath].orEmpty().forEach { (bundled, text) ->
+                        license {
+                            name.set(bundled)
+                            url.set(text)
+                            distribution.set("repo")
+                        }
                     }
                 }
                 // Maven Central rejects a bundle with no developer. Identity only, no address:

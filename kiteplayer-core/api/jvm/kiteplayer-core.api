@@ -499,6 +499,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer$Companion {
 	public final fun create (Lio/github/yuroyami/kiteplayer/PlayerConfig;)Lio/github/yuroyami/kiteplayer/KitePlayer;
 	public static synthetic fun create$default (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;Lio/github/yuroyami/kiteplayer/PlayerConfig;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/KitePlayer;
 	public final fun getDEFAULT_SLEEP_FADE-UwyO8pc ()J
+	public final fun getDELAY_MAX-UwyO8pc ()J
 }
 
 public abstract interface annotation class io/github/yuroyami/kiteplayer/KitePlayerLowLevelApi : java/lang/annotation/Annotation {

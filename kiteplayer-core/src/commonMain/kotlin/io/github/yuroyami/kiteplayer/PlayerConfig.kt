@@ -399,7 +399,7 @@ public data class SubtitleConfig(
      * behaviour turns this off.
      */
     val autoSelect: Boolean = true,
-    /** Shift every cue by this much. Positive shows cues later. */
+    /** Shift every cue by this much. Positive shows cues later. At most [KitePlayer.DELAY_MAX] either way. */
     val delay: Duration = Duration.ZERO,
     /** Scale applied to the authored font size. */
     val fontScale: Float = 1.0f,
@@ -420,6 +420,9 @@ public data class SubtitleConfig(
 ) {
     init {
         require(fontScale.isFinite() && fontScale > 0f) { "fontScale must be finite and positive, was $fontScale" }
+        require(delay.isFinite() && delay.absoluteValue <= KitePlayer.DELAY_MAX) {
+            "delay must be finite and at most ${KitePlayer.DELAY_MAX} either way, was $delay"
+        }
     }
 }
 

@@ -309,6 +309,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.SetBalance(value, CompletableDeferred()))
     }
 
+    private fun checkDelay(name: String, value: Duration) =
+        require(value.isFinite() && value.absoluteValue <= DELAY_MAX) {
+            "$name must be finite and at most $DELAY_MAX either way, was $value"
+        }
+
     private fun checkBalance(value: Float) = require(value.isFinite() && value >= -1f && value <= 1f) {
         "balance must be between -1 and 1, was $value"
     }
@@ -546,9 +551,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /**
      * Shifts subtitle timing by [value]. Positive shows cues later. Applies to the cues already
      * on screen at the next pass, no reopen and no reselection.
+     *
+     * @throws IllegalArgumentException when [value] is not finite or is more than [DELAY_MAX] either way.
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSubtitleDelay(value: Duration) {
+        checkDelay("subtitle delay", value)
         core.post(CoreCommand.SetSubtitleDelay(value, CompletableDeferred()))
     }
 
@@ -611,13 +619,19 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Compensates for sound that reaches the ear late: with a positive [value] every video frame
-     * is presented that much earlier, which is the whole of what a Bluetooth latency slider
-     * needs. The audio samples are never touched, so the change is instant and free, and the
-     * picture walks over smoothly within a frame or two rather than jumping.
+     * Delays the sound against the picture by [value], mpv's `audio-delay` sign. A positive value
+     * presents every video frame that much earlier. It is for sound that reaches the ear early.
+     *
+     * Sound that reaches the ear late, such as Bluetooth latency the device does not report, needs
+     * a negative value: -200 ms holds the picture back by 200 ms. The audio samples are never
+     * touched, so the change is instant and free, and the picture walks over smoothly within a
+     * frame or two rather than jumping.
+     *
+     * @throws IllegalArgumentException when [value] is not finite or is more than [DELAY_MAX] either way.
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setAudioDelay(value: Duration) {
+        checkDelay("audio delay", value)
         core.post(CoreCommand.SetAudioDelay(value, CompletableDeferred()))
     }
 
@@ -977,6 +991,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             "volume must be finite and not negative, was ${memento.volume}"
         }
         checkBalance(memento.balance)
+        checkDelay("subtitle delay", memento.subtitleDelay)
+        checkDelay("audio delay", memento.audioDelay)
         checkSubtitleScale(memento.subtitleScale)
         checkSubtitlePosition(memento.subtitlePosition)
         checkVideoTransform(memento.videoTransform)
@@ -1257,6 +1273,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
         /** How long [setSleepTimer] fades for when the caller does not say. */
         public val DEFAULT_SLEEP_FADE: Duration = kotlin.time.Duration.parse("10s")
+
+        /** The largest shift, either way, that [setAudioDelay] and [setSubtitleDelay] accept. */
+        public val DELAY_MAX: Duration = kotlin.time.Duration.parse("1h")
         /**
          * Builds a player from [config].
          *

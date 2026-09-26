@@ -61,6 +61,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   three (#218).
 - `setSleepTimer` throws `IllegalArgumentException` at the call for a negative fade or an `After`
   that is not in the future, and a refused A-B loop is published as `CommandRefused` (#217).
+- `setAudioDelay` was documented the wrong way round. A positive value presents the picture
+  earlier, which suits sound that reaches the ear early, as with mpv's `audio-delay`. Sound that
+  arrives late, such as Bluetooth latency, needs a negative value. The behaviour is unchanged.
+  Both delays, `SubtitleConfig.delay` and `restore` now refuse a value that is not finite or is
+  more than `KitePlayer.DELAY_MAX`, one hour, either way (#219).
 
 ## [0.0.27] - 2026-09-25
 

@@ -2224,6 +2224,8 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
 
         final val DEFAULT_SLEEP_FADE // io.github.yuroyami.kiteplayer/KitePlayer.Companion.DEFAULT_SLEEP_FADE|{}DEFAULT_SLEEP_FADE[0]
             final fun <get-DEFAULT_SLEEP_FADE>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/KitePlayer.Companion.DEFAULT_SLEEP_FADE.<get-DEFAULT_SLEEP_FADE>|<get-DEFAULT_SLEEP_FADE>(){}[0]
+        final val DELAY_MAX // io.github.yuroyami.kiteplayer/KitePlayer.Companion.DELAY_MAX|{}DELAY_MAX[0]
+            final fun <get-DELAY_MAX>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/KitePlayer.Companion.DELAY_MAX.<get-DELAY_MAX>|<get-DELAY_MAX>(){}[0]
 
         final fun create(io.github.yuroyami.kiteplayer/PlayerConfig = ...): io.github.yuroyami.kiteplayer/KitePlayer // io.github.yuroyami.kiteplayer/KitePlayer.Companion.create|create(io.github.yuroyami.kiteplayer.PlayerConfig){}[0]
     }

@@ -60,7 +60,10 @@ public data class PlayerSnapshot(
      * installed and [SubtitleConfig.typesetting] on.
      */
     val subtitleTypesetter: String? = null,
-    /** The runtime audio timing shift. Positive presents video earlier to meet late sound. */
+    /**
+     * The runtime audio timing shift, mpv's sign. Positive presents the picture earlier, for sound
+     * that reaches the ear early. Late sound, such as unreported Bluetooth latency, needs a negative one.
+     */
     val audioDelay: Duration = Duration.ZERO,
     /** The A of the armed A-B loop, or null when none is armed. */
     val abLoopA: Duration? = null,

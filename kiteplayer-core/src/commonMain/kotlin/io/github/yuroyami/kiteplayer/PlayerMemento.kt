@@ -12,7 +12,8 @@ import kotlin.time.Duration.Companion.microseconds
  * What the text form cannot carry: [MediaItem.io] factories, which nobody can store,
  * [MediaItem.externalSubtitles] and [MediaItem.videoFilter]. [asProperties] drops all three, and
  * an item that needs one is rebuilt by the application before [KitePlayer.restore]. Headers, raw
- * open options, the format hint, the demux settings and the start position are strings and travel.
+ * open options, the format hint, the demux settings, the start position, and the title, artist
+ * and album are strings and travel.
  *
  * Tracks are remembered by LANGUAGE rather than by id, because ids belong to one open of one
  * container and a memento outlives both.
@@ -50,13 +51,21 @@ public data class PlayerMemento(
     val renderQuality: RenderQuality = RenderQuality.Off,
     /** False when the viewer was playing sound only. */
     val videoEnabled: Boolean = true,
+    /**
+     * The shuffled play order, as positions into [queue], when [shuffle] was on. Empty when shuffle
+     * was off. [KitePlayer.restore] continues this order rather than drawing a new one, so the
+     * items already heard do not come round again.
+     */
+    val queueOrder: List<Int> = emptyList(),
 ) {
 
     /**
      * Flat string pairs, version-stamped. Keys: `version`, `queue.size`, then per item
      * `queue.N.uri`, `queue.N.formatHint`, `queue.N.startPosition` (microseconds),
-     * `queue.N.header.<name>`, `queue.N.option.<key>` and `queue.N.demux.<field>`; then one key per
-     * setting, durations in microseconds, and `audioLanguage` and `subtitleLanguage` only when known.
+     * `queue.N.title`, `queue.N.artist`, `queue.N.album`, `queue.N.header.<name>`,
+     * `queue.N.option.<key>` and `queue.N.demux.<field>`; then `queueOrder` as space-separated
+     * positions when there is one, one key per setting, durations in microseconds, and
+     * `audioLanguage` and `subtitleLanguage` only when known.
      */
     @OptIn(KitePlayerLowLevelApi::class)
     public fun asProperties(): Map<String, String> = buildMap {
@@ -66,11 +75,15 @@ public data class PlayerMemento(
             put("queue.$n.uri", item.uri)
             item.formatHint?.let { put("queue.$n.formatHint", it) }
             item.startPosition?.let { put("queue.$n.startPosition", it.inWholeMicroseconds.toString()) }
+            item.title?.let { put("queue.$n.title", it) }
+            item.artist?.let { put("queue.$n.artist", it) }
+            item.album?.let { put("queue.$n.album", it) }
             item.headers.forEach { (name, value) -> put("queue.$n.header.$name", value) }
             item.openOptions.forEach { (key, value) -> put("queue.$n.option.$key", value) }
             putDemux("queue.$n.demux.", item.demux)
         }
         put("queueIndex", queueIndex.toString())
+        if (queueOrder.isNotEmpty()) put("queueOrder", queueOrder.joinToString(" "))
         put("position", position.inWholeMicroseconds.toString())
         put("speed", speed.toString())
         put("preservePitch", preservePitch.toString())
@@ -125,7 +138,7 @@ public data class PlayerMemento(
 
     public companion object {
         /** The version [asProperties] stamps. [fromProperties] also reads every older one. */
-        public const val FORMAT_VERSION: Int = 3
+        public const val FORMAT_VERSION: Int = 4
 
         /**
          * Reads what [asProperties] wrote.
@@ -136,9 +149,9 @@ public data class PlayerMemento(
         public fun fromProperties(properties: Map<String, String>): PlayerMemento {
             val version = properties["version"]?.toIntOrNull()
             // Version 1 knew nothing about balance, the equaliser or any picture and subtitle
-            // setting, and version 2 nothing about the demux settings. Both read back with the
-            // defaults for those, which is what a player that had never been told about them would
-            // have had anyway.
+            // setting, version 2 nothing about the demux settings, and version 3 nothing about the
+            // item titles or the shuffle order. Each reads back with the defaults for those, which
+            // is what a player that had never been told about them would have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
                 "unsupported memento format version $version; this build reads 1 to $FORMAT_VERSION"
             }
@@ -149,6 +162,9 @@ public data class PlayerMemento(
 
             val size = need("queue.size").toInt()
             require(size >= 0) { "queue.size must not be negative, was $size" }
+            // Checked before anything is allocated: every item needs its own uri key, so a size
+            // above the number of keys is a lie, and trusting it ran out of memory (#214).
+            require(size <= properties.size) { "queue.size $size is more than the ${properties.size} keys hold" }
             val queue = List(size) { n ->
                 MediaItem(
                     uri = need("queue.$n.uri"),
@@ -157,6 +173,9 @@ public data class PlayerMemento(
                     formatHint = properties["queue.$n.formatHint"],
                     openOptions = tagged("queue.$n.option."),
                     demux = demuxFrom(properties, "queue.$n.demux."),
+                    title = properties["queue.$n.title"],
+                    artist = properties["queue.$n.artist"],
+                    album = properties["queue.$n.album"],
                 )
             }
             return PlayerMemento(
@@ -209,6 +228,9 @@ public data class PlayerMemento(
                     linearLight = properties["quality.linearLight"]?.toBooleanStrict() ?: false,
                 ),
                 videoEnabled = properties["videoEnabled"]?.toBooleanStrict() ?: true,
+                queueOrder = properties["queueOrder"]
+                    ?.split(" ")?.filter { it.isNotBlank() }?.map { it.toInt() }
+                    ?: emptyList(),
             )
         }
 

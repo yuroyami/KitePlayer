@@ -22,6 +22,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - ReplayGain no longer raises the level of a track whose tags carry no peak, which includes
   every Opus file, and `AudioConfig.volumeCeiling` no longer widens the ReplayGain clamp. A tag
   can still lower the level. Raise the volume instead to make such a track louder (#203).
+- `PlayerMemento` gains `queueOrder`, which changes the generated data-class methods. Recompile.
+  `PlayerMemento.FORMAT_VERSION` is 4, and a build older than this one refuses a memento that this
+  one wrote. The text form now also carries each item's title, artist and album (#214).
 
 ## [0.0.27] - 2026-09-25
 

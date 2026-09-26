@@ -147,6 +147,59 @@ class MementoTest {
         harness.close()
     }
 
+    // Every string an item carries travels in the text form, the three the lock screen shows too (#214).
+    @OptIn(KitePlayerLowLevelApi::class)
+    @Test
+    fun `the text form carries every string field of an item`() {
+        val item = MediaItem(
+            uri = "https://host.test/a.mkv",
+            headers = mapOf("Authorization" to "Bearer x"),
+            startPosition = 3.seconds,
+            formatHint = "matroska",
+            openOptions = mapOf("probesize" to "100000"),
+            title = "A title",
+            artist = "An artist",
+            album = "An album",
+        )
+        val memento = memento().copy(queue = listOf(item))
+        assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
+    }
+
+    @Test
+    fun `a queue size larger than the text form can hold is refused rather than allocated`() {
+        val forged = mapOf("version" to PlayerMemento.FORMAT_VERSION.toString(), "queue.size" to Int.MAX_VALUE.toString())
+        assertFailsWith<IllegalArgumentException> { PlayerMemento.fromProperties(forged) }
+    }
+
+    @Test
+    fun `a shuffled queue comes back in the order it was playing`() = runTest {
+        val items = List(8) { MediaItem("scripted://item$it") }
+        val first = CoreHarness(this, script = script())
+        val original = KitePlayer(first.core)
+        first.attachRenderer()
+        original.openQueue(items, startIndex = 0)
+        original.setShuffle(true, seed = 7L)
+        first.run(100.milliseconds)
+        original.next()
+        original.next()
+        first.run(100.milliseconds)
+        val before = original.state.value
+        val memento = PlayerMemento.fromProperties(original.memento().asProperties())
+        assertEquals(before.queueOrder, memento.queueOrder, "the memento must keep the play order")
+
+        val second = CoreHarness(this, script = script())
+        val restored = KitePlayer(second.core)
+        second.attachRenderer()
+        restored.restore(memento)
+        second.run(100.milliseconds)
+        val after = restored.state.value
+        assertEquals(before.queueOrder, after.queueOrder, "the restored queue was shuffled again")
+        assertEquals(before.queueIndex, after.queueIndex)
+        assertTrue(after.shuffle)
+        first.close()
+        second.close()
+    }
+
     @Test
     fun `properties round trip for items that carry only strings`() {
         val memento = PlayerMemento(

@@ -1188,6 +1188,13 @@ internal class PlaybackCore(
         awaitReply(reply)
     }
 
+    /** Turns shuffle on with [order] as the play order, as a memento saved it. */
+    suspend fun restoreQueueOrder(order: List<Int>) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.RestoreQueueOrder(order, reply))
+        awaitReply(reply)
+    }
+
     suspend fun setMarkers(markers: List<Marker>) {
         val reply = CompletableDeferred<Unit>()
         send(CoreCommand.SetMarkers(markers, reply))
@@ -1614,6 +1621,18 @@ internal class PlaybackCore(
                     shuffleRandom = command.seed?.let { Random(it) } ?: Random.Default
                 }
                 rebuildQueueOrder()
+                publishSnapshot()
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.RestoreQueueOrder -> {
+                // A saved shuffle continues where it was, instead of a fresh draw (#214). An order
+                // that is not a permutation of this queue falls back to one.
+                shuffleEnabled = true
+                if (command.order.sorted() == queueItems.indices.toList()) {
+                    queueOrder = command.order
+                } else {
+                    rebuildQueueOrder()
+                }
                 publishSnapshot()
                 command.reply.complete(Unit)
             }
@@ -8761,6 +8780,9 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         val seed: Long?,
         val reply: CompletableDeferred<Unit>,
     ) : CoreCommand("setShuffle", reply)
+
+    class RestoreQueueOrder(val order: List<Int>, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("restoreQueueOrder", reply)
 
     class SetMarkers(val markers: List<Marker>, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setMarkers", reply)

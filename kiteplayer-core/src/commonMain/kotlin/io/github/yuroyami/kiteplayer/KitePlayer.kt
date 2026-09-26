@@ -906,6 +906,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             videoAdjustments = snapshot.videoAdjustments,
             renderQuality = snapshot.renderQuality,
             videoEnabled = snapshot.videoEnabled,
+            queueOrder = if (snapshot.shuffle && snapshot.queue.isNotEmpty()) snapshot.queueOrder else emptyList(),
         )
     }
 
@@ -943,6 +944,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         checkVideoTransform(memento.videoTransform)
         checkVideoAdjustments(memento.videoAdjustments)
         checkRenderQuality(memento.renderQuality)
+        require(memento.queueOrder.isEmpty() || memento.queueOrder.sorted() == memento.queue.indices.toList()) {
+            "queueOrder ${memento.queueOrder} is not an order of a queue of ${memento.queue.size}"
+        }
 
         // A session still open would take the speed as a live change, which a source that cannot
         // seek refuses. Stopped, the player keeps each setting for the open that follows.
@@ -965,7 +969,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setVideoEnabled(memento.videoEnabled)
         openQueue(memento.queue, memento.queueIndex)
         setLoop(memento.loop)
-        setShuffle(memento.shuffle)
+        // The saved order continues, so the items already heard stay behind (#214).
+        if (memento.shuffle && memento.queueOrder.isNotEmpty()) {
+            core.restoreQueueOrder(memento.queueOrder)
+        } else {
+            setShuffle(memento.shuffle)
+        }
         if (memento.position > Duration.ZERO) {
             if (state.value.seekable) {
                 seek(memento.position)

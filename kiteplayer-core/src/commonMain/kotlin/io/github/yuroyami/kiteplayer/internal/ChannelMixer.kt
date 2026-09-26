@@ -80,24 +80,28 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
  * time. The fix is a matrix, and the matrix has to be chosen by what the channels *are*, which is
  * the layout mask, and never by how many of them there are.
  *
- * ### The matrices, into stereo
+ * ### The matrices
  *
- * `M` is -3 dB, which is `1 / sqrt(2)`, which is 0.70710678. Centre, LFE and every surround enter
- * both stereo channels at that level, which is the standard downmix. The rows below are exactly what
- * the code applies, with the source channels in native order:
+ * Every downmix is derived speaker by speaker with the rules of FFmpeg's `build_matrix` in
+ * `libswresample/rematrix.c`, at its defaults. Any layout made of the eleven speakers below mixes,
+ * not only the nine named in [MixLayout]: 5.0 with side surrounds, 3.0, 4.0 and side quad included.
+ * `M` is -3 dB, which is `1 / sqrt(2)`, which is 0.70710678. A speaker the target also has passes at
+ * unity. A speaker the target lacks is routed like this:
  *
- * - mono `FC`: `L = FC`, `R = FC`
- * - stereo `FL FR`: `L = FL`, `R = FR`
- * - 2.1 `FL FR LFE`: `L = FL + M*LFE`, `R = FR + M*LFE`
- * - quad `FL FR BL BR`: `L = FL + M*BL`, `R = FR + M*BR`
- * - 5.0 `FL FR FC BL BR`: `L = FL + M*FC + M*BL`, `R = FR + M*FC + M*BR`
- * - 5.1 `FL FR FC LFE BL BR`: `L = FL + M*FC + M*LFE + M*BL`, `R = FR + M*FC + M*LFE + M*BR`
- * - 5.1 side `FL FR FC LFE SL SR`: `L = FL + M*FC + M*LFE + M*SL`,
- *   `R = FR + M*FC + M*LFE + M*SR`
- * - 6.1 `FL FR FC LFE BC SL SR`: `L = FL + M*FC + M*LFE + M*BC + M*SL`,
- *   `R = FR + M*FC + M*LFE + M*BC + M*SR`
- * - 7.1 `FL FR FC LFE BL BR SL SR`: `L = FL + M*FC + M*LFE + M*BL + M*SL`,
- *   `R = FR + M*FC + M*LFE + M*BR + M*SR`
+ * - a front centre into the front pair at `M` each, and a front pair into a lone centre at `M` each;
+ * - a side or back pair into the other surround pair, at unity when the source has only one pair
+ *   and at `M` when it has both, else into the front speaker on its own side at `M`, else into a
+ *   lone centre at `M * M` (0.5) each;
+ * - a back centre into a surround pair at `M` each, else into the front pair or a lone centre at
+ *   `M * M`;
+ * - a front-of-centre pair into the front pair at unity, else into a lone centre at `M` each;
+ * - the LFE as [io.github.yuroyami.kiteplayer.DownmixConfig.includeLfe] says: dropped by default,
+ *   else into a lone centre at unity or into the front pair at `M` each.
+ *
+ * Into stereo that gives, for example, 5.1 as `L = FL + M*FC + M*BL`, `R = FR + M*FC + M*BR`, and a
+ * 6.1 back centre at 0.5 in each speaker. One rule is this engine's own: mono into stereo copies
+ * the one channel into both speakers at unity, where FFmpeg lowers it by 3 dB, because a mono
+ * source is not quieter than a stereo one.
  *
  * ### What happens to those coefficients before they are used
  *
@@ -122,14 +126,15 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
  *
  * ### When the layout is not certain
  *
- * Three cases where the mix cannot be keyed on a layout the source declared, and all three are
- * reported once through the warning callback rather than being papered over:
+ * Cases where the mix cannot be keyed on a layout the source declared are reported once through
+ * the warning callback rather than being papered over:
  *
  * - the stream declared no mask, so the layout is guessed from the channel count and mixed with that
  *   layout's matrix;
- * - the mask names something not modelled here, or disagrees with the channel count, in which case
- *   the first channels pass through in source order;
- * - the source layout is known and no matrix reaches the target channel count, same pass-through.
+ * - the mask disagrees with the channel count, or names a speaker these rules do not cover (a
+ *   height speaker, or one half of a pair), in which case the first channels pass through in source
+ *   order;
+ * - no matrix reaches the target channel count, which is an upmix, with the same pass-through.
  *
  * Only the source layout is ever guessed. The target is the device, its channel count is the
  * authority, and a device asking for two channels wants stereo.
@@ -152,27 +157,21 @@ internal class ChannelMixer(
     private val sourceChannels: Int = source.channels
     private val targetChannels: Int = target.channels
 
-    /** The layout the mask named, when it named one this mixer models and the count agrees with it. */
-    private val maskedLayout: MixLayout? = source.channelLayoutMask
-        ?.let { MixLayout.forMask(it) }
-        ?.takeIf { it.channels == sourceChannels }
-
     /**
-     * What the mix keys on: the mask's layout, or the conventional layout for the channel count when
-     * the stream declared no mask at all. A mask that names something else is not overridden by a
-     * guess, because it already said the layout is not one of these.
+     * What the mix keys on: the declared mask when its speaker count agrees with the channel count,
+     * or the conventional layout for the count when the stream declared no mask at all. A mask
+     * that disagrees with its count is trusted neither way.
      */
-    val sourceLayout: MixLayout? =
-        if (source.channelLayoutMask == null) MixLayout.forChannelCount(sourceChannels) else maskedLayout
+    private val sourceMask: Long? = when (val declared = source.channelLayoutMask) {
+        null -> MixLayout.forChannelCount(sourceChannels)?.mask
+        else -> declared.takeIf { it.countOneBits() == sourceChannels }
+    }
 
-    /** The layout the DEVICE takes, when it named one this mixer models and the count agrees. */
-    private val targetLayout: MixLayout? = target.channelLayoutMask
-        ?.let { MixLayout.forMask(it) }
-        ?.takeIf { it.channels == targetChannels }
+    /** The speakers the DEVICE declared, when their count agrees with its channel count. */
+    private val targetMask: Long? = target.channelLayoutMask?.takeIf { it.countOneBits() == targetChannels }
 
     /** Row-major, `targetChannels` rows of `sourceChannels` gains. Null means pass channels through. */
-    private val matrix: FloatArray? =
-        matrixFor(sourceLayout, targetLayout, sourceChannels, targetChannels, policy)
+    private val matrix: FloatArray? = matrixFor(sourceMask, targetMask, sourceChannels, targetChannels, policy)
 
     /**
      * True when the channels are copied rather than mixed, which is either a target that already has
@@ -252,21 +251,21 @@ internal class ChannelMixer(
         val mask = source.channelLayoutMask
         val kept = "so the first ${min(sourceChannels, targetChannels)} channels pass through"
         val detail = when {
-            mask == null && sourceLayout == null ->
+            mask == null && sourceMask == null ->
                 "the stream declared none and $sourceChannels channels has no conventional layout, $kept"
 
             mask == null ->
-                "the stream declared none, so ${sourceLayout?.label} was assumed from the channel count"
+                "the stream declared none, so ${describe(sourceMask)} was assumed from the channel count"
 
-            maskedLayout == null && MixLayout.forMask(mask) != null ->
-                "mask 0x${mask.toString(16)} is ${MixLayout.forMask(mask)?.label} and the stream has " +
+            sourceMask == null ->
+                "mask 0x${mask.toString(16)} names ${mask.countOneBits()} speakers and the stream has " +
                     "$sourceChannels channels, so neither of the two can be trusted and $kept"
 
-            maskedLayout == null ->
-                "mask 0x${mask.toString(16)} is not a layout this build models, $kept"
+            matrix == null && sourceChannels > targetChannels ->
+                "mask 0x${mask.toString(16)} has a speaker the downmix rules do not cover, $kept"
 
             matrix == null && sourceChannels != targetChannels ->
-                "no matrix maps ${sourceLayout?.label} to $targetChannels channels, $kept"
+                "no matrix maps ${describe(sourceMask)} to $targetChannels channels, $kept"
 
             else -> return null
         }
@@ -277,43 +276,46 @@ internal class ChannelMixer(
         /** -3 dB as an amplitude factor, which is `1 / sqrt(2)`. */
         const val MINUS_3_DB: Float = 0.70710678f
 
+        /** A layout's name when it is one of the nine, and its mask otherwise. */
+        private fun describe(mask: Long?): String =
+            mask?.let { MixLayout.forMask(it)?.label ?: "mask 0x${it.toString(16)}" } ?: "an unknown layout"
+
         /**
          * The matrix for one layout pair, or null when the channels are to be copied instead.
          *
-         * Two things happen here that did not before. Equal channel counts no longer copy blindly:
-         * when the source and the device both name a layout and those layouts are DIFFERENT, the
-         * channels are permuted into the device's order, because 5.1 with side surrounds and 5.1
-         * with back surrounds have the same six channels in different speakers and copying one into
-         * the other puts the surround content in the wrong place. And a downmix is
-         * scaled so it cannot clip.
+         * Equal counts are a copy, or a permutation when both sides name different layouts. A
+         * smaller target is a downmix derived per speaker. A wider target is an upmix, which this
+         * stage does not do, with one exception: mono into stereo.
          */
         private fun matrixFor(
-            layout: MixLayout?,
-            targetLayout: MixLayout?,
+            sourceMask: Long?,
+            targetMask: Long?,
             sourceChannels: Int,
             targetChannels: Int,
             policy: io.github.yuroyami.kiteplayer.DownmixConfig,
         ): FloatArray? {
             if (sourceChannels == targetChannels) {
                 // Same count, same layout, or a layout either side did not name: a copy is right.
-                if (layout == null || targetLayout == null || layout == targetLayout) return null
-                return reorder(layout, targetLayout)
+                if (sourceMask == null || targetMask == null || sourceMask == targetMask) return null
+                return reorder(sourceMask, targetMask, sourceChannels)
             }
-            if (layout == null) return null
-            if (targetChannels == 2) return downmix(layout, sourceChannels, policy)
-            // The fold to a smaller surround target: 7.1 into a 5.1
-            // device used to truncate the side surrounds away. A device that named no mask gets
-            // the conventional layout for its count, which is what Android reports by count.
-            if (targetChannels < sourceChannels) {
-                val resolved = targetLayout ?: MixLayout.forChannelCount(targetChannels) ?: return null
-                return fold(layout, resolved, policy)
+            if (sourceMask == null) return null
+            if (targetChannels > sourceChannels) {
+                // The one copy into more speakers: a mono source is not quieter than a stereo one.
+                return if (sourceChannels == 1 && targetChannels == 2) floatArrayOf(1f, 1f) else null
             }
-            // A wider target is an upmix, which this stage does not do: pass through, extras silent.
-            return null
+            // A device's channel count is the authority. Two channels are stereo, and a device that
+            // named no mask gets the conventional layout for its count, which is what Android
+            // reports by count.
+            val resolvedTarget = when {
+                targetChannels == 2 -> MixLayout.Stereo.mask
+                else -> targetMask ?: MixLayout.forChannelCount(targetChannels)?.mask ?: return null
+            }
+            return downmix(sourceMask, resolvedTarget, sourceChannels, targetChannels, policy)
         }
 
         /**
-         * Puts [source]'s channels into [target]'s speakers, by speaker and never by position.
+         * Puts [sourceMask]'s channels into [targetMask]'s speakers, by speaker and never by position.
          *
          * A target speaker the source does not carry takes its nearest equivalent, which in
          * practice means the side and back surrounds standing in for each other: a device with back
@@ -321,16 +323,13 @@ internal class ChannelMixer(
          * the back, not go silent. Anything with no equivalent at all is left silent, because
          * filling it would be upmixing and this stage does not upmix.
          *
-         * Null when the mapping turns out to be the identity, which keeps the plain copy path. That
-         * is what happens for every pair of layouts this build models, because all nine follow the
-         * same native bit order: this exists for a DEVICE that reports an order of its own, which
-         * is the case the audit describes and the case no modelled layout can stand in for.
+         * Null when the mapping turns out to be the identity, which keeps the plain copy path.
          */
-        private fun reorder(source: MixLayout, target: MixLayout): FloatArray? {
-            val sourceSpeakers = speakersOf(source)
-            val targetSpeakers = speakersOf(target)
-            val rows = FloatArray(target.channels * source.channels)
-            var identity = sourceSpeakers.size == targetSpeakers.size
+        private fun reorder(sourceMask: Long, targetMask: Long, channels: Int): FloatArray? {
+            val sourceSpeakers = speakersOf(sourceMask)
+            val targetSpeakers = speakersOf(targetMask)
+            val rows = FloatArray(channels * channels)
+            var identity = true
             for (out in targetSpeakers.indices) {
                 val speaker = targetSpeakers[out]
                 var from = sourceSpeakers.indexOf(speaker)
@@ -340,7 +339,7 @@ internal class ChannelMixer(
                     continue
                 }
                 if (from != out) identity = false
-                rows[out * source.channels + from] = 1f
+                rows[out * channels + from] = 1f
             }
             return if (identity) null else rows
         }
@@ -348,9 +347,9 @@ internal class ChannelMixer(
         /**
          * The speaker that stands in for one the source does not have.
          *
-         * Only the side and back surrounds, because they are the only pair among the modelled
-         * layouts that carries the same content under two names. Everything else answers with
-         * itself, which finds nothing and leaves the speaker silent.
+         * Only the side and back surrounds, because they are the only pair that carries the same
+         * content under two names. Everything else answers with itself, which finds nothing and
+         * leaves the speaker silent.
          */
         private fun equivalentOf(speaker: Int): Int = when (speaker) {
             BACK_LEFT_BIT -> SIDE_LEFT_BIT
@@ -360,38 +359,158 @@ internal class ChannelMixer(
             else -> speaker
         }
 
-        /** The speaker bits of a layout, lowest first, which IS the channel order in a buffer. */
-        private fun speakersOf(layout: MixLayout): List<Int> =
-            (0 until 64).filter { bit -> (layout.mask shr bit) and 1L == 1L }
+        /** The speaker bits of a mask, lowest first, which IS the channel order in a buffer. */
+        private fun speakersOf(mask: Long): List<Int> =
+            (0 until 64).filter { bit -> (mask shr bit) and 1L == 1L }
 
         private const val FRONT_LEFT_BIT: Int = 0
         private const val FRONT_RIGHT_BIT: Int = 1
         private const val FRONT_CENTER_BIT: Int = 2
-        private const val BACK_CENTER_BIT: Int = 8
-        private const val BACK_LEFT_BIT: Int = 4
-        private const val BACK_RIGHT_BIT: Int = 5
-        private const val SIDE_LEFT_BIT: Int = 9
-        private const val SIDE_RIGHT_BIT: Int = 10
 
         /** The bit for the low-frequency effects channel in the native order mask. */
         private const val LFE_BIT: Int = 3
+        private const val BACK_LEFT_BIT: Int = 4
+        private const val BACK_RIGHT_BIT: Int = 5
+        private const val FRONT_LEFT_OF_CENTER_BIT: Int = 6
+        private const val FRONT_RIGHT_OF_CENTER_BIT: Int = 7
+        private const val BACK_CENTER_BIT: Int = 8
+        private const val SIDE_LEFT_BIT: Int = 9
+        private const val SIDE_RIGHT_BIT: Int = 10
 
+        /** The eleven speakers the downmix rules cover, bits 0 to 10. */
+        private const val RULED_SPEAKERS: Int = 11
+
+        private fun has(mask: Long, bit: Int): Boolean = (mask shr bit) and 1L == 1L
+
+        /**
+         * True when every speaker has a rule and every pair is whole. FFmpeg refuses the same
+         * masks: a left speaker without its right has no symmetric place to go.
+         */
+        private fun ruled(mask: Long): Boolean {
+            if (mask shr RULED_SPEAKERS != 0L) return false
+            fun whole(left: Int, right: Int) = has(mask, left) == has(mask, right)
+            return whole(FRONT_LEFT_BIT, FRONT_RIGHT_BIT) &&
+                whole(BACK_LEFT_BIT, BACK_RIGHT_BIT) &&
+                whole(FRONT_LEFT_OF_CENTER_BIT, FRONT_RIGHT_OF_CENTER_BIT) &&
+                whole(SIDE_LEFT_BIT, SIDE_RIGHT_BIT)
+        }
+
+        /**
+         * The downmix of [sourceMask] into [targetMask], by FFmpeg's `build_matrix` rules at its
+         * defaults: centre and surround levels of -3 dB, no matrix encoding, and an LFE level of 0,
+         * or 1 when [policy] includes the LFE. Null when a speaker has no rule, which leaves the
+         * channels to pass through.
+         */
         private fun downmix(
-            layout: MixLayout,
+            sourceMask: Long,
+            targetMask: Long,
             sourceChannels: Int,
+            targetChannels: Int,
             policy: io.github.yuroyami.kiteplayer.DownmixConfig,
-        ): FloatArray {
-            val rows = stereoMatrix(layout)
-            if (!policy.includeLfe) {
-                // The LFE column, zeroed. Its position is wherever the LFE bit sits in this
-                // layout's own channel order, which is why the mask is the identity here too.
-                val lfe = speakersOf(layout).indexOf(LFE_BIT)
-                if (lfe >= 0) {
-                    rows[lfe] = 0f
-                    rows[sourceChannels + lfe] = 0f
+        ): FloatArray? {
+            if (!ruled(sourceMask) || !ruled(targetMask)) return null
+            val m = MINUS_3_DB
+            val lfeLevel = if (policy.includeLfe) 1f else 0f
+            // [target speaker][source speaker], by bit.
+            val gain = Array(RULED_SPEAKERS) { FloatArray(RULED_SPEAKERS) }
+            for (bit in 0 until RULED_SPEAKERS) {
+                if (has(sourceMask, bit) && has(targetMask, bit)) gain[bit][bit] = 1f
+            }
+            fun source(bit: Int) = has(sourceMask, bit)
+            fun target(bit: Int) = has(targetMask, bit)
+            fun pair(outLeft: Int, outRight: Int, inLeft: Int, inRight: Int, level: Float) {
+                gain[outLeft][inLeft] += level
+                gain[outRight][inRight] += level
+            }
+            val unaccounted = sourceMask and targetMask.inv()
+            val lost = { bit: Int -> has(unaccounted, bit) }
+
+            if (lost(FRONT_CENTER_BIT)) {
+                if (!target(FRONT_LEFT_BIT)) return null
+                pair(FRONT_LEFT_BIT, FRONT_RIGHT_BIT, FRONT_CENTER_BIT, FRONT_CENTER_BIT, m)
+            }
+            if (lost(FRONT_LEFT_BIT)) {
+                if (!target(FRONT_CENTER_BIT)) return null
+                gain[FRONT_CENTER_BIT][FRONT_LEFT_BIT] += m
+                gain[FRONT_CENTER_BIT][FRONT_RIGHT_BIT] += m
+                // The centre level times sqrt(2), which is unity at the default level.
+                if (source(FRONT_CENTER_BIT)) gain[FRONT_CENTER_BIT][FRONT_CENTER_BIT] = 1f
+            }
+            if (lost(BACK_CENTER_BIT)) {
+                when {
+                    target(BACK_LEFT_BIT) -> pair(BACK_LEFT_BIT, BACK_RIGHT_BIT, BACK_CENTER_BIT, BACK_CENTER_BIT, m)
+                    target(SIDE_LEFT_BIT) -> pair(SIDE_LEFT_BIT, SIDE_RIGHT_BIT, BACK_CENTER_BIT, BACK_CENTER_BIT, m)
+                    target(FRONT_LEFT_BIT) -> pair(FRONT_LEFT_BIT, FRONT_RIGHT_BIT, BACK_CENTER_BIT, BACK_CENTER_BIT, m * m)
+                    target(FRONT_CENTER_BIT) -> gain[FRONT_CENTER_BIT][BACK_CENTER_BIT] += m * m
+                    else -> return null
                 }
             }
-            if (policy.normalize) normalizeAgainstClipping(rows, 2, sourceChannels)
+            if (lost(BACK_LEFT_BIT)) {
+                when {
+                    target(BACK_CENTER_BIT) -> {
+                        gain[BACK_CENTER_BIT][BACK_LEFT_BIT] += m
+                        gain[BACK_CENTER_BIT][BACK_RIGHT_BIT] += m
+                    }
+                    // A second surround pair joins the first at -3 dB; a lone pair moves at unity.
+                    target(SIDE_LEFT_BIT) -> pair(
+                        SIDE_LEFT_BIT, SIDE_RIGHT_BIT, BACK_LEFT_BIT, BACK_RIGHT_BIT,
+                        if (source(SIDE_LEFT_BIT)) m else 1f,
+                    )
+                    target(FRONT_LEFT_BIT) -> pair(FRONT_LEFT_BIT, FRONT_RIGHT_BIT, BACK_LEFT_BIT, BACK_RIGHT_BIT, m)
+                    target(FRONT_CENTER_BIT) -> {
+                        gain[FRONT_CENTER_BIT][BACK_LEFT_BIT] += m * m
+                        gain[FRONT_CENTER_BIT][BACK_RIGHT_BIT] += m * m
+                    }
+                    else -> return null
+                }
+            }
+            if (lost(SIDE_LEFT_BIT)) {
+                when {
+                    target(BACK_LEFT_BIT) -> pair(
+                        BACK_LEFT_BIT, BACK_RIGHT_BIT, SIDE_LEFT_BIT, SIDE_RIGHT_BIT,
+                        if (source(BACK_LEFT_BIT)) m else 1f,
+                    )
+                    target(BACK_CENTER_BIT) -> {
+                        gain[BACK_CENTER_BIT][SIDE_LEFT_BIT] += m
+                        gain[BACK_CENTER_BIT][SIDE_RIGHT_BIT] += m
+                    }
+                    target(FRONT_LEFT_BIT) -> pair(FRONT_LEFT_BIT, FRONT_RIGHT_BIT, SIDE_LEFT_BIT, SIDE_RIGHT_BIT, m)
+                    target(FRONT_CENTER_BIT) -> {
+                        gain[FRONT_CENTER_BIT][SIDE_LEFT_BIT] += m * m
+                        gain[FRONT_CENTER_BIT][SIDE_RIGHT_BIT] += m * m
+                    }
+                    else -> return null
+                }
+            }
+            if (lost(FRONT_LEFT_OF_CENTER_BIT)) {
+                when {
+                    target(FRONT_LEFT_BIT) -> pair(
+                        FRONT_LEFT_BIT, FRONT_RIGHT_BIT, FRONT_LEFT_OF_CENTER_BIT, FRONT_RIGHT_OF_CENTER_BIT, 1f,
+                    )
+                    target(FRONT_CENTER_BIT) -> {
+                        gain[FRONT_CENTER_BIT][FRONT_LEFT_OF_CENTER_BIT] += m
+                        gain[FRONT_CENTER_BIT][FRONT_RIGHT_OF_CENTER_BIT] += m
+                    }
+                    else -> return null
+                }
+            }
+            if (lost(LFE_BIT)) {
+                when {
+                    target(FRONT_CENTER_BIT) -> gain[FRONT_CENTER_BIT][LFE_BIT] += lfeLevel
+                    target(FRONT_LEFT_BIT) -> pair(FRONT_LEFT_BIT, FRONT_RIGHT_BIT, LFE_BIT, LFE_BIT, lfeLevel * m)
+                    else -> return null
+                }
+            }
+
+            val sourceSpeakers = speakersOf(sourceMask)
+            val targetSpeakers = speakersOf(targetMask)
+            val rows = FloatArray(targetChannels * sourceChannels)
+            for (out in targetSpeakers.indices) {
+                for (channel in sourceSpeakers.indices) {
+                    rows[out * sourceChannels + channel] = gain[targetSpeakers[out]][sourceSpeakers[channel]]
+                }
+            }
+            if (policy.normalize) normalizeAgainstClipping(rows, targetChannels, sourceChannels)
             return rows
         }
 
@@ -412,127 +531,5 @@ internal class ChannelMixer(
                 for (i in rows.indices) rows[i] *= scale
             }
         }
-
-        /**
-         * Folds a wider layout into a smaller surround one, by speaker and never by position.
-         *
-         * Each source channel lands in the target speaker of the same name, or its side/back
-         * equivalent when the name is absent, the same rule [reorder] uses. A back centre with no
-         * home of its own splits into the surround pair at -3 dB each, so 6.1 content is kept
-         * rather than dropped. An LFE with no target LFE follows [policy]: folded into the front
-         * pair at -3 dB when included, dropped when not. Anything still unplaced is dropped,
-         * because filling it would be upmixing.
-         */
-        private fun fold(
-            source: MixLayout,
-            target: MixLayout,
-            policy: io.github.yuroyami.kiteplayer.DownmixConfig,
-        ): FloatArray {
-            val sourceSpeakers = speakersOf(source)
-            val targetSpeakers = speakersOf(target)
-            val rows = FloatArray(target.channels * source.channels)
-            fun route(out: Int, sourceChannel: Int, gain: Float) {
-                rows[out * source.channels + sourceChannel] += gain
-            }
-            /**
-             * Sends a channel the target has no speaker for towards the front.
-             *
-             * The front pair when there is one, and a lone centre otherwise, which is the mono
-             * case. Routing a channel into a speaker it does not name is what a downmix IS; leaving
-             * it out is how front left and right came to be silent on a mono device.
-             */
-            fun spreadForward(sourceChannel: Int) {
-                val left = targetSpeakers.indexOf(FRONT_LEFT_BIT)
-                val right = targetSpeakers.indexOf(FRONT_RIGHT_BIT)
-                if (left >= 0 && right >= 0) {
-                    route(left, sourceChannel, MINUS_3_DB)
-                    route(right, sourceChannel, MINUS_3_DB)
-                    return
-                }
-                val centre = targetSpeakers.indexOf(FRONT_CENTER_BIT)
-                if (centre >= 0) route(centre, sourceChannel, MINUS_3_DB)
-            }
-
-            for (sourceChannel in sourceSpeakers.indices) {
-                val speaker = sourceSpeakers[sourceChannel]
-                var out = targetSpeakers.indexOf(speaker)
-                if (out < 0) out = targetSpeakers.indexOf(equivalentOf(speaker))
-                if (out >= 0) {
-                    route(out, sourceChannel, 1f)
-                    continue
-                }
-                // The only channel a policy is allowed to drop entirely.
-                if (speaker == LFE_BIT) {
-                    if (policy.includeLfe) spreadForward(sourceChannel)
-                    continue
-                }
-                if (speaker == BACK_CENTER_BIT) {
-                    val left = targetSpeakers.indexOf(BACK_LEFT_BIT)
-                        .takeIf { it >= 0 } ?: targetSpeakers.indexOf(SIDE_LEFT_BIT)
-                    val right = targetSpeakers.indexOf(BACK_RIGHT_BIT)
-                        .takeIf { it >= 0 } ?: targetSpeakers.indexOf(SIDE_RIGHT_BIT)
-                    if (left >= 0 && right >= 0) {
-                        route(left, sourceChannel, MINUS_3_DB)
-                        route(right, sourceChannel, MINUS_3_DB)
-                        continue
-                    }
-                }
-                spreadForward(sourceChannel)
-            }
-            if (policy.normalize) normalizeAgainstClipping(rows, target.channels, source.channels)
-            return rows
-        }
-
-        private fun stereoMatrix(layout: MixLayout): FloatArray {
-            val m = MINUS_3_DB
-            return when (layout) {
-                // FC
-                MixLayout.Mono -> floatArrayOf(
-                    1f,
-                    1f,
-                )
-                // FL FR
-                MixLayout.Stereo -> floatArrayOf(
-                    1f, 0f,
-                    0f, 1f,
-                )
-                // FL FR LFE
-                MixLayout.Surround21 -> floatArrayOf(
-                    1f, 0f, m,
-                    0f, 1f, m,
-                )
-                // FL FR BL BR
-                MixLayout.Quad -> floatArrayOf(
-                    1f, 0f, m, 0f,
-                    0f, 1f, 0f, m,
-                )
-                // FL FR FC BL BR
-                MixLayout.Surround50 -> floatArrayOf(
-                    1f, 0f, m, m, 0f,
-                    0f, 1f, m, 0f, m,
-                )
-                // FL FR FC LFE BL BR
-                MixLayout.Surround51 -> floatArrayOf(
-                    1f, 0f, m, m, m, 0f,
-                    0f, 1f, m, m, 0f, m,
-                )
-                // FL FR FC LFE SL SR
-                MixLayout.Surround51Side -> floatArrayOf(
-                    1f, 0f, m, m, m, 0f,
-                    0f, 1f, m, m, 0f, m,
-                )
-                // FL FR FC LFE BC SL SR
-                MixLayout.Surround61 -> floatArrayOf(
-                    1f, 0f, m, m, m, m, 0f,
-                    0f, 1f, m, m, m, 0f, m,
-                )
-                // FL FR FC LFE BL BR SL SR
-                MixLayout.Surround71 -> floatArrayOf(
-                    1f, 0f, m, m, m, 0f, m, 0f,
-                    0f, 1f, m, m, 0f, m, 0f, m,
-                )
-            }
-        }
-
     }
 }

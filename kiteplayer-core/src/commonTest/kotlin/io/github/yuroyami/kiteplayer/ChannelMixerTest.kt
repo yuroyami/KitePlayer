@@ -191,14 +191,15 @@ class ChannelMixerTest {
         for (channel in 0 until 6) {
             assertTrue(output[channel] <= 1f + TOLERANCE, "channel $channel clipped: ${output[channel]}")
         }
-        // And the unnormalized default really does sum the merged surrounds, like FFmpeg.
+        // And the unnormalized default sums the merged surrounds like FFmpeg: the back pair at
+        // unity and the side pair joining it at -3 dB.
         val raw = ChannelMixer(
             source = format(channels = 8, mask = MixLayout.Surround71.mask),
             target = format(channels = 6, mask = MixLayout.Surround51.mask),
         )
         val rawOut = FloatArray(6)
         raw.mix(input, rawOut, 1)
-        assertEquals(2f, rawOut[4], TOLERANCE, "the default fold must keep FFmpeg's unnormalized sum")
+        assertEquals(1f + M, rawOut[4], TOLERANCE, "the default fold must keep FFmpeg's unnormalized sum")
     }
 
     @Test
@@ -233,10 +234,10 @@ class ChannelMixerTest {
             MixLayout.Surround51Side,
             listOf(1f to 0f, 0f to 1f, M to M, M to M, M to 0f, 0f to M),
         ),
-        // FL FR FC LFE BC SL SR
+        // FL FR FC LFE BC SL SR: the back centre enters each front speaker at M * M, as in FFmpeg
         LayoutCase(
             MixLayout.Surround61,
-            listOf(1f to 0f, 0f to 1f, M to M, M to M, M to M, M to 0f, 0f to M),
+            listOf(1f to 0f, 0f to 1f, M to M, M to M, M * M to M * M, M to 0f, 0f to M),
         ),
         // FL FR FC LFE BL BR SL SR
         LayoutCase(
@@ -306,25 +307,83 @@ class ChannelMixerTest {
     }
 
     @Test
-    fun `an unknown mask passes the first channels through and warns once`() {
+    fun `a mask with a speaker no rule covers passes the first channels through and warns once`() {
         val warnings = mutableListOf<PlaybackWarning>()
-        // A four channel layout of front left, front right, front centre and low frequency. Real, and
-        // not one of the named nine, so there is no matrix for it.
+        // Front left, front right and a top centre. The downmix rules have no place for a height
+        // speaker, so there is no matrix for it.
         val mixer = ChannelMixer(
-            source = format(4, mask = 0xFL),
+            source = format(3, mask = 0x803L),
             target = stereoDevice,
             onWarning = { warnings += it },
         )
 
         val output = FloatArray(2)
-        mixer.mix(floatArrayOf(1f, 2f, 3f, 4f), output, frames = 1)
+        mixer.mix(floatArrayOf(1f, 2f, 3f), output, frames = 1)
 
         assertEquals(1f, output[0], TOLERANCE, "the first channel passes through")
         assertEquals(2f, output[1], TOLERANCE, "and the second, in source order")
         assertEquals(1, warnings.size, "the fallback is reported exactly once")
         val warning = warnings.single() as PlaybackWarning.ChannelLayoutUnknown
-        assertEquals(4, warning.channels)
-        assertTrue(warning.message.contains("0xf"), "the message must name the mask: ${warning.message}")
+        assertEquals(3, warning.channels)
+        assertTrue(warning.message.contains("0x803"), "the message must name the mask: ${warning.message}")
+    }
+
+    /** One impulse on [channel] of a [mask] source, mixed into [target] with the default policy. */
+    private fun impulse(mask: Long, channel: Int, target: AudioFormat, warnings: MutableList<PlaybackWarning>): List<Float> {
+        val channels = mask.countOneBits()
+        val mixer = ChannelMixer(format(channels, mask), target, onWarning = { warnings += it })
+        val output = FloatArray(target.channels)
+        mixer.mix(FloatArray(channels).also { it[channel] = 1f }, output, frames = 1)
+        return output.toList()
+    }
+
+    private fun assertMix(expected: List<Float>, actual: List<Float>, what: String) {
+        assertEquals(expected.size, actual.size, what)
+        expected.zip(actual).forEach { (e, a) -> assertEquals(e, a, 1e-5f, "$what: expected $expected, got $actual") }
+    }
+
+    // Layouts FFmpeg's decoders report that the nine named ones do not cover (#199). The expected
+    // pairs are what ffmpeg 8.0 produced for the same impulses.
+    @Test
+    fun `layouts outside the named nine still keep their centre and surrounds in stereo`() {
+        val warnings = mutableListOf<PlaybackWarning>()
+        // 5.0 side, FL FR FC SL SR, from AC-3 3/2 without LFE.
+        assertMix(listOf(M, M), impulse(0x607L, 2, stereoDevice, warnings), "5.0(side) centre")
+        assertMix(listOf(M, 0f), impulse(0x607L, 3, stereoDevice, warnings), "5.0(side) side left")
+        assertMix(listOf(0f, M), impulse(0x607L, 4, stereoDevice, warnings), "5.0(side) side right")
+        // 3.0, FL FR FC.
+        assertMix(listOf(M, M), impulse(0x7L, 2, stereoDevice, warnings), "3.0 centre")
+        // 4.0, FL FR FC BC.
+        assertMix(listOf(M * M, M * M), impulse(0x107L, 3, stereoDevice, warnings), "4.0 back centre")
+        // quad side, FL FR SL SR.
+        assertMix(listOf(M, 0f), impulse(0x603L, 2, stereoDevice, warnings), "quad(side) side left")
+        assertEquals(emptyList(), warnings, "every one of these layouts has a rule for each speaker")
+    }
+
+    // The folds and small targets where FFmpeg's gains differ from what the mixer used (#210).
+    @Test
+    fun `folds and small targets use the gains ffmpeg uses`() {
+        val warnings = mutableListOf<PlaybackWarning>()
+        val mono = format(1, MixLayout.Mono.mask)
+        val twoOne = format(3, MixLayout.Surround21.mask)
+        val fiveOneBack = format(6, MixLayout.Surround51.mask)
+        val fiveOneSide = format(6, MixLayout.Surround51Side.mask)
+        val quad = format(4, MixLayout.Quad.mask)
+        assertMix(listOf(M * M), impulse(MixLayout.Surround61.mask, 4, mono, warnings), "6.1 back centre into mono")
+        assertMix(listOf(M * M), impulse(MixLayout.Surround51.mask, 4, mono, warnings), "5.1 back left into mono")
+        assertMix(listOf(M, 0f, 0f), impulse(MixLayout.Surround51.mask, 4, twoOne, warnings), "5.1 back left into 2.1")
+        assertMix(
+            listOf(0f, 0f, 0f, 0f, M, 0f),
+            impulse(MixLayout.Surround71.mask, 6, fiveOneBack, warnings),
+            "7.1 side left into 5.1 back",
+        )
+        assertMix(
+            listOf(0f, 0f, 0f, 0f, M, 0f),
+            impulse(MixLayout.Surround71.mask, 4, fiveOneSide, warnings),
+            "7.1 back left into 5.1 side",
+        )
+        assertMix(listOf(0f, 0f, M, 0f), impulse(MixLayout.Surround71.mask, 6, quad, warnings), "7.1 side left into quad")
+        assertEquals(emptyList(), warnings)
     }
 
     @Test

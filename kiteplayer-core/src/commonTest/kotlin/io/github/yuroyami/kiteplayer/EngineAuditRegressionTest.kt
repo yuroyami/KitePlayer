@@ -170,9 +170,9 @@ class EngineAuditRegressionTest {
     // stereo consumer untouched: every sample on the wrong speaker at the wrong time.
     @Test
     fun `an unmodelled channel layout is restrided to the target count not aliased`() {
-        // FL or FR or FC is mask 0x7: three channels, and not one of the modelled layouts, so
-        // the mixer's documented fallback is first-channels pass-through PER FRAME.
-        val source = AudioFormat(48_000, 3, SampleFormat.F32, channelLayoutMask = 0x7L)
+        // FL, FR and a top centre is mask 0x803: three channels, and a height speaker no downmix
+        // rule covers, so the mixer's documented fallback is first-channels pass-through PER FRAME.
+        val source = AudioFormat(48_000, 3, SampleFormat.F32, channelLayoutMask = 0x803L)
         val target = AudioFormat(48_000, 2, SampleFormat.F32)
         val pipeline = AudioPipeline(source, target, onWarning = {})
 

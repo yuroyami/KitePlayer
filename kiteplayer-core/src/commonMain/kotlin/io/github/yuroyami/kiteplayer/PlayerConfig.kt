@@ -369,8 +369,9 @@ public data class DownmixConfig(
      * The engine used to fold it in at -3 dB, and the surround fixtures kept their LFE silent so
      * that the disagreement with FFmpeg never showed up in a test.
      *
-     * True folds it in at the same -3 dB every other non-front channel gets, for a caller who
-     * would rather keep the content than match the reference.
+     * True folds it in, at -3 dB into each front speaker or at unity into a lone centre, which is
+     * FFmpeg with an LFE level of 1. That is for a caller who would rather keep the content than
+     * match the reference.
      */
     val includeLfe: Boolean = false,
 )

@@ -7872,8 +7872,11 @@ internal class PlaybackCore(
             try {
                 if (buffer.generation != epoch) continue
                 val audio = session.audio ?: continue
-                session.firstAudio.record(epoch, buffer.pts)
-                session.landingArrived.trySend(Unit)
+                // Read before the landing below is signalled. The actor ends the seek and clears the
+                // boundary as soon as it sees the landing, and a trim that read it afterwards kept
+                // the samples before the target (#292).
+                val switchDiscard = session.audioSwitchDiscardBeforeUs.value
+                val discardBefore = maxOf(session.discardBeforeUs.value, switchDiscard)
                 var interleaved = interleaver.interleave(buffer)
                 var pts = buffer.pts
                 var frames = buffer.frameCount
@@ -7882,8 +7885,6 @@ internal class PlaybackCore(
                 // pre-target samples off the survivor, so a precise seek starts its sound AT the
                 // target instead of up to one buffer early. Runs at most once per
                 // seek, so the one copyOfRange is off any steady-state path.
-                val switchDiscard = session.audioSwitchDiscardBeforeUs.value
-                val discardBefore = maxOf(session.discardBeforeUs.value, switchDiscard)
                 if (discardBefore != Long.MIN_VALUE && pts.micros < discardBefore && buffer.format.sampleRate > 0) {
                     val skipFrames = ((discardBefore - pts.micros) * buffer.format.sampleRate / 1_000_000L)
                         .coerceIn(0L, frames.toLong()).toInt()
@@ -7895,6 +7896,9 @@ internal class PlaybackCore(
                     }
                 }
                 if (frames == 0) continue
+                // The landing is the first sample that will be heard, so it is recorded after the trim.
+                session.firstAudio.record(epoch, pts)
+                session.landingArrived.trySend(Unit)
                 // The trimmed block goes to the taps first, then to the device.
                 deliverToTaps(Generation(session.audioGeneration.value), pts, interleaved, frames, buffer.format)
                 // One call, no external timeout, no retry. The old shape cancelled submitDecoded

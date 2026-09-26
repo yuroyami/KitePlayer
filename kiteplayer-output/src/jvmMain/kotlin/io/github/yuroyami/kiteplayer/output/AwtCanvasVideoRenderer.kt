@@ -241,14 +241,8 @@ public class AwtCanvasVideoRenderer(
         }
         val size = frame.size
         val rotation = frame.rotationDegrees
-        if (painted) {
-            announceToneMap(frame)
-            // Best effort by design: the AWT blit returned, which is the closest this path can
-            // observe to pixels on glass.
-            eventFlow.tryEmit(
-                RendererEvent.FramePresented(frame.pts, atNanos = System.nanoTime(), exact = false),
-            )
-        }
+        val pts = frame.pts
+        if (painted) announceToneMap(frame)
         frame.close()
         if (!painted) {
             failed.incrementAndGet()
@@ -264,8 +258,16 @@ public class AwtCanvasVideoRenderer(
             lastRotation = rotation
         }
         onVideoGeometry(size, rotation)
+        // Counted and reported only once the strategy showed it. A canvas with no peer or no size
+        // draws nothing, and the picture stays retained for the next repaint (#290).
+        if (!paintNow()) {
+            failed.incrementAndGet()
+            return false
+        }
         presented.incrementAndGet()
-        paintNow()
+        // Best effort by design: the AWT blit returned, which is the closest this path can
+        // observe to pixels on glass.
+        eventFlow.tryEmit(RendererEvent.FramePresented(pts, atNanos = System.nanoTime(), exact = false))
         return true
     }
 
@@ -289,17 +291,18 @@ public class AwtCanvasVideoRenderer(
         if (hasPicture) paintNow()
     }
 
-    private fun paintNow() {
+    /** Paints the retained picture, and answers true only when it reached the screen. */
+    private fun paintNow(): Boolean {
         paintLock.lock()
         try {
-            paintHeld()
+            return paintHeld()
         } finally {
             paintLock.unlock()
         }
     }
 
     /** Only with [paintLock] held. */
-    private fun paintHeld() {
+    private fun paintHeld(): Boolean {
         val target: Canvas
         val image: BufferedImage
         val size: VideoSize
@@ -307,15 +310,15 @@ public class AwtCanvasVideoRenderer(
         val mode: VideoScale
         val currentTransform: VideoTransform
         synchronized(lock) {
-            if (closed) return
-            target = canvas ?: return
-            image = lastImage ?: return
-            size = lastSize ?: return
+            if (closed) return false
+            target = canvas ?: return false
+            image = lastImage ?: return false
+            size = lastSize ?: return false
             rotation = lastRotation
             mode = scaleMode
             currentTransform = transform
         }
-        if (!target.isDisplayable) return
+        if (!target.isDisplayable) return false
         val layout = frameLayout(
             canvasWidth = target.width,
             canvasHeight = target.height,
@@ -323,8 +326,8 @@ public class AwtCanvasVideoRenderer(
             rotationDegrees = rotation,
             mode = mode,
             transform = currentTransform,
-        ) ?: return
-        presenter.present(target, image, layout, overlaySnapshot())
+        ) ?: return false
+        return presenter.present(target, image, layout, overlaySnapshot())
     }
 
     private fun overlaySnapshot(): SubtitleOverlay? = synchronized(lock) { overlay }

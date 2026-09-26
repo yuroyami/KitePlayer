@@ -302,8 +302,15 @@ class AwtCanvasVideoRendererTest {
         override fun isDisplayable(): Boolean = true
     }
 
-    /** Counts how many threads are inside it at once, and can hold each paint for a while. */
-    private class CountingPresenter(private val holdMillis: Long) : CanvasPresenter {
+    /**
+     * Counts how many threads are inside it at once, and can hold each paint for a while.
+     *
+     * [shows] is what it answers, as a strategy that did or did not reach the screen.
+     */
+    private class CountingPresenter(
+        private val holdMillis: Long,
+        @Volatile var shows: Boolean = true,
+    ) : CanvasPresenter {
         private val inside = java.util.concurrent.atomic.AtomicInteger()
         val mostAtOnce = java.util.concurrent.atomic.AtomicInteger()
         val painting = java.util.concurrent.CountDownLatch(1)
@@ -314,13 +321,14 @@ class AwtCanvasVideoRendererTest {
             image: BufferedImage,
             layout: FrameLayout,
             overlay: io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?,
-        ) {
+        ): Boolean {
             val now = inside.incrementAndGet()
             mostAtOnce.accumulateAndGet(now, ::maxOf)
             painting.countDown()
             if (holdMillis > 0) Thread.sleep(holdMillis)
             paints.incrementAndGet()
             inside.decrementAndGet()
+            return shows
         }
     }
 
@@ -359,6 +367,135 @@ class AwtCanvasVideoRendererTest {
         r.setCanvas(null)
         assertEquals(1, presenter.paints.get(), "setCanvas(null) returned while the paint still drew into the old canvas")
         painter.join()
+        r.close()
+    }
+
+    // ── a frame counts as presented only once it reached the screen (#290) ─────────────────
+
+    /** Draws into an image and counts its shows; a show can be made to fail like a lost peer. */
+    private class FakeStrategy(private val failShow: Boolean = false) : java.awt.image.BufferStrategy() {
+        private val backing = BufferedImage(160, 90, BufferedImage.TYPE_INT_RGB)
+        val shows = java.util.concurrent.atomic.AtomicInteger()
+
+        override fun getCapabilities(): java.awt.BufferCapabilities = java.awt.BufferCapabilities(
+            java.awt.ImageCapabilities(false),
+            java.awt.ImageCapabilities(false),
+            null,
+        )
+
+        override fun getDrawGraphics(): java.awt.Graphics = backing.createGraphics()
+        override fun contentsLost(): Boolean = false
+        override fun contentsRestored(): Boolean = false
+
+        override fun show() {
+            if (failShow) throw IllegalStateException("the peer went away")
+            shows.incrementAndGet()
+        }
+    }
+
+    /** A displayable canvas whose strategy is [strategy], and whose strategy creation can fail. */
+    private class StrategyCanvas(
+        private val strategy: java.awt.image.BufferStrategy?,
+        width: Int = 160,
+        height: Int = 90,
+        private val failCreate: Boolean = false,
+    ) : java.awt.Canvas() {
+        init {
+            setSize(width, height)
+        }
+
+        override fun isDisplayable(): Boolean = true
+        override fun getBufferStrategy(): java.awt.image.BufferStrategy? = strategy
+
+        override fun createBufferStrategy(numBuffers: Int) {
+            if (failCreate) throw IllegalStateException("Component must have a valid peer")
+        }
+    }
+
+    /** Presents one frame and answers what it returned, the events it caused and the frame closes. */
+    private suspend fun kotlinx.coroutines.test.TestScope.presentOnce(
+        r: AwtCanvasVideoRenderer,
+    ): Triple<Boolean, List<RendererEvent>, Int> {
+        val seen = mutableListOf<RendererEvent>()
+        val collector = launch(UnconfinedTestDispatcher(testScheduler)) { r.events.toList(seen) }
+        val frame = CountingFrame()
+        val result = r.present(frame, 0L)
+        collector.cancel()
+        return Triple(result, seen.toList(), frame.closes)
+    }
+
+    private fun assertNotPresented(r: AwtCanvasVideoRenderer, outcome: Triple<Boolean, List<RendererEvent>, Int>) {
+        val (result, seen, closes) = outcome
+        assertFalse(result, "the renderer answered true for a frame it did not show")
+        assertTrue(seen.none { it is RendererEvent.FramePresented }, "reported a frame nothing showed: $seen")
+        assertEquals(0L, r.presentedFrames)
+        assertEquals(1L, r.failedFrames)
+        assertEquals(1, closes)
+    }
+
+    @Test
+    fun `a canvas with no peer presents nothing and says so`() = runTest {
+        val r = renderer()
+        r.setCanvas(java.awt.Canvas())
+        assertNotPresented(r, presentOnce(r))
+        r.close()
+    }
+
+    @Test
+    fun `a canvas with no size presents nothing and says so`() = runTest {
+        val strategy = FakeStrategy()
+        val r = renderer()
+        r.setCanvas(StrategyCanvas(strategy, width = 0, height = 0))
+        assertNotPresented(r, presentOnce(r))
+        assertEquals(0, strategy.shows.get())
+        r.close()
+    }
+
+    @Test
+    fun `a canvas whose strategy cannot be built presents nothing`() = runTest {
+        val r = renderer()
+        r.setCanvas(StrategyCanvas(strategy = null, failCreate = true))
+        assertNotPresented(r, presentOnce(r))
+        r.close()
+    }
+
+    @Test
+    fun `a show that fails is not reported as shown`() = runTest {
+        val r = renderer()
+        r.setCanvas(StrategyCanvas(FakeStrategy(failShow = true)))
+        assertNotPresented(r, presentOnce(r))
+        r.close()
+    }
+
+    @Test
+    fun `a presented frame is reported after the strategy showed it`() = runTest {
+        val strategy = FakeStrategy()
+        val r = renderer()
+        r.setCanvas(StrategyCanvas(strategy))
+        val showsAtEvent = mutableListOf<Int>()
+        val collector = launch(UnconfinedTestDispatcher(testScheduler)) {
+            r.events.collect { if (it is RendererEvent.FramePresented) showsAtEvent += strategy.shows.get() }
+        }
+        val frame = CountingFrame()
+        assertTrue(r.present(frame, 0L))
+        collector.cancel()
+        assertEquals(listOf(1), showsAtEvent, "the event must follow the one show, exactly once")
+        assertEquals(1L, r.presentedFrames)
+        assertEquals(0L, r.failedFrames)
+        assertEquals(1, frame.closes)
+        r.close()
+    }
+
+    @Test
+    fun `a picture that could not be shown is kept for the next repaint`() = runTest {
+        val r = renderer()
+        val presenter = CountingPresenter(holdMillis = 0, shows = false)
+        r.presenter = presenter
+        r.setCanvas(DisplayableCanvas())
+        assertFalse(r.present(CountingFrame(), 0L))
+        presenter.shows = true
+        r.setOverlay(null)
+        assertEquals(2, presenter.paints.get(), "the refused picture was dropped instead of retained")
         r.close()
     }
 

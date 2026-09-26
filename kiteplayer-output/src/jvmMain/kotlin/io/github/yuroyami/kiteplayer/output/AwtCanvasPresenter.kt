@@ -21,7 +21,8 @@ import kotlin.math.roundToInt
  * underneath it.
  */
 internal interface CanvasPresenter {
-    fun present(canvas: Canvas, image: BufferedImage, layout: FrameLayout, overlay: SubtitleOverlay?)
+    /** Draws and shows one composed frame, and answers true only when the strategy showed it. */
+    fun present(canvas: Canvas, image: BufferedImage, layout: FrameLayout, overlay: SubtitleOverlay?): Boolean
 }
 
 internal class AwtCanvasPresenter : CanvasPresenter {
@@ -35,8 +36,8 @@ internal class AwtCanvasPresenter : CanvasPresenter {
         image: BufferedImage,
         layout: FrameLayout,
         overlay: SubtitleOverlay?,
-    ) {
-        if (canvas.width <= 0 || canvas.height <= 0) return
+    ): Boolean {
+        if (canvas.width <= 0 || canvas.height <= 0) return false
         if (strategyIsStale(canvas.bufferStrategy != null, builtWidth, builtHeight, canvas.width, canvas.height)) {
             // Creating a strategy needs a peer, and the caller has already checked for one; a
             // race with the peer going away still throws, and losing a frame to that is correct.
@@ -44,18 +45,21 @@ internal class AwtCanvasPresenter : CanvasPresenter {
             builtWidth = canvas.width
             builtHeight = canvas.height
         }
-        val strategy = canvas.bufferStrategy ?: return
+        val strategy = canvas.bufferStrategy ?: return false
+        var shown: Boolean
         do {
             do {
-                val g = strategy.drawGraphics as? Graphics2D ?: return
+                val g = strategy.drawGraphics as? Graphics2D ?: return false
                 try {
                     compose(g, canvas.width, canvas.height, image, layout, overlay)
                 } finally {
                     g.dispose()
                 }
             } while (strategy.contentsRestored())
-            runCatching { strategy.show() }
+            // A show that throws reached no screen, and the caller must not report it (#290).
+            shown = runCatching { strategy.show() }.isSuccess
         } while (strategy.contentsLost())
+        return shown
     }
 
     companion object {

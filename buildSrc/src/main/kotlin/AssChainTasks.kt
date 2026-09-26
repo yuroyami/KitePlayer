@@ -15,6 +15,7 @@ import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.process.ExecOperations
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
 import java.security.MessageDigest
@@ -170,7 +171,13 @@ abstract class FetchAssChainTask : DefaultTask() {
         }
     }
 
-    private fun download(url: String): ByteArray {
+    // A slow or lossy connection fails one attempt in a few, and one failure used to fail the build (#270).
+    private fun download(url: String): ByteArray = withDownloadRetries(DOWNLOAD_RETRY_WAITS_MS) { attempt ->
+        if (attempt > 1) logger.lifecycle("[kiteplayer-libass] attempt $attempt for $url")
+        downloadOnce(url)
+    }
+
+    private fun downloadOnce(url: String): ByteArray {
         var current = url
         repeat(6) {
             val connection = URI(current).toURL().openConnection() as HttpURLConnection
@@ -184,6 +191,10 @@ abstract class FetchAssChainTask : DefaultTask() {
                 connection.disconnect()
                 return@repeat
             }
+            if (code >= 500) {
+                connection.disconnect()
+                throw IOException("GET $current answered HTTP $code")
+            }
             if (code != 200) {
                 throw GradleException(
                     "GET $url answered HTTP $code. The chain is published as a release asset of the " +
@@ -193,6 +204,33 @@ abstract class FetchAssChainTask : DefaultTask() {
             return connection.inputStream.use { it.readBytes() }
         }
         throw GradleException("$url redirected more than six times")
+    }
+}
+
+/** The waits before the second, third and fourth download attempts, in milliseconds. */
+internal val DOWNLOAD_RETRY_WAITS_MS: List<Long> = listOf(2_000L, 4_000L, 8_000L)
+
+/**
+ * Runs [attempt] until it succeeds, and retries a transient [IOException] (a timeout, a reset, a
+ * server error) after each wait in [waits]. Any other failure ends it at once. The last failure
+ * is rethrown with the number of attempts made.
+ */
+internal fun <T> withDownloadRetries(
+    waits: List<Long>,
+    sleep: (Long) -> Unit = Thread::sleep,
+    attempt: (Int) -> T,
+): T {
+    var made = 0
+    while (true) {
+        made++
+        try {
+            return attempt(made)
+        } catch (failure: IOException) {
+            if (made > waits.size) {
+                throw GradleException("the download failed after $made attempts: ${failure.message}", failure)
+            }
+            sleep(waits[made - 1])
+        }
     }
 }
 

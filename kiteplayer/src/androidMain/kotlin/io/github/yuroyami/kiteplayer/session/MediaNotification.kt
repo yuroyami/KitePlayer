@@ -60,6 +60,8 @@ public data class MediaNotificationOptions(
      * the wake mode.
      */
     val wakeLocks: WakeLockPolicy = WakeLockPolicy.Network,
+    /** What a screen reader says for each transport button. Pass translated ones. */
+    val labels: MediaNotificationLabels = MediaNotificationLabels(),
 ) {
     init {
         require(smallIcon != 0) { "the notification needs a small icon" }
@@ -68,6 +70,14 @@ public data class MediaNotificationOptions(
         require(!pausedForegroundTimeout.isNegative()) { "the paused foreground timeout cannot be negative" }
     }
 }
+
+/** The names of the notification's transport buttons, which a screen reader says. English by default. */
+public data class MediaNotificationLabels(
+    val previous: CharSequence = "Previous",
+    val play: CharSequence = "Play",
+    val pause: CharSequence = "Pause",
+    val next: CharSequence = "Next",
+)
 
 /**
  * What the media notification keeps awake while the player plays or buffers.

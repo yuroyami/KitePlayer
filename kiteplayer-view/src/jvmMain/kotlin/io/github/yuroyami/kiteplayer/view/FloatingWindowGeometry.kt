@@ -21,6 +21,8 @@ public data class FloatingWindowOptions(
     val widthFraction: Float = 0.25f,
     val corner: FloatingCorner = FloatingCorner.BottomRight,
     val margin: Int = 24,
+    /** The words of the window's right-click menu. */
+    val labels: FloatingWindowLabels = FloatingWindowLabels(),
 ) {
     init {
         require(widthFraction > 0f && widthFraction <= 1f) {
@@ -29,6 +31,17 @@ public data class FloatingWindowOptions(
         require(margin >= 0) { "margin must not be negative, and it was $margin" }
     }
 }
+
+/** The words of the floating window's right-click menu. English by default; pass translated ones. */
+public data class FloatingWindowLabels(
+    val play: String = "Play",
+    val pause: String = "Pause",
+    val backToApp: String = "Back to app",
+    val close: String = "Close",
+)
+
+/** The menu entry that plays or pauses: what it does now, so Pause while the player is active. */
+internal fun FloatingWindowLabels.playOrPause(active: Boolean): String = if (active) pause else play
 
 /** The aspect a window has before any video has reported one. */
 internal const val DEFAULT_FLOATING_ASPECT: Float = 16f / 9f

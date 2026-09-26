@@ -104,12 +104,15 @@ internal const val MAX_NOTIFICATION_BUTTONS = 5
  * notification shows those transport buttons, which are never more than the three it allows.
  * Buttons past the fifth are left out here rather than by the platform.
  */
-internal fun mediaNotificationLayout(content: MediaNotificationContent): MediaNotificationLayout {
+internal fun mediaNotificationLayout(
+    content: MediaNotificationContent,
+    labels: MediaNotificationLabels = MediaNotificationLabels(),
+): MediaNotificationLayout {
     val transport = buildList {
-        if (content.hasPrevious) add(transportButton(MediaNotificationCommand.Previous))
+        if (content.hasPrevious) add(transportButton(MediaNotificationCommand.Previous, labels))
         val middle = if (content.playing) MediaNotificationCommand.Pause else MediaNotificationCommand.Play
-        add(transportButton(middle))
-        if (content.hasNext) add(transportButton(MediaNotificationCommand.Next))
+        add(transportButton(middle, labels))
+        if (content.hasNext) add(transportButton(MediaNotificationCommand.Next, labels))
     }
     val custom = content.customActions.mapIndexed { index, action ->
         MediaNotificationButton(
@@ -127,12 +130,12 @@ internal fun mediaNotificationLayout(content: MediaNotificationContent): MediaNo
 }
 
 // The platform's own icons. The labels are what a screen reader says for each button.
-private fun transportButton(command: MediaNotificationCommand): MediaNotificationButton {
+private fun transportButton(command: MediaNotificationCommand, labels: MediaNotificationLabels): MediaNotificationButton {
     val (label, icon) = when (command) {
-        MediaNotificationCommand.Previous -> "Previous" to android.R.drawable.ic_media_previous
-        MediaNotificationCommand.Play -> "Play" to android.R.drawable.ic_media_play
-        MediaNotificationCommand.Pause -> "Pause" to android.R.drawable.ic_media_pause
-        MediaNotificationCommand.Next -> "Next" to android.R.drawable.ic_media_next
+        MediaNotificationCommand.Previous -> labels.previous to android.R.drawable.ic_media_previous
+        MediaNotificationCommand.Play -> labels.play to android.R.drawable.ic_media_play
+        MediaNotificationCommand.Pause -> labels.pause to android.R.drawable.ic_media_pause
+        MediaNotificationCommand.Next -> labels.next to android.R.drawable.ic_media_next
         MediaNotificationCommand.Dismiss, MediaNotificationCommand.Custom ->
             error("$command is not a transport button")
     }
@@ -211,7 +214,7 @@ internal fun buildMediaNotification(
     ongoing: Boolean,
 ): Notification {
     val sdk = Build.VERSION.SDK_INT
-    val layout = mediaNotificationLayout(content)
+    val layout = mediaNotificationLayout(content, options.labels)
     val builder = Notification.Builder(context, options.channelId)
         .setSmallIcon(options.smallIcon)
         .setContentTitle(content.title)

@@ -153,6 +153,23 @@ public open class KitePlayerView @JvmOverloads constructor(
             updateAccessibilityState()
         }
 
+    /** What a screen reader calls this view. English by default; pass a translated one. */
+    public var accessibilityVideoLabel: String = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+        set(value) {
+            field = value
+            updateAccessibilityState()
+        }
+
+    /**
+     * Builds what a screen reader says about the state from the status, the position and the
+     * duration. The default, [accessibilityStateText], is English; pass a translated one.
+     */
+    public var accessibilityStateFormat: (PlaybackStatus, Duration, Duration?) -> String = ::accessibilityStateText
+        set(value) {
+            field = value
+            updateAccessibilityState()
+        }
+
     /**
      * Re-reads what a screen reader should say about the player and tells the platform.
      *
@@ -165,9 +182,9 @@ public open class KitePlayerView @JvmOverloads constructor(
     public fun updateAccessibilityState() {
         val snapshot = player?.state?.value
         val text = if (snapshot == null) {
-            accessibilityStateText(PlaybackStatus.Idle, Duration.ZERO, null)
+            accessibilityStateFormat(PlaybackStatus.Idle, Duration.ZERO, null)
         } else {
-            accessibilityStateText(
+            accessibilityStateFormat(
                 snapshot.status,
                 player?.progress?.value?.position ?: Duration.ZERO,
                 snapshot.duration,
@@ -177,9 +194,9 @@ public open class KitePlayerView @JvmOverloads constructor(
         // an older phone would otherwise never hear.
         if (android.os.Build.VERSION.SDK_INT >= 30) {
             stateDescription = text
-            contentDescription = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+            contentDescription = accessibilityVideoLabel
         } else {
-            contentDescription = "$DEFAULT_VIDEO_ACCESSIBILITY_LABEL. $text"
+            contentDescription = "$accessibilityVideoLabel. $text"
         }
     }
 
@@ -248,7 +265,7 @@ public open class KitePlayerView @JvmOverloads constructor(
         // A screen reader saw an unlabelled rectangle. This view IS the video, so it is the
         // element that announces itself; the surface and the subtitle overlay inside it are
         // decoration and stay out of the reader's way.
-        contentDescription = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+        contentDescription = accessibilityVideoLabel
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         // Fill lays the surface out larger than this view; the crop is what makes it Fill and
         // not an overflow onto whatever sits next to the video.

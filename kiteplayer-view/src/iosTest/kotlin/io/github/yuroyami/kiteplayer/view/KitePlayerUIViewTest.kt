@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import platform.CoreGraphics.CGRectMake
 import platform.UIKit.UIWindow
+import platform.UIKit.accessibilityLabel
+import platform.UIKit.accessibilityValue
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -92,6 +94,22 @@ class KitePlayerUIViewTest {
         assertFalse(view.hasPicture)
         assertTrue(view.metalLayerHidden())
         assertTrue(view.videoLayerHidden())
+    }
+
+    @Test
+    fun `VoiceOver says the label and the state text the application passed`() {
+        val view = KitePlayerUIView()
+        assertEquals(DEFAULT_VIDEO_ACCESSIBILITY_LABEL, view.accessibilityLabel)
+        view.updateAccessibilityState()
+        assertEquals("No media", view.accessibilityValue)
+
+        view.accessibilityVideoLabel = "Vídeo"
+        view.accessibilityStateFormat = { status, _, _ ->
+            if (status == io.github.yuroyami.kiteplayer.PlaybackStatus.Idle) "Sin contenido" else "Otro"
+        }
+        assertEquals("Vídeo", view.accessibilityLabel)
+        assertEquals("Sin contenido", view.accessibilityValue)
+        view.release()
     }
 }
 

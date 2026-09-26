@@ -77,6 +77,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   checked against the Java 11 API. The API is unchanged. On the desktop JVM the KiteFFmpeg 0.3.0
   jar is still Java 21 bytecode, so Java 21 stays the minimum there until a later KiteFFmpeg
   release is pinned (#268).
+- The fixed English text an app could not change is now configurable, with the same English as
+  the default. `MediaNotificationOptions.labels` names the notification buttons.
+  `accessibilityVideoLabel` and `accessibilityStateFormat` on `KitePlayerView` and
+  `KitePlayerUIView` build what a screen reader says. `FloatingWindowOptions.labels` names the
+  desktop floating window's menu. Each options class changes its generated data-class methods, so
+  recompile (#266).
 
 ## [0.0.27] - 2026-09-25
 

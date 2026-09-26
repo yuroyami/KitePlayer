@@ -124,6 +124,23 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
             binding.setPlayer(value)
         }
 
+    /** What VoiceOver calls this view. English by default; pass a translated one. */
+    public var accessibilityVideoLabel: String = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+        set(value) {
+            field = value
+            setAccessibilityLabel(value)
+        }
+
+    /**
+     * Builds what VoiceOver says about the state from the status, the position and the duration.
+     * The default, [accessibilityStateText], is English; pass a translated one.
+     */
+    public var accessibilityStateFormat: (PlaybackStatus, Duration, Duration?) -> String = ::accessibilityStateText
+        set(value) {
+            field = value
+            updateAccessibilityState()
+        }
+
     /**
      * Re-reads what VoiceOver should say about the player and sets it as this view's value.
      *
@@ -135,9 +152,9 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         val snapshot = player?.state?.value
         setAccessibilityValue(
             if (snapshot == null) {
-                accessibilityStateText(PlaybackStatus.Idle, Duration.ZERO, null)
+                accessibilityStateFormat(PlaybackStatus.Idle, Duration.ZERO, null)
             } else {
-                accessibilityStateText(
+                accessibilityStateFormat(
                     snapshot.status,
                     player?.progress?.value?.position ?: Duration.ZERO,
                     snapshot.duration,
@@ -186,7 +203,7 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         // VoiceOver saw an unlabelled rectangle. UpdatesFrequently tells it not to re-announce
         // the value on every change, which is what a moving position would otherwise do.
         setIsAccessibilityElement(true)
-        setAccessibilityLabel(DEFAULT_VIDEO_ACCESSIBILITY_LABEL)
+        setAccessibilityLabel(accessibilityVideoLabel)
         setAccessibilityTraits(UIAccessibilityTraitUpdatesFrequently)
         backgroundColor = UIColor.blackColor
         layer.addSublayer(videoLayer)

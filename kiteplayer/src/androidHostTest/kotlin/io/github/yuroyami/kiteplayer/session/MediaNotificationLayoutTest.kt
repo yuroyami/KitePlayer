@@ -201,4 +201,16 @@ class MediaNotificationLayoutTest {
         assertFailsWith<IllegalArgumentException> { MediaNotificationAction("like", "", 17) }
         assertFailsWith<IllegalArgumentException> { MediaNotificationAction("like", "Like", 0) }
     }
+
+    @Test
+    fun theTransportButtonsSayTheLabelsTheApplicationPassed() {
+        val spanish = MediaNotificationLabels(previous = "Anterior", play = "Reproducir", pause = "Pausa", next = "Siguiente")
+        val playing = mediaNotificationLayout(content(PlaybackStatus.Playing, hasPrevious = true, hasNext = true), spanish)
+        assertEquals(listOf("Anterior", "Pausa", "Siguiente"), playing.buttons.map { it.label.toString() })
+        val paused = mediaNotificationLayout(content(PlaybackStatus.Paused), spanish)
+        assertEquals(listOf("Reproducir"), paused.buttons.map { it.label.toString() })
+
+        val english = mediaNotificationLayout(content(PlaybackStatus.Playing, hasPrevious = true, hasNext = true))
+        assertEquals(listOf("Previous", "Pause", "Next"), english.buttons.map { it.label.toString() })
+    }
 }

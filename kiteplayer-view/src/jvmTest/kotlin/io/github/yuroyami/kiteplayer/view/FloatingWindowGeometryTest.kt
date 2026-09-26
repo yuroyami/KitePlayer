@@ -129,4 +129,14 @@ class FloatingWindowGeometryTest {
         assertFailsWith<IllegalArgumentException> { FloatingWindowOptions(margin = -1) }
         FloatingWindowOptions(widthFraction = 1f, margin = 0)
     }
+
+    @Test
+    fun theMenuSaysTheLabelsTheApplicationPassed() {
+        assertEquals("Pause", FloatingWindowLabels().playOrPause(active = true))
+        assertEquals("Play", FloatingWindowLabels().playOrPause(active = false))
+        val spanish = FloatingWindowLabels(play = "Reproducir", pause = "Pausa", backToApp = "Volver", close = "Cerrar")
+        assertEquals("Pausa", spanish.playOrPause(active = true))
+        assertEquals("Reproducir", spanish.playOrPause(active = false))
+        assertEquals(spanish, FloatingWindowOptions(labels = spanish).labels)
+    }
 }

@@ -30,7 +30,8 @@ import javax.swing.Timer
  *
  * In the window, a click plays or pauses, a double click returns to the app, a drag moves the
  * window, and a drag from its lower right corner resizes it and keeps its aspect. A right click
- * opens a menu with play or pause, "Back to app" and "Close". The window has no drawn buttons,
+ * opens a menu with play or pause, "Back to app" and "Close", or the [FloatingWindowLabels] passed
+ * in the options. The window has no drawn buttons,
  * because nothing Swing draws can appear above a native canvas.
  *
  * All members must be used from the AWT event dispatch thread, like the view itself.
@@ -181,8 +182,8 @@ public class KitePlayerPictureInPicture private constructor(
         fun install() {
             playOrPause.addActionListener { togglePlayback() }
             menu.add(playOrPause)
-            menu.add(MenuItem("Back to app").apply { addActionListener { restore() } })
-            menu.add(MenuItem("Close").apply { addActionListener { stop() } })
+            menu.add(MenuItem(options.labels.backToApp).apply { addActionListener { restore() } })
+            menu.add(MenuItem(options.labels.close).apply { addActionListener { stop() } })
             canvas.add(menu)
             canvas.addMouseListener(this)
             canvas.addMouseMotionListener(this)
@@ -245,7 +246,7 @@ public class KitePlayerPictureInPicture private constructor(
         }
 
         private fun showMenu(event: MouseEvent) {
-            playOrPause.label = if (view.player?.state?.value?.status?.isActive == true) "Pause" else "Play"
+            playOrPause.label = options.labels.playOrPause(view.player?.state?.value?.status?.isActive == true)
             menu.show(canvas, event.x, event.y)
         }
     }

@@ -75,6 +75,12 @@ final class io.github.yuroyami.kiteplayer.view/KitePlayerUIView : platform.UIKit
     final val supersededFrames // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.supersededFrames|{}supersededFrames[0]
         final fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
 
+    final var accessibilityStateFormat // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.accessibilityStateFormat|{}accessibilityStateFormat[0]
+        final fun <get-accessibilityStateFormat>(): kotlin/Function3<io.github.yuroyami.kiteplayer/PlaybackStatus, kotlin.time/Duration, kotlin.time/Duration?, kotlin/String> // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.accessibilityStateFormat.<get-accessibilityStateFormat>|<get-accessibilityStateFormat>(){}[0]
+        final fun <set-accessibilityStateFormat>(kotlin/Function3<io.github.yuroyami.kiteplayer/PlaybackStatus, kotlin.time/Duration, kotlin.time/Duration?, kotlin/String>) // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.accessibilityStateFormat.<set-accessibilityStateFormat>|<set-accessibilityStateFormat>(value:kotlin.Function3<io.github.yuroyami.kiteplayer.PlaybackStatus,kotlin.time.Duration,kotlin.time.Duration?,kotlin.String>){}[0]
+    final var accessibilityVideoLabel // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.accessibilityVideoLabel|{}accessibilityVideoLabel[0]
+        final fun <get-accessibilityVideoLabel>(): kotlin/String // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.accessibilityVideoLabel.<get-accessibilityVideoLabel>|<get-accessibilityVideoLabel>(){}[0]
+        final fun <set-accessibilityVideoLabel>(kotlin/String) // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.accessibilityVideoLabel.<set-accessibilityVideoLabel>|<set-accessibilityVideoLabel>(value:kotlin.String){}[0]
     final var player // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.player|{}player[0]
         final fun <get-player>(): io.github.yuroyami.kiteplayer/KitePlayer? // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.player.<get-player>|<get-player>(){}[0]
         final fun <set-player>(io.github.yuroyami.kiteplayer/KitePlayer?) // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.player.<set-player>|<set-player>(value:io.github.yuroyami.kiteplayer.KitePlayer?){}[0]

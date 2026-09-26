@@ -3,6 +3,11 @@ import io.github.yuroyami.kiteplayer.buildtools.CheckKitertCouplingTask
 import io.github.yuroyami.kiteplayer.buildtools.CheckPublicationReadinessTask
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.publish.maven.tasks.GenerateMavenPom
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
+import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 plugins {
     // Declared here with apply false so the publish plugin's shared build service is loaded by
@@ -28,6 +33,26 @@ allprojects {
     // gradle.properties also carried a VERSION line, so bumping the properties file published the
     // old coordinate and said BUILD SUCCESSFUL while doing it.
     version = providers.gradleProperty("VERSION").get()
+}
+
+// Every module builds with the JDK 21 toolchain but emits Java 11 bytecode, so an application
+// on Java 11 or 17 can load the JVM and Android classes. The JVM main code is also checked against
+// the Java 11 API, which catches a call that only a newer JDK has (#268).
+subprojects {
+    tasks.withType<KotlinJvmCompile>().configureEach {
+        compilerOptions.jvmTarget.set(JvmTarget.JVM_11)
+    }
+    plugins.withId("org.jetbrains.kotlin.multiplatform") {
+        extensions.configure<KotlinMultiplatformExtension> {
+            targets.withType<KotlinJvmTarget>().configureEach {
+                compilations.named(KotlinCompilation.MAIN_COMPILATION_NAME) {
+                    compileTaskProvider.configure {
+                        compilerOptions.freeCompilerArgs.add("-Xjdk-release=11")
+                    }
+                }
+            }
+        }
+    }
 }
 
 val kitertProjects = subprojects

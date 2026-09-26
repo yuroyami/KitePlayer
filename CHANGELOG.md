@@ -73,6 +73,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `IllegalStateException`, as `open` always did. Call `stop()` first. `restore` already does (#256).
 - `Thumbnail` and `Waveform` compare their arrays by content, so two results with the same bytes
   or buckets are equal and hash the same (#264).
+- Every JVM and Android class is Java 11 bytecode, where it was Java 21, and the JVM main code is
+  checked against the Java 11 API. The API is unchanged. On the desktop JVM the KiteFFmpeg 0.3.0
+  jar is still Java 21 bytecode, so Java 21 stays the minimum there until a later KiteFFmpeg
+  release is pinned (#268).
 
 ## [0.0.27] - 2026-09-25
 

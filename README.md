@@ -361,6 +361,8 @@ On the desktop JVM, the KiteFFmpeg 0.3.0 artifact carries the native library for
 Linux x64, Linux arm64 and Windows x64. macOS arm64 plays. On Linux arm64 the whole FFmpeg backend
 suite passes in a container, which has no audio device, so that proves decoding only. Windows has
 been linked, not run.
+KitePlayer's JVM and Android classes are Java 11 bytecode. The KiteFFmpeg 0.3.0 jar is Java 21
+bytecode, so a desktop app needs Java 21 until KitePlayer depends on a later KiteFFmpeg release.
 
 Every CI run of the format matrix writes a conformance table, uploaded as the
 `conformance-macos-host` artifact and printed in the run summary. It lists each clip, what was

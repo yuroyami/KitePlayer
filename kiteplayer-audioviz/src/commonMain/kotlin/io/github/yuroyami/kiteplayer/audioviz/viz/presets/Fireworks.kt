@@ -40,7 +40,7 @@ import kotlin.random.Random
  * - Licence as found: MIT, `LICENSE`: "Copyright (c) 2021 Ondřej Žára". The file was added in 2021;
  *   the code dates from December 2014.
  * - Year: 2014, made for New Year 2015
- * - The page bundles gl-matrix 2.2.1 (BSD-style notice, Brandon Jones and Colin MacKenzie IV). Its
+ * - The page bundles gl-matrix 2.2.1 (zlib licence, Copyright (c) 2013 Brandon Jones, Colin MacKenzie IV). Its
  *   `vec3.random`, `vec2.random`, `perspective`, `lookAt`, `rotateX` and `rotateY` are re-implemented here.
  *
  * Deviations from the original:

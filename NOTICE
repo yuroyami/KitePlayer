@@ -52,6 +52,38 @@ License. The license text heads the generated file, EastAsianTables.kt, and
 ships inside the JVM and Android artifacts under
 META-INF/licenses/kiteplayer-subtitles/.
 
+Visualiser drawings
+-------------------
+kiteplayer-audioviz ports ten browser visualisers, and it carries shader and
+colour code from other open source projects. The class documentation of each
+drawing credits its original and lists every way it differs. The license
+texts ship inside the JVM and Android artifacts under
+META-INF/licenses/kiteplayer-audioviz/. The native klibs have no place for
+them, so for those the texts are in this repository, under
+kiteplayer-audioviz/src/jvmMain/resources/META-INF/licenses/kiteplayer-audioviz/.
+
+- Silk ports codevember, Copyright (c) 2015 Matt DesLauriers, MIT. It also
+  carries Ashima simplex noise, Copyright (C) 2011 by Ashima Arts, MIT;
+  gl-vignette-background, Copyright (c) 2014 Matt DesLauriers, MIT; and
+  glsl-hsl2rgb, Copyright (c) 2015 Jam3, MIT.
+- Lines ports Lines by Silvio Paganini (FLUUUID), ISC, as its package.json
+  declares. The original has no license file and no copyright line.
+- Honeycomb ports soundcloud-visualizer, Copyright (c) 2013 Michael Bromley,
+  MIT.
+- Fracture, Threads and Iris port Vissonance, Copyright (c) 2020 Tariq
+  Soliman, MIT.
+- Fireworks ports fireworks-webgl, Copyright (c) 2021 Ondřej Žára, MIT. It
+  also re-implements functions of gl-matrix 2.2.1, Copyright (c) 2013 Brandon
+  Jones, Colin MacKenzie IV, under the zlib license.
+- Wavy Spiral ports Audible Visuals by Sonia Boller, Apache License 2.0. The
+  original's license file leaves the copyright line unfilled.
+- Muser ports Muser by Jon Shamir, MIT. Its license file reads "Copyright (c)
+  2017 Matt DesLauriers". It also carries functions of chroma.js 2.1.0,
+  Copyright (c) 2011-2019, Gregor Aisch, BSD 3-Clause, and the line width of
+  three.meshline, Copyright (c) 2016 Jaume Sanchez, MIT.
+- Musical Spectrum re-implements ShowCQTBar by Muhammad Faiz from its
+  formulas. No code of it is copied, and its page has no license.
+
 Sample media
 ------------
 The five songs in kiteplayer-sample-shared/media are by Skullbeatz, from the

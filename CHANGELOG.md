@@ -46,6 +46,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   manifests are refused with the same exception, which extends `IllegalArgumentException`. A
   representation that is one file now streams with range requests and seeks, and the segment
   ceiling no longer applies to it (#240).
+- `RendererEvent` gains `ColorApproximated`, which a renderer publishes for colour it can only
+  approximate. The engine turns it into `PlaybackWarning.ColorApproximated`. A `when` over
+  `RendererEvent` that lists every case needs the new branch. The web canvas now uses it to say
+  that it shows HDR without tone mapping and converts YCgCo and FCC with a guessed matrix (#228).
 
 ## [0.0.27] - 2026-09-25
 

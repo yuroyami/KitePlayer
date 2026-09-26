@@ -342,6 +342,10 @@ public sealed class PlaybackWarning {
      * Metadata-based on purpose, unlike [HdrToneMapped]: the approximation is a property of the
      * conversion the engine WILL do, it is known at open, and it is true of every path that
      * converts at all.
+     *
+     * A renderer can also report a limit of its own conversion, through
+     * [io.github.yuroyami.kiteplayer.spi.RendererEvent.ColorApproximated]: the web canvas, for
+     * example, shows HDR without tone mapping. That one arrives when the first such frame is drawn.
      */
     public data class ColorApproximated(val detail: String) : PlaybackWarning() {
         override val message: String get() = "colour approximated: $detail"

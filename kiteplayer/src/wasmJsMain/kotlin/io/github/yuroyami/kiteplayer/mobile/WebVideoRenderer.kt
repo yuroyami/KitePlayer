@@ -3,16 +3,24 @@
 package io.github.yuroyami.kiteplayer.mobile
 
 import io.github.yuroyami.kiteffmpeg.WebRgbaConverter
+import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoTransform
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.output.WebCanvasVideoRenderer
 import io.github.yuroyami.kiteplayer.output.WebFramePainter
+import io.github.yuroyami.kiteplayer.spi.ColorMatrix
+import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
+import io.github.yuroyami.kiteplayer.spi.ColorTransfer
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
+import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.merge
 import kotlin.js.JsAny
 
 /**
@@ -31,6 +39,24 @@ public class WebCanvasRendererFactory(private val canvas: JsAny) : VideoRenderer
 }
 
 /**
+ * What the web canvas cannot draw exactly for [colorSpace], one warning detail for each limit, and
+ * empty when it can. Its RGBA conversion is libswscale's: it applies no tone map, and it guesses
+ * BT.709 or BT.601 by picture height for a matrix it does not know.
+ */
+internal fun webColorLimits(colorSpace: ColorSpaceInfo): List<String> = buildList {
+    if (colorSpace.isHdr) {
+        val transfer = if (colorSpace.transfer == ColorTransfer.Pq) "PQ" else "HLG"
+        add("the web canvas shows $transfer HDR without tone mapping, so it looks flat and dim")
+    }
+    val guessed = when (colorSpace.matrix) {
+        ColorMatrix.YCgCo -> "YCgCo"
+        ColorMatrix.Fcc -> "FCC"
+        else -> null
+    }
+    if (guessed != null) add("the web canvas converts $guessed video with the BT.709 or BT.601 matrix")
+}
+
+/**
  * Ties one [WebRgbaConverter] to one renderer's life.
  *
  * The converter holds a scratch buffer sized to the largest frame it has seen, 24.9 MB for 4K, and
@@ -40,6 +66,13 @@ public class WebCanvasRendererFactory(private val canvas: JsAny) : VideoRenderer
 private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
 
     private val converter = WebRgbaConverter()
+
+    /** Colour limits met while painting, published beside the plain renderer's own events. */
+    private val limits = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 4)
+
+    /** The limits reported for the generation being drawn, so a limit is published once per generation. */
+    private val reported = mutableSetOf<String>()
+    private var reportedFor: Generation? = null
 
     private val delegate = WebCanvasVideoRenderer(
         canvas = canvas,
@@ -53,6 +86,14 @@ private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
      */
     private fun paint(frame: VideoFrame, destination: JsAny): Boolean {
         val kiteCodec = frame as? KiteFFmpegVideoFrame ?: return false
+        // Said out loud rather than drawn silently wrong. The engine keeps the first of each per open.
+        if (frame.generation != reportedFor) {
+            reportedFor = frame.generation
+            reported.clear()
+        }
+        for (detail in webColorLimits(frame.colorSpace)) {
+            if (reported.add(detail)) limits.tryEmit(RendererEvent.ColorApproximated(detail))
+        }
         return converter.copyInto(kiteCodec.frame, destination)
     }
 
@@ -72,5 +113,5 @@ private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
     override fun setScaleMode(mode: VideoScale) = delegate.setScaleMode(mode)
     override fun setTransform(transform: VideoTransform) = delegate.setTransform(transform)
     override suspend fun setOverlay(overlay: SubtitleOverlay?) = delegate.setOverlay(overlay)
-    override val events get() = delegate.events
+    override val events: Flow<RendererEvent> get() = merge(delegate.events, limits)
 }

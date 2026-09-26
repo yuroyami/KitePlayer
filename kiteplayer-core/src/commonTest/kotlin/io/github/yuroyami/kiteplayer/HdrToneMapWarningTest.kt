@@ -85,6 +85,25 @@ class HdrToneMapWarningTest {
         harness.close()
     }
 
+    // A renderer's own colour limit, such as the web canvas drawing HDR without a tone map.
+    @Test
+    fun `a renderer's colour limit becomes one warning per detail per open`() = runTest {
+        val renderer = ScriptedRenderer()
+        val harness = CoreHarness(this, renderer = null)
+        harness.core.attachRenderer(renderer)
+        harness.open()
+        harness.run(100.milliseconds)
+
+        repeat(3) { renderer.published.emit(RendererEvent.ColorApproximated("HDR without tone mapping")) }
+        renderer.published.emit(RendererEvent.ColorApproximated("YCgCo with a guessed matrix"))
+        harness.run(200.milliseconds)
+
+        val details = harness.core.warningHistory().map { it.warning }
+            .filterIsInstance<PlaybackWarning.ColorApproximated>().map { it.detail }
+        assertEquals(listOf("HDR without tone mapping", "YCgCo with a guessed matrix"), details)
+        harness.close()
+    }
+
     /**
      * A renderer publishing on every tone mapped frame is behaving correctly. The engine latches.
      *

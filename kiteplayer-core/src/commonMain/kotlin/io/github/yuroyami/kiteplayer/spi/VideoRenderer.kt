@@ -92,13 +92,15 @@ public interface VideoRenderer : AutoCloseable {
     public suspend fun setOverlay(overlay: SubtitleOverlay?)
 
     /**
-     * Surface loss, surface return, refresh changes, hard failure.
+     * Surface loss, surface return, refresh changes, colour limits, hard failure.
      *
-     * The engine collects this feed and acts on four of them. [RendererEvent.SurfaceLost] and
-     * [RendererEvent.Failed] become warnings; [RendererEvent.ToneMapEngaged] is what lets
+     * The engine collects this feed. [RendererEvent.SurfaceLost] and [RendererEvent.Failed] become
+     * warnings, and a failed renderer is detached. [RendererEvent.ToneMapEngaged] is what lets
      * `PlaybackWarning.HdrToneMapped` fire, since only the renderer knows whether it actually tone
-     * mapped. [RendererEvent.SurfaceAvailable] and [RendererEvent.VsyncChanged] are collected and
-     * currently ignored: no renderer reports a refresh interval yet, so there is nothing to act on.
+     * mapped, and [RendererEvent.ColorApproximated] becomes `PlaybackWarning.ColorApproximated`.
+     * [RendererEvent.VsyncChanged] reaches the running schedule, [RendererEvent.FramePresented]
+     * becomes a player event when frame events are on, and [RendererEvent.SurfaceAvailable] is
+     * ignored.
      *
      * Emitting is optional. A renderer that cannot draw refuses the frame instead, which the
      * schedule counts as a drop and carries on from, so a silent feed costs only the chance to
@@ -158,6 +160,16 @@ public sealed interface RendererEvent {
      * renderer that genuinely knows may say so, and its answer is used as given.
      */
     public data class ToneMapEngaged(val transfer: String, val streamIndex: Int = -1) : RendererEvent
+
+    /**
+     * This renderer showed a frame's colour only approximately, because of a limit of its own
+     * conversion: HDR without tone mapping, or a matrix it cannot apply. [detail] says which.
+     *
+     * The engine turns the first one of each [detail] per open into
+     * [io.github.yuroyami.kiteplayer.PlaybackWarning.ColorApproximated] and ignores the rest, so a
+     * renderer may publish it on every such frame.
+     */
+    public data class ColorApproximated(val detail: String) : RendererEvent
 
     /**
      * The renderer failed in a way it cannot recover from.

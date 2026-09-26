@@ -2126,6 +2126,9 @@ internal class PlaybackCore(
     /** Latches [PlaybackWarning.HdrToneMapped] to once per open. Reset with the session. */
     private var toneMapWarned: Boolean = false
 
+    /** The renderer's colour limits already warned about this open, by detail. Reset with the session. */
+    private val colorLimitsWarned = mutableSetOf<String>()
+
     /**
      * The video stream currently being fed to the renderer, or -1.
      *
@@ -2190,6 +2193,11 @@ internal class PlaybackCore(
                                 ),
                             )
                         }
+                        // Once per detail per open, for the same reason as the tone map above.
+                        is RendererEvent.ColorApproximated ->
+                            if (colorLimitsWarned.add(event.detail)) {
+                                warn(PlaybackWarning.ColorApproximated(event.detail))
+                            }
                         is RendererEvent.SurfaceAvailable -> Unit
                         is RendererEvent.VsyncChanged ->
                             // A display change reaches the running schedule without a reopen: a
@@ -2246,6 +2254,7 @@ internal class PlaybackCore(
         playRequested = false
         loopRefusalWarned = false
         toneMapWarned = false
+        colorLimitsWarned.clear()
         pendingVideoRecovery = null
         videoRecoveryAttempted = false
         forceBackendSoftwareForMedia = false

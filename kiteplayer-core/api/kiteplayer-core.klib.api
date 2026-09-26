@@ -845,6 +845,19 @@ sealed interface io.github.yuroyami.kiteplayer.spi/AudioSinkEvent { // io.github
 }
 
 sealed interface io.github.yuroyami.kiteplayer.spi/RendererEvent { // io.github.yuroyami.kiteplayer.spi/RendererEvent|null[0]
+    final class ColorApproximated : io.github.yuroyami.kiteplayer.spi/RendererEvent { // io.github.yuroyami.kiteplayer.spi/RendererEvent.ColorApproximated|null[0]
+        constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.spi/RendererEvent.ColorApproximated.<init>|<init>(kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer.spi/RendererEvent.ColorApproximated.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer.spi/RendererEvent.ColorApproximated.detail.<get-detail>|<get-detail>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer.spi/RendererEvent.ColorApproximated.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer.spi/RendererEvent.ColorApproximated // io.github.yuroyami.kiteplayer.spi/RendererEvent.ColorApproximated.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/RendererEvent.ColorApproximated.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/RendererEvent.ColorApproximated.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/RendererEvent.ColorApproximated.toString|toString(){}[0]
+    }
+
     final class Failed : io.github.yuroyami.kiteplayer.spi/RendererEvent { // io.github.yuroyami.kiteplayer.spi/RendererEvent.Failed|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.spi/RendererEvent.Failed.<init>|<init>(kotlin.String){}[0]
 

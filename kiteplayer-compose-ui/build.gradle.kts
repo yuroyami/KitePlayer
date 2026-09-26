@@ -40,5 +40,9 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        jvmTest.dependencies {
+            // Skia's native library, which a headless Compose scene needs to draw.
+            implementation(compose.desktop.currentOs)
+        }
     }
 }

@@ -44,12 +44,7 @@ public fun KitePlayerVideo(
     SideEffect { currentOnEffectivePath?.invoke(effective) }
     key(effective) {
         when (effective) {
-            KiteRenderPath.NativeView -> {
-                KitePlayerSurface(player = player, modifier = modifier)
-                SideEffect {
-                    player?.let { currentOnRendererAttached?.invoke(it) }
-                }
-            }
+            KiteRenderPath.NativeView -> NativeViewVideo(player, modifier) { currentOnRendererAttached?.invoke(it) }
             KiteRenderPath.ComposeCanvas -> ComposeCanvasVideo(
                 player = player,
                 modifier = modifier,
@@ -57,6 +52,28 @@ public fun KitePlayerVideo(
             )
             KiteRenderPath.Auto -> error("resolveRenderPath must never return Auto")
         }
+    }
+}
+
+/**
+ * The native view path: the platform view, and one report for each attachment. [surface] stands in
+ * for the view in tests, because the desktop view is a Swing panel that a headless scene cannot host.
+ */
+@Composable
+internal fun NativeViewVideo(
+    player: KitePlayer?,
+    modifier: Modifier,
+    surface: (@Composable (KitePlayer?, Modifier) -> Unit)? = null,
+    onRendererAttached: (KitePlayer) -> Unit,
+) {
+    if (surface != null) surface(player, modifier) else KitePlayerSurface(player = player, modifier = modifier)
+    // Once per player, and again when a path swap composes this afresh, but not on a recomposition:
+    // an unkeyed SideEffect here reported an attachment whenever the modifier changed. The view holds
+    // the player by now, because the interop view's update block hands it over while the change is
+    // applied, before any effect runs.
+    val currentOnAttached by rememberUpdatedState(onRendererAttached)
+    LaunchedEffect(player) {
+        player?.let { currentOnAttached(it) }
     }
 }
 

@@ -2,20 +2,27 @@ package io.github.yuroyami.kiteplayer.network.dash
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.network.HttpReaderPolicy
+import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
 import io.ktor.client.HttpClient
-import io.ktor.client.request.get
+import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentLength
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration
 
 /**
  * One representation's segments read as a single forward stream (the adaptive
@@ -104,7 +111,7 @@ public const val MAX_SEGMENT_BYTES: Long = 64L shl 20
  * big. The declared Content-Length is checked first because it costs nothing, and then the read
  * itself is bounded, because a server is free to declare one length and send another.
  */
-private suspend fun readBounded(response: HttpResponse, limit: Long, what: String): ByteArray {
+private suspend fun readBounded(response: HttpResponse, limit: Long, what: String, readTimeout: Duration): ByteArray {
     response.contentLength()?.let { declared ->
         if (declared > limit) {
             throw DashResponseTooLargeException(
@@ -117,7 +124,8 @@ private suspend fun readBounded(response: HttpResponse, limit: Long, what: Strin
     val buffer = ByteArray(64 * 1024)
     var total = 0L
     while (true) {
-        val read = channel.readAvailable(buffer, 0, buffer.size)
+        val read = withTimeoutOrNull(readTimeout) { channel.readAvailable(buffer, 0, buffer.size) }
+            ?: throw KtorMediaIoException("$what sent no bytes for $readTimeout")
         if (read < 0) break
         if (read == 0) continue
         total += read
@@ -135,32 +143,70 @@ private suspend fun readBounded(response: HttpResponse, limit: Long, what: Strin
     return out
 }
 
+/**
+ * One GET of [url], limited by [reader]: the response headers must arrive within its connect
+ * timeout and each later chunk within its read timeout. The door applies them itself, because the
+ * browser engine has no limit of its own and a silent server held the call for ever (#242).
+ */
+private suspend fun fetchBounded(
+    client: HttpClient,
+    url: String,
+    limit: Long,
+    what: String,
+    reader: HttpReaderPolicy,
+    refusal: (HttpStatusCode) -> String,
+): ByteArray = coroutineScope {
+    val answered = CompletableDeferred<Unit>()
+    val body = async {
+        try {
+            client.prepareGet(url).execute { response ->
+                answered.complete(Unit)
+                require(response.status.isSuccess()) { refusal(response.status) }
+                readBounded(response, limit, what, reader.readTimeout)
+            }
+        } catch (failure: Throwable) {
+            answered.completeExceptionally(failure)
+            throw failure
+        }
+    }
+    if (withTimeoutOrNull(reader.connectTimeout) { answered.await() } == null) {
+        body.cancel()
+        throw KtorMediaIoException("no answer from $url within ${reader.connectTimeout}")
+    }
+    body.await()
+}
+
 public object Dash {
 
     /**
      * Fetches and parses [mpdUrl]. Confined to [Dispatchers.Default] for the same reason
      * [DashMediaIo] confines its fetches: on Kotlin/Native the Darwin engine resumes onto the
      * main queue, which a plain runBlocking main thread never serves, and the fetch deadlocks.
+     *
+     * [readerPolicy] limits the wait: a server that sends no headers within its connect timeout,
+     * or no bytes within its read timeout, fails the call with [KtorMediaIoException].
      */
     public suspend fun manifest(
         mpdUrl: String,
         client: HttpClient,
         policy: DashUrlPolicy = DashUrlPolicy.Default,
         maxManifestBytes: Long = MAX_MANIFEST_BYTES,
+        readerPolicy: HttpReaderPolicy = HttpReaderPolicy(),
     ): DashManifest =
         withContext(Dispatchers.Default) {
             // Checked BEFORE the fetch, not after: the point of the policy is that a URL this
             // player will not accept is also a URL it never sends the caller's cookies to.
             DashManifestParser.requireAllowedScheme(mpdUrl, policy)
-            val response = client.get(mpdUrl)
-            require(response.status.isSuccess()) { "cannot fetch $mpdUrl: ${response.status}" }
-            val body = readBounded(response, maxManifestBytes, "the manifest at $mpdUrl")
+            val body = fetchBounded(client, mpdUrl, maxManifestBytes, "the manifest at $mpdUrl", readerPolicy) { status ->
+                "cannot fetch $mpdUrl: $status"
+            }
             DashManifestParser.parse(body.decodeToString(), mpdUrl, policy)
         }
 
     /**
      * A playable [MediaItem] for [mpdUrl]: the chosen representation's segments as one
      * [DashMediaIo] stream over [client]. The item's uri stays the manifest's, for labels.
+     * [readerPolicy] limits the manifest fetch and every segment fetch, as in [manifest].
      */
     public suspend fun mediaItemFor(
         mpdUrl: String,
@@ -168,8 +214,9 @@ public object Dash {
         policy: DashUrlPolicy = DashUrlPolicy.Default,
         maxManifestBytes: Long = MAX_MANIFEST_BYTES,
         maxSegmentBytes: Long = MAX_SEGMENT_BYTES,
+        readerPolicy: HttpReaderPolicy = HttpReaderPolicy(),
     ): MediaItem {
-        val manifest = manifest(mpdUrl, client, policy, maxManifestBytes)
+        val manifest = manifest(mpdUrl, client, policy, maxManifestBytes, readerPolicy)
         // Refused, not truncated: this tier byte-concatenates ONE period's
         // segments, and silently playing period one of an ad-stitched presentation looked like
         // a player that stops after the pre-roll. Period joining is the adaptive engine's next
@@ -194,9 +241,9 @@ public object Dash {
             uri = mpdUrl,
             io = {
                 DashMediaIo(plan) { url ->
-                    val response = client.get(url)
-                    require(response.status.isSuccess()) { "segment fetch failed: $url is ${response.status}" }
-                    readBounded(response, maxSegmentBytes, "the segment at $url")
+                    fetchBounded(client, url, maxSegmentBytes, "the segment at $url", readerPolicy) { status ->
+                        "segment fetch failed: $url is $status"
+                    }
                 }
             },
         )

@@ -48,10 +48,10 @@ public final class io/github/yuroyami/kiteplayer/network/KtorMediaIoResolver : i
 
 public final class io/github/yuroyami/kiteplayer/network/dash/Dash {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/network/dash/Dash;
-	public final fun manifest (Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun manifest$default (Lio/github/yuroyami/kiteplayer/network/dash/Dash;Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
-	public final fun mediaItemFor (Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun mediaItemFor$default (Lio/github/yuroyami/kiteplayer/network/dash/Dash;Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JJLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun manifest (Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JLio/github/yuroyami/kiteplayer/network/HttpReaderPolicy;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun manifest$default (Lio/github/yuroyami/kiteplayer/network/dash/Dash;Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JLio/github/yuroyami/kiteplayer/network/HttpReaderPolicy;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun mediaItemFor (Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JJLio/github/yuroyami/kiteplayer/network/HttpReaderPolicy;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun mediaItemFor$default (Lio/github/yuroyami/kiteplayer/network/dash/Dash;Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JJLio/github/yuroyami/kiteplayer/network/HttpReaderPolicy;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class io/github/yuroyami/kiteplayer/network/dash/DashAdaptationSet {

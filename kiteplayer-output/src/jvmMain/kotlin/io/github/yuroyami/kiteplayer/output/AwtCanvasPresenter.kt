@@ -5,6 +5,7 @@ import java.awt.Canvas
 import java.awt.Color
 import java.awt.Graphics2D
 import java.awt.RenderingHints
+import java.awt.geom.AffineTransform
 import java.awt.image.BufferedImage
 import kotlin.math.roundToInt
 
@@ -103,7 +104,22 @@ internal class AwtCanvasPresenter : CanvasPresenter {
             RenderingHints.KEY_INTERPOLATION,
             RenderingHints.VALUE_INTERPOLATION_BILINEAR,
         )
-        g.drawImage(image, layout.left, layout.top, layout.width, layout.height, null)
+        val turn = layout.rotationDegrees
+        if (turn == 0) {
+            g.drawImage(image, layout.left, layout.top, layout.width, layout.height, null)
+        } else {
+            // Scaled into the rectangle before the turn and turned about the centre of where the
+            // picture lands, in one transform, so a half-pixel edge stays a half pixel. The graphics'
+            // own transform is untouched, which keeps the cues drawn next upright.
+            val place = AffineTransform.getRotateInstance(
+                Math.toRadians(turn.toDouble()),
+                layout.centerX.toDouble(),
+                layout.centerY.toDouble(),
+            )
+            place.translate(layout.drawLeft.toDouble(), layout.drawTop.toDouble())
+            place.scale(layout.drawWidth.toDouble() / image.width, layout.drawHeight.toDouble() / image.height)
+            g.drawImage(image, place, null)
+        }
         drawOverlay(g, overlay, canvasWidth, canvasHeight)
     }
 

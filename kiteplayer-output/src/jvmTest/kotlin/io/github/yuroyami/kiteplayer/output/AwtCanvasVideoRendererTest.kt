@@ -207,6 +207,76 @@ class AwtCanvasVideoRendererTest {
         assertTrue(layout.width == canvasWidth, "the wide axis should fill exactly: $layout")
     }
 
+    /** A 4 by 2 picture in four colours: red and green along the top, blue and white along the bottom. */
+    private fun quadrants(): BufferedImage {
+        val picture = BufferedImage(4, 2, BufferedImage.TYPE_INT_RGB)
+        for (y in 0 until 2) {
+            for (x in 0 until 4) {
+                val color = when {
+                    y == 0 && x < 2 -> Color.RED
+                    y == 0 -> Color.GREEN
+                    x < 2 -> Color.BLUE
+                    else -> Color.WHITE
+                }
+                picture.setRGB(x, y, color.rgb)
+            }
+        }
+        return picture
+    }
+
+    private fun close(expected: Color, actual: Int): Boolean {
+        val found = Color(actual)
+        return kotlin.math.abs(found.red - expected.red) <= 8 &&
+            kotlin.math.abs(found.green - expected.green) <= 8 &&
+            kotlin.math.abs(found.blue - expected.blue) <= 8
+    }
+
+    @Test
+    fun `a turned picture is drawn turned and in the shape the turn gives it`() {
+        // Where each corner colour of the picture lands on a 200 by 200 canvas, per quarter turn.
+        // A 2:1 picture turned a quarter lands as a 100 by 200 column in the middle.
+        val expected = mapOf(
+            0 to listOf(Color.RED to (50 to 75), Color.GREEN to (150 to 75), Color.BLUE to (50 to 125), Color.WHITE to (150 to 125)),
+            90 to listOf(Color.RED to (125 to 50), Color.GREEN to (125 to 150), Color.BLUE to (75 to 50), Color.WHITE to (75 to 150)),
+            180 to listOf(Color.RED to (150 to 125), Color.GREEN to (50 to 125), Color.BLUE to (150 to 75), Color.WHITE to (50 to 75)),
+            270 to listOf(Color.RED to (75 to 150), Color.GREEN to (75 to 50), Color.BLUE to (125 to 150), Color.WHITE to (125 to 50)),
+        )
+        for ((turn, corners) in expected) {
+            val target = BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB)
+            val layout = frameLayout(200, 200, VideoSize(4, 2), turn)!!
+            val g = target.createGraphics()
+            AwtCanvasPresenter.compose(g, 200, 200, quadrants(), layout, overlay = null)
+            g.dispose()
+            for ((color, at) in corners) {
+                val (x, y) = at
+                assertTrue(close(color, target.getRGB(x, y)), "at $turn degrees ($x, $y) is ${Color(target.getRGB(x, y))}, not $color")
+            }
+            if (turn == 90 || turn == 270) {
+                assertEquals(Color.BLACK.rgb, target.getRGB(20, 100), "a quarter turn letterboxes the sides at $turn degrees")
+            }
+        }
+    }
+
+    @Test
+    fun `a quarter turn on an odd canvas with wide pixels leaves no seam`() {
+        // Pixels twice as wide as tall make the 4 by 2 picture 4:1, turned it is 1:4, and the odd
+        // canvas halves a side, which is where a rounded draw rectangle would leave a black seam.
+        val picture = BufferedImage(4, 2, BufferedImage.TYPE_INT_RGB)
+        picture.createGraphics().apply { color = Color.WHITE; fillRect(0, 0, 4, 2); dispose() }
+        val layout = frameLayout(101, 201, VideoSize(4, 2, 2, 1), 90)!!
+        val target = BufferedImage(101, 201, BufferedImage.TYPE_INT_RGB)
+        val g = target.createGraphics()
+        AwtCanvasPresenter.compose(g, 101, 201, picture, layout, overlay = null)
+        g.dispose()
+        assertTrue(layout.height > layout.width * 3, "the turned picture should be tall: $layout")
+        for (y in layout.top until layout.bottom) {
+            for (x in layout.left until layout.right) {
+                assertTrue(close(Color.WHITE, target.getRGB(x, y)), "($x, $y) inside $layout is ${Color(target.getRGB(x, y))}")
+            }
+        }
+        if (layout.left > 0) assertEquals(Color.BLACK.rgb, target.getRGB(layout.left - 1, (layout.top + layout.bottom) / 2))
+    }
+
     @Test
     fun `the letterbox is repainted so a narrower picture cannot leave the old one showing`() {
         val target = BufferedImage(400, 400, BufferedImage.TYPE_INT_RGB)

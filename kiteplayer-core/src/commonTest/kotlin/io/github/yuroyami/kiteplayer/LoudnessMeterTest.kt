@@ -146,7 +146,9 @@ class LoudnessMeterTest {
         samples[10] = 0.8f
         meter.feed(samples, samples.size)
         val result = meter.result()
-        assertEquals(0.8f, result.samplePeak)
+        // A tolerance, because on js the peak passes through a Float32Array and 0.8f is not
+        // exactly representable there.
+        assertEquals(0.8f, result.samplePeak, absoluteTolerance = 1e-6f)
         assertEquals(Double.NEGATIVE_INFINITY, result.integratedLufs)
     }
 

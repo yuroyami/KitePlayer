@@ -551,7 +551,8 @@ jobs:
             :kiteplayer-network:testAndroidHostTest \
             :kiteplayer-audioviz:testAndroidHostTest \
             :kiteplayer-phone:testAndroidHostTest \
-            :kiteplayer-sample-shared:testAndroidHostTest
+            :kiteplayer-sample-shared:testAndroidHostTest \
+            :kiteplayer-libass:testAndroidHostTest
 
       - name: Upload test reports
         if: failure()

@@ -277,6 +277,16 @@ dokka {
     moduleName.set("KitePlayer")
 }
 
+// Mocha's per-test limit is 2000 ms under Node as well as in the browser. A test that runs longer is
+// abandoned while it keeps running, and the next test in its class then fails in its place.
+// karma.config.d/timeouts.js raises the browser limit; this raises the Node one to the same ten
+// minutes. The bound that matters stays each test's own Kotlin timeout.
+subprojects {
+    tasks.withType<org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTest>().configureEach {
+        if (name.endsWith("NodeTest")) useMocha { timeout = "600s" }
+    }
+}
+
 // Shared Kite theme. Sources live in ../_kite-docs; docs/sync.sh copies them here, so this repo
 // still builds standalone from a fresh clone.
 //

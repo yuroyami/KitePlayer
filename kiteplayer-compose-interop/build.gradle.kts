@@ -75,3 +75,10 @@ kotlin {
         }
     }
 }
+
+// This module has no js or wasmJs tests. Compose still wires a check into their browser test tasks
+// that fails when a test compilation depends on Skiko and no executable binary bundles it. With
+// nothing to bundle, the check only fails the task. Remove this when a web test is added here.
+tasks.matching { it.name.startsWith("checkComposeUiTestConfigurationFor") }.configureEach {
+    enabled = false
+}

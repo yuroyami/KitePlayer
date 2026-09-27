@@ -200,6 +200,7 @@ kotlin {
         namespace = "io.github.yuroyami.kiteplayer.libass"
         compileSdk = 37
         minSdk = 26
+        withHostTest {}
         withDeviceTestBuilder {
             sourceSetTreeName = "test"
         }.configure {

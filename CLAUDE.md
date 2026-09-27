@@ -48,6 +48,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A Gradle test run that is killed part way leaves its results directory unusable, and the next run
   fails before any test with `NoSuchFileException ... in-progress-results-generic.bin`. Delete
   `build/test-results/<task>` and run again.
+- The js browser tests cannot run in a checkout whose path contains `#`, such as one under `#Kite`.
+  Kotlin/JS serves each test file as `/absolute/<path>`, the browser cuts that URL at the `#`, and
+  the task fails with two 404 lines and no test result. The wasmJs browser tests and both Node
+  runners are unaffected, and CI's path has no `#`.
 - `audiovizSurvey` takes its classpath from `jvmTest`, so it depends on it: one red fast test stops
   the whole survey before it draws anything. The XML you then read is the previous run's, with the
   previous numbers. Compare the file's timestamp with the source you edited before you believe it.

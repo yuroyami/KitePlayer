@@ -1009,6 +1009,11 @@ sealed interface io.github.yuroyami.kiteplayer.subtitle/SubtitleCue { // io.gith
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text.toString|toString(){}[0]
     }
+
+    final object Companion { // io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Companion|null[0]
+        final const val OPEN_END // io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Companion.OPEN_END|{}OPEN_END[0]
+            final fun <get-OPEN_END>(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Companion.OPEN_END.<get-OPEN_END>|<get-OPEN_END>(){}[0]
+    }
 }
 
 sealed interface io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroyami.kiteplayer/PlayerEvent|null[0]

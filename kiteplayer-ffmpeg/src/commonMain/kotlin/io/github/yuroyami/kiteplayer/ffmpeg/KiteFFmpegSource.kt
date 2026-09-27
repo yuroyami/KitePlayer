@@ -349,6 +349,18 @@ public class KiteFFmpegSource internal constructor(
             declaredChannelLayoutMask = kiteStream(stream.index).audio?.channelLayoutMask,
         )
 
+    /**
+     * A decoder for the image subtitle stream [stream], such as Blu-ray, DVB or DVD subtitles. Built
+     * here for the timestamp mapper, like the video and audio decoders. An image with no canvas size
+     * is placed on the first video stream's picture.
+     */
+    internal fun newImageSubtitleDecoder(stream: PlayerStreamInfo): io.github.yuroyami.kiteplayer.spi.SubtitleDecoder =
+        KiteFFmpegImageSubtitleDecoder(
+            decoder = source.openSubtitleDecoder(kiteStream(stream.index)),
+            mapper = mapper,
+            fallbackCanvas = firstVideo?.videoSize,
+        )
+
     /** Video decoders for this source. The factory applies the caller's platform policy at open. */
     public fun videoDecoderFactories(): List<VideoDecoderFactory> =
         listOf(KiteFFmpegVideoDecoderFactory(this))

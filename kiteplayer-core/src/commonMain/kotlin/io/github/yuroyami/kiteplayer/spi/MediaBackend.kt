@@ -90,8 +90,8 @@ public interface BackendSession : AutoCloseable {
     public val audioDecoders: List<AudioDecoderFactory>
 
     /**
-     * Factories for the text subtitle formats this backend can decode over the packet path. The
-     * engine asks the first factory that accepts the selected subtitle stream; an empty list means
+     * Factories for the subtitle formats this backend can decode over the packet path. The engine
+     * asks the first factory that accepts the selected subtitle stream; an empty list means
      * subtitle tracks cannot be selected on this backend.
      */
     public val subtitleDecoders: List<SubtitleDecoderFactory>

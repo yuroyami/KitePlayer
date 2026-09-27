@@ -3158,6 +3158,8 @@ public final class io/github/yuroyami/kiteplayer/subtitle/StyledSpan {
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/subtitle/SubtitleCue {
+	public static final field Companion Lio/github/yuroyami/kiteplayer/subtitle/SubtitleCue$Companion;
+	public static final field OPEN_END J
 	public abstract fun getEndMicros ()J
 	public abstract fun getLayer ()I
 	public abstract fun getStartMicros ()J
@@ -3179,6 +3181,10 @@ public final class io/github/yuroyami/kiteplayer/subtitle/SubtitleCue$Bitmap : i
 	public fun getStartMicros ()J
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/subtitle/SubtitleCue$Companion {
+	public static final field OPEN_END J
 }
 
 public final class io/github/yuroyami/kiteplayer/subtitle/SubtitleCue$Text : io/github/yuroyami/kiteplayer/subtitle/SubtitleCue {

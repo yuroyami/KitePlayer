@@ -101,7 +101,8 @@ public interface AudioDecoder : AutoCloseable {
 /**
  * Creates subtitle decoders.
  *
- * The FFmpeg backend supplies one for SubRip, WebVTT, MP4 timed text and the ASS dialogue tier.
+ * The FFmpeg backend supplies one for SubRip, WebVTT, MP4 timed text and the ASS dialogue tier, and
+ * one for the image formats: Blu-ray, DVB, DVD and XSUB.
  * An ASS track's packets are read twice when a [SubtitleTypesetter] is installed: the decoder
  * fills the cue table and the cue flow, and the engine hands the same bytes to the typesetter,
  * which draws them.

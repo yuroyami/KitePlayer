@@ -88,10 +88,10 @@ public class KiteFFmpegMediaBackend(
  * One opened container and its decoders.
  *
  * The lists come from the source itself, because a KiteFFmpeg decoder is opened against the very
- * container context the packets are read from. The subtitle factory decodes the TEXT formats
- * (SubRip, WebVTT, and ASS at the dialogue tier) over the packet path with no C involved;
- * bitmap formats still need a real engine, and a stream the factory refuses is
- * deselected by the engine rather than failing the open.
+ * container context the packets are read from. The first subtitle factory decodes the TEXT formats
+ * (SubRip, WebVTT, and ASS at the dialogue tier) over the packet path with no C involved. The
+ * second decodes the image formats (Blu-ray, DVB, DVD and XSUB) through FFmpeg's own decoders.
+ * A stream both refuse is deselected by the engine rather than failing the open.
  */
 private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) : BackendSession {
 
@@ -113,7 +113,7 @@ private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) 
     override val audioDecoders: List<AudioDecoderFactory> = kiteCodec.audioDecoderFactories()
 
     override val subtitleDecoders: List<SubtitleDecoderFactory> =
-        listOf(KiteFFmpegSubtitleDecoderFactory())
+        listOf(KiteFFmpegSubtitleDecoderFactory(), KiteFFmpegImageSubtitleDecoderFactory(kiteCodec))
 
     override fun close(): Unit = kiteCodec.close()
 }

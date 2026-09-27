@@ -4762,7 +4762,11 @@ internal class PlaybackCore(
             decoded.sortedBy { it.startMicros }
         }
         if (cues.isEmpty() || cues.last().startMicros <= incoming.first().startMicros) {
+            // Only the cues sharing the latest start can still be open, so the closing pass starts
+            // at that group rather than at the beginning of a table that can hold thousands.
+            val openFrom = io.github.yuroyami.kiteplayer.subtitle.lastStartGroup(cues)
             cues.addAll(incoming)
+            io.github.yuroyami.kiteplayer.subtitle.closeOpenCues(cues, openFrom)
             subtitleCueAppendBatches++
             return
         }
@@ -4784,6 +4788,8 @@ internal class PlaybackCore(
         while (incomingIndex < incoming.size) merged += incoming[incomingIndex++]
         cues.clear()
         cues.addAll(merged)
+        // The cold path: a cue merged into the middle may be open, so the pass covers the table.
+        io.github.yuroyami.kiteplayer.subtitle.closeOpenCues(cues)
         subtitleCueMergeBatches++
     }
 

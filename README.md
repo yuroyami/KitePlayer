@@ -307,6 +307,8 @@ players in one process work and are tested.
 
 - SubRip, WebVTT and SubStation Alpha, from the container or from an external file. External
   files load in the middle of playback.
+- Blu-ray (PGS), DVB, DVD and XSUB image subtitles from the container, placed on the picture they
+  were authored for. An image stays until the next one replaces or clears it.
 - ASS and SSA tracks are drawn by libass, as authored: moving signs, animated transforms, karaoke
   fills, clips and vector drawings. They re-render every video frame while they move.
 - Fonts attached to a Matroska file are loaded for the track. `SubtitleConfig.fonts` adds your own.

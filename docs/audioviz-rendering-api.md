@@ -171,8 +171,7 @@ inspection clips, not presentation FPS measurements. `scripts/check-neonlofi-and
 and pushes the exact shader, textures and ordered mesh batches for an explicit offscreen device
 run. Its blocking draw/readback duration includes synchronisation and is not isolated GPU scene
 cost or app cadence. Neither that script nor an APK build establishes ten-minute presentation
-performance. Current implementation evidence and pending physical checks are indexed in
-[`audioviz-revamp/neonlofi-implementation-report.md`](../audioviz-revamp/neonlofi-implementation-report.md).
+performance.
 
 ## Marbled ink
 
@@ -230,8 +229,9 @@ slow fade halfway, which is worse than the flash it was built to prevent.
 **What checks the rest.** `FlashCaptureTest` renders every drawing through the same surface, with
 the finishing pass on, and counts the flashes in the composed frames. The fixture is 200 beats a
 minute with hits on the half beat, plus the ordinary drum loop, and each drawing is rendered again
-with reduced motion on, which must leave no flash at all. `FlashGuardTest` fixes the runtime
-guard's own counter against known pass and fail signals.
+with reduced motion on, which must bring it inside the policy and never raise its count. It renders
+for minutes, so it runs in `./gradlew :kiteplayer-audioviz:audiovizSurvey` and not in `jvmTest`.
+`FlashGuardTest` fixes the runtime guard's own counter against known pass and fail signals.
 
 It counts by area, the way a flash analyser does. Each frame is compared with the picture 0.3
 seconds earlier, which is the time a flash takes at the policy's own rate. Where at least a tenth
@@ -253,13 +253,14 @@ drift, and called sixty-five unsafe. Brightness changes were made against the fi
 then taken back out. Calibrate the counter before trusting it about a drawing.
 
 **What it cannot see, measured.** A drawing draws its own bright marks, and the guard reads only
-the shared light, so a picture that flashes through what it draws passes the guard. Seven of the
-seventy-eight cross the policy in the captured output: Pipe at eight flashes in its busiest second,
-then Hex Shaft, Ocean Mist, Wormhole, Ring Flight and Cathedral at five or six, and Pulse at four,
-against a limit of three. Four of them fly down a tunnel, where the walls brighten together as the
-camera surges on the beat. Damping the kick's light rib, which was the obvious suspect, moved Pipe
-from eight to seven and nothing else, so it was taken back out: bringing these seven inside the
-policy is a change to how they look, and the capture test is the tool to check any such change.
+the shared light, so a picture that flashes through what it draws passes the guard. The capture
+test ran on all 24 drawings on 2026-09-27. Two of them cross the policy in the captured output,
+both on the drum loop: Honeycomb at six flashes in its busiest second and Pipe at five, against a
+limit of three. On the 200 beats a minute fixture both stay at two. In both, a large share of the
+picture brightens at once, up to 92 percent for Honeycomb and 40 percent for Pipe. Bars, Fracture,
+Iris and Odyssey reach three, the limit itself, and the other eighteen stay below it. With reduced
+motion on, no drawing flashes at all. Bringing Honeycomb and Pipe inside the policy is a change to
+how they look, and the capture test is the tool to check any such change.
 
 The test also prints the widest area that swung together for every drawing, so one that is close to
 the limit is visible before it crosses it.

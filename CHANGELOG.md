@@ -93,6 +93,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   follows at most five redirects. Under `DashUrlPolicy.SameOrigin`, a redirect to another scheme,
   host or port fails with `DashUrlRefusedException`, and in a browser every redirect fails. Use
   `DashUrlPolicy.Default` for a CDN that redirects to another host.
+- `PlaybackWarning` gains `SubtitlesNotDrawn`, so a `when` that lists every warning needs the new
+  branch. The engine now holds every subtitle rasterizer to the limits in the `SubtitleRasterizer`
+  companion object, such as 256 cues and four viewports of pixels in one overlay. Cues past a limit
+  are not drawn, and the warning says so. When a rasterizer or a renderer throws, the subtitles are
+  cleared, the warning names the failure, and playback continues. A custom rasterizer gets only
+  what `SubtitleRasterizer.limitCues` keeps, and it can throw `SubtitleOverlayLimitException` to
+  show part of an overlay.
 
 ## [0.0.27] - 2026-09-25
 

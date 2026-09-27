@@ -40,6 +40,7 @@ class WarningAuditTest {
         PlaybackWarning.SubtitleSourceUnreadable("subs.srt", "x"),
         PlaybackWarning.ContainerDeclarationDiverged(0, "Width", "1920", "1440"),
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
+        PlaybackWarning.SubtitlesNotDrawn("x"),
         PlaybackWarning.ResamplerUnavailable("x"),
         PlaybackWarning.AudioTapFailed("x"),
         PlaybackWarning.RecordingStopped("x.mkv", "x"),
@@ -64,6 +65,12 @@ class WarningAuditTest {
         is PlaybackWarning.TypesetterUnavailable -> listOf(
             "PlaybackCore.refuseTypesetting, when the installed typesetter provider returns no engine " +
                 "or throws while starting, and from abandonTypesetting when a render threw on its lane",
+        )
+        is PlaybackWarning.SubtitlesNotDrawn -> listOf(
+            "rasterizeWithinLimits in PlaybackCore's overlay publication, the typeset lane and the " +
+                "screenshot overlay, when the cues or the images pass a SubtitleRasterizer limit or the " +
+                "rasterizer throws",
+            "PlaybackCore.showOverlayFromRasterLane, when the renderer throws from setOverlay",
         )
         is PlaybackWarning.ResamplerUnavailable -> listOf(
             "AudioPlayback's conversion stage, when AudioConfig.resampler throws while making a " +

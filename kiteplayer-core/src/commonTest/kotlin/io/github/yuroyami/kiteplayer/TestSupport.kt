@@ -212,7 +212,11 @@ internal class RecordingRenderer(
     /** Every overlay handed over, in order, nulls included. */
     val overlays: MutableList<SubtitleOverlay?> = mutableListOf()
 
+    /** Thrown by every overlay with images while set, as a renderer that cannot upload would. */
+    var overlayFailure: Exception? = null
+
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
+        if (overlay != null && overlay.images.isNotEmpty()) overlayFailure?.let { throw it }
         if (overlayPublishDuration > Duration.ZERO && overlay != null && overlay.images.isNotEmpty()) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
                 kotlinx.coroutines.delay(overlayPublishDuration)

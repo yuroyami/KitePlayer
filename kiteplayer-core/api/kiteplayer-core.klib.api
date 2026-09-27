@@ -674,6 +674,24 @@ abstract interface io.github.yuroyami.kiteplayer.spi/SubtitleDecoderFactory { //
 
 abstract interface io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer { // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer|null[0]
     abstract fun rasterize(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/Int, kotlin/Int, kotlin/Float, kotlin/Float = ...): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/OverlayImage> // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.rasterize|rasterize(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.Int;kotlin.Int;kotlin.Float;kotlin.Float){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion|null[0]
+        final const val MAX_CUES // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_CUES|{}MAX_CUES[0]
+            final fun <get-MAX_CUES>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_CUES.<get-MAX_CUES>|<get-MAX_CUES>(){}[0]
+        final const val MAX_CUE_LENGTH // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_CUE_LENGTH|{}MAX_CUE_LENGTH[0]
+            final fun <get-MAX_CUE_LENGTH>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_CUE_LENGTH.<get-MAX_CUE_LENGTH>|<get-MAX_CUE_LENGTH>(){}[0]
+        final const val MAX_OVERLAY_PIXELS // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_OVERLAY_PIXELS|{}MAX_OVERLAY_PIXELS[0]
+            final fun <get-MAX_OVERLAY_PIXELS>(): kotlin/Long // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_OVERLAY_PIXELS.<get-MAX_OVERLAY_PIXELS>|<get-MAX_OVERLAY_PIXELS>(){}[0]
+        final const val MAX_OVERLAY_SPANS // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_OVERLAY_SPANS|{}MAX_OVERLAY_SPANS[0]
+            final fun <get-MAX_OVERLAY_SPANS>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_OVERLAY_SPANS.<get-MAX_OVERLAY_SPANS>|<get-MAX_OVERLAY_SPANS>(){}[0]
+        final const val MAX_OVERLAY_TEXT_LENGTH // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_OVERLAY_TEXT_LENGTH|{}MAX_OVERLAY_TEXT_LENGTH[0]
+            final fun <get-MAX_OVERLAY_TEXT_LENGTH>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_OVERLAY_TEXT_LENGTH.<get-MAX_OVERLAY_TEXT_LENGTH>|<get-MAX_OVERLAY_TEXT_LENGTH>(){}[0]
+        final const val MAX_VIEWPORT_SIZE // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_VIEWPORT_SIZE|{}MAX_VIEWPORT_SIZE[0]
+            final fun <get-MAX_VIEWPORT_SIZE>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.MAX_VIEWPORT_SIZE.<get-MAX_VIEWPORT_SIZE>|<get-MAX_VIEWPORT_SIZE>(){}[0]
+
+        final fun limitCues(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue> // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.limitCues|limitCues(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>){}[0]
+        final fun overlayPixelBudget(kotlin/Int, kotlin/Int): kotlin/Long // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.Companion.overlayPixelBudget|overlayPixelBudget(kotlin.Int;kotlin.Int){}[0]
+    }
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/SubtitleTypesetter : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/SubtitleTypesetter|null[0]
@@ -1519,6 +1537,15 @@ final class io.github.yuroyami.kiteplayer.spi/SubtitleOverlay { // io.github.yur
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/SubtitleOverlay.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SubtitleOverlay.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/SubtitleOverlay.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.spi/SubtitleOverlayLimitException : kotlin/RuntimeException { // io.github.yuroyami.kiteplayer.spi/SubtitleOverlayLimitException|null[0]
+    constructor <init>(kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/OverlayImage>, kotlin/Int) // io.github.yuroyami.kiteplayer.spi/SubtitleOverlayLimitException.<init>|<init>(kotlin.collections.List<io.github.yuroyami.kiteplayer.spi.OverlayImage>;kotlin.Int){}[0]
+
+    final val drawn // io.github.yuroyami.kiteplayer.spi/SubtitleOverlayLimitException.drawn|{}drawn[0]
+        final fun <get-drawn>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/OverlayImage> // io.github.yuroyami.kiteplayer.spi/SubtitleOverlayLimitException.drawn.<get-drawn>|<get-drawn>(){}[0]
+    final val skipped // io.github.yuroyami.kiteplayer.spi/SubtitleOverlayLimitException.skipped|{}skipped[0]
+        final fun <get-skipped>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SubtitleOverlayLimitException.skipped.<get-skipped>|<get-skipped>(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer.spi/TypesetFrame { // io.github.yuroyami.kiteplayer.spi/TypesetFrame|null[0]
@@ -3827,6 +3854,22 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleSourceUnreadable // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleSourceUnreadable.copy|copy(kotlin.String;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleSourceUnreadable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleSourceUnreadable.hashCode|hashCode(){}[0]
+    }
+
+    final class SubtitlesNotDrawn : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn|null[0]
+        constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.<init>|<init>(kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.detail.<get-detail>|<get-detail>(){}[0]
+        final val fields // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.fields|{}fields[0]
+            final fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.fields.<get-fields>|<get-fields>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.message.<get-message>|<get-message>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.hashCode|hashCode(){}[0]
     }
 
     final class TonemappingUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable|null[0]

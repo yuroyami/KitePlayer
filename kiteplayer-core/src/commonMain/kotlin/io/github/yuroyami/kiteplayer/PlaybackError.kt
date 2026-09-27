@@ -446,6 +446,19 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * Some subtitles were not drawn, or none were. [detail] says why: the cues on screen went past a
+     * limit of [io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer], or the rasterizer or the
+     * renderer failed. Playback continues, and the next change of the subtitles draws again. Once
+     * per opened item for a limit, and once per player for a failure.
+     */
+    public data class SubtitlesNotDrawn(val detail: String) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("detail" to detail)
+
+        override val message: String get() = "subtitles not drawn: $detail"
+    }
+
+    /**
      * The configured `AudioConfig.resampler` could not make a resampler, so the engine converts
      * the sample rate with its own windowed sinc instead. The usual cause is a factory with no
      * implementation on this platform: `KiteFFmpegResampler` has none on the web. Once per

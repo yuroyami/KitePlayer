@@ -1495,6 +1495,9 @@ internal class ScriptedOutput(
     /** The first-span style of every TEXT cue each raster call received, for the override tests. */
     val rasterizedCueStyles: MutableList<List<io.github.yuroyami.kiteplayer.subtitle.CueStyle>> = mutableListOf()
 
+    /** Thrown by every raster call while set, after the call is recorded, as a broken font engine would. */
+    var rasterizeFailure: Exception? = null
+
     override val audioSink: AudioSinkFactory = object : AudioSinkFactory {
         override val name: String = "scripted"
         override suspend fun create(): AudioSink = sink
@@ -1519,6 +1522,7 @@ internal class ScriptedOutput(
                         is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Bitmap -> "<bitmap>"
                     }
                 }
+                rasterizeFailure?.let { throw it }
                 return cues.map { cue ->
                     io.github.yuroyami.kiteplayer.spi.OverlayImage(
                         x = 0,

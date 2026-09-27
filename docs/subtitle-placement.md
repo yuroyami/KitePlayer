@@ -98,6 +98,22 @@ changes shape, for example after a rotation.
   for. A change of height changes the text size. A change of width changes only where lines break.
 - The typesetter sizes text against the picture, so typeset text follows the picture's size.
 
+## Limits
+
+The Kotlin tier draws within the limits in the `SubtitleRasterizer` companion object, on every
+renderer and in screenshots:
+
+- A text size is at least 1 pixel and at most the height of the area that the text is laid out in.
+- A text cue lays out at most `MAX_CUE_LENGTH` characters. Its image is never wider or taller than
+  that area, plus its shadow and its box. Lines that do not fit are left off the bottom.
+- A bitmap cue keeps only its part inside the area.
+- One overlay draws at most `MAX_CUES` cues, at most `MAX_OVERLAY_TEXT_LENGTH` characters and
+  `MAX_OVERLAY_SPANS` styled spans, and at most four areas of pixels. The cue that reaches a limit
+  is cut or left out, and so are the cues after it.
+
+When the engine leaves cues out, or when drawing them fails, it warns once with
+`PlaybackWarning.SubtitlesNotDrawn`, and playback continues.
+
 ## What each renderer does
 
 | Renderer | Its output | Reports its size |

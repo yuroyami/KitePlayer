@@ -926,9 +926,10 @@ internal class PlaybackCore(
     /**
      * Draws whatever subtitles were showing, at the captured frame's own size.
      *
-     * Null when nothing was showing, when this build has no platform rasterizer, or when the
-     * frame's size is not a size. A screenshot without its subtitles is half a screenshot, and a
-     * screenshot with the text laid out for a screen of a different shape is worse than either.
+     * Null when nothing was showing, when this build has no platform rasterizer, when the
+     * frame's size is not a size, or when the rasterizer failed. A screenshot without its subtitles
+     * is half a screenshot, and a screenshot with the text laid out for a screen of a different
+     * shape is worse than either. The limits of the on-screen overlay hold here too.
      */
     private suspend fun rasterizeOverlayFor(
         captured: io.github.yuroyami.kiteplayer.CapturedFrame,
@@ -940,11 +941,13 @@ internal class PlaybackCore(
         val height = captured.size.height
         if (width <= 0 || height <= 0) return null
         val images = withContext(dispatchers.raster) {
-            rasterizer.rasterize(
+            rasterizer.rasterizeWithinLimits(
+                io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea.None,
                 applyOverride(cues, subtitleStyle), width, height, subtitleScale, subtitlePosition,
+                ::warnUndrawnSubtitles,
             )
         }
-        if (images.isEmpty()) return null
+        if (images.isNullOrEmpty()) return null
         return io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
             images = images,
             viewportWidth = width,
@@ -2289,6 +2292,7 @@ internal class PlaybackCore(
         progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
         firstFrameSeen = false
         divergencesReported = false
+        undrawnSubtitlesLimited.value = false
         endOfStream.reset()
         demuxUnderrunSeen = false
         stillImageFinished = false
@@ -4840,11 +4844,14 @@ internal class PlaybackCore(
         val cues = active.toList()
         session.rasterJob?.cancel()
         session.rasterJob = scope.launch(dispatchers.raster) {
-            val images = rasterizer.rasterizeInSafeArea(
+            // A rasterizer that failed publishes the empty overlay, so the text it replaced goes.
+            val images = rasterizer.rasterizeWithinLimits(
                 safeArea, applyOverride(cues, subtitleStyle), width, height, subtitleScale, subtitlePosition,
-            )
+                ::warnUndrawnSubtitles,
+            ).orEmpty()
             if (session.overlayGeneration.value != generation) return@launch
-            session.renderer.setOverlay(
+            showOverlayFromRasterLane(
+                session,
                 SubtitleOverlay(
                     images = images,
                     viewportWidth = width,
@@ -4854,6 +4861,36 @@ internal class PlaybackCore(
             )
         }
     }
+
+    /**
+     * Hands [overlay] to the renderer from the raster lane. That lane's jobs have no one to fail
+     * to, so a renderer that throws costs the subtitles and a warning, not the player.
+     */
+    private suspend fun showOverlayFromRasterLane(session: OpenSession, overlay: SubtitleOverlay) {
+        try {
+            session.renderer.setOverlay(overlay)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Exception) {
+            warnUndrawnSubtitles(UndrawnSubtitles.Failed, "the renderer refused the subtitle overlay: $failure")
+        }
+    }
+
+    /**
+     * Warns once per opened item that subtitles went past a limit, and once per player that
+     * drawing them failed. Called from the raster lane.
+     */
+    private fun warnUndrawnSubtitles(cause: UndrawnSubtitles, detail: String) {
+        val warned = when (cause) {
+            UndrawnSubtitles.Limited -> undrawnSubtitlesLimited
+            UndrawnSubtitles.Failed -> undrawnSubtitlesFailed
+        }
+        if (warned.compareAndSet(expect = false, update = true)) warn(PlaybackWarning.SubtitlesNotDrawn(detail))
+    }
+
+    /** Set once [warnUndrawnSubtitles] warned for that cause. Each open clears the limit one. */
+    private val undrawnSubtitlesLimited = atomic(false)
+    private val undrawnSubtitlesFailed = atomic(false)
 
     /**
      * Orphans the Kotlin tier's raster job and waits for it, the way the typeset lane is retired, so
@@ -5114,19 +5151,21 @@ internal class PlaybackCore(
             } else {
                 // The typeset images keep the author's placement; the cues beside them keep to the
                 // safe area, rule 3 of docs/subtitle-placement.md.
-                output.subtitleRasterizer?.rasterizeInSafeArea(
+                output.subtitleRasterizer?.rasterizeWithinLimits(
                     request.otherSafeArea,
                     applyOverride(request.otherCues, request.otherStyle),
                     frame.width,
                     frame.height,
                     frame.fontScale,
                     frame.linePosition,
+                    ::warnUndrawnSubtitles,
                 ).orEmpty()
             }
             // Re-checked after the render, because a withdrawal may have happened during it.
             if (request.epoch != lane.epoch.value) continue
             lane.published.value = true
-            session.renderer.setOverlay(
+            showOverlayFromRasterLane(
+                session,
                 SubtitleOverlay(
                     images = lane.lastImages + rasterized,
                     viewportWidth = frame.width,

@@ -44,30 +44,8 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         viewportHeight: Int,
         fontScale: Float,
         position: Float,
-    ): List<OverlayImage> {
-        if (viewportWidth <= 0 || viewportHeight <= 0) return emptyList()
-        val images = mutableListOf<OverlayImage>()
-        var stackedBottom = 0
-        // ASS `Collisions: Reverse` puts the NEWEST cue at the bottom, so the pile is built from
-        // the end of the list and turned back the right way round: the images keep the caller's
-        // order, which is the draw order, and only the stack offsets change.
-        val reversed = cues.stacksLastAtBottom
-        for (cue in if (reversed) cues.asReversed() else cues) {
-            when (cue) {
-                is SubtitleCue.Text -> rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom, position)
-                    ?.let { image ->
-                        images += image
-                        if (cue.layout.usesImplicitBottomStack) {
-                            stackedBottom += image.bitmap.height + STACK_GAP_PX
-                        }
-                    }
-                is SubtitleCue.Bitmap -> cue.regions.forEach { region ->
-                    // Origin and extent both scale from the authored canvas to the viewport.
-                    regionImage(region, viewportWidth, viewportHeight)?.let { images += it }
-                }
-            }
-        }
-        return if (reversed) images.asReversed() else images
+    ): List<OverlayImage> = rasterizeCues(cues, viewportWidth, viewportHeight) { cue, stackedBottom, budget ->
+        rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom, position, budget)
     }
 
     private fun rasterizeText(
@@ -77,14 +55,13 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         fontScale: Float,
         stackedBottom: Int,
         position: Float,
+        budget: OverlayPixels,
     ): OverlayImage? {
         val layoutSpec = cue.layout
-        // The classic subtitle size rule: about one twentieth of the picture height, scaled by
-        // the user's preference and by the authoring resolution when the format declared one.
-        val authoredScale = layoutSpec.authoredHeight?.let { viewportHeight.toFloat() / it } ?: 1f
-        fun sizeOf(style: CueStyle) =
-            (style.fontSizePx?.times(authoredScale) ?: (viewportHeight / 20f)) * fontScale
-        val baseSize = cue.spans.firstOrNull()?.style?.let { sizeOf(it) } ?: (viewportHeight / 20f)
+        // The classic subtitle size rule; see cueFontSizePx.
+        fun sizeOf(style: CueStyle) = cueFontSizePx(style, layoutSpec, viewportHeight, fontScale)
+        val baseSize = sizeOf(cue.spans.firstOrNull()?.style ?: CueStyle())
+        fun strokeOf(style: CueStyle) = cueOutlinePx(style, fontScale, sizeOf(style))
 
         val text = SpannableStringBuilder()
         val runs = mutableListOf<StyleRun>()
@@ -120,7 +97,7 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
             color = baseColor
             textSize = baseSize
         }
-        val safeWidth = (viewportWidth * (1f - layoutSpec.marginLeft - layoutSpec.marginRight)).toInt()
+        val safeWidth = cueSafeWidth(layoutSpec, viewportWidth)
         if (safeWidth <= 0) return null
 
         val alignment = when (layoutSpec.alignment) {
@@ -163,28 +140,25 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
             Layout.Alignment.ALIGN_CENTER -> (layout.width - width) / 2f
             else -> 0f
         }
-        val height = layout.height.coerceAtLeast(1)
+        // Never taller than the viewport: the lines that fit are drawn from the top, as CoreText
+        // does on Apple, and the rest would be pixels nobody can see.
+        val height = layout.height.coerceIn(1, viewportHeight)
 
         val firstStyle = cue.spans.firstOrNull()?.style
         // The shadow lands outside the text box, so the bitmap grows for it and the placement
         // below subtracts the origin back off. See CueShadow.
         val shadow = firstStyle?.let { cueShadow(it, fontScale) } ?: NO_CUE_SHADOW
-        val anyOutline = runs.any { it.style.outlineWidthPx > 0f }
+        val anyOutline = runs.any { strokeOf(it.style) > 0f }
 
         // The viewer's box: the bitmap grows by the padding on every side so the box is
         // never clipped, and the placement subtracts it back off. Transparent draws nothing.
         val boxColor = firstStyle?.backgroundColor ?: 0
-        val boxPad = if (boxColor ushr 24 != 0) {
-            kotlin.math.ceil((firstStyle!!.backgroundPaddingPx * fontScale).toDouble()).toInt()
-        } else {
-            0
-        }
+        val boxPad = firstStyle?.let { cueBoxPadPx(it, fontScale) } ?: 0
+        val bitmapWidth = width + shadow.pad + 2 * boxPad
+        val bitmapHeight = height + shadow.pad + 2 * boxPad
+        if (!budget.take(bitmapWidth, bitmapHeight)) return null
 
-        val bitmap = Bitmap.createBitmap(
-            width + shadow.pad + 2 * boxPad,
-            height + shadow.pad + 2 * boxPad,
-            Bitmap.Config.ARGB_8888,
-        )
+        val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.translate(shadow.origin - glyphShift + boxPad, (shadow.origin + boxPad).toFloat())
         if (boxPad > 0) {
@@ -208,13 +182,13 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
             canvas.translate(shadow.offset, shadow.offset)
             // Stroke then fill, so the shadow is as fat as the outlined text casting it.
             if (anyOutline) {
-                layoutAt(wrapWidth, strokeCopy(text, runs, fontScale, firstStyle.shadowColor)).draw(canvas)
+                layoutAt(wrapWidth, strokeCopy(text, runs, ::strokeOf, firstStyle.shadowColor)).draw(canvas)
             }
             layoutAt(wrapWidth, flatCopy(text, firstStyle.shadowColor)).draw(canvas)
             canvas.restore()
         }
         // Outline pass first, fill second: the cheap universal legibility trick.
-        if (anyOutline) layoutAt(wrapWidth, strokeCopy(text, runs, fontScale, null)).draw(canvas)
+        if (anyOutline) layoutAt(wrapWidth, strokeCopy(text, runs, ::strokeOf, null)).draw(canvas)
         layout.draw(canvas)
 
         val pixels = ByteArray(bitmap.width * bitmap.height * 4)
@@ -258,7 +232,7 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
     private fun strokeCopy(
         text: SpannableStringBuilder,
         runs: List<StyleRun>,
-        fontScale: Float,
+        strokeOf: (CueStyle) -> Float,
         override: Int?,
     ): SpannableStringBuilder {
         val copy = SpannableStringBuilder(text)
@@ -267,7 +241,7 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         }
         for (run in runs) {
             copy.setSpan(
-                StrokeSpan(run.style.outlineWidthPx * fontScale, override ?: run.style.outlineColor),
+                StrokeSpan(strokeOf(run.style), override ?: run.style.outlineColor),
                 run.start,
                 run.end,
                 0,
@@ -292,10 +266,5 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
             tp.strokeWidth = widthPx
             tp.color = color
         }
-    }
-
-
-    private companion object {
-        private const val STACK_GAP_PX: Int = 8
     }
 }

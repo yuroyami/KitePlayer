@@ -1272,6 +1272,18 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$SubtitleSourceU
 	public fun hashCode ()I
 }
 
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$SubtitlesNotDrawn : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$SubtitlesNotDrawn;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$SubtitlesNotDrawn;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$SubtitlesNotDrawn;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public fun getFields ()Ljava/util/Map;
+	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+}
+
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TonemappingUnavailable : io/github/yuroyami/kiteplayer/PlaybackWarning {
 	public fun <init> (Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
@@ -2774,9 +2786,33 @@ public final class io/github/yuroyami/kiteplayer/spi/SubtitleOverlay {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/spi/SubtitleOverlayLimitException : java/lang/RuntimeException {
+	public fun <init> (Ljava/util/List;I)V
+	public final fun getDrawn ()Ljava/util/List;
+	public final fun getSkipped ()I
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/spi/SubtitleRasterizer {
+	public static final field Companion Lio/github/yuroyami/kiteplayer/spi/SubtitleRasterizer$Companion;
+	public static final field MAX_CUES I
+	public static final field MAX_CUE_LENGTH I
+	public static final field MAX_OVERLAY_PIXELS J
+	public static final field MAX_OVERLAY_SPANS I
+	public static final field MAX_OVERLAY_TEXT_LENGTH I
+	public static final field MAX_VIEWPORT_SIZE I
 	public abstract fun rasterize (Ljava/util/List;IIFF)Ljava/util/List;
 	public static synthetic fun rasterize$default (Lio/github/yuroyami/kiteplayer/spi/SubtitleRasterizer;Ljava/util/List;IIFFILjava/lang/Object;)Ljava/util/List;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/SubtitleRasterizer$Companion {
+	public static final field MAX_CUES I
+	public static final field MAX_CUE_LENGTH I
+	public static final field MAX_OVERLAY_PIXELS J
+	public static final field MAX_OVERLAY_SPANS I
+	public static final field MAX_OVERLAY_TEXT_LENGTH I
+	public static final field MAX_VIEWPORT_SIZE I
+	public final fun limitCues (Ljava/util/List;)Ljava/util/List;
+	public final fun overlayPixelBudget (II)J
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/SubtitleRasterizer$DefaultImpls {

@@ -50,31 +50,8 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         viewportHeight: Int,
         fontScale: Float,
         position: Float,
-    ): List<OverlayImage> {
-        if (viewportWidth <= 0 || viewportHeight <= 0) return emptyList()
-        val images = mutableListOf<OverlayImage>()
-        var stackedBottom = 0
-        // ASS `Collisions: Reverse` puts the NEWEST cue at the bottom, so the pile is built from
-        // the end of the list and turned back the right way round: the images keep the caller's
-        // order, which is the draw order, and only the stack offsets change.
-        val reversed = cues.stacksLastAtBottom
-        for (cue in if (reversed) cues.asReversed() else cues) {
-            when (cue) {
-                is SubtitleCue.Text ->
-                    rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom, position)
-                        ?.let { image ->
-                            images += image
-                            if (cue.layout.usesImplicitBottomStack) {
-                                stackedBottom += image.bitmap.height + STACK_GAP_PX
-                            }
-                        }
-                is SubtitleCue.Bitmap -> cue.regions.forEach { region ->
-                    // Origin and extent both scale from the authored canvas to the viewport.
-                    regionImage(region, viewportWidth, viewportHeight)?.let { images += it }
-                }
-            }
-        }
-        return if (reversed) images.asReversed() else images
+    ): List<OverlayImage> = rasterizeCues(cues, viewportWidth, viewportHeight) { cue, stackedBottom, budget ->
+        rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom, position, budget)
     }
 
     private fun rasterizeText(
@@ -84,17 +61,16 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         fontScale: Float,
         stackedBottom: Int,
         position: Float,
+        budget: OverlayPixels,
     ): OverlayImage? {
         val whole = cue.spans.joinToString("") { it.text }
         if (whole.isEmpty()) return null
         val layoutSpec = cue.layout
         val firstStyle = cue.spans.first().style
-        // The classic subtitle size rule: about one twentieth of the picture height, scaled by the
-        // user's preference and by the authoring resolution when the format declared one.
-        val authoredScale = layoutSpec.authoredHeight?.let { viewportHeight.toFloat() / it } ?: 1f
-        fun sizeOf(style: CueStyle) =
-            (style.fontSizePx?.times(authoredScale) ?: (viewportHeight / 20f)) * fontScale
-        val safeWidth = (viewportWidth * (1f - layoutSpec.marginLeft - layoutSpec.marginRight)).toInt()
+        // The classic subtitle size rule; see cueFontSizePx.
+        fun sizeOf(style: CueStyle) = cueFontSizePx(style, layoutSpec, viewportHeight, fontScale)
+        fun strokeOf(style: CueStyle) = cueOutlinePx(style, fontScale, sizeOf(style))
+        val safeWidth = cueSafeWidth(layoutSpec, viewportWidth)
         if (safeWidth <= 0) return null
 
         val styled = AttributedString(whole)
@@ -117,16 +93,23 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
 
         // The cue's own wrap mode decides the width AWT breaks at; see wrapWidthFor.
         val wrapWidth = wrapWidthFor(layoutSpec.wrap, safeWidth) { breakInto(styled, whole, it).size }
-        val lines = breakInto(styled, whole, wrapWidth)
-        if (lines.isEmpty()) return null
+        val laidOut = breakInto(styled, whole, wrapWidth)
+        if (laidOut.isEmpty()) return null
 
+        // The bitmap is never taller than the viewport: the lines that fit are drawn from the top,
+        // as CoreText does on Apple, and the rest would be pixels nobody can see.
         var height = 0
         var widest = 0f
-        for ((line, _, _) in lines) {
-            height += ceil((line.ascent + line.descent + line.leading).toDouble()).toInt()
+        var shown = 0
+        for ((line, _, _) in laidOut) {
+            val lineHeight = ceil((line.ascent + line.descent + line.leading).toDouble()).toInt()
+            if (shown > 0 && height + lineHeight > viewportHeight) break
+            height += lineHeight
+            shown++
             if (line.advance > widest) widest = line.advance
         }
-        height = height.coerceAtLeast(1)
+        val lines = if (shown < laidOut.size) laidOut.subList(0, shown) else laidOut
+        height = height.coerceIn(1, viewportHeight)
 
         // A POSITIONED cue's bitmap is its text extent, not the whole safe width:
         // the lines still break at their own width so they read identically, but the bitmap hugs
@@ -150,18 +133,13 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         // The viewer's box: drawn under everything, padded past the glyphs, and the bitmap
         // grows by the padding on every side so the box is never clipped. Transparent draws
         // nothing and costs nothing, which is every cue no override touched.
-        val boxPad = if (firstStyle.backgroundColor ushr 24 != 0) {
-            ceil((firstStyle.backgroundPaddingPx * fontScale).toDouble()).toInt()
-        } else {
-            0
-        }
+        val boxPad = cueBoxPadPx(firstStyle, fontScale)
+        val imageWidth = width + shadow.pad + 2 * boxPad
+        val imageHeight = height + shadow.pad + 2 * boxPad
+        if (!budget.take(imageWidth, imageHeight)) return null
 
         // ARGB_PRE, read straight out of the raster: this is the whole alpha contract.
-        val image = BufferedImage(
-            width + shadow.pad + 2 * boxPad,
-            height + shadow.pad + 2 * boxPad,
-            BufferedImage.TYPE_INT_ARGB_PRE,
-        )
+        val image = BufferedImage(imageWidth, imageHeight, BufferedImage.TYPE_INT_ARGB_PRE)
         val g = image.createGraphics()
         try {
             applyHints(g)
@@ -175,10 +153,10 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
             }
             if (shadow.draws) {
                 val at = inset + shadow.offset
-                drawLines(g, lines, runs, width, layoutSpec.alignment, at, at, fontScale, Color(firstStyle.shadowColor, true))
+                drawLines(g, lines, runs, width, layoutSpec.alignment, at, at, ::strokeOf, Color(firstStyle.shadowColor, true))
             }
             val at = inset.toFloat()
-            drawLines(g, lines, runs, width, layoutSpec.alignment, at, at, fontScale, silhouette = null)
+            drawLines(g, lines, runs, width, layoutSpec.alignment, at, at, ::strokeOf, silhouette = null)
         } finally {
             g.dispose()
         }
@@ -255,7 +233,7 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         alignment: CueAlignment,
         dx: Float,
         dy: Float,
-        fontScale: Float,
+        strokeOf: (CueStyle) -> Float,
         silhouette: Color?,
     ) {
         var baseline = dy
@@ -267,7 +245,7 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
             )
             val onLine = runs.filter { it.start < line.end && it.end > line.start }
             for (run in onLine) {
-                val stroke = run.style.outlineWidthPx * fontScale
+                val stroke = strokeOf(run.style)
                 if (stroke <= 0f) continue
                 val saved = g.clip
                 if (onLine.size > 1) g.clip(runClip(line, run, x, baseline, stroke))
@@ -309,15 +287,23 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
     /**
      * AWT's own line breaker at [width], one measurer run per authored paragraph so an explicit
      * newline breaks exactly where the author put it and everything else breaks at the width.
+     *
+     * Each paragraph's end is found once, not once per line: a search per line reads the rest of
+     * a long paragraph again for every line it breaks into.
      */
     private fun breakInto(styled: AttributedString, whole: String, width: Int): List<Line> {
         val lines = mutableListOf<Line>()
         val measurer = LineBreakMeasurer(styled.iterator, RENDER_CONTEXT)
+        var limit = 0
         while (measurer.position < whole.length) {
-            val newline = whole.indexOf('\n', measurer.position)
-            val limit = if (newline < 0) whole.length else newline + 1
             val start = measurer.position
+            if (start >= limit) {
+                val newline = whole.indexOf('\n', start)
+                limit = if (newline < 0) whole.length else newline + 1
+            }
             val layout = measurer.nextLayout(width.toFloat(), limit, false) ?: break
+            // Without requireNextWord the measurer always moves; a stall would otherwise loop for ever.
+            if (measurer.position <= start) break
             lines += Line(layout, start, measurer.position)
         }
         return lines
@@ -351,8 +337,6 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
 
 
     private companion object {
-        private const val STACK_GAP_PX: Int = 8
-
         private fun applyHints(g: Graphics2D) {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
             g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)

@@ -98,30 +98,8 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
         viewportHeight: Int,
         fontScale: Float,
         position: Float,
-    ): List<OverlayImage> {
-        if (viewportWidth <= 0 || viewportHeight <= 0) return emptyList()
-        val images = mutableListOf<OverlayImage>()
-        var stackedBottom = 0
-        // ASS `Collisions: Reverse` puts the NEWEST cue at the bottom, so the pile is built from
-        // the end of the list and turned back the right way round: the images keep the caller's
-        // order, which is the draw order, and only the stack offsets change.
-        val reversed = cues.stacksLastAtBottom
-        for (cue in if (reversed) cues.asReversed() else cues) {
-            when (cue) {
-                is SubtitleCue.Text -> rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom, position)
-                    ?.let { image ->
-                        images += image
-                        if (cue.layout.usesImplicitBottomStack) {
-                            stackedBottom += image.bitmap.height + STACK_GAP_PX
-                        }
-                    }
-                is SubtitleCue.Bitmap -> cue.regions.forEach { region ->
-                    // Origin and extent both scale from the authored canvas to the viewport.
-                    regionImage(region, viewportWidth, viewportHeight)?.let { images += it }
-                }
-            }
-        }
-        return if (reversed) images.asReversed() else images
+    ): List<OverlayImage> = rasterizeCues(cues, viewportWidth, viewportHeight) { cue, stackedBottom, budget ->
+        rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom, position, budget)
     }
 
     private fun rasterizeText(
@@ -131,13 +109,13 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
         fontScale: Float,
         stackedBottom: Int,
         position: Float,
+        budget: OverlayPixels,
     ): OverlayImage? {
         if (cue.spans.isEmpty() || cue.spans.all { it.text.isEmpty() }) return null
         val layoutSpec = cue.layout
         val firstStyle = cue.spans.first().style
-        val authoredScale = layoutSpec.authoredHeight?.let { viewportHeight.toFloat() / it } ?: 1f
-        fun sizeOf(style: CueStyle) =
-            (style.fontSizePx?.times(authoredScale) ?: (viewportHeight / 20f)) * fontScale
+        // The classic subtitle size rule; see cueFontSizePx.
+        fun sizeOf(style: CueStyle) = cueFontSizePx(style, layoutSpec, viewportHeight, fontScale)
 
         val whole = cue.spans.joinToString("") { it.text }
         if (whole.isEmpty()) return null
@@ -175,19 +153,20 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
                     range,
                 )
             }
-            if (style.outlineWidthPx > 0f) {
+            val outlinePx = cueOutlinePx(style, fontScale, sizePx)
+            if (outlinePx > 0f) {
                 // CoreText's own stroke attributes rather than one context-wide setting, which is
                 // what makes the outline PER SPAN. Its width is a percentage of the font size and
                 // a NEGATIVE value means fill and stroke, which is the same one-draw legibility
                 // trick kCGTextFillStroke used to do for the whole cue at once.
-                val percent = -(style.outlineWidthPx * fontScale / sizePx * 100.0)
+                val percent = -(outlinePx / sizePx * 100.0)
                 text.addAttribute(cfKey(kCTStrokeWidthAttributeName), NSNumber(double = percent), range)
                 val outline = style.outlineColor.toCgColor()!!
                 text.addAttribute(cfKey(kCTStrokeColorAttributeName), objcValue(outline), range)
                 CFRelease(outline)
             }
         }
-        val safeWidth = (viewportWidth * (1f - layoutSpec.marginLeft - layoutSpec.marginRight)).toInt()
+        val safeWidth = cueSafeWidth(layoutSpec, viewportWidth)
         if (safeWidth <= 0) return null
 
         // Every Create-rule object below is released on every exit: a two hour
@@ -208,20 +187,17 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             // An unwrapped cue may be wider than the safe area, and the viewport is where that
             // stops: a bitmap grown past the screen is pixels nobody can see.
             val width = fitted.first.coerceIn(1, maxOf(safeWidth, viewportWidth))
-            val height = fitted.second.coerceAtLeast(1)
+            val height = fitted.second.coerceIn(1, viewportHeight)
 
             // The shadow lands outside the text box, so the bitmap grows for it and the placement
             // below subtracts the origin back off. See CueShadow.
             val shadow = cueShadow(firstStyle, fontScale)
             // The viewer's box: the bitmap grows by the padding on every side so the box is
             // never clipped, and the placement subtracts it back off. Transparent draws nothing.
-            val boxPad = if (firstStyle.backgroundColor shr 24 and 0xFF != 0) {
-                ceil((firstStyle.backgroundPaddingPx * fontScale).toDouble()).toInt()
-            } else {
-                0
-            }
+            val boxPad = cueBoxPadPx(firstStyle, fontScale)
             val bitmapWidth = width + shadow.pad + 2 * boxPad
             val bitmapHeight = height + shadow.pad + 2 * boxPad
+            if (!budget.take(bitmapWidth, bitmapHeight)) return null
 
             val pixels = ByteArray(bitmapWidth * bitmapHeight * 4)
             pixels.usePinned { pinned ->
@@ -409,10 +385,5 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
         val green = ((this ushr 8) and 0xFF) / 255.0
         val blue = (this and 0xFF) / 255.0
         return CGColorCreateGenericRGB(red, green, blue, alpha)
-    }
-
-
-    private companion object {
-        private const val STACK_GAP_PX: Int = 8
     }
 }

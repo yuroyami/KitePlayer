@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.View
 import android.view.WindowManager
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -13,12 +14,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * [KitePlayerView.secure] keeps the video out of a screenshot, and clearing it brings the picture
- * back (#19). The screenshot comes from the instrumentation, which cannot capture a secure layer.
- * What a person sees on the glass is not something a screenshot can check.
+ * What the direct view shows, read from screenshots the instrumentation takes: [KitePlayerView.secure]
+ * keeps the video out of them (#19), and a paused picture comes back on a new surface (#300). The
+ * instrumentation cannot capture a secure layer. What a person sees on the glass is not something
+ * a screenshot can check.
  */
 @RunWith(AndroidJUnit4::class)
-class SecureViewScreenshotTest {
+class ViewScreenshotTest {
 
     private val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation()
 
@@ -44,6 +46,20 @@ class SecureViewScreenshotTest {
 
             instrumentation.runOnMainSync { view.secure = false }
             awaitShare(view, "the picture back in the screenshot after secure is cleared") { it > PICTURE_SHARE }
+        }
+    }
+
+    @Test
+    fun aPausedPictureComesBackWhenTheActivityReturnsFromTheBackground() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            lateinit var view: KitePlayerView
+            scenario.onActivity { view = it.findViewById(R.id.player_view) }
+            awaitShare(view, "the first frame in the screenshot") { it > PICTURE_SHARE }
+
+            // Stopped, the activity's window goes and the view loses its surface; resumed, a new one comes.
+            scenario.moveToState(Lifecycle.State.CREATED)
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            awaitShare(view, "the paused picture back after the activity returns") { it > PICTURE_SHARE }
         }
     }
 

@@ -16,6 +16,7 @@ import android.view.View
 import android.widget.FrameLayout
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.PlaybackStatus
+import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
@@ -252,6 +253,21 @@ public open class KitePlayerView @JvmOverloads constructor(
     /** True while a [secure] change waits for the old surface to go before showing a new one. */
     private var recreatingSurface = false
 
+    /** True from the loss of a surface until the next one arrives. */
+    private var surfaceLost = false
+
+    /**
+     * Draws the paused picture again on a new surface. The frames that made it went to the old
+     * surface, and a paused player makes no next frame, so a precise seek to where it stands
+     * presents it once more. A playing player needs nothing: its next frame arrives on its own.
+     */
+    private fun repaintIfPaused() {
+        val bound = player ?: return
+        if (bound.state.value.status != PlaybackStatus.Paused) return
+        // A closed player refuses; there is then no picture to bring back.
+        runCatching { bound.seekLater(bound.position(), SeekMode.Precise) }
+    }
+
     /**
      * Marks the surface secure: excluded from screenshots, screen recording and non-secure
      * displays, which is what paid content asks for. Off by default. Reads back what this view
@@ -338,6 +354,10 @@ public open class KitePlayerView @JvmOverloads constructor(
                 binding.activeRenderer?.setSurface(holder.surface)
                 feedDisplayRefreshRate()
                 binding.surfaceReady()
+                if (surfaceLost) {
+                    surfaceLost = false
+                    repaintIfPaused()
+                }
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -351,6 +371,7 @@ public open class KitePlayerView @JvmOverloads constructor(
                 // with a time limit, so a stuck draw cannot hang the main thread.
                 binding.activeRenderer?.setSurface(null)
                 binding.surfaceGone()
+                surfaceLost = true
                 if (recreatingSurface) {
                     recreatingSurface = false
                     // On the next frame, so that this traversal has finished with the old surface.

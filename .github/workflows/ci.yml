@@ -615,10 +615,13 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       # sdkmanager can skip a package whose license is not accepted and still exit zero, so the
-      # step checks that the emulator and the image are there. -accel-check fails when KVM is not
-      # usable.
+      # step checks that the emulator and the image are there. The emulator links libpulse, which
+      # the runner image does not carry, and without it the emulator cannot start at all.
+      # -accel-check fails when KVM is not usable.
       - name: Install the emulator and the system image
         run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libpulse0
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           log="$RUNNER_TEMP/sdkmanager.log"
@@ -626,13 +629,23 @@ jobs:
             < /dev/null > "$log" 2>&1 || { cat "$log"; exit 1; }
           image="$ANDROID_HOME/$(echo "$AVD_PACKAGE" | tr ';' '/')"
           [ -x "$ANDROID_HOME/emulator/emulator" ] && [ -d "$image" ] || { cat "$log"; exit 1; }
-          "$ANDROID_HOME/emulator/emulator" -version | head -n 1
+          version="$RUNNER_TEMP/emulator-version.txt"
+          "$ANDROID_HOME/emulator/emulator" -version > "$version" 2>&1 || { cat "$version"; exit 1; }
+          if grep -q "error while loading shared libraries" "$version"; then cat "$version"; exit 1; fi
+          head -n 1 "$version"
           "$ANDROID_HOME/emulator/emulator" -accel-check
 
+      # The emulator looks for the device in ANDROID_AVD_HOME, or in ~/.android/avd when that is
+      # unset, and on the hosted runner avdmanager wrote it somewhere else. Both tools read the
+      # variable, so the step sets it for this step and every later one.
       - name: Create the virtual device
         run: |
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          mkdir -p "$ANDROID_AVD_HOME"
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             --name kite --package "$AVD_PACKAGE" --device pixel_6 --force
+          [ -f "$ANDROID_AVD_HOME/kite.ini" ] || { echo "::error::avdmanager wrote no kite.ini"; exit 1; }
 
       # In the background, so that it boots while Gradle builds. The runner stops it when the job
       # ends.

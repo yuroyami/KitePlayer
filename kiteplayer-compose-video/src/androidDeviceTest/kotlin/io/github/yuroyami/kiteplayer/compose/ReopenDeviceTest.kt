@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.File
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -56,15 +57,15 @@ internal class ReopenDeviceTest {
                 runBlocking {
                     player.attachRenderer(state.renderer)
 
-                    val firstOpenNanos = measure { player.open(MediaItem(clip.absolutePath)) }
+                    val firstOpenNanos = measureWatched("the first open") { player.open(MediaItem(clip.absolutePath)) }
                     player.play()
                     delay(2_000)
                     player.pause()
                     delay(200)
 
                     // Exactly what a host app does for file number two.
-                    val stopNanos = measure { player.stop() }
-                    val reopenNanos = measure { player.open(MediaItem(clip.absolutePath)) }
+                    val stopNanos = measureWatched("the stop") { player.stop() }
+                    val reopenNanos = measureWatched("the second open") { player.open(MediaItem(clip.absolutePath)) }
                     val secondOpenNanos = stopNanos + reopenNanos
 
                     val firstMs = firstOpenNanos / 1_000_000
@@ -103,7 +104,30 @@ internal class ReopenDeviceTest {
         return SystemClock.elapsedRealtimeNanos() - startedAt
     }
 
+    /**
+     * [measure], and when [block] runs past [WATCHDOG_MILLIS], every thread's stack goes to the log
+     * once. The slow second open showed once in three emulator runs, so the evidence has to be
+     * taken from inside the run that is slow.
+     */
+    private inline fun measureWatched(what: String, block: () -> Unit): Long {
+        val done = CountDownLatch(1)
+        Thread {
+            if (!done.await(WATCHDOG_MILLIS, TimeUnit.MILLISECONDS)) {
+                Log.w(TAG, "$what has run for $WATCHDOG_MILLIS ms; the stack of every thread follows")
+                Thread.getAllStackTraces().forEach { (thread, stack) ->
+                    Log.w(TAG, "\"${thread.name}\" ${thread.state}\n" + stack.joinToString("\n") { "    at $it" })
+                }
+            }
+        }.apply { isDaemon = true }.start()
+        try {
+            return measure(block)
+        } finally {
+            done.countDown()
+        }
+    }
+
     private companion object {
         const val TAG = "KiteReopen"
+        const val WATCHDOG_MILLIS = 3_000L
     }
 }

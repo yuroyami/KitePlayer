@@ -779,24 +779,11 @@ jobs:
           ffmpeg_pkg=io.github.yuroyami.kiteplayer.ffmpeg.test
           compose_pkg=io.github.yuroyami.kiteplayer.compose.video.test
           push_clips "$ffmpeg_pkg" testmedia/. && run_tests "$ffmpeg_pkg" -e annotation "$NEEDS_PUSHED_MEDIA"
+          # KiteVideoDeviceTest is a performance proof of the GPU path. This emulator draws with a
+          # software GPU, which dropped 6 to 23 frames a second of the 1080p30 clip (run
+          # 36335742915), so that test runs on a phone or on an emulator with a host GPU.
           if push_clips "$compose_pkg" testmedia/sync1080p30.mp4; then
-            # Diagnostics for the slow second open in ReopenDeviceTest, which showed when that test
-            # was the first player in a fresh process: the Java stacks of the test process 9 and 13
-            # seconds after it starts, which is inside the stall.
-            (
-              for _ in $(seq 1 240); do
-                adb logcat -d -s TestRunner 2>/dev/null | grep -q "started: replacingTheMediaOpensPromptly" && break
-                sleep 1
-              done
-              for at in 9 13; do
-                sleep $((at == 9 ? 9 : 4))
-                pid=$(adb shell pidof "$compose_pkg" | tr -d '\r')
-                [ -n "$pid" ] && adb shell debuggerd -j "$pid" > "$RUNNER_TEMP/test-logs/reopen-stacks-$at.txt" 2>&1
-              done
-            ) &
             run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.ReopenDeviceTest
-            wait
-            run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.KiteVideoDeviceTest
           fi
           adb unroot > /dev/null || true
           exit $status

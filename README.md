@@ -89,6 +89,30 @@ Declare it in the app's `PrivacyInfo.xcprivacy`: the category is
 `NSPrivacyAccessedAPICategorySystemBootTime` and the reason is `35F9.1`, time measured between
 events inside the app.
 
+It also reads file sizes and dates with `stat`, `fstat` and `lstat`, from FFmpeg's file reader, the
+libass chain and KitePlayer's own file readers. Apple lists those under the file timestamp
+category, and App Store Connect refuses the upload (ITMS-91053) until it is declared. Its reasons
+are `C617.1` for files inside the app container, such as caches and the visualiser's song map
+store, and `3B52.1` for files the user picked. Keep only the reasons that apply to your app:
+
+```xml
+<key>NSPrivacyAccessedAPITypes</key>
+<array>
+    <dict>
+        <key>NSPrivacyAccessedAPIType</key>
+        <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+        <key>NSPrivacyAccessedAPITypeReasons</key>
+        <array><string>35F9.1</string></array>
+    </dict>
+    <dict>
+        <key>NSPrivacyAccessedAPIType</key>
+        <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+        <key>NSPrivacyAccessedAPITypeReasons</key>
+        <array><string>C617.1</string><string>3B52.1</string></array>
+    </dict>
+</array>
+```
+
 ## Play something
 
 Three steps: create a player, show it, open something.

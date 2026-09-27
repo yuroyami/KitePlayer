@@ -801,6 +801,12 @@ jobs:
           adb unroot > /dev/null || true
           exit $status
 
+      # The sample app embeds the clip generated above. Its instrumented tests check the view on
+      # a screen, such as the screenshot of a secure view.
+      - name: The sample app's instrumented tests
+        if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
+        run: ./gradlew --stacktrace :kiteplayer-sample-android:connectedDebugAndroidTest
+
       # A test binary runs from its own directory on the device, which is also its TMPDIR. `adb
       # shell` returns the exit code of the command it ran.
       - name: Android native tests (androidNativeX64), on the emulator
@@ -840,15 +846,18 @@ jobs:
           import glob, os, re, xml.etree.ElementTree as ET
           print("### Android emulator: device tests\n")
           print("| Test task | Tests | Failed | Skipped |\n|---|---:|---:|---:|")
-          for module in ("kiteplayer-io", "kiteplayer-output", "kiteplayer-ffmpeg",
-                         "kiteplayer-libass", "kiteplayer-compose-video"):
+          tasks = [(m, "connectedAndroidDeviceTest") for m in (
+              "kiteplayer-io", "kiteplayer-output", "kiteplayer-ffmpeg",
+              "kiteplayer-libass", "kiteplayer-compose-video")]
+          tasks.append(("kiteplayer-sample-android", "connectedDebugAndroidTest"))
+          for module, task in tasks:
               files = glob.glob(f"{module}/build/outputs/androidTest-results/connected/**/*.xml",
                                 recursive=True)
               roots = [ET.parse(f).getroot() for f in files]
               suites = [s for r in roots for s in ([r] if r.tag == "testsuite" else r.iter("testsuite"))]
               total = lambda *keys: sum(int(s.get(k, 0)) for s in suites for k in keys)
               cells = f"{total('tests')} | {total('failures', 'errors')} | {total('skipped')}"
-              print(f"| :{module}:connectedAndroidDeviceTest | {cells if suites else 'no results | |'} |")
+              print(f"| :{module}:{task} | {cells if suites else 'no results | |'} |")
           print("\n### Android emulator: device tests that read clips\n")
           print("| Test APK | Tests | Failed |\n|---|---:|---:|")
           for pkg in ("io.github.yuroyami.kiteplayer.ffmpeg.test",

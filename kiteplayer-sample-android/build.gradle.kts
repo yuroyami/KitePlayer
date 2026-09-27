@@ -37,6 +37,7 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     packaging {
@@ -107,6 +108,11 @@ dependencies {
     // hops threads the way any ordinary app does. Without this the hop throws before open() and
     // the player stays Idle.
     implementation(libs.kotlinx.coroutines.android)
+
+    // The instrumented checks of the view in this app, such as the secure screenshot test.
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
 
 /* The bundled clip: copied from the conformance media, never committed (about 20 MB), never

@@ -6,4 +6,4 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-compose-interop>
-final fun io.github.yuroyami.kiteplayer.compose/KitePlayerSurface(io.github.yuroyami.kiteplayer/KitePlayer?, androidx.compose.ui/Modifier?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.compose/KitePlayerSurface|KitePlayerSurface(io.github.yuroyami.kiteplayer.KitePlayer?;androidx.compose.ui.Modifier?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
+final fun io.github.yuroyami.kiteplayer.compose/KitePlayerSurface(io.github.yuroyami.kiteplayer/KitePlayer?, androidx.compose.ui/Modifier?, kotlin/Boolean, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.compose/KitePlayerSurface|KitePlayerSurface(io.github.yuroyami.kiteplayer.KitePlayer?;androidx.compose.ui.Modifier?;kotlin.Boolean;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]

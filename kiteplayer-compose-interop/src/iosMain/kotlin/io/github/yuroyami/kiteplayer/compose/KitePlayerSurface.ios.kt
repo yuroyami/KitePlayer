@@ -8,11 +8,14 @@ import io.github.yuroyami.kiteplayer.mobile.installMobileRenderer
 import io.github.yuroyami.kiteplayer.view.KitePlayerUIView
 
 @Composable
-internal actual fun platformKitePlayerSurface(player: KitePlayer?, modifier: Modifier) {
+internal actual fun platformKitePlayerSurface(player: KitePlayer?, modifier: Modifier, keepDisplayAwake: Boolean) {
     UIKitView(
         factory = { KitePlayerUIView().apply { installMobileRenderer() } },
         modifier = modifier,
-        update = { view -> view.player = player },
+        update = { view ->
+            view.keepDisplayAwake = keepDisplayAwake
+            view.player = player
+        },
         onRelease = { view -> view.release() },
     )
 }

@@ -109,6 +109,13 @@ public open class KitePlayerAwtView : Canvas() {
             binding.setPlayer(value)
         }
 
+    /**
+     * Accepted for symmetry with the Android and iOS views, and does nothing: the desktop JVM has
+     * no call that keeps the display awake. A desktop application that needs it asks its own
+     * platform, for example with a power assertion on macOS.
+     */
+    public var keepDisplayAwake: Boolean = true
+
     /** Permanently releases this view's player pairing and active renderer. */
     public fun release() {
         player = null

@@ -4,12 +4,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.PlaybackStatus
 
 /**
  * One video composable over both rendering products, switchable while media plays.
@@ -29,6 +31,11 @@ import io.github.yuroyami.kiteplayer.KitePlayer
  * decoder selection already sees it), the Compose canvas one frame after composition. A caller
  * that delays media open until output exists releases it here. It fires again after each path
  * swap, so a one-shot caller must latch it.
+ *
+ * [keepDisplayAwake] keeps the display from dimming and locking while [player] plays video and
+ * this composable is on screen. True by default. A paused or ended player, or one that plays
+ * audio only, lets the display sleep again. The desktop accepts it and does nothing, because the
+ * desktop JVM has no call for it.
  */
 @Composable
 public fun KitePlayerVideo(
@@ -37,6 +44,7 @@ public fun KitePlayerVideo(
     path: KiteRenderPath = KiteRenderPath.Auto,
     onEffectivePath: ((KiteRenderPath) -> Unit)? = null,
     onRendererAttached: ((KitePlayer) -> Unit)? = null,
+    keepDisplayAwake: Boolean = true,
 ) {
     val effective = resolveRenderPath(path)
     val currentOnEffectivePath by rememberUpdatedState(onEffectivePath)
@@ -44,12 +52,18 @@ public fun KitePlayerVideo(
     SideEffect { currentOnEffectivePath?.invoke(effective) }
     key(effective) {
         when (effective) {
-            KiteRenderPath.NativeView -> NativeViewVideo(player, modifier) { currentOnRendererAttached?.invoke(it) }
-            KiteRenderPath.ComposeCanvas -> ComposeCanvasVideo(
-                player = player,
-                modifier = modifier,
-                onRendererAttached = { currentOnRendererAttached?.invoke(it) },
-            )
+            KiteRenderPath.NativeView -> NativeViewVideo(player, modifier, keepDisplayAwake = keepDisplayAwake) {
+                currentOnRendererAttached?.invoke(it)
+            }
+            KiteRenderPath.ComposeCanvas -> {
+                ComposeCanvasVideo(
+                    player = player,
+                    modifier = modifier,
+                    onRendererAttached = { currentOnRendererAttached?.invoke(it) },
+                )
+                // The native view holds the display itself; the canvas has no view to do it.
+                if (keepDisplayAwake) KeepDisplayAwakeWhilePlaying(player)
+            }
             KiteRenderPath.Auto -> error("resolveRenderPath must never return Auto")
         }
     }
@@ -64,9 +78,14 @@ internal fun NativeViewVideo(
     player: KitePlayer?,
     modifier: Modifier,
     surface: (@Composable (KitePlayer?, Modifier) -> Unit)? = null,
+    keepDisplayAwake: Boolean = true,
     onRendererAttached: (KitePlayer) -> Unit,
 ) {
-    if (surface != null) surface(player, modifier) else KitePlayerSurface(player = player, modifier = modifier)
+    if (surface != null) {
+        surface(player, modifier)
+    } else {
+        KitePlayerSurface(player = player, modifier = modifier, keepDisplayAwake = keepDisplayAwake)
+    }
     // Once per player, and again when a path swap composes this afresh, but not on a recomposition:
     // an unkeyed SideEffect here reported an attachment whenever the modifier changed. The view holds
     // the player by now, because the interop view's update block hands it over while the change is
@@ -76,6 +95,17 @@ internal fun NativeViewVideo(
         player?.let { currentOnAttached(it) }
     }
 }
+
+/** Holds the display awake for as long as [player] plays video and this is composed. */
+@Composable
+private fun KeepDisplayAwakeWhilePlaying(player: KitePlayer?) {
+    val snapshot = player?.state?.collectAsState()?.value ?: return
+    if (snapshot.status == PlaybackStatus.Playing && snapshot.videoSize != null) HoldDisplayAwake()
+}
+
+/** Keeps the display awake while this is composed: `keepScreenOn` on Android, the idle timer on iOS. */
+@Composable
+internal expect fun HoldDisplayAwake()
 
 /** Resolves [requested] to the path this platform runs. Never returns [KiteRenderPath.Auto]. */
 internal expect fun resolveRenderPath(requested: KiteRenderPath): KiteRenderPath

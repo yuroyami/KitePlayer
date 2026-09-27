@@ -104,6 +104,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   takes it as a new last constructor parameter. Recompile. `UpmixMode.Surround` plays a mono or
   stereo source from every speaker of a surround device, with the matrix its KDoc gives.
   `UpmixMode.Off`, the default, keeps the sound as it was (#181).
+- `KitePlayerVideo`, `KitePlayerSurface`, `KitePlayerView` and `KitePlayerUIView` gain
+  `keepDisplayAwake`, true by default: while the player plays video and the view is on screen,
+  the display does not dim or lock. Android uses `keepScreenOn` and iOS the idle timer, with one
+  count of holds for the app. `KitePlayerAwtView` accepts it and does nothing. The composables'
+  signatures change, so recompile. Pass false to keep managing the display yourself (#238).
 
 ## [0.0.27] - 2026-09-25
 

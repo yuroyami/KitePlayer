@@ -72,6 +72,7 @@ public class io/github/yuroyami/kiteplayer/view/KitePlayerAwtView : java/awt/Can
 	public fun <init> ()V
 	public fun addNotify ()V
 	public final fun getFailedFrames ()J
+	public final fun getKeepDisplayAwake ()Z
 	public final fun getPlayer ()Lio/github/yuroyami/kiteplayer/KitePlayer;
 	public final fun getPresentedFrames ()J
 	public final fun getRendererFactory ()Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRendererFactory;
@@ -80,6 +81,7 @@ public class io/github/yuroyami/kiteplayer/view/KitePlayerAwtView : java/awt/Can
 	public final fun getVideoRotation ()I
 	public final fun release ()V
 	public fun removeNotify ()V
+	public final fun setKeepDisplayAwake (Z)V
 	public final fun setPlayer (Lio/github/yuroyami/kiteplayer/KitePlayer;)V
 	public final fun setRendererFactory (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRendererFactory;)V
 }

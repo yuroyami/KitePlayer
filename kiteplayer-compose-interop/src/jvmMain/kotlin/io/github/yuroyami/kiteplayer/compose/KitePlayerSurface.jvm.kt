@@ -23,14 +23,17 @@ import io.github.yuroyami.kiteplayer.view.KitePlayerAwtView
  * picture rather than the playback.
  */
 @Composable
-internal actual fun platformKitePlayerSurface(player: KitePlayer?, modifier: Modifier) {
+internal actual fun platformKitePlayerSurface(player: KitePlayer?, modifier: Modifier, keepDisplayAwake: Boolean) {
     val view = androidx.compose.runtime.remember {
         KitePlayerAwtView().also { it.installDesktopRenderer() }
     }
     SwingPanel(
         factory = { view },
         modifier = modifier,
-        update = { it.player = player },
+        update = {
+            it.keepDisplayAwake = keepDisplayAwake
+            it.player = player
+        },
     )
     DisposableEffect(view) {
         // The view holds the renderer, and the renderer holds a canvas the window is about to

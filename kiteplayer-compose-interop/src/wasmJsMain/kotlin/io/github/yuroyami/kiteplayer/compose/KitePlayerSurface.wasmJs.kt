@@ -5,6 +5,6 @@ import androidx.compose.ui.Modifier
 import io.github.yuroyami.kiteplayer.KitePlayer
 
 @Composable
-internal actual fun platformKitePlayerSurface(player: KitePlayer?, modifier: Modifier) {
+internal actual fun platformKitePlayerSurface(player: KitePlayer?, modifier: Modifier, keepDisplayAwake: Boolean) {
     EmptyKitePlayerSurface(modifier)
 }

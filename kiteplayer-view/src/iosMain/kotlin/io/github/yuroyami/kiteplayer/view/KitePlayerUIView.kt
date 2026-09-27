@@ -11,6 +11,10 @@ import kotlin.time.Duration
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.KitePlayer
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.cinterop.readValue
 import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGRectZero
@@ -122,7 +126,40 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         set(value) {
             field = value
             binding.setPlayer(value)
+            watchPlayer()
         }
+
+    /**
+     * Keeps the display from dimming and locking while the player plays video and this view is in
+     * a window, through the app's idle timer. True by default. A paused or ended player, or one
+     * that plays audio only, lets the display sleep again. Every view and composable of this
+     * library shares one count of holds, so one of them letting go does not wake the timer while
+     * another still plays.
+     */
+    public var keepDisplayAwake: Boolean = true
+        set(value) {
+            field = value
+            displayAwake.enabled = value
+        }
+
+    private val displayAwake = DisplayAwakeHolder(hold = IdleTimerHolds::acquire, release = IdleTimerHolds::release)
+
+    /** Follows the player's state for the display hold, only while this view is in a window and paired. */
+    private var stateWatch: Job? = null
+
+    private fun watchPlayer() {
+        stateWatch?.cancel()
+        stateWatch = null
+        val watched = player
+        if (watched == null || window == null) {
+            displayAwake.playing = false
+            return
+        }
+        displayAwake.playing = playsVideo(watched.state.value)
+        stateWatch = CoroutineScope(Dispatchers.Main).launch {
+            watched.state.collect { displayAwake.playing = playsVideo(it) }
+        }
+    }
 
     /** What VoiceOver calls this view. English by default; pass a translated one. */
     public var accessibilityVideoLabel: String = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
@@ -242,5 +279,7 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         } else {
             binding.surfaceGone()
         }
+        displayAwake.onScreen = window != null
+        watchPlayer()
     }
 }

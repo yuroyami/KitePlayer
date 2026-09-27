@@ -22,14 +22,18 @@ import io.github.yuroyami.kiteplayer.KitePlayer
  * The player is never owned here: opening media, playing, seeking and closing stay the
  * caller's. Passing null detaches, and this Composable leaving composition only stops the
  * picture, never the playback.
+ *
+ * [keepDisplayAwake] keeps the display from dimming and locking while the player plays video and
+ * this surface is on screen, as the platform view's own property of that name does. True by
+ * default; the desktop view accepts it and does nothing.
  */
 @Composable
-public fun KitePlayerSurface(player: KitePlayer?, modifier: Modifier = Modifier) {
-    platformKitePlayerSurface(player, modifier)
+public fun KitePlayerSurface(player: KitePlayer?, modifier: Modifier = Modifier, keepDisplayAwake: Boolean = true) {
+    platformKitePlayerSurface(player, modifier, keepDisplayAwake)
 }
 
 @Composable
-internal expect fun platformKitePlayerSurface(player: KitePlayer?, modifier: Modifier)
+internal expect fun platformKitePlayerSurface(player: KitePlayer?, modifier: Modifier, keepDisplayAwake: Boolean)
 
 /** Keeps sizing and modifier semantics intact on an explicitly unavailable placeholder target. */
 @Composable

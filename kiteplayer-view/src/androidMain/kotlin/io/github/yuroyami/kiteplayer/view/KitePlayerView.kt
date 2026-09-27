@@ -5,6 +5,7 @@ import android.app.PictureInPictureParams
 import android.content.Context
 import android.graphics.Rect
 import android.os.Build
+import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.util.Rational
@@ -18,6 +19,11 @@ import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.roundToInt
 
 /**
@@ -151,7 +157,50 @@ public open class KitePlayerView @JvmOverloads constructor(
             field = value
             binding.setPlayer(value)
             updateAccessibilityState()
+            watchPlayer()
         }
+
+    /**
+     * Keeps the display from dimming and locking while the player plays video and this view is on
+     * screen, through [View.setKeepScreenOn]. True by default. A paused or ended player, or one
+     * that plays audio only, lets the display sleep again.
+     */
+    public var keepDisplayAwake: Boolean = true
+        set(value) {
+            field = value
+            displayAwake.enabled = value
+        }
+
+    private val displayAwake = DisplayAwakeHolder(hold = { keepScreenOn = true }, release = { keepScreenOn = false })
+
+    /** Follows the player's state for the display hold, only while this view is attached and paired. */
+    private var stateWatch: Job? = null
+
+    private fun watchPlayer() {
+        stateWatch?.cancel()
+        stateWatch = null
+        val watched = player
+        if (watched == null || !isAttachedToWindow) {
+            displayAwake.playing = false
+            return
+        }
+        displayAwake.playing = playsVideo(watched.state.value)
+        stateWatch = CoroutineScope(MainLooper).launch {
+            watched.state.collect { displayAwake.playing = playsVideo(it) }
+        }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        displayAwake.onScreen = true
+        watchPlayer()
+    }
+
+    override fun onDetachedFromWindow() {
+        displayAwake.onScreen = false
+        watchPlayer()
+        super.onDetachedFromWindow()
+    }
 
     /** What a screen reader calls this view. English by default; pass a translated one. */
     public var accessibilityVideoLabel: String = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
@@ -437,4 +486,16 @@ internal fun videoBounds(
         width = width,
         height = height,
     )
+}
+
+/**
+ * The main thread as a coroutine dispatcher, for the view's state watch. Written here rather than
+ * taken from kotlinx-coroutines-android, which no module of this library depends on.
+ */
+private object MainLooper : CoroutineDispatcher() {
+    private val handler = Handler(Looper.getMainLooper())
+
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        handler.post(block)
+    }
 }

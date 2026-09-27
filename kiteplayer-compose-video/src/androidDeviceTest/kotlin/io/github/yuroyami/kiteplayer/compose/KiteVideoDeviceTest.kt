@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.yuroyami.kiteplayer.NeedsPushedMedia
 import io.github.yuroyami.kiteplayer.PlaybackStats
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.HwdecKind
@@ -36,6 +37,7 @@ import kotlin.test.assertTrue
  * latter lets a debuggable test APK receive the fixture through `run-as` without changing ADB's
  * privilege level, then drive the installed instrumentation directly with `am instrument`.
  */
+@NeedsPushedMedia
 internal class KiteVideoDeviceTest {
 
     @Test

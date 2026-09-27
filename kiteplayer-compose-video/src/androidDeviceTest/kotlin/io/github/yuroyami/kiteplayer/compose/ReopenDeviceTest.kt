@@ -6,6 +6,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.NeedsPushedMedia
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.mobile.mobileBackends
@@ -26,6 +27,7 @@ import kotlin.test.assertTrue
  * reports Paused with a duration, so the failure is invisible to a status check and shows up only
  * as wall-clock time.
  */
+@NeedsPushedMedia
 internal class ReopenDeviceTest {
 
     @Test

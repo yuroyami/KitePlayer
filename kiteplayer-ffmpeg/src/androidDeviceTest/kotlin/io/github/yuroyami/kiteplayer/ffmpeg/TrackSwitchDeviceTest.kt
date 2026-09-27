@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.Backends
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.NeedsPushedMedia
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.TrackChange
@@ -15,6 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /** Scratch repro: full player on a real device, switch audio and subtitles on multitrack.mkv. */
+@NeedsPushedMedia
 internal class TrackSwitchDeviceTest {
 
     private suspend fun step(player: KitePlayer, name: String, act: suspend () -> TrackChange) {

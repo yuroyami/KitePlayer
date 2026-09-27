@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import android.util.Log
+import io.github.yuroyami.kiteplayer.NeedsPushedMedia
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.test.Test
@@ -11,6 +12,7 @@ import kotlin.test.assertTrue
  * clips live differs. Rows are logged to logcat under the MATRIX tag so the run leaves a
  * transcript to quote.
  */
+@NeedsPushedMedia
 class FormatMatrixDeviceTest {
 
     @Test

@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.Backends
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.NeedsPushedMedia
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.TrackChange
 import io.github.yuroyami.kiteplayer.TrackKind
@@ -26,6 +27,7 @@ import kotlin.test.assertTrue
  * 660 Hz. Tapping the PCM the engine renders into the sink and counting zero crossings tells
  * WHICH stream is actually being heard, which no snapshot assertion can.
  */
+@NeedsPushedMedia
 internal class TrackSwitchAudibleDeviceTest {
 
     /** Zero crossings and frames rendered since the last [reset], channel 0 only. */

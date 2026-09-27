@@ -83,3 +83,37 @@ internal fun decoderSelection(
         DecoderSelection(null, mayFallback = false, requiresHardware = false)
     }
 }
+
+/**
+ * The codecs VideoToolbox decodes, for the Apple native targets and for the desktop JVM on macOS.
+ * Both link an FFmpeg that carries the same VideoToolbox hwaccels.
+ *
+ * AV1 sits with h264 and hevc because the hwaccel is REAL in the build, not because the codec is
+ * fashionable: `ff_av1_videotoolbox_hwaccel` is a defined symbol in the shipped `libavcodec.a`, so
+ * FFmpeg's `av1` decoder can attach it. Leaving av1 out of this list meant the route was never asked
+ * for, so the decoder opened with no hwaccel at all, and `av1dec.c` is a hwaccel shell that answers
+ * ENOSYS (-78) in that state.
+ *
+ * The AV1 route names that decoder, because it is not the one FFmpeg finds first. The build also
+ * carries dav1d, which comes first for the codec and cannot take the attach, so an attach by codec
+ * decoded in software while the status said VideoToolbox (#95). A device with no AV1 silicon
+ * (anything before A17 Pro / M3) refuses the attach at the first packet, and the measured fallback
+ * then decodes with dav1d.
+ *
+ * The measured runs behind this comment were on an M2, which has no AV1 silicon, so they prove the
+ * refusal-and-fallback path and NOT that the attach succeeds. A named simulator carries a phone's
+ * name and its host's hardware; the two must never be read as one. Positive proof needs an
+ * A17 Pro / M3 or newer machine and is still owed.
+ *
+ * vp9 stays out on purpose. The hwaccel symbol exists, but no Apple silicon carries a VP9 decode
+ * block, so every attach would fail and pay for the attempt; FFmpeg's native VP9 decoder is real
+ * software and already handles those files. prores and the mpeg-family hwaccels are the same shape
+ * as AV1 and are eligible in principle, but no fixture exercises them yet, and this project does
+ * not advertise a route it has never measured.
+ */
+internal fun String.videoToolboxRoute(): HardwareRoute? = when (trim().lowercase()) {
+    "h264", "avc1", "hevc", "h265", "hev1" ->
+        HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox)
+    "av1" -> HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox, decoder = DecoderId("av1"))
+    else -> null
+}

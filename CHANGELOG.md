@@ -126,6 +126,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   reads. It defaults to `pixelFormat`, so a custom frame needs no change. A VideoToolbox frame
   reports the format of its downloaded copy there, so `captureFrame` and `encode` now work while
   VideoToolbox decodes, and such a capture holds NV12 or P010 planes (#299).
+- On macOS the desktop JVM now decodes H.264 and HEVC with VideoToolbox under `HwdecPolicy.Auto`,
+  as the Apple native targets do, and AV1 on a Mac with AV1 hardware. `PlaybackStats.hardwareDecode`
+  names it. Such a frame reports `PlayerPixelFormat.Opaque` with a `CoreVideoPixelBuffer` surface,
+  and the desktop renderers, `captureFrame` and `encode` read it through its downloaded copy. A
+  custom renderer that reads planes itself uses `planeFormat`, or passes `HwdecPolicy.Off` to keep
+  software frames (#237).
 
 ## [0.0.27] - 2026-09-25
 

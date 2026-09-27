@@ -1,11 +1,13 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.io.ofFile
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import javax.sound.sampled.AudioSystem
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -62,9 +64,18 @@ class DesktopPlaybackTest {
                 "no video track was reported: ${snapshot.tracks.all}",
             )
             assertNotNull(snapshot.tracks.selectedAudio, "no audio track was selected")
+
+            // On macOS the default desktop stack decodes this H.264 clip with VideoToolbox (#237).
+            if (System.getProperty("os.name").orEmpty().startsWith("Mac")) {
+                val decode = withTimeoutOrNull(5.seconds) {
+                    player.stats.first { it.hardwareDecode != HwdecStatus.Software }.hardwareDecode
+                } ?: player.stats.value.hardwareDecode
+                assertEquals(HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox), decode)
+            }
             println(
                 "desktop played to ${player.progress.value.position}, " +
-                    "tracks=${snapshot.tracks.all.size}, size=${snapshot.videoSize}",
+                    "tracks=${snapshot.tracks.all.size}, size=${snapshot.videoSize}, " +
+                    "decode=${player.stats.value.hardwareDecode}",
             )
         } finally {
             player.closeAndAwait()

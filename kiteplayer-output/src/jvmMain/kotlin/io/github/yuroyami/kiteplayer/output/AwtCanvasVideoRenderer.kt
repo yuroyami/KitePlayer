@@ -154,7 +154,7 @@ public class AwtCanvasVideoRenderer(
 
     override fun supports(format: PlayerPixelFormat): Boolean = true
 
-    /** No hardware path: the desktop backend decodes in software and the painter converts on the CPU. */
+    /** No hardware surface: the painter converts every frame on the CPU, a hardware frame through its downloaded copy. */
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 
     override fun vsyncIntervalNanos(): Long? = try {

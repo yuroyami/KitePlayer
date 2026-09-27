@@ -86,6 +86,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `XmlMini` and `XmlElement` in `kiteplayer-network` are internal. They are the DASH parser's own
   reader and were never meant as a general XML API. `XmlException` stays public, because
   `DashManifestParser.parse` throws it for a malformed manifest (#274).
+- An external subtitle at an http or https address now gets the item's `headers` only when the
+  address has the same scheme, host and port as the item's `uri`. A subtitle on another server
+  gets no item header. To send headers to it, give its `SubtitleSource` its own `io`.
 
 ## [0.0.27] - 2026-09-25
 

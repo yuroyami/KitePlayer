@@ -282,7 +282,7 @@ internal class PlaybackCore(
         item.externalSubtitles.mapIndexedNotNull { index, sourceFile ->
             // TrackId's own convention: external ids are negative, printed external1, external2...
             val id = TrackId(-(index + 1))
-            when (val parsed = parseExternalSubtitle(sourceFile, id, item.headers)) {
+            when (val parsed = parseExternalSubtitle(sourceFile, id, item)) {
                 is ExternalSubtitleParse.Loaded -> parsed.track
                 is ExternalSubtitleParse.Failed -> {
                     warn(PlaybackWarning.SubtitleSourceUnreadable(sourceFile.uri, parsed.reason))
@@ -312,13 +312,12 @@ internal class PlaybackCore(
      * The bytes of one external subtitle file, from whichever door it has.
      *
      * The caller's own reader first, then the network resolver for an http or https address, then
-     * the local path. The network road carries the PARENT item's headers, which is what makes a
-     * subtitle beside a signed URL load at all: the two are almost always served by the same host
-     * under the same authorization.
+     * the local path. The network road carries the [parent] item's headers only to the item's own
+     * scheme, host and port, where a subtitle beside a signed URL is almost always served.
      */
     private suspend fun readSubtitleBytes(
         source: SubtitleSource,
-        parentHeaders: Map<String, String>,
+        parent: MediaItem?,
     ): SubtitleBytes {
         val factory = source.io
         if (factory != null) {
@@ -326,8 +325,9 @@ internal class PlaybackCore(
                 .getOrElse { SubtitleBytes.Refused("its reader failed${causeDetail(it)}") }
         }
         if (source.uri.startsWith("http://", true) || source.uri.startsWith("https://", true)) {
+            val headers = if (parent != null && sameHttpOrigin(source.uri, parent.uri)) parent.headers else emptyMap()
             val reader = runCatching {
-                resolveMediaIo(MediaItem(source.uri, headers = parentHeaders), config.network)
+                resolveMediaIo(MediaItem(source.uri, headers = headers), config.network)
             }.getOrElse { return SubtitleBytes.Refused("the address could not be reached${causeDetail(it)}") }
                 ?: return SubtitleBytes.Refused(
                     "nothing here can fetch an address; add the network module or give the source its own reader",
@@ -406,13 +406,13 @@ internal class PlaybackCore(
     private suspend fun parseExternalSubtitle(
         sourceFile: SubtitleSource,
         id: TrackId,
-        parentHeaders: Map<String, String>,
+        parent: MediaItem?,
     ): ExternalSubtitleParse {
         val parser = backend.subtitleFileParser()
             ?: return ExternalSubtitleParse.Failed(
                 "this backend supplies no subtitle file parser, so external files cannot load",
             )
-        val bytes = when (val read = readSubtitleBytes(sourceFile, parentHeaders)) {
+        val bytes = when (val read = readSubtitleBytes(sourceFile, parent)) {
             is SubtitleBytes.Read -> read.bytes
             is SubtitleBytes.Refused -> return ExternalSubtitleParse.Failed(read.reason)
         }
@@ -480,7 +480,7 @@ internal class PlaybackCore(
         }
         externalSubtitleIdsMinted++
         val id = TrackId(-externalSubtitleIdsMinted)
-        when (val parsed = parseExternalSubtitle(command.source, id, media?.headers.orEmpty())) {
+        when (val parsed = parseExternalSubtitle(command.source, id, media)) {
             is ExternalSubtitleParse.Failed -> command.reply.completeExceptionally(
                 IllegalArgumentException(parsed.reason),
             )

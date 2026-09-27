@@ -12,7 +12,8 @@ public data class MediaItem(
     val uri: String,
     /**
      * Request headers, for the http and https protocols. Passed to a configured or automatic
-     * [MediaIoResolver] when it supplies the transport.
+     * [MediaIoResolver] when it supplies the transport. An external subtitle gets them only when it
+     * has the same scheme, host and port as [uri]; see [SubtitleSource].
      *
      * Respelled by the FFmpeg backend as the http protocol's own `headers` option, one
      * CRLF-joined block, through the same pre-open funnel [openOptions] uses. A `headers` key in
@@ -259,8 +260,11 @@ public fun interface MediaIoResolver {
  * read or parsed warns typed and is skipped rather than failing the open.
  *
  * Where the bytes come from, in order: [io] when set; then, for an http or https [uri], the
- * network resolver, carrying the parent item's own headers so a signed URL works; then [uri] as
- * a local path.
+ * network resolver; then [uri] as a local path.
+ *
+ * The network resolver gets the parent item's [MediaItem.headers] only when [uri] has the same
+ * scheme, host and port as the item's own URI, so a subtitle beside a signed URL works. A subtitle
+ * on another server gets no item header. To send headers to it, give it its own [io].
  */
 public data class SubtitleSource(
     val uri: String,

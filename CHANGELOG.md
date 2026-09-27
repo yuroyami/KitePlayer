@@ -89,6 +89,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - An external subtitle at an http or https address now gets the item's `headers` only when the
   address has the same scheme, host and port as the item's `uri`. A subtitle on another server
   gets no item header. To send headers to it, give its `SubtitleSource` its own `io`.
+- The DASH door now applies `DashUrlPolicy` to every redirect before it follows it, and a request
+  follows at most five redirects. Under `DashUrlPolicy.SameOrigin`, a redirect to another scheme,
+  host or port fails with `DashUrlRefusedException`, and in a browser every redirect fails. Use
+  `DashUrlPolicy.Default` for a CDN that redirects to another host.
 
 ## [0.0.27] - 2026-09-25
 

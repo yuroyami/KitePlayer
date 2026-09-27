@@ -5,6 +5,8 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.network.HttpReaderPolicy
 import io.github.yuroyami.kiteplayer.network.KtorMediaIo
 import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
+import io.github.yuroyami.kiteplayer.network.RedirectRule
+import io.github.yuroyami.kiteplayer.network.originOf
 import io.github.yuroyami.kiteplayer.network.shownUri
 import io.github.yuroyami.kiteplayer.network.xml.XmlMini
 import io.ktor.client.HttpClient
@@ -12,6 +14,7 @@ import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
 import io.ktor.http.contentLength
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
@@ -37,6 +40,10 @@ import kotlin.time.Duration
  * Forward-only and unsized on purpose: a segment plan's total byte size is unknown until the
  * last fetch, and lying about seekability would let the demuxer walk into a wall. Seeking a
  * DASH presentation properly means segment arithmetic at the PLAYER level; this tier plays.
+ *
+ * [fetch] is the caller's own, so [DashUrlPolicy] does not reach it: what it requests and which
+ * redirects it follows are the caller's to judge. [Dash.mediaItemFor] builds one that applies the
+ * policy.
  */
 public class DashMediaIo(
     plan: DashSegmentPlan,
@@ -147,7 +154,8 @@ private suspend fun readBounded(response: HttpResponse, limit: Long, what: Strin
 /**
  * One GET of [url], limited by [reader]: the response headers must arrive within its connect
  * timeout and each later chunk within its read timeout. The door applies them itself, because the
- * browser engine has no limit of its own and a silent server held the call for ever (#242).
+ * browser engine has no limit of its own and a silent server held the call for ever (#242). The
+ * connect timeout covers every redirect of the request, and [redirects] checks each one.
  */
 private suspend fun fetchBounded(
     client: HttpClient,
@@ -155,15 +163,19 @@ private suspend fun fetchBounded(
     limit: Long,
     what: String,
     reader: HttpReaderPolicy,
+    redirects: RedirectRule,
     refusal: (HttpStatusCode) -> String,
 ): ByteArray = coroutineScope {
     val answered = CompletableDeferred<Unit>()
     val body = async {
         try {
-            client.prepareGet(url).execute { response ->
-                answered.complete(Unit)
-                require(response.status.isSuccess()) { refusal(response.status) }
-                readBounded(response, limit, what, reader.readTimeout)
+            redirects.guard(client) { mark ->
+                client.prepareGet(url) { mark() }.execute { response ->
+                    answered.complete(Unit)
+                    redirects.refuseHidden(response, shownUri(url))
+                    require(response.status.isSuccess()) { refusal(response.status) }
+                    readBounded(response, limit, what, reader.readTimeout)
+                }
             }
         } catch (failure: Throwable) {
             answered.completeExceptionally(failure)
@@ -177,6 +189,42 @@ private suspend fun fetchBounded(
     body.await()
 }
 
+/**
+ * [policy] applied to every redirect of a request that the DASH door makes for the manifest at
+ * [manifestUrl]: its scheme, its downgrade rule and, for [DashUrlPolicy.sameOriginOnly], the
+ * scheme, host and port of [manifestUrl] itself.
+ */
+internal class DashRedirectRule(private val policy: DashUrlPolicy, manifestUrl: String) :
+    RedirectRule(refusesHiddenRedirects = policy.sameOriginOnly) {
+
+    private val manifest = Url(manifestUrl)
+
+    override fun check(from: Url, to: Url) {
+        val shown = shownUri(from.toString())
+        val scheme = to.protocol.name
+        if (scheme !in policy.allowedSchemes) {
+            throw DashUrlRefusedException(
+                "$shown redirects to scheme '$scheme', which is not in ${policy.allowedSchemes.sorted()}",
+            )
+        }
+        if (!policy.allowSchemeDowngrade && manifest.protocol.name == "https" && scheme != "https") {
+            throw DashUrlRefusedException(
+                "$shown, from an https manifest, redirects over '$scheme'; set " +
+                    "DashUrlPolicy(allowSchemeDowngrade = true) if that is genuinely intended",
+            )
+        }
+        if (policy.sameOriginOnly && originOf(to) != originOf(manifest)) {
+            throw DashUrlRefusedException(
+                "$shown redirects to ${originOf(to)}, and this policy is sameOriginOnly for ${originOf(manifest)}",
+            )
+        }
+    }
+
+    override fun refusal(reason: String): Exception = DashUrlRefusedException(reason)
+
+    override fun isRefusal(failure: Throwable): Boolean = failure is DashUrlRefusedException
+}
+
 /** Opens DASH presentations: fetches a manifest, and builds a playable item from it. */
 public object Dash {
 
@@ -187,6 +235,9 @@ public object Dash {
      *
      * [readerPolicy] limits the wait: a server that sends no headers within its connect timeout,
      * or no bytes within its read timeout, fails the call with [KtorMediaIoException].
+     *
+     * [policy] judges the manifest's own redirects too, against [mpdUrl], and refuses one with
+     * [DashUrlRefusedException] before it is requested. A request follows at most five redirects.
      *
      * A manifest within [maxManifestBytes] is never refused for its length. One with more than
      * 262,144 elements or 1,048,576 attributes, or with an element that carries more than 128
@@ -207,7 +258,8 @@ public object Dash {
             // player will not accept is also a URL it never sends the caller's cookies to.
             DashManifestParser.requireAllowedScheme(mpdUrl, policy)
             val shown = shownUri(mpdUrl)
-            val body = fetchBounded(client, mpdUrl, maxManifestBytes, "the manifest at $shown", readerPolicy) { status ->
+            val redirects = DashRedirectRule(policy, mpdUrl)
+            val body = fetchBounded(client, mpdUrl, maxManifestBytes, "the manifest at $shown", readerPolicy, redirects) { status ->
                 "cannot fetch $shown: $status"
             }
             // UTF-8 never decodes to more UTF-16 code units than it had bytes, so a length limit
@@ -225,6 +277,9 @@ public object Dash {
      * stream. A representation with no segment addressing is one file, and it is read through
      * [KtorMediaIo] with range requests, so it is seekable and never held in memory whole.
      *
+     * [policy] judges every redirect of every request the item makes, as in [manifest]. A segment
+     * or file behind a refused redirect fails its read with [DashUrlRefusedException].
+     *
      * Throws [DashUnsupportedException] for a live manifest, for more than one Period, and for
      * audio in an adaptation set of its own, because this tier would play that video silent.
      */
@@ -238,6 +293,7 @@ public object Dash {
         readerPolicy: HttpReaderPolicy = HttpReaderPolicy(),
     ): MediaItem {
         val manifest = manifest(mpdUrl, client, policy, maxManifestBytes, readerPolicy)
+        val redirects = DashRedirectRule(policy, mpdUrl)
         // Refused, not truncated: this tier byte-concatenates ONE period's
         // segments, and silently playing period one of an ad-stitched presentation looked like
         // a player that stops after the pre-roll. Period joining is the adaptive engine's next
@@ -272,7 +328,7 @@ public object Dash {
             // BaseURL names the media, and then there is nothing to play.
             val file = representation.baseUrl
             require(file != mpdUrl) { "${shownUri(mpdUrl)} names no media for representation ${representation.id}" }
-            return MediaItem(uri = mpdUrl, io = { KtorMediaIo.open(file, client, policy = readerPolicy) })
+            return MediaItem(uri = mpdUrl, io = { KtorMediaIo.open(file, client, emptyMap(), readerPolicy, redirects) })
         }
         val plan = DashManifestParser.segmentPlan(manifest, period, representation, policy)
         // A factory, so every open of this item gets its own segment stream. One live reader here
@@ -284,7 +340,7 @@ public object Dash {
             io = {
                 DashMediaIo(plan) { url ->
                     val shown = shownUri(url)
-                    fetchBounded(client, url, maxSegmentBytes, "the segment at $shown", readerPolicy) { status ->
+                    fetchBounded(client, url, maxSegmentBytes, "the segment at $shown", readerPolicy, redirects) { status ->
                         "segment fetch failed: $shown is $status"
                     }
                 }

@@ -68,6 +68,8 @@ public class KtorMediaIo private constructor(
     firstJob: Job,
     private val scope: CoroutineScope,
     private val policy: HttpReaderPolicy,
+    /** Where a redirect of any request of this reader may lead, or null for Ktor's own rules. */
+    private val redirects: RedirectRule?,
 ) : MediaIo {
 
     // What messages name instead of the URI, whose query may carry a signature (#241).
@@ -146,6 +148,7 @@ public class KtorMediaIo private constructor(
      */
     private fun canResumeAfter(failure: Throwable): Boolean {
         if (failure is KtorMediaIoException && !failure.retryable) return false
+        if (redirects?.isRefusal(failure) == true) return false
         return seekable || position == 0L
     }
 
@@ -177,59 +180,63 @@ public class KtorMediaIo private constructor(
         val answered = CompletableDeferred<Unit>()
         bodyJob = scope.launch {
             try {
-                client.prepareGet(uri) {
-                    requestHeaders.forEach { (key, value) -> header(key, value) }
-                    // A rewind to zero asks for a range too, so its answer is checked like any other.
-                    header(HttpHeaders.Range, "bytes=$target-")
-                    // A server that honours this answers with the whole file, not a range, when
-                    // the file changed since the first response.
-                    entityTag?.let { header(HttpHeaders.IfRange, it) }
-                }.execute { response ->
-                    val ok = response.status == HttpStatusCode.PartialContent ||
-                        (target == 0L && response.status == HttpStatusCode.OK)
-                    if (!ok) {
-                        val changed = if (entityTag != null && response.status == HttpStatusCode.OK) {
-                            ", so the file changed since it was opened"
-                        } else {
-                            ""
-                        }
-                        throw KtorMediaIoException(
-                            "server answered ${response.status} to a ranged read at byte $target of $shown$changed",
-                            // A server error may pass. A refusal, or no ranges at all, will not.
-                            retryable = response.status.value >= 500,
-                        )
-                    }
-                    // The bytes must start where the reader stands, in the same file, or they would
-                    // splice in the wrong place (#283). RFC 9110, 14.4: Content-Range names the
-                    // range the body holds, so a 206 without a valid one proves nothing.
-                    val total = if (response.status == HttpStatusCode.PartialContent) {
-                        val range = parseContentRange(response.headers[HttpHeaders.ContentRange])
-                            ?: throw KtorMediaIoException(
-                                "server answered a ranged read at byte $target of $shown with no valid Content-Range",
-                            )
-                        if (range.first != target) {
+                guarded(client, redirects) { mark ->
+                    client.prepareGet(uri) {
+                        mark()
+                        requestHeaders.forEach { (key, value) -> header(key, value) }
+                        // A rewind to zero asks for a range too, so its answer is checked like any other.
+                        header(HttpHeaders.Range, "bytes=$target-")
+                        // A server that honours this answers with the whole file, not a range, when
+                        // the file changed since the first response.
+                        entityTag?.let { header(HttpHeaders.IfRange, it) }
+                    }.execute { response ->
+                        redirects?.refuseHidden(response, shown)
+                        val ok = response.status == HttpStatusCode.PartialContent ||
+                            (target == 0L && response.status == HttpStatusCode.OK)
+                        if (!ok) {
+                            val changed = if (entityTag != null && response.status == HttpStatusCode.OK) {
+                                ", so the file changed since it was opened"
+                            } else {
+                                ""
+                            }
                             throw KtorMediaIoException(
-                                "server answered from byte ${range.first} to a ranged read at byte $target of $shown",
+                                "server answered ${response.status} to a ranged read at byte $target of $shown$changed",
+                                // A server error may pass. A refusal, or no ranges at all, will not.
+                                retryable = response.status.value >= 500,
                             )
                         }
-                        range.complete
-                    } else {
-                        response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                        // The bytes must start where the reader stands, in the same file, or they would
+                        // splice in the wrong place (#283). RFC 9110, 14.4: Content-Range names the
+                        // range the body holds, so a 206 without a valid one proves nothing.
+                        val total = if (response.status == HttpStatusCode.PartialContent) {
+                            val range = parseContentRange(response.headers[HttpHeaders.ContentRange])
+                                ?: throw KtorMediaIoException(
+                                    "server answered a ranged read at byte $target of $shown with no valid Content-Range",
+                                )
+                            if (range.first != target) {
+                                throw KtorMediaIoException(
+                                    "server answered from byte ${range.first} to a ranged read at byte $target of $shown",
+                                )
+                            }
+                            range.complete
+                        } else {
+                            response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                        }
+                        if (size != null && total != size) {
+                            throw KtorMediaIoException(
+                                "the file at $shown changed since it was opened: it had $size bytes and has ${total ?: "an unknown size"}",
+                            )
+                        }
+                        val tag = response.headers[HttpHeaders.ETag]
+                        if (entityTag != null && tag != null && tag != entityTag) {
+                            throw KtorMediaIoException(
+                                "the file at $shown changed since it was opened: its entity tag was $entityTag and is $tag",
+                            )
+                        }
+                        answered.complete(Unit)
+                        response.bodyAsChannel().copyTo(pipe)
+                        pipe.close()
                     }
-                    if (size != null && total != size) {
-                        throw KtorMediaIoException(
-                            "the file at $shown changed since it was opened: it had $size bytes and has ${total ?: "an unknown size"}",
-                        )
-                    }
-                    val tag = response.headers[HttpHeaders.ETag]
-                    if (entityTag != null && tag != null && tag != entityTag) {
-                        throw KtorMediaIoException(
-                            "the file at $shown changed since it was opened: its entity tag was $entityTag and is $tag",
-                        )
-                    }
-                    answered.complete(Unit)
-                    response.bodyAsChannel().copyTo(pipe)
-                    pipe.close()
                 }
             } catch (failure: Throwable) {
                 answered.completeExceptionally(failure)
@@ -278,6 +285,15 @@ public class KtorMediaIo private constructor(
             client: HttpClient? = null,
             headers: Map<String, String> = emptyMap(),
             policy: HttpReaderPolicy = HttpReaderPolicy(),
+        ): KtorMediaIo = open(uri, client, headers, policy, redirects = null)
+
+        /** [open], with every redirect of every request this reader makes checked by [redirects]. */
+        internal suspend fun open(
+            uri: String,
+            client: HttpClient?,
+            headers: Map<String, String>,
+            policy: HttpReaderPolicy,
+            redirects: RedirectRule?,
         ): KtorMediaIo {
             val shown = shownUri(uri)
             val ownsClient = client == null
@@ -287,33 +303,37 @@ public class KtorMediaIo private constructor(
             val pipe = ByteChannel(autoFlush = true)
             val job = scope.launch {
                 try {
-                    http.prepareGet(uri) {
-                        headers.forEach { (key, value) -> header(key, value) }
-                        header(HttpHeaders.Range, "bytes=0-")
-                    }.execute { response ->
-                        // A weak tag cannot make a range request conditional, so only a strong one is kept.
-                        val tag = response.headers[HttpHeaders.ETag]?.takeUnless { it.startsWith("W/") }
-                        when (response.status) {
-                            HttpStatusCode.PartialContent -> {
-                                // Content-Range: bytes 0-last/total, total possibly "*". A range that
-                                // does not start at zero would be read as the start of the file (#283).
-                                val range = parseContentRange(response.headers[HttpHeaders.ContentRange])
-                                if (range == null || range.first != 0L) {
-                                    throw KtorMediaIoException(
-                                        "cannot open $shown: it answered the read from byte 0 with the range " +
-                                            "${response.headers[HttpHeaders.ContentRange]}",
-                                    )
+                    guarded(http, redirects) { mark ->
+                        http.prepareGet(uri) {
+                            mark()
+                            headers.forEach { (key, value) -> header(key, value) }
+                            header(HttpHeaders.Range, "bytes=0-")
+                        }.execute { response ->
+                            redirects?.refuseHidden(response, shown)
+                            // A weak tag cannot make a range request conditional, so only a strong one is kept.
+                            val tag = response.headers[HttpHeaders.ETag]?.takeUnless { it.startsWith("W/") }
+                            when (response.status) {
+                                HttpStatusCode.PartialContent -> {
+                                    // Content-Range: bytes 0-last/total, total possibly "*". A range that
+                                    // does not start at zero would be read as the start of the file (#283).
+                                    val range = parseContentRange(response.headers[HttpHeaders.ContentRange])
+                                    if (range == null || range.first != 0L) {
+                                        throw KtorMediaIoException(
+                                            "cannot open $shown: it answered the read from byte 0 with the range " +
+                                                "${response.headers[HttpHeaders.ContentRange]}",
+                                        )
+                                    }
+                                    probe.complete(Probe(range.complete, seekable = true, tag))
                                 }
-                                probe.complete(Probe(range.complete, seekable = true, tag))
+                                HttpStatusCode.OK -> {
+                                    val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                                    probe.complete(Probe(total, seekable = false, tag))
+                                }
+                                else -> throw KtorMediaIoException("cannot open $shown: ${response.status}")
                             }
-                            HttpStatusCode.OK -> {
-                                val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                                probe.complete(Probe(total, seekable = false, tag))
-                            }
-                            else -> throw KtorMediaIoException("cannot open $shown: ${response.status}")
+                            response.bodyAsChannel().copyTo(pipe)
+                            pipe.close()
                         }
-                        response.bodyAsChannel().copyTo(pipe)
-                        pipe.close()
                     }
                 } catch (failure: Throwable) {
                     pipe.close(failure)
@@ -340,6 +360,7 @@ public class KtorMediaIo private constructor(
                 firstJob = job,
                 scope = scope,
                 policy = policy,
+                redirects = redirects,
             )
         }
     }

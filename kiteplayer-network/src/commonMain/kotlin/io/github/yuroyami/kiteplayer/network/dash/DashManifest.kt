@@ -77,28 +77,37 @@ public data class DashSegmentPlan(
 /**
  * What a manifest is allowed to point this player at.
  *
- * An MPD is attacker-supplied input: the player fetches whatever it names, using the CALLER'S
- * `HttpClient`, which carries that client's default headers and its cookie jar. Before this policy
- * existed the resolver accepted any absolute URL at all, so a manifest could name
- * `file:///etc/passwd`, or an address on the machine's own network, and have the player fetch it
- * with the caller's credentials attached. That is server-side request forgery plus credential
- * leakage, in the one module built to load remote manifests.
+ * An MPD is untrusted input: the player fetches whatever it names, using the CALLER'S `HttpClient`,
+ * which carries that client's default headers and its cookie jar. The policy judges every URL the
+ * manifest names, and every redirect a server answers with, before the player requests it. A
+ * request follows at most five redirects, and a chain that comes back to an address it already
+ * asked for is refused.
  *
  * **Cross-origin is allowed by default and that is deliberate.** A BaseURL pointing at a different
  * CDN host is ordinary, correct DASH, and refusing it would break real manifests. The two things
  * that are NOT ordinary are refused by default instead: a scheme other than http or https, and an
  * https manifest naming http resources.
  *
- * **A caller whose `HttpClient` carries credentials should pass [SameOrigin].** That is the only
- * configuration in which a hostile manifest cannot make those credentials leave the origin the
- * manifest itself came from.
+ * **A caller whose `HttpClient` carries credentials should pass [SameOrigin].** Then nothing
+ * outside the manifest's own scheme, host and port gets a request, whether the manifest names it
+ * or a redirect leads to it.
+ *
+ * The policy judges URLs, not network addresses. A public host name can resolve to an address on
+ * the device's own network, and the policy never sees that address. To keep requests off such
+ * addresses, filter them where the client connects, for example with OkHttp's `Dns` on Android and
+ * the JVM.
+ *
+ * Redirects are judged where Ktor follows them. The OkHttp and Darwin engines that this module
+ * brings leave every redirect to Ktor. An engine configured to follow redirects by itself hides
+ * them from the policy. A browser follows a redirect by itself and does not show where it leads, so
+ * in a browser [SameOrigin] refuses every redirect and [Default] lets the browser follow them.
  */
 public data class DashUrlPolicy(
-    /** Lowercase schemes a resolved URL may use. */
+    /** Lowercase schemes a resolved URL, or a redirect, may use. */
     val allowedSchemes: Set<String> = setOf("http", "https"),
-    /** Whether an `https` manifest may name `http` resources. */
+    /** Whether an `https` manifest may name `http` resources, or redirect to them. */
     val allowSchemeDowngrade: Boolean = false,
-    /** Whether every resolved URL must share the manifest's scheme, host and port. */
+    /** Whether every resolved URL, and every redirect, must share the manifest's scheme, host and port. */
     val sameOriginOnly: Boolean = false,
 ) {
     /** The two policies most callers want. */
@@ -106,7 +115,7 @@ public data class DashUrlPolicy(
         /** http and https, no downgrade, cross-origin allowed. */
         public val Default: DashUrlPolicy = DashUrlPolicy()
 
-        /** [Default] plus: nothing outside the manifest's own origin is ever fetched. */
+        /** [Default] plus: nothing outside the manifest's own origin is ever fetched, redirects included. */
         public val SameOrigin: DashUrlPolicy = DashUrlPolicy(sameOriginOnly = true)
     }
 }

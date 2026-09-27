@@ -26,6 +26,23 @@ class FiniteContractTest {
 
     @Test
     fun hostileInputNeverPublishesANonFiniteOrOutOfRangeValue() {
+        playHostileInput()
+        assertTrue(checked > 500, "only $checked frames were checked")
+        assertTrue(problems.isEmpty(), problems.take(12).joinToString("\n"))
+    }
+
+    @Test
+    fun aDrawingNeverReceivesANonFiniteOrOutOfRangeValueAfterHostileInput() {
+        useSkiaGraphics() // the view state draws
+        val (micros, generation) = playHostileInput()
+        // The view path interpolates and joins events; check what a drawing actually receives.
+        val state = AudioVizState(feed = feed) { VizClockReading(micros - 300_000L, 1.0, generation) }
+        repeat(20) { check(state.nextFrame(), "view frame $it") }
+        assertTrue(problems.isEmpty(), problems.take(12).joinToString("\n"))
+    }
+
+    /** Feeds silence, invalid samples, clipping, tiny values and format changes; returns the end. */
+    private fun playHostileInput(): Pair<Long, Generation> {
         var micros = 0L
         var generation = Generation.Initial
         fun play(seconds: Float, rate: Int, channels: Int, sample: (Int, Int) -> Float) {
@@ -72,12 +89,7 @@ class FiniteContractTest {
         feed.onDiscontinuity(generation)
         play(2f, 96_000, 6) { index, channel -> 0.3f * sin(index * 0.01f * (channel + 1)) }
         play(1f, 8_000, 2) { _, _ -> noise.signed() }
-
-        // The view path interpolates and joins events; check what a drawing actually receives.
-        val state = AudioVizState(feed = feed) { VizClockReading(micros - 300_000L, 1.0, generation) }
-        repeat(20) { check(state.nextFrame(), "view frame $it") }
-        assertTrue(checked > 500, "only $checked frames were checked")
-        assertTrue(problems.isEmpty(), problems.take(12).joinToString("\n"))
+        return micros to generation
     }
 
     private fun check(frame: SpectrumFrame, where: String) {

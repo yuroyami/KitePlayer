@@ -538,8 +538,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Android HOST tests, which are ordinary JVM tests against the Android variant. Device tests
-      # are a different claim and are not made here.
-      - name: Android host tests, media-free modules
+      # are a different claim and are not made here. The visualiser's tests that draw skip here,
+      # because android.graphics is a stub on the host; its skiko targets run them.
+      - name: Android host tests, media-free tests
         run: |
           ./gradlew --stacktrace \
             :kiteplayer-core:testAndroidHostTest \
@@ -547,7 +548,10 @@ jobs:
             :kiteplayer-io:testAndroidHostTest \
             :kiteplayer-output:testAndroidHostTest \
             :kiteplayer-view:testAndroidHostTest \
-            :kiteplayer-network:testAndroidHostTest
+            :kiteplayer-network:testAndroidHostTest \
+            :kiteplayer-audioviz:testAndroidHostTest \
+            :kiteplayer-phone:testAndroidHostTest \
+            :kiteplayer-sample-shared:testAndroidHostTest
 
       - name: Upload test reports
         if: failure()

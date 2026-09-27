@@ -27,6 +27,7 @@ kotlin {
         namespace = "io.github.yuroyami.kiteplayer.phone"
         compileSdk = 37
         minSdk = 26
+        withHostTest {}
     }
 
     sourceSets {

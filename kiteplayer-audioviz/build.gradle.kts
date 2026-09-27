@@ -44,6 +44,7 @@ kotlin {
         namespace = "io.github.yuroyami.kiteplayer.audioviz"
         compileSdk = 37
         minSdk = 26
+        withHostTest {}
     }
 
     sourceSets {

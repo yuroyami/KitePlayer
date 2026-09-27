@@ -19,7 +19,6 @@ import io.github.yuroyami.kiteplayer.TrackId
  *
  * Calls happen on a background dispatcher, never on the analysis worker, so they may block.
  */
-@AudioVizAuthoringApi
 public interface SongMapStore {
     /** The bytes stored under [key], or null when there are none. */
     public suspend fun read(key: String): ByteArray?

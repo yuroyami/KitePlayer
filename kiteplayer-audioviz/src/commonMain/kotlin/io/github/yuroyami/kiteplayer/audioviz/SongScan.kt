@@ -36,7 +36,6 @@ import kotlinx.coroutines.withContext
  * item with its own reader factory need the application's explicit consent, because a scan reads
  * the whole track a second time. Live and read-once items never scan.
  */
-@AudioVizAuthoringApi
 public class SongScanPolicy(
     /** Files on this device, named by a `file:` URI or a plain path. */
     public val localFiles: Boolean = true,

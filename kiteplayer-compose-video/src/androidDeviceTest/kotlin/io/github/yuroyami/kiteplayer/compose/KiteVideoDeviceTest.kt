@@ -56,11 +56,16 @@ internal class KiteVideoDeviceTest {
         )
         val clip = candidates.firstOrNull(File::isFile)
         checkNotNull(clip) { "matrix media not found at ${candidates.joinToString()}. Push it first." }
-        assertEquals(
-            FIXTURE_SHA256,
-            sha256(clip),
-            "the performance fixture changed; update its declared profile before accepting results",
-        )
+        // The physical profile is device evidence, so it holds the exact bytes it was measured on.
+        // Emulator numbers are provisional, and CI encodes its own clip with its own ffmpeg build,
+        // so the emulator profile relies on the frame count, rate and duration checks below.
+        if (profile == PerformanceProfile.Physical) {
+            assertEquals(
+                FIXTURE_SHA256,
+                sha256(clip),
+                "the performance fixture changed; update its declared profile before accepting results",
+            )
+        }
 
         val scenario = ActivityScenario.launch(KiteVideoTestActivity::class.java)
         try {

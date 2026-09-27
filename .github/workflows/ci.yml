@@ -770,7 +770,21 @@ jobs:
             grep -q '^OK (' "$out" || { echo "::error::$pkg: a test that reads clips failed"; status=1; }
           }
           run_with_clips io.github.yuroyami.kiteplayer.ffmpeg.test testmedia/.
+          # Diagnostics for the slow second open in ReopenDeviceTest: the Java stacks of the test
+          # process 9 and 13 seconds after that test starts, which is inside the stall.
+          (
+            for _ in $(seq 1 240); do
+              adb logcat -d -s TestRunner 2>/dev/null | grep -q "started: replacingTheMediaOpensPromptly" && break
+              sleep 1
+            done
+            for at in 9 13; do
+              sleep $((at == 9 ? 9 : 4))
+              pid=$(adb shell pidof io.github.yuroyami.kiteplayer.compose.video.test | tr -d '\r')
+              [ -n "$pid" ] && adb shell debuggerd -j "$pid" > "$RUNNER_TEMP/test-logs/reopen-stacks-$at.txt" 2>&1
+            done
+          ) &
           run_with_clips io.github.yuroyami.kiteplayer.compose.video.test testmedia/sync1080p30.mp4
+          wait
           adb unroot > /dev/null || true
           exit $status
 

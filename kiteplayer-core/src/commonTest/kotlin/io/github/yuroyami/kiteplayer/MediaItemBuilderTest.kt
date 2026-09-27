@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -28,6 +29,7 @@ class MediaItemBuilderTest {
             externalSubtitle(english)
             externalSubtitle(french)
             videoFilter("scale=1280:720")
+            audioFilter("volume=0.5")
             startPosition(90.seconds)
             io(io)
             formatHint("matroska")
@@ -43,6 +45,7 @@ class MediaItemBuilderTest {
             headers = mapOf("Authorization" to "Bearer token", "X-Session" to "42", "User-Agent" to "kite"),
             externalSubtitles = listOf(english, french),
             videoFilter = "scale=1280:720",
+            audioFilter = "volume=0.5",
             startPosition = 90.seconds,
             io = io,
             formatHint = "matroska",
@@ -56,6 +59,7 @@ class MediaItemBuilderTest {
             ),
         )
         assertEquals(byHand, built)
+        assertTrue("audioFilter=volume=0.5" in built.toString(), "a printed item names its audio filter: $built")
     }
 
     @Test

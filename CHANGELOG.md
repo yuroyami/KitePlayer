@@ -118,6 +118,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   with the policy, which the engine calls and which defaults to the old `create`.
   `PlaybackWarning` gains `DeinterlaceUnavailable`, which the web build emits because it has no
   filters, so a `when` that lists every warning needs the new branch (#71).
+- `MediaItem` gains `audioFilter`, an FFmpeg audio filter chain such as `volume=0.5` or
+  `loudnorm` that every decoded audio buffer runs through, which changes the generated data-class
+  methods, so recompile. It is low-level API, like `videoFilter`. The web build has no filter
+  graphs, so there an item with one fails to open with `ConfigurationInvalid` (#239).
 
 ## [0.0.27] - 2026-09-25
 

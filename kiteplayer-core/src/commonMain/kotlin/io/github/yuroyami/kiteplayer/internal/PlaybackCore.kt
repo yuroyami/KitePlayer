@@ -7244,11 +7244,15 @@ internal class PlaybackCore(
         // can be attached today, and it is what is reported.
         @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
         val attachedFilter = snapshot.media?.videoFilter
+        @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+        val attachedAudioFilter = snapshot.media?.audioFilter
         appendLine(
-            if (attachedFilter == null) {
-                "  filters: none attached"
-            } else {
-                "  filters: video graph attached: ${text(attachedFilter)}"
+            when {
+                attachedFilter == null && attachedAudioFilter == null -> "  filters: none attached"
+                attachedAudioFilter == null -> "  filters: video graph attached: ${text(attachedFilter!!)}"
+                attachedFilter == null -> "  filters: audio graph attached: ${text(attachedAudioFilter)}"
+                else -> "  filters: video graph attached: ${text(attachedFilter)}; " +
+                    "audio graph attached: ${text(attachedAudioFilter)}"
             },
         )
         appendLine()

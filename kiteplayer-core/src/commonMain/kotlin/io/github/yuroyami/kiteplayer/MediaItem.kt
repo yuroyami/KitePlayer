@@ -105,6 +105,17 @@ public data class MediaItem(
     val artist: String? = null,
     /** The album line, where a screen shows one. Null falls back to the file's album tag. */
     val album: String? = null,
+    /**
+     * An audio filter chain attached at open: a raw FFmpeg chain like `volume=0.5` or
+     * `loudnorm`. Every decoded audio buffer runs through it before the engine's own stages, so
+     * it works on untagged files, keeps pitch and speed apart, and can change the level or the
+     * key. Keep the chain's timing consistent with the audio it takes in; the buffers it gives
+     * back carry the timestamps FFmpeg puts on them. The web build has no filter graphs, so there
+     * an item with one fails to open with [PlaybackError.ConfigurationInvalid] rather than playing
+     * without it.
+     */
+    @property:KitePlayerLowLevelApi
+    val audioFilter: String? = null,
 ) {
     public companion object {}
 
@@ -146,6 +157,7 @@ public data class MediaItem(
         if (headers.isNotEmpty()) append(", headers=").append(headers.keys)
         if (externalSubtitles.isNotEmpty()) append(", externalSubtitles=").append(externalSubtitles.size)
         if (videoFilter != null) append(", videoFilter=").append(videoFilter)
+        if (audioFilter != null) append(", audioFilter=").append(audioFilter)
         if (startPosition != null) append(", startPosition=").append(startPosition)
         if (io != null) append(", io")
         if (formatHint != null) append(", formatHint=").append(formatHint)

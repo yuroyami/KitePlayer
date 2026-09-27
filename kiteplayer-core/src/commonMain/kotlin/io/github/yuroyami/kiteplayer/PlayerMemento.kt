@@ -10,8 +10,9 @@ import kotlin.time.Duration.Companion.microseconds
  * string form for applications that keep key-value text, and [fromProperties] reads it back.
  *
  * What the text form cannot carry: [MediaItem.io] factories, which nobody can store,
- * [MediaItem.externalSubtitles] and [MediaItem.videoFilter]. [asProperties] drops all three, and
- * an item that needs one is rebuilt by the application before [KitePlayer.restore]. Headers, raw
+ * [MediaItem.externalSubtitles], [MediaItem.videoFilter] and [MediaItem.audioFilter].
+ * [asProperties] drops all four, and an item that needs one is rebuilt by the application before
+ * [KitePlayer.restore]. Headers, raw
  * open options, the format hint, the demux settings, the start position, and the title, artist
  * and album are strings and travel.
  *

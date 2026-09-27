@@ -71,9 +71,28 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         // openOptions, formatHint and videoFilter and skipped the FFmpeg identity mapping, so the
         // documented SPI door behaved differently from the backend door for the same MediaItem.
         val source = mappingFFmpegRuntimeRejection { openItem(media).let { KiteFFmpegSource(it.source, it.bridge) } }
-        source.videoFilterDescription = media.videoFilter
+        source.attachItemFilters(media)
         return source
     }
+}
+
+/**
+ * Applies [media]'s filter chains to this source. An audio chain on a build without filter graphs,
+ * which is the web build, closes the source and refuses the open, typed, rather than playing the
+ * item without the effect it asked for.
+ */
+internal fun KiteFFmpegSource.attachItemFilters(media: MediaItem) {
+    videoFilterDescription = media.videoFilter
+    val audioChain = media.audioFilter ?: return
+    if (!io.github.yuroyami.kiteffmpeg.FFmpeg.hasFilter("abuffer")) {
+        close()
+        throw io.github.yuroyami.kiteplayer.PlaybackException(
+            io.github.yuroyami.kiteplayer.PlaybackError.ConfigurationInvalid(
+                "MediaItem.audioFilter needs FFmpeg filter graphs, and this build has none",
+            ),
+        )
+    }
+    audioFilterDescription = audioChain
 }
 
 public class KiteFFmpegSource internal constructor(
@@ -277,6 +296,9 @@ public class KiteFFmpegSource internal constructor(
     /** The media item's compiled video filter chain, or null for none. */
     internal var videoFilterDescription: String? = null
 
+    /** The media item's audio filter chain, or null for none. */
+    internal var audioFilterDescription: String? = null
+
     /**
      * Whether audio may open the platform's own decoder (see `platformAudioDecoder`).
      *
@@ -350,6 +372,7 @@ public class KiteFFmpegSource internal constructor(
             // The container's answer, used until the decoder gives its own. A stream that declares no
             // layout, or one no mask can describe, reports null and the mixer falls back to the count.
             declaredChannelLayoutMask = kiteStream(stream.index).audio?.channelLayoutMask,
+            filterDescription = audioFilterDescription,
         )
 
     /**
@@ -889,7 +912,15 @@ private class KiteFFmpegAudioDecoder(
     stream: PlayerStreamInfo,
     private val mapper: TimestampMapper,
     declaredChannelLayoutMask: Long?,
+    /** The media item's audio filter chain every decoded frame runs through, or null for none. */
+    private val filterDescription: String? = null,
 ) : AudioDecoder {
+
+    /** The graph, built from the first decoded frame's own format and rebuilt when that changes. */
+    private var filterGraph: io.github.yuroyami.kiteffmpeg.FilterGraph? = null
+    private var graphInput: List<Any?>? = null
+    private val filteredPending = ArrayDeque<KiteFrame>()
+    private var filterFlushed = false
 
     private var generation: Generation = Generation.Initial
 
@@ -913,11 +944,16 @@ private class KiteFFmpegAudioDecoder(
     override suspend fun send(packet: PlayerPacket?): Boolean =
         decoder.send((packet as KiteFFmpegPacket?)?.native)
 
-    /** KiteFFmpeg's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
-    override val isDrained: Boolean get() = decoder.isDrained
+    /**
+     * KiteFFmpeg's own flag, set when its `receive` saw the end of the stream and cleared by flush,
+     * and with a filter, only once the graph gave back its tail.
+     */
+    override val isDrained: Boolean
+        get() = decoder.isDrained &&
+            (filterDescription == null || filterGraph == null || (filterFlushed && filteredPending.isEmpty()))
 
     override suspend fun receive(): AudioBuffer? {
-        val frame = decoder.receive() ?: return null
+        val frame = nextFrame() ?: return null
         val info = frame.info
         // A stream can change its rate, channel count or layout mid-file. Reporting it here lets the
         // engine rebuild its mixer and resampler rather than quietly playing at the wrong speed or
@@ -955,6 +991,7 @@ private class KiteFFmpegAudioDecoder(
 
     override suspend fun flush(newGeneration: Generation) {
         decoder.flush()
+        dropFilterState()
         generation = newGeneration
         // The sample counter measured a run that the seek ended. Nothing about it survives, so the
         // count restarts and waits for the first real timestamp of the new position, which every
@@ -963,7 +1000,61 @@ private class KiteFFmpegAudioDecoder(
         samplesSinceAnchor = 0
     }
 
-    override fun close() = decoder.close()
+    override fun close() {
+        dropFilterState()
+        decoder.close()
+    }
+
+    /** The next frame for the engine: the decoder's own, or the filter graph's when there is a chain. */
+    private fun nextFrame(): KiteFrame? {
+        val description = filterDescription ?: return decoder.receive()
+        while (filteredPending.isEmpty()) {
+            val raw = decoder.receive()
+            if (raw == null) {
+                if (decoder.isDrained && filterGraph != null && !filterFlushed) {
+                    filterFlushed = true
+                    filterGraph?.flushInput(0) { out -> filteredPending.addLast(out.copy()) }
+                    continue
+                }
+                return null
+            }
+            val info = raw.info
+            val input = listOf(info.sampleRate, info.sampleFormat, info.channelCount, info.channelLayoutMask)
+            if (filterGraph != null && input != graphInput) {
+                // The decoder changed its format mid-stream, and a graph takes one input format.
+                filterGraph?.close()
+                filterGraph = null
+            }
+            val graph = filterGraph ?: try {
+                io.github.yuroyami.kiteffmpeg.FilterGraph.buildAudio(
+                    description = description,
+                    sampleRate = info.sampleRate,
+                    sampleFormat = info.sampleFormat,
+                    channels = info.channelCount,
+                    timeBase = info.timeBase,
+                    channelLayoutMask = info.channelLayoutMask,
+                )
+            } catch (failure: Throwable) {
+                // Only feedInput takes the frame, so a graph that cannot be built leaves it here.
+                raw.close()
+                throw failure
+            }.also {
+                filterGraph = it
+                graphInput = input
+            }
+            // feedInput owns and closes the raw frame; every output is copied out of the callback.
+            graph.feedInput(0, raw) { out -> filteredPending.addLast(out.copy()) }
+        }
+        return filteredPending.removeFirst()
+    }
+
+    private fun dropFilterState() {
+        while (true) filteredPending.removeFirstOrNull()?.close() ?: break
+        filterGraph?.close()
+        filterGraph = null
+        graphInput = null
+        filterFlushed = false
+    }
 }
 
 /**

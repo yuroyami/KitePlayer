@@ -72,7 +72,7 @@ public class KiteFFmpegMediaBackend(
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
         val source = mappingFFmpegRuntimeRejection { openItem(media).let { KiteFFmpegSource(it.source, it.bridge) } }
         source.onWarning = onWarning
-        source.videoFilterDescription = media.videoFilter
+        source.attachItemFilters(media)
         // The option echo's honest half: a key the demuxer never consumed did nothing,
         // and the caller hears that once, typed, instead of discovering it by measurement.
         if (source.unusedOpenOptions.isNotEmpty()) {

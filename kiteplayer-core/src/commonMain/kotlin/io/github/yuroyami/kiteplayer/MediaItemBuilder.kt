@@ -10,6 +10,7 @@ public class MediaItemBuilder internal constructor(private val uri: String) {
     private val headers = LinkedHashMap<String, String>()
     private val externalSubtitles = ArrayList<SubtitleSource>()
     private var videoFilter: String? = null
+    private var audioFilter: String? = null
     private var startPosition: Duration? = null
     private var io: MediaIoFactory? = null
     private var formatHint: String? = null
@@ -38,6 +39,12 @@ public class MediaItemBuilder internal constructor(private val uri: String) {
     @KitePlayerLowLevelApi
     public fun videoFilter(chain: String) {
         videoFilter = chain
+    }
+
+    /** See [MediaItem.audioFilter]. */
+    @KitePlayerLowLevelApi
+    public fun audioFilter(chain: String) {
+        audioFilter = chain
     }
 
     /** See [MediaItem.startPosition]. */
@@ -115,6 +122,7 @@ public class MediaItemBuilder internal constructor(private val uri: String) {
         title = title,
         artist = artist,
         album = album,
+        audioFilter = audioFilter,
     )
 }
 

@@ -789,7 +789,20 @@ jobs:
           # software GPU, which dropped 6 to 23 frames a second of the 1080p30 clip (run
           # 36335742915), so that test runs on a phone or on an emulator with a host GPU.
           if push_clips "$compose_pkg" testmedia/sync1080p30.mp4; then
+            # ReopenDeviceTest logs its Java stacks when a stop or an open runs past 3 s. The native
+            # stacks are taken here at that moment, because the stall seen so far sits inside
+            # MediaCodec.stop, where only a native stack shows what it waits for.
+            (
+              for _ in $(seq 1 300); do
+                adb logcat -d -s KiteReopen 2>/dev/null | grep -q "has run for" && break
+                sleep 1
+              done
+              pid=$(adb shell pidof "$compose_pkg" | tr -d '\r')
+              [ -n "$pid" ] && adb shell debuggerd -b "$pid" > "$RUNNER_TEMP/test-logs/reopen-native-stacks.txt" 2>&1
+            ) &
+            watcher=$!
             run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.ReopenDeviceTest
+            kill "$watcher" 2> /dev/null || true
           fi
           adb unroot > /dev/null || true
           exit $status

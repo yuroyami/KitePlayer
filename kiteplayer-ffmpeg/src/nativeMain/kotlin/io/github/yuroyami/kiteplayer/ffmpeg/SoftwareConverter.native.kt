@@ -125,19 +125,23 @@ public object SoftwareConverter {
             val vStride = strides[2]
             val step = layout.bytesPerSample
 
-            for (row in 0 until height) {
-                val chromaRow = row shr subsampleY
-                val yRow = row * yStride
-                val uRow = chromaRow * uStride
-                val vRow = chromaRow * vStride
-                var outIndex = row * width * 4
+            // Rows are independent, so the slices write disjoint parts of out, and the lease keeps
+            // the planes alive until the last slice returns (#247).
+            parallelRowSlices(width, height) { startRow, endRow ->
+                for (row in startRow until endRow) {
+                    val chromaRow = row shr subsampleY
+                    val yRow = row * yStride
+                    val uRow = chromaRow * uStride
+                    val vRow = chromaRow * vStride
+                    var outIndex = row * width * 4
 
-                for (column in 0 until width) {
-                    val chromaColumn = ((column + chromaShift) shr subsampleX).coerceIn(0, lastChromaColumn)
-                    val luma = readComponent(y, yRow + column * step, layout)
-                    val chromaB = readComponent(u, uRow + chromaColumn * step, layout)
-                    val chromaR = readComponent(v, vRow + chromaColumn * step, layout)
-                    outIndex = writeRgba(out, outIndex, coefficients, luma, chromaB, chromaR)
+                    for (column in 0 until width) {
+                        val chromaColumn = ((column + chromaShift) shr subsampleX).coerceIn(0, lastChromaColumn)
+                        val luma = readComponent(y, yRow + column * step, layout)
+                        val chromaB = readComponent(u, uRow + chromaColumn * step, layout)
+                        val chromaR = readComponent(v, vRow + chromaColumn * step, layout)
+                        outIndex = writeRgba(out, outIndex, coefficients, luma, chromaB, chromaR)
+                    }
                 }
             }
         }
@@ -160,18 +164,20 @@ public object SoftwareConverter {
             val uvStride = strides[1]
             val step = layout.bytesPerSample
 
-            for (row in 0 until height) {
-                val yRow = row * yStride
-                val uvRow = (row shr 1) * uvStride
-                var outIndex = row * width * 4
+            parallelRowSlices(width, height) { startRow, endRow ->
+                for (row in startRow until endRow) {
+                    val yRow = row * yStride
+                    val uvRow = (row shr 1) * uvStride
+                    var outIndex = row * width * 4
 
-                for (column in 0 until width) {
-                    val chromaColumn = ((column + chromaShift) shr 1).coerceIn(0, lastChromaColumn)
-                    val luma = readComponent(y, yRow + column * step, layout)
-                    // Chroma is interleaved in this format: U then V, per chroma sample.
-                    val chromaB = readComponent(uv, uvRow + chromaColumn * 2 * step, layout)
-                    val chromaR = readComponent(uv, uvRow + (chromaColumn * 2 + 1) * step, layout)
-                    outIndex = writeRgba(out, outIndex, coefficients, luma, chromaB, chromaR)
+                    for (column in 0 until width) {
+                        val chromaColumn = ((column + chromaShift) shr 1).coerceIn(0, lastChromaColumn)
+                        val luma = readComponent(y, yRow + column * step, layout)
+                        // Chroma is interleaved in this format: U then V, per chroma sample.
+                        val chromaB = readComponent(uv, uvRow + chromaColumn * 2 * step, layout)
+                        val chromaR = readComponent(uv, uvRow + (chromaColumn * 2 + 1) * step, layout)
+                        outIndex = writeRgba(out, outIndex, coefficients, luma, chromaB, chromaR)
+                    }
                 }
             }
         }
@@ -184,19 +190,21 @@ public object SoftwareConverter {
             require(planes.isNotEmpty()) { "a packed frame needs one plane" }
             val source = planes[0]
             val stride = strides[0]
-            for (row in 0 until height) {
-                val sourceRow = row * stride
-                var outIndex = row * width * 4
-                for (column in 0 until width) {
-                    val at = sourceRow + column * sourceComponents
-                    val first = source[at].toInt() and 0xFF
-                    val green = source[at + 1].toInt() and 0xFF
-                    val third = source[at + 2].toInt() and 0xFF
-                    val alpha = if (sourceComponents == 4) source[at + 3].toInt() and 0xFF else 255
-                    out[outIndex++] = (if (redFirst) first else third).toByte()
-                    out[outIndex++] = green.toByte()
-                    out[outIndex++] = (if (redFirst) third else first).toByte()
-                    out[outIndex++] = alpha.toByte()
+            parallelRowSlices(width, height) { startRow, endRow ->
+                for (row in startRow until endRow) {
+                    val sourceRow = row * stride
+                    var outIndex = row * width * 4
+                    for (column in 0 until width) {
+                        val at = sourceRow + column * sourceComponents
+                        val first = source[at].toInt() and 0xFF
+                        val green = source[at + 1].toInt() and 0xFF
+                        val third = source[at + 2].toInt() and 0xFF
+                        val alpha = if (sourceComponents == 4) source[at + 3].toInt() and 0xFF else 255
+                        out[outIndex++] = (if (redFirst) first else third).toByte()
+                        out[outIndex++] = green.toByte()
+                        out[outIndex++] = (if (redFirst) third else first).toByte()
+                        out[outIndex++] = alpha.toByte()
+                    }
                 }
             }
         }

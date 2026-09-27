@@ -80,6 +80,8 @@ internal class AudioPipeline(
      * built mid-epoch makes its resampler once, at the right rate.
      */
     initialSpeed: Double = 1.0,
+    /** Whether mono or stereo also fills a surround device; see `UpmixMode`. */
+    private val upmix: io.github.yuroyami.kiteplayer.UpmixMode = io.github.yuroyami.kiteplayer.UpmixMode.Off,
 ) : AutoCloseable {
     init {
         // A decoder can report any format, so it is checked before any stage multiplies by it.
@@ -89,7 +91,7 @@ internal class AudioPipeline(
         require(targetFormat.sampleRate > 0 && targetFormat.channels > 0) { "$targetFormat is not a device format" }
     }
 
-    private val mixer = ChannelMixer(sourceFormat, targetFormat, onWarning, downmix)
+    private val mixer = ChannelMixer(sourceFormat, targetFormat, onWarning, downmix, upmix)
 
     /**
      * The uncorrected-pitch rate. Always 1.0 while [preservePitch] is true. When it is not,
@@ -200,7 +202,7 @@ internal class AudioPipeline(
     ): AudioPipeline =
         AudioPipeline(
             decoderFormat, targetFormat, onWarning, preservePitch, downmix,
-            resamplerFactory, onResamplerRefused, initialSpeed = speed,
+            resamplerFactory, onResamplerRefused, initialSpeed = speed, upmix = upmix,
         ).also {
             it.speed = speed
             // No gain crosses here any more, and none needs to: the gain lives in the ring, which
@@ -352,6 +354,7 @@ internal class AudioPipeline(
      * flush. The gain keeps its position: the volume did not change because the position did.
      */
     fun reset() {
+        mixer.reset()
         resampler?.reset()
         tempo.reset()
         // The filters ring for a few dozen samples, so a seek that kept their history would splice

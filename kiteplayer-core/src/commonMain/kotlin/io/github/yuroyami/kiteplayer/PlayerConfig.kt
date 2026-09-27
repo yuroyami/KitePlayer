@@ -253,6 +253,11 @@ public data class AudioConfig(
      * instead. A factory that throws leaves the sinc in place; see [AudioResamplerFactory].
      */
     val resampler: AudioResamplerFactory? = null,
+    /**
+     * Whether mono or stereo audio also plays from the other speakers of a surround device. Off by
+     * default, because widening a mix is a matter of taste. See [UpmixMode] for the matrix.
+     */
+    val upmix: UpmixMode = UpmixMode.Off,
 ) {
     init {
         require(volumeCeiling.isFinite() && volumeCeiling >= 1f && volumeCeiling <= GAIN_MAX) {
@@ -333,6 +338,31 @@ public enum class ReplayGainMode {
 
     /** Level each album as a whole, so its own quiet and loud tracks keep their relationship. */
     Album,
+}
+
+/**
+ * Whether a source with fewer channels than the device also fills the device's other speakers.
+ */
+public enum class UpmixMode {
+    /** Only the speakers the source has play. A stereo file on a 5.1 device plays from the front pair. */
+    Off,
+
+    /**
+     * A mono or stereo source fills every front centre, low-frequency and surround speaker the
+     * device has, with one fixed matrix. For a stereo source with channels L and R:
+     *
+     * - front left and front right: L and R, unchanged;
+     * - front centre: 0.707 × (L + R);
+     * - low-frequency channel: 0.5 × (L + R), through a 120 Hz low-pass;
+     * - each surround pair, side or back: 0.5 × (L − R) on the left and 0.5 × (R − L) on the right.
+     *   A 7.1 device plays this from both of its surround pairs.
+     *
+     * A mono source with channel M plays M at unity from both front speakers, 0.707 × M from the
+     * centre, 0.5 × M through the low-pass from the low-frequency channel, and 0.35 × M from every
+     * surround speaker. A source with more than two channels is never upmixed, and a device
+     * without a front pair changes nothing.
+     */
+    Surround,
 }
 
 /**

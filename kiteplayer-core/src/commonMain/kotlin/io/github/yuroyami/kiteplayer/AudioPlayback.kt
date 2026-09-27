@@ -76,6 +76,8 @@ public class AudioPlayback(
     private val downmix: DownmixConfig = DownmixConfig(),
     /** Makes the rate conversion when the rates differ. Null uses the engine's own sinc. */
     private val resampler: AudioResamplerFactory? = null,
+    /** Whether mono or stereo also fills a surround device; see [UpmixMode]. */
+    private val upmix: UpmixMode = UpmixMode.Off,
 ) : AutoCloseable {
 
     /**
@@ -400,7 +402,7 @@ public class AudioPlayback(
             existing == null -> AudioPipeline(
                 sourceFormat, negotiated, onWarning, preservePitch = pitchNow, downmix = downmix,
                 resamplerFactory = resamplerFactory, onResamplerRefused = onResamplerRefused,
-                initialSpeed = speedNow,
+                initialSpeed = speedNow, upmix = upmix,
             )
             existing.matches(sourceFormat) && existing.preservePitch == pitchNow -> existing
             else -> existing.rebuiltFor(sourceFormat, pitchNow, speedNow, resamplerFactory)

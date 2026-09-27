@@ -230,6 +230,21 @@ internal class BiquadCoefficients(
             )
         }
 
+        /** A second-order Butterworth low-pass at [cutoffHz], with unity gain at DC. */
+        fun lowPass(sampleRate: Int, cutoffHz: Double): BiquadCoefficients {
+            val q = 0.7071067811865476
+            val k = tan(PI * cutoffHz / sampleRate)
+            val a0 = 1.0 + k / q + k * k
+            val b0 = k * k / a0
+            return BiquadCoefficients(
+                b0 = b0,
+                b1 = 2.0 * b0,
+                b2 = b0,
+                a1 = 2.0 * (k * k - 1.0) / a0,
+                a2 = (1.0 - k / q + k * k) / a0,
+            )
+        }
+
         /** The RLB weighting: a high pass at about 38 Hz, which is what takes rumble out of the answer. */
         fun rlb(sampleRate: Int): BiquadCoefficients {
             val f0 = 38.13547087602444

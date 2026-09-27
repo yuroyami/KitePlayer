@@ -437,6 +437,17 @@ final enum class io.github.yuroyami.kiteplayer/TrackKind : kotlin/Enum<io.github
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/TrackKind> // io.github.yuroyami.kiteplayer/TrackKind.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer/UpmixMode : kotlin/Enum<io.github.yuroyami.kiteplayer/UpmixMode> { // io.github.yuroyami.kiteplayer/UpmixMode|null[0]
+    enum entry Off // io.github.yuroyami.kiteplayer/UpmixMode.Off|null[0]
+    enum entry Surround // io.github.yuroyami.kiteplayer/UpmixMode.Surround|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer/UpmixMode.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer/UpmixMode> // io.github.yuroyami.kiteplayer/UpmixMode.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer/UpmixMode // io.github.yuroyami.kiteplayer/UpmixMode.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/UpmixMode> // io.github.yuroyami.kiteplayer/UpmixMode.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer/VideoScale : kotlin/Enum<io.github.yuroyami.kiteplayer/VideoScale> { // io.github.yuroyami.kiteplayer/VideoScale|null[0]
     enum entry Fill // io.github.yuroyami.kiteplayer/VideoScale.Fill|null[0]
     enum entry Fit // io.github.yuroyami.kiteplayer/VideoScale.Fit|null[0]
@@ -1872,7 +1883,7 @@ final class io.github.yuroyami.kiteplayer/AudioClockSnapshot { // io.github.yuro
 }
 
 final class io.github.yuroyami.kiteplayer/AudioConfig { // io.github.yuroyami.kiteplayer/AudioConfig|null[0]
-    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer/EqualizerSettings = ..., io.github.yuroyami.kiteplayer/ReplayGainMode = ..., kotlin/Float = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory? = ...) // io.github.yuroyami.kiteplayer/AudioConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig;kotlin.Float;io.github.yuroyami.kiteplayer.EqualizerSettings;io.github.yuroyami.kiteplayer.ReplayGainMode;kotlin.Float;kotlin.Float;io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory?){}[0]
+    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer/EqualizerSettings = ..., io.github.yuroyami.kiteplayer/ReplayGainMode = ..., kotlin/Float = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory? = ..., io.github.yuroyami.kiteplayer/UpmixMode = ...) // io.github.yuroyami.kiteplayer/AudioConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig;kotlin.Float;io.github.yuroyami.kiteplayer.EqualizerSettings;io.github.yuroyami.kiteplayer.ReplayGainMode;kotlin.Float;kotlin.Float;io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory?;io.github.yuroyami.kiteplayer.UpmixMode){}[0]
 
     final val downmix // io.github.yuroyami.kiteplayer/AudioConfig.downmix|{}downmix[0]
         final fun <get-downmix>(): io.github.yuroyami.kiteplayer/DownmixConfig // io.github.yuroyami.kiteplayer/AudioConfig.downmix.<get-downmix>|<get-downmix>(){}[0]
@@ -1890,10 +1901,13 @@ final class io.github.yuroyami.kiteplayer/AudioConfig { // io.github.yuroyami.ki
         final fun <get-replayGainPreampDb>(): kotlin/Float // io.github.yuroyami.kiteplayer/AudioConfig.replayGainPreampDb.<get-replayGainPreampDb>|<get-replayGainPreampDb>(){}[0]
     final val resampler // io.github.yuroyami.kiteplayer/AudioConfig.resampler|{}resampler[0]
         final fun <get-resampler>(): io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory? // io.github.yuroyami.kiteplayer/AudioConfig.resampler.<get-resampler>|<get-resampler>(){}[0]
+    final val upmix // io.github.yuroyami.kiteplayer/AudioConfig.upmix|{}upmix[0]
+        final fun <get-upmix>(): io.github.yuroyami.kiteplayer/UpmixMode // io.github.yuroyami.kiteplayer/AudioConfig.upmix.<get-upmix>|<get-upmix>(){}[0]
     final val volumeCeiling // io.github.yuroyami.kiteplayer/AudioConfig.volumeCeiling|{}volumeCeiling[0]
         final fun <get-volumeCeiling>(): kotlin/Float // io.github.yuroyami.kiteplayer/AudioConfig.volumeCeiling.<get-volumeCeiling>|<get-volumeCeiling>(){}[0]
 
     final fun component1(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/AudioConfig.component1|component1(){}[0]
+    final fun component10(): io.github.yuroyami.kiteplayer/UpmixMode // io.github.yuroyami.kiteplayer/AudioConfig.component10|component10(){}[0]
     final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioConfig.component2|component2(){}[0]
     final fun component3(): io.github.yuroyami.kiteplayer/DownmixConfig // io.github.yuroyami.kiteplayer/AudioConfig.component3|component3(){}[0]
     final fun component4(): kotlin/Float // io.github.yuroyami.kiteplayer/AudioConfig.component4|component4(){}[0]
@@ -1902,14 +1916,14 @@ final class io.github.yuroyami.kiteplayer/AudioConfig { // io.github.yuroyami.ki
     final fun component7(): kotlin/Float // io.github.yuroyami.kiteplayer/AudioConfig.component7|component7(){}[0]
     final fun component8(): kotlin/Float // io.github.yuroyami.kiteplayer/AudioConfig.component8|component8(){}[0]
     final fun component9(): io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory? // io.github.yuroyami.kiteplayer/AudioConfig.component9|component9(){}[0]
-    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer/EqualizerSettings = ..., io.github.yuroyami.kiteplayer/ReplayGainMode = ..., kotlin/Float = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory? = ...): io.github.yuroyami.kiteplayer/AudioConfig // io.github.yuroyami.kiteplayer/AudioConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig;kotlin.Float;io.github.yuroyami.kiteplayer.EqualizerSettings;io.github.yuroyami.kiteplayer.ReplayGainMode;kotlin.Float;kotlin.Float;io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory?){}[0]
+    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer/EqualizerSettings = ..., io.github.yuroyami.kiteplayer/ReplayGainMode = ..., kotlin/Float = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory? = ..., io.github.yuroyami.kiteplayer/UpmixMode = ...): io.github.yuroyami.kiteplayer/AudioConfig // io.github.yuroyami.kiteplayer/AudioConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig;kotlin.Float;io.github.yuroyami.kiteplayer.EqualizerSettings;io.github.yuroyami.kiteplayer.ReplayGainMode;kotlin.Float;kotlin.Float;io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory?;io.github.yuroyami.kiteplayer.UpmixMode){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/AudioConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/AudioConfig.toString|toString(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer/AudioPlayback : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/AudioPlayback|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer.spi/AudioSink, io.github.yuroyami.kiteplayer/MonotonicClock = ..., kotlin.time/Duration = ..., kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit> = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ..., io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory? = ...) // io.github.yuroyami.kiteplayer/AudioPlayback.<init>|<init>(io.github.yuroyami.kiteplayer.spi.AudioSink;io.github.yuroyami.kiteplayer.MonotonicClock;kotlin.time.Duration;kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>;io.github.yuroyami.kiteplayer.DownmixConfig;io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory?){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.spi/AudioSink, io.github.yuroyami.kiteplayer/MonotonicClock = ..., kotlin.time/Duration = ..., kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit> = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ..., io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory? = ..., io.github.yuroyami.kiteplayer/UpmixMode = ...) // io.github.yuroyami.kiteplayer/AudioPlayback.<init>|<init>(io.github.yuroyami.kiteplayer.spi.AudioSink;io.github.yuroyami.kiteplayer.MonotonicClock;kotlin.time.Duration;kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>;io.github.yuroyami.kiteplayer.DownmixConfig;io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory?;io.github.yuroyami.kiteplayer.UpmixMode){}[0]
 
     final val buffered // io.github.yuroyami.kiteplayer/AudioPlayback.buffered|{}buffered[0]
         final fun <get-buffered>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/AudioPlayback.buffered.<get-buffered>|<get-buffered>(){}[0]

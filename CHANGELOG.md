@@ -100,6 +100,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   cleared, the warning names the failure, and playback continues. A custom rasteriser gets only
   what `SubtitleRasterizer.limitCues` keeps, and it can throw `SubtitleOverlayLimitException` to
   show part of an overlay.
+- `AudioConfig` gains `upmix`, which changes the generated data-class methods, and `AudioPlayback`
+  takes it as a new last constructor parameter. Recompile. `UpmixMode.Surround` plays a mono or
+  stereo source from every speaker of a surround device, with the matrix its KDoc gives.
+  `UpmixMode.Off`, the default, keeps the sound as it was (#181).
 
 ## [0.0.27] - 2026-09-25
 

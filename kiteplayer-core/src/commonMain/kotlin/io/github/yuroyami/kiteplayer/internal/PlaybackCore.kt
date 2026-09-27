@@ -3490,6 +3490,7 @@ internal class PlaybackCore(
         },
         downmix = config.audio.downmix,
         resampler = config.audio.resampler.takeUnless { resamplerRefused.value },
+        upmix = config.audio.upmix,
     )
 
     /** Builds a dormant device path; ownership transfers only when the lane transaction commits. */

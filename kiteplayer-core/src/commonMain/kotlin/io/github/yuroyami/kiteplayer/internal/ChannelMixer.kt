@@ -120,9 +120,18 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
  * When the source and the device both name a layout and those layouts differ, the channels are
  * PERMUTED into the device's order. Six channels are 5.1 with side surrounds or 5.1 with back
  * surrounds, and copying one into the other puts the surround content in speakers the mix never
- * meant. A speaker the source does not carry is left silent rather than filled,
- * because inventing content for it would be upmixing and this stage does not upmix. When either
- * side names no layout, or both name the same one, the copy is still right and is still what runs.
+ * meant. A speaker the source does not carry is left silent rather than filled, because inventing
+ * content for it is upmixing. When either side names no layout, or both name the same one, the
+ * copy is still right and is still what runs.
+ *
+ * ### Upmixing
+ *
+ * Only on request, through [io.github.yuroyami.kiteplayer.UpmixMode.Surround], and only from a mono
+ * or stereo source into a device with a front pair and more channels. The matrix is the one that
+ * enum documents. Its low-frequency row runs through a 120 Hz low-pass after the matrix, the one
+ * stage here with a memory, which [reset] clears on a seek. With the default,
+ * [io.github.yuroyami.kiteplayer.UpmixMode.Off], mono into stereo is the only copy into more
+ * speakers.
  *
  * ### When the layout is not certain
  *
@@ -148,6 +157,7 @@ internal class ChannelMixer(
     onWarning: (PlaybackWarning) -> Unit = {},
     private val policy: io.github.yuroyami.kiteplayer.DownmixConfig =
         io.github.yuroyami.kiteplayer.DownmixConfig(),
+    private val upmix: io.github.yuroyami.kiteplayer.UpmixMode = io.github.yuroyami.kiteplayer.UpmixMode.Off,
 ) {
     init {
         require(source.channels > 0) { "a source format with ${source.channels} channels cannot be mixed" }
@@ -171,7 +181,20 @@ internal class ChannelMixer(
     private val targetMask: Long? = target.channelLayoutMask?.takeIf { it.countOneBits() == targetChannels }
 
     /** Row-major, `targetChannels` rows of `sourceChannels` gains. Null means pass channels through. */
-    private val matrix: FloatArray? = matrixFor(sourceMask, targetMask, sourceChannels, targetChannels, policy)
+    private val matrix: FloatArray? = matrixFor(sourceMask, targetMask, sourceChannels, targetChannels, policy, upmix)
+
+    /** The output channel of an upmix's low-frequency row, or -1 when nothing is low-passed. */
+    private val lowPassChannel: Int =
+        if (matrix != null && targetChannels > sourceChannels) upmixLfeChannel(targetMask, targetChannels) else -1
+
+    private val lowPass = if (lowPassChannel >= 0) {
+        io.github.yuroyami.kiteplayer.audio.BiquadCoefficients.lowPass(source.sampleRate, UPMIX_LFE_CUTOFF_HZ)
+    } else {
+        null
+    }
+
+    /** The low-pass's two inputs and two outputs, carried across buffers. */
+    private val lowPassState = DoubleArray(4)
 
     /**
      * True when the channels are copied rather than mixed, which is either a target that already has
@@ -224,9 +247,18 @@ internal class ChannelMixer(
                 }
                 output[outBase + out] = sum
             }
+            if (lowPass != null) {
+                val at = outBase + lowPassChannel
+                output[at] = lowPass.step(output[at].toDouble(), lowPassState, 0).toFloat()
+            }
             inBase += sourceChannels
             outBase += targetChannels
         }
+    }
+
+    /** Forgets what the upmix's low-pass carried, so a seek does not splice two positions together. */
+    fun reset() {
+        lowPassState.fill(0.0)
     }
 
     /** Channels in source order, as many as fit. A wider target keeps its extra channels silent. */
@@ -280,12 +312,18 @@ internal class ChannelMixer(
         private fun describe(mask: Long?): String =
             mask?.let { MixLayout.forMask(it)?.label ?: "mask 0x${it.toString(16)}" } ?: "an unknown layout"
 
+        /** The upmix's low-frequency row goes through a low-pass at this frequency. */
+        const val UPMIX_LFE_CUTOFF_HZ: Double = 120.0
+
+        /** A mono source feeds each surround speaker at this level. */
+        const val UPMIX_MONO_SURROUND: Float = 0.35f
+
         /**
          * The matrix for one layout pair, or null when the channels are to be copied instead.
          *
          * Equal counts are a copy, or a permutation when both sides name different layouts. A
-         * smaller target is a downmix derived per speaker. A wider target is an upmix, which this
-         * stage does not do, with one exception: mono into stereo.
+         * smaller target is a downmix derived per speaker. A wider target is an upmix only when
+         * [upmix] asks for one, and otherwise has one exception: mono into stereo.
          */
         private fun matrixFor(
             sourceMask: Long?,
@@ -293,6 +331,7 @@ internal class ChannelMixer(
             sourceChannels: Int,
             targetChannels: Int,
             policy: io.github.yuroyami.kiteplayer.DownmixConfig,
+            upmix: io.github.yuroyami.kiteplayer.UpmixMode,
         ): FloatArray? {
             if (sourceChannels == targetChannels) {
                 // Same count, same layout, or a layout either side did not name: a copy is right.
@@ -301,6 +340,11 @@ internal class ChannelMixer(
             }
             if (sourceMask == null) return null
             if (targetChannels > sourceChannels) {
+                if (upmix == io.github.yuroyami.kiteplayer.UpmixMode.Surround) {
+                    upmixTarget(targetMask, targetChannels)?.let { target ->
+                        surroundUpmix(sourceMask, target, sourceChannels, targetChannels)?.let { return it }
+                    }
+                }
                 // The one copy into more speakers: a mono source is not quieter than a stereo one.
                 return if (sourceChannels == 1 && targetChannels == 2) floatArrayOf(1f, 1f) else null
             }
@@ -315,13 +359,65 @@ internal class ChannelMixer(
         }
 
         /**
+         * The device's speakers for an upmix: its own mask when it named one, else the conventional
+         * layout for its count. Null when that layout has no front pair or a speaker the rules do
+         * not cover, which leaves the device as it is without an upmix.
+         */
+        private fun upmixTarget(targetMask: Long?, targetChannels: Int): Long? {
+            val mask = targetMask ?: MixLayout.forChannelCount(targetChannels)?.mask ?: return null
+            if (targetChannels <= 2 || !ruled(mask)) return null
+            return mask.takeIf { has(it, FRONT_LEFT_BIT) && has(it, FRONT_RIGHT_BIT) }
+        }
+
+        /** Where an upmix into [targetMask] writes its low-frequency row, or -1 for no such speaker. */
+        private fun upmixLfeChannel(targetMask: Long?, targetChannels: Int): Int {
+            val mask = upmixTarget(targetMask, targetChannels) ?: return -1
+            return speakersOf(mask).indexOf(LFE_BIT)
+        }
+
+        /**
+         * The [io.github.yuroyami.kiteplayer.UpmixMode.Surround] matrix from mono or stereo into
+         * [targetMask]. Null for any other source, which is never upmixed.
+         */
+        private fun surroundUpmix(sourceMask: Long, targetMask: Long, sourceChannels: Int, targetChannels: Int): FloatArray? {
+            val mono = sourceMask == MixLayout.Mono.mask
+            if (!mono && sourceMask != MixLayout.Stereo.mask) return null
+            val rows = FloatArray(targetChannels * sourceChannels)
+            for ((out, speaker) in speakersOf(targetMask).withIndex()) {
+                val row = out * sourceChannels
+                if (mono) {
+                    rows[row] = when (speaker) {
+                        FRONT_LEFT_BIT, FRONT_RIGHT_BIT -> 1f
+                        FRONT_CENTER_BIT -> MINUS_3_DB
+                        LFE_BIT -> 0.5f
+                        BACK_LEFT_BIT, BACK_RIGHT_BIT, SIDE_LEFT_BIT, SIDE_RIGHT_BIT -> UPMIX_MONO_SURROUND
+                        else -> 0f
+                    }
+                    continue
+                }
+                val (left, right) = when (speaker) {
+                    FRONT_LEFT_BIT -> 1f to 0f
+                    FRONT_RIGHT_BIT -> 0f to 1f
+                    FRONT_CENTER_BIT -> MINUS_3_DB to MINUS_3_DB
+                    LFE_BIT -> 0.5f to 0.5f
+                    BACK_LEFT_BIT, SIDE_LEFT_BIT -> 0.5f to -0.5f
+                    BACK_RIGHT_BIT, SIDE_RIGHT_BIT -> -0.5f to 0.5f
+                    else -> 0f to 0f
+                }
+                rows[row] = left
+                rows[row + 1] = right
+            }
+            return rows
+        }
+
+        /**
          * Puts [sourceMask]'s channels into [targetMask]'s speakers, by speaker and never by position.
          *
          * A target speaker the source does not carry takes its nearest equivalent, which in
          * practice means the side and back surrounds standing in for each other: a device with back
          * speakers playing a mix authored for side speakers should play the surround content from
          * the back, not go silent. Anything with no equivalent at all is left silent, because
-         * filling it would be upmixing and this stage does not upmix.
+         * filling it would be upmixing, which a reorder never does.
          *
          * Null when the mapping turns out to be the identity, which keeps the plain copy path.
          */

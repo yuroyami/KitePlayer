@@ -369,22 +369,27 @@ if (snapshot.isAudioOnly) {
 
 ## Where it runs
 
-| | |
+| Target | What runs, and where |
 |---|---|
-| Plays real media | Android (device and emulator), iOS (device and simulator), macOS arm64, desktop JVM on macOS arm64, Linux x64 and arm64 |
-| Builds and links, nothing has run | Windows x64 |
-| Compiles only | iOS x64, tvOS, watchOS, Android native. The JavaScript facade reports unavailable |
-| Web | wasmJs plays through the FFmpeg Wasm module with browser audio. Load `KiteFFmpegWeb` before creating a player. This is not broad browser qualification |
+| Android | Plays real media on phones, checked by hand. CI runs the media-free host tests on Linux. Its emulator job does not pass yet, so no Android device test runs on every push. |
+| iOS | Plays real media on devices, checked by hand. CI runs the tests of every iOS module on the simulator. |
+| macOS arm64, native and desktop JVM | Plays real media. CI runs every module's tests on both, the format matrix included. |
+| Linux x64, native | CI runs the tests of the media-free modules: core, subtitles, io, output, rt, libass and `kiteplayer`. The FFmpeg backend is only linked. |
+| Linux arm64, native | CI runs the same tests on an arm64 runner and links the FFmpeg backend. Locally, `scripts/linux-tests.sh` runs them in a container, the FFmpeg backend included. |
+| Linux x64, desktop JVM | CI runs the JVM tests of the media-free modules: core, subtitles, io, output, network and view. |
+| Linux arm64, desktop JVM | Locally, `scripts/linux-jvm-tests.sh` runs the FFmpeg backend suite in a container. The container has no audio device, so this proves decoding only. |
+| Windows x64, native | CI runs the tests of core, subtitles, output, rt, libass and `kiteplayer`. The FFmpeg backend is only linked. |
+| Windows x64, desktop JVM | The native library is linked. Nothing has run. |
+| tvOS and watchOS | Only core, subtitles, io and rt have these targets. CI runs their tests on both simulators. |
+| Web, wasmJs | Plays through the FFmpeg Wasm module with browser audio. Load `KiteFFmpegWeb` before creating a player. CI runs the web tests of core, subtitles, output, network, libass, ffmpeg and `kiteplayer` under Node and in a headless browser. This is not broad browser qualification. |
+| iOS x64, Android native | Compile only. |
+| JavaScript, js | The facade reports unavailable. |
 
 Android and iOS are the platforms in daily use. macOS arm64 is the development machine and has the
 deepest automated coverage. A Kotlin/Native app on macOS gets its player from
 `KitePlayerPlatform.createOrNull()` and attaches a renderer from `kiteplayer-output`. Linux and
 Windows native have no audio output and no HTTPS, so there `createOrNull()` returns null. Pass
 `KiteFFmpegMediaBackend()` and your own `OutputBackend` to `KitePlayer.create` instead.
-On the desktop JVM, the KiteFFmpeg 0.3.0 artifact carries the native library for macOS arm64,
-Linux x64, Linux arm64 and Windows x64. macOS arm64 plays. On Linux arm64 the whole FFmpeg backend
-suite passes in a container, which has no audio device, so that proves decoding only. Windows has
-been linked, not run.
 KitePlayer's JVM and Android classes are Java 11 bytecode. The KiteFFmpeg 0.3.0 jar is Java 21
 bytecode, so a desktop app needs Java 21 until KitePlayer depends on a later KiteFFmpeg release.
 
@@ -429,6 +434,8 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | `kiteplayer-phone` | Deprecated. `kiteplayer` plus `kiteplayer-view`. |
 
 Compose presentation and the visualiser target Android, iOS arm64, the iOS simulator and the desktop JVM.
+`kiteplayer-compose-interop` also has js and wasmJs variants. They draw an empty surface, so that
+shared Compose code compiles for the web; they show no video.
 
 Custom assemblies start from `kiteplayer-core` and supply their own backends through
 `KitePlayer.create(PlayerConfig(backends = Backends(backend, output)))`. The

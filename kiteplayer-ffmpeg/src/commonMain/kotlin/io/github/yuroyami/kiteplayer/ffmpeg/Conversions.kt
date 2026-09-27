@@ -498,27 +498,32 @@ internal class PackedCoefficients(
 internal fun decodeToFloat(bytes: ByteArray, info: FrameInfo, outChannels: Int = info.channelCount): FloatArray {
     val frames = info.sampleCount
     if (frames <= 0) return FloatArray(0)
+    return FloatArray(frames * outChannels.coerceAtLeast(1)).also { decodeToFloatInto(bytes, info, outChannels, it, 0) }
+}
+
+/** [decodeToFloat] into [into] from [offset], for a caller that reuses one array across buffers. */
+internal fun decodeToFloatInto(bytes: ByteArray, info: FrameInfo, outChannels: Int, into: FloatArray, offset: Int) {
+    val frames = info.sampleCount
+    if (frames <= 0) return
     val channels = outChannels.coerceAtLeast(1)
     val sourceChannels = info.channelCount.coerceAtLeast(1)
     val format = info.sampleFormat
     val planar = format.name.endsWith("p")
     val width = format.bytesPerSample()
-    val out = FloatArray(frames * channels)
 
     for (channel in 0 until channels) {
         // A mono source feeding a stereo device plays in both channels rather than leaving one silent.
         val sourceChannel = if (channel < sourceChannels) channel else 0
         for (frame in 0 until frames) {
-            val offset = if (planar) {
+            val at = if (planar) {
                 (sourceChannel * frames + frame) * width
             } else {
                 (frame * sourceChannels + sourceChannel) * width
             }
-            if (offset + width > bytes.size) break
-            out[frame * channels + channel] = bytes.readSample(offset, format)
+            if (at + width > bytes.size) break
+            into[offset + frame * channels + channel] = bytes.readSample(at, format)
         }
     }
-    return out
 }
 
 private fun KiteSampleFormat.bytesPerSample(): Int = when (this) {

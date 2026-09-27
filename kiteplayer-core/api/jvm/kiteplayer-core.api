@@ -2174,6 +2174,8 @@ public final class io/github/yuroyami/kiteplayer/audio/LoudnessResult {
 public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioBuffer : java/lang/AutoCloseable {
 	public abstract fun copyChannel (I[FI)V
 	public static synthetic fun copyChannel$default (Lio/github/yuroyami/kiteplayer/spi/AudioBuffer;I[FIILjava/lang/Object;)V
+	public fun copyInterleaved ([FI)V
+	public static synthetic fun copyInterleaved$default (Lio/github/yuroyami/kiteplayer/spi/AudioBuffer;[FIILjava/lang/Object;)V
 	public abstract fun getFormat ()Lio/github/yuroyami/kiteplayer/spi/AudioFormat;
 	public abstract fun getFrameCount ()I
 	public abstract fun getGeneration-exH1Oj8 ()J
@@ -2182,6 +2184,8 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioBuffer : 
 
 public final class io/github/yuroyami/kiteplayer/spi/AudioBuffer$DefaultImpls {
 	public static synthetic fun copyChannel$default (Lio/github/yuroyami/kiteplayer/spi/AudioBuffer;I[FIILjava/lang/Object;)V
+	public static fun copyInterleaved (Lio/github/yuroyami/kiteplayer/spi/AudioBuffer;[FI)V
+	public static synthetic fun copyInterleaved$default (Lio/github/yuroyami/kiteplayer/spi/AudioBuffer;[FIILjava/lang/Object;)V
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioDecoder : java/lang/AutoCloseable {

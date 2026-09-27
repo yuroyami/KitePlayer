@@ -508,6 +508,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/AudioBuffer : kotlin/AutoCl
         abstract fun <get-pts>(): io.github.yuroyami.kiteplayer/Pts // io.github.yuroyami.kiteplayer.spi/AudioBuffer.pts.<get-pts>|<get-pts>(){}[0]
 
     abstract fun copyChannel(kotlin/Int, kotlin/FloatArray, kotlin/Int = ...) // io.github.yuroyami.kiteplayer.spi/AudioBuffer.copyChannel|copyChannel(kotlin.Int;kotlin.FloatArray;kotlin.Int){}[0]
+    open fun copyInterleaved(kotlin/FloatArray, kotlin/Int = ...) // io.github.yuroyami.kiteplayer.spi/AudioBuffer.copyInterleaved|copyInterleaved(kotlin.FloatArray;kotlin.Int){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/AudioDecoder : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/AudioDecoder|null[0]

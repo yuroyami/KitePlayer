@@ -1068,9 +1068,10 @@ internal class KiteFFmpegAudioBuffer(
      * the truncated stride interleaved wrong-channel samples into every frame.
      * decodeToFloat itself maps source channels onto the requested count.
      */
-    private val samples: FloatArray by lazy {
+    private val samplesDecoded: Lazy<FloatArray> = lazy {
         decodeToFloat(frame.copyPlanesToByteArray(), info, format.channels)
     }
+    private val samples: FloatArray by samplesDecoded
 
     override val frameCount: Int get() = info.sampleCount
 
@@ -1079,6 +1080,15 @@ internal class KiteFFmpegAudioBuffer(
         val source = if (channel < channels) channel else 0
         for (i in 0 until frameCount) {
             into[offset + i] = samples[i * channels + source]
+        }
+    }
+
+    /** Decodes straight into [into], with no interleaved copy of its own, unless one was made already. */
+    override fun copyInterleaved(into: FloatArray, offset: Int) {
+        if (samplesDecoded.isInitialized()) {
+            samples.copyInto(into, offset, 0, frameCount * format.channels)
+        } else {
+            decodeToFloatInto(frame.copyPlanesToByteArray(), info, format.channels, into, offset)
         }
     }
 
@@ -1097,11 +1107,5 @@ internal class KiteFFmpegAudioBuffer(
  */
 public fun AudioBuffer.interleavedFloat(): FloatArray = when (this) {
     is KiteFFmpegAudioBuffer -> interleaved()
-    else -> FloatArray(frameCount * format.channels).also { out ->
-        val scratch = FloatArray(frameCount)
-        for (channel in 0 until format.channels) {
-            copyChannel(channel, scratch)
-            for (i in 0 until frameCount) out[i * format.channels + channel] = scratch[i]
-        }
-    }
+    else -> FloatArray(frameCount * format.channels).also { copyInterleaved(it) }
 }

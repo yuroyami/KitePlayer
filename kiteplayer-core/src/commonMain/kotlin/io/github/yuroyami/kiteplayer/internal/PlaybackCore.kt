@@ -8840,28 +8840,20 @@ internal class FirstTimestamp {
 internal class WorkerOutcome(val sessionToken: Long, val name: String, val cause: Throwable?)
 
 /**
- * Interleaves a decoded buffer into what the ring wants, without allocating per buffer.
+ * Interleaves a decoded buffer into what the ring wants, into one array reused across buffers.
  *
- * The arrays grow to the largest buffer seen and are reused after that. The conversion stage behind the
- * ring copies what it is given, so handing the same array over again is safe.
+ * The array grows to the largest buffer seen and is reused after that. The conversion stage behind
+ * the ring copies what it is given, so handing the same array over again is safe. The buffer
+ * writes the layout itself through [AudioBuffer.copyInterleaved], which the FFmpeg backend decodes
+ * straight into; a planar scratch here meant every sample was copied twice more.
  */
 internal class Interleaver {
-    private var planar = FloatArray(0)
     private var interleaved = FloatArray(0)
 
     fun interleave(buffer: AudioBuffer): FloatArray {
-        val frames = buffer.frameCount
-        val channels = buffer.format.channels
-        if (planar.size < frames) planar = FloatArray(frames)
-        if (interleaved.size < frames * channels) interleaved = FloatArray(frames * channels)
-        for (channel in 0 until channels) {
-            buffer.copyChannel(channel, planar)
-            var frame = 0
-            while (frame < frames) {
-                interleaved[frame * channels + channel] = planar[frame]
-                frame++
-            }
-        }
+        val values = buffer.frameCount * buffer.format.channels
+        if (interleaved.size < values) interleaved = FloatArray(values)
+        buffer.copyInterleaved(interleaved)
         return interleaved
     }
 }

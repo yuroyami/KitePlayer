@@ -158,6 +158,22 @@ public interface AudioBuffer : AutoCloseable {
      * clipping between stages. Conversion to the device's format happens once, at the sink boundary.
      */
     public fun copyChannel(channel: Int, into: FloatArray, offset: Int = 0)
+
+    /**
+     * Copies every channel into [into] interleaved, frame by frame, starting at [offset]: the
+     * [frameCount] times `format.channels` values the engine hands to its ring. The engine reads
+     * each buffer through this. The default builds it from [copyChannel] and allocates one channel
+     * of scratch per call; a backend whose samples decode straight into this layout overrides it.
+     */
+    public fun copyInterleaved(into: FloatArray, offset: Int = 0) {
+        val channels = format.channels
+        val frames = frameCount
+        val scratch = FloatArray(frames)
+        for (channel in 0 until channels) {
+            copyChannel(channel, scratch)
+            for (frame in 0 until frames) into[offset + frame * channels + channel] = scratch[frame]
+        }
+    }
 }
 
 /** The shape of PCM: [sampleRate] sample frames a second, each holding [channels] samples of [sampleFormat]. */

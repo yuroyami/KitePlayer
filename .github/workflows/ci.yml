@@ -557,8 +557,12 @@ jobs:
       # The sample app packages every Android ABI, 32-bit ARM included, so it can be sideloaded
       # onto a streaming stick. A KiteFFmpeg release or a libass build that lacks one ABI's
       # library would otherwise give an app that cannot start on that ABI, and nothing would fail.
+      # The sample embeds testmedia/sync1080p30.mp4, and this job generates no clips. Only the
+      # packaged libraries are checked here, so a placeholder stands in for the clip.
       - name: Package the sample app for every Android ABI
         run: |
+          mkdir -p testmedia
+          [ -s testmedia/sync1080p30.mp4 ] || printf 'placeholder' > testmedia/sync1080p30.mp4
           ./gradlew --stacktrace :kiteplayer-sample-android:assembleDebug
           apk=kiteplayer-sample-android/build/outputs/apk/debug/kiteplayer-sample-android-debug.apk
           for abi in arm64-v8a armeabi-v7a x86_64; do

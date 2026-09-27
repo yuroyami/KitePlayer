@@ -7,6 +7,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.Chapter
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.DeinterlacePolicy
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -25,6 +26,7 @@ import io.github.yuroyami.kiteplayer.spi.MediaSourceFactory
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.MediaAttachment
+import io.github.yuroyami.kiteplayer.spi.FieldOrder
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.RecordingCapable
 import io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame
@@ -315,6 +317,7 @@ public class KiteFFmpegSource internal constructor(
         hardwareAccel: HardwareAccel? = null,
         hardware: HwdecStatus = HwdecStatus.Software,
         continuity: VideoDecoderContinuity = VideoDecoderContinuity(),
+        filter: String? = videoFilterDescription,
     ): VideoDecoder = KiteFFmpegVideoDecoder(
         decoder = openDecoder(
             stream.index,
@@ -329,7 +332,7 @@ public class KiteFFmpegSource internal constructor(
         continuity = continuity,
         warn = { onWarning(it) },
         // The graph runs on software frames only; the factory stands hardware down first.
-        filterDescription = if (hardware == HwdecStatus.Software) videoFilterDescription else null,
+        filterDescription = if (hardware == HwdecStatus.Software) filter else null,
     )
 
     /**
@@ -507,6 +510,12 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInf
         isCoverArt = disposition.attachedPicture,
         sampleRate = audio?.sampleRate,
         channels = audio?.channels,
+        fieldOrder = when (video?.fieldOrder) {
+            io.github.yuroyami.kiteffmpeg.FieldOrder.Progressive -> io.github.yuroyami.kiteplayer.spi.FieldOrder.Progressive
+            io.github.yuroyami.kiteffmpeg.FieldOrder.TopFirst -> io.github.yuroyami.kiteplayer.spi.FieldOrder.TopFirst
+            io.github.yuroyami.kiteffmpeg.FieldOrder.BottomFirst -> io.github.yuroyami.kiteplayer.spi.FieldOrder.BottomFirst
+            else -> io.github.yuroyami.kiteplayer.spi.FieldOrder.Unknown
+        },
         vp9 = video?.vp9?.let { metadata ->
             Vp9CodecConfiguration(
                 profile = metadata.profile?.let { source ->
@@ -556,25 +565,38 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
 ) : VideoDecoderFactory {
     override val name: String = "KiteFFmpeg FFmpeg"
 
-    override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? {
+    /** Without a deinterlacing policy, as before the policy existed: no deinterlacer. */
+    override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? =
+        create(stream, hwdec, DeinterlacePolicy.Off)
+
+    override suspend fun create(
+        stream: PlayerStreamInfo,
+        hwdec: HwdecPolicy,
+        deinterlace: DeinterlacePolicy,
+    ): VideoDecoder? {
         if (stream.kind != TrackKind.Video) return null
         val selection = platformDecoderSelection(stream.codec, hwdec)
         if (selection.requiresHardware && selection.hardware == null) return null
+        val filter = videoFilterChain(stream, deinterlace)
 
         // A video filter runs on software frames: under Auto and Prefer the hardware
         // route stands down with a warning; under Require the two demands cannot both hold and
         // the refusal is this factory's null, which the engine reports typed.
-        if (source.videoFilterDescription != null && selection.hardware != null) {
+        if (filter != null && selection.hardware != null) {
             source.onWarning(
                 PlaybackWarning.HardwareDecodeUnavailable(
                     stream.codec,
-                    "a video filter is attached and filters run on software frames",
+                    if (source.videoFilterDescription != null) {
+                        "a video filter is attached and filters run on software frames"
+                    } else {
+                        "the stream is deinterlaced, and the deinterlacer runs on software frames"
+                    },
                 ),
             )
-            return if (hwdec == HwdecPolicy.Require) null else source.newVideoDecoder(stream)
+            return if (hwdec == HwdecPolicy.Require) null else source.newVideoDecoder(stream, filter = filter)
         }
 
-        if (selection.hardware == null) return source.newVideoDecoder(stream)
+        if (selection.hardware == null) return source.newVideoDecoder(stream, filter = filter)
 
         val continuity = VideoDecoderContinuity()
 
@@ -608,6 +630,35 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
             warn = { source.onWarning(it) },
         )
     }
+
+    /**
+     * The media item's filter chain, with a deinterlacer in front when [policy] and the stream's
+     * field order ask for one. A build without the deinterlacer, which is the web build, warns and
+     * plays the stream as it is rather than failing at the first frame.
+     */
+    private fun videoFilterChain(stream: PlayerStreamInfo, policy: DeinterlacePolicy): String? {
+        val itemFilter = source.videoFilterDescription
+        val deinterlacer = deinterlaceFilter(policy, stream.fieldOrder) ?: return itemFilter
+        if (!io.github.yuroyami.kiteffmpeg.FFmpeg.hasFilter(DEINTERLACER)) {
+            source.onWarning(PlaybackWarning.DeinterlaceUnavailable(stream.codec, "this build has no $DEINTERLACER filter"))
+            return itemFilter
+        }
+        return if (itemFilter == null) deinterlacer else "$deinterlacer,$itemFilter"
+    }
+}
+
+/** The deinterlacer: FFmpeg's bwdif, which keeps the frame rate in send_frame mode. */
+private const val DEINTERLACER = "bwdif"
+
+/**
+ * The deinterlacing filter [policy] asks for on a stream of [fieldOrder], or null for none. Under
+ * [DeinterlacePolicy.Auto] only a stream the container calls interlaced gets one, and it touches
+ * only the frames marked interlaced; [DeinterlacePolicy.Always] deinterlaces every frame.
+ */
+internal fun deinterlaceFilter(policy: DeinterlacePolicy, fieldOrder: FieldOrder): String? = when (policy) {
+    DeinterlacePolicy.Off -> null
+    DeinterlacePolicy.Auto -> if (fieldOrder.isInterlaced) "$DEINTERLACER=mode=send_frame:parity=auto:deint=interlaced" else null
+    DeinterlacePolicy.Always -> "$DEINTERLACER=mode=send_frame:parity=auto:deint=all"
 }
 
 private class KiteFFmpegVideoDecoder(

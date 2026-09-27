@@ -24,6 +24,16 @@ public interface VideoDecoderFactory {
     /** Null when this factory cannot handle the stream. The engine then tries the next candidate. */
     public suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder?
 
+    /**
+     * [create] with the player's deinterlacing policy, which is what the engine calls. The default
+     * ignores [deinterlace]; a factory that can deinterlace overrides this.
+     */
+    public suspend fun create(
+        stream: PlayerStreamInfo,
+        hwdec: HwdecPolicy,
+        deinterlace: io.github.yuroyami.kiteplayer.DeinterlacePolicy,
+    ): VideoDecoder? = create(stream, hwdec)
+
     /** For logs and for the warning emitted when a candidate is skipped. */
     public val name: String
 }

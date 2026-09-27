@@ -2804,7 +2804,7 @@ internal class PlaybackCore(
         context = dispatchers.videoDecode,
         acquire = {
             try {
-                factory.create(stream, policy)
+                factory.create(stream, policy, config.deinterlace)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (failure: Throwable) {

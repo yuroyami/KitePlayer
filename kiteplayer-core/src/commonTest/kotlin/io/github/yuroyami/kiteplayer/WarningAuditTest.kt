@@ -15,6 +15,7 @@ class WarningAuditTest {
     private val samples: List<PlaybackWarning> = listOf(
         PlaybackWarning.RendererFailed("x"),
         PlaybackWarning.HardwareDecodeUnavailable("h264", "x"),
+        PlaybackWarning.DeinterlaceUnavailable("h264", "x"),
         PlaybackWarning.FrameDropping(1),
         PlaybackWarning.AudioDeviceChanged("x"),
         PlaybackWarning.AudioUnderrun(1),
@@ -94,6 +95,10 @@ class WarningAuditTest {
         is PlaybackWarning.HardwareDecodeUnavailable -> listOf(
             "PlaybackCore.warnAboutRefusedHardwareCandidate, when a requested hardware factory refuses",
             "PlaybackCore.reopenWithBackendSoftware, when a hardware decoder death recovered to software",
+        )
+        is PlaybackWarning.DeinterlaceUnavailable -> listOf(
+            "KiteFFmpegVideoDecoderFactory.videoFilterChain in :kiteplayer-ffmpeg, when the policy " +
+                "asks for a deinterlacer and the build has no bwdif filter, which is the web build",
         )
         is PlaybackWarning.FrameDropping -> listOf(
             "PlaybackCore's stats pass, when late drops in the last second cross the threshold",

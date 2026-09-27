@@ -109,6 +109,15 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the display does not dim or lock. Android uses `keepScreenOn` and iOS the idle timer, with one
   count of holds for the app. `KitePlayerAwtView` accepts it and does nothing. The composables'
   signatures change, so recompile. Pass false to keep managing the display yourself (#238).
+- Interlaced video is deinterlaced by default. `PlayerConfig` gains `deinterlace`, a
+  `DeinterlacePolicy`: `Auto` runs FFmpeg's bwdif on a stream the container calls interlaced,
+  `Always` on every stream and `Off` on none. A deinterlaced stream decodes in software, like any
+  stream with a video filter, so under `Auto` an interlaced stream no longer takes a hardware
+  decoder; pass `Off` to keep the old behaviour. `PlayerStreamInfo` gains `fieldOrder`, and both
+  classes' generated methods change, so recompile. `VideoDecoderFactory` gains a `create` overload
+  with the policy, which the engine calls and which defaults to the old `create`.
+  `PlaybackWarning` gains `DeinterlaceUnavailable`, which the web build emits because it has no
+  filters, so a `when` that lists every warning needs the new branch (#71).
 
 ## [0.0.27] - 2026-09-25
 

@@ -58,6 +58,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSourceKt {
 }
 
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoDecoderFactory : io/github/yuroyami/kiteplayer/spi/VideoDecoderFactory {
+	public fun create (Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lio/github/yuroyami/kiteplayer/DeinterlacePolicy;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun create (Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getName ()Ljava/lang/String;
 }

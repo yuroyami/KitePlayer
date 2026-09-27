@@ -91,6 +91,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoDecoderFactory :
         final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoDecoderFactory.name.<get-name>|<get-name>(){}[0]
 
     final suspend fun create(io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo, io.github.yuroyami.kiteplayer/HwdecPolicy): io.github.yuroyami.kiteplayer.spi/VideoDecoder? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoDecoderFactory.create|create(io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo;io.github.yuroyami.kiteplayer.HwdecPolicy){}[0]
+    final suspend fun create(io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo, io.github.yuroyami.kiteplayer/HwdecPolicy, io.github.yuroyami.kiteplayer/DeinterlacePolicy): io.github.yuroyami.kiteplayer.spi/VideoDecoder? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoDecoderFactory.create|create(io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo;io.github.yuroyami.kiteplayer.HwdecPolicy;io.github.yuroyami.kiteplayer.DeinterlacePolicy){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame : io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame, io.github.yuroyami.kiteplayer.spi/VideoFrame { // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame|null[0]

@@ -153,6 +153,14 @@ public sealed class PlaybackWarning {
         override val message: String get() = "open options not consumed by the demuxer: $keys"
     }
 
+    /**
+     * An interlaced stream plays without deinterlacing, although [PlayerConfig.deinterlace] asked
+     * for it, because this build has no deinterlacing filter: the web build has no filters at all.
+     */
+    public data class DeinterlaceUnavailable(val codec: String, val detail: String) : PlaybackWarning() {
+        override val message: String get() = "cannot deinterlace $codec: $detail"
+    }
+
     /** A hardware decoder was unavailable or failed and policy allowed playback to continue in software. */
     public data class HardwareDecodeUnavailable(val codec: String, val reason: String) : PlaybackWarning() {
         override val message: String get() = "hardware decode unavailable for $codec: $reason"

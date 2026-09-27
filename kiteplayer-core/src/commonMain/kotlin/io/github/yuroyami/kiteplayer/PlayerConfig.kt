@@ -68,6 +68,11 @@ public data class PlayerConfig(
      * reopening anything.
      */
     val videoEnabled: Boolean = true,
+    /**
+     * Whether interlaced video is deinterlaced. See [DeinterlacePolicy]. A deinterlaced stream
+     * decodes in software, like any stream with a video filter.
+     */
+    val deinterlace: DeinterlacePolicy = DeinterlacePolicy.Auto,
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive
@@ -338,6 +343,24 @@ public enum class ReplayGainMode {
 
     /** Level each album as a whole, so its own quiet and loud tracks keep their relationship. */
     Album,
+}
+
+/**
+ * Whether interlaced video is deinterlaced, which removes the combing that DVD rips and broadcast
+ * captures otherwise show on every moving edge.
+ */
+public enum class DeinterlacePolicy {
+    /**
+     * Deinterlaces a stream whose container says it is interlaced, and only its frames that are
+     * marked interlaced. A stream of unknown field order plays as it is. The default.
+     */
+    Auto,
+
+    /** Never deinterlaces. */
+    Off,
+
+    /** Deinterlaces every frame of every video stream, whatever it declares. */
+    Always,
 }
 
 /**

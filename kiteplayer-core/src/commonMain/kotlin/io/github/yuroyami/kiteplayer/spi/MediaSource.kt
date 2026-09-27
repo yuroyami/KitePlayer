@@ -169,6 +169,11 @@ public data class PlayerStreamInfo(
      * whatever else it carried. Reported, never repaired.
      */
     val metadata: Map<String, String> = emptyMap(),
+    /**
+     * Whether a video stream is interlaced, and which field comes first. [FieldOrder.Unknown] on
+     * most files, because most containers do not say, and never a synonym for progressive.
+     */
+    val fieldOrder: FieldOrder = FieldOrder.Unknown,
 ) {
     /**
      * By CONTENT, including [codecExtradata].
@@ -201,6 +206,7 @@ public data class PlayerStreamInfo(
             channels == other.channels &&
             vp9 == other.vp9 &&
             metadata == other.metadata &&
+            fieldOrder == other.fieldOrder &&
             (codecExtradata?.contentEquals(other.codecExtradata) ?: (other.codecExtradata == null))
     }
 
@@ -225,9 +231,27 @@ public data class PlayerStreamInfo(
         result = 31 * result + (channels ?: 0)
         result = 31 * result + (vp9?.hashCode() ?: 0)
         result = 31 * result + metadata.hashCode()
+        result = 31 * result + fieldOrder.hashCode()
         result = 31 * result + (codecExtradata?.contentHashCode() ?: 0)
         return result
     }
+}
+
+/** How a video stream's fields are ordered, in display order. */
+public enum class FieldOrder {
+    /** The container did not say. Not a synonym for [Progressive]. */
+    Unknown,
+    Progressive,
+
+    /** Interlaced, top field shown first. */
+    TopFirst,
+
+    /** Interlaced, bottom field shown first. */
+    BottomFirst,
+    ;
+
+    /** True for the two interlaced answers. */
+    public val isInterlaced: Boolean get() = this == TopFirst || this == BottomFirst
 }
 
 /** The VP9 profile, level, bit depth and chroma subsampling the container declares. A null field was not declared. */

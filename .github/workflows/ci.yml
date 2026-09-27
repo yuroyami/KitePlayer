@@ -746,8 +746,14 @@ jobs:
         run: |
           ./gradlew --stacktrace :kiteplayer-ffmpeg:installAndroidDeviceTest :kiteplayer-compose-video:installAndroidDeviceTest
           mkdir -p "$RUNNER_TEMP/test-logs"
-          adb root > /dev/null
-          adb wait-for-device
+          # adb root restarts adbd, and the answer sometimes comes back as "closed" while it does.
+          for _ in 1 2 3 4 5; do
+            adb root > /dev/null 2>&1 || true
+            adb wait-for-device
+            [ "$(adb shell id -u | tr -d '\r')" = 0 ] && break
+            sleep 2
+          done
+          [ "$(adb shell id -u | tr -d '\r')" = 0 ] || { echo "::error::adb did not become root"; exit 1; }
           status=0
           # Pushes the clips into the package's external files directory and hands them to its user.
           push_clips() {

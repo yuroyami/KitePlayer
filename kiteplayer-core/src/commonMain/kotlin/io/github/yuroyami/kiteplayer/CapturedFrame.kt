@@ -120,7 +120,9 @@ public class CapturedFrame internal constructor(
             return CapturedFrame(
                 pts = frame.pts,
                 size = frame.size,
-                pixelFormat = frame.pixelFormat,
+                // The planes' own format: a hardware frame read through a downloaded copy is
+                // Opaque as a frame and NV12 or P010 as planes.
+                pixelFormat = readable.planeFormat,
                 colorSpace = frame.colorSpace,
                 rotationDegrees = frame.rotationDegrees,
                 generation = frame.generation,

@@ -15,8 +15,8 @@ public enum class SnapshotFormat { Png, Jpeg }
  * `KitePlayer.captureFrame`, or any software frame a backend produced.
  *
  * Runs the pixel conversion FFmpeg needs on the calling thread and leaves this frame untouched.
- * Hardware-opaque frames have no readable planes and never reach here: capture refuses them
- * first, typed.
+ * A hardware frame that is read through a downloaded copy, such as a VideoToolbox frame, encodes
+ * that copy.
  *
  * @throws UnsupportedOperationException for a frame whose pixel format has no FFmpeg name
  * @throws io.github.yuroyami.kiteffmpeg.FFmpegException when the encoder refuses the frame
@@ -24,11 +24,11 @@ public enum class SnapshotFormat { Png, Jpeg }
 public fun SoftwareReadableFrame.encode(format: SnapshotFormat = SnapshotFormat.Jpeg): ByteArray {
     // FFmpeg's scaler has no Identity matrix: named yuv444p, these planes would be read as YCbCr.
     // Named gbrp, they are the picture.
-    val name = if (pixelFormat == PlayerPixelFormat.Yuv444p && colorSpace.matrix == ColorMatrix.Identity) {
+    val name = if (planeFormat == PlayerPixelFormat.Yuv444p && colorSpace.matrix == ColorMatrix.Identity) {
         "gbrp"
     } else {
-        pixelFormat.ffmpegName()
-            ?: throw UnsupportedOperationException("a $pixelFormat frame has no pixels an image encoder can take")
+        planeFormat.ffmpegName()
+            ?: throw UnsupportedOperationException("a $planeFormat frame has no pixels an image encoder can take")
     }
     val frame = Frame.ofVideo(tightlyPackedPlanes(), size.width, size.height, PixelFormat(name))
     try {
@@ -76,14 +76,14 @@ internal fun SoftwareReadableFrame.tightlyPackedPlanes(): ByteArray {
     val width = size.width
     val rows = IntArray(planeCount) { rowBytes(it) }
     val total = (0 until planeCount).sumOf { rows[it].toLong() * planeHeight(it) }
-    require(total <= Int.MAX_VALUE) { "a ${size.width}x${size.height} $pixelFormat frame does not fit one array" }
+    require(total <= Int.MAX_VALUE) { "a ${size.width}x${size.height} $planeFormat frame does not fit one array" }
     val packed = ByteArray(total.toInt())
     var at = 0
     for (plane in 0 until planeCount) {
         val stride = planeStride(plane)
         val height = planeHeight(plane)
         val rowBytes = rows[plane]
-        require(rowBytes <= stride) { "plane $plane of a $pixelFormat frame $width wide claims a stride of $stride" }
+        require(rowBytes <= stride) { "plane $plane of a $planeFormat frame $width wide claims a stride of $stride" }
         val raw = ByteArray(stride * height).also { copyPlane(plane, it, 0) }
         for (row in 0 until height) {
             raw.copyInto(packed, destinationOffset = at, startIndex = row * stride, endIndex = row * stride + rowBytes)
@@ -93,4 +93,4 @@ internal fun SoftwareReadableFrame.tightlyPackedPlanes(): ByteArray {
     return packed
 }
 
-private fun SoftwareReadableFrame.rowBytes(plane: Int): Int = pixelFormat.rowBytes(plane, size.width)
+private fun SoftwareReadableFrame.rowBytes(plane: Int): Int = planeFormat.rowBytes(plane, size.width)

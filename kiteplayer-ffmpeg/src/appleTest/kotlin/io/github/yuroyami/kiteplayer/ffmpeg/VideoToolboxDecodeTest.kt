@@ -49,6 +49,27 @@ class VideoToolboxDecodeTest {
     }
 
     /**
+     * A capture reads a VideoToolbox frame through its downloaded copy, so the planes the frame
+     * reports are the copy's: NV12 for this 8-bit H.264 clip.
+     */
+    @Test
+    fun aVideotoolboxFrameIsReadableAsItsDownloadedPlanes() = runBlocking {
+        val (source, decoder, frame) = firstVideoFrameAuto("colors-bt709.mp4")
+        try {
+            assertEquals(HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox), decoder.hardware)
+            assertEquals(PlayerPixelFormat.Opaque, frame.pixelFormat)
+            assertEquals(PlayerPixelFormat.Nv12, frame.planeFormat)
+            assertEquals(2, frame.planeCount)
+            assertEquals(listOf(320 to 240, 320 to 120), (0 until 2).map { frame.planeStride(it) to frame.planeHeight(it) })
+            val image = frame.encode(SnapshotFormat.Png)
+            assertEquals(0x89.toByte(), image[0], "not a PNG")
+        } finally {
+            frame.close()
+            source.close()
+        }
+    }
+
+    /**
      * AV1 has two decoders in the build. FFmpeg finds dav1d first for the codec, and VideoToolbox
      * can attach only to FFmpeg's own AV1 decoder (#95). So the status has to match the frame:
      * hardware only when a VideoToolbox frame came out. A Mac without AV1 silicon proves the refusal

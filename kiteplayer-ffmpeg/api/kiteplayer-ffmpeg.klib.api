@@ -109,6 +109,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame : io.githu
         final fun <get-pixelFormat>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.pixelFormat.<get-pixelFormat>|<get-pixelFormat>(){}[0]
     final val planeCount // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.planeCount|{}planeCount[0]
         final fun <get-planeCount>(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.planeCount.<get-planeCount>|<get-planeCount>(){}[0]
+    final val planeFormat // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.planeFormat|{}planeFormat[0]
+        final fun <get-planeFormat>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.planeFormat.<get-planeFormat>|<get-planeFormat>(){}[0]
     final val pts // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.pts|{}pts[0]
         final fun <get-pts>(): io.github.yuroyami.kiteplayer/Pts // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.pts.<get-pts>|<get-pts>(){}[0]
     final val rotationDegrees // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.rotationDegrees|{}rotationDegrees[0]

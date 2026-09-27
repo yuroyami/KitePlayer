@@ -164,6 +164,7 @@ public final class io/github/yuroyami/kiteplayer/CapturedFrame : io/github/yuroy
 	public final fun getOverlay ()Lio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;
 	public fun getPixelFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
 	public fun getPlaneCount ()I
+	public fun getPlaneFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
 	public fun getPts-BBkgT00 ()J
 	public fun getRotationDegrees ()I
 	public fun getSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
@@ -2777,12 +2778,14 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/SoftwareReadab
 	public abstract fun copyPlane (I[BI)V
 	public static synthetic fun copyPlane$default (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;I[BIILjava/lang/Object;)V
 	public abstract fun getPlaneCount ()I
+	public fun getPlaneFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
 	public abstract fun planeHeight (I)I
 	public abstract fun planeStride (I)I
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame$DefaultImpls {
 	public static synthetic fun copyPlane$default (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;I[BIILjava/lang/Object;)V
+	public static fun getPlaneFormat (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;)Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
 	public static fun getRotationDegrees (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;)I
 }
 

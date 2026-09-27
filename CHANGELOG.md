@@ -122,6 +122,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `loudnorm` that every decoded audio buffer runs through, which changes the generated data-class
   methods, so recompile. It is low-level API, like `videoFilter`. The web build has no filter
   graphs, so there an item with one fails to open with `ConfigurationInvalid` (#239).
+- `SoftwareReadableFrame` gains `planeFormat`, the pixel format of the planes that `copyPlane`
+  reads. It defaults to `pixelFormat`, so a custom frame needs no change. A VideoToolbox frame
+  reports the format of its downloaded copy there, so `captureFrame` and `encode` now work while
+  VideoToolbox decodes, and such a capture holds NV12 or P010 planes (#299).
 
 ## [0.0.27] - 2026-09-25
 

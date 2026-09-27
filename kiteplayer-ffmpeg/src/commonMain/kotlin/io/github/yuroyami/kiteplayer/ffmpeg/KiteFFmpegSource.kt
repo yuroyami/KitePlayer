@@ -1137,8 +1137,13 @@ public class KiteFFmpegVideoFrame internal constructor(
      */
     private val packedPlanes: ByteArray by lazy { readableFrame().copyPlanesToByteArray() }
 
+    /** The downloaded copy's format for a VideoToolbox frame, which downloads it on first read. */
+    override val planeFormat: PlayerPixelFormat by lazy {
+        if (info.isHardware) readableFrame().info.pixelFormat.toPlayerFormat() else pixelFormat
+    }
+
     private val planeLayout: List<PlaneSpec> by lazy {
-        planeLayoutFor(pixelFormat, info.width, info.height)
+        planeLayoutFor(planeFormat, info.width, info.height)
     }
 
     override val planeCount: Int get() = planeLayout.size

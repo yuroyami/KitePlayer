@@ -24,11 +24,12 @@ class CapturedFrameGeometryTest {
         private val strides: IntArray,
         private val heights: IntArray,
         override val planeCount: Int = strides.size,
+        override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p,
+        override val planeFormat: PlayerPixelFormat = pixelFormat,
     ) : SoftwareReadableFrame {
         override val pts: Pts = Pts.Zero
         override val duration: Pts? = null
         override val size: VideoSize = VideoSize(16, 16)
-        override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p
         override val colorSpace: ColorSpaceInfo = ColorSpaceInfo()
         override val rotationDegrees: Int = 0
         override val hardwareSurface: HwSurfaceKind? = null
@@ -75,6 +76,20 @@ class CapturedFrameGeometryTest {
         assertEquals(2, captured.planeCount)
         assertEquals(16, captured.planeStride(0))
         assertEquals(8, captured.planeHeight(1))
+    }
+
+    @Test
+    fun `a frame read through a downloaded copy captures the format of its planes`() {
+        val captured = CapturedFrame.of(
+            FakeReadable(
+                strides = intArrayOf(16, 16),
+                heights = intArrayOf(16, 8),
+                pixelFormat = PlayerPixelFormat.Opaque,
+                planeFormat = PlayerPixelFormat.Nv12,
+            ),
+        )
+        assertEquals(PlayerPixelFormat.Nv12, captured.pixelFormat)
+        assertEquals(PlayerPixelFormat.Nv12, captured.planeFormat)
     }
 
     @Test

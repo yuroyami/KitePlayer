@@ -68,6 +68,15 @@ public interface VideoFrame : AutoCloseable {
  * This is not the render path. Every method here copies.
  */
 public interface SoftwareReadableFrame : VideoFrame {
+    /**
+     * The pixel format of the planes [copyPlane] reads.
+     *
+     * It is [pixelFormat] for a frame in main memory. A hardware frame that is read through a
+     * downloaded copy, such as a VideoToolbox frame, reports the copy's format here, while its
+     * [pixelFormat] stays [PlayerPixelFormat.Opaque] for the renderers.
+     */
+    public val planeFormat: PlayerPixelFormat get() = pixelFormat
+
     /** How many planes [copyPlane] can read. */
     public val planeCount: Int
 

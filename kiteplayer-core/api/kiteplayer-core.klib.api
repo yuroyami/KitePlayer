@@ -692,6 +692,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/RecordingCapable { // io.gi
 abstract interface io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame : io.github.yuroyami.kiteplayer.spi/VideoFrame { // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame|null[0]
     abstract val planeCount // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame.planeCount|{}planeCount[0]
         abstract fun <get-planeCount>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame.planeCount.<get-planeCount>|<get-planeCount>(){}[0]
+    open val planeFormat // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame.planeFormat|{}planeFormat[0]
+        open fun <get-planeFormat>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame.planeFormat.<get-planeFormat>|<get-planeFormat>(){}[0]
 
     abstract fun copyPlane(kotlin/Int, kotlin/ByteArray, kotlin/Int = ...) // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame.copyPlane|copyPlane(kotlin.Int;kotlin.ByteArray;kotlin.Int){}[0]
     abstract fun planeHeight(kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame.planeHeight|planeHeight(kotlin.Int){}[0]

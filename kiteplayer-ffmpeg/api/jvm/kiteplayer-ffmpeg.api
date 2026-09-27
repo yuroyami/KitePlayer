@@ -73,6 +73,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : i
 	public final fun getHasPts ()Z
 	public fun getPixelFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
 	public fun getPlaneCount ()I
+	public fun getPlaneFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
 	public fun getPts-BBkgT00 ()J
 	public fun getRotationDegrees ()I
 	public fun getSize ()Lio/github/yuroyami/kiteplayer/VideoSize;

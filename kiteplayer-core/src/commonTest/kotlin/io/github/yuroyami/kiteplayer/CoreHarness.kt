@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.PlaybackCore
 import io.github.yuroyami.kiteplayer.internal.PlaybackDispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -50,6 +51,8 @@ internal class CoreHarness(
     sinkSessionId: Int? = null,
     /** The format the scripted device answers every open with. Null accepts what was asked. */
     sinkAccepts: io.github.yuroyami.kiteplayer.spi.AudioFormat? = null,
+    /** The dispatcher every engine worker runs on, over the test's own scheduler. */
+    engineDispatcher: (TestCoroutineScheduler) -> CoroutineDispatcher = { StandardTestDispatcher(it) },
 ) {
     val scheduler: TestCoroutineScheduler = scope.testScheduler
     val clock: VirtualClock = VirtualClock(scheduler)
@@ -71,7 +74,7 @@ internal class CoreHarness(
         config = config,
         backend = backend,
         output = output,
-        dispatchers = PlaybackDispatchers.sharing(StandardTestDispatcher(scheduler)),
+        dispatchers = PlaybackDispatchers.sharing(engineDispatcher(scheduler)),
         closeDispatchers = false,
         // Under the test's own background lifetime, so a test that fails an assertion before it closes
         // still leaves no worker running. Without it, one failed assertion leaves five loops on the

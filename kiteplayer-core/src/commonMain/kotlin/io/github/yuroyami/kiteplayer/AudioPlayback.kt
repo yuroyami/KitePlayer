@@ -89,6 +89,14 @@ public class AudioPlayback(
      */
     private var ring: AudioRingHandle? = null
 
+    /**
+     * How long the feeder waits on a full ring before it tries again: the time the device takes to
+     * play a quarter of the ring, set at open. A shorter wait refills sooner and buys nothing, because
+     * three quarters of the ring still stand between the device and an underrun, and each wait is a
+     * wake-up that keeps a phone's cores out of idle. A paused device frees nothing at all.
+     */
+    private var fullRingWait: Duration = FULL_RING_WAIT_MIN
+
     /** Opens the device and the ring behind it. A test replaces it to supply its own ring. */
     internal var openPath: suspend (AudioSink, AudioFormat, (AudioFormat) -> Int) -> OpenedAudioPath =
         ::openAudioPath
@@ -237,13 +245,20 @@ public class AudioPlayback(
         // The device and the ring, opened together, because the ring's format is the format the device
         // accepted and its capacity depends on that format and on the device's own period. Which kind
         // of ring comes back is the sink's choice; see `openAudioPath`.
+        var capacityFrames = 0
         val opened = openPath(sink, request) { negotiated ->
             max(
                 sink.deviceBufferFrames * DEVICE_BUFFER_MULTIPLE,
                 negotiated.framesIn(Pts(bufferDuration.inWholeMicroseconds)),
-            )
+            ).also { capacityFrames = it }
         }
         val negotiated = opened.format
+        fullRingWait = if (negotiated.sampleRate > 0) {
+            (capacityFrames / 4 * 1_000_000L / negotiated.sampleRate).microseconds
+                .coerceIn(FULL_RING_WAIT_MIN, FULL_RING_WAIT_MAX)
+        } else {
+            FULL_RING_WAIT_MIN
+        }
         // Under the lock, like every write of the field that a member on another thread reads.
         synchronized(lock) { ring = opened.ring }
         format = negotiated
@@ -296,6 +311,7 @@ public class AudioPlayback(
         interleaved: FloatArray,
         frames: Int,
         abort: () -> Boolean = { false },
+        idle: suspend (Duration) -> Unit = { delay(it) },
     ) {
         // The FIELD is read under the lock, extending the one-sentence rule to the producer:
         // a member that may run beside [close] touches `ring` only under
@@ -315,9 +331,9 @@ public class AudioPlayback(
             )
             if (accepted == 0) {
                 if (abort()) return
-                // The ring is full, which means the device has as much as it can hold. Waiting a
-                // fraction of a device period is exactly the right amount of patience.
-                delay(FULL_RING_WAIT)
+                // The ring is full, which means the device has as much as it can hold. The engine
+                // passes a nap that a quiesce request ends at once, so a seek does not wait this out.
+                idle(fullRingWait)
                 continue
             }
             offset += accepted
@@ -357,6 +373,19 @@ public class AudioPlayback(
         frames: Int,
         sourceFormat: AudioFormat,
         abort: () -> Boolean = { false },
+    ): Unit = submitDecoded(pts, interleaved, frames, sourceFormat, abort) { delay(it) }
+
+    /**
+     * [submitDecoded] with the wait on a full ring supplied by the caller. The engine passes its
+     * worker's nap, which a quiesce request ends at once.
+     */
+    internal suspend fun submitDecoded(
+        pts: Pts?,
+        interleaved: FloatArray,
+        frames: Int,
+        sourceFormat: AudioFormat,
+        abort: () -> Boolean,
+        idle: suspend (Duration) -> Unit,
     ) {
         val negotiated = format ?: error("submitDecoded was called before open")
         // The epoch's pitch law, read with the rate below: both only ever change across a flush,
@@ -428,7 +457,7 @@ public class AudioPlayback(
 
         if (speedNow == 1.0) {
             // The exact pre-speed path: media pts straight through, byte for byte.
-            if (produced > 0) submit(pts, stage.output, produced, abort)
+            if (produced > 0) submit(pts, stage.output, produced, abort, idle)
             return
         }
 
@@ -444,7 +473,7 @@ public class AudioPlayback(
         if (produced > 0) {
             val base = scaledBaseUs
             val scaledPts = base?.let { Pts(it + framesToMicros(emittedBefore, rate)) }
-            submit(scaledPts, stage.output, produced, abort)
+            submit(scaledPts, stage.output, produced, abort, idle)
         }
     }
 
@@ -564,7 +593,10 @@ public class AudioPlayback(
      * @throws PlaybackException carrying [PlaybackError.DecoderFailed] when the rate conversion's
      *         tail would need more than 4 Mi float values.
      */
-    public suspend fun finishDecoded(abort: () -> Boolean = { false }): Int {
+    public suspend fun finishDecoded(abort: () -> Boolean = { false }): Int = finishDecoded(abort) { delay(it) }
+
+    /** [finishDecoded] with the wait on a full ring supplied by the caller, as [submitDecoded] takes it. */
+    internal suspend fun finishDecoded(abort: () -> Boolean, idle: suspend (Duration) -> Unit): Int {
         val stage = pipeline ?: return 0
         val negotiated = format ?: return 0
         val emittedBefore = stage.tempoEmittedFrames
@@ -575,12 +607,12 @@ public class AudioPlayback(
             // Dated by the ring's own continuity, like every 1.0 buffer: the tail follows the
             // buffer before it with no gap, so a null pts is the truthful answer rather than a
             // guess at a media timestamp the tempo stage never carried.
-            submit(null, stage.output, produced, abort)
+            submit(null, stage.output, produced, abort, idle)
             return produced
         }
         val base = synchronized(lock) { scaledBaseUs }
         val scaledPts = base?.let { Pts(it + framesToMicros(emittedBefore, negotiated.sampleRate)) }
-        submit(scaledPts, stage.output, produced, abort)
+        submit(scaledPts, stage.output, produced, abort, idle)
         return produced
     }
 
@@ -604,8 +636,11 @@ public class AudioPlayback(
     public suspend fun drain() {
         val ring = ring ?: return
         ring.markEnding()
-        // Wait for the ring itself to empty first, then let the device finish its own buffer.
-        while (ring.bufferedFrames > 0) delay(FULL_RING_WAIT)
+        // Wait for the ring itself to empty first, then let the device finish its own buffer. Each
+        // wait is the time the rest takes to play, so the end is noticed on time with few wake-ups.
+        while (ring.bufferedFrames > 0) {
+            delay(ring.bufferedUs.microseconds.coerceIn(FULL_RING_WAIT_MIN, fullRingWait))
+        }
         sink.drain()
     }
 
@@ -843,6 +878,10 @@ public class AudioPlayback(
         /** Ring capacity as a multiple of the device buffer, when that is the larger figure. */
         const val DEVICE_BUFFER_MULTIPLE = 8
 
-        val FULL_RING_WAIT: Duration = 2.milliseconds
+        /** The shortest wait on a full ring, for a ring so small that a quarter of it is less. */
+        val FULL_RING_WAIT_MIN: Duration = 2.milliseconds
+
+        /** The longest wait on a full ring, so a deep ring still refills in small steps. */
+        val FULL_RING_WAIT_MAX: Duration = 50.milliseconds
     }
 }

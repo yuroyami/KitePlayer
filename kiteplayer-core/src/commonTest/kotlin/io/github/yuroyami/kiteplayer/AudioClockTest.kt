@@ -150,7 +150,10 @@ class AudioClockTest {
 
             override fun onAudio(generation: Generation, pts: Pts, interleaved: FloatArray, frames: Int, format: AudioFormat) {
                 seen += generation
-                assertEquals(cuts.last(), generation, "a block belongs to the announced timeline")
+                // A retired session's last callback may still arrive after the next discontinuity,
+                // carrying its old generation, as AudioTap.onDiscontinuity allows. No block may run
+                // ahead of the announced timeline.
+                assertTrue(generation <= cuts.last(), "block of $generation after only ${cuts.last()} was announced")
             }
 
             override fun onDiscontinuity(generation: Generation) {

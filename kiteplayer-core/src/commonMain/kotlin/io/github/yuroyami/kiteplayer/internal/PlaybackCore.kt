@@ -7667,7 +7667,7 @@ internal class PlaybackCore(
                             if (!handOver(session, worker, video, frame, epoch, held)) break
                         } else {
                             if (worker.quiesceRequested) break
-                            worker.napUntil(HANDOVER_RETRY) { video.awaitDeparture() }
+                            worker.napUntil(handoverRetry(session)) { video.awaitDeparture() }
                         }
                     }
                 } finally {
@@ -7852,10 +7852,21 @@ internal class PlaybackCore(
             if (video.trySubmit(frame)) return true
             if (worker.quiesceRequested) return false
             // Woken by the frame that frees the slot, so the release that frame queued is served
-            // on the next decoder call instead of at the end of a poll (#139).
-            worker.napUntil(HANDOVER_RETRY) { video.awaitDeparture() }
+            // on the next decoder call instead of at the end of a poll (#139). Every path that
+            // takes a frame out signals that departure, so the bound is the ordinary poll: a
+            // shorter one only woke the worker to find the queue still full (#245).
+            worker.napUntil(WORKER_POLL) { video.awaitDeparture() }
         }
     }
+
+    /**
+     * The bound on the decoder's retry when it takes no packet and gives no frame. An asynchronous
+     * decoder signals nothing when it becomes ready, so a playing schedule polls it often. A paused
+     * schedule takes no frame, so nothing frees the decoder's output, and the ordinary poll is
+     * enough: a departure or a quiesce request still ends the wait at once (#245).
+     */
+    private fun handoverRetry(session: OpenSession): Duration =
+        if (session.schedulerMode.value == SCHEDULER_IDLE) WORKER_POLL else HANDOVER_RETRY
 
     /**
      * The frame a backward landing holds: the newest one decoded below the target so far.
@@ -8027,7 +8038,7 @@ internal class PlaybackCore(
                     !session.audioTailFlushed.value &&
                     session.audioInFlight.value == 0
                 ) {
-                    audio.finishDecoded { worker.quiesceRequested }
+                    audio.finishDecoded({ worker.quiesceRequested }, worker::nap)
                     // Only after the tail is in the ring, so the terminal state cannot read this
                     // as done while a quiesce abandoned the submit half way.
                     if (!worker.quiesceRequested) session.audioTailFlushed.value = true
@@ -8071,8 +8082,9 @@ internal class PlaybackCore(
                 // samples the ring had already accepted and ran the stateful conversion twice
                 // The abort callback bounds the wait instead: while the ring is full
                 // the submit polls it, and a quiesce request abandons the unaccepted remainder,
-                // which the seek's flush was about to discard anyway.
-                audio.submitDecoded(pts, interleaved, frames, buffer.format) { worker.quiesceRequested }
+                // which the seek's flush was about to discard anyway. The wait on a full ring is
+                // the worker's nap, so the same request also ends that wait at once.
+                audio.submitDecoded(pts, interleaved, frames, buffer.format, { worker.quiesceRequested }, worker::nap)
                 if (switchDiscard != Long.MIN_VALUE) {
                     session.audioSwitchDiscardBeforeUs.compareAndSet(switchDiscard, Long.MIN_VALUE)
                 }

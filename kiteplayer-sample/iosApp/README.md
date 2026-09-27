@@ -7,8 +7,9 @@ Swift module name `KitePlayerSampleHost`, so importing the framework module name
 is unambiguous.
 
 The app opens on the shared Compose screen from `kiteplayer-sample-shared`: the audio visualiser,
-playing the sample song, or the song named by `kiteplayer.sample.song` in the root
-`local.properties`. The build phase copies the song into the bundle as `sample-song`.
+playing the songs in `kiteplayer-sample-shared/media`, or only the song named by
+`kiteplayer.sample.song` in the root `local.properties`. The build phase copies up to nine songs
+into the bundle, as `sample-song` and then `sample-song-2` up to `sample-song-9`.
 `--s1b-smoke`, `--scenario` and `--uikit` start the
 UIKit host instead, which presents through the `KitePlayerUIView` owned by `kiteplayer-view` with
 no Compose involved.

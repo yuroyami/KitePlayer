@@ -59,15 +59,18 @@ internal data class SampleOptions(
         }
 
         /**
-         * Every song committed beside the sample, in name order.
+         * Every song in the shared media folder, in name order.
          *
          * The desktop sample runs from the repository, so the songs are read straight from the
-         * shared module rather than copied anywhere. An empty list means the clip plays.
+         * shared module rather than copied anywhere. The build passes the folder as
+         * `kiteplayer.sample.songs`; a launch without it reads the folder relative to the working
+         * directory. An empty list means the clip plays.
          */
-        private fun sharedSongs(): List<String> = File("kiteplayer-sample-shared/media").listFiles().orEmpty()
-            .filter { file -> file.isFile && SONG_TYPES.any { file.name.endsWith(".$it", ignoreCase = true) } }
-            .sortedBy { it.name }
-            .map { it.absolutePath }
+        private fun sharedSongs(): List<String> =
+            File(property("kiteplayer.sample.songs") ?: "kiteplayer-sample-shared/media").listFiles().orEmpty()
+                .filter { file -> file.isFile && SONG_TYPES.any { file.name.endsWith(".$it", ignoreCase = true) } }
+                .sortedBy { it.name }
+                .map { it.absolutePath }
 
         /** An empty value still counts as set, so `-Pkiteplayer.sample.measure` alone works. */
         private fun property(key: String): String? =

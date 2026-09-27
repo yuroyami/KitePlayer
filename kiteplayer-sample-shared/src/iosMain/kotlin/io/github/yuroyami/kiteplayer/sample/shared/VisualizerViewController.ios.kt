@@ -19,9 +19,10 @@ import platform.Foundation.NSFileManager
 import platform.UIKit.UIViewController
 
 /**
- * The sample screen for iOS, with a player of its own. It plays the song the app was built with,
- * copied into the bundle as `sample-song`, or the conformance clip when the song is missing. The song
- * shows on the lock screen and in the control centre, and pauses for a call.
+ * The sample screen for iOS, with a player of its own. It plays the songs the app was built with,
+ * copied into the bundle as `sample-song` and `sample-song-2` up to `sample-song-9`, or the
+ * conformance clip when there is none. The song shows on the lock screen and in the control centre,
+ * and pauses for a call.
  */
 fun visualizerViewController(): UIViewController = ComposeUIViewController {
     val player = remember { KitePlayerPlatform.createOrNull() }

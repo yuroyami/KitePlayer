@@ -12,7 +12,7 @@ plugins {
  * content. The modifier toggle is the point of that screen: clip, alpha, rotation and scale apply
  * to the video pixels, which a platform-view player cannot do.
  *
- * A bare `run` opens on the audio visualiser instead, playing the sample song; `--modifiers` or
+ * A bare `run` opens on the audio visualiser instead, playing the sample songs; `--modifiers` or
  * the measurement flags bring back the video screen above.
  *
  * An application, not a library: no explicitApi, no ABI dump, nothing published.
@@ -49,16 +49,17 @@ val measureFlags = listOf(
     providers.gradleProperty(key).orNull?.let { value -> "-D$key=$value" }
 }
 
-// The song the visualiser opens on: -Pkiteplayer.sample.song, else kiteplayer.sample.song in the root
-// local.properties, else the committed one in kiteplayer-sample-shared/media.
-val sampleSong: String = providers.gradleProperty("kiteplayer.sample.song")
+// The songs the visualiser offers: -Pkiteplayer.sample.song names one and only one, else
+// kiteplayer.sample.song in the root local.properties, else every song in the shared media folder.
+// The folder's absolute path is baked in, because the run task starts in this module's directory.
+val sampleSong: String? = providers.gradleProperty("kiteplayer.sample.song")
     .orElse(
         providers.fileContents(rootProject.layout.projectDirectory.file("local.properties")).asText.map { text ->
             Properties().apply { load(text.reader()) }.getProperty("kiteplayer.sample.song").orEmpty()
         },
     )
     .orNull?.takeIf { it.isNotBlank() }
-    ?: rootProject.layout.projectDirectory.file("kiteplayer-sample-shared/media/bad-cat.mp3").asFile.absolutePath
+val sampleSongFolder = rootProject.layout.projectDirectory.dir("kiteplayer-sample-shared/media").asFile.absolutePath
 
 // The run classpath, printed so the measurement can be repeated with no Gradle daemon in the
 // picture: `java -cp "$(./gradlew -q :kiteplayer-sample-desktop:printRunClasspath)" ... MainKt`.
@@ -76,6 +77,7 @@ compose.desktop {
         mainClass = "io.github.yuroyami.kiteplayer.sample.desktop.MainKt"
         jvmArgs += "-Dkiteplayer.sample.media.default=$defaultMedia"
         jvmArgs += measureFlags
-        jvmArgs += "-Dkiteplayer.sample.song=$sampleSong"
+        jvmArgs += "-Dkiteplayer.sample.songs=$sampleSongFolder"
+        if (sampleSong != null) jvmArgs += "-Dkiteplayer.sample.song=$sampleSong"
     }
 }

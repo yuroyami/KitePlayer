@@ -95,6 +95,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/SnapshotsKt {
 public final class io/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter;
 	public final fun toRgba (Lio/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame;)[B
+	public final fun toRgba (Lio/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame;[B)[B
 	public final fun toneMapsHdr (Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;)Z
 }
 

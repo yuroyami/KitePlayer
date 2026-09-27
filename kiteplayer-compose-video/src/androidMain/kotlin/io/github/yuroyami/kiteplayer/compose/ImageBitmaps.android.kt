@@ -42,8 +42,8 @@ internal actual class FrameImagePool actual constructor() {
     actual fun release() = Unit
 }
 
-internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray =
-    SoftwareConverter.toRgba(frame.asKiteFFmpegFrame())
+internal actual fun kiteCodecFrameToRgba(frame: VideoFrame, reuse: ByteArray?): ByteArray =
+    SoftwareConverter.toRgba(frame.asKiteFFmpegFrame(), reuse)
 
 internal actual fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap {
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)

@@ -20,7 +20,7 @@ public object MobileAndroidPlayerViewRendererFactory : AndroidPlayerViewRenderer
         onScaleMode: (VideoScale) -> Unit,
     ): AndroidPlayerViewRenderer = MobileAndroidPlayerViewRenderer(
         AndroidSurfaceVideoRenderer(
-            convert = { frame -> SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame) },
+            convert = reusingConverter(),
             onOverlay = onOverlay,
             onVideoGeometry = onVideoGeometry,
         ),
@@ -57,4 +57,14 @@ private class MobileAndroidPlayerViewRenderer(
         delegate.setScaleMode(mode)
         onScaleMode(mode)
     }
+}
+
+/**
+ * The converter one renderer uses, holding the array it returned last. The renderer converts on its
+ * one worker and swizzles the bytes into its own buffer before the next frame, so the array is free
+ * again by then.
+ */
+private fun reusingConverter(): (io.github.yuroyami.kiteplayer.spi.VideoFrame) -> ByteArray {
+    var last: ByteArray? = null
+    return { frame -> SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame, last).also { last = it } }
 }

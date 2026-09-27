@@ -25,12 +25,20 @@ public object DesktopAwtPlayerViewRendererFactory : AwtPlayerViewRendererFactory
     ): AwtPlayerViewRenderer = DesktopAwtPlayerViewRenderer(
         AwtCanvasVideoRenderer(
             painter = object : AwtFramePainter {
+                // The renderer paints from one caller at a time and is done with the bytes when
+                // packRgbInto returns, so one array serves every frame of this renderer.
+                private var rgba: ByteArray? = null
+
                 override fun paintArgb(
                     frame: VideoFrame,
                     destination: IntArray,
                     width: Int,
                     height: Int,
-                ): Boolean = packRgbInto(frame as KiteFFmpegVideoFrame, destination, width, height)
+                ): Boolean {
+                    val converted = SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame, rgba)
+                    rgba = converted
+                    return packRgbInto(converted, destination, width, height)
+                }
 
                 // Only the converter knows whether it rolled HDR off or handed it through, and
                 // this is what turns PlaybackWarning.HdrToneMapped from silent into truthful.
@@ -48,7 +56,7 @@ public fun KitePlayerAwtView.installDesktopRenderer() {
 }
 
 /**
- * Converts one frame into the packed integers a `BufferedImage` of type `TYPE_INT_RGB` stores.
+ * Repacks one converted frame into the integers a `BufferedImage` of type `TYPE_INT_RGB` stores.
  *
  * The converter answers RGBA bytes, which is what every other consumer of it wants, so the one
  * repacking step lives here rather than being pushed into the shared converter for one platform's
@@ -56,12 +64,11 @@ public fun KitePlayerAwtView.installDesktopRenderer() {
  * frame has no meaningful alpha to carry.
  */
 private fun packRgbInto(
-    frame: KiteFFmpegVideoFrame,
+    rgba: ByteArray,
     destination: IntArray,
     width: Int,
     height: Int,
 ): Boolean {
-    val rgba = SoftwareConverter.toRgba(frame)
     val pixels = width * height
     if (rgba.size < pixels * 4 || destination.size < pixels) return false
     var i = 0

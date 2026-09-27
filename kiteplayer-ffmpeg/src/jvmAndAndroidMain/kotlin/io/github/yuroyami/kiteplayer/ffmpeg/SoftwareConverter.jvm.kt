@@ -18,7 +18,15 @@ public object SoftwareConverter {
      * copy per frame, which is exactly what HardwareWithDownload reports upstream. Hardware
      * kinds that cannot be read back still refuse inside [KiteFFmpegVideoFrame.readableFrame].
      */
-    public fun toRgba(frame: KiteFFmpegVideoFrame): ByteArray {
+    public fun toRgba(frame: KiteFFmpegVideoFrame): ByteArray = toRgba(frame, reuse = null)
+
+    /**
+     * [toRgba] into [reuse] when it is exactly `width * height * 4` bytes, and into a new array
+     * otherwise. A renderer that passes back the array it got for the previous frame allocates the
+     * RGBA bytes once instead of once per frame. It must be done with that array first: the bytes
+     * are overwritten in place.
+     */
+    public fun toRgba(frame: KiteFFmpegVideoFrame, reuse: ByteArray?): ByteArray {
         val readable = frame.readableFrame()
         val info = readable.info
         return tightlyPackedToRgba(
@@ -27,6 +35,7 @@ public object SoftwareConverter {
             height = frame.size.height,
             pixelFormat = info.pixelFormat.toPlayerFormat(),
             colorSpace = info.color.toPlayerColorSpace(info.pixelFormat),
+            into = reuse,
         )
     }
 

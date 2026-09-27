@@ -187,15 +187,20 @@ internal fun parallelSliceCount(width: Int, height: Int): Int {
  */
 internal const val PARALLEL_PIXEL_THRESHOLD: Long = 65_536L
 
+/**
+ * Converts [bytes] to tightly packed RGBA. [into] is used when it is exactly `width * height * 4`
+ * bytes, because every path below writes all four bytes of every pixel; otherwise a new array is.
+ */
 internal fun tightlyPackedToRgba(
     bytes: ByteArray,
     width: Int,
     height: Int,
     pixelFormat: PlayerPixelFormat,
     colorSpace: ColorSpaceInfo,
+    into: ByteArray? = null,
 ): ByteArray {
     require(width > 0 && height > 0) { "frame has no dimensions: ${width}x$height" }
-    val out = ByteArray(width * height * 4)
+    val out = into?.takeIf { it.size == width * height * 4 } ?: ByteArray(width * height * 4)
     when (pixelFormat) {
         PlayerPixelFormat.Yuv420p -> bytes.convertPlanarYuv(
             out, width, height, colorSpace,

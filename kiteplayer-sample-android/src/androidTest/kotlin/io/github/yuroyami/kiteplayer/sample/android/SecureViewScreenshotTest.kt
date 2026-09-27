@@ -4,6 +4,7 @@ import android.app.Instrumentation
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.View
+import android.view.WindowManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -29,6 +30,14 @@ class SecureViewScreenshotTest {
 
             // The activity opens the bundled clip paused, so its first frame stays on the view.
             awaitShare(view, "the first frame in the screenshot") { it > PICTURE_SHARE }
+
+            // The control: a secure window is black in these screenshots, which proves they cannot
+            // capture a secure layer. Without it, a flag that does nothing and a screenshot that
+            // sees secure content would look the same.
+            scenario.onActivity { it.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+            awaitShare(view, "a black video area in the screenshot of a secure window") { it < BLACK_SHARE }
+            scenario.onActivity { it.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+            awaitShare(view, "the picture back after the window stops being secure") { it > PICTURE_SHARE }
 
             instrumentation.runOnMainSync { view.secure = true }
             awaitShare(view, "a black video area in the screenshot of a secure view") { it < BLACK_SHARE }

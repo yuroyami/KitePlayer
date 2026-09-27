@@ -249,15 +249,27 @@ public open class KitePlayerView @JvmOverloads constructor(
         }
     }
 
+    /** True while a [secure] change waits for the old surface to go before showing a new one. */
+    private var recreatingSurface = false
+
     /**
      * Marks the surface secure: excluded from screenshots, screen recording and non-secure
      * displays, which is what paid content asks for. Off by default. Reads back what this view
      * last set; the platform does not report the flag.
+     *
+     * Android applies the flag only when a surface is created. A change while the video shows
+     * therefore drops the surface and makes a new one, and the picture blanks for a frame or two.
      */
     public var secure: Boolean = false
         set(value) {
+            if (field == value) return
             field = value
             surfaceView.setSecure(value)
+            if (surfaceView.holder.surface.isValid) {
+                // Hiding the surface view destroys the surface; surfaceDestroyed shows it again.
+                recreatingSurface = true
+                surfaceView.visibility = INVISIBLE
+            }
         }
 
     /** The turn last reported for the picture, for the parameter keeper beside this class. */
@@ -339,6 +351,11 @@ public open class KitePlayerView @JvmOverloads constructor(
                 // with a time limit, so a stuck draw cannot hang the main thread.
                 binding.activeRenderer?.setSurface(null)
                 binding.surfaceGone()
+                if (recreatingSurface) {
+                    recreatingSurface = false
+                    // On the next frame, so that this traversal has finished with the old surface.
+                    post { surfaceView.visibility = VISIBLE }
+                }
             }
         })
     }

@@ -1,7 +1,6 @@
 package io.github.yuroyami.kiteplayer.sample.android
 
 import android.app.Instrumentation
-import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.View
 import android.view.WindowManager
@@ -56,10 +55,13 @@ class ViewScreenshotTest {
             scenario.onActivity { view = it.findViewById(R.id.player_view) }
             awaitShare(view, "the first frame in the screenshot") { it > PICTURE_SHARE }
 
-            // Stopped, the activity's window goes and the view loses its surface; resumed, a new one comes.
-            scenario.moveToState(Lifecycle.State.CREATED)
-            scenario.moveToState(Lifecycle.State.RESUMED)
-            awaitShare(view, "the paused picture back after the activity returns") { it > PICTURE_SHARE }
+            // Stopped, the activity's window goes and the view loses its surface; resumed, a new one
+            // comes. Five times, as step 4 of the device run sheet asks.
+            repeat(5) { round ->
+                scenario.moveToState(Lifecycle.State.CREATED)
+                scenario.moveToState(Lifecycle.State.RESUMED)
+                awaitShare(view, "the paused picture back after return ${round + 1}") { it > PICTURE_SHARE }
+            }
         }
     }
 
@@ -68,58 +70,14 @@ class ViewScreenshotTest {
         val deadline = SystemClock.uptimeMillis() + TIMEOUT_MILLIS
         var last = -1.0
         while (SystemClock.uptimeMillis() < deadline) {
-            last = brightShare(view)
+            last = pictureBrightShare(instrumentation, view)
             if (accept(last)) return
             SystemClock.sleep(POLL_MILLIS)
         }
         throw AssertionError("timed out waiting for $what: the bright share stayed at $last")
     }
 
-    /**
-     * The share of sampled pixels brighter than near black, in the middle 60 percent of where the
-     * 16:9 clip sits when it is fitted into the view. The performance overlay sits at the view's
-     * top edge, outside that area.
-     */
-    private fun brightShare(view: View): Double {
-        val shot: Bitmap = instrumentation.uiAutomation.takeScreenshot() ?: return 0.0
-        try {
-            val origin = IntArray(2)
-            var width = 0
-            var height = 0
-            instrumentation.runOnMainSync {
-                view.getLocationOnScreen(origin)
-                width = view.width
-                height = view.height
-            }
-            val fitsWidth = width * 9 <= height * 16
-            val pictureWidth = if (fitsWidth) width else height * 16 / 9
-            val pictureHeight = if (fitsWidth) width * 9 / 16 else height
-            val left = origin[0] + (width - pictureWidth) / 2 + pictureWidth / 5
-            val top = origin[1] + (height - pictureHeight) / 2 + pictureHeight / 5
-            var bright = 0
-            var sampled = 0
-            for (row in 0 until GRID) {
-                for (column in 0 until GRID) {
-                    val x = left + pictureWidth * 3 / 5 * column / (GRID - 1)
-                    val y = top + pictureHeight * 3 / 5 * row / (GRID - 1)
-                    if (x !in 0 until shot.width || y !in 0 until shot.height) continue
-                    val pixel = shot.getPixel(x, y)
-                    val level = maxOf((pixel shr 16) and 0xFF, (pixel shr 8) and 0xFF, pixel and 0xFF)
-                    if (level > NEAR_BLACK) bright++
-                    sampled++
-                }
-            }
-            return if (sampled == 0) 0.0 else bright.toDouble() / sampled
-        } finally {
-            shot.recycle()
-        }
-    }
-
     private companion object {
-        const val GRID = 16
-        const val NEAR_BLACK = 40
-        const val PICTURE_SHARE = 0.5
-        const val BLACK_SHARE = 0.02
         const val TIMEOUT_MILLIS = 40_000L
         const val POLL_MILLIS = 250L
     }

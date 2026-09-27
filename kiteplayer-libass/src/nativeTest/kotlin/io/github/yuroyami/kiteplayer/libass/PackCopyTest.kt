@@ -40,14 +40,16 @@ class PackCopyTest {
             val copied = copyOut(pack, PACK_BYTES)
             assertTrue((0 until PACK_BYTES).all { copied[it] == (it * 31).toByte() }, "the copy changed the bytes")
 
-            val reference = ByteArray(PACK_BYTES)
+            // The reference does what any copy out of C memory has to do: allocate a fresh array
+            // and fill it with one memcpy. The allocation varies far more than the copy does, and
+            // measured this way it varies on both sides.
             val memcpyMillis = medianMillis {
-                reference.usePinned { memcpy(it.addressOf(0), pack, PACK_BYTES.convert()) }
+                ByteArray(PACK_BYTES).usePinned { memcpy(it.addressOf(0), pack, PACK_BYTES.convert()) }
             }
             val copyMillis = medianMillis { copyOut(pack, PACK_BYTES) }
             val ratio = copyMillis / memcpyMillis.coerceAtLeast(0.001)
-            println("256 KiB pack, median of $RUNS: copyOut $copyMillis ms, memcpy $memcpyMillis ms, ratio $ratio")
-            assertTrue(ratio <= MOST_RATIO, "copyOut took $ratio times one memcpy; readBytes measured about 1,300 times")
+            println("256 KiB pack, median of $RUNS: copyOut $copyMillis ms, allocation and memcpy $memcpyMillis ms, ratio $ratio")
+            assertTrue(ratio <= MOST_RATIO, "copyOut took $ratio times an allocation and one memcpy")
         } finally {
             nativeHeap.free(pack)
         }
@@ -58,10 +60,9 @@ class PackCopyTest {
         const val RUNS = 9
 
         /**
-         * Five times the highest ratio an M2 measured for these copies, which ranged from 4 to 10,
-         * because allocating and zeroing the new array varies more than the copy does. The old byte
-         * loop sat near 1,300.
+         * Against a reference that allocates too, a copy out costs about one reference. The old
+         * byte loop cost about 1,300 bare memcpy calls, which is still far above this bound.
          */
-        const val MOST_RATIO = 50.0
+        const val MOST_RATIO = 5.0
     }
 }

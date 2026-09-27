@@ -63,16 +63,17 @@ internal class ReopenDeviceTest {
                     delay(200)
 
                     // Exactly what a host app does for file number two.
-                    val secondOpenNanos = measure {
-                        player.stop()
-                        player.open(MediaItem(clip.absolutePath))
-                    }
+                    val stopNanos = measure { player.stop() }
+                    val reopenNanos = measure { player.open(MediaItem(clip.absolutePath)) }
+                    val secondOpenNanos = stopNanos + reopenNanos
 
                     val firstMs = firstOpenNanos / 1_000_000
                     val secondMs = secondOpenNanos / 1_000_000
-                    Log.i(TAG, "firstOpenMs=$firstMs secondOpenMs=$secondMs")
+                    val warnings = player.warningHistory()
+                    Log.i(TAG, "firstOpenMs=$firstMs secondOpenMs=$secondMs (stop ${stopNanos / 1_000_000}, open ${reopenNanos / 1_000_000})")
                     Log.i(TAG, "statusAfterSecond=${player.state.value.status}")
                     Log.i(TAG, "durationAfterSecond=${player.state.value.duration}")
+                    Log.i(TAG, "warnings=$warnings")
 
                     assertTrue(
                         player.state.value.status == PlaybackStatus.Paused,
@@ -82,7 +83,9 @@ internal class ReopenDeviceTest {
                         secondMs < firstMs + 3_000,
                         "the second open took ${secondMs}ms against ${firstMs}ms for the first: " +
                             "replacing the media must prime the new pipeline, not wait out the " +
-                            "initial-fill and first-frame deadlines",
+                            "initial-fill and first-frame deadlines. The stop took " +
+                            "${stopNanos / 1_000_000}ms and the open ${reopenNanos / 1_000_000}ms; " +
+                            "warnings: $warnings",
                     )
                 }
             } finally {

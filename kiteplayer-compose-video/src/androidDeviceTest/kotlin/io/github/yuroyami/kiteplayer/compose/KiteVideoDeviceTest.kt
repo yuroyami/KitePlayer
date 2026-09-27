@@ -19,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.security.MessageDigest
 import java.util.Locale
@@ -298,37 +299,45 @@ internal class KiteVideoDeviceTest {
     private suspend fun awaitStablePostDrainSnapshot(
         player: KitePlayer,
         state: KiteVideoState,
-    ): PostDrainSnapshot = withTimeout(POST_DRAIN_TIMEOUT_MILLIS) {
-        var stableMatches = 0
-        var previousSubmitted = -1L
-        var previousOutcomes: RendererOutcomes? = null
-        var previousGpuCompletions: KiteVideoGpuCompletionStats? = null
-        while (true) {
-            val stats = player.stats.value
-            val outcomes = rendererOutcomes(state)
-            val gpuCompletions = state.gpuCompletionStats
-            val pendingOutcomes = stats.submittedFrames - outcomes.total
-            stableMatches = if (
-                stats.submittedFrames > 0L &&
-                pendingOutcomes == 0L &&
-                stats.submittedFrames == previousSubmitted &&
-                outcomes == previousOutcomes &&
-                gpuCompletions == previousGpuCompletions
-            ) {
-                stableMatches + 1
-            } else {
-                0
+    ): PostDrainSnapshot {
+        val settled = withTimeoutOrNull(POST_DRAIN_TIMEOUT_MILLIS) {
+            var stableMatches = 0
+            var previousSubmitted = -1L
+            var previousOutcomes: RendererOutcomes? = null
+            var previousGpuCompletions: KiteVideoGpuCompletionStats? = null
+            while (true) {
+                val stats = player.stats.value
+                val outcomes = rendererOutcomes(state)
+                val gpuCompletions = state.gpuCompletionStats
+                val pendingOutcomes = stats.submittedFrames - outcomes.total
+                stableMatches = if (
+                    stats.submittedFrames > 0L &&
+                    pendingOutcomes == 0L &&
+                    stats.submittedFrames == previousSubmitted &&
+                    outcomes == previousOutcomes &&
+                    gpuCompletions == previousGpuCompletions
+                ) {
+                    stableMatches + 1
+                } else {
+                    0
+                }
+                if (stableMatches >= POST_DRAIN_STABLE_POLLS) {
+                    return@withTimeoutOrNull PostDrainSnapshot(stats, outcomes, gpuCompletions)
+                }
+                previousSubmitted = stats.submittedFrames
+                previousOutcomes = outcomes
+                previousGpuCompletions = gpuCompletions
+                delay(POST_DRAIN_POLL_MILLIS)
             }
-            if (stableMatches >= POST_DRAIN_STABLE_POLLS) {
-                return@withTimeout PostDrainSnapshot(stats, outcomes, gpuCompletions)
-            }
-            previousSubmitted = stats.submittedFrames
-            previousOutcomes = outcomes
-            previousGpuCompletions = gpuCompletions
-            delay(POST_DRAIN_POLL_MILLIS)
+            @Suppress("UNREACHABLE_CODE")
+            error("post-drain accounting loop exited")
         }
-        @Suppress("UNREACHABLE_CODE")
-        error("post-drain accounting loop exited")
+        // Names the numbers that never settled, not only that a timeout expired.
+        return settled ?: throw AssertionError(
+            "the renderer's frame accounting did not settle within $POST_DRAIN_TIMEOUT_MILLIS ms: " +
+                "submitted ${player.stats.value.submittedFrames}, outcomes ${rendererOutcomes(state)}, " +
+                "GPU completions ${state.gpuCompletionStats}; warnings: ${player.warningHistory()}",
+        )
     }
 
     private fun rendererOutcomes(state: KiteVideoState): RendererOutcomes = RendererOutcomes(

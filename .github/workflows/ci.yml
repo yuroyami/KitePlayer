@@ -749,13 +749,14 @@ jobs:
           adb root > /dev/null
           adb wait-for-device
           status=0
-          run_with_clips() {
-            local pkg=$1 source=$2 uid app dir out
+          # Pushes the clips into the package's external files directory and hands them to its user.
+          push_clips() {
+            local pkg=$1 source=$2 uid app dir
             uid=$(adb shell pm list packages -U "$pkg" | tr -d '\r' | sed -n "s/^package:$pkg uid:\([0-9]*\)$/\1/p")
             if [ -z "$uid" ]; then
               echo "::error::$pkg is not installed"
               status=1
-              return
+              return 1
             fi
             app="/data/media/0/Android/data/$pkg"
             dir="$app/files/testmedia"
@@ -764,27 +765,39 @@ jobs:
             adb shell chown -R "$uid:ext_data_rw" "$app"
             adb shell restorecon -R "$app"
             adb shell ls -lZ "$dir" | head -n 3
-            out="$RUNNER_TEMP/test-logs/$pkg.txt"
-            adb shell am instrument -w -e annotation "$NEEDS_PUSHED_MEDIA" \
-              "$pkg/androidx.test.runner.AndroidJUnitRunner" | tr -d '\r' | tee "$out"
-            grep -q '^OK (' "$out" || { echo "::error::$pkg: a test that reads clips failed"; status=1; }
           }
-          run_with_clips io.github.yuroyami.kiteplayer.ffmpeg.test testmedia/.
-          # Diagnostics for the slow second open in ReopenDeviceTest: the Java stacks of the test
-          # process 9 and 13 seconds after that test starts, which is inside the stall.
-          (
-            for _ in $(seq 1 240); do
-              adb logcat -d -s TestRunner 2>/dev/null | grep -q "started: replacingTheMediaOpensPromptly" && break
-              sleep 1
-            done
-            for at in 9 13; do
-              sleep $((at == 9 ? 9 : 4))
-              pid=$(adb shell pidof io.github.yuroyami.kiteplayer.compose.video.test | tr -d '\r')
-              [ -n "$pid" ] && adb shell debuggerd -j "$pid" > "$RUNNER_TEMP/test-logs/reopen-stacks-$at.txt" 2>&1
-            done
-          ) &
-          run_with_clips io.github.yuroyami.kiteplayer.compose.video.test testmedia/sync1080p30.mp4
-          wait
+          # One am instrument run, which is one fresh process. The output accumulates per package.
+          run_tests() {
+            local pkg=$1 out part
+            shift
+            out="$RUNNER_TEMP/test-logs/$pkg.txt"
+            part="$RUNNER_TEMP/test-logs/part.txt"
+            adb shell am instrument -w "$@" "$pkg/androidx.test.runner.AndroidJUnitRunner" | tr -d '\r' | tee "$part"
+            cat "$part" >> "$out"
+            grep -q '^OK (' "$part" || { echo "::error::$pkg: a test that reads clips failed"; status=1; }
+          }
+          ffmpeg_pkg=io.github.yuroyami.kiteplayer.ffmpeg.test
+          compose_pkg=io.github.yuroyami.kiteplayer.compose.video.test
+          push_clips "$ffmpeg_pkg" testmedia/. && run_tests "$ffmpeg_pkg" -e annotation "$NEEDS_PUSHED_MEDIA"
+          if push_clips "$compose_pkg" testmedia/sync1080p30.mp4; then
+            # Diagnostics for the slow second open in ReopenDeviceTest, which showed when that test
+            # was the first player in a fresh process: the Java stacks of the test process 9 and 13
+            # seconds after it starts, which is inside the stall.
+            (
+              for _ in $(seq 1 240); do
+                adb logcat -d -s TestRunner 2>/dev/null | grep -q "started: replacingTheMediaOpensPromptly" && break
+                sleep 1
+              done
+              for at in 9 13; do
+                sleep $((at == 9 ? 9 : 4))
+                pid=$(adb shell pidof "$compose_pkg" | tr -d '\r')
+                [ -n "$pid" ] && adb shell debuggerd -j "$pid" > "$RUNNER_TEMP/test-logs/reopen-stacks-$at.txt" 2>&1
+              done
+            ) &
+            run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.ReopenDeviceTest
+            wait
+            run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.KiteVideoDeviceTest
+          fi
           adb unroot > /dev/null || true
           exit $status
 
@@ -842,9 +855,11 @@ jobs:
                       "io.github.yuroyami.kiteplayer.compose.video.test"):
               path = os.path.join(os.environ["RUNNER_TEMP"], "test-logs", f"{pkg}.txt")
               text = open(path, errors="replace").read() if os.path.exists(path) else ""
-              ok = re.search(r"^OK \((\d+) tests?\)", text, re.M)
-              bad = re.search(r"^Tests run: (\d+),\s+Failures: (\d+)", text, re.M)
-              cells = f"{ok[1]} | 0" if ok else f"{bad[1]} | {bad[2]}" if bad else "no results |"
+              # One package can have several runs, each a fresh process; every run counts.
+              oks = [int(n) for n in re.findall(r"^OK \((\d+) tests?\)", text, re.M)]
+              bads = [(int(a), int(b)) for a, b in re.findall(r"^Tests run: (\d+),\s+Failures: (\d+)", text, re.M)]
+              tests = sum(oks) + sum(a for a, _ in bads)
+              cells = f"{tests} | {sum(b for _, b in bads)}" if oks or bads else "no results |"
               print(f"| {pkg} | {cells} |")
           print("\nThe classes marked `@NeedsPushedMedia`:\n")
           for path in sorted(glob.glob("*/src/androidDeviceTest/**/*.kt", recursive=True)):

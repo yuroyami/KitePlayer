@@ -34,7 +34,9 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/demo_direct_xml"
-            android:configChanges="orientation|screenSize" />
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
         <activity
             android:name=".ComposeInteropActivity"
             android:exported="false"

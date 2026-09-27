@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.sample.android
 
 import android.app.Activity
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -8,10 +9,13 @@ import android.widget.TextView
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.io.ofAsset
 import io.github.yuroyami.kiteplayer.io.ofUri
 import io.github.yuroyami.kiteplayer.mobile.installMobileRenderer
 import io.github.yuroyami.kiteplayer.view.KitePlayerView
+import io.github.yuroyami.kiteplayer.view.enterPictureInPicture
+import io.github.yuroyami.kiteplayer.view.keepPictureInPictureParamsCurrent
 
 /**
  * Direct native-view demo: one [KitePlayerView] inflated from XML and three ordinary buttons.
@@ -25,6 +29,7 @@ internal class MainActivity : Activity() {
     private lateinit var controller: SampleController
     private lateinit var playerView: KitePlayerView
     private var smoke = false
+    private var pictureInPictureParams: AutoCloseable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,6 +56,13 @@ internal class MainActivity : Activity() {
             controller.observePerformance(playerView) { perfOverlay.text = it }
         }
 
+        if (!smoke) {
+            // The view keeps this window's picture-in-picture parameters current, so leaving the app
+            // while the clip plays opens the window by itself on Android 12 and later.
+            playerView.player = controller.player
+            pictureInPictureParams = playerView.keepPictureInPictureParamsCurrent(this)
+        }
+
         // No surface wait: the view attaches its headless-capable renderer before open, then forwards
         // Surface lifecycle changes without rebuilding the decoder.
         val item = requestedItem()
@@ -67,13 +79,25 @@ internal class MainActivity : Activity() {
         else -> null
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // Before Android 12 nothing opens the window on its own, so leaving while playing asks for it.
+        if (!smoke && Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+            controller.player.state.value.status == PlaybackStatus.Playing
+        ) {
+            playerView.enterPictureInPicture(this)
+        }
+    }
+
     override fun onPause() {
         super.onPause()
-        /* Backgrounding pauses; the sample invents no audio-focus policy. */
-        if (!smoke) controller.onBackground()
+        /* Backgrounding pauses; the sample invents no audio-focus policy. The picture-in-picture
+         * window is the exception: it exists to keep playing. */
+        if (!smoke && !isInPictureInPictureMode) controller.onBackground()
     }
 
     override fun onDestroy() {
+        pictureInPictureParams?.close()
         try {
             playerView.release()
         } finally {

@@ -113,7 +113,11 @@ private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) 
     override val audioDecoders: List<AudioDecoderFactory> = kiteCodec.audioDecoderFactories()
 
     override val subtitleDecoders: List<SubtitleDecoderFactory> =
-        listOf(KiteFFmpegSubtitleDecoderFactory(), KiteFFmpegImageSubtitleDecoderFactory(kiteCodec))
+        listOf(
+            KiteFFmpegSubtitleDecoderFactory(),
+            KiteFFmpegImageSubtitleDecoderFactory(kiteCodec),
+            KiteFFmpegCaptionDecoderFactory(kiteCodec),
+        )
 
     override fun close(): Unit = kiteCodec.close()
 }

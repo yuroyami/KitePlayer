@@ -387,6 +387,10 @@ public class KiteFFmpegSource internal constructor(
             fallbackCanvas = firstVideo?.videoSize,
         )
 
+    /** A decoder for the caption stream [stream], such as a MOV `c608` track. */
+    internal fun newCaptionDecoder(stream: PlayerStreamInfo): io.github.yuroyami.kiteplayer.spi.SubtitleDecoder =
+        KiteFFmpegCaptionDecoder(decoder = source.openSubtitleDecoder(kiteStream(stream.index)), mapper = mapper)
+
     /** Video decoders for this source. The factory applies the caller's platform policy at open. */
     public fun videoDecoderFactories(): List<VideoDecoderFactory> =
         listOf(KiteFFmpegVideoDecoderFactory(this))

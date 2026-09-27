@@ -46,14 +46,14 @@ import kotlin.time.Duration.Companion.seconds
  *
  * ### What is not here
  *
- * Shuffle, a gapless queue handoff and a secondary subtitle track are absent rather than stubbed.
- * Each is tracked as its own issue.
+ * A gapless queue handoff is absent rather than stubbed, and is tracked as its own issue.
  *
- * External subtitles, filter chains, the open-option escape hatch, chapters, the queue and frame
- * stepping were on this list and are all here now: [addExternalSubtitle], [MediaItem.videoFilter],
- * [MediaItem.openOptions], [chapterAt] with [seekToChapter], [openQueue] with [next] and
- * [previous], [stepFrame] and [setBalance]. A member that describes something still unbuilt says
- * so in its own documentation.
+ * External subtitles, filter chains, the open-option escape hatch, chapters, the queue, shuffle, a
+ * secondary subtitle track and frame stepping were on this list and are all here now:
+ * [addExternalSubtitle], [MediaItem.videoFilter], [MediaItem.openOptions], [chapterAt] with
+ * [seekToChapter], [openQueue] with [next] and [previous], [setShuffle],
+ * [selectSecondarySubtitle], [stepFrame] and [setBalance]. A member that describes something
+ * still unbuilt says so in its own documentation.
  */
 public class KitePlayer internal constructor(private val core: PlaybackCore) : AutoCloseable {
 

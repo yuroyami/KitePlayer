@@ -16,15 +16,15 @@ a pause nobody had bounded. So the callback, the AudioUnit and the sample ring m
 
 | Path | What it is |
 |---|---|
-| `native/include/kite_rt.h` | The whole public surface: 28 `KPRT_API` functions and the constants. This is what cinterop reads. |
+| `native/include/kite_rt.h` | The whole public surface: 31 `KPRT_API` functions and the constants. This is what cinterop reads. |
 | `native/src/kite_rt_ring.c` | The ring's producer side and its lifecycle. The only file here that allocates. |
 | `native/src/kite_rt_render.c` | The ring renderer and anchor translation unit called by the device callback; no lifecycle code or allocator. |
 | `native/src/kite_rt_coreaudio.c` | The device glue and the common `static` callback: DefaultOutput on macOS, RemoteIO on iOS, and explicit refusal elsewhere. |
 | `native/src/kite_rt_ring_internal.h`, `kite_rt_sink_internal.h` | The private layouts. Not in `include/`, so Kotlin gets opaque pointers with no field and no size. |
-| `native/tests/*.c` | Eight suites, 132 cases, table driven, one line per case. |
+| `native/tests/*.c` | Ten suites, 149 cases, table driven, one line per case. |
 | `native/tests/interpose_alloc.c` | The allocation interposer, through the Mach-O `__DATA,__interpose` section. |
 | `native/scripts/build-host.sh` | Builds the host test binaries for one variant. No make, no cmake, no ninja. |
-| `native/scripts/run-c-tests.sh` | Runs the eight suites in one of four modes. |
+| `native/scripts/run-c-tests.sh` | Runs the ten suites in one of four modes. |
 | `native/scripts/render-audit.sh` | The symbol and instruction audit of both real-time objects in the macOS and two gated iOS archives. The first of the four real-time assertions. |
 | `native/scripts/source-discipline.sh` | The eighteen ordering decisions no runtime instrument fully covers. Level 4, and it says so. |
 | `src/nativeInterop/cinterop/kitert.def` | The cinterop def. Names the archive and links AudioToolbox on macOS and iOS. |
@@ -99,7 +99,7 @@ Level is how strong the evidence is: 1 is the strongest, and 7 means the code on
 `KotlinAudioRing` in `kiteplayer-core` is not going away.
 `commonMain` targets js and wasmJs, which can never contain C, and the Kotlin ring is the only oracle
 the C ring can be checked against. So on macOS the eighteen `AudioRingTest` cases no longer cover the
-shipped path. What covers it is the eight C suites plus the differential oracle at
+shipped path. What covers it is the ten C suites plus the differential oracle at
 `kiteplayer-core/src/nativeTest/.../AudioRingDifferentialTest.kt`, which drives one scripted sequence
 through both rings at four sample rates and at one, two, six and eight channels and compares the
 samples bit for bit, the published anchor to the microsecond, and the counters exactly.

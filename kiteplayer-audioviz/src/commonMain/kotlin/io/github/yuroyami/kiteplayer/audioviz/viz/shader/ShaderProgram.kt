@@ -18,13 +18,16 @@ import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
  * position and returns a colour:
  *
  * ```
+ * uniform float2 uResolution;
+ *
  * half4 main(float2 position) {
  *     float2 uv = position / uResolution;
  *     return half4(uv.x, uv.y, 0.5, 1.0);
  * }
  * ```
  *
- * Set the values it reads with [uniform] and [child], then hand [brush] to any Compose draw call.
+ * The source declares every value it reads, as `uResolution` is declared here; nothing is added to
+ * it. Set those values with [uniform] and [child], then hand [brush] to any Compose draw call.
  * Values persist between frames, so only what changed has to be set again.
  *
  * Not every device can run one. Android gained the ability in version 33, and anything older

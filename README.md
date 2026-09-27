@@ -330,8 +330,10 @@ val notification = KitePlayerPlatform.attachMediaNotification(
   away, which stops the service and leaves the player paused.
 - From Android 12, Android can refuse a start from the background. `onForegroundRefused` tells
   you, and the notification still shows.
-- The library adds nothing to your manifest. Android 13 and later need no notification permission
-  for this notification.
+- The library declares no service and no permission for background playback, so your manifest
+  carries all of the entries above. The one entry the library adds is `INTERNET`, from
+  `kiteplayer-network` (see [Network](#network)). Android 13 and later need no notification
+  permission for this notification.
 - Close the notification before the session, and the session before the player.
 
 On iOS, declare `UIBackgroundModes` with `audio` in `Info.plist`, and create a
@@ -423,7 +425,7 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | `kiteplayer-audioviz` | Optional. An audio visualiser for files with no picture: independent presets in a flat catalogue, palettes, and a director that changes drawings with the music. |
 | `kiteplayer-view` | The native views: `KitePlayerView` on Android, `KitePlayerUIView` on iOS, `KitePlayerAwtView` on the desktop JVM. |
 | `kiteplayer-view-bindings` | The FFmpeg adapters those views need. |
-| `kiteplayer-core` | The engine and its service interfaces. Depends on coroutines only. |
+| `kiteplayer-core` | The engine and its service interfaces. Depends on kotlinx.coroutines and atomicfu, and on `kiteplayer-rt` on native targets. |
 | `kiteplayer-ffmpeg` | Media source and decoders over KiteFFmpeg. Also snapshots, thumbnails, waveforms and the subtitle parsers. |
 | `kiteplayer-network` | HTTP and HTTPS transport through Ktor. Registers itself. |
 | `kiteplayer-io` | Input doors for platform types: a JVM `File`, `Path`, `FileChannel` or `InputStream`, an Android content URI or asset, a file path on Apple and Linux, and an Apple file URL. Comes with `kiteplayer`. |
@@ -463,7 +465,7 @@ launch the app with the `--uikit` argument and tap Open file.
 | `kiteplayer-sample-web` | The wasmJs measurement harness, not a demo | `./gradlew :kiteplayer-sample-web:wasmJsBrowserDistribution`, then read `kiteplayer-sample-web/MEASUREMENTS.md` |
 
 The test clips come from `./scripts/testmedia.sh`, which needs `ffmpeg` on your PATH, and are not
-committed. The only committed media is the sample song, in `kiteplayer-sample-shared/media`.
+committed. The only committed media is the five sample songs, in `kiteplayer-sample-shared/media`.
 
 ## Working on KitePlayer
 

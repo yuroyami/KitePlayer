@@ -13,11 +13,15 @@ public fun interface AudioScanSink {
 }
 
 public suspend fun scanAudio(media: MediaItem, backend: MediaBackend, track: TrackId? = null,
-    sink: AudioScanSink): AudioScanResult
+    range: AudioScanRange? = null, sink: AudioScanSink): AudioScanResult
 
 // On KitePlayer, with this player's backend and reader rules:
-public suspend fun scanAudio(media: MediaItem, track: TrackId? = null, sink: AudioScanSink): AudioScanResult
+public suspend fun scanAudio(media: MediaItem, track: TrackId? = null,
+    range: AudioScanRange? = null, sink: AudioScanSink): AudioScanResult
 ```
+
+The sink comes last, so a call can pass it as a trailing lambda:
+`player.scanAudio(media) { pts, interleaved, frames, format -> ... }`.
 
 `scanAudio` opens its own backend session, selects one audio stream, creates a decoder from the
 same factory list in the same order as playback, and decodes from the start to the end. It
@@ -29,6 +33,8 @@ playing session.
 - `track` names the audio stream. Null picks the default stream: the container's default ordinary
   track, else the first ordinary track, else the first audio track. The player variant uses the
   player's own choice, including its preferred languages.
+- `range` scans one stretch of the stream instead of all of it, and null scans all of it. See
+  [Ranges](#ranges).
 - The sink's array is borrowed until it returns, as with `AudioTap`. The scan reads nothing more
   while the sink runs, so a suspending sink paces the whole scan.
 - The call blocks on reads in the caller's context. Call it from a context that may block.

@@ -1,9 +1,8 @@
-# Module contract for 0.0.23
+# Module contract
 
-Agreed for issue #123. This document defines the public dependency and activation contract before
-its implementation. The 0.0.23 work prepares commits and artifacts for verification only. It does
-not publish to Central or create a release or tag. The libass integration landed after this
-document was agreed and is described under Subtitles below.
+This page defines the public dependency and activation contract: which module a consumer depends
+on, what each entry point brings in, and how the network transport and the libass typesetter are
+found.
 
 ## Entry points
 
@@ -91,18 +90,15 @@ entry point. A `kiteplayer-compose-ui` consumer that also needs default construc
 `kiteplayer-compose`, or adds `kiteplayer` explicitly. The mobile and phone compatibility entry
 points continue to resolve without duplicating declarations from the moved assembly.
 
-## Verification and release notes
+## Verification
 
-Verify that each documented dependency resolves by itself where promised, required modules appear
-in published metadata, presentation does not pull in playback construction/networking, and
-network discovery survives release optimization. Check normal HTTP/HTTPS open, seeks, headers,
-explicit overrides, disabled discovery, missing providers and cleanup on success/failure.
+A change to these modules verifies that each documented dependency resolves by itself where
+promised, that required modules appear in published metadata, that presentation does not pull in
+playback construction or networking, and that network discovery survives release optimization. It
+checks a normal HTTP and HTTPS open, seeks, headers, explicit overrides, disabled discovery,
+missing providers and cleanup on success and on failure.
 
-The 0.0.23 notes include the URL redaction, sleep timer and subtitle parser fixes committed after
-0.0.22, plus these packaging and transport changes. Installation examples present alternatives
-rather than a list of dependencies that appears to require all of them.
-
-## In-memory media input, 0.0.24
+## In-memory media input
 
 `MediaIo.ofBytes(bytes)` returns a `MediaIoFactory` in `kiteplayer-core`. Each open owns
 an independent cursor and close state over the original array. No copy is made; the caller

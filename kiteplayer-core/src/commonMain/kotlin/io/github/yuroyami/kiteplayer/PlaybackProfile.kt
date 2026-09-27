@@ -14,13 +14,16 @@ import kotlin.time.Duration.Companion.seconds
  * compiles to, which is what the diagnostics dump carries (law 4).
  *
  * ```
- * val profile = PlaybackProfile.Scrubbing
- * val player = KitePlayer.create(
- *     profile.applyTo(PlayerConfig(backends = Backends(
- *         backend = KiteFFmpegMediaBackend(decoderOptions = profile.decoderOptions),
- *         output = mobileBackends().output,
- *     ))),
- * )
+ * @OptIn(KitePlayerLowLevelApi::class) // decoderOptions is low-level API
+ * fun scrubbingPlayer(): KitePlayer {
+ *     val profile = PlaybackProfile.Scrubbing
+ *     return KitePlayer.create(
+ *         profile.applyTo(PlayerConfig(backends = Backends(
+ *             backend = KiteFFmpegMediaBackend(decoderOptions = profile.decoderOptions),
+ *             output = mobileBackends().output,
+ *         ))),
+ *     )
+ * }
  * ```
  */
 public class PlaybackProfile internal constructor(

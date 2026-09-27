@@ -91,7 +91,30 @@ tries the next factory and deselects the stream when every candidate refused, wi
 
 ## Trying it
 
-The scripted backend runs a full session in milliseconds of virtual time:
+A backend in your own project is tested through the public API: build a player with it, play a
+file to the end, and check that everything the engine was handed came back closed. On the desktop
+JVM that looks like this:
+
+```kotlin
+@Test
+fun myBackendPlaysAFileToTheEnd() = runBlocking {
+    val backend = MyMediaBackend()
+    KitePlayer.create(PlayerConfig(backends = Backends(backend, DesktopOutputBackend))).use { player ->
+        player.open(MediaItem("my://five-seconds"))
+        player.play()
+        withTimeout(30.seconds) { player.state.first { it.status == PlaybackStatus.Ended } }
+    }
+    assertEquals(0, backend.openHandles, "the engine closes everything it was handed")
+}
+```
+
+This runs in real time and needs an audio device when the file has sound. `openHandles` is your
+own ledger: count each source, decoder and frame you hand over, and count them down in `close`.
+
+The scripted backend and `CoreHarness` are this repository's own test fakes, in
+`kiteplayer-core/src/commonTest`. They are not published, so another project cannot use them or
+the engine's suites, but they are the worked example of the rules above. Inside this repository
+the harness runs a full session in milliseconds of virtual time:
 
 ```kotlin
 val harness = CoreHarness(this)          // in a runTest block
@@ -100,9 +123,6 @@ harness.core.play()
 harness.run(2.seconds)                   // virtual: the whole file plays in wall-microseconds
 assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
 ```
-
-A new backend can be developed the same way: point the harness at yours, keep the ledger at
-zero, and the engine's own suites become your conformance tests.
 
 ## A recording source
 

@@ -202,11 +202,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - The visualiser drawings Kaleidoscope, Ocean Mist, Contour, Glitch, Nebula Field, Pipe, Alchemy,
   Neon Lo-Fi and Odyssey were rebuilt. Shatter and Ripple Well became Thin Ice, Reaction Diffusion
   and Smoke Rise became Marble, and Aurora and Aurora Field left the catalogue.
-- CI builds and launches the iOS sample app, runs the tvOS, watchOS, Linux arm64 and Android device
-  tests, and fails when a published artifact grows past its baseline or a hot path gets ten times
-  slower.
+- CI builds and launches the iOS sample app, runs the tvOS, watchOS and Linux arm64 tests, and
+  fails when a published artifact grows past its baseline or a hot path gets ten times slower. CI
+  also has an Android emulator job for the device tests. Its emulator has not finished booting yet
+  (#81), so no Android device test has run in CI.
 
-## [0.0.26] - 2026-09-20
+## [0.0.26] - 2026-09-22
 
 ### Added
 

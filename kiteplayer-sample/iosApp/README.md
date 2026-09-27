@@ -16,16 +16,18 @@ no Compose involved.
 `kiteplayer-phone` is only the deprecated 0.0.2 source-migration umbrella and is not part of this
 sample.
 
-Nothing here is an installation or distribution path. KiteFFmpeg and its FFmpeg trees are local,
-there is no CocoaPods or downloaded framework, the framework is linked statically and is not embedded,
-and no artifact is publicly published. A simulator run does not prove the app works on a physical
-iPhone. The unsigned device build below proves linking only; it does not install or run.
+Nothing here is an installation or distribution path. The app itself is not published. There is no
+CocoaPods or downloaded framework, and the framework is linked statically and is not embedded. A
+simulator run does not prove the app works on a physical iPhone. The unsigned device build below
+proves linking only; it does not install or run.
 
 Run every command from the KitePlayer repository root. The Xcode build phase runs Gradle offline,
 links the debug simulator framework for `iphonesimulator` and the arm64 framework of the build's
 configuration for `iphoneos`, rejects every other platform, and copies in the song.
 
-KiteFFmpeg resolves from Maven Central, so no local publication step is needed.
+KiteFFmpeg resolves from Maven Central with its FFmpeg inside, so no local FFmpeg tree and no
+local publication step are needed. The Xcode build phase runs Gradle with `--offline`, so run one
+Gradle build first to fill the Gradle cache. The smoke script and the device build below both do.
 
 ## Build and run the smoke on a simulator
 
@@ -58,5 +60,4 @@ xcodebuild \
 ```
 
 The bundle identifier is `io.github.yuroyami.kiteplayer.sample.ios`. The project copies the generated
-`testmedia/sync1080p30.mp4` into the app bundle. Generate that fixture before either build. A missing
-local FFmpeg tree or local KiteFFmpeg publication is an error; this host never downloads a substitute.
+`testmedia/sync1080p30.mp4` into the app bundle. Generate that fixture before either build.

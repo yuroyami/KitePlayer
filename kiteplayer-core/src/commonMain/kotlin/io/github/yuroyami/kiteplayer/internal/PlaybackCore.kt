@@ -4188,10 +4188,22 @@ internal class PlaybackCore(
                 cause ?: IllegalStateException("the demuxer stopped $context"),
                 "the demuxer stopped $context${cause?.let(::causeDetail).orEmpty()}",
             )
+            AUDIO_FEED_WORKER -> audioFeedError(session, cause) { "a pipeline worker stopped $context" }
             else -> PlaybackError.Internal("a pipeline worker stopped $context", cause)
         }
         return PlaybackException(error)
     }
+
+    /**
+     * What a dead audio feed reports. The audio pipeline's refusals are already typed, and they
+     * get the stream's codec here, where it is known. Anything else is a bug here.
+     */
+    private fun audioFeedError(session: OpenSession, cause: Throwable?, detail: () -> String): PlaybackError =
+        when (val error = (cause as? PlaybackException)?.error) {
+            is PlaybackError.DecoderFailed -> error.copy(codec = session.audioStream?.codec ?: error.codec)
+            null -> PlaybackError.Internal(detail(), cause)
+            else -> error
+        }
 
     /**
      * The start rendezvous: playback begins only when every selected stream can supply it.
@@ -6808,6 +6820,7 @@ internal class PlaybackCore(
                 ?: PlaybackError.DecoderFailed(
                     session.audioStream?.codec ?: "audio", cause.message ?: cause.toString(), cause,
                 )
+            outcome.name == AUDIO_FEED_WORKER -> audioFeedError(session, cause) { "the ${outcome.name} worker failed" }
             else -> PlaybackError.Internal("the ${outcome.name} worker failed", cause)
         }
         // A dead worker is a handled failure and never a hang, which is why every worker reports here.

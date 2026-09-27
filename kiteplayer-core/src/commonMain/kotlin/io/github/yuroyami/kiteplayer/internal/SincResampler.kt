@@ -40,7 +40,11 @@ import kotlin.math.sin
  *
  * The read position is an integer frame index plus an exact fraction over the target rate, never a
  * floating-point accumulator, so it cannot drift over a long session. The stream stays sample-locked
- * to the source for as long as it lasts.
+ * to the source for as long as it lasts. Both parts are 64-bit, because one step of a large
+ * downsampling ratio can be most of the range of an Int.
+ *
+ * A step can also pass every frame that is held. The frames it jumps over are then dropped as they
+ * arrive, counted in [skip], rather than kept in the buffer only to be thrown away.
  *
  * ### Timing
  *
@@ -80,11 +84,21 @@ internal class SincResampler(
     private var pending: FloatArray = FloatArray(half * channels)
     private var pendingFrames: Int = half
 
-    /** Integer frame position of the next output inside [pending]. */
-    private var readIndex: Int = half
+    /**
+     * Integer frame position of the next output inside [pending]. Past [pendingFrames] while a
+     * long step waits for its input.
+     */
+    private var readIndex: Long = half.toLong()
 
     /** Fractional part of that position, over [targetRate]. Always in `0 until targetRate`. */
-    private var remainder: Int = 0
+    private var remainder: Long = 0
+
+    /** Input frames still to drop as they arrive: the part of a step that went past [pending]. */
+    private var skip: Long = 0
+
+    /** One output's step through the input: [step] whole frames and [stepRemainder] over [targetRate]. */
+    private val step: Long = sourceRate.toLong() / targetRate
+    private val stepRemainder: Long = sourceRate.toLong() % targetRate
 
     /** One output frame under construction, so the tap loop walks memory in interleaved order. */
     private val accumulator = FloatArray(channels)
@@ -96,13 +110,13 @@ internal class SincResampler(
      */
     override fun process(input: FloatArray, frames: Int, output: FloatArray): Int {
         if (frames <= 0) return 0
-        require(input.size >= frames * channels) {
-            "$frames frames of $channels channels need ${frames * channels} values, got ${input.size}"
+        require(input.size >= frames.toLong() * channels) {
+            "$frames frames of $channels channels need ${frames.toLong() * channels} values, got ${input.size}"
         }
         val capacity = outputCapacity(frames)
-        require(output.size >= capacity * channels) {
+        require(output.size >= capacity.toLong() * channels) {
             "$frames input frames can produce $capacity output frames, which need " +
-                "${capacity * channels} values, got ${output.size}"
+                "${capacity.toLong() * channels} values, got ${output.size}"
         }
         append(input, frames)
         val produced = produce(output)
@@ -128,10 +142,18 @@ internal class SincResampler(
     }
 
     private fun append(input: FloatArray, frames: Int) {
-        val needed = (pendingFrames + frames) * channels
-        if (pending.size < needed) pending = pending.copyOf(maxOf(needed, pending.size * 2))
-        input.copyInto(pending, pendingFrames * channels, 0, frames * channels)
-        pendingFrames += frames
+        // The frames a long step jumped over never enter the buffer.
+        val skipped = minOf(skip, frames.toLong()).toInt()
+        skip -= skipped
+        val kept = frames - skipped
+        if (kept == 0) return
+        val needed = (pendingFrames.toLong() + kept) * channels
+        require(needed <= Int.MAX_VALUE) { "$needed values do not fit in one array" }
+        if (pending.size < needed) {
+            pending = pending.copyOf(maxOf(needed, minOf(pending.size * 2L, Int.MAX_VALUE.toLong())).toInt())
+        }
+        input.copyInto(pending, pendingFrames * channels, skipped * channels, frames * channels)
+        pendingFrames += kept
     }
 
     /**
@@ -143,12 +165,12 @@ internal class SincResampler(
      */
     private fun produce(output: FloatArray): Int {
         var produced = 0
-        val last = pendingFrames - 1 - half
+        val last = pendingFrames - 1L - half
         while (readIndex <= last) {
-            val phase = (remainder.toLong() * PHASES / targetRate).toInt().coerceIn(0, PHASES - 1)
+            val phase = (remainder * PHASES / targetRate).toInt().coerceIn(0, PHASES - 1)
             val row = phase * TAPS
             for (channel in 0 until channels) accumulator[channel] = 0f
-            var at = (readIndex - half + 1) * channels
+            var at = (readIndex - half + 1).toInt() * channels
             for (tap in 0 until TAPS) {
                 val weight = kernel[row + tap]
                 for (channel in 0 until channels) accumulator[channel] += weight * pending[at + channel]
@@ -158,20 +180,33 @@ internal class SincResampler(
             for (channel in 0 until channels) output[outBase + channel] = accumulator[channel]
             produced++
 
-            // Integers only: this is the step that would drift if the position were a double.
-            remainder += sourceRate
-            readIndex += remainder / targetRate
-            remainder %= targetRate
+            // Integers only: this is the step that would drift if the position were a double. The
+            // whole frames and the fraction are added separately, so neither sum can overflow.
+            readIndex += step
+            remainder += stepRemainder
+            if (remainder >= targetRate) {
+                remainder -= targetRate
+                readIndex++
+            }
         }
         return produced
     }
 
-    /** Drops the frames no future tap can reach, and moves the read position with them. */
+    /**
+     * Drops the frames no future tap can reach, and moves the read position with them. When that
+     * is more than [pending] holds, the rest is dropped from the input still to come.
+     */
     private fun dropConsumed() {
         val keep = readIndex - half + 1
         if (keep <= 0) return
-        pending.copyInto(pending, 0, keep * channels, pendingFrames * channels)
-        pendingFrames -= keep
+        if (keep >= pendingFrames) {
+            skip += keep - pendingFrames
+            pendingFrames = 0
+        } else {
+            val kept = keep.toInt()
+            pending.copyInto(pending, 0, kept * channels, pendingFrames * channels)
+            pendingFrames -= kept
+        }
         readIndex -= keep
     }
 
@@ -180,11 +215,13 @@ internal class SincResampler(
      *
      * Counted against the backlog as well as the input, because a call that arrives after several
      * short ones releases what they left behind as well as its own. Zero input sizes a [flush],
-     * which feeds [half] frames of silence.
+     * which feeds [half] frames of silence. An answer past the range of an Int is [Int.MAX_VALUE],
+     * never a wrapped number.
      */
     override fun outputCapacity(inputFrames: Int): Int {
         val frames = if (inputFrames <= 0) half else inputFrames
-        return ((frames + TAPS).toLong() * targetRate / sourceRate).toInt() + 2
+        val capacity = (frames.toLong() + TAPS) * targetRate / sourceRate + 2
+        return if (capacity > Int.MAX_VALUE) Int.MAX_VALUE else capacity.toInt()
     }
 
     /**
@@ -196,8 +233,9 @@ internal class SincResampler(
     override fun reset() {
         pending.fill(0f, 0, min(pending.size, half * channels))
         pendingFrames = half
-        readIndex = half
+        readIndex = half.toLong()
         remainder = 0
+        skip = 0
     }
 
     /** Nothing to release: the kernel and the backlog are ordinary arrays. */

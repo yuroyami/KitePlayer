@@ -17,6 +17,12 @@ package io.github.yuroyami.kiteplayer.spi
  *
  * The engine never calls two members at the same time, so an implementation needs no lock. A
  * filter may hold input between calls, because it needs samples on both sides of each output.
+ *
+ * ## Limits
+ *
+ * The engine allocates the output array before each call, and never more than 4 Mi float values
+ * for one buffer. An [outputCapacity] below zero or past that size, or a [process] or [flush]
+ * answer outside zero to that capacity, stops playback with `PlaybackError.DecoderFailed`.
  */
 public interface AudioResampler : AutoCloseable {
 

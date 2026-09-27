@@ -347,6 +347,9 @@ public class AudioPlayback(
      * @param frames sample frames in [interleaved], meaning one value per channel each.
      * @param abort polled while the ring is full. Returning true gives up the rest of the buffer,
      *        and the caller is expected to flush, as a seek does.
+     * @throws PlaybackException carrying [PlaybackError.DecoderFailed] when [sourceFormat] has no
+     *         channels or no rate, or when a stage would need more than 4 Mi float values for this
+     *         buffer. The refused stage allocates nothing.
      */
     public suspend fun submitDecoded(
         pts: Pts?,
@@ -558,6 +561,8 @@ public class AudioPlayback(
      *
      * @param abort polled while the ring is full, exactly as [submitDecoded] polls it.
      * @return sample frames handed to the ring, zero when the stages were already empty.
+     * @throws PlaybackException carrying [PlaybackError.DecoderFailed] when the rate conversion's
+     *         tail would need more than 4 Mi float values.
      */
     public suspend fun finishDecoded(abort: () -> Boolean = { false }): Int {
         val stage = pipeline ?: return 0

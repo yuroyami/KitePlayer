@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.internal
 
+import io.github.yuroyami.kiteplayer.PlaybackError
+import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioResampler
@@ -43,6 +45,13 @@ import kotlin.time.Duration
  *
  * One instance per audio stream, owned by the audio feeder. Not thread safe by design: the feeder is
  * the ring's single producer and this sits directly in front of it.
+ *
+ * ### Limits
+ *
+ * No stage allocates more than [MAX_STAGE_VALUES] values for one buffer. A decoder format with no
+ * channels or no rate, a conversion that would need more room, and a resampler whose answers break
+ * its contract are refused with a [PlaybackException] carrying [PlaybackError.DecoderFailed], before
+ * anything is allocated. An unusual rate plays whenever its buffers fit.
  */
 internal class AudioPipeline(
     /** What the decoder produces. The mask on it is what the mixer keys on. */
@@ -72,6 +81,14 @@ internal class AudioPipeline(
      */
     initialSpeed: Double = 1.0,
 ) : AutoCloseable {
+    init {
+        // A decoder can report any format, so it is checked before any stage multiplies by it.
+        if (sourceFormat.sampleRate <= 0 || sourceFormat.channels <= 0) {
+            throw refused("the decoder reported ${sourceFormat.channels} channels at ${sourceFormat.sampleRate} Hz")
+        }
+        require(targetFormat.sampleRate > 0 && targetFormat.channels > 0) { "$targetFormat is not a device format" }
+    }
+
     private val mixer = ChannelMixer(sourceFormat, targetFormat, onWarning, downmix)
 
     /**
@@ -84,12 +101,16 @@ internal class AudioPipeline(
     /** The rate conversion, or null when the rates match and there is nothing to convert. */
     private var resampler: AudioResampler? = buildResampler()
 
-    private fun buildResampler(): AudioResampler? {
-        val sourceRate = if (resampleSpeed == 1.0) {
+    /** The rate the resampler converts from: the source's, with the speed folded in when pitch moves. */
+    private fun conversionRate(): Int =
+        if (resampleSpeed == 1.0) {
             sourceFormat.sampleRate
         } else {
             (sourceFormat.sampleRate * resampleSpeed).roundToInt().coerceAtLeast(1)
         }
+
+    private fun buildResampler(): AudioResampler? {
+        val sourceRate = conversionRate()
         val targetRate = targetFormat.sampleRate
         if (sourceRate == targetRate) return null
         val channels = targetFormat.channels
@@ -211,14 +232,16 @@ internal class AudioPipeline(
         if (mixer.isIdentity) {
             result = input
         } else {
-            mixed = grown(mixed, frames * targetChannels)
+            mixed = grown(mixed, mixValues(frames))
             mixer.mix(input, mixed, frames)
             result = mixed
         }
         val conversion = resampler
         if (conversion != null) {
-            resampled = grown(resampled, conversion.outputCapacity(frames) * targetChannels)
+            val capacity = conversion.outputCapacity(frames)
+            resampled = grown(resampled, conversionValues(capacity, frames))
             produced = conversion.process(result, frames, resampled)
+            checkWritten(produced, capacity)
             result = resampled
         }
 
@@ -285,8 +308,10 @@ internal class AudioPipeline(
         // 1. The rate conversion's tail, through the tempo stage like any other buffer.
         val conversion = resampler
         if (conversion != null) {
-            resampled = grown(resampled, conversion.outputCapacity(0) * targetChannels)
+            val capacity = conversion.outputCapacity(0)
+            resampled = grown(resampled, conversionValues(capacity, 0))
             val drained = conversion.flush(resampled)
+            checkWritten(drained, capacity)
             if (drained > 0) {
                 if (tempo.speed != 1.0 || tempo.hasQueuedInput) {
                     val stretched = tempo.process(resampled, drained)
@@ -342,4 +367,51 @@ internal class AudioPipeline(
 
     private fun grown(buffer: FloatArray, values: Int): FloatArray =
         if (buffer.size >= values) buffer else FloatArray(values)
+
+    /** The values the channel mix writes for [frames] frames, refused past [MAX_STAGE_VALUES]. */
+    private fun mixValues(frames: Int): Int {
+        val values = frames.toLong() * targetChannels
+        if (values > MAX_STAGE_VALUES) {
+            throw refused(
+                "the channel mix needs $values values for one buffer of $frames frames, and the limit is " +
+                    "$MAX_STAGE_VALUES",
+            )
+        }
+        return values.toInt()
+    }
+
+    /**
+     * The values the rate conversion asks for, room for [capacity] frames, refused before any is
+     * allocated when the answer is negative or passes [MAX_STAGE_VALUES]. [frames] is the input.
+     */
+    private fun conversionValues(capacity: Int, frames: Int): Int {
+        val values = capacity.toLong() * targetChannels
+        if (capacity < 0 || values > MAX_STAGE_VALUES) {
+            throw refused(
+                "the rate conversion from ${conversionRate()} Hz to ${targetFormat.sampleRate} Hz asks for room " +
+                    "for $capacity frames of $targetChannels channels for $frames input frames, and the limit " +
+                    "is $MAX_STAGE_VALUES values",
+            )
+        }
+        return values.toInt()
+    }
+
+    /** A resampler that wrote outside the room it asked for broke its contract. */
+    private fun checkWritten(written: Int, capacity: Int) {
+        if (written < 0 || written > capacity) {
+            throw refused("the rate conversion wrote $written frames into room for $capacity")
+        }
+    }
+
+    internal companion object {
+        /**
+         * The most float values one stage may allocate for one buffer, which is 16 MiB. A block of
+         * 65,535 frames of 7.1 audio converted from 44.1 kHz to 192 kHz needs about 2.3 Mi.
+         */
+        const val MAX_STAGE_VALUES: Int = 4 * 1024 * 1024
+
+        /** The typed refusal. The audio feed replaces "audio" with the stream's codec. */
+        fun refused(detail: String): PlaybackException =
+            PlaybackException(PlaybackError.DecoderFailed("audio", detail))
+    }
 }

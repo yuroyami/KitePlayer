@@ -139,7 +139,36 @@ class KiteFFmpegResamplerTest {
     }
 
     @Test
+    fun everyAnswerStaysInsideTheRoomItAskedFor() {
+        // The engine sizes its array from outputCapacity and refuses a larger answer, so the room
+        // asked for must cover every call, the flush included. The engine reuses an array that an
+        // earlier, larger buffer grew, so each call here gets spare room it must not use.
+        val sizes = intArrayOf(1, 7, 441, 1_024, 4_096, 333, 2)
+        for ((from, to) in listOf(44_100 to 48_000, 48_000 to 44_100, 8_000 to 48_000, 96_000 to 44_100)) {
+            val resampler = KiteFFmpegResampler().create(from, to, 2)
+            try {
+                repeat(40) { call ->
+                    val frames = sizes[call % sizes.size]
+                    val capacity = resampler.outputCapacity(frames)
+                    val output = FloatArray((capacity + SPARE) * 2)
+                    val written = resampler.process(tone(frames, from, 440.0, channels = 2), frames, output)
+                    assertTrue(written in 0..capacity, "$from to $to Hz: call $call wrote $written into room for $capacity")
+                }
+                val capacity = resampler.outputCapacity(0)
+                val drained = resampler.flush(FloatArray((capacity + SPARE) * 2))
+                assertTrue(drained in 0..capacity, "$from to $to Hz: the flush wrote $drained into room for $capacity")
+            } finally {
+                resampler.close()
+            }
+        }
+    }
+
+    @Test
     fun moreChannelsThanAFrameCarriesAreRefused() {
         assertFailsWith<IllegalArgumentException> { KiteFFmpegResampler().create(44_100, 48_000, 9) }
+    }
+
+    private companion object {
+        const val SPARE = 8_192
     }
 }

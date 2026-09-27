@@ -6,9 +6,11 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegSourceFactory
+import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -61,15 +63,19 @@ class LibassPlaybackEndToEndTest {
             }
             assertNotNull(player.state.value.tracks.selectedSubtitle, "no subtitle track was selected")
             player.play()
-            // Wait for the first picture, then watch the moving sign for a while.
-            withTimeout(15.seconds) {
-                while (renderer.overlays.none { it != null && it.images.isNotEmpty() }) delay(20)
+            // Watch the moving sign until it has moved enough, polling up to a deadline. A fixed
+            // wait here counted how fast a loaded machine renders, not whether the sign moves.
+            var shown = emptyList<SubtitleOverlay>()
+            var signXs = emptyList<Int>()
+            withTimeoutOrNull(20.seconds) {
+                while (shown.size < 5 || signXs.size < 3 || renderer.presented <= 10) {
+                    delay(20)
+                    shown = renderer.overlays.filterNotNull().filter { it.images.isNotEmpty() }
+                    // The sign is the topmost image; its x must change as it moves right.
+                    signXs = shown.map { overlay -> overlay.images.minByOrNull { it.y }!!.x }.distinct()
+                }
             }
-            delay(2.seconds)
-            val shown = renderer.overlays.filterNotNull().filter { it.images.isNotEmpty() }
-            assertTrue(shown.size >= 5, "only ${shown.size} non-empty overlays in two seconds of a moving sign")
-            // The sign is the topmost image; its x must change as it moves right.
-            val signXs = shown.map { overlay -> overlay.images.minByOrNull { it.y }!!.x }.distinct()
+            assertTrue(shown.size >= 5, "only ${shown.size} non-empty overlays in 20 seconds of a moving sign")
             assertTrue(signXs.size >= 3, "the sign never moved: x values $signXs")
             assertTrue(renderer.presented > 10, "the picture did not play: ${renderer.presented} frames presented")
         } finally {

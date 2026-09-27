@@ -119,7 +119,7 @@ internal expect class LibassEngine : AutoCloseable {
         /** A fresh engine, or null when libass is not loadable here. */
         fun open(): LibassEngine?
 
-        /** libass' own version word, `0x01704000` for 0.17.4, or 0 when nothing is loadable. */
+        /** libass' own version word, `0x01705000` for 0.17.5, or 0 when nothing is loadable. */
         fun libraryVersion(): Int
     }
 }

@@ -32,7 +32,7 @@ public object KiteLibass {
     /** True where libass has no font provider of its own and [fontDirectories] are scanned. */
     public val needsSystemFontFiles: Boolean get() = platformNeedsSystemFontFiles
 
-    /** libass' version word, `0x01704000` for 0.17.4, or 0 when this platform build has none. */
+    /** libass' version word, `0x01705000` for 0.17.5, or 0 when this platform build has none. */
     public fun libraryVersion(): Int = LibassEngine.libraryVersion()
 
     /** Whether this platform build can create a typesetter at all. Loads the native library on the JVM. */

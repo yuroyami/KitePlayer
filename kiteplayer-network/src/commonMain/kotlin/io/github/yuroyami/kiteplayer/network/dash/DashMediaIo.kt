@@ -191,7 +191,8 @@ public object Dash {
      * A manifest within [maxManifestBytes] is never refused for its length. One with more than
      * 262,144 elements or 1,048,576 attributes, or with an element that carries more than 128
      * attributes, is refused with [io.github.yuroyami.kiteplayer.network.xml.XmlException] whatever
-     * the ceiling.
+     * the ceiling. The URL ceilings that [DashManifestParser.parse] states grow in proportion once
+     * [maxManifestBytes] passes 8 MiB.
      */
     @Throws(Exception::class)
     public suspend fun manifest(

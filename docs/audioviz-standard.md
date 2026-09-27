@@ -37,7 +37,7 @@ zero. Negative media positions alone are not a portable missing-timestamp marker
 Raw calibrated features, shared normalised drivers and artistic mappings must remain distinguishable.
 A driver must document its provenance: observed audio, a live estimate, or a song-map estimate.
 All public values must be finite. Channel/layout changes and non-finite input must have explicit
-reset or sanitisation behavior, with a diagnostic rather than poisoned FFT history.
+reset or sanitisation behaviour, with a diagnostic rather than poisoned FFT history.
 
 The default describes source audio before user volume, equalisation and tempo/pitch processing,
 matching the current AudioTap. Muting may leave this source visualisation running. A mode that
@@ -221,7 +221,7 @@ at 12 dB/s in the power domain before conversion to height. *Judgement.*
 
 Drawings may map a driver through a fixed curve, integrate velocity, or run damped physics.
 Those responses must be declared, including added delay, and must not secretly renormalise or
-repeat analysis smoothing. Camera inertia and particle lifetime are artistic behavior, not a
+repeat analysis smoothing. Camera inertia and particle lifetime are artistic behaviour, not a
 second measurement of the signal.
 
 Checked by: analytic step responses and equal-media-time replay at different analysis and
@@ -361,7 +361,7 @@ literal meter. These are default roles, not a ban on deliberate, documented alte
 | Confident section context | Scene choice and broad density |
 
 Each drawing must declare the driver-to-property mapping, fixed transforms, envelope/physics
-response, required capabilities, missing-data behavior and quality controls in machine-readable
+response, required capabilities, missing-data behaviour and quality controls in machine-readable
 form. Fixed mappings and restrained secondary noise are allowed. Hidden automatic rescaling that
 makes quiet and loud passages equally busy is not.
 
@@ -429,7 +429,7 @@ when the darker state is below 0.80, and defines red flashes separately. Its are
   *judgement*. It is not a WCAG constant and does not account for uncommanded flashes.
 - Assess the actual colour-managed output. Digital RGB percentages do not specify cd/m²;
   remove any conversion such as '20 cd/m² equals 2% of phone white'. HDR needs a separately
-  qualified output policy; an SDR capture cannot establish HDR flash behavior.
+  qualified output policy; an SDR capture cannot establish HDR flash behaviour.
 - Unqualified custom shaders/presets must not inherit a safety claim from the host's event limiter.
   Use a qualified restrained fallback in the default profile until their output is checked.
 

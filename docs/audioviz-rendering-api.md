@@ -164,12 +164,12 @@ finished light and host CPU cost. The light fixture uses decoded linear sRGB and
 saturated-red swing trace; it is a bounded fixture, not general photosensitivity certification.
 
 `NeonLoFiCaptureTest` accepts `NEON_PCM_DIRECTORY` containing named 48 kHz mono f32le files and
-optional comma-separated `NEON_SONGS`. It warms the production analyzer for three seconds, then
+optional comma-separated `NEON_SONGS`. It warms the production analyser for three seconds, then
 records twelve seconds at 15 FPS with travel stopped and moving. The first visual frame corresponds
 to decoded input time 3.066666667 seconds, which the muxed audio must match. These are offline
 inspection clips, not presentation FPS measurements. `scripts/check-neonlofi-android.sh` exports
 and pushes the exact shader, textures and ordered mesh batches for an explicit offscreen device
-run. Its blocking draw/readback duration includes synchronization and is not isolated GPU scene
+run. Its blocking draw/readback duration includes synchronisation and is not isolated GPU scene
 cost or app cadence. Neither that script nor an APK build establishes ten-minute presentation
 performance. Current implementation evidence and pending physical checks are indexed in
 [`audioviz-revamp/neonlofi-implementation-report.md`](../audioviz-revamp/neonlofi-implementation-report.md).

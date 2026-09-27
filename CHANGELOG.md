@@ -94,10 +94,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   host or port fails with `DashUrlRefusedException`, and in a browser every redirect fails. Use
   `DashUrlPolicy.Default` for a CDN that redirects to another host.
 - `PlaybackWarning` gains `SubtitlesNotDrawn`, so a `when` that lists every warning needs the new
-  branch. The engine now holds every subtitle rasterizer to the limits in the `SubtitleRasterizer`
+  branch. The engine now holds every subtitle rasteriser to the limits in the `SubtitleRasterizer`
   companion object, such as 256 cues and four viewports of pixels in one overlay. Cues past a limit
-  are not drawn, and the warning says so. When a rasterizer or a renderer throws, the subtitles are
-  cleared, the warning names the failure, and playback continues. A custom rasterizer gets only
+  are not drawn, and the warning says so. When a rasteriser or a renderer throws, the subtitles are
+  cleared, the warning names the failure, and playback continues. A custom rasteriser gets only
   what `SubtitleRasterizer.limitCues` keeps, and it can throw `SubtitleOverlayLimitException` to
   show part of an overlay.
 
@@ -211,7 +211,7 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Added
 
-- `AudioVizState.framesPerSecond` caps how often the visualizer redraws; zero, the default, draws
+- `AudioVizState.framesPerSecond` caps how often the visualiser redraws; zero, the default, draws
   every display frame. Both surfaces and the director pace by it. Fixes #146.
 
 - `KitePlayer.scanAudio` decodes an audio track a second time, without playing it, and hands
@@ -263,7 +263,7 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Changed
 
-- The visualizer opens on a drawing chosen at random and the director walks a different sequence
+- The visualiser opens on a drawing chosen at random and the director walks a different sequence
   on every run. `VizDirector`'s seed is random unless one is given. Fixes #145.
 
 - `VizDirector.current` is Compose snapshot state, so a control that names the drawing on
@@ -430,7 +430,7 @@ styling remains the fallback where no typesetter is installed.
   per-item headers. Existing Kotlin implementations remain source compatible; recompile them.
 - Installed transport providers are selected automatically by both default and direct core
   factories. Explicit byte sources and resolvers retain precedence. Native/web discovery depends
-  on the pinned Kotlin toolchain and its initialization behavior.
+  on the pinned Kotlin toolchain and its initialisation behaviour.
 - `kiteplayer-libass` is now published and included by `kiteplayer`, `kiteplayer-mobile` and
   `kiteplayer-compose`. An ASS or SSA track is typeset by libass when the module is present.
   `SubtitleConfig.typesetting = false` keeps the built-in styling. `SubtitleConfig` also gains

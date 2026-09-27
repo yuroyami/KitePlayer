@@ -57,11 +57,11 @@ only when network media is opened. Automatically created resources must have a c
 caller-supplied resources remain caller-owned. Do not silently share mutable player state through
 an extension registry. Competing providers must have deterministic selection.
 
-JVM and Android use service metadata; Native and web use target initialization/registration.
+JVM and Android use service metadata; Native and web use target initialisation/registration.
 The Android network artifact supplies the normal `android.permission.INTERNET` permission through
 manifest merging, so consumers do not need a separate permission declaration.
-Kotlin's eager initialization is experimental/deprecated, so dependency-presence activation must
-be verified against this pinned toolchain in optimized consumers before being claimed. A consumer
+Kotlin's eager initialisation is experimental/deprecated, so dependency-presence activation must
+be verified against this pinned toolchain in optimised consumers before being claimed. A consumer
 proof references only core APIs: touching a network symbol would hide a missing registration root.
 
 The concrete core additions are `NetworkConfig.autoResolve` (default true), a default
@@ -74,7 +74,7 @@ lazy-created client, so reader close also releases the client.
 ## Subtitles and compatibility
 
 Default playback continues to include the Kotlin subtitle parsers through the FFmpeg backend,
-with cue timing in core and text rasterization in output. `kiteplayer-libass` joins the default
+with cue timing in core and text rasterisation in output. `kiteplayer-libass` joins the default
 assembly the way the network module does: `kiteplayer` depends on it, so
 `kiteplayer-compose` inherit it, and `kiteplayer-compose-ui` does not. Discovery mirrors the
 transport providers exactly: `SubtitleTypesetterProvider` through service metadata on the JVM and
@@ -94,7 +94,7 @@ points continue to resolve without duplicating declarations from the moved assem
 
 A change to these modules verifies that each documented dependency resolves by itself where
 promised, that required modules appear in published metadata, that presentation does not pull in
-playback construction or networking, and that network discovery survives release optimization. It
+playback construction or networking, and that network discovery survives release optimisation. It
 checks a normal HTTP and HTTPS open, seeks, headers, explicit overrides, disabled discovery,
 missing providers and cleanup on success and on failure.
 

@@ -42,9 +42,9 @@ with it, and the failed open closes that reader. No media decoder or audio devic
 The runner checks completion markers as well as exit status; the deliberate decoder refusal is
 part of the proof, not a test failure.
 
-Native probes use release executables and Wasm uses the optimized production executable. Android
+Native probes use release executables and Wasm uses the optimised production executable. Android
 uses a non-debuggable release with R8 enabled and requires its mapping file. Its local installation
-signature does not disable optimization. The app adds no provider references or custom keep rules;
+signature does not disable optimisation. The app adds no provider references or custom keep rules;
 any discovery rules must arrive from the published dependency itself.
 
 Outputs and logs stay under `verification/network-consumer/build/{without-network,with-network}`.

@@ -1,4 +1,4 @@
-# Audio visualization performance
+# Audio visualisation performance
 
 The normal finishing pass renders the scene once and shares its pixels across the
 colour fringe and bloom. Skia uses a filtered bloom pyramid at half, quarter,

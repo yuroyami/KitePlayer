@@ -150,7 +150,7 @@ delivered low hits each contribute before the spring advances once. A new genera
 revision, explicit camera reset or cursor catch-up reset clears anticipation. Sixteen pending
 identities bound the bookkeeping and cover the player's 100 ms anticipation plus 250 ms catch-up
 budget at the live detector's 30 ms combination floor. Legacy author-created scalar frames keep
-their single-hit compatibility behavior and cannot provide this identity or multiplicity guarantee.
+their single-hit compatibility behaviour and cannot provide this identity or multiplicity guarantee.
 
 Camera physics advances the previous state to the current display instant before applying new
 event impulses. The flat and flying impulse springs have theoretical peak delays of about 96 ms

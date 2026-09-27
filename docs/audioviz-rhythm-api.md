@@ -10,7 +10,7 @@ the phase is currently usable. Support values are algorithm scores, not calibrat
 The phase belongs to its stated media reference, independent of the shorter spectral window.
 
 The live baseline keeps six seconds of causal activation history, searches 40 through 240 BPM,
-and re-estimates every 500 ms after enough evidence exists. Normalized autocorrelation identifies
+and re-estimates every 500 ms after enough evidence exists. Normalised autocorrelation identifies
 periodicity. Alignment coverage distinguishes a pulse period from multiples that explain only
 some attacks; a weak log-tempo preference near 120 BPM only breaks close ties. The alternate
 octave remains visible when the unweighted evidence supports it. These are project choices,
@@ -43,7 +43,7 @@ The director's `minimumHoldSeconds` is a cooldown, not a timer that schedules a 
 With no accepted boundary it holds the scene and reports an unknown next-change time. Manual
 selection remains immediate. A seek or track change does not cut a change already under way; it
 finishes over its planned duration, and boundaries delivered meanwhile are consumed rather than
-queued. The event vocabulary and consumer gate do not themselves recognize sections. The live
+queued. The event vocabulary and consumer gate do not themselves recognise sections. The live
 detector that publishes them, with its development evidence and its limits, is described in the
 [structure and key contract](audioviz-structure-api.md).
 
@@ -65,7 +65,7 @@ something else. Set it and a drawing held that long with no boundary changes on 
 no usable tempo there is no beat to wait for, so the wait alone is enough. A boundary is still
 preferred whenever one arrives, and the cooldown still applies. The sample app sets 30 seconds.
 
-This is elapsed time authorizing a change, which the contract forbids by default and still forbids
+This is elapsed time authorising a change, which the contract forbids by default and still forbids
 unless the application says otherwise. It is written down here rather than hidden in a default so
 that a picture nobody asked to shuffle never shuffles.
 

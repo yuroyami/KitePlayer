@@ -4,32 +4,61 @@
   <img src="art/final/kiteplayer-logo.svg" width="180" alt="KitePlayer logo">
 </p>
 
-A media player for Kotlin Multiplatform, with a Kotlin engine and FFmpeg decoding compiled into
-the artifacts.
+A media player for Kotlin Multiplatform. One Kotlin engine plays video, audio and subtitles on
+Android, iOS, macOS, the desktop JVM and the web, and FFmpeg is compiled into the artifacts.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/yuroyami/KitePlayer/ci.yml?label=CI)](https://github.com/yuroyami/KitePlayer/actions/workflows/ci.yml)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.yuroyami/kiteplayer?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.yuroyami/kiteplayer)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
-**[Documentation](docs/)** · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
+**[Guides](docs/README.md)** · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
-Things people build with it:
+## What you get
+
+The engine does seeking, audio and video sync, subtitle timing and the playback state in Kotlin,
+so each platform behaves the same way. FFmpeg decodes through
+[KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg), and each platform supplies only an audio
+output and a video surface. You show the video in a native view (an Android View, a UIKit view or
+an AWT canvas), in an AppKit window on macOS, or in Compose. libass draws ASS and SSA subtitles as
+they were authored.
+
+Typical uses:
 
 - A video screen in a Compose Multiplatform app, on Android, iOS and desktop
 - A player inside an Android XML layout or a UIKit view, with no Compose at all
 - An audio player with a ten band equaliser, ReplayGain, balance and a sleep timer
 - A player for subtitle heavy content: SSA and ASS drawn by libass, plus SubRip and WebVTT
 
-KitePlayer does not wrap ExoPlayer, AVPlayer or libmpv. Seeking, audio and video sync and the
-state machine live in one Kotlin engine, so they behave the same on every platform. FFmpeg comes
-through [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg) and is compiled into the artifacts.
-You do not install FFmpeg or add a Gradle plugin. An iOS app that links a static framework adds a
-few system frameworks to its linker flags; [iOS](#ios) lists them.
-
 > **Early software.** KitePlayer is 0.0.x. It plays real media on Android, iOS, macOS and the
-> desktop JVM, and it runs inside a shipping app. The public API will still change. Read
-> [What is missing](#what-is-missing) before you plan around it.
+> desktop JVM, and it runs inside a shipping app. The API can still change between versions. Read
+> [Limits](#limits) before you plan around it.
+
+## Try it
+
+This desktop JVM program plays a song, seeks, and closes the player. It needs the `kiteplayer`
+dependency from [Install](#install).
+
+```kotlin
+import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.MediaItem
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlin.time.Duration.Companion.seconds
+
+fun main() = runBlocking {
+    val player = KitePlayerPlatform.createOrNull()
+        ?: error("KitePlayer cannot run here: ${KitePlayerPlatform.availability}")
+    player.open(MediaItem("/path/to/song.mp3"))   // returns when the item is open and paused
+    player.play()
+    delay(10.seconds)
+    player.seek(60.seconds)                       // returns when the seek has landed
+    delay(10.seconds)
+    player.closeAndAwait()
+}
+```
+
+[Play something](#play-something) shows the same player in a view or in Compose.
 
 ## Install
 
@@ -46,7 +75,11 @@ implementation("io.github.yuroyami:kiteplayer-audioviz:0.0.27")
 
 Put the line in `commonMain.dependencies`, or in the `dependencies` block of an Android-only app.
 Every artifact lives under `io.github.yuroyami`. Gradle picks the platform pieces for each target
-you declare.
+you declare, and you do not install FFmpeg or add a Gradle plugin. On Android, every artifact needs
+`minSdk` 26 or higher.
+
+An iOS app that links a static framework adds linker flags, and every iOS app declares two
+categories of required reason APIs in its privacy manifest. [iOS](#ios) says how.
 
 What each line pulls in:
 
@@ -118,6 +151,8 @@ store, and `3B52.1` for files the user picked. Keep only the reasons that apply 
 Three steps: create a player, show it, open something.
 
 ```kotlin
+import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+
 val player = KitePlayerPlatform.createOrNull()
     ?: error("KitePlayer cannot run here: ${KitePlayerPlatform.availability}")
 ```
@@ -125,10 +160,15 @@ val player = KitePlayerPlatform.createOrNull()
 In Compose, show the player with `KitePlayerVideo`:
 
 ```kotlin
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import io.github.yuroyami.kiteplayer.compose.KitePlayerVideo
+
 KitePlayerVideo(player = player, modifier = Modifier.fillMaxSize())
 ```
 
-For a native view, create the view, install its renderer binding and hand it the player:
+For a native view, create the view, install its renderer binding and hand it the player. The views
+are in `io.github.yuroyami.kiteplayer.view`, and the bindings in `io.github.yuroyami.kiteplayer.mobile`.
 
 | Platform | View | Binding |
 |---|---|---|
@@ -137,14 +177,20 @@ For a native view, create the view, install its renderer binding and hand it the
 | Desktop JVM | `KitePlayerAwtView` | `view.installDesktopRenderer()` |
 
 ```kotlin
+import io.github.yuroyami.kiteplayer.mobile.installMobileRenderer
+
 view.installMobileRenderer()
 view.player = player
 ```
 
 Then open media from a coroutine you own, once the view or composable is on screen. `open`,
-`seek` and `closeAndAwait` suspend. `play` and `pause` do not.
+`seek` and `closeAndAwait` suspend. `play` and `pause` do not. Put your own file path or URL in
+place of the one below.
 
 ```kotlin
+import io.github.yuroyami.kiteplayer.MediaItem
+import kotlin.time.Duration.Companion.seconds
+
 player.open(MediaItem("https://example.com/movie.mkv"))
 player.play()
 player.seek(90.seconds)
@@ -188,6 +234,8 @@ The first two are in `kiteplayer-core`. The others are in `kiteplayer-io`, which
 `kiteplayer`. A stream and a pipe read forward only, so the player cannot seek in them.
 
 ```kotlin
+import io.github.yuroyami.kiteplayer.MediaIo
+import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.from
 import io.github.yuroyami.kiteplayer.io.ofUri
 
@@ -202,6 +250,10 @@ To set several things on one item, build it in a block. An empty block gives the
 `MediaItem(uri)`.
 
 ```kotlin
+import io.github.yuroyami.kiteplayer.CorruptPackets
+import io.github.yuroyami.kiteplayer.ProbeDepth
+import io.github.yuroyami.kiteplayer.mediaItem
+
 val item = mediaItem("https://cdn.example.com/live/channel.ts") {
     header("Authorization", "Bearer $token")
     probe(ProbeDepth.Fast)
@@ -307,6 +359,11 @@ Then attach the media notification to the player's media session. `smallIcon` is
 monochrome notification icon.
 
 ```kotlin
+import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.session.KitePlayerMediaSession
+import io.github.yuroyami.kiteplayer.session.MediaNotificationOptions
+import io.github.yuroyami.kiteplayer.session.attachMediaNotification
+
 val session = KitePlayerMediaSession(player, context)
 val notification = KitePlayerPlatform.attachMediaNotification(
     session,
@@ -346,6 +403,15 @@ page plays while its tab is open.
 line and show it in place of the video when `isAudioOnly` says so:
 
 ```kotlin
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import io.github.yuroyami.kiteplayer.audioviz.KiteAudioViz
+import io.github.yuroyami.kiteplayer.audioviz.isAudioOnly
+import io.github.yuroyami.kiteplayer.audioviz.rememberAudioVizState
+import io.github.yuroyami.kiteplayer.compose.KitePlayerVideo
+
 val viz = rememberAudioVizState(player)
 val snapshot by player.state.collectAsState()
 
@@ -370,6 +436,23 @@ if (snapshot.isAudioOnly) {
 - The toolkit the drawings are written with is public behind `@AudioVizAuthoringApi`.
 
 ## Where it runs
+
+Each artifact publishes the targets below, read from the build. iOS means `iosArm64` and
+`iosSimulatorArm64`; core, subtitles, io and rt also publish `iosX64`. The last column covers
+`tvosArm64`, `tvosSimulatorArm64`, the four watchOS targets and the four Android native targets.
+
+| Artifact | Android | iOS | macOS | JVM | Linux | Windows | wasmJs | js | tvOS, watchOS, Android native |
+|---|---|---|---|---|---|---|---|---|---|
+| `kiteplayer-core`, `-subtitles`, `-io` | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| `kiteplayer-rt` | no | yes | yes | no | yes | yes | no | no | yes |
+| `kiteplayer`, `-libass` | yes | yes | yes | yes | yes | yes | yes | yes | no |
+| `kiteplayer-ffmpeg`, `-output` | yes | yes | yes | yes | yes | yes | yes | no | no |
+| `kiteplayer-network` | yes | yes | yes | yes | no | no | yes | yes | no |
+| `kiteplayer-view` | yes | yes | yes | yes | no | no | yes | no | no |
+| `kiteplayer-compose-interop` | yes | yes | no | yes | no | no | yes | yes | no |
+| `kiteplayer-compose`, `-compose-ui`, `-compose-video`, `-view-bindings`, `-audioviz`, `-phone` | yes | yes | no | yes | no | no | no | no | no |
+
+What runs on each target, and where:
 
 | Target | What runs, and where |
 |---|---|
@@ -399,19 +482,28 @@ Every CI run of the format matrix writes a conformance table, uploaded as the
 `conformance-macos-host` artifact and printed in the run summary. It lists each clip, what was
 asked of it, and what happened.
 
-## What is missing
+## Limits
 
-- Adaptive streaming. Single file HTTP and HTTPS with an in-memory byte cache is there. HLS and
-  DASH with bitrate switching and persistent caching are not.
-- Linux audio output. The engine plays; there is no ALSA sink.
-- Desktop JVM sound on Linux and Windows, which has not met a real audio device, see above.
-- A stable API. Public declarations are checked against committed ABI dumps, so a change fails
-  the build here rather than surprising you. That is visibility, not a promise.
-- AV1 on the web. Native targets have dav1d with full SIMD, and hardware AV1 where it exists. The
-  Wasm build is single threaded and dav1d needs threads, so the web has no software AV1.
-- An automated device farm. Device results are checked by hand, not on every push.
+| Topic | What to expect |
+|---|---|
+| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache. `Dash.mediaItemFor` in `kiteplayer-network` plays one representation of an on-demand DASH manifest, with no bitrate switching. HLS, live DASH and a persistent cache do not work. |
+| Native Linux and Windows | There is no audio output and no HTTPS, so `createOrNull()` returns null. Pass your own `OutputBackend` to `KitePlayer.create`, or use the desktop JVM target. |
+| Desktop JVM sound | Played on macOS only. Linux and Windows have not played audio on a real device. |
+| AV1 on the web | There is no software AV1, because the Wasm build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |
+| Android devices | No device test runs automatically yet. Device results are checked by hand. |
+| API stability | Any 0.0.x release can change the API. Committed ABI dumps make each change visible in review, but they are not a promise. |
 
 Everything else that is open lives in [GitHub Issues](https://github.com/yuroyami/KitePlayer/issues).
+
+## How it is tested
+
+Each push runs the jobs in [`ci.yml`](.github/workflows/ci.yml): the real-media suites on macOS
+arm64 (JVM and native), the iOS simulator suites and the iOS sample app, the tvOS and watchOS
+simulators, the media-free suites on Linux x64 and on a Linux arm64 runner, Windows x64 native,
+wasmJs under Node and in a headless browser, and the C audio ring under AddressSanitizer and
+ThreadSanitizer. The Android emulator job does not boot yet, so Android device tests run by hand.
+Before a commit, `scripts/check-gate.sh` runs the local gate that
+[CONTRIBUTING.md](CONTRIBUTING.md) describes.
 
 ## Modules
 
@@ -500,5 +592,4 @@ static linking case in detail. The licence texts ship inside the JVM and Android
 `META-INF/licenses/`.
 
 Part of the Kite family: [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg),
-[KiteCore](https://github.com/yuroyami/KiteCore), [KitePDF](https://github.com/yuroyami/KitePDF),
-[KiteImage](https://github.com/yuroyami/KiteImage), [KiteQR](https://github.com/yuroyami/KiteQR).
+[Kite3D](https://github.com/yuroyami/Kite3D) and [KitePDF](https://github.com/yuroyami/KitePDF).

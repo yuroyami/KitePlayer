@@ -76,6 +76,7 @@ internal class MainActivity : Activity() {
     private fun requestedItem(): MediaItem? = when (intent.getStringExtra(EXTRA_SOURCE)) {
         SOURCE_PICKED -> intent.data?.let { uri -> MediaItem(uri = uri.toString(), io = MediaIo.ofUri(contentResolver, uri)) }
         SOURCE_ASSET -> MediaItem(uri = BUNDLED_CLIP, io = MediaIo.ofAsset(assets, BUNDLED_CLIP))
+        SOURCE_PATH -> intent.getStringExtra(EXTRA_PATH)?.let { MediaItem(it) }
         else -> null
     }
 
@@ -110,9 +111,14 @@ internal class MainActivity : Activity() {
     }
 
     companion object {
-        /** Which door to open: [SOURCE_PICKED] with the file as the intent's data, or [SOURCE_ASSET]. */
+        /**
+         * Which door to open: [SOURCE_PICKED] with the file as the intent's data, [SOURCE_ASSET], or
+         * [SOURCE_PATH] with a file this app can read in [EXTRA_PATH], which the instrumented tests use.
+         */
         const val EXTRA_SOURCE = "kite_source"
         const val SOURCE_PICKED = "picked"
         const val SOURCE_ASSET = "asset"
+        const val SOURCE_PATH = "path"
+        const val EXTRA_PATH = "kite_path"
     }
 }

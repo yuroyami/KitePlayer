@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.sample.android
 import android.accessibilityservice.AccessibilityService
 import android.app.Activity
 import android.app.Instrumentation
+import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
@@ -15,11 +16,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 /**
- * Picture in picture from the direct view's own parameters (#20), with the upright 16:9 clip the
- * sample bundles. Whether the transition starts from the video area is a look, not something the
- * test can read.
+ * Picture in picture from the direct view's own parameters (#20): the upright 16:9 clip the sample
+ * bundles, and a quarter-turned clip this test carries. Whether the transition starts from the
+ * video area is a look, not something the test can read.
  */
 @RunWith(AndroidJUnit4::class)
 class PictureInPictureTest {
@@ -36,6 +38,25 @@ class PictureInPictureTest {
             assertTrue("the OS refused picture in picture", entered)
             await("the activity in picture in picture") { onMain { activity.isInPictureInPictureMode } }
             await("a window at the clip's 16:9") { aspectOf(activity) in 1.72..1.84 }
+        }
+    }
+
+    @Test
+    fun aQuarterTurnedClipOpensAPortraitWindow() {
+        // 320x240 stored, turned a quarter by its display matrix, so the picture is 3:4.
+        val clip = File(instrumentation.targetContext.filesDir, ROTATED_CLIP)
+        instrumentation.context.assets.open(ROTATED_CLIP).use { input -> clip.outputStream().use { input.copyTo(it) } }
+        val intent = Intent(instrumentation.targetContext, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_SOURCE, MainActivity.SOURCE_PATH)
+            .putExtra(MainActivity.EXTRA_PATH, clip.absolutePath)
+        ActivityScenario.launch<MainActivity>(intent).use { scenario ->
+            val (activity, view) = activityAndView(scenario)
+            play(view)
+            var entered = false
+            instrumentation.runOnMainSync { entered = view.enterPictureInPicture(activity) }
+            assertTrue("the OS refused picture in picture", entered)
+            await("the activity in picture in picture") { onMain { activity.isInPictureInPictureMode } }
+            await("a window at the turned clip's 3:4") { aspectOf(activity) in 0.70..0.80 }
         }
     }
 
@@ -97,5 +118,6 @@ class PictureInPictureTest {
     private companion object {
         const val TIMEOUT_MILLIS = 40_000L
         const val POLL_MILLIS = 200L
+        const val ROTATED_CLIP = "rotated90ccw.mp4"
     }
 }

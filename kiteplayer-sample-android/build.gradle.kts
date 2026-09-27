@@ -146,7 +146,17 @@ val prepareSampleSong = tasks.register<PrepareAndroidSampleSongsTask>("prepareAn
     outputDirectory.set(layout.buildDirectory.dir("generated/songAssets"))
 }
 
+// The instrumented tests carry a rotated clip of their own, so picture in picture can be checked
+// with a portrait picture. It stays out of the app.
+val prepareRotatedTestClip = tasks.register<PrepareAndroidSampleMediaTask>("prepareAndroidTestRotatedClip") {
+    sourceMedia.set(rootProject.layout.projectDirectory.file("testmedia/rotated90ccw.mp4"))
+    outputDirectory.set(layout.buildDirectory.dir("generated/testClipAssets"))
+}
+
 androidComponents.onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(prepareSampleMedia, PrepareAndroidSampleMediaTask::outputDirectory)
     variant.sources.assets?.addGeneratedSourceDirectory(prepareSampleSong, PrepareAndroidSampleSongsTask::outputDirectory)
+    variant.deviceTests.values.forEach { deviceTest ->
+        deviceTest.sources.assets?.addGeneratedSourceDirectory(prepareRotatedTestClip, PrepareAndroidSampleMediaTask::outputDirectory)
+    }
 }

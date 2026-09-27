@@ -83,9 +83,11 @@ android {
         }
     }
 
+    // The root build compiles every Kotlin JVM target to Java 11, and AGP refuses a Java target
+    // that differs from the Kotlin one.
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
 
     buildFeatures {

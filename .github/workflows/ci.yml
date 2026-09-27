@@ -554,6 +554,19 @@ jobs:
             :kiteplayer-sample-shared:testAndroidHostTest \
             :kiteplayer-libass:testAndroidHostTest
 
+      # The sample app packages every Android ABI, 32-bit ARM included, so it can be sideloaded
+      # onto a streaming stick. A KiteFFmpeg release or a libass build that lacks one ABI's
+      # library would otherwise give an app that cannot start on that ABI, and nothing would fail.
+      - name: Package the sample app for every Android ABI
+        run: |
+          ./gradlew --stacktrace :kiteplayer-sample-android:assembleDebug
+          apk=kiteplayer-sample-android/build/outputs/apk/debug/kiteplayer-sample-android-debug.apk
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            for lib in libkitecodec_jni.so libkiteplayer_libass_jni.so; do
+              unzip -l "$apk" "lib/$abi/$lib" > /dev/null || { echo "$apk has no lib/$abi/$lib"; exit 1; }
+            done
+          done
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

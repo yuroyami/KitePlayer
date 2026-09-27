@@ -836,6 +836,17 @@ jobs:
       - name: Link the FFmpeg backend for linuxX64
         run: ./gradlew --stacktrace :kiteplayer-ffmpeg:linkDebugTestLinuxX64
 
+      # 32-bit ARM Android, which the common streaming sticks run. Nothing here can run these
+      # binaries, so this lane proves only that every module declaring the target links for it.
+      # Running them is the stick smoke run of #64.
+      - name: Link the androidNativeArm32 test binaries
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:linkDebugTestAndroidNativeArm32 \
+            :kiteplayer-subtitles:linkDebugTestAndroidNativeArm32 \
+            :kiteplayer-io:linkDebugTestAndroidNativeArm32 \
+            :kiteplayer-rt:linkDebugTestAndroidNativeArm32
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

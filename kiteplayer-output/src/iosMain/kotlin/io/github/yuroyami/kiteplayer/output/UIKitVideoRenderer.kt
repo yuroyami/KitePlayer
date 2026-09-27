@@ -59,7 +59,8 @@ import platform.posix.memcpy
 import kotlin.math.PI
 
 /**
- * Converts software frames away from the caller and presents the newest finished image in [layer].
+ * Converts software frames away from the caller and presents the newest finished image in its
+ * `layer`.
  *
  * The caller owns the layer. In particular, closing this renderer gives up the renderer's image
  * references but does not clear or replace the layer's last contents.

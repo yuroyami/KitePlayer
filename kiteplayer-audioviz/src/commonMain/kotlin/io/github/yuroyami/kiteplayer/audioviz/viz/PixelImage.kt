@@ -18,7 +18,7 @@ internal class PixelImage(val width: Int, val height: Int) {
     }
 }
 
-/** Copies [pixels], opaque ARGB and row by row, into this picture. */
+/** Copies the pixels given to [write], opaque ARGB and row by row, into this picture. */
 internal expect class PixelUpload(image: ImageBitmap) {
     fun write(pixels: IntArray)
 }

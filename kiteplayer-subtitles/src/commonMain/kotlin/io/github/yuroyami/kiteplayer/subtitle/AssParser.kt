@@ -31,7 +31,7 @@ public object AssParser {
     }
 
     /**
-     * Builds a per-event parser from an ASS HEADER (everything before [Events]' Dialogue
+     * Builds a per-event parser from an ASS HEADER (everything before `[Events]`' Dialogue
      * lines; a Matroska ass track's codec extradata is exactly this). Malformed headers
      * yield a parser with default styles rather than failing: an unstyled subtitle beats none.
      */
@@ -70,7 +70,7 @@ internal class AssStyle(
     val marginV: Int,
 )
 
-/** The parsed header plus the raw Dialogue lines when the text carried an [Events] section. */
+/** The parsed header plus the raw Dialogue lines when the text carried an `[Events]` section. */
 internal class AssDocument(text: String) {
 
     var playResX: Int = 0

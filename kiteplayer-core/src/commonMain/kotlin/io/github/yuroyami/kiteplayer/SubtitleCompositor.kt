@@ -3,7 +3,7 @@ package io.github.yuroyami.kiteplayer
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 
 /**
- * Draws [overlay] onto RGBA pixels, in place.
+ * Draws this overlay onto RGBA pixels, in place.
  *
  * For burning subtitles into a screenshot. The engine's own renderers composite on the GPU and
  * never come here; this is the path for a caller holding a [CapturedFrame] that wants one image

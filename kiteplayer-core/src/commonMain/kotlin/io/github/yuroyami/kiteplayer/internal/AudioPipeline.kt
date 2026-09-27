@@ -156,7 +156,7 @@ internal class AudioPipeline(
      * no buffer is ever spliced from two speeds and the discarded carry frame was going to be
      * dropped by [reset] anyway.
      *
-     * Owned by the feeder like [volume].
+     * Owned by the feeder, like every stage of the pipeline.
      */
     var speed: Double
         get() = if (preservePitch) tempo.speed else resampleSpeed

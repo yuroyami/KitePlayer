@@ -43,7 +43,7 @@ import kotlin.math.min
  * ### Ownership and threading
  *
  * One instance per audio pipeline, owned by the feeder like every other stage. Not thread safe,
- * same rule as [ChannelMixer] and [GainStage]. [output] is this stage's own buffer, reused by
+ * same rule as [ChannelMixer]. [output] is this stage's own buffer, reused by
  * the next [process], never handed anywhere.
  */
 internal class TempoStage(

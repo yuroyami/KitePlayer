@@ -98,9 +98,10 @@ public interface BackendSession : AutoCloseable {
 
     /**
      * Where the engine installs its warning reporter after open, so backend degradations (a
-     * hardware-to-software fallback, colour approximation) surface as [PlayerEvent.Warning]
-     * instead of dying in a backend-private default. A backend with nothing to report keeps the
-     * empty default; a backend that already has an application-level listener calls both.
+     * hardware-to-software fallback, colour approximation) surface as
+     * [io.github.yuroyami.kiteplayer.PlayerEvent.Warning] instead of dying in a backend-private
+     * default. A backend with nothing to report keeps the empty default; a backend that already has
+     * an application-level listener calls both.
      */
     public fun setWarningSink(sink: (io.github.yuroyami.kiteplayer.PlaybackWarning) -> Unit) {}
 }

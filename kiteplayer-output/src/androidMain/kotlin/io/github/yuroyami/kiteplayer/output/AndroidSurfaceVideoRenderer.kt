@@ -579,9 +579,9 @@ public class AndroidSurfaceVideoRenderer internal constructor(
 
     /**
      * The display's interval, fed by whoever owns the Surface: the renderer itself cannot ask,
-     * because a Surface does not know its display. [io.github.yuroyami.kiteplayer.view.KitePlayerView]
-     * calls this from the view's own display and again on every surface change, and a change
-     * while attached is announced as [RendererEvent.VsyncChanged].
+     * because a Surface does not know its display. `KitePlayerView` in `kiteplayer-view` calls
+     * this from the view's own display and again on every surface change, and a change while
+     * attached is announced as [RendererEvent.VsyncChanged].
      */
     @Volatile
     private var displayVsyncNanos: Long? = null

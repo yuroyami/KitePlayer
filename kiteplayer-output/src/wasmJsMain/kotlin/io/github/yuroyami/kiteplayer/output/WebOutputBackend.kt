@@ -69,7 +69,7 @@ private external fun performanceNow(): Double
  * callback consumes the audio ring, so a sink that merely holds the callback would leave playback
  * frozen at position zero with the ring backing up behind it. A review caught exactly that
  * in the first version of this class. So a coroutine calls [AudioRenderCallback.onRender] for one
- * [deviceBufferFrames] block at a time, on a wall-clock schedule, and throws the samples away.
+ * `deviceBufferFrames` block at a time, on a wall-clock schedule, and throws the samples away.
  *
  * The real audible sink is [WebAudioSinkFactory]'s `AudioWorklet`. This one is no
  * longer the web's sink: it is the fallback where Web Audio does not exist, which is `nodejs` and

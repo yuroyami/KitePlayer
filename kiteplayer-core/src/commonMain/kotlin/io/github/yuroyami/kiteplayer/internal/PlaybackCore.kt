@@ -956,7 +956,7 @@ internal class PlaybackCore(
         )
     }
 
-    /** Decodes one audio track without playing it, with playback's reader rules. See [KitePlayer.scanAudio]. */
+    /** Decodes one audio track without playing it, with playback's reader rules. See [io.github.yuroyami.kiteplayer.KitePlayer.scanAudio]. */
     suspend fun scanAudio(media: MediaItem, track: io.github.yuroyami.kiteplayer.TrackId?,
         range: io.github.yuroyami.kiteplayer.AudioScanRange?,
         sink: io.github.yuroyami.kiteplayer.AudioScanSink): io.github.yuroyami.kiteplayer.AudioScanResult {
@@ -972,7 +972,7 @@ internal class PlaybackCore(
         }
     }
 
-    /** Reads a file's own facts without opening playback. See [KitePlayer.inspect]. */
+    /** Reads a file's own facts without opening playback. See [io.github.yuroyami.kiteplayer.KitePlayer.inspect]. */
     suspend fun inspect(media: MediaItem): MediaInspection {
         // The backend and the reader open would use, so an item that plays can be inspected (#202).
         val io = resolveMediaIo(media, config.network)

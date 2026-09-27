@@ -270,6 +270,7 @@ dependencies {
     dokka(project(":kiteplayer-phone"))
     dokka(project(":kiteplayer-compose"))
     dokka(project(":kiteplayer-audioviz"))
+    dokka(project(":kiteplayer-libass"))
 }
 
 dokka {
@@ -295,6 +296,11 @@ allprojects {
                     templatesDir.set(templates)
                 }
                 footerMessage.set("Apache-2.0 · KitePlayer is part of the Kite family.")
+            }
+
+            // An unresolved KDoc link renders as plain text and breaks nothing else, so it fails here.
+            dokkaPublications.configureEach {
+                failOnWarning.set(true)
             }
 
             dokkaSourceSets.configureEach {

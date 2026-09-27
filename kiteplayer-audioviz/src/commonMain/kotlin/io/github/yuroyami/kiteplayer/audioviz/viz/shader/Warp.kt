@@ -81,7 +81,8 @@ internal class WarpRunner(field: String, private val drift: Float = 0f, private 
     /**
      * Points the program at last frame's picture and this frame's music.
      *
-     * [zoom] above one pulls the picture outward, below one drains it inward. [spin] turns it.
+     * [zoomX] and [zoomY] above one pull the picture outward, below one drain it inward. [spin]
+     * turns it.
      * [decay] is how much survives, and the loop only stays stable while it stays under one.
      */
     fun prepare(

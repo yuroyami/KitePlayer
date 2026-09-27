@@ -126,9 +126,9 @@ public interface AudioSinkFactory {
  * - Must not allocate, must not take a contended lock, must not log, must not throw.
  * - Reads from a preallocated single-producer single-consumer ring, and when that ring is dry writes
  *   silence and returns rather than waiting for the feeder.
- * - [deadlineNanos] is when the **last** frame of this buffer becomes audible, on the engine's
- *   monotonic clock. It is what the audio clock is anchored to, and it is the reason this callback
- *   takes a time at all.
+ * - The `deadlineNanos` argument of [onRender] is when the **last** frame of this buffer becomes
+ *   audible, on the engine's monotonic clock. It is what the audio clock is anchored to, and it is
+ *   the reason this callback takes a time at all.
  *
  * ffplay does the opposite of all of this: it resamples, allocates and computes A/V correction
  * inside the device callback. The busy-wait workaround in its Windows path is the visible scar.
@@ -148,9 +148,9 @@ public interface AudioSinkFactory {
  * oracle the C one can be checked against. What it must not be presented as is
  * coverage of the macOS device path.
  *
- * @return frames written, counted from the start of the buffer. Fewer than [frames] means the
- *         remainder is silence, and writing that silence is the sink's own obligation. That is
- *         stated rather than implied because the engine's silence fill moved into
+ * @return frames written, counted from the start of the buffer. Fewer than the `frames` asked for
+ *         means the remainder is silence, and writing that silence is the sink's own obligation.
+ *         That is stated rather than implied because the engine's silence fill moved into
  *         `kprt_ring_render`, which is the C path and is not this one: on this path nothing above the
  *         sink zeroes the tail, and an unwritten device buffer plays whatever was left in it.
  *         [AudioSinkBuffer.writeSilence] is what a sink writes it with.

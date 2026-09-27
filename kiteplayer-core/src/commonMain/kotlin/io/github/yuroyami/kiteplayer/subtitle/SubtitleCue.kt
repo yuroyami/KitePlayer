@@ -12,7 +12,15 @@ public sealed interface SubtitleCue {
     /** When the cue becomes visible, in microseconds on the media timeline. */
     public val startMicros: Long
 
-    /** When the cue stops being visible. See [SubtitleTrackState] for how open ends are resolved. */
+    /**
+     * When the cue stops being visible. The cue shows from [startMicros] up to, but not including,
+     * this time.
+     *
+     * The built-in sources give a cue with no end one before it reaches the engine. The SubRip and
+     * WebVTT parsers close it at the next cue's start, or 3 seconds later when no cue follows. The
+     * FFmpeg backend holds a text cue from a packet with no duration for 10 seconds, and an ASS
+     * event for 5 seconds. A custom source sets its own end.
+     */
     public val endMicros: Long
 
     /** Ordering hint from the source. Higher values are drawn on top. */

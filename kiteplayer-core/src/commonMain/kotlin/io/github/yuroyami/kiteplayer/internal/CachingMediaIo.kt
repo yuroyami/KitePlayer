@@ -13,7 +13,7 @@ import kotlinx.atomicfu.atomic
  *  - A free seek-back window: a seek landing inside the window is served from RAM with NO
  *    upstream seek, which on http means no new ranged request. This is the piece that makes
  *    scrubbing a network stream tolerable.
- *  - An honest [Progress.bufferedRanges]: the window's byte span, published through [window]
+ *  - An honest [io.github.yuroyami.kiteplayer.Progress.bufferedRanges]: the window's byte span, published through [window]
  *    and time-mapped by the engine where duration and size are both known.
  *
  * Threading: MediaIo's own contract (demux worker only, one call at a time) is inherited, so

@@ -389,6 +389,13 @@ internal class KotlinAudioRing(
         segmentsRetired.value = stillNeeded
     }
 
+    override fun setGain(target: Float) {
+        require(target.isFinite() && target >= 0f && target <= GAIN_MAX) {
+            "gain must be between 0 and $GAIN_MAX, was $target"
+        }
+        gainTarget.value = target
+    }
+
     /**
      * Fills [destination] from the ring. Called on the device's real-time thread.
      *
@@ -399,13 +406,6 @@ internal class KotlinAudioRing(
      * @param deadlineNanos when the last frame of the whole request becomes audible.
      * @return frames of real audio written. The rest of [destination] is silence.
      */
-    override fun setGain(target: Float) {
-        require(target.isFinite() && target >= 0f && target <= GAIN_MAX) {
-            "gain must be between 0 and $GAIN_MAX, was $target"
-        }
-        gainTarget.value = target
-    }
-
     fun render(destination: AudioSinkBuffer, frames: Int, deadlineNanos: Long): Int {
         val startFrame = consumed.value
         val available = (written.value - startFrame).toInt().coerceAtLeast(0)

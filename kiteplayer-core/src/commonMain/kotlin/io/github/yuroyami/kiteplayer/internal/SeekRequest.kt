@@ -89,9 +89,9 @@ internal sealed interface SeekTarget {
  *
  * The two waiting rules are the whole reason this is a state machine rather than a boolean.
  *
- * Within [COALESCE_WINDOW_US] of the previous seek, a new request waits until a frame from that seek
- * has actually reached the screen. Without that rule, holding an arrow key freezes the picture
- * completely, because every seek is superseded before it can present anything.
+ * Within [SeekTiming.COALESCE_WINDOW_US] of the previous seek, a new request waits until a frame
+ * from that seek has actually reached the screen. Without that rule, holding an arrow key freezes
+ * the picture completely, because every seek is superseded before it can present anything.
  *
  * A precise seek additionally waits for the previous restart to complete. Without that rule, a seek
  * past the end has its end-of-stream result overwritten by the next seek, and playback never

@@ -8,7 +8,7 @@ import kotlin.math.sqrt
 /**
  * One analyser-owned spectral work area. Published frames copy its results.
  *
- * Bins contain one-sided mean-square power: d[k] * |FFT(x*w)[k]|^2 / (N * sum(w^2)).
+ * Bins contain one-sided mean-square power: `d[k] * |FFT(x*w)[k]|^2 / (N * sum(w^2))`.
  * d is one for DC/Nyquist and two elsewhere. This is PSD times the FFT bin spacing, not the
  * coherent-gain amplitude spectrum. Every channel has weight 1/channelCount, including LFE;
  * programme K-weighting and its LFE exclusion are separate measurements.
@@ -121,7 +121,7 @@ internal class SpectralPower(val size: Int, val sampleRate: Int, val bandCount: 
     }
 }
 
-/** For Z = FFT(a + i*b), (|Z[k]|^2 + |Z[-k]|^2)/2 = |FFT(a)[k]|^2 + |FFT(b)[k]|^2. */
+/** For `Z = FFT(a + i*b)`, `(|Z[k]|^2 + |Z[-k]|^2)/2 = |FFT(a)[k]|^2 + |FFT(b)[k]|^2`. */
 internal fun packedChannelPower(real: Float, imaginary: Float, mirrorReal: Float, mirrorImaginary: Float): Double =
     (real.toDouble() * real + imaginary.toDouble() * imaginary +
         mirrorReal.toDouble() * mirrorReal + mirrorImaginary.toDouble() * mirrorImaginary) * 0.5

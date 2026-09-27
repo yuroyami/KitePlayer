@@ -301,7 +301,10 @@ public class WebCanvasVideoRendererFactory(
 /* The JS half. Every call takes the state object, so nothing here holds a JS reference in Kotlin
  * beyond that one handle, and the whole draw is a handful of crossings per frame. */
 
-/** Null when the element is not a canvas or has no 2d context, which [supports] then reports. */
+/**
+ * Null when the element is not a canvas or has no 2d context, which
+ * [WebCanvasVideoRenderer.supports] then reports.
+ */
 @JsFun(
     """(canvas) => {
       if (!canvas || typeof canvas.getContext !== 'function') return null;

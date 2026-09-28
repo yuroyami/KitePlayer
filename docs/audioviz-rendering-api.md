@@ -191,17 +191,13 @@ pixel wide, from the local slope, so the edges are sharp curves at native resolu
 grid is small. The same slope lights the ink from the upper left. Where runtime shaders cannot run,
 the same grids are drawn stretched over the screen. Pause and silence freeze the tray.
 
-Controls include zero, one or two black holes, influence size, travel speed, curl, attraction,
-lensing and horizon absorption, plus smoke density, directional detail, brightness, embers,
-emitters, wind, light path and ceiling. Setting the count to zero removes the added fluid effects.
+Marble has no controls of its own. The music sets everything through its mapping: kicks and snares
+drop ink, the spectrum shapes the vortices, a section changes the recipe of the lace, a breakdown
+stops the vortices while the lace keeps growing, and a drop lands one large gold drop in the middle.
 
-Focused tests cover the absence of drawn black-hole objects, concentration outside the horizon
-and absorption inside after the actual fluid solve, bending/fading embers, empty-field preservation,
-control limits, musical pace, pause, reduced motion, display cadence, portrait output and reset.
-The optional `SMOKE_RISE_PCM` path accepts 48 kHz mono f32le audio, warms the production analyser
-for three seconds and captures up to twelve seconds through the composed renderer. It simulates
-at 60 Hz and saves 640 x 360 images at 30 FPS. This host capture does not measure phone performance.
-Force the selected test to rerun when only the PCM file changes.
+`MarbleTest` covers the lively picture without blown-out white, silence, the orange drop of a
+kick that pushes the old ink outward, the growth of the lace, the breakdown and the gold drop.
+`PausedPictureTest` covers the pause.
 
 ## The flash guard
 
@@ -264,6 +260,10 @@ how they look, and the capture test is the tool to check any such change.
 
 The test also prints the widest area that swung together for every drawing, so one that is close to
 the limit is visible before it crosses it.
+
+**The allowed light reaches every drawing.** The guard cannot dim a finished frame. It lowers
+`VizRenderState.lightScale`, and each drawing scales its own light by it. `FlashGuardReachTest`
+renders every drawing at full and at half the allowed light, and the half render must be dimmer.
 
 **Also not covered.** A change of drawing composes two scenes, and the capture test renders one at
 a time. `StrobeCut` alternates the two scenes about four times inside one change, so it is out of

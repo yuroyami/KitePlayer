@@ -105,6 +105,8 @@ then: a held frame keeps its levels on screen but says so, and a level under the
 silence whatever the section mood says. `motionRate`, `idle` and `VizRenderState.stepSeconds`
 follow it, and every camera, ground and scrolling field moves by `stepSeconds` rather than by the
 wall clock. Springs and fades keep settling on `deltaSeconds`, so a hit still lands and decays.
+`PausedPictureTest` renders every drawing through a pause and needs each picture to settle within
+five seconds.
 
 The height curve has a top. A run whose power sits far above the loudness reference clips against
 it, and two runs 12 dB apart then read almost the same. The qualification suites therefore set the

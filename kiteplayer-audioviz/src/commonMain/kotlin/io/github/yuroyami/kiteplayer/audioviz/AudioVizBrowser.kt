@@ -113,6 +113,7 @@ public fun AudioVizBrowser(state: AudioVizState, modifier: Modifier = Modifier, 
                         palette = state.palette,
                         modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(6.dp)),
                         post = false,
+                        reducedMotion = state.reducedMotion,
                         framesPerSecond = tileRate,
                     )
                     Note(tile.name, Modifier.padding(top = 4.dp))

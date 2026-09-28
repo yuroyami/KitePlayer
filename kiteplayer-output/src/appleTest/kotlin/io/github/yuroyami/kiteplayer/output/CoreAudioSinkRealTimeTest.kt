@@ -88,7 +88,7 @@ class CoreAudioSinkRealTimeTest {
         try {
             fillRing(ring, 0)
             sink.start()
-            delay(200)
+            awaitDevice { ringAnchor(ring).valid }
             sink.stop()
 
             val consumed = ringConsumed(ring)
@@ -123,6 +123,8 @@ class CoreAudioSinkRealTimeTest {
         try {
             fillRing(handoff.ringPointer(), 0)
             sink.start()
+            awaitDevice { sink.callbacks > 0 }
+            // A fixed window after that: the count is a bound over a few hundred callbacks.
             delay(200)
             sink.stop()
             assertTrue(sink.callbacks > 0)
@@ -301,7 +303,7 @@ class CoreAudioSinkRealTimeTest {
         try {
             fillRing(ring, 0)
             sink.start()
-            delay(80)
+            awaitDevice { ringAnchor(ring).valid }
             val first = ringAnchor(ring)
             val sinceFirst = TimeSource.Monotonic.markNow()
             delay(200)

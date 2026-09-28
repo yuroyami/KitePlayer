@@ -25,7 +25,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeSource
 
 /**
  * Drives the platform's native output unit.
@@ -483,15 +482,6 @@ class CoreAudioSinkTest {
             assertTrue(message.contains("AppleHostClock"), "the message must name the clock to use: $message")
             assertTrue(message.contains("host time"), "the message must explain the shared time base: $message")
         }
-    }
-
-    /**
-     * Returns once [ready] holds, or after two seconds, and the assertion after it decides. A machine
-     * with no audio hardware can call back late, so a fixed sleep races the device.
-     */
-    private suspend fun awaitDevice(ready: () -> Boolean) {
-        val deadline = TimeSource.Monotonic.markNow() + 2.seconds
-        while (!ready() && deadline.hasNotPassedNow()) delay(10)
     }
 
     private companion object {

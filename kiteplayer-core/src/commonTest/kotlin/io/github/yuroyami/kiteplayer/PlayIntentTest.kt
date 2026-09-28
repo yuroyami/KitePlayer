@@ -17,7 +17,12 @@ class PlayIntentTest {
 
     @Test
     fun theIntentFollowsBufferingPlayingAndTheNextQueueOpen() = runTest {
-        val harness = CoreHarness(this, script = MediaScript(durationUs = 1_000_000))
+        // The old path opens the next item from scratch, which is the open this test watches.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 1_000_000),
+            config = PlayerConfig(queue = QueueConfig(gapless = false)),
+        )
         val seen = mutableListOf<Pair<PlaybackStatus, Boolean>>()
         val collector = launch(UnconfinedTestDispatcher(testScheduler)) {
             harness.core.snapshots.collect { seen += it.status to it.playRequested }

@@ -53,6 +53,9 @@ class PlaybackCoreTest {
             "drainCommands",
             "handleTrackChanges",
             "handleAudioFill",
+            // Right after the clock is anchored for the pass, so a gapless swap happens before
+            // anything reads the position or the picture of the item that just ended.
+            "handleQueueHandoff",
             "handleVideoWrite",
             "handlePlaybackRestart",
             "handlePlaybackTime",

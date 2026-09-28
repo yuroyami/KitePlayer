@@ -91,7 +91,8 @@ class RecordingTest {
         harness.attachRenderer()
         harness.core.openQueue(listOf(MediaItem("scripted://first"), MediaItem("scripted://second")), 0)
         harness.core.startRecording(PATH)
-        val recording = harness.session
+        // The first session, which records: the gapless preload may already have opened the second.
+        val recording = harness.backend.sessions.first()
 
         harness.core.queueNext()
 

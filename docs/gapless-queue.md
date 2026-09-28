@@ -32,8 +32,8 @@ public data class QueueConfig(
   the end of an item, and the next item opens from scratch. With `gapless` false the player
   preloads nothing.
 
-`PlayerSnapshot.preloadedIndex` is the queue position of the next item while it is open in the
-background. It is null at all other times.
+`PlayerSnapshot.preloadedIndex` is the queue position of the next item once it is open and its
+queues fill in the background. It is null at all other times.
 
 ## Preload
 
@@ -44,6 +44,7 @@ The player preloads the next item when all of these are true:
 - A next item exists. `LoopMode` is not `One`, no A-B loop is set, and the sleep timer is not
   `SleepTimer.EndOfItem`.
 - The current item is seekable, its duration is known, and it is not a still image.
+- The current item still has decoded sound to write into the ring.
 
 The preload opens the source and the decoders of the next item on a coroutine that does not block
 the session actor. It creates no audio device. It aligns the queues and the decoders of the item
@@ -60,7 +61,7 @@ These actions drop a preload and release everything it opened:
 - `stop`, `open`, `openQueue`, `next`, `previous` and `close`
 - every queue edit, `setShuffle` and `restoreQueueOrder`
 - `setLoop`, `setSleepTimer` and `setAbLoop`
-- a seek, which includes a change of speed or of the pitch law
+- a seek, which includes a change of speed or of the pitch law, and `stepFrame`
 - a track selection, `setVideoEnabled` and a renderer attach or detach
 - a video decoder recovery and a failure of the current item
 
@@ -86,6 +87,12 @@ data. At that moment the ring still holds the end of the current item.
 The device is not paused, stopped or drained. The current item keeps its video schedule, so its
 last frames present on time.
 
+An audio tap gets blocks as they are written into the ring. So it gets every block of the current
+item, then a discontinuity at the handoff, and then the next item's blocks under a new generation.
+The published audio clock keeps the current item's generation until the swap. A tap that follows
+generations, such as the audio visualiser, can therefore draw nothing for the last ring depth of
+the current item.
+
 ## Swap
 
 When the device plays the first sample of the next item, the audio clock holds at the end of the
@@ -110,15 +117,18 @@ position of the next item and the reason. It then plays the old way: the device 
 stops, `Ended` fires, and the next item opens from scratch. These are the reasons:
 
 - The preload failed to open, or a worker of the preload failed.
-- The preload was still opening or priming when the current item had no more audio to write.
+- The preload was still opening or priming when the current item had written all its sound and
+  the ring held less than 40 ms of it. Until then the player waits for the next item.
 - The next item has a video stream that is not cover art, and the attached renderer supplies its
   own video decoders. The Android renderers do this. Their decoder needs the surface of the
   renderer, and the current item holds that surface until the swap.
-- A stream of the next item has no decoder that the backend supplies.
 - The current item or the next item has no selected audio track.
 - The sample rate or the channel count of the next item differs from the format that the device
   was opened for.
 - The next item has a start position.
+
+After a fallback the player does not try the same two items again while the current item stays
+open.
 
 ## Actions during the handoff
 

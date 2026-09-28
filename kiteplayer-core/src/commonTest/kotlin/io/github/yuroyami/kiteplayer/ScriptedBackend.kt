@@ -522,6 +522,12 @@ internal class ScriptedBackend(
     /** Thrown by [open] instead of returning a session. */
     var openFailure: Throwable? = null
 
+    /** The script of one item, for a queue whose items differ. Null gives every item the one script. */
+    var scriptFor: ((MediaItem) -> MediaScript?)? = null
+
+    /** Thrown by [open] for one item instead of returning a session. */
+    var openFailureFor: ((MediaItem) -> Throwable?)? = null
+
     /**
      * How many reads [open] makes from the item's reader before it returns, the way a demuxer reads
      * while it discovers the streams. A reader that hangs then holds the open.
@@ -591,13 +597,15 @@ internal class ScriptedBackend(
         lastOpenedItem = media
         openGate?.await()
         openFailure?.let { throw it }
+        openFailureFor?.invoke(media)?.let { throw it }
         // A real demuxer reads bytes; this one is scripted and normally does not. When the item
         // carries a reader it drains a little from it per packet, so the engine's byte path is
         // exercised rather than assumed: without this, anything measuring what a source delivered
         // measures a reader nobody ever called.
         val io = media.io?.open()
         repeat(readsDuringOpen) { io?.read(openScratch, 0, openScratch.size) }
-        return ScriptedSession(script, ledger, faults, trace, videoDecoderStatus, io, clock)
+        val itemScript = scriptFor?.invoke(media) ?: script
+        return ScriptedSession(itemScript, ledger, faults, trace, videoDecoderStatus, io, clock)
             .also { sessions += it }
     }
 }
@@ -1308,6 +1316,9 @@ internal class ScriptedSink(
         private set
     val isRunning: Boolean get() = running
 
+    /** Every call the engine made on the device, in order: open, start, stop, pause, resume, drain, close. */
+    val calls: MutableList<String> = mutableListOf()
+
     /** Every distinct sample value handed to the device, which names the epochs that were heard. */
     val audibleValues: MutableSet<Float> = mutableSetOf()
 
@@ -1321,6 +1332,7 @@ internal class ScriptedSink(
 
     override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
         if (faults.sinkOpenFails) error("the scripted device refuses to open")
+        calls += "open"
         openCount++
         openRequests += request
         val format = accepts ?: request
@@ -1331,11 +1343,13 @@ internal class ScriptedSink(
     }
 
     override suspend fun start() {
+        calls += "start"
         startCount++
         running = true
     }
 
     override suspend fun stop() {
+        calls += "stop"
         stopCount++
         trace.record("sink.stop")
         // A device whose stop has wedged. Rechecked rather than parked for ever, so the test that
@@ -1345,6 +1359,7 @@ internal class ScriptedSink(
     }
 
     override suspend fun drain() {
+        calls += "drain"
         drainCount++
         if (faults.drainHangs) {
             // A device that never reports its buffer empty. The engine must bound its own wait rather
@@ -1355,6 +1370,7 @@ internal class ScriptedSink(
     }
 
     override suspend fun setPaused(paused: Boolean): Boolean {
+        calls += if (paused) "pause" else "resume"
         running = !paused
         return true
     }
@@ -1374,6 +1390,7 @@ internal class ScriptedSink(
     }
 
     override fun close() {
+        calls += "close"
         closed = true
         running = false
         render = null

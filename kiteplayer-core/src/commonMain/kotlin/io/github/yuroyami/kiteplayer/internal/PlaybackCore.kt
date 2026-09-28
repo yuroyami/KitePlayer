@@ -72,6 +72,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -278,14 +279,17 @@ internal class PlaybackCore(
      * file that turned out to be unreadable left the viewer with no subtitles at all, which is
      * worse than the defect it was fixing. Nothing here touches the session.
      */
-    private suspend fun parseExternalSubtitles(item: MediaItem): List<ExternalSubtitleTrack> =
+    private suspend fun parseExternalSubtitles(
+        item: MediaItem,
+        report: (PlaybackWarning) -> Unit = ::warn,
+    ): List<ExternalSubtitleTrack> =
         item.externalSubtitles.mapIndexedNotNull { index, sourceFile ->
             // TrackId's own convention: external ids are negative, printed external1, external2...
             val id = TrackId(-(index + 1))
-            when (val parsed = parseExternalSubtitle(sourceFile, id, item)) {
+            when (val parsed = parseExternalSubtitle(sourceFile, id, item, report)) {
                 is ExternalSubtitleParse.Loaded -> parsed.track
                 is ExternalSubtitleParse.Failed -> {
-                    warn(PlaybackWarning.SubtitleSourceUnreadable(sourceFile.uri, parsed.reason))
+                    report(PlaybackWarning.SubtitleSourceUnreadable(sourceFile.uri, parsed.reason))
                     null
                 }
             }
@@ -407,6 +411,7 @@ internal class PlaybackCore(
         sourceFile: SubtitleSource,
         id: TrackId,
         parent: MediaItem?,
+        report: (PlaybackWarning) -> Unit = ::warn,
     ): ExternalSubtitleParse {
         val parser = backend.subtitleFileParser()
             ?: return ExternalSubtitleParse.Failed(
@@ -421,7 +426,7 @@ internal class PlaybackCore(
         // act on silence. The East Asian tables are the parser's, because they live above the core.
         val decoded = decodeSubtitleBytes(bytes, sourceFile.language, eastAsian = parser::decode)
         if (!decoded.confident) {
-            warn(
+            report(
                 PlaybackWarning.SubtitleCharsetGuessed(
                     uri = sourceFile.uri,
                     charset = decoded.charset,
@@ -884,6 +889,7 @@ internal class PlaybackCore(
         Handler("drainCommands") { drainCommands() },
         Handler("handleTrackChanges") { handleTrackChanges() },
         Handler("handleAudioFill") { handleAudioFill() },
+        Handler("handleQueueHandoff") { handleQueueHandoff() },
         Handler("handleVideoWrite") { handleVideoWrite() },
         Handler("handlePlaybackRestart") { handlePlaybackRestart() },
         Handler("handlePlaybackTime") { handlePlaybackTime() },
@@ -1627,6 +1633,7 @@ internal class PlaybackCore(
             command.fail(it)
             return
         }
+        if (pendingNext != null && dropsPreload(command)) dropPending(null)
         when (command) {
             is CoreCommand.Open -> {
                 // A plain open is single-media by contract: whatever queue existed is replaced.
@@ -2454,19 +2461,30 @@ internal class PlaybackCore(
         } else {
             VideoDecoderSelection.Configured
         },
+        /** Set for the gapless preload, which must not touch the player while another item plays. */
+        pending: PendingBuild? = null,
     ): OpenSession {
+        val report: (PlaybackWarning) -> Unit = pending?.report ?: ::warn
+        fun stage(next: OpenStage) {
+            if (pending == null) openStage = next
+        }
+        fun deselected(base: String): String = when {
+            pending == null -> deselectionDetail(base)
+            pending.failures.isEmpty() -> base
+            else -> "$base (${pending.failures.joinToString("; ")})"
+        }
         // The network resolver and the byte cache, both at the one place every open passes. The resolver
         // answers only for an item with a URI and no reader of its own; the cache wraps every
         // reader-fed open. On an open FAILURE a resolver-produced reader is the engine's to
         // close (the item's own reader stays the caller's, matching the backend's contract).
-        openStage = OpenStage.Source
+        stage(OpenStage.Source)
         // One reader per session, made HERE and owned here. The item carries a factory rather than
         // a live reader precisely because this line runs again for every rebuild: a track switch, a
         // decoder recovery, a loop and a queue returning to the same item all come back through it,
         // and the reader the previous session was given has been closed since.
         val suppliedIo = resolveMediaIo(item, config.network)
         // A reader that recovers from a dropped connection says so through the player's warnings.
-        suppliedIo?.setWarningSink { warning -> warn(warning) }
+        suppliedIo?.setWarningSink { warning -> report(warning) }
         // Every byte the reader delivers is progress for the stall timeout, so a slow reader that
         // still delivers is never taken for a stalled one.
         val stallWatch = StallWatch(clock)
@@ -2485,7 +2503,7 @@ internal class PlaybackCore(
             // Only an open that reads through the engine's reader shows its progress, so only such
             // an open can stall. The backend's own protocols carry their own timeouts instead.
             val stallLimit = if (sessionIo != null) config.buffer.stallTimeout else Duration.INFINITE
-            openBackendSession(effectiveItem, stallWatch, stallLimit)
+            openBackendSession(effectiveItem, stallWatch, stallLimit, preemptible = pending == null)
         } catch (failure: Throwable) {
             // Every reader on this path is the engine's, whoever supplied the factory, so an open
             // that never produced a session closes it here. The backend's own unwind may have got
@@ -2502,40 +2520,54 @@ internal class PlaybackCore(
         try {
             // Backend degradations (hardware fallback, colour approximation) flow into the same
             // warning stream everything else uses, instead of a backend-private default.
-            openStage = OpenStage.Decoders
+            stage(OpenStage.Decoders)
             // Through warn(), not straight onto the flow: a backend degradation that went only to
             // the event flow was absent from the bounded history and therefore from every support
             // bundle, which is the one place a warning that happened before anyone collected can
             // still be read.
-            backendSession.setWarningSink { warning -> warn(warning) }
+            backendSession.setWarningSink { warning -> report(warning) }
             val source = backendSession.source
-            tracks = source.streams.toTracks()
+            var builtTracks = source.streams.toTracks()
+            if (pending == null) tracks = builtTracks
 
             val videoCandidate =
-                resolveStreamChoice(videoChoice, source.streams, TrackKind.Video, ::warn) {
+                resolveStreamChoice(videoChoice, source.streams, TrackKind.Video, report) {
                     source.streams.firstOrNull { it.kind == TrackKind.Video && !it.isCoverArt }
                         // A file whose only picture is its cover art still has a picture worth showing, and the
                         // still-image rule is what keeps it from carrying the timeline.
                         ?: source.streams.firstOrNull { it.kind == TrackKind.Video }
                 }
             val audioCandidate =
-                resolveStreamChoice(audioChoice, source.streams, TrackKind.Audio, ::warn) {
+                resolveStreamChoice(audioChoice, source.streams, TrackKind.Audio, report) {
                     pickAudio(source.streams)
                 }
             val subtitleCandidate =
-                resolveStreamChoice(subtitleChoice, source.streams, TrackKind.Subtitle, ::warn) {
+                resolveStreamChoice(subtitleChoice, source.streams, TrackKind.Subtitle, report) {
                     pickSubtitle(source.streams, audioCandidate)
                 }
 
             var videoStream = videoCandidate
             var audioStream = audioCandidate
             var subtitleStream = subtitleCandidate
+            // The old path would decode this stream with the renderer's own decoder, which needs
+            // the surface the current item holds, so the item cannot be preloaded. Cover art decodes
+            // on the backend's decoders either way.
+            if (pending != null && videoStream != null && !videoStream.isCoverArt &&
+                pendingRenderer?.videoDecoderFactories().orEmpty().isNotEmpty() &&
+                rendererDecodes(videoSelection, config.hardwareDecode, source.seekable)
+            ) {
+                throw GaplessRefusal(
+                    "the attached renderer decodes its video with a decoder of its own, which needs the " +
+                        "surface that the current item holds",
+                )
+            }
             val selectedVideoDecoder = videoStream?.let {
                 createVideoDecoder(
                     session = backendSession,
                     stream = it,
                     sourceSeekable = source.seekable,
                     selection = videoSelection,
+                    pending = pending,
                 )
             }
             val videoDecoder = selectedVideoDecoder?.decoder
@@ -2543,23 +2575,23 @@ internal class PlaybackCore(
                 rollback += { withContext(dispatchers.videoDecode) { videoDecoder.close() } }
             }
             if (videoStream != null && videoDecoder == null) {
-                warn(
+                report(
                     PlaybackWarning.TrackDeselected(
                         TrackId(videoStream.index),
-                        deselectionDetail("no decoder accepted this video stream"),
+                        deselected("no decoder accepted this video stream"),
                     ),
                 )
                 videoStream = null
             }
-            val audioDecoder = audioStream?.let { createAudioDecoder(backendSession, it) }
+            val audioDecoder = audioStream?.let { createAudioDecoder(backendSession, it, pending) }
             if (audioDecoder != null) {
                 rollback += { withContext(dispatchers.audioDecode) { audioDecoder.close() } }
             }
             if (audioStream != null && audioDecoder == null) {
-                warn(
+                report(
                     PlaybackWarning.TrackDeselected(
                         TrackId(audioStream.index),
-                        deselectionDetail("no decoder accepted this audio stream"),
+                        deselected("no decoder accepted this audio stream"),
                     ),
                 )
                 audioStream = null
@@ -2571,7 +2603,7 @@ internal class PlaybackCore(
                 rollback += { subtitleDecoder.close() }
             }
             if (subtitleStream != null && subtitleDecoder == null) {
-                warn(
+                report(
                     PlaybackWarning.TrackDeselected(
                         TrackId(subtitleStream.index),
                         "no decoder accepted this subtitle stream",
@@ -2584,7 +2616,7 @@ internal class PlaybackCore(
                     if (source.streams.isEmpty()) {
                         PlaybackError.NotMedia(item.uri, "the container declares no audio or video stream")
                     } else {
-                        PlaybackError.NoPlayableStream(tracks.all)
+                        PlaybackError.NoPlayableStream(builtTracks.all)
                     },
                 )
             }
@@ -2609,11 +2641,12 @@ internal class PlaybackCore(
                 videoPlayback.speed = speed
             }
 
-            openStage = OpenStage.Output
+            stage(OpenStage.Output)
             var sink: AudioSink? = null
             var audioPlayback: AudioPlayback? = null
             var negotiated: AudioFormat? = null
-            if (audioStream != null && audioDecoder != null) {
+            // A preload opens no device: at the handoff it takes over the current item's.
+            if (pending == null && audioStream != null && audioDecoder != null) {
                 val createdSink = output.audioSink.create()
                 sink = createdSink
                 // Generalized from AudioPlayback's
@@ -2637,7 +2670,7 @@ internal class PlaybackCore(
                 createdPlayback.equalizer = equalizer
                 emitEvent(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
-            openStage = OpenStage.Assembly
+            stage(OpenStage.Assembly)
 
             // The demux frontier can run seconds ahead of the presentation clock. A
             // stream enabled only at switch time would therefore begin at that frontier, not at
@@ -2655,11 +2688,15 @@ internal class PlaybackCore(
                 )
             }
 
-            tracks = tracks
+            builtTracks = builtTracks
                 .withSelection(TrackKind.Video, videoStream?.let { TrackId(it.index) })
                 .withSelection(TrackKind.Audio, audioStream?.let { TrackId(it.index) })
                 .withSelection(TrackKind.Subtitle, subtitleStream?.let { TrackId(it.index) })
-            videoStream?.videoSize?.let { emitEvent(PlayerEvent.VideoSizeChanged(it)) }
+            if (pending == null) tracks = builtTracks else pending.tracks = builtTracks
+            videoStream?.videoSize?.let { size ->
+                val event = PlayerEvent.VideoSizeChanged(size)
+                if (pending == null) emitEvent(event) else pending.events += event
+            }
 
             val softLimitUs = config.buffer.softTarget.inWholeMicroseconds
             // A queue starts at the initial generation, and a rebuild starts at whatever epoch the
@@ -2688,7 +2725,7 @@ internal class PlaybackCore(
                 null
             }
             return OpenSession(
-                token = nextSessionToken++,
+                token = pending?.token ?: nextSessionToken++,
                 backendSession = backendSession,
                 source = source,
                 videoStream = videoStream,
@@ -2713,7 +2750,10 @@ internal class PlaybackCore(
                 negotiatedFormat = negotiated,
                 cachingIo = cachingIo,
                 stallWatch = stallWatch,
-            )
+            ).also { built ->
+                // What the device was opened for, which a gapless handoff compares the next item against.
+                built.deviceRequest = if (audioPlayback != null) audioDecoder?.outputFormat else null
+            }
         } catch (failure: Throwable) {
             // Newest-first, under NonCancellable: a cancelled open must still release everything
             // it acquired, and each undo is isolated so one refusal cannot leak the rest.
@@ -2747,33 +2787,34 @@ internal class PlaybackCore(
         stream: PlayerStreamInfo,
         sourceSeekable: Boolean,
         selection: VideoDecoderSelection,
+        pending: PendingBuild? = null,
     ): SelectedVideoDecoder? {
         if (stream.kind != TrackKind.Video) return null
-        val failures = mutableListOf<String>()
-        decoderCandidateFailures = failures
+        val failures = pending?.failures ?: mutableListOf<String>().also { decoderCandidateFailures = it }
+        failures.clear()
+        val report = pending?.report ?: ::warn
 
         val policy = when (selection) {
             VideoDecoderSelection.Configured -> config.hardwareDecode
             VideoDecoderSelection.BackendSoftwareOnly -> HwdecPolicy.Off
         }
-        val rendererEligible = selection == VideoDecoderSelection.Configured && when (policy) {
-            HwdecPolicy.Auto -> sourceSeekable
-            HwdecPolicy.Require -> true
-            HwdecPolicy.Off, is HwdecPolicy.Prefer -> false
-        }
+        // A preload never takes a renderer's own decoder: that decoder needs the renderer's
+        // surface, which the current item holds until the swap. buildSession refuses a preload
+        // that would need one.
+        val rendererEligible = pending == null && rendererDecodes(selection, policy, sourceSeekable)
         if (rendererEligible) {
             for (factory in pendingRenderer?.videoDecoderFactories().orEmpty()) {
                 val decoder = tryCreateVideoDecoder(factory, stream, policy, failures)
                 if (decoder != null) {
                     return SelectedVideoDecoder(decoder, VideoDecoderOrigin.Renderer)
                 }
-                warnAboutRefusedHardwareCandidate(factory, stream, policy)
+                warnAboutRefusedHardwareCandidate(factory, stream, policy, report)
             }
         }
 
         for (factory in session.videoDecoders) {
             val decoder = tryCreateVideoDecoder(factory, stream, policy, failures) ?: run {
-                warnAboutRefusedHardwareCandidate(factory, stream, policy)
+                warnAboutRefusedHardwareCandidate(factory, stream, policy, report)
                 continue
             }
             if (selection == VideoDecoderSelection.BackendSoftwareOnly && decoder.hardware != HwdecStatus.Software) {
@@ -2815,24 +2856,37 @@ internal class PlaybackCore(
         closeAbandoned = { it.close() },
     )
 
+    /** True when the configured policy would try the attached renderer's own decoders first. */
+    private fun rendererDecodes(selection: VideoDecoderSelection, policy: HwdecPolicy, sourceSeekable: Boolean): Boolean =
+        selection == VideoDecoderSelection.Configured && when (policy) {
+            HwdecPolicy.Auto -> sourceSeekable
+            HwdecPolicy.Require -> true
+            HwdecPolicy.Off, is HwdecPolicy.Prefer -> false
+        }
+
     private fun warnAboutRefusedHardwareCandidate(
         factory: VideoDecoderFactory,
         stream: PlayerStreamInfo,
         policy: HwdecPolicy,
+        report: (PlaybackWarning) -> Unit = ::warn,
     ) {
         // Named as a hardware problem only when hardware was actually asked for. A factory refusing a
         // stream it cannot decode has nothing to do with hardware, and the caller already learns about
         // that from the TrackDeselected warning and the failed open, each carrying the real reason.
         val askedForHardware = policy is HwdecPolicy.Require || policy is HwdecPolicy.Prefer
         if (askedForHardware) {
-            warn(PlaybackWarning.HardwareDecodeUnavailable(stream.codec, "${factory.name} refused the stream"))
+            report(PlaybackWarning.HardwareDecodeUnavailable(stream.codec, "${factory.name} refused the stream"))
         }
     }
 
-    private suspend fun createAudioDecoder(session: BackendSession, stream: PlayerStreamInfo): AudioDecoder? {
+    private suspend fun createAudioDecoder(
+        session: BackendSession,
+        stream: PlayerStreamInfo,
+        pending: PendingBuild? = null,
+    ): AudioDecoder? {
         if (stream.kind != TrackKind.Audio) return null
-        val failures = mutableListOf<String>()
-        decoderCandidateFailures = failures
+        val failures = pending?.failures ?: mutableListOf<String>().also { decoderCandidateFailures = it }
+        failures.clear()
         for (factory in session.audioDecoders) {
             val decoder = acquireAcrossContext(
                 context = dispatchers.audioDecode,
@@ -2912,7 +2966,12 @@ internal class PlaybackCore(
      * @throws OpenPreempted when a stop or a close cancelled the open.
      * @throws PlaybackException with [PlaybackError.SourceStalled] when the open stalled.
      */
-    private suspend fun openBackendSession(item: MediaItem, watch: StallWatch, stallLimit: Duration): BackendSession {
+    private suspend fun openBackendSession(
+        item: MediaItem,
+        watch: StallWatch,
+        stallLimit: Duration,
+        preemptible: Boolean = true,
+    ): BackendSession {
         var outcome: Result<BackendSession>? = null
         var abandoned: Throwable? = null
         try {
@@ -2930,7 +2989,7 @@ internal class PlaybackCore(
                         if (abandoned == null) {
                             val stalledFor = watch.stalledFor() ?: Duration.ZERO
                             abandoned = when {
-                                preempted() -> OpenPreempted()
+                                preemptible && preempted() -> OpenPreempted()
                                 stalledFor >= stallLimit ->
                                     PlaybackException(PlaybackError.SourceStalled(item.uri, stalledFor))
                                 else -> null
@@ -3448,6 +3507,8 @@ internal class PlaybackCore(
         val playback: AudioPlayback,
         val sink: AudioSink,
         val negotiated: AudioFormat,
+        /** The format the device was opened for. */
+        val request: AudioFormat,
     )
 
     /**
@@ -3510,7 +3571,7 @@ internal class PlaybackCore(
             playback.balance = balance
             playback.equalizer = equalizer
             playback.flush(requestedEpoch)
-            return PreparedAudioPath(playback, createdSink, negotiated)
+            return PreparedAudioPath(playback, createdSink, negotiated, decoder.outputFormat)
         } catch (cancellation: CancellationException) {
             if (createdPlayback != null) createdPlayback.close() else createdSink.close()
             throw cancellation
@@ -3692,6 +3753,7 @@ internal class PlaybackCore(
             session.audio = preparedPath.playback
             session.sink = preparedPath.sink
             session.negotiatedFormat = preparedPath.negotiated
+            session.deviceRequest = preparedPath.request
         } else if (targetStream != null) {
             // A reused path still carries the previous stream's ReplayGain and peak clamp (#288).
             // Set here, after the ring flush succeeded, so a refused switch keeps the old gain.
@@ -5200,6 +5262,16 @@ internal class PlaybackCore(
         endOfStream.audioDecoderDrained = session.audioDecoder?.isDrained ?: true
         endOfStream.videoDecoderDrained = session.videoDecoder?.isDrained ?: true
 
+        // A preload owns this item's end: the next item's sound follows its last sample, and a
+        // fallback hands the end back to the lines below. See handleQueueHandoff.
+        if (pendingNext != null) {
+            wakeIn(WORKER_POLL)
+            return
+        }
+        // A queued seek moves the position before this pass ends. Declaring the end first let the
+        // queue advance and drop the seek it had been asked for.
+        if (pendingSeek != null) return
+
         // Told as soon as the audio side is finished, which is what the sink's own contract asks for and
         // is earlier than the moment every condition below is met: the video frame queue holds frames
         // ahead of the screen and empties last, and the ring runs dry while it drains. The silence in
@@ -5468,6 +5540,474 @@ internal class PlaybackCore(
         }
         // An open ends paused by contract; a queue that was playing keeps playing through it.
         playRequested = true
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The gapless queue: preload, handoff and swap. See docs/gapless-queue.md.
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * The next queue item, open in the background so that its sound follows the last sample of
+     * the current item on the same device. Actor only.
+     */
+    private var pendingNext: PendingNext? = null
+
+    /** The current session and next position whose handoff fell back, so the pair is not tried again. */
+    private var gaplessRefused: Pair<Long, Int>? = null
+
+    /** Cancelled preload builds that may still be releasing what they opened. Close waits for them. */
+    private val retiringBuilds = mutableListOf<Job>()
+
+    private class PendingNext(
+        val index: Int,
+        val item: MediaItem,
+        /** The token of the session this item follows. */
+        val follows: Long,
+        val build: PendingBuild,
+        val job: Deferred<Result<PreparedNext>>,
+    ) {
+        /** Set once the build has finished; the item's workers then run. */
+        var prepared: PreparedNext? = null
+
+        /** True once the item's feeder writes into the current item's ring. */
+        var handedOff: Boolean = false
+    }
+
+    private class PreparedNext(
+        val session: OpenSession,
+        val externals: List<ExternalSubtitleTrack>,
+    )
+
+    /**
+     * What a background build for the preload does differently from an open: it writes no player
+     * state, holds its warnings and events for the swap, opens no audio device, and never takes a
+     * renderer's own video decoder. See [buildSession].
+     */
+    private inner class PendingBuild(val token: Long) {
+        val warnings = HeldWarnings()
+        val report: (PlaybackWarning) -> Unit = warnings::deliver
+
+        /** Why each decoder candidate refused, for this build's deselection warnings. */
+        val failures = mutableListOf<String>()
+
+        /** Events an open would emit, emitted at the swap instead. */
+        val events = mutableListOf<PlayerEvent>()
+        var tracks: Tracks = Tracks.Empty
+    }
+
+    /** A preload that cannot follow the current item without a gap. The message is the reason. */
+    private class GaplessRefusal(reason: String) : Exception(reason)
+
+    /** Warnings of a preloaded item, held until it becomes the current one. Safe from any thread. */
+    private inner class HeldWarnings {
+        /** Null once released: later warnings then pass straight through. */
+        private val held = atomic<List<PlaybackWarning>?>(emptyList())
+        private val discarded = atomic(false)
+
+        fun deliver(warning: PlaybackWarning) {
+            while (true) {
+                if (discarded.value) return
+                val current = held.value
+                if (current == null) {
+                    warn(warning)
+                    return
+                }
+                if (held.compareAndSet(current, current + warning)) return
+            }
+        }
+
+        /** Delivers what is held, and everything after it directly. */
+        fun release() {
+            held.getAndSet(null)?.forEach(::warn)
+        }
+
+        /** The item was dropped, so nothing it says reaches the caller. */
+        fun discard() {
+            discarded.value = true
+        }
+    }
+
+    /**
+     * The gapless handoff, one pass at a time. It starts the preload when the current item nears
+     * its end, starts the preloaded item's workers when its build finishes, gives it the ring when
+     * the current item's last sample is written, and swaps the items when the device plays the
+     * next item's first sample.
+     */
+    private suspend fun handleQueueHandoff() {
+        val active = session ?: return
+        val next = pendingNext
+        if (next == null) {
+            maybeStartPreload(active)
+            return
+        }
+        // Defensive: every path that replaces the session drops the preload first.
+        if (next.follows != active.token) {
+            dropPending(null)
+            return
+        }
+        val prepared = next.prepared ?: adoptPreload(next, active) ?: return
+        if (!next.handedOff) {
+            if (!currentAudioFinished(active)) {
+                wakeIn(WORKER_POLL)
+                return
+            }
+            if (!pendingPrimed(prepared.session)) {
+                // Waited for only while the ring still covers the wait.
+                if (ringRunsDry(active)) {
+                    dropPending("the next item was not ready when the current one ran out of sound")
+                } else {
+                    wakeIn(HANDOFF_POLL)
+                }
+                return
+            }
+            if (!handOffRing(active, next, prepared)) return
+        }
+        if (active.audio?.joinCrossed == true) {
+            swapToNext(next, prepared)
+        } else {
+            wakeIn(HANDOFF_POLL)
+        }
+    }
+
+    /** Starts the preload once the current item is within [QueueConfig.preloadNext] of its end. */
+    private fun maybeStartPreload(active: OpenSession) {
+        val policy = config.queue
+        if (!policy.gapless || policy.preloadNext <= Duration.ZERO) return
+        if (status != PlaybackStatus.Playing && status != PlaybackStatus.Paused) return
+        if (pendingSeek != null || seekPhase.isRunning || pendingVideoRecovery != null) return
+        if (pendingSelections.isNotEmpty()) return
+        if (loop == LoopMode.One || abLoopA != null || sleepTimer == SleepTimer.EndOfItem) return
+        if (queueItems.size <= 1) return
+        val index = neighbourInOrder(1) ?: return
+        if (gaplessRefused == (active.token to index)) return
+        val durationUs = active.source.duration?.micros ?: return
+        if (!active.source.seekable || active.isStillImage) return
+        // Too late: the current item's sound is all in the ring, and the old path is closer.
+        if (currentAudioFinished(active)) return
+        val leftUs = durationUs - publishedPositionMicros.value
+        val leadUs = policy.preloadNext.inWholeMicroseconds
+        if (leftUs > leadUs) {
+            // Woken when the lead begins rather than a whole pass later. Media distance over rate
+            // is wall distance.
+            if (status == PlaybackStatus.Playing) wakeIn(((leftUs - leadUs) / speed).toLong().microseconds)
+            return
+        }
+        val item = queueItems[index]
+        val refusal = when {
+            active.audioLane == null || active.audio == null -> "the current item has no selected audio track"
+            (item.startPosition ?: Duration.ZERO) > Duration.ZERO -> "the next item has a start position"
+            else -> null
+        }
+        if (refusal != null) {
+            gaplessRefused = active.token to index
+            warn(PlaybackWarning.GaplessFallback(index, refusal))
+            return
+        }
+        val build = PendingBuild(nextSessionToken++)
+        // On the session lane, so it reads the player where the actor does. It writes nothing of
+        // the player's: see PendingBuild.
+        val job = scope.async(dispatchers.session) {
+            try {
+                val externals = parseExternalSubtitles(item, build.report)
+                val immediate = externals.any { track ->
+                    item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true
+                }
+                val built = buildSession(
+                    item = item,
+                    videoChoice = StreamChoice.Auto,
+                    audioChoice = StreamChoice.Auto,
+                    subtitleChoice = if (immediate) StreamChoice.None else StreamChoice.Auto,
+                    videoSelection = VideoDecoderSelection.Configured,
+                    pending = build,
+                )
+                Result.success(PreparedNext(built, externals))
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                Result.failure(failure)
+            }
+        }
+        pendingNext = PendingNext(index, item, active.token, build, job)
+        wakeIn(WORKER_POLL)
+    }
+
+    /**
+     * Takes the finished build, answers what only the opened item can answer, aligns the item to
+     * the epoch the player is at, and starts its demux and decode workers. Null while the build
+     * still runs, and when the preload was dropped.
+     */
+    private suspend fun adoptPreload(next: PendingNext, active: OpenSession): PreparedNext? {
+        if (!next.job.isCompleted) {
+            if (currentAudioFinished(active) && ringRunsDry(active)) {
+                dropPending("the next item was still opening when the current one ran out of sound")
+            } else {
+                wakeIn(WORKER_POLL)
+            }
+            return null
+        }
+        val prepared = next.job.await().getOrElse { failure ->
+            dropPending(
+                if (failure is GaplessRefusal) failure.message.orEmpty()
+                else "the next item did not open${causeDetail(failure)}",
+            )
+            return null
+        }
+        // Set first, so that every drop from here on releases the opened item.
+        next.prepared = prepared
+        val incoming = prepared.session
+        handoffRefusal(active, incoming)?.let { refusal ->
+            dropPending(refusal)
+            return null
+        }
+        // Aligned to the epoch the player is at, as a rebuild is: fresh decoders stamp the first
+        // epoch, and the workers would drop everything they produced.
+        incoming.videoParked.value = !videoEnabled
+        try {
+            flushDecoders(incoming, requestedEpoch)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            dropPending("the next item's decoders did not start${causeDetail(failure)}")
+            return null
+        }
+        incoming.video?.flush(requestedEpoch)
+        incoming.subtitleDecoder?.flush(requestedEpoch)
+        startPendingWorkers(incoming)
+        snapshotDirty = true
+        return prepared
+    }
+
+    /** Why the preloaded item cannot take the current item's ring, or null when it can. */
+    private fun handoffRefusal(active: OpenSession, incoming: OpenSession): String? {
+        val format = incoming.audioDecoder?.outputFormat ?: return "the next item has no selected audio track"
+        val device = active.deviceRequest ?: return "the current item has no audio device open"
+        if (format.sampleRate != device.sampleRate || format.channels != device.channels) {
+            return "the next item has ${format.sampleRate} Hz and ${format.channels} channels, and the " +
+                "device was opened for ${device.sampleRate} Hz and ${device.channels} channels"
+        }
+        return null
+    }
+
+    /**
+     * The demux and decode workers of a preloaded item, which fill its queues. Its feeder starts at
+     * the handoff and its video schedule at the swap.
+     */
+    private fun startPendingWorkers(incoming: OpenSession) {
+        val epoch = requestedEpoch
+        incoming.preloading.value = true
+        if (incoming.videoQueue != null && incoming.videoDecoder != null && incoming.video != null) {
+            incoming.videoDecodeWorker = Worker(VIDEO_DECODE_WORKER)
+        }
+        if (incoming.audioQueues.isNotEmpty()) incoming.audioDecodeWorker = Worker(AUDIO_DECODE_WORKER)
+        incoming.demuxWorker = Worker(DEMUX_WORKER)
+        incoming.workers.forEach { it.release(epoch) }
+        incoming.demuxWorker?.let { worker ->
+            incoming.jobs += launchWorker(incoming, worker, dispatchers.demux) { runDemux(incoming, worker) }
+        }
+        incoming.videoDecodeWorker?.let { worker ->
+            incoming.jobs += launchWorker(incoming, worker, dispatchers.videoDecode) { runVideoDecode(incoming, worker) }
+        }
+        incoming.audioDecodeWorker?.let { worker ->
+            incoming.jobs += launchWorker(incoming, worker, dispatchers.audioDecode) { runAudioDecode(incoming, worker) }
+        }
+    }
+
+    /** True when the preloaded item can start at once: its queues are ready and decoded sound waits. */
+    private fun pendingPrimed(incoming: OpenSession): Boolean {
+        val readyUs = config.buffer.readyDuration.inWholeMicroseconds
+        if (!incoming.selectedQueues().all { it.isReady(readyUs, config.buffer.readyPackets) }) return false
+        val video = incoming.video
+        val videoReady = video == null || video.queuedFrames > 0 ||
+            incoming.videoQueue?.isEndOfStream == true || incoming.videoParked.value
+        val audioReady = incoming.audioLane == null || incoming.audioInFlight.value > 0 ||
+            incoming.audioQueue?.isEndOfStream == true
+        return videoReady && audioReady
+    }
+
+    /** True once every decoded sample of the current item is in the ring. */
+    private fun currentAudioFinished(active: OpenSession): Boolean {
+        val queue = active.audioQueue ?: return false
+        return (active.audioDecoder?.isDrained ?: true) && queue.isEndOfStream && queue.count == 0 &&
+            active.audioInFlight.value == 0
+    }
+
+    /** True when the ring holds too little of the current item to wait for the next one any longer. */
+    private fun ringRunsDry(active: OpenSession): Boolean =
+        (active.audio?.buffered ?: Duration.ZERO) <= HANDOFF_MARGIN
+
+    /**
+     * Gives the ring to the preloaded item: the current item's feeder parks, and the next item's
+     * feeder starts right after the last sample in the ring. The device keeps running.
+     *
+     * @return false when the current feeder did not park; the preload was dropped then.
+     */
+    private suspend fun handOffRing(active: OpenSession, next: PendingNext, prepared: PreparedNext): Boolean {
+        val audio = active.audio ?: run {
+            dropPending("the current item has no audio device open")
+            return false
+        }
+        val incoming = prepared.session
+        // The ring has one producer, so the current feeder stops before the next one starts.
+        val feeder = active.audioFeedWorker
+        if (feeder != null && !feeder.quiesce(QUIESCE_DEADLINE)) {
+            feeder.release(requestedEpoch)
+            dropPending("the current item's audio feeder did not stop within $QUIESCE_DEADLINE")
+            return false
+        }
+        // ReplayGain is applied on the way in, so the next item's own value holds from its first sample.
+        audio.replayGain = replayGainFor(incoming.audioStream, incoming.source.metadata)
+        audio.beginJoin()
+        active.ownsAudio = false
+        incoming.audio = audio
+        incoming.sink = active.sink
+        incoming.negotiatedFormat = active.negotiatedFormat
+        incoming.deviceRequest = active.deviceRequest
+        // The taps have every block of the current item, since blocks reach them as they are
+        // written. What follows comes from somewhere else, so they hear that first, and the next
+        // item's blocks arrive under a generation of their own.
+        tapsDiscontinuous(active = incoming)
+        val worker = Worker(AUDIO_FEED_WORKER)
+        incoming.audioFeedWorker = worker
+        worker.release(requestedEpoch)
+        incoming.jobs += launchWorker(incoming, worker, dispatchers.audioFeed) { runAudioFeed(incoming, worker) }
+        next.handedOff = true
+        return true
+    }
+
+    /**
+     * Makes the preloaded item the current one, once the device has played its first sample. The
+     * old item's lanes, decoders and source close, and the device and the ring carry on. The
+     * status and the play intent do not change.
+     */
+    private suspend fun swapToNext(next: PendingNext, prepared: PreparedNext) {
+        val incoming = prepared.session
+        pendingNext = null
+        emitEvent(PlayerEvent.Ended)
+        detachSession(forHandoff = true)?.let { releaseSession(it) }
+        // What an open resets for a new item, except the play intent, the status and the epoch,
+        // which carry on with the device.
+        media = next.item
+        queueIndex = next.index
+        lastChapterIndex = Int.MIN_VALUE
+        markerCursorUs = NO_POSITION
+        markerCursorEpoch = null
+        externalSubtitleTracks = emptyList()
+        selectedExternalSubtitle = null
+        selectedExternalSubtitle2 = null
+        pendingExternalSubtitle = null
+        loopRefusalWarned = false
+        toneMapWarned = false
+        colorLimitsWarned.clear()
+        videoRecoveryAttempted = false
+        forceBackendSoftwareForMedia = false
+        firstFrameSeen = false
+        divergencesReported = false
+        undrawnSubtitlesLimited.value = false
+        endOfStream.reset()
+        demuxUnderrunSeen = false
+        stillImageFinished = false
+        stillImageShownSinceNanos = 0
+        openedAtNanos = clock.nanos()
+        tracks = next.build.tracks
+        session = incoming
+        incoming.preloading.value = false
+        incoming.videoParked.value = !videoEnabled
+        incoming.audio?.commitJoin()
+        publishedPositionMicros.value = currentPosition().micros
+        progressState.value = Progress(position = publishedPositionMicros.value.microseconds, bufferedAhead = Duration.ZERO)
+        next.build.warnings.release()
+        next.build.events.forEach(::emitEvent)
+        adoptExternalSubtitles(next.item, prepared.externals)
+        prepared.externals
+            .firstOrNull { track -> next.item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true }
+            ?.let { applyExternalSubtitle(it.id) }
+        refreshTypesetting()
+        startAudioEventCollector(incoming)
+        startVideoSchedule(incoming)
+        reportContainerDivergences(incoming)
+        emitEvent(PlayerEvent.Opened(next.item, tracks))
+        snapshotDirty = true
+    }
+
+    /** The preloaded item's video schedule, started at the swap. A paused player gets one frame. */
+    private fun startVideoSchedule(incoming: OpenSession) {
+        if (incoming.videoQueue == null || incoming.videoDecoder == null || incoming.video == null) return
+        val worker = Worker(VIDEO_SCHEDULE_WORKER)
+        incoming.videoScheduler = worker
+        incoming.schedulerMode.value = if (status == PlaybackStatus.Playing) SCHEDULER_RUNNING else SCHEDULER_ONE_FRAME
+        worker.release(requestedEpoch)
+        incoming.jobs += launchWorker(incoming, worker, dispatchers.videoSchedule) { runVideoSchedule(incoming, worker) }
+    }
+
+    /**
+     * Drops the preload and releases everything it opened. [reason] is a fallback reason, which is
+     * warned, or null when the caller's own action dropped it. A handoff under way is taken back
+     * first. After a fallback the same pair of items is not tried again.
+     */
+    private suspend fun dropPending(reason: String?) {
+        val next = pendingNext ?: return
+        pendingNext = null
+        snapshotDirty = true
+        next.build.warnings.discard()
+        val active = session
+        if (reason != null) {
+            if (active != null) gaplessRefused = active.token to next.index
+            warn(PlaybackWarning.GaplessFallback(next.index, reason))
+        }
+        val prepared = next.prepared
+        when {
+            prepared == null && next.job.isCompleted ->
+                next.job.await().getOrNull()?.session?.let { releaseSession(it) }
+            prepared == null -> {
+                // Still opening: its own rollback releases what it opened.
+                next.job.cancel()
+                retiringBuilds.removeAll { it.isCompleted }
+                retiringBuilds += next.job
+            }
+            next.handedOff && active != null -> takeRingBack(active, prepared.session)
+            else -> releaseSession(prepared.session)
+        }
+    }
+
+    /**
+     * Takes the ring back from a next item whose feeder already writes into it. That feeder parks,
+     * the device stops and the ring is cleared, which loses at most one ring depth of the current
+     * item's end, and the next item is released. The current item then sits at its end with
+     * nothing left to drain.
+     */
+    private suspend fun takeRingBack(active: OpenSession, incoming: OpenSession) {
+        val audio = active.audio
+        val parked = incoming.audioFeedWorker?.quiesce(QUIESCE_DEADLINE) ?: true
+        // Both producers are parked, so the flush may clear the ring.
+        if (parked) audio?.flush(requestedEpoch)
+        incoming.audio = null
+        incoming.sink = null
+        releaseSession(incoming)
+        // Its feeder is joined by now, whatever the park answered.
+        if (!parked) audio?.flush(requestedEpoch)
+        active.ownsAudio = true
+        active.audioTailFlushed.value = true
+        endOfStream.draining = true
+        endOfStream.sinkDrained = true
+        // The taps heard the next item's first blocks, which will never play.
+        tapsDiscontinuous(active = active)
+        active.audioFeedWorker?.release(requestedEpoch)
+    }
+
+    /** The actions that change what follows the current item, or where it plays. See docs/gapless-queue.md. */
+    private fun dropsPreload(command: CoreCommand): Boolean = when (command) {
+        is CoreCommand.Open, is CoreCommand.OpenQueue, is CoreCommand.QueueNext, is CoreCommand.QueuePrevious,
+        is CoreCommand.EditQueue, is CoreCommand.SetShuffle, is CoreCommand.RestoreQueueOrder,
+        is CoreCommand.Seek, is CoreCommand.SeekLater, is CoreCommand.Stop, is CoreCommand.Close,
+        is CoreCommand.SelectTrack, is CoreCommand.SelectSecondarySubtitle,
+        is CoreCommand.AttachRenderer, is CoreCommand.DetachRenderer, is CoreCommand.StepFrame,
+        is CoreCommand.SetSleepTimer, is CoreCommand.SetAbLoop,
+        -> true
+        is CoreCommand.SetLoop -> command.mode != loop
+        is CoreCommand.SetSpeed -> command.value != speed
+        is CoreCommand.SetPreservePitch -> command.value != preservePitch
+        is CoreCommand.SetVideoEnabled -> command.value != videoEnabled
+        else -> false
     }
 
     /**
@@ -5967,6 +6507,9 @@ internal class PlaybackCore(
      *    every waiting caller exactly once.
      */
     private suspend fun runSeek(request: SeekRequest) {
+        // A seek takes the ring back from a next item that already writes into it, before the
+        // flush below clears it. Commands drop the preload earlier; this is for the engine's own seeks.
+        dropPending(null)
         val session = session ?: return
         val tracing = KiteTrace.enabled
         var phaseBegin = if (tracing) clock.nanos() else 0L
@@ -6400,6 +6943,11 @@ internal class PlaybackCore(
         pendingSeek = null
         // The caller's own end, so it warns nothing. The detach below would warn.
         session?.let { endRecording(it, reason = null) }
+        // A preload and a handoff are taken back while the session they follow is still installed.
+        dropPending(null)
+        // A build still unwinding runs on the dispatchers the finalizer closes.
+        for (build in retiringBuilds) withTimeoutOrNull(closeDeadline) { build.join() }
+        retiringBuilds.clear()
         // The session comes off the actor FIRST, so that everything below is about a graph nothing
         // else can reach, and the release can then run somewhere this coroutine is able to stop
         // waiting for.
@@ -6641,7 +7189,7 @@ internal class PlaybackCore(
      * it nothing can read them again and their totals would otherwise fall back to the next
      * session's zero.
      */
-    private fun detachSession(): OpenSession? {
+    private fun detachSession(forHandoff: Boolean = false): OpenSession? {
         val detached = session ?: return null
         session = null
         // Every path that retires a session comes through here: the next queue item, a video track
@@ -6652,7 +7200,8 @@ internal class PlaybackCore(
             IllegalStateException("the media was closed before captureFrame got a frame"),
         )
         // The retiring worker keeps its old identity even if its final callback is still running.
-        tapsDiscontinuous(active = null)
+        // A gapless swap marks the discontinuity for the incoming item itself.
+        if (!forHandoff) tapsDiscontinuous(active = null)
         // No session, no cues. A stop or a close that left the last line published would have an
         // application drawing subtitles over nothing.
         cuesState.value = emptyList()
@@ -6661,6 +7210,7 @@ internal class PlaybackCore(
     }
 
     private suspend fun teardownSession() {
+        dropPending(null)
         releaseSession(detachSession() ?: return)
     }
 
@@ -6713,7 +7263,7 @@ internal class PlaybackCore(
         retiredDroppedDecode += session.droppedVideoBeforeDecode.value
         retiredRefused += session.video?.refusedFrames ?: 0
         retiredRepeated += session.video?.repeatedFrames ?: 0
-        retiredUnderruns += session.audio?.underruns ?: 0
+        if (session.ownsAudio) retiredUnderruns += session.audio?.underruns ?: 0
         retiredIoBytes += session.cachingIo?.upstreamBytesRead?.value ?: 0L
     }
 
@@ -6757,7 +7307,7 @@ internal class PlaybackCore(
                     releaseFailures += "$what: ${failure.message ?: failure::class.simpleName}"
                 }
             }
-            release("audio device stop") { session.sink?.stop() }
+            if (session.ownsAudio) release("audio device stop") { session.sink?.stop() }
             // A lane blocked inside an uncancellable native read would
             // make the quiesce below burn its whole deadline and the joins after it wait for
             // ever. The session is ending and the source is about to close, so aborting whatever
@@ -6798,8 +7348,9 @@ internal class PlaybackCore(
             }
             runCatching { session.pendingSubtitlePacket?.close() }
             session.pendingSubtitlePacket = null
-            // Closes the sink too: the audio path owns the device it was given.
-            release("audio playback") { session.audio?.close() }
+            // Closes the sink too: the audio path owns the device it was given. A gapless handoff
+            // gave both to the next item, which closes them.
+            if (session.ownsAudio) release("audio playback") { session.audio?.close() }
             release("backend session") { session.backendSession.close() }
             if (releaseFailures.isNotEmpty()) {
                 warn(PlaybackWarning.ResourcesNotReleased(releaseFailures.joinToString("; ")))
@@ -6842,6 +7393,10 @@ internal class PlaybackCore(
     private suspend fun handleWorkerOutcome(outcome: WorkerOutcome) {
         val cause = outcome.cause ?: return
         if (cause is CancellationException) return
+        if (pendingNext?.prepared?.session?.token == outcome.sessionToken) {
+            dropPending("the ${outcome.name} worker of the next item failed${causeDetail(cause)}")
+            return
+        }
         val session = session ?: return
         if (outcome.sessionToken != session.token) return
         val recovery = if (outcome.name == VIDEO_DECODE_WORKER) videoRecoveryFor(session, cause) else null
@@ -6961,6 +7516,7 @@ internal class PlaybackCore(
             queueOrder = queueOrder,
             markers = markers,
             playRequested = publishedPlayIntent(),
+            preloadedIndex = pendingNext?.takeIf { it.prepared != null }?.index,
         )
         publishProgressAndStats()
     }
@@ -7493,6 +8049,8 @@ internal class PlaybackCore(
 
     /** Keeps alternate-track history near presentation time without making it backpressure video. */
     private fun pruneInactiveSwitchCaches(session: OpenSession) {
+        // The published position is the playing item's, not this one's.
+        if (session.preloading.value) return
         val positionUs = publishedPositionMicros.value
         val previous = session.lastSwitchCachePrunePositionUs
         if (previous != Long.MIN_VALUE && positionUs - previous < SWITCH_CACHE_PRUNE_STEP_US) return
@@ -7712,7 +8270,7 @@ internal class PlaybackCore(
         session: OpenSession,
         packet: io.github.yuroyami.kiteplayer.spi.PlayerPacket,
         skipping: Boolean,
-    ): Boolean = skipVideoPacketBeforeDecode(
+    ): Boolean = !session.preloading.value && skipVideoPacketBeforeDecode(
         policy = config.frameDrop,
         isKeyframe = packet.isKeyframe,
         packetPtsUs = packet.pts?.micros,
@@ -8244,6 +8802,21 @@ internal class PlaybackCore(
          * keeps waiting, because a teardown around a read that never returns would hang. Actor only.
          */
         var stallInterruptRefused: Boolean = false
+
+        /**
+         * False once a gapless handoff gave [audio] and [sink] to the next item: this session's
+         * release then leaves the device and the ring alone. Actor only.
+         */
+        var ownsAudio: Boolean = true
+
+        /** The format the audio device was opened for, which a gapless handoff compares against. Actor only. */
+        var deviceRequest: AudioFormat? = null
+
+        /**
+         * True while this session is the next queue item, open in the background. Its workers then
+         * judge nothing by the published position, which belongs to the item still playing.
+         */
+        val preloading = atomic(false)
         private val audioRouting = atomic(
             AudioRouting(audioLane, listOfNotNull(videoQueue, audioLane?.queue)),
         )
@@ -8610,6 +9183,12 @@ internal class PlaybackCore(
 
         /** How long the device is given to play out what it holds. */
         val DRAIN_DEADLINE: Duration = 5.seconds
+
+        /** How often the gapless handoff looks again while the ring carries the join. */
+        val HANDOFF_POLL: Duration = 10.milliseconds
+
+        /** The least of the current item the ring must hold while the handoff waits for the next one. */
+        val HANDOFF_MARGIN: Duration = 40.milliseconds
 
         /** Late drops in one stats interval that make dropping worth SAYING, not just counting. */
         const val FRAME_DROP_WARN_PER_INTERVAL: Long = 5L

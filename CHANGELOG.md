@@ -12,10 +12,17 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Upgrading
 
-- `PlayerConfig` gains `queue`, a `QueueConfig`, and `PlayerSnapshot` gains `preloadedIndex`.
-  Both change the generated data-class methods, so recompile. `PlaybackWarning` gains
-  `GaplessFallback`, so a `when` that lists every warning needs the new branch. The design is in
-  `docs/gapless-queue.md` (#75).
+- Queue items now follow each other without a gap. The next item opens five seconds before the
+  current one ends, and its sound follows the last sample on the same audio device, which is not
+  stopped, paused or drained between the items. `PlayerEvent.Ended` and then `PlayerEvent.Opened`
+  still fire per item, but the status stays Playing, with no Opening between the items.
+  `PlayerConfig` gains `queue`, a `QueueConfig`: `QueueConfig(gapless = false)` keeps the old path.
+  `PlayerSnapshot` gains `preloadedIndex`. Both change the generated data-class methods, so
+  recompile. `PlaybackWarning` gains `GaplessFallback`, which says when an item opened the old way
+  and why, so a `when` that lists every warning needs the new branch. `docs/gapless-queue.md` has
+  the design (#75).
+- A seek that was queued while an item reached its end now runs before the end is declared. The
+  queue could move to the next item and drop the seek.
 - Swift and Objective-C: every `KitePlayer` call that can fail now declares `@Throws`, so a
   failure arrives as an error instead of ending the app (#204). The suspend calls convert any
   `Exception`. The setters, `play`, `pause`, `seekLater` and the renderer and tap calls throw on a

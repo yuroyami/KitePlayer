@@ -46,14 +46,12 @@ import kotlin.time.Duration.Companion.seconds
  *
  * ### What is not here
  *
- * A gapless queue handoff is absent rather than stubbed, and is tracked as its own issue.
- *
  * External subtitles, filter chains, the open-option escape hatch, chapters, the queue, shuffle, a
- * secondary subtitle track and frame stepping were on this list and are all here now:
- * [addExternalSubtitle], [MediaItem.videoFilter], [MediaItem.openOptions], [chapterAt] with
- * [seekToChapter], [openQueue] with [next] and [previous], [setShuffle],
- * [selectSecondarySubtitle], [stepFrame] and [setBalance]. A member that describes something
- * still unbuilt says so in its own documentation.
+ * secondary subtitle track, frame stepping and the gapless queue handoff were on this list and are
+ * all here now: [addExternalSubtitle], [MediaItem.videoFilter], [MediaItem.openOptions],
+ * [chapterAt] with [seekToChapter], [openQueue] with [next] and [previous], [setShuffle],
+ * [selectSecondarySubtitle], [stepFrame], [setBalance] and [QueueConfig]. A member that describes
+ * something still unbuilt says so in its own documentation.
  */
 public class KitePlayer internal constructor(private val core: PlaybackCore) : AutoCloseable {
 
@@ -661,9 +659,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * Opens [items] as the queue, starting at [startIndex], and returns paused on its first frame
      * exactly like [open].
      *
-     * At each item's end the next opens and playback continues; [LoopMode.All] wraps the end back
-     * to the start. [PlayerEvent.Ended] still fires per item, and the snapshot carries the queue
-     * and the moving [PlayerSnapshot.queueIndex]. A plain [open] replaces the queue with the one
+     * Each item's sound follows the one before it on the same audio device, with no gap, and
+     * [LoopMode.All] wraps the end back to the start. [PlayerEvent.Ended] and then
+     * [PlayerEvent.Opened] still fire per item, and the snapshot carries the queue and the moving
+     * [PlayerSnapshot.queueIndex]. [QueueConfig] turns the gapless handoff off and names the cases
+     * where an item opens from scratch instead. A plain [open] replaces the queue with the one
      * item it names.
      *
      * Legal from Idle, Ended and Failed, like [open]: replacing what is playing needs an explicit

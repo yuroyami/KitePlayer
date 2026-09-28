@@ -295,7 +295,7 @@ read it back.
 | | |
 |---|---|
 | Playback | `open`, `play`, `pause`, `stop`, `seek`, `stepFrame`, `close`, `closeAndAwait` |
-| Queue | `openQueue`, `next`, `previous`, `setLoop`, and `addToQueue`, `removeFromQueue`, `moveInQueue`, `clearQueue` while it plays |
+| Queue | `openQueue`, `next`, `previous`, `setLoop`, and `addToQueue`, `removeFromQueue`, `moveInQueue`, `clearQueue` while it plays. Items follow each other on the same audio device with no gap; `PlayerConfig.queue` turns that off, and [the gapless design](docs/gapless-queue.md) says when an item opens from scratch instead |
 | Shuffle | `setShuffle`. The items never move. `queueOrder` tells you what plays next |
 | Speed | `setSpeed`, 0.25x to 4x with pitch preserved. `setPreservePitch(false)` lets the pitch change like a tape |
 | Sound | `setVolume`, `setMuted`, `setBalance`, `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), `setVideoEnabled(false)` for audio only |

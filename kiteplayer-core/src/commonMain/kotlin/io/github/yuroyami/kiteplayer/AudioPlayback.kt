@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.AudioPipeline
 import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
+import io.github.yuroyami.kiteplayer.internal.KotlinAudioRing
 import io.github.yuroyami.kiteplayer.internal.AudioRingHandle
 import io.github.yuroyami.kiteplayer.internal.MediaClock
 import io.github.yuroyami.kiteplayer.internal.ClockSnapshot
@@ -16,6 +17,7 @@ import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.delay
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
@@ -200,6 +202,47 @@ public class AudioPlayback(
      */
     private var anchorFloorNanos: Long? = null
 
+    /**
+     * Where the ring's timestamps stand after the last frame [submit] wrote, on the ring's own
+     * axis: the start of the newest timestamp segment plus the frames written since. It follows
+     * the ring's own rule for opening a segment, so a chunk stamped with [writeEndUs] continues
+     * the ring's newest segment and opens none. Feeder only.
+     */
+    private var writeSegmentStartUs: Long? = null
+    private var writeSegmentFrames: Long = 0
+
+    /**
+     * The gapless join: the next queue item's audio continuing this ring. See
+     * `docs/gapless-queue.md`. Under [lock], because the feeder moves it from [Join.Armed] to
+     * [Join.Writing] and a reader on any thread moves it to [Join.Crossed].
+     */
+    private var join: Join = Join.None
+
+    /** Where the next item's first sample sits, on the ring's axis. */
+    private var joinBoundaryUs: Long = 0
+
+    /** The next item's own timestamp at that sample. */
+    private var joinOriginUs: Long = 0
+
+    /** The end of the item before the join, in its own media time. The clock holds there until [commitJoin]. */
+    private var joinHeldUs: Long = 0
+
+    private enum class Join {
+        None,
+
+        /** [beginJoin] ran; the next item's first timestamped buffer has not arrived. */
+        Armed,
+
+        /** The next item's samples are in the ring; the device still plays the item before it. */
+        Writing,
+
+        /** The device reached the next item's first sample; the owner has not swapped yet. */
+        Crossed,
+
+        /** The owner swapped: the clock reads the new item's own timestamps until the next flush. */
+        Committed,
+    }
+
     /** The format the device accepted. Null before [open]. */
     public val negotiatedFormat: AudioFormat? get() = format
 
@@ -275,7 +318,10 @@ public class AudioPlayback(
             epochPreservePitch = wantedPreservePitch
             scaledBaseUs = null
             mediaClock.speed = epochSpeed
+            join = Join.None
         }
+        writeSegmentStartUs = null
+        writeSegmentFrames = 0
 
         if (sink.latencyQuality == LatencyQuality.Unreliable && !warnedAboutLatency) {
             warnedAboutLatency = true
@@ -338,10 +384,24 @@ public class AudioPlayback(
                 idle(fullRingWait)
                 continue
             }
+            if (firstChunk && pts != null) trackSegment(pts.micros, ring.format.sampleRate)
+            writeSegmentFrames += accepted
             offset += accepted
             firstChunk = false
         }
     }
+
+    /** Opens a tracked segment where the ring would open one: at a timestamp that breaks continuity. */
+    private fun trackSegment(ptsUs: Long, sampleRate: Int) {
+        val predicted = writeEndUs(sampleRate)
+        if (predicted == null || abs(ptsUs - predicted) >= KotlinAudioRing.DISCONTINUITY_TOLERANCE_US) {
+            writeSegmentStartUs = ptsUs
+            writeSegmentFrames = 0
+        }
+    }
+
+    private fun writeEndUs(sampleRate: Int): Long? =
+        writeSegmentStartUs?.let { it + framesToMicros(writeSegmentFrames, sampleRate) }
 
     /**
      * Hands decoded audio over, suspending until all of it has been accepted.
@@ -397,6 +457,20 @@ public class AudioPlayback(
         // The epoch's rate. Read before a stage is built, because without pitch correction the
         // resampler is built for it.
         val speedNow = synchronized(lock) { epochSpeed }
+        // The first timestamped buffer of the next queue item in a gapless join. Where its output
+        // lands on the ring's axis is read here, before a rebuild below can drop the scaled base.
+        val joinBoundary = if (pts != null && synchronized(lock) { join == Join.Armed }) {
+            val rate = negotiated.sampleRate
+            val base = synchronized(lock) { scaledBaseUs }
+            val continued = if (speedNow != 1.0 && base != null) {
+                base + framesToMicros(pipeline?.tempoEmittedFrames ?: 0L, rate)
+            } else {
+                writeEndUs(rate)
+            }
+            continued ?: (pts.micros / speedNow).toLong()
+        } else {
+            null
+        }
         val existing = pipeline
         val stage = when {
             existing == null -> AudioPipeline(
@@ -408,8 +482,9 @@ public class AudioPlayback(
             else -> existing.rebuiltFor(sourceFormat, pitchNow, speedNow, resamplerFactory)
         }
         // Only a FORMAT change is worth saying out loud. A pitch-law change rebuilds the same
-        // stage too, and that one the caller asked for, so it is not news.
-        if (existing != null && !existing.matches(sourceFormat)) {
+        // stage too, and that one the caller asked for, so it is not news. Nor is a join: the
+        // next item is allowed a sample format of its own.
+        if (existing != null && !existing.matches(sourceFormat) && joinBoundary == null) {
             onWarning(
                 PlaybackWarning.AudioSourceFormatChanged(
                     fromSampleRate = existing.sourceFormat.sampleRate,
@@ -453,13 +528,26 @@ public class AudioPlayback(
         }
 
         val emittedBefore = stage.tempoEmittedFrames
+        if (joinBoundary != null) {
+            synchronized(lock) {
+                joinBoundaryUs = joinBoundary
+                joinOriginUs = pts?.micros ?: 0L
+                joinHeldUs = if (speedNow == 1.0) joinBoundary else (joinBoundary * speedNow).toLong()
+                join = Join.Writing
+                // The scaled axis runs on past the join, dated from the boundary.
+                if (speedNow != 1.0) {
+                    scaledBaseUs = joinBoundary - framesToMicros(emittedBefore, negotiated.sampleRate)
+                }
+            }
+        }
         // Converted exactly once: the mixer, resampler and gain ramp all carry state, so running
         // process twice over the same input is audible, not just wasteful.
         val produced = stage.process(interleaved, frames)
 
         if (speedNow == 1.0) {
-            // The exact pre-speed path: media pts straight through, byte for byte.
-            if (produced > 0) submit(pts, stage.output, produced, abort, idle)
+            // The exact pre-speed path: media pts straight through, byte for byte, shifted onto
+            // the ring's axis only after a join.
+            if (produced > 0) submit(ringPts(pts), stage.output, produced, abort, idle)
             return
         }
 
@@ -502,13 +590,37 @@ public class AudioPlayback(
      */
     public fun position(): Pts? = synchronized(lock) {
         anchorLocked()
-        mediaClock.nowOrNull()
+        crossLocked()
+        heldLocked(mediaClock.nowOrNull())
     }
 
     /** Actor publication uses one mapping instead of separately reading position and rate. */
     internal fun clockSnapshot(): ClockSnapshot = synchronized(lock) {
         anchorLocked()
-        mediaClock.snapshot()
+        crossLocked()
+        val snapshot = mediaClock.snapshot()
+        snapshot.copy(pts = heldLocked(snapshot.pts))
+    }
+
+    /**
+     * A reading of the item before a join, which never passes that item's end: the next item's
+     * samples are already in the ring, and the clock holds at the end until [commitJoin].
+     */
+    private fun heldLocked(reading: Pts?): Pts? = when (join) {
+        Join.Crossed -> Pts(joinHeldUs)
+        Join.Writing -> reading?.let { if (it.micros > joinHeldUs) Pts(joinHeldUs) else it }
+        else -> reading
+    }
+
+    /**
+     * Notices that the device is past the item before a join. Read from the clock and not from the
+     * anchor, because an anchor dates the end of what the device took, which it plays later: the
+     * clock already counts that delay, and it stands still while the device is paused.
+     */
+    private fun crossLocked() {
+        if (join != Join.Writing) return
+        val reading = mediaClock.nowOrNull() ?: return
+        if (reading.micros >= joinHeldUs) join = Join.Crossed
     }
 
     private fun anchorLocked() {
@@ -517,12 +629,68 @@ public class AudioPlayback(
             if (anchor.audibleAtNanos <= floor) return
             anchorFloorNanos = null
         }
+        if (join == Join.Committed) {
+            // An anchor still before the boundary dates the old item's tail, so the clock keeps
+            // what it has. Past it, the new item's own timestamps run from its first sample.
+            val sinceJoin = anchor.pts.micros - joinBoundaryUs
+            if (sinceJoin < 0) return
+            val mediaUs = joinOriginUs + if (epochSpeed == 1.0) sinceJoin else (sinceJoin * epochSpeed).toLong()
+            mediaClock.setAt(Pts(mediaUs), generation, anchor.audibleAtNanos)
+            return
+        }
         // The ring speaks the scaled axis at any epoch rate other than 1.0; multiplying out here
-        // is the one place playout time turns back into media time.
+        // is the one place playout time turns back into media time. Before a join is committed
+        // this dates the item before it, past its end too, which is how the crossing is noticed.
         val mediaPts =
             if (epochSpeed == 1.0) anchor.pts
             else Pts((anchor.pts.micros * epochSpeed).toLong())
         mediaClock.setAt(mediaPts, generation, anchor.audibleAtNanos)
+    }
+
+    /** [pts] on the ring's axis: shifted past the boundary once a join has started writing. */
+    private fun ringPts(pts: Pts?): Pts? {
+        if (pts == null) return null
+        return synchronized(lock) {
+            when (join) {
+                Join.Writing, Join.Crossed, Join.Committed -> Pts(pts.micros - joinOriginUs + joinBoundaryUs)
+                Join.None, Join.Armed -> pts
+            }
+        }
+    }
+
+    /**
+     * Starts a gapless join: the next buffers handed to [submitDecoded] belong to the next queue
+     * item and continue this ring after the last sample already in it. The device, the ring and
+     * the conversion stages carry on untouched.
+     *
+     * Belongs to the session owner, with the feeder of the previous item parked and the feeder of
+     * the next one not yet started, because the next [submitDecoded] reads it.
+     */
+    internal fun beginJoin(): Unit = synchronized(lock) {
+        check(ring != null) { "a join needs an open audio path" }
+        join = Join.Armed
+    }
+
+    /** True once the device has played the first sample of the next item. Safe from any thread. */
+    internal val joinCrossed: Boolean
+        get() = synchronized(lock) {
+            anchorLocked()
+            crossLocked()
+            join == Join.Crossed
+        }
+
+    /**
+     * Ends the join: from here the clock reads the new item's own timestamps. The owner calls it
+     * when it makes the next item the current one. A flush ends a join too.
+     */
+    internal fun commitJoin(): Unit = synchronized(lock) {
+        if (join == Join.None || join == Join.Committed) return
+        // The new item starts at its first sample plus however far the device is past the old
+        // item's end, which the old mapping still reads. A newer anchor refines it below.
+        val overshootUs = ((mediaClock.nowOrNull()?.micros ?: joinHeldUs) - joinHeldUs).coerceAtLeast(0)
+        join = Join.Committed
+        mediaClock.setAt(Pts(joinOriginUs + overshootUs), generation, clock.nanos())
+        anchorLocked()
     }
 
     /** Starts the device and lets the clock run. Belongs to the session owner. */
@@ -570,7 +738,12 @@ public class AudioPlayback(
             scaledBaseUs = null
             mediaClock.invalidate()
             mediaClock.speed = epochSpeed
+            // An empty ring has nothing on either side of a join, and the samples that follow
+            // carry the current item's own timestamps.
+            join = Join.None
         }
+        writeSegmentStartUs = null
+        writeSegmentFrames = 0
         // The conversion stage holds one sample frame across buffers. After a seek that frame belongs
         // to the position that was abandoned, so interpolating the new position out of it would mix
         // the two.

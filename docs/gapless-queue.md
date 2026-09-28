@@ -52,6 +52,10 @@ to the epoch the player is at, and then starts the demux and decode workers of t
 decoded audio buffers and the first video frames wait in the queues of the item. The feeder and
 the video schedule of the next item do not run yet.
 
+A renderer can supply its own video decoders, as the Android renderers do. Such a decoder draws
+into the renderer's surface, which the current item holds until the swap. So for a next item with
+a video stream that is not cover art, the preload leaves that decoder for the swap.
+
 A preload changes nothing that the caller can see except `preloadedIndex`. It emits no event.
 Warnings that the backend raises while the item opens are held back and delivered when the item
 becomes the current one.
@@ -102,7 +106,10 @@ current item until the session actor sees the crossing. The actor then swaps the
 2. The video and subtitle lanes, the decoders and the source of the current item close. The audio
    device and the ring stay with the next item.
 3. The next item becomes the current item. `media` and `queueIndex` move to it, the audio clock
-   reads its own timestamps, and its video schedule starts.
+   reads its own timestamps, and its video schedule starts. A video decoder that the preload left
+   for the swap is created first, from the renderer's factories. Until its first frame the picture
+   holds the old item's last frame. When no decoder takes the stream, the item drops its video
+   track with `TrackDeselected`, as an open does.
 4. `PlayerEvent.Opened` fires for it. `PlayerEvent.AudioFormatChanged` does not fire, because the
    device format does not change.
 
@@ -119,9 +126,6 @@ stops, `Ended` fires, and the next item opens from scratch. These are the reason
 - The preload failed to open, or a worker of the preload failed.
 - The preload was still opening or priming when the current item had written all its sound and
   the ring held less than 40 ms of it. Until then the player waits for the next item.
-- The next item has a video stream that is not cover art, and the attached renderer supplies its
-  own video decoders. The Android renderers do this. Their decoder needs the surface of the
-  renderer, and the current item holds that surface until the swap.
 - The current item or the next item has no selected audio track.
 - The sample rate or the channel count of the next item differs from the format that the device
   was opened for.

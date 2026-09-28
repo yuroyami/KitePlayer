@@ -217,20 +217,79 @@ class GaplessQueueTest {
     }
 
     @Test
-    fun aRendererThatDecodesItsOwnVideoMakesAVideoItemFallBack() = runTest {
-        val refusing = object : VideoDecoderFactory {
+    fun aRendererThatDecodesItsOwnVideoGetsTheNextDecoderAtTheSwap() = runTest {
+        var harness: CoreHarness? = null
+        var created = 0
+        var open = 0
+        var mostOpen = 0
+        val ownDecoders = object : VideoDecoderFactory {
             override val name: String = "renderer decoder"
-            override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? = null
+            override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? {
+                // The backend's scripted decoder, standing in for one that draws into the
+                // renderer's surface, which only one decoder at a time can hold.
+                val inner = harness!!.backend.sessions.last().videoDecoders.first().create(stream, hwdec) ?: return null
+                created++
+                open++
+                mostOpen = maxOf(mostOpen, open)
+                return object : VideoDecoder by inner {
+                    override fun close() {
+                        open--
+                        inner.close()
+                    }
+                }
+            }
         }
-        val renderer = RecordingRenderer(decoderFactories = listOf(refusing))
-        val harness = CoreHarness(this, script = MediaScript(durationUs = 3_000_000), renderer = renderer)
-        harness.attachRenderer()
-        harness.core.openQueue(items, 0)
-        harness.core.play()
-        assertTrue(harness.runUntil(5.seconds) { harness.core.snapshots.value.queueIndex == 1 })
-        assertTrue("renderer" in harness.fallbacks().single().reason, harness.fallbacks().single().reason)
-        harness.close()
-        assertEquals(0, harness.ledger.liveCount, "nothing leaked")
+        val renderer = RecordingRenderer(decoderFactories = listOf(ownDecoders))
+        val started = CoreHarness(this, script = MediaScript(durationUs = 3_000_000), renderer = renderer)
+        harness = started
+        started.attachRenderer()
+        started.core.openQueue(items, 0)
+        started.core.play()
+        assertTrue(started.runUntil(5.seconds) { started.core.snapshots.value.queueIndex == 1 })
+        val before = renderer.count
+        started.run(300.milliseconds)
+        assertTrue(renderer.count > before, "the second item's pictures present within 300 ms of the swap")
+        assertEquals(2, created, "the renderer's factory made one decoder for each item")
+        assertEquals(1, mostOpen, "and never while the other item's decoder was open")
+        assertEquals(1, started.sink.openCount, "the sound followed without a gap")
+        assertEquals(emptyList(), started.fallbacks())
+        started.close()
+        assertEquals(0, started.ledger.liveCount, "nothing leaked")
+    }
+
+    @Test
+    fun aNextItemWhoseVideoNoDecoderTakesAtTheSwapPlaysOnWithoutIt() = runTest {
+        val faults = FaultPlan()
+        var harness: CoreHarness? = null
+        val ownDecoders = object : VideoDecoderFactory {
+            override val name: String = "renderer decoder"
+            override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? =
+                harness!!.backend.sessions.last().videoDecoders.first().create(stream, hwdec)
+        }
+        val started = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 3_000_000),
+            faults = faults,
+            renderer = RecordingRenderer(decoderFactories = listOf(ownDecoders)),
+        )
+        harness = started
+        started.attachRenderer()
+        started.core.openQueue(items, 0)
+        // The first item has its decoder. From here no decoder takes a video stream.
+        faults.videoDecodersRefuse = true
+        started.core.play()
+        assertTrue(started.runUntil(5.seconds) { started.core.snapshots.value.queueIndex == 1 })
+        assertTrue(
+            started.runUntil(2.seconds) {
+                val snapshot = started.core.snapshots.value
+                snapshot.tracks.selectedVideo == null && snapshot.status == PlaybackStatus.Playing
+            },
+            "the second item plays on without its video: ${started.core.snapshots.value.status}",
+        )
+        val deselected = started.core.warningHistory().map { it.warning }.filterIsInstance<PlaybackWarning.TrackDeselected>()
+        assertTrue(deselected.isNotEmpty(), "and says why")
+        started.close()
+        assertEquals(0, started.ledger.liveCount, "nothing leaked")
     }
 
     @Test

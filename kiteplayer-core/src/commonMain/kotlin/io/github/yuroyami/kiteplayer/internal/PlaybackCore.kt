@@ -2550,18 +2550,12 @@ internal class PlaybackCore(
             var audioStream = audioCandidate
             var subtitleStream = subtitleCandidate
             // The old path would decode this stream with the renderer's own decoder, which needs
-            // the surface the current item holds, so the item cannot be preloaded. Cover art decodes
-            // on the backend's decoders either way.
-            if (pending != null && videoStream != null && !videoStream.isCoverArt &&
+            // the surface the current item holds, so a preload leaves that decoder for the swap.
+            // Cover art decodes on the backend's decoders either way.
+            val deferVideoDecoder = pending != null && videoStream != null && !videoStream.isCoverArt &&
                 pendingRenderer?.videoDecoderFactories().orEmpty().isNotEmpty() &&
                 rendererDecodes(videoSelection, config.hardwareDecode, source.seekable)
-            ) {
-                throw GaplessRefusal(
-                    "the attached renderer decodes its video with a decoder of its own, which needs the " +
-                        "surface that the current item holds",
-                )
-            }
-            val selectedVideoDecoder = videoStream?.let {
+            val selectedVideoDecoder = if (deferVideoDecoder) null else videoStream?.let {
                 createVideoDecoder(
                     session = backendSession,
                     stream = it,
@@ -2574,7 +2568,7 @@ internal class PlaybackCore(
             if (videoDecoder != null) {
                 rollback += { withContext(dispatchers.videoDecode) { videoDecoder.close() } }
             }
-            if (videoStream != null && videoDecoder == null) {
+            if (videoStream != null && videoDecoder == null && !deferVideoDecoder) {
                 report(
                     PlaybackWarning.TrackDeselected(
                         TrackId(videoStream.index),
@@ -2753,6 +2747,7 @@ internal class PlaybackCore(
             ).also { built ->
                 // What the device was opened for, which a gapless handoff compares the next item against.
                 built.deviceRequest = if (audioPlayback != null) audioDecoder?.outputFormat else null
+                built.videoDecoderDeferred = deferVideoDecoder && videoStream != null
             }
         } catch (failure: Throwable) {
             // Newest-first, under NonCancellable: a cancelled open must still release everything
@@ -5595,9 +5590,6 @@ internal class PlaybackCore(
         var tracks: Tracks = Tracks.Empty
     }
 
-    /** A preload that cannot follow the current item without a gap. The message is the reason. */
-    private class GaplessRefusal(reason: String) : Exception(reason)
-
     /** Warnings of a preloaded item, held until it becomes the current one. Safe from any thread. */
     private inner class HeldWarnings {
         /** Null once released: later warnings then pass straight through. */
@@ -5746,10 +5738,7 @@ internal class PlaybackCore(
             return null
         }
         val prepared = next.job.await().getOrElse { failure ->
-            dropPending(
-                if (failure is GaplessRefusal) failure.message.orEmpty()
-                else "the next item did not open${causeDetail(failure)}",
-            )
+            dropPending("the next item did not open${causeDetail(failure)}")
             return null
         }
         // Set first, so that every drop from here on releases the opened item.
@@ -5818,7 +5807,8 @@ internal class PlaybackCore(
         if (!incoming.selectedQueues().all { it.isReady(readyUs, config.buffer.readyPackets) }) return false
         val video = incoming.video
         val videoReady = video == null || video.queuedFrames > 0 ||
-            incoming.videoQueue?.isEndOfStream == true || incoming.videoParked.value
+            incoming.videoQueue?.isEndOfStream == true || incoming.videoParked.value ||
+            incoming.videoDecoderDeferred
         val audioReady = incoming.audioLane == null || incoming.audioInFlight.value > 0 ||
             incoming.audioQueue?.isEndOfStream == true
         return videoReady && audioReady
@@ -5923,10 +5913,55 @@ internal class PlaybackCore(
             ?.let { applyExternalSubtitle(it.id) }
         refreshTypesetting()
         startAudioEventCollector(incoming)
+        if (incoming.videoDecoderDeferred) startDeferredVideo(incoming)
         startVideoSchedule(incoming)
         reportContainerDivergences(incoming)
         emitEvent(PlayerEvent.Opened(next.item, tracks))
         snapshotDirty = true
+    }
+
+    /**
+     * Creates the video decoder that a preload left for the swap, now that the item before it has
+     * closed its own and freed the renderer's surface, and starts the video decode lane. A stream
+     * that no decoder accepts is dropped through the ordinary track change, as an open drops it.
+     */
+    private suspend fun startDeferredVideo(incoming: OpenSession) {
+        incoming.videoDecoderDeferred = false
+        val stream = incoming.videoStream ?: return
+        val selected = createVideoDecoder(
+            session = incoming.backendSession,
+            stream = stream,
+            sourceSeekable = incoming.source.seekable,
+            selection = VideoDecoderSelection.Configured,
+        )
+        val decoder = selected?.decoder
+        val aligned = decoder != null && try {
+            withContext(dispatchers.videoDecode) { decoder.flush(requestedEpoch) }
+            true
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            decoderCandidateFailures = listOf("${stream.codec}: the flush failed${causeDetail(failure)}")
+            withContext(NonCancellable + dispatchers.videoDecode) { runCatching { decoder.close() } }
+            false
+        }
+        if (selected == null || !aligned) {
+            warn(
+                PlaybackWarning.TrackDeselected(
+                    TrackId(stream.index),
+                    deselectionDetail("no decoder accepted this video stream"),
+                ),
+            )
+            queueSelection(TrackKind.Video, null, CompletableDeferred())
+            return
+        }
+        incoming.videoDecoder = selected.decoder
+        incoming.videoDecoderOrigin = selected.origin
+        incoming.coupledRenderer = if (selected.origin == VideoDecoderOrigin.Renderer) pendingRenderer else null
+        val worker = Worker(VIDEO_DECODE_WORKER)
+        incoming.videoDecodeWorker = worker
+        worker.release(requestedEpoch)
+        incoming.jobs += launchWorker(incoming, worker, dispatchers.videoDecode) { runVideoDecode(incoming, worker) }
     }
 
     /** The preloaded item's video schedule, started at the swap. A paused player gets one frame. */
@@ -8773,10 +8808,11 @@ internal class PlaybackCore(
         val backendSession: BackendSession,
         val source: PlayerMediaSource,
         val videoStream: PlayerStreamInfo?,
-        val videoDecoder: VideoDecoder?,
-        val videoDecoderOrigin: VideoDecoderOrigin?,
+        /** Set once, before the video decode worker starts: at build, or at the swap for a preload. */
+        var videoDecoder: VideoDecoder?,
+        var videoDecoderOrigin: VideoDecoderOrigin?,
         /** The renderer whose factory made [videoDecoder], null for a backend decoder. */
-        val coupledRenderer: VideoRenderer?,
+        var coupledRenderer: VideoRenderer?,
         val videoQueue: PacketQueue?,
         audioLane: AudioLane?,
         /** One epoch-aligned compressed cache for every audio stream in the container. */
@@ -8814,6 +8850,12 @@ internal class PlaybackCore(
 
         /** The format the audio device was opened for, which a gapless handoff compares against. Actor only. */
         var deviceRequest: AudioFormat? = null
+
+        /**
+         * True while a preloaded item waits for its video decoder, which the renderer's own
+         * factory makes at the swap, once the item before it has freed the surface. Actor only.
+         */
+        var videoDecoderDeferred: Boolean = false
 
         /**
          * True while this session is the next queue item, open in the background. Its workers then

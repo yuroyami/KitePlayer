@@ -2,10 +2,16 @@ package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.io.ofFile
 import io.github.yuroyami.kiteplayer.output.DesktopOutputBackend
+import io.github.yuroyami.kiteplayer.spi.AudioFormat
+import io.github.yuroyami.kiteplayer.spi.AudioRenderCallback
+import io.github.yuroyami.kiteplayer.spi.AudioSink
+import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
+import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import javax.sound.sampled.AudioSystem
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -101,7 +107,88 @@ class DesktopPlaybackTest {
         }
     }
 
+    /**
+     * The gapless queue on the desktop output, which is a writer thread feeding a Java Sound line
+     * rather than a device callback: the same lossless file twice plays on one line, which is never
+     * stopped, paused or drained between the two items. See `docs/gapless-queue.md`.
+     */
+    @Test
+    fun theSameLosslessFileTwiceJoinsOnOneLineWithNoStop() = runBlocking {
+        val flac = sequenceOf(
+            System.getenv("KITEPLAYER_TESTMEDIA")?.let { File(it, QUEUE_MEDIA) },
+            File("testmedia/$QUEUE_MEDIA"),
+            File("../testmedia/$QUEUE_MEDIA"),
+        ).filterNotNull().firstOrNull { it.isFile } ?: return@runBlocking println("SKIP: no $QUEUE_MEDIA to play")
+        if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
+
+        val defaults = assertNotNull(KitePlayerPlatform.backendsOrNull(), "no default desktop backends")
+        val counts = LineCounts()
+        val player = KitePlayer.create(
+            PlayerConfig(backends = defaults.copy(output = CountingOutput(defaults.output ?: DesktopOutputBackend, counts))),
+        )
+        try {
+            val item = MediaItem(flac.absolutePath)
+            player.openQueue(listOf(item, item))
+            player.play()
+            // Seven seconds of playback: the whole first item and one second of the second.
+            val joined = withTimeoutOrNull(30.seconds) {
+                while (!(player.state.value.queueIndex == 1 && player.position() >= 1.seconds)) kotlinx.coroutines.delay(10)
+                true
+            }
+            assertTrue(joined == true, "the second item did not play: ${player.state.value.queueIndex}, ${player.position()}")
+            val warnings = player.warningHistory().map { it.warning }
+            println("desktop gapless join: underruns=${player.stats.value.audioUnderruns} warnings=$warnings")
+
+            assertEquals(PlaybackStatus.Playing, player.state.value.status, "the second item plays")
+            assertEquals(emptyList(), warnings.filterIsInstance<PlaybackWarning.GaplessFallback>(), "no fallback")
+            assertEquals(1, counts.opens.get(), "one line for both items")
+            assertEquals(0, counts.stops.get(), "the line never stopped between the items")
+            assertEquals(0, counts.pauses.get(), "the line never paused between the items")
+            assertEquals(0, counts.drains.get(), "the line never drained between the items")
+        } finally {
+            player.closeAndAwait()
+        }
+    }
+
+    /** Every call the engine made on the line. Atomic, because the engine calls from its own threads. */
+    private class LineCounts {
+        val opens = AtomicInteger()
+        val stops = AtomicInteger()
+        val pauses = AtomicInteger()
+        val drains = AtomicInteger()
+    }
+
+    private class CountingSink(private val real: AudioSink, private val counts: LineCounts) : AudioSink by real {
+        override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
+            counts.opens.incrementAndGet()
+            return real.open(request, render)
+        }
+
+        override suspend fun stop() {
+            counts.stops.incrementAndGet()
+            real.stop()
+        }
+
+        override suspend fun setPaused(paused: Boolean): Boolean {
+            if (paused) counts.pauses.incrementAndGet()
+            return real.setPaused(paused)
+        }
+
+        override suspend fun drain() {
+            counts.drains.incrementAndGet()
+            real.drain()
+        }
+    }
+
+    private class CountingOutput(private val real: OutputBackend, counts: LineCounts) : OutputBackend by real {
+        override val audioSink: AudioSinkFactory = object : AudioSinkFactory {
+            override val name: String = real.audioSink.name
+            override suspend fun create(): AudioSink = CountingSink(real.audioSink.create(), counts)
+        }
+    }
+
     private companion object {
         const val MEDIA = "sync1080p30.mp4"
+        const val QUEUE_MEDIA = "audio-flac.flac"
     }
 }

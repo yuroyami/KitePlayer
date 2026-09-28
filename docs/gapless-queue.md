@@ -165,4 +165,7 @@ Every action that drops a preload also cancels a handoff that has started:
   sequence is pinned.
 - Each fallback has its own test.
 - With real media, the same lossless file plays twice in a queue with no underrun across the join
-  and no stop on the CoreAudio sink.
+  and no stop on the CoreAudio sink. The desktop JVM line and Android's AudioTrack pass the same
+  check: one open, and no stop, pause or drain between the items.
+- On the CI emulator, a video queue on the Compose GPU path plays on one AudioTrack, and the
+  renderer shows the second item's pictures from its new decoder.

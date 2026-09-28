@@ -5640,7 +5640,10 @@ internal class PlaybackCore(
         val prepared = next.prepared ?: adoptPreload(next, active) ?: return
         if (!next.handedOff) {
             if (!currentAudioFinished(active)) {
-                wakeIn(WORKER_POLL)
+                // With every packet decoded, the last sample is at most a ring depth and a few
+                // buffers away, and the next item's feeder must start well before the ring runs dry.
+                val allDecoded = active.audioQueue?.let { it.isEndOfStream && it.count == 0 } == true
+                wakeIn(if (allDecoded) HANDOFF_POLL else WORKER_POLL)
                 return
             }
             if (!pendingPrimed(prepared.session)) {

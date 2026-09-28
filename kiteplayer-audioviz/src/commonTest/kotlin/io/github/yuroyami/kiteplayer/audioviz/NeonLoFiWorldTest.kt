@@ -29,6 +29,13 @@ class NeonLoFiWorldTest {
         assertContentEquals(profile, w.profile)
         assertEquals(0f, w.history.valueAt(14_000_000, 0))
     }
+    @Test fun controlsFollowTheSlidersWhilePaused() {
+        val w = NeonLoFiWorld(); run(w, 5f)
+        val before = w.controls[3]
+        val settings = w.controls.copyOf().apply { this[3] = before + 0.5f }
+        repeat(180) { w.advance(state(neonFrame(5_000_000, held = true), 6f + it / 60f), settings, 0.9f) }
+        assertEquals(settings[3], w.controls[3], 0.01f)
+    }
     @Test fun seekingWhilePausedClearsOldHistoryWithoutReplayingHits() {
         val w = NeonLoFiWorld(); run(w, 5f)
         w.advance(state(neonFrame(1_000_000, held = true, revision = 2), 6f), w.controls, 0.37f)

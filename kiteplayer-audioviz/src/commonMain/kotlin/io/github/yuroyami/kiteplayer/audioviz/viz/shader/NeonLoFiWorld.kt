@@ -74,13 +74,14 @@ internal class NeonLoFiWorld {
         val f = state.frame
         history.record(f)
         if (epoch != history.epoch) { clearActors(); epoch = history.epoch }
-        if (f.held) return
-        available = f.availability == AnalysisAvailability.Ready
-        val audible = if (available) f.audible else 0f
+        // The controls follow the sliders while the player is paused, so a change shows at once.
         for (i in controls.indices) controls[i] = if (!settingsInitialized || i == 0 ||
             ((i == 6 || i == 9) && values[i] == 0f)) values[i]
             else NeonLoFiFlight.approach(controls[i], values[i], dt, 0.35f)
         settingsInitialized = true
+        if (f.held) return
+        available = f.availability == AnalysisAvailability.Ready
+        val audible = if (available) f.audible else 0f
         if (available) NeonLoFiHistory.resample(f.bands, wanted)
         // Missing analysis is not silence or a musical boundary. Relax only the live foreground.
         if (!available) for (i in wanted.indices) wanted[i] *= exp(-dt * 1.5f)

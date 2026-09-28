@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
+import io.github.yuroyami.kiteplayer.HwdecKind
+import io.github.yuroyami.kiteplayer.HwdecStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -8,7 +10,13 @@ import kotlin.test.assertTrue
 class ConformanceReportTest {
 
     private val results = listOf(
-        MatrixResult("baseline.mkv", MatrixVerdict.MustPlay, ok = true, outcome = "played 10 frames"),
+        MatrixResult(
+            "baseline.mkv",
+            MatrixVerdict.MustPlay,
+            ok = true,
+            outcome = "played 10 frames",
+            decoder = HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox).routeName(),
+        ),
         MatrixResult("av1.mkv", MatrixVerdict.MustPlay, ok = false, outcome = "no video stream"),
         MatrixResult("torture.mkv", MatrixVerdict.MustSurvive, ok = true, outcome = "refused: typed"),
     )
@@ -42,8 +50,15 @@ class ConformanceReportTest {
         )
         val row = report.lines().single { it.contains("x.mkv") }
         assertTrue("\\|" in row, "the pipe must be escaped, not left to split the row: $row")
-        // Four columns means five separators. Counting them with the escaped ones removed is what
+        // Five columns means six separators. Counting them with the escaped ones removed is what
         // says the outcome stayed one cell instead of splitting into two.
-        assertEquals(5, row.replace("\\|", "").count { it == '|' }, row)
+        assertEquals(6, row.replace("\\|", "").count { it == '|' }, row)
+    }
+
+    @Test
+    fun everyRowNamesItsVideoDecoder() {
+        val report = conformanceReport("macos-arm64", results)
+        assertTrue("VideoToolbox, downloaded" in report.lines().single { it.contains("baseline.mkv") }, report)
+        assertTrue(NO_VIDEO_DECODER in report.lines().single { it.contains("torture.mkv") }, report)
     }
 }

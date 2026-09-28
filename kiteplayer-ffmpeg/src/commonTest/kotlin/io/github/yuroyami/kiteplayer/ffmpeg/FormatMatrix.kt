@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecPolicy
+import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
@@ -102,15 +103,29 @@ internal val FORMAT_MATRIX: List<MatrixRow> = listOf(
     MatrixRow("asssubbed.mkv", MatrixVerdict.MustPlay, hasAudio = false, expectSubtitleStreams = 1),
 )
 
-/** One row's transcript line. [ok] is the pass/fail; [outcome] is the measured detail. */
+/**
+ * One row's transcript line. [ok] is the pass/fail; [outcome] is the measured detail. [decoder]
+ * names the video decoder's route, so a silent fall to software cannot pass as a hardware row.
+ */
 internal class MatrixResult(
     val clip: String,
     val verdict: MatrixVerdict,
     val ok: Boolean,
     val outcome: String,
+    val decoder: String = NO_VIDEO_DECODER,
 ) {
     override fun toString(): String =
-        "${if (ok) "PASS" else "FAIL"} ${verdict.name.padEnd(11)} ${clip.padEnd(24)} $outcome"
+        "${if (ok) "PASS" else "FAIL"} ${verdict.name.padEnd(11)} ${clip.padEnd(24)} [$decoder] $outcome"
+}
+
+/** The decoder column of a row that opened no video decoder. */
+internal const val NO_VIDEO_DECODER = "no video decoder"
+
+/** The route a video decoder took, as the matrix reports it. */
+internal fun HwdecStatus.routeName(): String = when (this) {
+    HwdecStatus.Software -> "FFmpeg software"
+    is HwdecStatus.HardwareWithDownload -> "${kind.name}, downloaded"
+    is HwdecStatus.HardwareZeroCopy -> "${kind.name}, zero copy"
 }
 
 /** Where the matrix media lives on this platform, or null when this platform cannot run it. */
@@ -141,14 +156,15 @@ internal fun conformanceReport(platform: String, results: List<MatrixResult>): S
     appendLine()
     appendLine("$passed of ${results.size} rows met their verdict.")
     appendLine()
-    appendLine("| Clip | Verdict | Result | Outcome |")
-    appendLine("|---|---|---|---|")
+    appendLine("| Clip | Verdict | Result | Video decoder | Outcome |")
+    appendLine("|---|---|---|---|---|")
     for (result in results) {
         // The outcome is the row's own transcript and can carry a pipe; escaping keeps the table
         // a table rather than silently losing a column.
         val outcome = result.outcome.replace("|", "\\|")
         appendLine(
-            "| `${result.clip}` | ${result.verdict.name} | ${if (result.ok) "PASS" else "FAIL"} | $outcome |",
+            "| `${result.clip}` | ${result.verdict.name} | ${if (result.ok) "PASS" else "FAIL"} | " +
+                "${result.decoder} | $outcome |",
         )
     }
 }
@@ -158,31 +174,53 @@ internal object FormatMatrixRunner {
     /** A row that makes no progress for this long is hanging, which fails both verdicts. */
     private const val ROW_TIMEOUT_MILLIS = 180_000L
 
-    suspend fun runAll(mediaDir: String): List<MatrixResult> = FORMAT_MATRIX.map { row ->
-        runRow(mediaDir, row)
+    suspend fun runAll(mediaDir: String): List<MatrixResult> = runAll { clip -> MediaItem("$mediaDir/$clip") }
+
+    /**
+     * Runs every row with the item [itemFor] gives for its clip, and the verdict [verdictFor]
+     * gives. A browser has no path to open, so it hands over clips it already holds in memory, and
+     * a row whose container or codec the web build leaves out runs there as MustSurvive.
+     */
+    suspend fun runAll(
+        verdictFor: (MatrixRow) -> MatrixVerdict = { it.verdict },
+        itemFor: suspend (clip: String) -> MediaItem,
+    ): List<MatrixResult> = FORMAT_MATRIX.map { row -> runRow(row, verdictFor(row), itemFor) }
+
+    private suspend fun runRow(
+        row: MatrixRow,
+        verdict: MatrixVerdict,
+        itemFor: suspend (clip: String) -> MediaItem,
+    ): MatrixResult {
+        val decoder = DecoderNote()
+        return try {
+            val outcome = withTimeout(ROW_TIMEOUT_MILLIS) { playRow(itemFor(row.clip), row, decoder) }
+            MatrixResult(row.clip, verdict, ok = true, outcome = outcome, decoder = decoder.name)
+        } catch (hang: TimeoutCancellationException) {
+            MatrixResult(row.clip, verdict, ok = false, outcome = "HUNG past ${ROW_TIMEOUT_MILLIS} ms", decoder = decoder.name)
+        } catch (failure: Throwable) {
+            when (verdict) {
+                MatrixVerdict.MustPlay -> MatrixResult(
+                    row.clip,
+                    verdict,
+                    ok = false,
+                    outcome = failure.message ?: failure::class.simpleName ?: "failed",
+                    decoder = decoder.name,
+                )
+                // A typed refusal is a legal, measured outcome for a survive row.
+                MatrixVerdict.MustSurvive -> MatrixResult(
+                    row.clip,
+                    verdict,
+                    ok = true,
+                    outcome = "refused: ${failure.message ?: failure::class.simpleName}",
+                    decoder = decoder.name,
+                )
+            }
+        }
     }
 
-    suspend fun runRow(mediaDir: String, row: MatrixRow): MatrixResult = try {
-        val outcome = withTimeout(ROW_TIMEOUT_MILLIS) { playRow(mediaDir, row) }
-        MatrixResult(row.clip, row.verdict, ok = true, outcome = outcome)
-    } catch (hang: TimeoutCancellationException) {
-        MatrixResult(row.clip, row.verdict, ok = false, outcome = "HUNG past ${ROW_TIMEOUT_MILLIS} ms")
-    } catch (failure: Throwable) {
-        when (row.verdict) {
-            MatrixVerdict.MustPlay -> MatrixResult(
-                row.clip,
-                row.verdict,
-                ok = false,
-                outcome = failure.message ?: failure::class.simpleName ?: "failed",
-            )
-            // A typed refusal is a legal, measured outcome for a survive row.
-            MatrixVerdict.MustSurvive -> MatrixResult(
-                row.clip,
-                row.verdict,
-                ok = true,
-                outcome = "refused: ${failure.message ?: failure::class.simpleName}",
-            )
-        }
+    /** The video decoder's route, written as soon as it opens so that a failing row still names it. */
+    private class DecoderNote {
+        var name: String = NO_VIDEO_DECODER
     }
 
     /**
@@ -195,8 +233,8 @@ internal object FormatMatrixRunner {
      * report a landing; the engine learns it from the first decoded frame), so seek success here
      * is the call returning and decoding resuming, never a non-null landing.
      */
-    private suspend fun playRow(mediaDir: String, row: MatrixRow): String {
-        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/${row.clip}")) as KiteFFmpegSource
+    private suspend fun playRow(item: MediaItem, row: MatrixRow, decoder: DecoderNote): String {
+        val source = KiteFFmpegSourceFactory().open(item) as KiteFFmpegSource
         try {
             val streams = source.streams
             val video = streams.firstOrNull { it.kind == TrackKind.Video && !it.isCoverArt }
@@ -256,6 +294,7 @@ internal object FormatMatrixRunner {
             } else {
                 null
             }
+            videoDecoder?.let { decoder.name = it.hardware.routeName() }
             val audioDecoder = if (wantAudio) {
                 checkNotNull(
                     source.audioDecoderFactories().firstNotNullOfOrNull { factory -> factory.create(audio!!) },
@@ -323,8 +362,11 @@ internal object FormatMatrixRunner {
                     seekNote = "seek to $target resumed"
                 }
 
+                // Read again after decoding: a hardware route that fails at its first frames
+                // falls back to software, and the row must report the route that decoded.
+                videoDecoder?.let { decoder.name = it.hardware.routeName() }
                 val cueNote = decodedCueText?.let { text -> ", cue '$text'" } ?: ""
-            return "video ${pass.video}, audio ${pass.audio}, $seekNote$cueNote"
+                return "video ${pass.video}, audio ${pass.audio}, $seekNote$cueNote"
             } finally {
                 videoDecoder?.close()
                 audioDecoder?.close()

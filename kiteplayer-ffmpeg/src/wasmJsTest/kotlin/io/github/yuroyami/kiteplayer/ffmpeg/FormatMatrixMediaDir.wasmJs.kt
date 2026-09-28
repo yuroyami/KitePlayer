@@ -3,13 +3,12 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 /**
  * There is no media directory on the web, because there is no filesystem to hold one.
  *
- * The format matrix reads clips off disk, so every matrix row skips itself here rather than
- * failing. That is the same answer the Android host tests give, and for the same reason: the
- * absence is the environment rather than a gap in coverage.
+ * The browser half runs the matrix anyway, from clips the page fetches into memory: see
+ * [WebFormatMatrixTest]. The node half has neither a page nor a directory, so it runs no matrix.
  */
 internal actual fun formatMatrixMediaDir(): String? = null
 
-/** No filesystem worth writing a report to, and no matrix run here either. */
+/** No filesystem to write a report to. [WebFormatMatrixTest] prints the report instead. */
 internal actual fun writeConformanceReport(fileName: String, markdown: String): String? = null
 
 internal actual fun conformancePlatformName(): String = "wasm-js"

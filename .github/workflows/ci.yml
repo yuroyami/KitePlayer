@@ -1204,14 +1204,29 @@ jobs:
           restore-keys: |
             kotlin-js-
 
+      # The browser half of :kiteplayer-ffmpeg runs the format matrix (WebFormatMatrixTest), so this
+      # job needs the clips. They come from the ffmpeg series that testmedia.sh records, as on the
+      # macOS job. Homebrew is on the runner image, but not on its PATH.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install --quiet ffmpeg
+          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
+
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+        env:
+          TESTMEDIA_STRICT_FFMPEG: "1"
+
       # wasmJsTest is BOTH halves: wasmJsNodeTest and wasmJsBrowserTest. Running only the node half
       # is what let WebCanvasVideoRendererTest assert a node-only refusal for as long as it did; the
       # browser really has OffscreenCanvas, so the same call draws there.
       #
-      # `:kiteplayer-ffmpeg` contributes 46 tests here, not its whole suite. The tests that open real
-      # clips live in its `realBackendTest` source set, which only the JVM and native targets take,
-      # because a browser has no filesystem to read the clips from. What runs here is the shared
-      # decoder logic, which is most of it: 29 of the 46 are `DecoderFallbackTest`.
+      # `:kiteplayer-ffmpeg` runs its shared decoder logic here, and in the browser half the format
+      # matrix too. The page cannot open a path, so karma serves the clips and the codec module from
+      # the kiteffmpeg web zip (karma.config.d/format-matrix.js), and the test fetches each clip into
+      # memory. The rest of its real-clip tests live in `realBackendTest`, which only the JVM and
+      # native targets take.
       #
       # `:kiteplayer` runs its shared session tests here, and drives the web media session against a
       # fake session object, so nothing in it needs a browser's real media session.
@@ -1234,6 +1249,16 @@ jobs:
       # skipped precisely because of that: if it comes back, this job is what says so.
       - name: wasmJs tests, network (node and browser)
         run: ./gradlew --stacktrace :kiteplayer-network:wasmJsTest
+
+      # The browser matrix cannot write a file, so it prints its conformance table into the test
+      # result. This copies the table from there into the run summary, beside the macOS one.
+      - name: The browser conformance report
+        if: always()
+        run: |
+          for result in kiteplayer-ffmpeg/build/test-results/wasmJsBrowserTest/*WebFormatMatrixTest*.xml; do
+            [ -f "$result" ] || continue
+            sed -n '/^# Format conformance/,/]]>/p' "$result" | sed 's/]]>.*//' >> "$GITHUB_STEP_SUMMARY"
+          done
 
       - name: Upload test reports
         if: failure()

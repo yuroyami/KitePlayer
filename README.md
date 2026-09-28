@@ -459,7 +459,7 @@ What runs on each target, and where:
 
 | Target | What runs, and where |
 |---|---|
-| Android | Plays real media on phones, checked by hand. CI runs the media-free host tests on Linux. Its emulator job does not pass yet, so no Android device test runs on every push. |
+| Android | Plays real media on phones, checked by hand. CI runs the media-free host tests on Linux. An emulator job runs the device tests of five modules and of the sample app on every push, the clip tests included. A failure there does not fail the run yet. |
 | iOS | Plays real media on devices, checked by hand. CI runs the tests of every iOS module on the simulator. |
 | macOS arm64, native and desktop JVM | Plays real media. CI runs every module's tests on both, the format matrix included. |
 | Linux x64, native | CI runs the tests of the media-free modules: core, subtitles, io, output, rt, libass and `kiteplayer`. The FFmpeg backend is only linked. |
@@ -469,7 +469,7 @@ What runs on each target, and where:
 | Windows x64, native | CI runs the tests of core, subtitles, output, rt, libass and `kiteplayer`. The FFmpeg backend is only linked. |
 | Windows x64, desktop JVM | The native library is linked. Nothing has run. |
 | tvOS and watchOS | Only core, subtitles, io and rt have these targets. CI runs their tests on both simulators. |
-| Web, wasmJs | Plays through the FFmpeg Wasm module with browser audio. Load `KiteFFmpegWeb` before creating a player. CI runs the web tests of core, subtitles, output, network, libass, ffmpeg and `kiteplayer` under Node and in a headless browser. This is not broad browser qualification. |
+| Web, wasmJs | Plays through the FFmpeg Wasm module with browser audio. Load `KiteFFmpegWeb` before creating a player. CI runs the web tests of core, subtitles, output, network, libass, ffmpeg and `kiteplayer` under Node and in a headless browser. The browser half runs the format matrix too, and the rows the Wasm build carries must play. This is not broad browser qualification. |
 | iOS x64, Android native | Compile only. |
 | JavaScript, js | The facade reports unavailable. |
 
@@ -482,8 +482,9 @@ KitePlayer's JVM and Android classes are Java 11 bytecode. The KiteFFmpeg 0.3.0 
 bytecode, so a desktop app needs Java 21 until KitePlayer depends on a later KiteFFmpeg release.
 
 Every CI run of the format matrix writes a conformance table, uploaded as the
-`conformance-macos-host` artifact and printed in the run summary. It lists each clip, what was
-asked of it, and what happened.
+`conformance-macos-host` artifact and printed in the run summary. The browser run prints its own
+table in the summary. Each table lists each clip, what was asked of it, which video decoder ran,
+and what happened.
 
 ## Limits
 
@@ -493,7 +494,7 @@ asked of it, and what happened.
 | Native Linux and Windows | There is no audio output and no HTTPS, so `createOrNull()` returns null. Pass your own `OutputBackend` to `KitePlayer.create`, or use the desktop JVM target. |
 | Desktop JVM sound | Played on macOS only. Linux and Windows have not played audio on a real device. |
 | AV1 on the web | There is no software AV1, because the Wasm build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |
-| Android devices | No device test runs automatically yet. Device results are checked by hand. |
+| Android devices | The emulator job runs the device tests on every push, on a software GPU. What needs a real phone, such as frame pacing and GPU cost, is checked by hand. |
 | API stability | Any 0.0.x release can change the API. Committed ABI dumps make each change visible in review, but they are not a promise. |
 
 Everything else that is open lives in [GitHub Issues](https://github.com/yuroyami/KitePlayer/issues).

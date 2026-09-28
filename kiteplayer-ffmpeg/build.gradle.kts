@@ -163,6 +163,23 @@ kotlin {
     }
 }
 
+// The browser half of wasmJsTest runs the format matrix (#59) against the codec module that the
+// kiteffmpeg web zip carries, the same one a web app unpacks beside its page.
+// karma.config.d/format-matrix.js serves it from the directory this task fills.
+val kiteffmpegWebZip = configurations.create("kiteffmpegWebZip") {
+    isCanBeConsumed = false
+    isTransitive = false
+}
+dependencies {
+    kiteffmpegWebZip("io.github.yuroyami:kiteffmpeg-wasm-js:${libs.versions.kiteffmpeg.get()}:web@zip")
+}
+val unpackKiteFFmpegWebModule =
+    tasks.register<io.github.yuroyami.kiteplayer.buildtools.UnpackZipsTask>("unpackKiteFFmpegWebModule") {
+        archives.from(kiteffmpegWebZip)
+        outputDir.set(layout.buildDirectory.dir("kiteffmpeg-web"))
+    }
+tasks.named { it == "wasmJsBrowserTest" }.configureEach { dependsOn(unpackKiteFFmpegWebModule) }
+
 // The jvm TEST runtime classpath, printed for the same reason :kiteplayer-sample-desktop prints its
 // run classpath: the Linux container that runs this suite has no Gradle to ask.
 val jvmTestFiles = kotlin.jvm().compilations.getByName("test")

@@ -674,7 +674,8 @@ jobs:
 
       # Every module that declares androidNativeX64, and the device test sources of every module
       # that has them. The other three Android native targets are arm or 32-bit, and none of them
-      # runs here.
+      # runs here. compileAndroidDeviceTest is the task that compiles; the one named
+      # compileAndroidDeviceTestSources has no dependencies and builds nothing (#305).
       - name: Build the Android native test binaries and the device test sources
         run: |
           ./gradlew --stacktrace \
@@ -682,11 +683,11 @@ jobs:
             :kiteplayer-subtitles:linkDebugTestAndroidNativeX64 \
             :kiteplayer-io:linkDebugTestAndroidNativeX64 \
             :kiteplayer-rt:linkDebugTestAndroidNativeX64 \
-            :kiteplayer-io:compileAndroidDeviceTestSources \
-            :kiteplayer-output:compileAndroidDeviceTestSources \
-            :kiteplayer-ffmpeg:compileAndroidDeviceTestSources \
-            :kiteplayer-libass:compileAndroidDeviceTestSources \
-            :kiteplayer-compose-video:compileAndroidDeviceTestSources
+            :kiteplayer-io:compileAndroidDeviceTest \
+            :kiteplayer-output:compileAndroidDeviceTest \
+            :kiteplayer-ffmpeg:compileAndroidDeviceTest \
+            :kiteplayer-libass:compileAndroidDeviceTest \
+            :kiteplayer-compose-video:compileAndroidDeviceTest
 
       - name: Wait for the emulator to finish booting
         id: boot

@@ -172,13 +172,8 @@ internal class SongMapBuilder(
         val end = minOf(coveredThrough, ownedUntilMicros)
         closeKey(end)
         // The live detector's decisions stand; a key change adds a boundary only where none lies within four seconds.
-        val merged = ArrayList(structure)
-        for (change in keyChanges) {
-            if (structure.none { abs(it.ptsMicros - change.ptsMicros) <= KEY_BOUNDARY_SPACING_MICROS }) merged += change
-        }
-        merged.sortBy { it.ptsMicros }
         return SongMapPart(end, histogram.copyOf(), readings, curve.copyOf(curveSize), curveStart ?: 0L,
-            merged, ArrayList(keys))
+            withKeyBoundaries(structure, keyChanges), ArrayList(keys))
     }
 
     /** The map so far. [scanned] names the track the scan actually decoded, when it differs. */
@@ -208,6 +203,21 @@ internal class SongMapBuilder(
         /** Audio a part analyses past the stretch it owns, because the section detector looks ahead. */
         const val LOOK_AHEAD_MICROS = 5_000_000L
     }
+}
+
+/**
+ * The structural events with the key-change boundaries that fit between them.
+ *
+ * The live detector's decisions stand. A key change adds a boundary only where no boundary lies
+ * within four seconds, and that includes the key changes already added.
+ */
+internal fun withKeyBoundaries(structure: List<AudioDetection>, keyChanges: List<AudioDetection>): List<AudioDetection> {
+    val merged = ArrayList(structure)
+    for (change in keyChanges.sortedBy { it.ptsMicros }) {
+        if (merged.none { abs(it.ptsMicros - change.ptsMicros) <= SongMapBuilder.KEY_BOUNDARY_SPACING_MICROS }) merged += change
+    }
+    merged.sortBy { it.ptsMicros }
+    return merged
 }
 
 /** One builder's share of a song map, ready to be joined with the others by [mergeSongMapParts]. */
@@ -271,7 +281,13 @@ internal fun mergeSongMapParts(parts: List<SongMapPart>, track: TrackId, complet
         // A seam that left a hole carries the last real reading across it, then the first one back.
         var last = Float.NaN
         for (index in 0 until size) {
-            if (written[index]) last = curve[index] else if (!last.isNaN()) curve[index] = last
+            if (written[index]) {
+                last = curve[index]
+            } else if (!last.isNaN()) {
+                curve[index] = last
+                // Marked, so the backward pass below fills only the cells before the first reading.
+                written[index] = true
+            }
         }
         var next = Float.NaN
         for (index in size - 1 downTo 0) {

@@ -106,4 +106,39 @@ class SongMapBuilderTest {
         }
         assertTrue(map.levelCurve.size <= 201, "one value per 100 ms, got ${map.levelCurve.size}")
     }
+
+    private fun part(firstCell: Int, cells: Int, db: Float) = SongMapPart(
+        coveredThroughMicros = (firstCell + cells) * SongMap.CURVE_STEP_MICROS,
+        histogram = IntArray(SongMapBuilder.HISTOGRAM_BINS), readings = 0,
+        curve = FloatArray(cells) { db }, curveStartMicros = firstCell * SongMap.CURVE_STEP_MICROS,
+        structure = emptyList(), keys = emptyList(),
+    )
+
+    @Test
+    fun aHoleBetweenPartsCarriesThePreviousReadingForward() {
+        val map = mergeSongMapParts(listOf(part(0, 10, -10f), part(20, 10, -30f)), TrackId(1), complete = false)
+        assertEquals(30, map.levelCurve.size)
+        for (cell in 0 until 10) assertEquals(-10f, map.levelCurve[cell], "cell $cell of the first part")
+        for (cell in 10 until 20) assertEquals(-10f, map.levelCurve[cell], "cell $cell of the hole")
+        for (cell in 20 until 30) assertEquals(-30f, map.levelCurve[cell], "cell $cell of the second part")
+    }
+
+    @Test
+    fun cellsBeforeTheFirstReadingTakeTheFirstReading() {
+        val map = mergeSongMapParts(listOf(part(5, 10, -20f)), TrackId(1), complete = false)
+        assertEquals(10, map.levelCurve.size)
+        assertTrue(map.levelCurve.all { it == -20f })
+    }
+
+    private fun boundary(seconds: Double) = AudioDetection(
+        AudioEventKind.SectionBoundary, (seconds * 1_000_000).toLong(), (seconds * 1_000_000).toLong(), 0f, 0.5f, 0f,
+    )
+
+    @Test
+    fun keyBoundariesKeepFourSecondsFromEveryOtherBoundary() {
+        val structure = listOf(boundary(30.0))
+        val changes = listOf(boundary(5.0), boundary(5.2), boundary(9.6), boundary(9.8), boundary(31.0), boundary(40.0))
+        val merged = withKeyBoundaries(structure, changes).map { it.ptsMicros / 1_000_000.0 }
+        assertEquals(listOf(5.0, 9.6, 30.0, 40.0), merged)
+    }
 }

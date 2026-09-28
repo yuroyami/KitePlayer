@@ -28,7 +28,8 @@ internal class MapVerification(private val map: SongMap) {
         sum += abs(live - mapped)
         count++
         val start = firstAt ?: at.also { firstAt = it }
-        if (at - start >= SPAN_MICROS) verdict = if (sum / count > TOLERANCE_DB) Verdict.Rejected else Verdict.Verified
+        // Written so that a mean which is not a number is rejected, not verified.
+        if (at - start >= SPAN_MICROS) verdict = if (sum / count <= TOLERANCE_DB) Verdict.Verified else Verdict.Rejected
         return verdict
     }
 

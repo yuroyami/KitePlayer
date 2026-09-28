@@ -71,6 +71,38 @@ class SongMapCodecTest {
         assertEquals(original.levelAt(350_000L), copy.levelAt(350_000L))
     }
 
+    private fun withReference(power: Double): SongMap = sample().let {
+        SongMap(it.version, it.track, it.coveredThroughMicros, it.complete, power,
+            arrayOf(it.structure(0)), arrayOf(it.key(0)), it.levelCurve, it.curveStartMicros)
+    }
+
+    @Test
+    fun aStoredReferenceThatTheAnalysisCannotUseIsACacheMiss() {
+        for (power in listOf(Double.NaN, 0.0, -1.0, Double.POSITIVE_INFINITY)) {
+            assertNull(decodeSongMap(encodeSongMap(withReference(power))), "a stored reference of $power")
+        }
+        assertNotNull(decodeSongMap(encodeSongMap(withReference(0.25))))
+    }
+
+    @Test
+    fun aStoredLevelThatIsNotANumberIsACacheMiss() {
+        val map = sample().let {
+            SongMap(it.version, it.track, it.coveredThroughMicros, it.complete, it.referencePower,
+                arrayOf(it.structure(0)), arrayOf(it.key(0)), floatArrayOf(-30f, Float.NaN, -20f), it.curveStartMicros)
+        }
+        assertNull(decodeSongMap(encodeSongMap(map)))
+    }
+
+    @Test
+    fun aStoredKeyOutsideTheOctaveIsACacheMiss() {
+        val map = sample().let {
+            SongMap(it.version, it.track, it.coveredThroughMicros, it.complete, it.referencePower,
+                arrayOf(it.structure(0)), arrayOf(KeySegment(0L, 1_000_000L, 12, KeyMode.Major, 0.5f)),
+                it.levelCurve, it.curveStartMicros)
+        }
+        assertNull(decodeSongMap(encodeSongMap(map)))
+    }
+
     @Test
     fun aPartialMapKeepsItsMissingReference() {
         val partial = SongMap(SongMap.VERSION, TrackId(0), 30_000_000L, complete = false, referencePower = null,

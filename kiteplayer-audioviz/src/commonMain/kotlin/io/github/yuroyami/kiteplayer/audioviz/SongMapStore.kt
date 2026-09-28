@@ -168,6 +168,7 @@ internal fun decodeSongMap(bytes: ByteArray): SongMap? = try {
             val curveStart = input.long()
             val curve = FloatArray(input.count()) { Float.fromBits(input.int()) }
             SongMap(version, track, coveredThrough, complete, reference, structure, keys, curve, curveStart)
+                .takeIf { it.usable() }
         }
     }
 } catch (failure: IllegalArgumentException) {
@@ -175,6 +176,26 @@ internal fun decodeSongMap(bytes: ByteArray): SongMap? = try {
     null
 } catch (failure: IndexOutOfBoundsException) {
     null
+}
+
+/**
+ * Whether every number in the map can be used. A file that decodes but holds a reference the
+ * analysis rejects, or a level that is not a number, would fail on every block or verify against
+ * nothing, so it is a cache miss like any other damaged file.
+ */
+private fun SongMap.usable(): Boolean {
+    val reference = referencePower
+    if (reference != null && !(reference.isFinite() && reference > 0.0)) return false
+    if (curveStartMicros < 0L || levelCurve.any { !it.isFinite() }) return false
+    for (index in 0 until structureCount) {
+        val detection = structure(index)
+        if (!(detection.strength.isFinite() && detection.confidence.isFinite() && detection.surprise.isFinite())) return false
+    }
+    for (index in 0 until keyCount) {
+        val key = key(index)
+        if (key.tonic !in 0..11 || !key.confidence.isFinite()) return false
+    }
+    return true
 }
 
 private class ByteWriter(capacity: Int) {

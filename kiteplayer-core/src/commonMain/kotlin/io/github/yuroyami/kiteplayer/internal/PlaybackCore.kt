@@ -5669,7 +5669,7 @@ internal class PlaybackCore(
         }
     }
 
-    /** Starts the preload once the current item is within [QueueConfig.preloadNext] of its end. */
+    /** Starts the preload once the current item is within `QueueConfig.preloadNext` of its end. */
     private fun maybeStartPreload(active: OpenSession) {
         val policy = config.queue
         if (!policy.gapless || policy.preloadNext <= Duration.ZERO) return

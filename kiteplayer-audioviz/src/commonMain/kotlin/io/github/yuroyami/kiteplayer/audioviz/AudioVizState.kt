@@ -316,11 +316,12 @@ public fun rememberAudioVizState(
     }
     DisposableEffect(player, state) {
         // Configured before a new feed attaches, because attaching starts its scanner (#289).
-        val lease = playerAudioVizSessions.acquire(player) { it.configureScan(songScan, songMapStore) }
-        state.bind(lease.feed)
+        // A player that is already closed refuses the tap. The view then shows the empty picture.
+        val lease = playerAudioVizSessions.acquireOrNull(player) { it.configureScan(songScan, songMapStore) }
+        state.bind(lease?.feed)
         onDispose {
             state.bind(null)
-            lease.close()
+            lease?.close()
         }
     }
     // A later composition with another policy or store reaches the shared feed as well.

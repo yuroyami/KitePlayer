@@ -87,6 +87,20 @@ internal class AudioVizSessions<K : Any>(
     }
 }
 
+/**
+ * Like [AudioVizSessions.acquire], but answers null when [key] refuses the feed because it is
+ * closed. A closed player throws [IllegalStateException] from every command, and a view composed
+ * after that should show the empty picture rather than crash its composition.
+ */
+internal fun <K : Any> AudioVizSessions<K>.acquireOrNull(
+    key: K,
+    configure: (AudioVizFeed) -> Unit = {},
+): AudioVizSessions.Lease? = try {
+    acquire(key, configure)
+} catch (_: IllegalStateException) {
+    null
+}
+
 internal val playerAudioVizSessions = AudioVizSessions<KitePlayer>(
     attach = { player, feed ->
         player.attachAudioTap(feed)

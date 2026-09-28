@@ -814,6 +814,9 @@ jobs:
               status=$before
               run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.ReopenDeviceTest
             fi
+            # A video queue on the GPU path: the renderer's own decoder starts at the gapless swap
+            # (#304). Its waits leave room for the graphics host's stalls.
+            run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.GaplessVideoQueueDeviceTest
           fi
           adb unroot > /dev/null || true
           exit $status

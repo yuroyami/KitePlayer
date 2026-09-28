@@ -62,7 +62,7 @@ becomes the current one.
 
 These actions drop a preload and release everything it opened:
 
-- `stop`, `open`, `openQueue`, `next`, `previous` and `close`
+- `stop`, `open`, `openQueue`, `previous` and `close`
 - every queue edit, `setShuffle` and `restoreQueueOrder`
 - `setLoop`, `setSleepTimer` and `setAbLoop`
 - a seek, which includes a change of speed or of the pitch law, and `stepFrame`
@@ -72,6 +72,10 @@ These actions drop a preload and release everything it opened:
 The item then opens the old way at the end of the current item. A preload that the caller dropped
 warns nothing, because the caller asked for the action. When the conditions above hold again, the
 player preloads again.
+
+`next` keeps a preload whose queues fill: the preloaded item becomes the current one without a
+second open, and it gets an audio device of its own, as `next` always gives. During the handoff
+itself, `next` drops the preload like the actions above.
 
 ## Handoff
 
@@ -121,7 +125,7 @@ Video frames of the old item that were still queued at the crossing are dropped.
 
 When the handoff cannot run, the player warns `PlaybackWarning.GaplessFallback` with the queue
 position of the next item and the reason. It then plays the old way: the device drains and
-stops, `Ended` fires, and the next item opens from scratch. These are the reasons:
+stops, `Ended` fires, and the next item opens with a device of its own. These are the reasons:
 
 - The preload failed to open, or a worker of the preload failed.
 - The preload was still opening or priming when the current item had written all its sound and
@@ -130,6 +134,10 @@ stops, `Ended` fires, and the next item opens from scratch. These are the reason
 - The sample rate or the channel count of the next item differs from the format that the device
   was opened for.
 - The next item has a start position.
+
+When the reason is the audio of the next item, its format or a missing track, the preload stays
+and the next item opens from it, without a second open of its source. For the other reasons the
+next item opens from scratch.
 
 After a fallback the player does not try the same two items again while the current item stays
 open.

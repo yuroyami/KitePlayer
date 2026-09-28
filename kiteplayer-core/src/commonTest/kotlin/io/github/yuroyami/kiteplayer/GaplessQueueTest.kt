@@ -148,6 +148,7 @@ class GaplessQueueTest {
         assertTrue("44100 Hz" in fallback.reason, fallback.reason)
         assertTrue(harness.runUntil(1.seconds) { harness.core.snapshots.value.status == PlaybackStatus.Playing }, "the old path plays the item")
         assertEquals(2, harness.sink.openCount, "the old path opened the device again, for the new rate")
+        assertEquals(2, harness.backend.openCalls, "and played the preloaded item without opening it again")
         harness.close()
         assertEquals(0, harness.ledger.liveCount, "nothing leaked")
     }
@@ -191,6 +192,7 @@ class GaplessQueueTest {
         harness.core.play()
         assertTrue(harness.runUntil(5.seconds) { harness.core.snapshots.value.queueIndex == 1 })
         assertTrue("no selected audio track" in harness.fallbacks().single().reason, harness.fallbacks().single().reason)
+        assertEquals(2, harness.backend.openCalls, "the old path played the preloaded item without opening it again")
         harness.close()
     }
 
@@ -400,7 +402,7 @@ class GaplessQueueTest {
     }
 
     @Test
-    fun nextDuringThePreloadOpensTheItemOnItsOwn() = runTest {
+    fun nextDuringThePreloadPlaysThePreloadedItemWithoutOpeningItAgain() = runTest {
         val harness = CoreHarness(this, script = threeSeconds)
         harness.core.openQueue(items, 0)
         harness.core.play()
@@ -408,6 +410,8 @@ class GaplessQueueTest {
         harness.core.queueNext()
         assertEquals(1, harness.core.snapshots.value.queueIndex)
         assertEquals(null, harness.core.snapshots.value.preloadedIndex)
+        assertEquals(2, harness.backend.openCalls, "the preload became the current item without a second open")
+        assertEquals(2, harness.sink.openCount, "with a device of its own, as next() always gives")
         assertEquals(emptyList(), harness.fallbacks(), "the caller asked for the move, so nothing is warned")
         harness.run(500.milliseconds)
         assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status, "the play intent carries on")

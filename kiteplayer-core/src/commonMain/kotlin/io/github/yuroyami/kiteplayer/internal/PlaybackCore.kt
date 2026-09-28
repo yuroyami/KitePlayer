@@ -2248,14 +2248,13 @@ internal class PlaybackCore(
         return requested.inWholeMicroseconds
     }
 
-    private suspend fun runOpen(command: CoreCommand.Open) {
-        traceUntilReplied(command.reply, "session", "open") { mapOf("uri" to redactUri(command.media.uri)) }
-        // Open is legal from Ended, and Ended keeps its session alive so the viewer can seek back.
-        // That session must be fully torn down and awaited BEFORE the new one is installed:
-        // overwriting the field would strand its source, workers, decoders, sink and queues live
-        // but unreachable.
-        if (session != null) teardownSession()
-        media = command.media
+    /**
+     * What every open resets for a new item, in the order [runOpen] has always reset it, ending in
+     * Opening. [epoch] is the epoch the new session's queues and decoders carry: the first one for
+     * a fresh open, and the player's own for a preload that was aligned to it (#306).
+     */
+    private fun resetForOpen(item: MediaItem, epoch: Generation) {
+        media = item
         lastChapterIndex = Int.MIN_VALUE
         markerCursorUs = NO_POSITION
         markerCursorEpoch = null
@@ -2289,7 +2288,7 @@ internal class PlaybackCore(
         // decoders and schedule started at the initial one, so handOver dropped every frame decoded,
         // both startup deadlines expired on no picture, and playback landed in Ended at position zero
         // until some later seek happened to realign it (owner report 2026-08-22).
-        requestedEpoch = Generation.Initial
+        requestedEpoch = epoch
         // For the same reason as the pending seek above: a waiting selection names a track id from
         // the PREVIOUS media's table, and running it against the new file would rebuild the wrong
         // stream or silently change nothing and report success.
@@ -2306,6 +2305,16 @@ internal class PlaybackCore(
         stillImageShownSinceNanos = 0
         openedAtNanos = clock.nanos()
         setStatus(PlaybackStatus.Opening)
+    }
+
+    private suspend fun runOpen(command: CoreCommand.Open) {
+        traceUntilReplied(command.reply, "session", "open") { mapOf("uri" to redactUri(command.media.uri)) }
+        // Open is legal from Ended, and Ended keeps its session alive so the viewer can seek back.
+        // That session must be fully torn down and awaited BEFORE the new one is installed:
+        // overwriting the field would strand its source, workers, decoders, sink and queues live
+        // but unreachable.
+        if (session != null) teardownSession()
+        resetForOpen(command.media, Generation.Initial)
         try {
             // The subtitle files are read FIRST, because whether one of them loads decides whether
             // the container's own subtitle stream should be selected at all. A file flagged
@@ -5259,7 +5268,7 @@ internal class PlaybackCore(
 
         // A preload owns this item's end: the next item's sound follows its last sample, and a
         // fallback hands the end back to the lines below. See handleQueueHandoff.
-        if (pendingNext != null) {
+        if (pendingNext?.coldOnly == false) {
             wakeIn(WORKER_POLL)
             return
         }
@@ -5529,7 +5538,12 @@ internal class PlaybackCore(
         queueIndex = next
         openCarriesPlay = true
         try {
-            runOpen(CoreCommand.Open(queueItems[next], CompletableDeferred()))
+            val primed = primedFor(next)
+            if (primed != null) {
+                runOpenPrepared(primed, CompletableDeferred())
+            } else {
+                runOpen(CoreCommand.Open(queueItems[next], CompletableDeferred()))
+            }
         } finally {
             openCarriesPlay = false
         }
@@ -5566,6 +5580,13 @@ internal class PlaybackCore(
 
         /** True once the item's feeder writes into the current item's ring. */
         var handedOff: Boolean = false
+
+        /**
+         * True when this item cannot take the current item's ring, so it follows the old way: the
+         * current item ends and stops its device, and this item opens from the preload with a
+         * device of its own (#306).
+         */
+        var coldOnly: Boolean = false
     }
 
     private class PreparedNext(
@@ -5638,6 +5659,8 @@ internal class PlaybackCore(
             return
         }
         val prepared = next.prepared ?: adoptPreload(next, active) ?: return
+        // The old path owns the end of the current item; handleQueueAdvance opens this one.
+        if (next.coldOnly) return
         if (!next.handedOff) {
             if (!currentAudioFinished(active)) {
                 // With every packet decoded, the last sample is at most a ring depth and a few
@@ -5748,8 +5771,11 @@ internal class PlaybackCore(
         next.prepared = prepared
         val incoming = prepared.session
         handoffRefusal(active, incoming)?.let { refusal ->
-            dropPending(refusal)
-            return null
+            // The item is fine and only the ring does not fit it, so the old path plays it from
+            // here rather than opening it again (#306).
+            gaplessRefused = active.token to next.index
+            warn(PlaybackWarning.GaplessFallback(next.index, refusal))
+            next.coldOnly = true
         }
         // Aligned to the epoch the player is at, as a rebuild is: fresh decoders stamp the first
         // epoch, and the workers would drop everything they produced.
@@ -5859,12 +5885,103 @@ internal class PlaybackCore(
         // written. What follows comes from somewhere else, so they hear that first, and the next
         // item's blocks arrive under a generation of their own.
         tapsDiscontinuous(active = incoming)
+        launchFeeder(incoming)
+        next.handedOff = true
+        return true
+    }
+
+    /** Starts a preloaded item's audio feeder, which the preload left for the handoff or the open. */
+    private fun launchFeeder(incoming: OpenSession) {
         val worker = Worker(AUDIO_FEED_WORKER)
         incoming.audioFeedWorker = worker
         worker.release(requestedEpoch)
         incoming.jobs += launchWorker(incoming, worker, dispatchers.audioFeed) { runAudioFeed(incoming, worker) }
-        next.handedOff = true
-        return true
+    }
+
+    /** The preload of queue position [index] when its workers run and no handoff has started, or null. */
+    private fun primedFor(index: Int?): PendingNext? =
+        pendingNext?.takeIf { index != null && it.index == index && it.prepared != null && !it.handedOff }
+
+    /**
+     * Opens a primed preload as the current item without opening it again (#306). The item before
+     * it closes as an open closes it, and the preload gets an audio device of its own, opened for
+     * its format. Like [runOpen], it ends paused on the item's first frame.
+     */
+    private suspend fun runOpenPrepared(next: PendingNext, reply: CompletableDeferred<Unit>) {
+        traceUntilReplied(reply, "session", "open") { mapOf("uri" to redactUri(next.item.uri)) }
+        val prepared = next.prepared ?: error("runOpenPrepared needs a primed preload")
+        val incoming = prepared.session
+        // Adopted, not dropped: the teardown below must leave it alone.
+        pendingNext = null
+        if (session != null) teardownSession()
+        // The preload's queues and decoders carry the epoch the player is at, so the open keeps it.
+        resetForOpen(next.item, requestedEpoch)
+        try {
+            session = incoming
+            incoming.preloading.value = false
+            incoming.videoParked.value = !videoEnabled
+            tracks = next.build.tracks
+            openStage = OpenStage.Output
+            openAudioPathFor(incoming)
+            openStage = OpenStage.Assembly
+            tapsDiscontinuous(active = incoming)
+            startAudioEventCollector(incoming)
+            if (incoming.audioQueues.isNotEmpty()) launchFeeder(incoming)
+            if (incoming.videoDecoderDeferred) startDeferredVideo(incoming)
+            startVideoSchedule(incoming, SCHEDULER_IDLE)
+            next.build.warnings.release()
+            next.build.events.forEach(::emitEvent)
+            reportFirstFrame(incoming, "open")
+            if (preempted()) {
+                teardownSession()
+                reply.completeExceptionally(preemptedByTeardown("open"))
+                return
+            }
+            adoptExternalSubtitles(next.item, prepared.externals)
+            prepared.externals
+                .firstOrNull { track -> next.item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true }
+                ?.let { applyExternalSubtitle(it.id) }
+            refreshTypesetting()
+            setStatus(PlaybackStatus.Paused)
+            emitEvent(PlayerEvent.Opened(next.item, tracks))
+            reply.complete(Unit)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            val error = classify(failure, next.item)
+            teardownSession()
+            fail(error)
+            reply.completeExceptionally(PlaybackException(error))
+        }
+    }
+
+    /** Opens an audio device for the selected audio lane of [target], as an open's output stage does. */
+    private suspend fun openAudioPathFor(target: OpenSession) {
+        val lane = target.audioLane ?: return
+        val createdSink = output.audioSink.create()
+        val playback = newAudioPlayback(createdSink)
+        try {
+            // Before open, which captures the wanted rate as the fresh path's epoch.
+            playback.speed = speed
+            playback.preservePitch = preservePitch
+            val negotiated = playback.open(lane.decoder.outputFormat)
+            playback.volume = volume
+            playback.setDuckLevel(duckLevel)
+            playback.muted = muted
+            playback.replayGain = replayGainFor(lane.stream, target.source.metadata)
+            playback.balance = balance
+            playback.equalizer = equalizer
+            target.audio = playback
+            target.sink = createdSink
+            target.negotiatedFormat = negotiated
+            target.deviceRequest = lane.decoder.outputFormat
+            target.ownsAudio = true
+            emitEvent(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
+        } catch (failure: Throwable) {
+            // The playback owns the sink it was given, so its close covers both.
+            playback.close()
+            throw failure
+        }
     }
 
     /**
@@ -5967,12 +6084,18 @@ internal class PlaybackCore(
         incoming.jobs += launchWorker(incoming, worker, dispatchers.videoDecode) { runVideoDecode(incoming, worker) }
     }
 
-    /** The preloaded item's video schedule, started at the swap. A paused player gets one frame. */
-    private fun startVideoSchedule(incoming: OpenSession) {
+    /**
+     * The preloaded item's video schedule. At the swap a playing player runs it and a paused one
+     * gets one frame; an open passes [mode] idle and presents its first frame itself.
+     */
+    private fun startVideoSchedule(
+        incoming: OpenSession,
+        mode: Int = if (status == PlaybackStatus.Playing) SCHEDULER_RUNNING else SCHEDULER_ONE_FRAME,
+    ) {
         if (incoming.videoQueue == null || incoming.videoDecoder == null || incoming.video == null) return
         val worker = Worker(VIDEO_SCHEDULE_WORKER)
         incoming.videoScheduler = worker
-        incoming.schedulerMode.value = if (status == PlaybackStatus.Playing) SCHEDULER_RUNNING else SCHEDULER_ONE_FRAME
+        incoming.schedulerMode.value = mode
         worker.release(requestedEpoch)
         incoming.jobs += launchWorker(incoming, worker, dispatchers.videoSchedule) { runVideoSchedule(incoming, worker) }
     }
@@ -6037,7 +6160,8 @@ internal class PlaybackCore(
 
     /** The actions that change what follows the current item, or where it plays. See docs/gapless-queue.md. */
     private fun dropsPreload(command: CoreCommand): Boolean = when (command) {
-        is CoreCommand.Open, is CoreCommand.OpenQueue, is CoreCommand.QueueNext, is CoreCommand.QueuePrevious,
+        is CoreCommand.QueueNext -> primedFor(neighbourInOrder(1)) == null
+        is CoreCommand.Open, is CoreCommand.OpenQueue, is CoreCommand.QueuePrevious,
         is CoreCommand.EditQueue, is CoreCommand.SetShuffle, is CoreCommand.RestoreQueueOrder,
         is CoreCommand.Seek, is CoreCommand.SeekLater, is CoreCommand.Stop, is CoreCommand.Close,
         is CoreCommand.SelectTrack, is CoreCommand.SelectSecondarySubtitle,
@@ -6239,7 +6363,8 @@ internal class PlaybackCore(
         queueIndex = target
         openCarriesPlay = wasPlaying
         try {
-            runOpen(CoreCommand.Open(queueItems[target], reply))
+            val primed = primedFor(target)
+            if (primed != null) runOpenPrepared(primed, reply) else runOpen(CoreCommand.Open(queueItems[target], reply))
         } finally {
             openCarriesPlay = false
         }

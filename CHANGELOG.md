@@ -19,7 +19,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `PlayerConfig` gains `queue`, a `QueueConfig`: `QueueConfig(gapless = false)` keeps the old path.
   `PlayerSnapshot` gains `preloadedIndex`. Both change the generated data-class methods, so
   recompile. `PlaybackWarning` gains `GaplessFallback`, which says when an item opened the old way
-  and why, so a `when` that lists every warning needs the new branch. `docs/gapless-queue.md` has
+  and why, so a `when` that lists every warning needs the new branch. On Android a video item
+  follows too: its decoder starts at the join, so the picture holds its last frame for a moment
+  (#304). `next()` near the end of an item, and the old path after a fallback for the audio
+  format, play the preloaded item without opening it again (#306). `docs/gapless-queue.md` has
   the design (#75).
 - A seek that was queued while an item reached its end now runs before the end is declared. The
   queue could move to the next item and drop the seek.

@@ -49,9 +49,11 @@ composition does not start a worker. A retained diagnostic object does not retai
 the session closes.
 
 The tap copies into a preallocated single-producer/single-consumer pool and signals one analysis
-coroutine. The defaults reserve 256 KiB of sample storage (16 slots of 4096 floats), with a separate
+coroutine. The defaults reserve 640 KiB of sample storage (40 slots of 4096 floats), with a separate
 250 ms bound on queued source-audio duration. Both limits include the slot currently being read by
-the worker. These are media durations, not a promise about wall-clock latency at every playback
+the worker. A block longer than the 250 ms bound is accepted when nothing is queued, because decoders
+may return frames of half a second or more. The storage then limits it: about 1.8 seconds of
+44.1 kHz stereo. Behind queued audio the 250 ms bound holds. These are media durations, not a promise about wall-clock latency at every playback
 rate. Pool accounting excludes metadata, feature snapshots and analyser working storage.
 
 An input block is accepted in full or dropped in full. No queued or consumer-owned slot can be

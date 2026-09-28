@@ -43,6 +43,21 @@ class AudioVizFeedTest {
     }
 
     @Test
+    fun `decoder blocks of half a second reach the timeline`() {
+        val feed = feed()
+        val format = AudioFormat(44_100, 2, SampleFormat.F32)
+        val block = FloatArray(22_050 * 2) { 0.3f }
+        repeat(6) {
+            feed.onAudio(Pts(it * 500_000L), block, 22_050, format)
+            worker.runAll()
+        }
+        assertEquals(0L, feed.stats.droppedBlocks, "half a second blocks must not be dropped")
+        assertEquals(6L, feed.stats.copiedBlocks)
+        assertTrue(feed.stats.publishedAnalyses > 100L, "analyses were published: ${feed.stats.publishedAnalyses}")
+        assertTrue(assertNotNull(feed.timeline.newest()).level > 0f)
+    }
+
+    @Test
     fun `a stalled worker drops visual blocks and recovers with a new local revision`() {
         val feed = feed(AudioPcmQueue(capacity = 2))
         hear(feed, 0L, 0.2f)

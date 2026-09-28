@@ -8,7 +8,7 @@ import kotlin.concurrent.atomics.AtomicLong
 
 /** Preallocated single-producer/single-consumer PCM storage. A peeked slot stays owned until release. */
 internal class AudioPcmQueue(
-    val capacity: Int = 16,
+    val capacity: Int = 40,
     val samplesPerSlot: Int = 4096,
     val maxQueuedNanos: Long = 250_000_000L,
 ) {
@@ -59,7 +59,10 @@ internal class AudioPcmQueue(
         if (needed > capacity - (end - consumed.load())) return Offer.Full
         val baseNanos = producedNanos.load()
         val duration = frames * 1_000_000_000L / format.sampleRate
-        if (duration > maxQueuedNanos - (baseNanos - releasedNanos.load())) return Offer.TooMuchTime
+        // A block longer than the time bound is accepted when nothing is queued, because it would
+        // never fit otherwise. The storage still limits its size. Behind queued audio, the bound holds.
+        val queuedNanos = baseNanos - releasedNanos.load()
+        if (queuedNanos + duration > maxOf(maxQueuedNanos, duration)) return Offer.TooMuchTime
 
         var offset = 0
         var sequence = end

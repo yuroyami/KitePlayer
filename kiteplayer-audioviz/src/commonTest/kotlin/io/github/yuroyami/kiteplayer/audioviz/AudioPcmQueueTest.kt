@@ -71,6 +71,19 @@ class AudioPcmQueueTest {
     }
 
     @Test
+    fun `a block longer than the time budget is accepted when nothing is queued`() {
+        val queue = AudioPcmQueue(capacity = 8, samplesPerSlot = 1024, maxQueuedNanos = 20_000_000L)
+        val format = AudioFormat(8_000, 1, SampleFormat.F32)
+        val data = FloatArray(800)
+        // 100 ms against a 20 ms budget: it fits the storage, so an empty queue takes it.
+        assertEquals(AudioPcmQueue.Offer.Accepted, queue.offer(Generation.Initial, 0, 0, data, 800, format))
+        // The budget still holds behind queued audio.
+        assertEquals(AudioPcmQueue.Offer.TooMuchTime, queue.offer(Generation.Initial, 0, 0, data, 80, format))
+        queue.release(assertNotNull(queue.peek()))
+        assertEquals(AudioPcmQueue.Offer.Accepted, queue.offer(Generation.Initial, 0, 0, data, 80, format))
+    }
+
+    @Test
     fun `oversize blocks are rejected whole and invalid sizes cannot overflow`() {
         val queue = AudioPcmQueue(capacity = 2, samplesPerSlot = 8)
         assertEquals(AudioPcmQueue.Offer.Full, queue.offer(Generation.Initial, 0, 0, FloatArray(24), 12, stereo))

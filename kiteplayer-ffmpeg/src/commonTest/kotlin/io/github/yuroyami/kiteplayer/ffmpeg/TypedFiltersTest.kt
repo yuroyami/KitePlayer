@@ -21,10 +21,10 @@ class TypedFiltersTest {
         val item = MediaItem("clip.mp4").withVideoFilter(
             videoFilters {
                 scale(1280, 720)
-                eq(brightness = 0.1)
+                crop(640, 360)
             },
         )
-        assertEquals("scale=1280:720,eq=brightness=0.1", item.videoFilter)
+        assertEquals("scale=1280:720,crop=640:360", item.videoFilter)
     }
 
     @Test

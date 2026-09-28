@@ -274,8 +274,15 @@ that decision.
 
 `AudioVizState.reducedMotion` keeps the spectrum, the colours and the shapes, and damps what throws
 the picture about: the camera's punch, shake, roll and cuts, the trail's swim, and the flash limit
-drops to none at all. Every change of drawing becomes a plain fade. The camera still wanders
-slowly, because a still picture with a moving spectrum in it reads as broken rather than as calm.
+drops to none at all. Every change of drawing becomes a plain fade, even when a caller has set a
+preferred way, except that a preferred way other than the strobe still wins. The strobe is never
+used. The camera still wanders slowly, because a still picture with a moving spectrum in it reads as
+broken rather than as calm.
+
+The reading a drawing sees is slowed down: its smooth values glide to each new frame over half a
+second. The waveform, the power spectrum, the hits, the delivered events and the pause stay those
+of the newest frame, so a drawing that draws the spectrum still follows the music and a pause still
+stops the picture.
 
 It also holds back the hits themselves, to about a third of their strength. Without that the
 setting kept none of its promise about flashes: a drawing flashes mostly through what it draws on a

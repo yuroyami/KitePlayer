@@ -5956,8 +5956,11 @@ internal class PlaybackCore(
         }
         val prepared = next.prepared
         when {
-            prepared == null && next.job.isCompleted ->
+            // A build the player's own cancellation stopped released what it opened, and awaiting
+            // it would throw into the teardown that is running now.
+            prepared == null && next.job.isCompleted -> if (!next.job.isCancelled) {
                 next.job.await().getOrNull()?.session?.let { releaseSession(it) }
+            }
             prepared == null -> {
                 // Still opening: its own rollback releases what it opened.
                 next.job.cancel()

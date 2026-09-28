@@ -6,10 +6,12 @@ import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
@@ -101,9 +103,10 @@ class GaplessQueueTest {
         harness.core.openQueue(items, 0)
         harness.core.play()
         assertTrue(harness.runUntil(4.seconds) { harness.core.snapshots.value.queueIndex == 1 })
-        val before = harness.renderer!!.count
+        val renderer = assertNotNull(harness.renderer)
+        val before = renderer.count
         harness.run(1.seconds)
-        assertTrue(harness.renderer!!.count > before + 10, "the second item's pictures present after the swap")
+        assertTrue(renderer.count > before + 10, "the second item's pictures present after the swap")
         assertEquals(1, harness.sink.openCount, "the device opened once")
         assertEquals(emptyList(), harness.fallbacks())
         harness.close()
@@ -428,6 +431,25 @@ class GaplessQueueTest {
         val before = heard.take(lastBreak).filter { it.startsWith("audio") }.map { it.split(" ")[2].toLong() }
         assertTrue(before.last() > 2_900_000, "the current item's last block came before the break: ${before.takeLast(3)}")
         harness.close()
+    }
+
+    @Test
+    fun cancellingThePlayerDuringAPreloadStillReleasesTheCurrentItem() = runTest {
+        val parent = Job(backgroundScope.coroutineContext[Job])
+        val harness = CoreHarness(this, script = threeSeconds, parent = parent)
+        harness.core.openQueue(items, 0)
+        // The preload's open waits here, so the cancellation meets a build still in flight.
+        val gate = CompletableDeferred<Unit>()
+        harness.backend.openGate = gate
+        harness.core.play()
+        assertTrue(harness.runUntil(3.seconds) { harness.backend.openCalls == 2 }, "the preload started its open")
+        parent.cancel()
+        harness.run(100.milliseconds)
+        gate.complete(Unit)
+        harness.run(100.milliseconds)
+        assertEquals(0, harness.ledger.liveCount, "the current item was released")
+        assertTrue(harness.sink.closed, "and the device closed")
+        harness.stopDevice()
     }
 
     /** Frames one scripted item delivers: whole decoder buffers covering its duration. */

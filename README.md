@@ -330,6 +330,12 @@ player never moves to another device: when its device is gone, the open fails wi
 `PlaybackError.AudioDeviceUnavailable`. On macOS the player also fails with that error when the
 device disappears during playback. On Android and iOS the operating system owns the route.
 
+The Android, iOS and desktop views, and both paths of `KitePlayerVideo`, tell a screen reader that
+they are the video and what the player is doing, for example "Playing, 1:23 of 4:56".
+`accessibilityVideoLabel` and `accessibilityStateFormat` take translated words, on the views and
+on the composables. `KiteVideo`, the bare canvas, gets its semantics from the modifier you pass. On
+the web, the page owns the canvas and labels it.
+
 Anything the player cannot do is refused with a typed error, never accepted and ignored. Two
 players in one process work and are tested.
 

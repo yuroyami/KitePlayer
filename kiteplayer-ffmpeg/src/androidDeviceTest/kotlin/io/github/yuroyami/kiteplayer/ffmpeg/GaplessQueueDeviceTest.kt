@@ -85,7 +85,9 @@ internal class GaplessQueueDeviceTest {
             val flac = MediaItem("$mediaDir/audio-flac.flac")
             withTimeout(30_000) { player.openQueue(listOf(flac, flac)) }
             player.play()
-            waitFor(20.seconds) { player.state.value.queueIndex == 1 && player.position() >= 1.seconds }
+            // Seven seconds of playback, with room for the emulator's graphics host, which freezes
+            // the whole system for 15 to 17 seconds now and then (#301).
+            waitFor(40.seconds) { player.state.value.queueIndex == 1 && player.position() >= 1.seconds }
             // One stats interval, so the reading below covers the join.
             delay(150)
             println("GAPLESS DEVICE underruns=${player.stats.value.audioUnderruns} warnings=${player.warningHistory().map { it.warning }}")

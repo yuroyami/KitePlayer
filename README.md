@@ -337,6 +337,11 @@ point includes it. You do not build a resolver or a Ktor client.
 
 - Android and the JVM use OkHttp with the platform trust store. Apple uses NSURLSession. The
   browser uses its own HTTP stack.
+- In a browser, network media does not play yet. The web player reads only bytes that are already
+  in memory, because a read cannot wait on the page's thread, and a network read always waits.
+  Fetch the file and play it from memory with `MediaItem.from(MediaIo.ofBytes(bytes), name)`.
+  Network playback in the browser waits for a web worker, where a read may wait
+  ([#100](https://github.com/yuroyami/KitePlayer/issues/100)).
 - The Android artifact declares the `INTERNET` permission for you. Cleartext HTTP follows your
   app's own policy.
 - Order of precedence: the item's own `io` source, then a resolver you set in
@@ -474,7 +479,7 @@ What runs on each target, and where:
 | Windows x64, native | CI runs the tests of core, subtitles, output, rt, libass and `kiteplayer`. The FFmpeg backend is only linked. |
 | Windows x64, desktop JVM | The native library is linked. Nothing has run. |
 | tvOS and watchOS | Only core, subtitles, io and rt have these targets. CI runs their tests on both simulators. |
-| Web, wasmJs | Plays through the FFmpeg Wasm module with browser audio. Load `KiteFFmpegWeb` before creating a player. CI runs the web tests of core, subtitles, output, network, libass, ffmpeg and `kiteplayer` under Node and in a headless browser. The browser half runs the format matrix too, and the rows the Wasm build carries must play. This is not broad browser qualification. |
+| Web, wasmJs | Plays through the FFmpeg Wasm module with browser audio. Load `KiteFFmpegWeb` before creating a player. It plays media from memory, not from the network yet. CI runs the web tests of core, subtitles, output, network, libass, ffmpeg and `kiteplayer` under Node and in a headless browser. The browser half runs the format matrix too, and the rows the Wasm build carries must play. This is not broad browser qualification. |
 | iOS x64, Android native | Compile only. |
 | JavaScript, js | The facade reports unavailable. |
 
@@ -495,7 +500,7 @@ and what happened.
 
 | Topic | What to expect |
 |---|---|
-| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache. `Dash.mediaItemFor` in `kiteplayer-network` plays one representation of an on-demand DASH manifest, with no bitrate switching. HLS, live DASH and a persistent cache do not work. |
+| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere but the browser. `Dash.mediaItemFor` in `kiteplayer-network` plays one representation of an on-demand DASH manifest, with no bitrate switching. HLS, live DASH and a persistent cache do not work. |
 | Native Linux and Windows | There is no audio output and no HTTPS, so `createOrNull()` returns null. Pass your own `OutputBackend` to `KitePlayer.create`, or use the desktop JVM target. |
 | Desktop JVM sound | Played on macOS only. Linux and Windows have not played audio on a real device. |
 | AV1 on the web | There is no software AV1, because the Wasm build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |

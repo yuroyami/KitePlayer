@@ -12,6 +12,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Upgrading
 
+- `PlayerConfig` gains `queue`, a `QueueConfig`, and `PlayerSnapshot` gains `preloadedIndex`.
+  Both change the generated data-class methods, so recompile. `PlaybackWarning` gains
+  `GaplessFallback`, so a `when` that lists every warning needs the new branch. The design is in
+  `docs/gapless-queue.md` (#75).
 - Swift and Objective-C: every `KitePlayer` call that can fail now declares `@Throws`, so a
   failure arrives as an error instead of ending the app (#204). The suspend calls convert any
   `Exception`. The setters, `play`, `pause`, `seekLater` and the renderer and tap calls throw on a

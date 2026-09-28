@@ -46,9 +46,15 @@ class WarningAuditTest {
         PlaybackWarning.AudioTapFailed("x"),
         PlaybackWarning.RecordingStopped("x.mkv", "x"),
         PlaybackWarning.SourceReconnecting(1_024, 1, "x"),
+        PlaybackWarning.GaplessFallback(1, "x"),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
+        is PlaybackWarning.GaplessFallback -> listOf(
+            "PlaybackCore's queue handoff, when the next item cannot follow the current one without a " +
+                "gap: its preload failed or was not ready, an item has no audio, its audio format differs, " +
+                "it needs the renderer's own video decoder, or it has a start position",
+        )
         is PlaybackWarning.SourceReconnecting -> listOf(
             "KtorMediaIo.read in :kiteplayer-network, before each reconnect after a failed read, a read " +
                 "timeout or a response that ended early; it reaches the player through MediaIo.setWarningSink, " +

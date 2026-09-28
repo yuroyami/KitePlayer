@@ -135,6 +135,11 @@ public data class PlayerSnapshot(
      * headphones coming out reads this, not [status] alone.
      */
     val playRequested: Boolean = false,
+    /**
+     * The position in [queue] of the next item while it is open in the background for the
+     * gapless handoff, or null. See [QueueConfig].
+     */
+    val preloadedIndex: Int? = null,
 )
 
 /**

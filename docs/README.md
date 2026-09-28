@@ -14,6 +14,8 @@ installation and everyday use.
   read, and which limit bounds each wait.
 - [Subtitle placement](subtitle-placement.md): where subtitles land, on every renderer and with
   both subtitle engines.
+- [Gapless queue playback](gapless-queue.md): how a queue moves to its next item without a
+  silence, and when it opens the item from scratch instead.
 
 ## Audio visualiser
 

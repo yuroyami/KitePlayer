@@ -562,4 +562,13 @@ public sealed class PlaybackWarning {
     public data class RecordingStopped(val path: String, val reason: String) : PlaybackWarning() {
         override val message: String get() = "the recording to $path stopped: $reason"
     }
+
+    /**
+     * The queue item at [index] did not follow the one before it without a gap. The device
+     * stopped at the end of that item, and this one opened from scratch, as it does with
+     * [QueueConfig.gapless] off. [reason] names what stopped the gapless handoff.
+     */
+    public data class GaplessFallback(val index: Int, val reason: String) : PlaybackWarning() {
+        override val message: String get() = "queue item $index opened without the gapless handoff: $reason"
+    }
 }

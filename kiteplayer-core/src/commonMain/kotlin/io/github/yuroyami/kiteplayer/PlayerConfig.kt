@@ -73,6 +73,8 @@ public data class PlayerConfig(
      * decodes in software, like any stream with a video filter.
      */
     val deinterlace: DeinterlacePolicy = DeinterlacePolicy.Auto,
+    /** How a queue moves from one item to the next, including the gapless handoff. See [QueueConfig]. */
+    val queue: QueueConfig = QueueConfig(),
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive
@@ -205,6 +207,33 @@ public data class BufferPolicy(
         require(videoFrameQueue >= 2) { "videoFrameQueue must hold at least two frames, was $videoFrameQueue" }
         // Zero would end every session on its first read.
         require(stallTimeout > Duration.ZERO) { "stallTimeout must be positive, was $stallTimeout" }
+    }
+}
+
+/**
+ * How the player moves from one queue item to the next. See `docs/gapless-queue.md`.
+ *
+ * With the defaults the next item opens in the background five seconds before the current one
+ * ends, and its sound follows the last sample of the current item on the same audio device, with
+ * no silence between them. [PlaybackWarning.GaplessFallback] says when an item opened the old way.
+ */
+public data class QueueConfig(
+    /**
+     * Open and prime the next item this long before the current one ends, for the gapless
+     * handoff. Zero turns preloading off, and with it the handoff.
+     */
+    val preloadNext: Duration = 5.seconds,
+    /**
+     * Hand the audio device from one item to the next without stopping it. Needs [preloadNext]
+     * above zero. False keeps the old path for every item and preloads nothing: the device stops
+     * at the end of an item, and the next item opens from scratch.
+     */
+    val gapless: Boolean = true,
+) {
+    init {
+        require(!preloadNext.isNegative() && preloadNext.isFinite()) {
+            "preloadNext must be zero or a finite positive duration, was $preloadNext"
+        }
     }
 }
 

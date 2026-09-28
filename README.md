@@ -162,8 +162,9 @@ WebAssembly modules. Each comes as a `web` zip beside its artifact on Maven Cent
    instantiate the module from a plain `<script type="module">` and pass it to
    `KiteFFmpegWeb.attach()` instead.
 
-Serve `.mjs` as `text/javascript` and `.wasm` as `application/wasm`. The page needs no
-cross-origin isolation headers, because both modules are single-threaded. A browser starts audio
+Serve `.mjs` as `text/javascript` and `.wasm` as `application/wasm`. With gzip on, the codec
+module is about 1.42 MiB to download, and CI holds it to that. The page needs no cross-origin
+isolation headers, because both modules are single-threaded. A browser starts audio
 only after the user interacts with the page, so the position stays at zero until then. Network
 media does not play in the browser yet, so play files from memory, as [Network](#network) says.
 

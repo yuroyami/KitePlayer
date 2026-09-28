@@ -1268,6 +1268,10 @@ jobs:
       - name: wasmJs tests, network (node and browser)
         run: ./gradlew --stacktrace :kiteplayer-network:wasmJsTest
 
+      # The codec module a web page downloads, gzipped, held to its budget (#58).
+      - name: The web codec module's size
+        run: ./scripts/check-web-size.sh
+
       # The browser matrix cannot write a file, so it prints its conformance table into the test
       # result. This copies the table from there into the run summary, beside the macOS one, and
       # into the log, which a reader who is not signed in can see.

@@ -20,7 +20,12 @@ import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.runBlocking
 import platform.CoreGraphics.CGRectMake
+import platform.Foundation.NSDate
+import platform.Foundation.NSRunLoop
+import platform.Foundation.dateWithTimeIntervalSinceNow
+import platform.Foundation.runUntilDate
 import platform.UIKit.UIWindow
 import platform.UIKit.accessibilityLabel
 import platform.UIKit.accessibilityValue
@@ -29,6 +34,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * Driven against real UIKit objects in the simulator.
@@ -110,6 +117,29 @@ class KitePlayerUIViewTest {
         assertEquals("Vídeo", view.accessibilityLabel)
         assertEquals("Sin contenido", view.accessibilityValue)
         view.release()
+    }
+
+    /** The application no longer has to tell the view: it follows the status while in a window (#307). */
+    @Test
+    fun `VoiceOver hears a status change without the application asking`() {
+        val window = UIWindow(frame = CGRectMake(0.0, 0.0, 320.0, 240.0))
+        val view = KitePlayerUIView()
+        view.rendererFactory = ApplePlayerViewRendererFactory { _, _, _ -> FakeRenderer() }
+        window.addSubview(view)
+        val player = player()
+        view.player = player
+        assertEquals("No media", view.accessibilityValue)
+
+        // The backend refuses every open, so the status moves on to Failed.
+        runBlocking { runCatching { player.open(MediaItem("refused.mp4")) } }
+        // The view follows the player on the main queue, which runs only while the run loop turns.
+        val deadline = TimeSource.Monotonic.markNow() + 5.seconds
+        while (view.accessibilityValue != "Failed" && deadline.hasNotPassedNow()) {
+            NSRunLoop.mainRunLoop.runUntilDate(NSDate.dateWithTimeIntervalSinceNow(0.02))
+        }
+        assertEquals("Failed", view.accessibilityValue)
+        view.release()
+        window.hidden = true
     }
 }
 

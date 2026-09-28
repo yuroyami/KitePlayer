@@ -36,6 +36,8 @@ kotlin {
         commonMain.dependencies {
             api(project(":kiteplayer-compose-interop"))
             api(project(":kiteplayer-compose-video"))
+            // The screen reader wording, shared with the platform views.
+            implementation(project(":kiteplayer-view"))
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
@@ -43,6 +45,9 @@ kotlin {
         jvmTest.dependencies {
             // Skia's native library, which a headless Compose scene needs to draw.
             implementation(compose.desktop.currentOs)
+            // The semantics tree, which is what a screen reader reads. Test scope only.
+            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
         }
     }
 }

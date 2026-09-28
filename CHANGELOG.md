@@ -31,6 +31,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   went silent and stayed Playing. A bound player also no longer reports changes of the system
   default output, which it does not follow. `AudioSinkEvent` gains `Failed`, which a sink sends
   when it cannot play again, so a `when` that lists every event needs the new branch (#93).
+- A screen reader now finds the video on the Compose canvas path of `KitePlayerVideo`: it says
+  "Video", and its state reads as the platform views' state does, for example "Playing, 1:23 of
+  4:56". `KitePlayerView` and `KitePlayerUIView` now update that state by themselves when the
+  player's status or duration changes, while they are on screen. Before, the state stayed as it
+  was when the player was set, unless the application called `updateAccessibilityState()`. None
+  of them follows the position on every tick, so a screen reader does not speak continuously
+  (#307).
 - Swift and Objective-C: every `KitePlayer` call that can fail now declares `@Throws`, so a
   failure arrives as an error instead of ending the app (#204). The suspend calls convert any
   `Exception`. The setters, `play`, `pause`, `seekLater` and the renderer and tap calls throw on a

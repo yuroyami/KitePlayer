@@ -126,6 +126,7 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         set(value) {
             field = value
             binding.setPlayer(value)
+            updateAccessibilityState()
             watchPlayer()
         }
 
@@ -144,7 +145,10 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
 
     private val displayAwake = DisplayAwakeHolder(hold = IdleTimerHolds::acquire, release = IdleTimerHolds::release)
 
-    /** Follows the player's state for the display hold, only while this view is in a window and paired. */
+    /**
+     * Follows the player's state for the display hold and for what VoiceOver hears, only while this
+     * view is in a window and paired.
+     */
     private var stateWatch: Job? = null
 
     private fun watchPlayer() {
@@ -157,7 +161,16 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         }
         displayAwake.playing = playsVideo(watched.state.value)
         stateWatch = CoroutineScope(Dispatchers.Main).launch {
-            watched.state.collect { displayAwake.playing = playsVideo(it) }
+            var announced: Pair<PlaybackStatus, Duration?>? = null
+            watched.state.collect { snapshot ->
+                displayAwake.playing = playsVideo(snapshot)
+                // The status and the duration, never the position; see updateAccessibilityState.
+                val heard = snapshot.status to snapshot.duration
+                if (heard != announced) {
+                    announced = heard
+                    updateAccessibilityState()
+                }
+            }
         }
     }
 
@@ -181,9 +194,11 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
     /**
      * Re-reads what VoiceOver should say about the player and sets it as this view's value.
      *
-     * Not wired to a flow here, for the reason the Android view gives: this view owns no scope,
-     * and one started for a label would outlive the pairing. The text is a pure function shared
-     * with every other view, so an application updating its own controls calls this beside them.
+     * This view calls it when the player is assigned, and while it is in a window, each time the
+     * player's status or duration changes. It does not follow the position, because a value that
+     * changed on every tick would make VoiceOver speak continuously. So the position read out is
+     * the one from the last change. An application that wants a fresh position, for example after
+     * a seek, calls this beside its own controls.
      */
     public fun updateAccessibilityState() {
         val snapshot = player?.state?.value

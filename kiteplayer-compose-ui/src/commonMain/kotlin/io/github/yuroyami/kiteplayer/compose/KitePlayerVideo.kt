@@ -7,11 +7,18 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.PlaybackStatus
+import io.github.yuroyami.kiteplayer.view.DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+import io.github.yuroyami.kiteplayer.view.accessibilityStateText
+import kotlin.time.Duration
 
 /**
  * One video composable over both rendering products, switchable while media plays.
@@ -123,7 +130,22 @@ private fun ComposeCanvasVideo(
     val videoState = rememberPlatformKiteVideoState()
     val currentOnRendererAttached by rememberUpdatedState(onRendererAttached)
 
-    KiteVideo(state = videoState, modifier = modifier)
+    // A canvas is an unlabelled area to a screen reader, so it says what the platform views say.
+    // The text follows the status and the duration, never the position: a value that changed on
+    // every tick would make a screen reader speak continuously.
+    val snapshot = player?.state?.collectAsState()?.value
+    val status = snapshot?.status ?: PlaybackStatus.Idle
+    val duration = snapshot?.duration
+    val stateText = remember(player, status, duration) {
+        accessibilityStateText(status, player?.progress?.value?.position ?: Duration.ZERO, duration)
+    }
+    KiteVideo(
+        state = videoState,
+        modifier = modifier.semantics {
+            contentDescription = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+            stateDescription = stateText
+        },
+    )
 
     LaunchedEffect(player, videoState) {
         val currentPlayer = player ?: return@LaunchedEffect

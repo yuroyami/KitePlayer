@@ -174,7 +174,10 @@ public open class KitePlayerView @JvmOverloads constructor(
 
     private val displayAwake = DisplayAwakeHolder(hold = { keepScreenOn = true }, release = { keepScreenOn = false })
 
-    /** Follows the player's state for the display hold, only while this view is attached and paired. */
+    /**
+     * Follows the player's state for the display hold and for what a screen reader hears, only
+     * while this view is attached and paired.
+     */
     private var stateWatch: Job? = null
 
     private fun watchPlayer() {
@@ -187,7 +190,17 @@ public open class KitePlayerView @JvmOverloads constructor(
         }
         displayAwake.playing = playsVideo(watched.state.value)
         stateWatch = CoroutineScope(MainLooper).launch {
-            watched.state.collect { displayAwake.playing = playsVideo(it) }
+            var announced: Pair<PlaybackStatus, Duration?>? = null
+            watched.state.collect { snapshot ->
+                displayAwake.playing = playsVideo(snapshot)
+                // The status and the duration, never the position: a value that changed on every
+                // tick would make a screen reader speak continuously.
+                val heard = snapshot.status to snapshot.duration
+                if (heard != announced) {
+                    announced = heard
+                    updateAccessibilityState()
+                }
+            }
         }
     }
 
@@ -223,11 +236,11 @@ public open class KitePlayerView @JvmOverloads constructor(
     /**
      * Re-reads what a screen reader should say about the player and tells the platform.
      *
-     * Called when the player is assigned and by an application whenever the state it cares about
-     * moved. It is NOT wired to a flow here on purpose: this view holds no scope of its own, and
-     * one started for a label would outlive the pairing it belongs to. The state text is a pure
-     * function, so an application already collecting the snapshot can call this from the same
-     * place it updates its own controls.
+     * This view calls it when the player is assigned, and while it is on screen, each time the
+     * player's status or duration changes. It does not follow the position, because a value that
+     * changed on every tick would make a screen reader speak continuously. So the position read
+     * out is the one from the last change. An application that wants a fresh position, for example
+     * after a seek, calls this beside its own controls.
      */
     public fun updateAccessibilityState() {
         val snapshot = player?.state?.value

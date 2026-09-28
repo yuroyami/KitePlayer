@@ -97,7 +97,8 @@ public sealed class PlaybackError {
 
     /**
      * The audio output device the player was bound to cannot be opened: it has gone away, or the
-     * platform does not let an application choose one. [device] is the id the player was given.
+     * platform does not let an application choose one. A bound device that disappears during
+     * playback fails the player with this error too. [device] is the id the player was given.
      */
     public data class AudioDeviceUnavailable(val device: String, val detail: String) : PlaybackError() {
         override val message: String get() = "the audio output device $device cannot be opened: $detail"

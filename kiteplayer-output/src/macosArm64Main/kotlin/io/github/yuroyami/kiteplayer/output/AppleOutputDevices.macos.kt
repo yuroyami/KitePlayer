@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.AudioOutputDevice
+import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.cinterop.AutofreeScope
@@ -28,6 +29,7 @@ import platform.CoreAudio.AudioObjectGetPropertyData
 import platform.CoreAudio.AudioObjectGetPropertyDataSize
 import platform.CoreAudio.AudioObjectPropertyAddress
 import platform.CoreAudio.AudioObjectRemovePropertyListener
+import platform.CoreAudio.kAudioDevicePropertyDeviceIsAlive
 import platform.CoreAudio.kAudioDevicePropertyDeviceUID
 import platform.CoreAudio.kAudioDevicePropertyStreams
 import platform.CoreAudio.kAudioHardwarePropertyDefaultOutputDevice
@@ -52,7 +54,7 @@ internal actual fun platformAppleOutputDevices(): AppleOutputDevices = MacOutput
  *
  * An unbound sink plays through the DefaultOutput unit, which moves to a new system default output
  * by itself. So a change of default is a notice to the application, not a reason to rebuild the
- * sink. A sink bound to one device stays on it.
+ * sink. A sink bound to one device stays on it, so it watches that device for its removal instead.
  */
 internal object MacOutputDevices : AppleOutputDevices {
 
@@ -65,6 +67,46 @@ internal object MacOutputDevices : AppleOutputDevices {
             val name = deviceName(device) ?: "device $device"
             onChange("the default output changed to $name, and playback follows it")
         }
+
+    override fun watchDevice(device: UInt, onLost: (detail: String) -> Unit): AutoCloseable? {
+        val name = deviceName(device) ?: "device $device"
+        val reported = atomic(false)
+        val check = {
+            if (!isPresent(device) && reported.compareAndSet(expect = false, update = true)) {
+                onLost("the output device $name is gone")
+            }
+        }
+        // The device's own notice is the documented one. The device list is watched as well, because
+        // every removal changes it.
+        val alive = HardwareListener.register(objectId = device, selector = kAudioDevicePropertyDeviceIsAlive, onNotice = check)
+        val list = HardwareListener.register(
+            objectId = kAudioObjectSystemObject.toUInt(),
+            selector = kAudioHardwarePropertyDevices,
+            onNotice = check,
+        )
+        // A device that went before the listeners were in place sends no notice.
+        check()
+        if (alive == null && list == null) return null
+        return AutoCloseable {
+            alive?.close()
+            list?.close()
+        }
+    }
+
+    /** Whether [device] is still in the device list and says it is alive. A removed device answers with an error. */
+    private fun isPresent(device: UInt): Boolean = device in allDevices() && memScoped {
+        val alive = alloc<UIntVar>()
+        val size = alloc<UIntVar>().apply { value = sizeOf<UIntVar>().toUInt() }
+        val status = AudioObjectGetPropertyData(
+            device,
+            globalAddress(kAudioDevicePropertyDeviceIsAlive).ptr,
+            0u,
+            null,
+            size.ptr,
+            alive.ptr,
+        )
+        status == 0 && alive.value != 0u
+    }
 
     /** The system default output device, or 0 when there is none. */
     fun defaultOutputDevice(): UInt = memScoped {
@@ -98,7 +140,10 @@ internal object MacOutputDevices : AppleOutputDevices {
         outputDevices().firstOrNull { deviceString(it, kAudioDevicePropertyDeviceUID) == id }
 
     /** Every audio device CoreAudio knows that has an output stream. */
-    private fun outputDevices(): List<UInt> = memScoped {
+    private fun outputDevices(): List<UInt> = allDevices().filter(::hasOutputStream)
+
+    /** Every audio device CoreAudio knows. */
+    private fun allDevices(): List<UInt> = memScoped {
         val system = kAudioObjectSystemObject.toUInt()
         val address = globalAddress(kAudioHardwarePropertyDevices)
         val size = alloc<UIntVar>()
@@ -109,7 +154,7 @@ internal object MacOutputDevices : AppleOutputDevices {
         if (AudioObjectGetPropertyData(system, address.ptr, 0u, null, size.ptr, ids) != 0) return emptyList()
         // The list can shrink between the two calls, and size then says how much was written.
         val written = (size.value / sizeOf<UIntVar>().toUInt()).toInt().coerceAtMost(capacity)
-        List(written) { ids[it] }.filter(::hasOutputStream)
+        List(written) { ids[it] }
     }
 
     private fun hasOutputStream(device: UInt): Boolean = memScoped {

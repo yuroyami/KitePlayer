@@ -24,6 +24,16 @@ internal interface AppleOutputDevices {
      */
     fun watchDefaultOutput(onChange: (detail: String) -> Unit): AutoCloseable?
 
+    /**
+     * Calls [onLost] once when the CoreAudio device [device] disappears, with a sentence that names
+     * it. A device that is already gone when this is called is reported at once, on the calling
+     * thread. Otherwise [onLost] runs on a CoreAudio notification thread.
+     *
+     * @return the registration, which `close` releases, or null when the platform has no such
+     *         notice or refused the registration.
+     */
+    fun watchDevice(device: UInt, onLost: (detail: String) -> Unit): AutoCloseable?
+
     /** The output devices an application can play through, the system default among them. */
     fun devices(): List<AudioOutputDevice>
 

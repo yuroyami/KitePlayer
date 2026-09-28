@@ -34,6 +34,7 @@ import io.github.yuroyami.kiteplayer.spi.NativeRingAddress
 import io.github.yuroyami.kiteplayer.spi.NativeRingHandoff
 import io.github.yuroyami.kiteplayer.spi.RawRingApi
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
+import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.cinterop.CPointer
@@ -48,7 +49,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.onSubscription
 
 /**
  * Test seam around C's void teardown call. Production implementations must not throw and return only
@@ -135,12 +136,15 @@ private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
  * therefore leaves this object owning nothing, which is what [retainedResources] reports and what
  * appleTest asserts.
  *
- * ### A change of the default output
+ * ### The output device
  *
- * On macOS the sink uses the DefaultOutput unit, which follows the system default output device by
- * itself. So an open sink watches the default output and reports each change as
- * `AudioSinkEvent.DeviceChanged`, which the engine turns into a warning, and it keeps playing. iOS has
- * no default device of its own: the audio session owns the route.
+ * On macOS an unbound sink uses the DefaultOutput unit, which follows the system default output
+ * device by itself. So an open sink watches the default output and reports each change as
+ * `AudioSinkEvent.DeviceChanged`, which the engine turns into a warning, and it keeps playing. A sink
+ * bound to one device stays on it and watches that device instead. When the device disappears, the
+ * sink reports `AudioSinkEvent.Failed` with `PlaybackError.AudioDeviceUnavailable`, and the player
+ * fails with that error. The failure stays on [events], so a collector that subscribes after the
+ * loss still receives it. iOS has no default device of its own: the audio session owns the route.
  *
  * ### Threading
  *
@@ -246,7 +250,7 @@ public class CoreAudioSink private constructor(
     /** Acquired before C creates the device and released only after C destroys it. */
     private var sessionLease: AppleAudioSessionLease? = null
 
-    /** The notice of a change of the system default output, held while the sink is open. */
+    /** The notice about the output device, held while the sink is open. See the class note. */
     private var deviceWatch: AutoCloseable? = null
 
     private val eventFlow = MutableSharedFlow<AudioSinkEvent>(
@@ -254,7 +258,15 @@ public class CoreAudioSink private constructor(
         extraBufferCapacity = 16,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
-    override val events: Flow<AudioSinkEvent> = eventFlow.asSharedFlow()
+
+    /** Why this sink cannot play again, or null. Kept as well as emitted, so a late collector cannot miss it. */
+    private val failedWith = atomic<PlaybackError?>(null)
+
+    // The subscription is in place before the kept failure is read, so a failure reaches every collector
+    // at least once: from the emission, from the read, or from both.
+    override val events: Flow<AudioSinkEvent> = eventFlow.onSubscription {
+        failedWith.value?.let { emit(AudioSinkEvent.Failed(it)) }
+    }
 
     /**
      * The device's period, as C reports it.
@@ -302,6 +314,7 @@ public class CoreAudioSink private constructor(
         capacityFrames: (AudioFormat) -> Int,
     ): NativeRingHandoff {
         check(handle == null && sessionLease == null) { "this sink is already open" }
+        failedWith.value = null
 
         // A chosen device that is not there now fails typed, before anything is made or leased.
         val deviceId = device?.let { id ->
@@ -392,10 +405,20 @@ public class CoreAudioSink private constructor(
                 ring = NativeRingAddress(attachedRing.rawValue.toLong()),
             )
 
-            // The unit follows the system default output by itself, so a change is a notice for the
-            // application and not a reason to rebuild. The notice arrives on a CoreAudio thread.
-            val watch = outputDevices.watchDefaultOutput { detail ->
-                eventFlow.tryEmit(AudioSinkEvent.DeviceChanged(detail))
+            // An unbound unit follows the system default output by itself, so a change is a notice
+            // for the application and not a reason to rebuild. A bound unit stays on its device, so
+            // the loss of that device ends the sink. The notices arrive on a CoreAudio thread.
+            val bound = device?.takeIf { deviceId != 0u }
+            val watch = if (bound == null) {
+                outputDevices.watchDefaultOutput { detail ->
+                    eventFlow.tryEmit(AudioSinkEvent.DeviceChanged(detail))
+                }
+            } else {
+                outputDevices.watchDevice(deviceId) { detail ->
+                    val error = PlaybackError.AudioDeviceUnavailable(bound, detail)
+                    failedWith.value = error
+                    eventFlow.tryEmit(AudioSinkEvent.Failed(error))
+                }
             }
 
             // Published inside the lock, so a diagnostic read from another thread sees either nothing

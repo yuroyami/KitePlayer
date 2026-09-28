@@ -325,8 +325,10 @@ needs naming, and `demux` for how the container opens.
 
 The audio output device is chosen when the player is built, on the desktop JVM and on macOS.
 `audioOutputDevices()` on `DesktopOutputBackend` or `AppleOutputBackend` lists the devices, and
-`withAudioOutputDevice(id)` returns the backend bound to one, for `PlayerConfig.backends`. On
-Android and iOS the operating system owns the route.
+`withAudioOutputDevice(id)` returns the backend bound to one, for `PlayerConfig.backends`. A bound
+player never moves to another device: when its device is gone, the open fails with
+`PlaybackError.AudioDeviceUnavailable`. On macOS the player also fails with that error when the
+device disappears during playback. On Android and iOS the operating system owns the route.
 
 Anything the player cannot do is refused with a typed error, never accepted and ignored. Two
 players in one process work and are tested.

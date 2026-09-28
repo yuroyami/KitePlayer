@@ -44,7 +44,8 @@ public object AppleOutputBackend : OutputBackend {
      *
      * On macOS the player then plays through that device, whatever the system default does. When
      * the device has gone away, opening media fails with [PlaybackError.AudioDeviceUnavailable]
-     * rather than falling back to the default. On iOS only an output of the current route is
+     * rather than falling back to the default. When the device goes away while media is open, the
+     * player fails with the same error. On iOS only an output of the current route is
      * accepted, and it changes nothing, because the audio session chooses the route.
      */
     public fun withAudioOutputDevice(id: String): OutputBackend = object : OutputBackend {

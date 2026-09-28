@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.AudioOutputDevice
+import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_destroy
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSinkEvent
@@ -17,15 +18,17 @@ import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * The macOS sink tells the application when the system default output changes.
+ * The macOS sink tells the application about its output device.
  *
- * The DefaultOutput unit follows the new default by itself, so the sink keeps playing and only
- * reports. These cases replace the CoreAudio notice with a fake one to drive it on demand.
- * `DefaultOutputSwitchTest` makes the real change, and runs only when asked to.
+ * An unbound sink reports a change of the system default output, which its DefaultOutput unit
+ * follows by itself, so it keeps playing. A bound sink watches its own device, and the loss of that
+ * device fails it. These cases replace the CoreAudio notices with fake ones to drive them on demand.
+ * `AppleAudioOutputDeviceTest` removes a real device from under a bound sink.
  */
 class CoreAudioSinkDeviceWatchTest {
 
@@ -38,6 +41,7 @@ class CoreAudioSinkDeviceWatchTest {
         sink.openWithRing(format) { it.sampleRate / 4 }
         try {
             assertEquals(1, devices.registrations, "an open sink watches the default output once")
+            assertEquals(0, devices.deviceWatches, "an unbound sink watches no device of its own")
             // Started undispatched, so the collector is subscribed before the notice fires.
             val received = async(start = CoroutineStart.UNDISPATCHED) { sink.events.first() }
             devices.fire("the default output changed to Test Speakers")
@@ -95,17 +99,80 @@ class CoreAudioSinkDeviceWatchTest {
         assertEquals(before, HardwareListener.liveCount, "close must remove the listener exactly once")
     }
 
-    private fun sinkWith(devices: AppleOutputDevices) = CoreAudioSink(
+    @Test
+    fun aBoundSinkWatchesItsDeviceAndNotTheDefaultOutput() = runBlocking {
+        val real = MacOutputDevices.defaultOutputDevice()
+        if (real == 0u) return@runBlocking println("skipped: this Mac has no default output")
+        val devices = FakeOutputDevices(boundDevice = real)
+        val sink = sinkWith(devices, device = "test-uid")
+        sink.openWithRing(format) { it.sampleRate / 4 }
+        try {
+            assertEquals(1, devices.deviceWatches, "a bound sink watches its device once")
+            assertEquals(real, devices.watchedDevice)
+            assertEquals(0, devices.registrations, "a bound sink does not follow the default, so it does not report it")
+        } finally {
+            sink.close()
+        }
+        assertEquals(1, devices.releases, "close releases the device watch")
+    }
+
+    @Test
+    fun theLossOfTheBoundDeviceReachesTheSinkEventsAsAFailure() = runBlocking {
+        val real = MacOutputDevices.defaultOutputDevice()
+        if (real == 0u) return@runBlocking println("skipped: this Mac has no default output")
+        val devices = FakeOutputDevices(boundDevice = real)
+        val sink = sinkWith(devices, device = "test-uid")
+        sink.openWithRing(format) { it.sampleRate / 4 }
+        try {
+            val received = async(start = CoroutineStart.UNDISPATCHED) { sink.events.first() }
+            devices.lose("the output device Test DAC is gone")
+            assertEquals(
+                AudioSinkEvent.Failed(PlaybackError.AudioDeviceUnavailable("test-uid", "the output device Test DAC is gone")),
+                withTimeout(2.seconds) { received.await() },
+            )
+        } finally {
+            sink.close()
+        }
+    }
+
+    @Test
+    fun aLossBeforeAnyoneCollectsStillReachesALateCollector() = runBlocking {
+        val real = MacOutputDevices.defaultOutputDevice()
+        if (real == 0u) return@runBlocking println("skipped: this Mac has no default output")
+        val devices = FakeOutputDevices(boundDevice = real)
+        val sink = sinkWith(devices, device = "test-uid")
+        sink.openWithRing(format) { it.sampleRate / 4 }
+        try {
+            // The engine subscribes after the open returns, so a loss in between must not be dropped.
+            devices.lose("the output device Test DAC is gone")
+            val event = withTimeout(2.seconds) { sink.events.first() }
+            assertEquals("test-uid", assertIs<PlaybackError.AudioDeviceUnavailable>(assertIs<AudioSinkEvent.Failed>(event).error).device)
+        } finally {
+            sink.close()
+        }
+    }
+
+    private fun sinkWith(devices: AppleOutputDevices, device: String? = null) = CoreAudioSink(
         policy = AppleAudioSessionPolicy.ApplicationManaged,
         leaseManager = sharedAppleAudioSessionLeaseManager,
         outputDevices = devices,
+        device = device,
     )
 
-    /** Records registrations and releases, and fires the notice when a test says so. */
-    private class FakeOutputDevices(private val onRelease: () -> Unit = {}) : AppleOutputDevices {
+    /**
+     * Records registrations and releases, and fires the notices when a test says so. [boundDevice]
+     * is what every id resolves to: a real CoreAudio device, because the sink opens a real unit on it.
+     */
+    private class FakeOutputDevices(
+        private val onRelease: () -> Unit = {},
+        private val boundDevice: UInt? = null,
+    ) : AppleOutputDevices {
         var registrations = 0
+        var deviceWatches = 0
+        var watchedDevice: UInt? = null
         var releases = 0
         private var listener: ((String) -> Unit)? = null
+        private var lossListener: ((String) -> Unit)? = null
 
         override fun watchDefaultOutput(onChange: (detail: String) -> Unit): AutoCloseable {
             registrations++
@@ -117,13 +184,29 @@ class CoreAudioSinkDeviceWatchTest {
             }
         }
 
+        override fun watchDevice(device: UInt, onLost: (detail: String) -> Unit): AutoCloseable {
+            deviceWatches++
+            watchedDevice = device
+            lossListener = onLost
+            return AutoCloseable {
+                releases++
+                lossListener = null
+                onRelease()
+            }
+        }
+
         fun fire(detail: String) {
             val current = listener ?: error("nothing is watching the default output")
             current(detail)
         }
 
+        fun lose(detail: String) {
+            val current = lossListener ?: error("nothing is watching a device")
+            current(detail)
+        }
+
         override fun devices(): List<AudioOutputDevice> = emptyList()
 
-        override fun deviceFor(id: String): UInt? = null
+        override fun deviceFor(id: String): UInt? = boundDevice
     }
 }

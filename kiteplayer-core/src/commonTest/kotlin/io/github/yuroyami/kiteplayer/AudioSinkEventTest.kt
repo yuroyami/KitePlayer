@@ -83,4 +83,25 @@ class AudioSinkEventTest {
         assertEquals(0, harness.sink.stopCount, "and the sink is not torn down for either")
         harness.close()
     }
+
+    /** A bound device that is gone: the sink cannot play again, so the player fails with its error. */
+    @Test
+    fun `a sink failure stops the session and fails the player with the sink's error`() = runTest {
+        val harness = CoreHarness(this, publishesSinkEvents = true)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(200.milliseconds)
+
+        val error = PlaybackError.AudioDeviceUnavailable("usb-dac", "the output device USB DAC is gone")
+        harness.sink.publish(AudioSinkEvent.Failed(error))
+        harness.run(100.milliseconds)
+
+        val snapshot = harness.core.snapshots.value
+        assertEquals(PlaybackStatus.Failed, snapshot.status)
+        assertEquals(error, snapshot.error, "the player fails with the sink's own error")
+        assertEquals(listOf(error), harness.events.filterIsInstance<PlayerEvent.Failed>().map { it.error })
+        assertTrue(harness.sink.closed, "the session is stopped, and its sink with it")
+        assertEquals(emptyList(), harness.deviceWarnings(), "a failure is not also a warning")
+        harness.close()
+    }
 }

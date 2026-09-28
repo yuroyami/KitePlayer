@@ -2375,6 +2375,17 @@ public final class io/github/yuroyami/kiteplayer/spi/AudioSinkEvent$DeviceLost :
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/spi/AudioSinkEvent$Failed : io/github/yuroyami/kiteplayer/spi/AudioSinkEvent {
+	public fun <init> (Lio/github/yuroyami/kiteplayer/PlaybackError;)V
+	public final fun component1 ()Lio/github/yuroyami/kiteplayer/PlaybackError;
+	public final fun copy (Lio/github/yuroyami/kiteplayer/PlaybackError;)Lio/github/yuroyami/kiteplayer/spi/AudioSinkEvent$Failed;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/spi/AudioSinkEvent$Failed;Lio/github/yuroyami/kiteplayer/PlaybackError;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/spi/AudioSinkEvent$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getError ()Lio/github/yuroyami/kiteplayer/PlaybackError;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/spi/AudioSinkEvent$FormatChangeRequested : io/github/yuroyami/kiteplayer/spi/AudioSinkEvent {
 	public fun <init> (Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;

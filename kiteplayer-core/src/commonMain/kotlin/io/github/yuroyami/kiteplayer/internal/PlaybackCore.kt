@@ -4259,7 +4259,7 @@ internal class PlaybackCore(
                 cause ?: IllegalStateException("the demuxer stopped $context"),
                 "the demuxer stopped $context${cause?.let(::causeDetail).orEmpty()}",
             )
-            AUDIO_FEED_WORKER -> audioFeedError(session, cause) { "a pipeline worker stopped $context" }
+            AUDIO_FEED_WORKER, AUDIO_DEVICE -> audioFeedError(session, cause) { "a pipeline worker stopped $context" }
             else -> PlaybackError.Internal("a pipeline worker stopped $context", cause)
         }
         return PlaybackException(error)
@@ -7587,7 +7587,8 @@ internal class PlaybackCore(
                 ?: PlaybackError.DecoderFailed(
                     session.audioStream?.codec ?: "audio", cause.message ?: cause.toString(), cause,
                 )
-            outcome.name == AUDIO_FEED_WORKER -> audioFeedError(session, cause) { "the ${outcome.name} worker failed" }
+            outcome.name == AUDIO_FEED_WORKER || outcome.name == AUDIO_DEVICE ->
+                audioFeedError(session, cause) { "the ${outcome.name} worker failed" }
             else -> PlaybackError.Internal("the ${outcome.name} worker failed", cause)
         }
         // A dead worker is a handled failure and never a hang, which is why every worker reports here.
@@ -8124,6 +8125,13 @@ internal class PlaybackCore(
                                 "the device requested a format change: " + event.detail,
                             ),
                         )
+                    // The actor stops the session, the same way it handles a dead worker. This lane
+                    // may not touch the session itself.
+                    is io.github.yuroyami.kiteplayer.spi.AudioSinkEvent.Failed -> {
+                        val outcome = WorkerOutcome(session.token, AUDIO_DEVICE, PlaybackException(event.error))
+                        session.firstWorkerOutcome.compareAndSet(null, outcome)
+                        outcomes.trySend(outcome)
+                    }
                 }
             }
         }
@@ -9389,6 +9397,9 @@ internal class PlaybackCore(
         const val AUDIO_DECODE_WORKER = "audio decode"
         const val AUDIO_FEED_WORKER = "audio feed"
         const val VIDEO_SCHEDULE_WORKER = "video schedule"
+
+        /** Not a worker: the sink reporting that it cannot play again, through the same channel. */
+        const val AUDIO_DEVICE = "audio device"
     }
     // ---------------------------------------------------------------------------------------------
     // The actor, started LAST.

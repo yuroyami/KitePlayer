@@ -873,6 +873,19 @@ sealed interface io.github.yuroyami.kiteplayer.spi/AudioSinkEvent { // io.github
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.DeviceLost.toString|toString(){}[0]
     }
 
+    final class Failed : io.github.yuroyami.kiteplayer.spi/AudioSinkEvent { // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Failed|null[0]
+        constructor <init>(io.github.yuroyami.kiteplayer/PlaybackError) // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Failed.<init>|<init>(io.github.yuroyami.kiteplayer.PlaybackError){}[0]
+
+        final val error // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Failed.error|{}error[0]
+            final fun <get-error>(): io.github.yuroyami.kiteplayer/PlaybackError // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Failed.error.<get-error>|<get-error>(){}[0]
+
+        final fun component1(): io.github.yuroyami.kiteplayer/PlaybackError // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Failed.component1|component1(){}[0]
+        final fun copy(io.github.yuroyami.kiteplayer/PlaybackError = ...): io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Failed // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Failed.copy|copy(io.github.yuroyami.kiteplayer.PlaybackError){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Failed.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Failed.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Failed.toString|toString(){}[0]
+    }
+
     final class FormatChangeRequested : io.github.yuroyami.kiteplayer.spi/AudioSinkEvent { // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.FormatChangeRequested|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.FormatChangeRequested.<init>|<init>(kotlin.String){}[0]
 

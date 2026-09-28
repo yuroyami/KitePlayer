@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.spi
 
 import io.github.yuroyami.kiteplayer.LatencyQuality
+import io.github.yuroyami.kiteplayer.PlaybackError
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -103,8 +104,9 @@ public interface AudioSink : AutoCloseable {
      * collects the feed on the session lane. `DeviceLost` and `DeviceChanged` become a
      * `PlaybackWarning.AudioDeviceChanged`. `Underrun` becomes an `AudioDeviceUnderrun` warning,
      * once per session. `FormatChangeRequested` becomes an `AudioDeviceChanged` warning naming the
-     * request. Nothing here rebuilds a sink or recovers a device yet: publish honestly, and expect
-     * a warning rather than a repair.
+     * request. `Failed` stops the session, and the player fails with the event's error. Nothing
+     * here rebuilds a sink or recovers a device yet: publish honestly, and expect a warning or a
+     * typed failure rather than a repair.
      */
     public val events: Flow<AudioSinkEvent>
 }
@@ -207,4 +209,13 @@ public sealed interface AudioSinkEvent {
      * bugs live.
      */
     public data class FormatChangeRequested(val detail: String) : AudioSinkEvent
+
+    /**
+     * The sink cannot play again, and [error] says why. For example, the one device it was bound to
+     * is gone, and a bound sink never moves to another device.
+     *
+     * The engine stops the session and the player fails with [error]. A sink that can recover
+     * reports `DeviceLost` instead.
+     */
+    public data class Failed(val error: PlaybackError) : AudioSinkEvent
 }

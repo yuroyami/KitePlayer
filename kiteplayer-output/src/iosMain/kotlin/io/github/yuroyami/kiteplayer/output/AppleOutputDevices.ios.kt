@@ -12,6 +12,9 @@ import platform.AVFAudio.currentRoute
 internal actual fun platformAppleOutputDevices(): AppleOutputDevices = object : AppleOutputDevices {
     override fun watchDefaultOutput(onChange: (detail: String) -> Unit): AutoCloseable? = null
 
+    /** Nothing is ever bound on iOS, so there is no device to watch. */
+    override fun watchDevice(device: UInt, onLost: (detail: String) -> Unit): AutoCloseable? = null
+
     /** The outputs of the current route, which are the only devices an app on iOS can name. */
     override fun devices(): List<AudioOutputDevice> =
         AVAudioSession.sharedInstance().currentRoute.outputs.mapNotNull { output ->

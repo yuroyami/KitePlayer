@@ -26,6 +26,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the design (#75).
 - A seek that was queued while an item reached its end now runs before the end is declared. The
   queue could move to the next item and drop the seek.
+- On macOS, a player bound to one output device with `withAudioOutputDevice(id)` now fails with
+  `PlaybackError.AudioDeviceUnavailable` when that device disappears during playback. Before, it
+  went silent and stayed Playing. A bound player also no longer reports changes of the system
+  default output, which it does not follow. `AudioSinkEvent` gains `Failed`, which a sink sends
+  when it cannot play again, so a `when` that lists every event needs the new branch (#93).
 - Swift and Objective-C: every `KitePlayer` call that can fail now declares `@Throws`, so a
   failure arrives as an error instead of ending the app (#204). The suspend calls convert any
   `Exception`. The setters, `play`, `pause`, `seekLater` and the renderer and tap calls throw on a

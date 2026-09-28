@@ -95,6 +95,14 @@ public sealed class PlaybackError {
         override val message: String get() = "the player cannot be built as configured: $detail"
     }
 
+    /**
+     * The audio output device the player was bound to cannot be opened: it has gone away, or the
+     * platform does not let an application choose one. [device] is the id the player was given.
+     */
+    public data class AudioDeviceUnavailable(val device: String, val detail: String) : PlaybackError() {
+        override val message: String get() = "the audio output device $device cannot be opened: $detail"
+    }
+
     /** The engine hit a state it does not know how to leave. This is always a bug here. */
     public data class Internal(val detail: String, override val cause: Throwable? = null) : PlaybackError() {
         override val message: String get() = "internal error: $detail"

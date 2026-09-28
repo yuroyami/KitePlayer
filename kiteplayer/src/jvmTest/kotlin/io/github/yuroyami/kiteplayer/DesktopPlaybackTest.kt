@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.io.ofFile
+import io.github.yuroyami.kiteplayer.output.DesktopOutputBackend
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -8,6 +9,8 @@ import java.io.File
 import javax.sound.sampled.AudioSystem
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -37,6 +40,22 @@ class DesktopPlaybackTest {
     fun theSameFilePlaysThroughTheFileDoor() = runBlocking {
         val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
         playsAndTheClockMoves(MediaItem.from(MediaIo.ofFile(file), file.name))
+    }
+
+    @Test
+    fun aPlayerBoundToAnOutputDeviceThatIsNotThereFailsTheOpenTyped() = runBlocking {
+        val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
+        val defaults = assertNotNull(KitePlayerPlatform.backendsOrNull(), "no default desktop backends")
+        val player = KitePlayer.create(
+            PlayerConfig(backends = defaults.copy(output = DesktopOutputBackend.withAudioOutputDevice("no such device"))),
+        )
+        try {
+            val failure = assertFailsWith<PlaybackException> { player.open(MediaItem(file.absolutePath)) }
+            val error = assertIs<PlaybackError.AudioDeviceUnavailable>(failure.error)
+            assertEquals("no such device", error.device)
+        } finally {
+            player.closeAndAwait()
+        }
     }
 
     private suspend fun playsAndTheClockMoves(item: MediaItem) {

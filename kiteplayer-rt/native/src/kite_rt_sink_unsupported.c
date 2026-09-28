@@ -46,6 +46,14 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     return KPRT_SINK_UNSUPPORTED_PLATFORM;
 }
 
+int32_t kprt_sink_create_on_device(uint32_t device_id, int32_t sample_rate, int32_t channels,
+                                   kprt_sink **out_sink, kprt_sink_format *out_format,
+                                   int32_t *out_os_status)
+{
+    (void)device_id;
+    return kprt_sink_create(sample_rate, channels, out_sink, out_format, out_os_status);
+}
+
 int32_t kprt_sink_attach_ring(kprt_sink *sink, int32_t capacity_frames)
 {
     (void)sink;

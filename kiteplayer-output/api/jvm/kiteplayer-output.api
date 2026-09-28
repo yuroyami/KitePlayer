@@ -72,8 +72,10 @@ public final class io/github/yuroyami/kiteplayer/output/DesktopMonotonicClock : 
 
 public final class io/github/yuroyami/kiteplayer/output/DesktopOutputBackend : io/github/yuroyami/kiteplayer/spi/OutputBackend {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/output/DesktopOutputBackend;
+	public final fun audioOutputDevices ()Ljava/util/List;
 	public fun getAudioSink ()Lio/github/yuroyami/kiteplayer/spi/AudioSinkFactory;
 	public fun getClock ()Lio/github/yuroyami/kiteplayer/MonotonicClock;
 	public fun getSubtitleRasterizer ()Lio/github/yuroyami/kiteplayer/spi/SubtitleRasterizer;
+	public final fun withAudioOutputDevice (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/spi/OutputBackend;
 }
 

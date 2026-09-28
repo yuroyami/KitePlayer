@@ -540,7 +540,18 @@ public class DesktopAudioSink internal constructor(
 }
 
 /** Creates [DesktopAudioSink]s for the engine. One sink per playback session. */
-public class DesktopAudioSinkFactory : AudioSinkFactory {
-    override suspend fun create(): AudioSink = DesktopAudioSink()
+public class DesktopAudioSinkFactory private constructor(
+    /** The output mixer every sink plays through, or null for the system default. */
+    private val device: String?,
+    @Suppress("UNUSED_PARAMETER") marker: Unit,
+) : AudioSinkFactory {
+    public constructor() : this(null, Unit)
+
+    /** Every sink it creates plays through the output mixer named [device]. */
+    internal constructor(device: String) : this(device, Unit)
+
+    override suspend fun create(): AudioSink =
+        if (device == null) DesktopAudioSink() else DesktopAudioSink(MixerSourceDataLineDriverFactory(device), DesktopMonotonicClock)
+
     override val name: String get() = "SourceDataLine"
 }

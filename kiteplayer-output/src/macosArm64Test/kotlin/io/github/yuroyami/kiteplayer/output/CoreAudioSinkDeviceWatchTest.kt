@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.AudioOutputDevice
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_destroy
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSinkEvent
@@ -120,5 +121,9 @@ class CoreAudioSinkDeviceWatchTest {
             val current = listener ?: error("nothing is watching the default output")
             current(detail)
         }
+
+        override fun devices(): List<AudioOutputDevice> = emptyList()
+
+        override fun deviceFor(id: String): UInt? = null
     }
 }

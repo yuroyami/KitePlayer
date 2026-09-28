@@ -438,7 +438,10 @@ enum {
     /* Teardown could not prove the render callback is out (stop, uninitialise or dispose
      * refused). The sink and ring were deliberately leaked rather than freed under a possibly
      * live callback. */
-    KPRT_SINK_TEARDOWN_UNPROVEN = 13
+    KPRT_SINK_TEARDOWN_UNPROVEN = 13,
+    /* The output unit refused the device it was bound to, which is what a device that has gone
+     * away looks like. */
+    KPRT_SINK_DEVICE_REFUSED = 14
 };
 
 /* What the device accepted, reported by `kprt_sink_create` so the caller never has to assume it
@@ -504,6 +507,17 @@ typedef struct {
  * @param out_os_status receives the CoreAudio status behind a refusal, or 0. May be NULL. */
 KPRT_API int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_sink,
                                   kprt_sink_format *out_format, int32_t *out_os_status);
+
+/* `kprt_sink_create` on one CoreAudio device, which stays the device while the sink lives.
+ *
+ * device_id 0 is the system default, exactly as `kprt_sink_create`. Any other value is an
+ * AudioDeviceID on macOS: the sink plays through a HALOutput unit bound to it, where the default
+ * uses the DefaultOutput unit, which follows every change of the system default. A device the unit
+ * will not take, such as one that has gone away, is KPRT_SINK_DEVICE_REFUSED. On iOS the audio
+ * session owns the route, so any value but 0 is KPRT_SINK_BAD_ARGUMENT, before anything is made. */
+KPRT_API int32_t kprt_sink_create_on_device(uint32_t device_id, int32_t sample_rate, int32_t channels,
+                                            kprt_sink **out_sink, kprt_sink_format *out_format,
+                                            int32_t *out_os_status);
 
 /* Creates a ring at the accepted format and publishes it to the callback.
  *

@@ -1,8 +1,13 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.AudioOutputDevice
+import io.github.yuroyami.kiteplayer.PlaybackError
+import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import javax.sound.sampled.AudioSystem
 import javax.sound.sampled.DataLine
+import javax.sound.sampled.Line
+import javax.sound.sampled.Mixer
 import javax.sound.sampled.SourceDataLine
 import javax.sound.sampled.AudioFormat as WireFormat
 
@@ -87,8 +92,8 @@ internal fun interface SourceDataLineDriverFactory {
 internal const val WIRE_BYTES_PER_SAMPLE: Int = 2
 
 /**
- * The production driver: one `SourceDataLine` on the default mixer, 16-bit signed little-endian,
- * with a buffer of [BUFFER_FRAMES] frames.
+ * The production driver: one `SourceDataLine`, on the default mixer or on a chosen one, 16-bit
+ * signed little-endian, with a buffer of [BUFFER_FRAMES] frames.
  *
  * `SourceDataLine` has no presentation-timestamp API at all, which is why [DesktopMonotonicClock]
  * is the sink's only "now" and why the sink declares `LatencyQuality.Estimated`.
@@ -117,12 +122,55 @@ internal object PlatformSourceDataLineDriverFactory : SourceDataLineDriverFactor
     }.getOrDefault(false)
 }
 
-internal class PlatformSourceDataLineDriver(accepted: AudioFormat) : SourceDataLineDriver {
+/**
+ * Lines on the output mixer named [name], one of [desktopAudioOutputDevices]. The mixer is looked
+ * up for every line, so a device that went away after it was listed fails typed when a line opens.
+ */
+internal class MixerSourceDataLineDriverFactory(private val name: String) : SourceDataLineDriverFactory {
+    override fun create(accepted: AudioFormat): SourceDataLineDriver {
+        val mixer = outputMixerNamed(name) ?: throw PlaybackException(
+            PlaybackError.AudioDeviceUnavailable(name, "no output mixer has this name now"),
+        )
+        return PlatformSourceDataLineDriver(accepted, mixer)
+    }
+
+    override fun supports(format: AudioFormat): Boolean = runCatching {
+        outputMixerNamed(name)?.isLineSupported(DataLine.Info(SourceDataLine::class.java, wireFormatFor(format))) == true
+    }.getOrDefault(false)
+}
+
+/**
+ * The output devices this JVM can open a line on: every mixer that offers a source data line. The
+ * mixer name is the id. The default is the mixer `AudioSystem.getMixer(null)` answers.
+ */
+internal fun desktopAudioOutputDevices(): List<AudioOutputDevice> {
+    val default = runCatching { AudioSystem.getMixer(null).mixerInfo }.getOrNull()
+    return outputMixerInfos().map { info ->
+        AudioOutputDevice(id = info.name, name = info.name, isDefault = info == default)
+    }
+}
+
+private val sourceLineInfo = Line.Info(SourceDataLine::class.java)
+
+private fun outputMixerInfos(): List<Mixer.Info> = AudioSystem.getMixerInfo().filter { info ->
+    runCatching { AudioSystem.getMixer(info).isLineSupported(sourceLineInfo) }.getOrDefault(false)
+}
+
+/** The first output mixer named [name]. Two devices with one name are told apart by list order. */
+private fun outputMixerNamed(name: String): Mixer? =
+    outputMixerInfos().firstOrNull { it.name == name }?.let(AudioSystem::getMixer)
+
+internal class PlatformSourceDataLineDriver(
+    accepted: AudioFormat,
+    /** The mixer to take the line from, or null for the system default. */
+    mixer: Mixer? = null,
+) : SourceDataLineDriver {
 
     private val wire = wireFormatFor(accepted)
 
-    private val line: SourceDataLine =
-        AudioSystem.getLine(DataLine.Info(SourceDataLine::class.java, wire)) as SourceDataLine
+    private val line: SourceDataLine = DataLine.Info(SourceDataLine::class.java, wire).let { info ->
+        (mixer?.getLine(info) ?: AudioSystem.getLine(info)) as SourceDataLine
+    }
 
     override fun open() {
         line.open(wire, BUFFER_FRAMES * wire.frameSize)

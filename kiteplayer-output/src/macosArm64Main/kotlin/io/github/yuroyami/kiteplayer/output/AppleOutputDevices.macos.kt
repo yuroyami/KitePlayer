@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.AudioOutputDevice
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.cinterop.AutofreeScope
@@ -13,6 +14,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.UIntVar
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.allocArray
+import kotlinx.cinterop.get
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.sizeOf
@@ -23,12 +25,17 @@ import kotlinx.cinterop.toLong
 import kotlinx.cinterop.value
 import platform.CoreAudio.AudioObjectAddPropertyListener
 import platform.CoreAudio.AudioObjectGetPropertyData
+import platform.CoreAudio.AudioObjectGetPropertyDataSize
 import platform.CoreAudio.AudioObjectPropertyAddress
 import platform.CoreAudio.AudioObjectRemovePropertyListener
+import platform.CoreAudio.kAudioDevicePropertyDeviceUID
+import platform.CoreAudio.kAudioDevicePropertyStreams
 import platform.CoreAudio.kAudioHardwarePropertyDefaultOutputDevice
+import platform.CoreAudio.kAudioHardwarePropertyDevices
 import platform.CoreAudio.kAudioObjectPropertyElementMain
 import platform.CoreAudio.kAudioObjectPropertyName
 import platform.CoreAudio.kAudioObjectPropertyScopeGlobal
+import platform.CoreAudio.kAudioObjectPropertyScopeOutput
 import platform.CoreAudio.kAudioObjectSystemObject
 import platform.CoreFoundation.CFRelease
 import platform.CoreFoundation.CFStringGetCString
@@ -43,8 +50,9 @@ internal actual fun platformAppleOutputDevices(): AppleOutputDevices = MacOutput
 /**
  * The macOS answers, through the CoreAudio hardware API.
  *
- * The sink plays through the DefaultOutput unit, which moves to a new system default output by
- * itself. So a change of default is a notice to the application, not a reason to rebuild the sink.
+ * An unbound sink plays through the DefaultOutput unit, which moves to a new system default output
+ * by itself. So a change of default is a notice to the application, not a reason to rebuild the
+ * sink. A sink bound to one device stays on it.
  */
 internal object MacOutputDevices : AppleOutputDevices {
 
@@ -75,6 +83,44 @@ internal object MacOutputDevices : AppleOutputDevices {
 
     /** What the system calls [device], or null when it will not say. */
     fun deviceName(device: UInt): String? = deviceString(device, kAudioObjectPropertyName)
+
+    /** Every device with an output stream. The id is the device's UID, which survives a restart. */
+    override fun devices(): List<AudioOutputDevice> {
+        val default = defaultOutputDevice()
+        return outputDevices().mapNotNull { device ->
+            val uid = deviceString(device, kAudioDevicePropertyDeviceUID) ?: return@mapNotNull null
+            AudioOutputDevice(id = uid, name = deviceName(device) ?: uid, isDefault = device == default)
+        }
+    }
+
+    /** The device whose UID is [id]. A chosen device is always bound, even when it is the default. */
+    override fun deviceFor(id: String): UInt? =
+        outputDevices().firstOrNull { deviceString(it, kAudioDevicePropertyDeviceUID) == id }
+
+    /** Every audio device CoreAudio knows that has an output stream. */
+    private fun outputDevices(): List<UInt> = memScoped {
+        val system = kAudioObjectSystemObject.toUInt()
+        val address = globalAddress(kAudioHardwarePropertyDevices)
+        val size = alloc<UIntVar>()
+        if (AudioObjectGetPropertyDataSize(system, address.ptr, 0u, null, size.ptr) != 0) return emptyList()
+        val capacity = (size.value / sizeOf<UIntVar>().toUInt()).toInt()
+        if (capacity == 0) return emptyList()
+        val ids = allocArray<UIntVar>(capacity)
+        if (AudioObjectGetPropertyData(system, address.ptr, 0u, null, size.ptr, ids) != 0) return emptyList()
+        // The list can shrink between the two calls, and size then says how much was written.
+        val written = (size.value / sizeOf<UIntVar>().toUInt()).toInt().coerceAtMost(capacity)
+        List(written) { ids[it] }.filter(::hasOutputStream)
+    }
+
+    private fun hasOutputStream(device: UInt): Boolean = memScoped {
+        val address = alloc<AudioObjectPropertyAddress>().apply {
+            mSelector = kAudioDevicePropertyStreams
+            mScope = kAudioObjectPropertyScopeOutput
+            mElement = kAudioObjectPropertyElementMain
+        }
+        val size = alloc<UIntVar>()
+        AudioObjectGetPropertyDataSize(device, address.ptr, 0u, null, size.ptr) == 0 && size.value > 0u
+    }
 }
 
 /** One global-scope property address on the main element, in [this] scope's memory. */

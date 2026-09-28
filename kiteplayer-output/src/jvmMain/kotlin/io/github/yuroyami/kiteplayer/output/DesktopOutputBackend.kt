@@ -1,6 +1,8 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.AudioOutputDevice
 import io.github.yuroyami.kiteplayer.MonotonicClock
+import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer
@@ -25,4 +27,23 @@ public object DesktopOutputBackend : OutputBackend {
 
     /** AWT does the line breaking, bidi and shaping; see the rasteriser's own KDoc. */
     override val subtitleRasterizer: SubtitleRasterizer = DesktopSubtitleRasterizer()
+
+    /**
+     * The output devices this JVM can play through: every `javax.sound` mixer that offers a line for
+     * playback. Each [AudioOutputDevice.id] is the mixer name. Empty on a machine with no audio
+     * output, such as most CI runners.
+     */
+    public fun audioOutputDevices(): List<AudioOutputDevice> = desktopAudioOutputDevices()
+
+    /**
+     * This backend, with its audio bound to the device that [id] names, one of [audioOutputDevices].
+     *
+     * The player then plays through that mixer. When the device has gone away, opening media fails
+     * with [PlaybackError.AudioDeviceUnavailable] rather than falling back to the default.
+     */
+    public fun withAudioOutputDevice(id: String): OutputBackend = object : OutputBackend {
+        override val clock: MonotonicClock get() = DesktopMonotonicClock
+        override val audioSink: AudioSinkFactory = DesktopAudioSinkFactory(id)
+        override val subtitleRasterizer: SubtitleRasterizer = this@DesktopOutputBackend.subtitleRasterizer
+    }
 }

@@ -355,8 +355,31 @@ int32_t kprt_test_invoke_render_callback(kprt_sink *sink,
 
 /* ---- Lifecycle ---- */
 
+#if !(defined(TARGET_OS_IOS) && TARGET_OS_IOS)
+/* The HALOutput component, which a sink bound to one device needs: DefaultOutput follows the system
+ * default by itself, and would leave the named device the moment the default changed. A separate
+ * function, so the DefaultOutput description stays one constant in the object, where
+ * render-audit.sh pins it. */
+__attribute__((noinline)) static AudioComponent kprt_hal_output_component(void)
+{
+    AudioComponentDescription description;
+    memset(&description, 0, sizeof(description));
+    description.componentType = kAudioUnitType_Output;
+    description.componentSubType = kAudioUnitSubType_HALOutput;
+    description.componentManufacturer = kAudioUnitManufacturer_Apple;
+    return AudioComponentFindNext(NULL, &description);
+}
+#endif
+
 int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_sink,
                          kprt_sink_format *out_format, int32_t *out_os_status)
+{
+    return kprt_sink_create_on_device(0, sample_rate, channels, out_sink, out_format, out_os_status);
+}
+
+int32_t kprt_sink_create_on_device(uint32_t device_id, int32_t sample_rate, int32_t channels,
+                                   kprt_sink **out_sink, kprt_sink_format *out_format,
+                                   int32_t *out_os_status)
 {
     AudioComponentDescription description;
     AudioComponent component;
@@ -390,12 +413,19 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     memset(&description, 0, sizeof(description));
     description.componentType = kAudioUnitType_Output;
 #if defined(TARGET_OS_IOS) && TARGET_OS_IOS
+    /* The audio session owns the route on iOS, so there is no device to bind. */
+    if (device_id != 0)
+        return KPRT_SINK_BAD_ARGUMENT;
     description.componentSubType = kAudioUnitSubType_RemoteIO;
 #else
     description.componentSubType = kAudioUnitSubType_DefaultOutput;
 #endif
     description.componentManufacturer = kAudioUnitManufacturer_Apple;
+#if defined(TARGET_OS_IOS) && TARGET_OS_IOS
     component = AudioComponentFindNext(NULL, &description);
+#else
+    component = device_id != 0 ? kprt_hal_output_component() : AudioComponentFindNext(NULL, &description);
+#endif
     if (component == NULL)
         return KPRT_SINK_NO_COMPONENT;
 
@@ -406,6 +436,21 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     }
 
     /* From here on every failure disposes the instance before returning. */
+
+#if !(defined(TARGET_OS_IOS) && TARGET_OS_IOS)
+    /* Bound before any format is set, so the formats and the channel query below are the named
+     * device's. */
+    if (device_id != 0) {
+        AudioDeviceID device = (AudioDeviceID)device_id;
+        status = AudioUnitSetProperty(instance, kAudioOutputUnitProperty_CurrentDevice,
+                                      kAudioUnitScope_Global, 0, &device, (UInt32)sizeof(device));
+        if (status != noErr) {
+            AudioComponentInstanceDispose(instance);
+            report_status(out_os_status, status);
+            return KPRT_SINK_DEVICE_REFUSED;
+        }
+    }
+#endif
 
     /* The device's own channel count bounds the accepted one. Asking is the whole point: the input
      * scope would take six channels on a two channel route without complaint, and the engine reads

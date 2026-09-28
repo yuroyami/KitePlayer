@@ -1956,6 +1956,25 @@ final class io.github.yuroyami.kiteplayer/AudioConfig { // io.github.yuroyami.ki
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/AudioConfig.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer/AudioOutputDevice { // io.github.yuroyami.kiteplayer/AudioOutputDevice|null[0]
+    constructor <init>(kotlin/String, kotlin/String, kotlin/Boolean) // io.github.yuroyami.kiteplayer/AudioOutputDevice.<init>|<init>(kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+
+    final val id // io.github.yuroyami.kiteplayer/AudioOutputDevice.id|{}id[0]
+        final fun <get-id>(): kotlin/String // io.github.yuroyami.kiteplayer/AudioOutputDevice.id.<get-id>|<get-id>(){}[0]
+    final val isDefault // io.github.yuroyami.kiteplayer/AudioOutputDevice.isDefault|{}isDefault[0]
+        final fun <get-isDefault>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioOutputDevice.isDefault.<get-isDefault>|<get-isDefault>(){}[0]
+    final val name // io.github.yuroyami.kiteplayer/AudioOutputDevice.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer/AudioOutputDevice.name.<get-name>|<get-name>(){}[0]
+
+    final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/AudioOutputDevice.component1|component1(){}[0]
+    final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer/AudioOutputDevice.component2|component2(){}[0]
+    final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioOutputDevice.component3|component3(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/AudioOutputDevice // io.github.yuroyami.kiteplayer/AudioOutputDevice.copy|copy(kotlin.String;kotlin.String;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioOutputDevice.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/AudioOutputDevice.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/AudioOutputDevice.toString|toString(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/AudioPlayback : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/AudioPlayback|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer.spi/AudioSink, io.github.yuroyami.kiteplayer/MonotonicClock = ..., kotlin.time/Duration = ..., kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit> = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ..., io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory? = ..., io.github.yuroyami.kiteplayer/UpmixMode = ...) // io.github.yuroyami.kiteplayer/AudioPlayback.<init>|<init>(io.github.yuroyami.kiteplayer.spi.AudioSink;io.github.yuroyami.kiteplayer.MonotonicClock;kotlin.time.Duration;kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>;io.github.yuroyami.kiteplayer.DownmixConfig;io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory?;io.github.yuroyami.kiteplayer.UpmixMode){}[0]
 
@@ -3331,6 +3350,23 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         open fun <get-cause>(): kotlin/Throwable? // io.github.yuroyami.kiteplayer/PlaybackError.cause.<get-cause>|<get-cause>(){}[0]
 
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.toString|toString(){}[0]
+
+    final class AudioDeviceUnavailable : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable|null[0]
+        constructor <init>(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.detail.<get-detail>|<get-detail>(){}[0]
+        final val device // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.device|{}device[0]
+            final fun <get-device>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.device.<get-device>|<get-device>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.message.<get-message>|<get-message>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.component1|component1(){}[0]
+        final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.copy|copy(kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.AudioDeviceUnavailable.hashCode|hashCode(){}[0]
+    }
 
     final class ConfigurationInvalid : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.ConfigurationInvalid|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackError.ConfigurationInvalid.<init>|<init>(kotlin.String){}[0]

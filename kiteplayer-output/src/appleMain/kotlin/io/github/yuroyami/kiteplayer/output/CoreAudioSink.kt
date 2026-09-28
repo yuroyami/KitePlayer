@@ -9,9 +9,12 @@ import cnames.structs.kprt_ring
 import cnames.structs.kprt_sink
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.MonotonicClock
+import io.github.yuroyami.kiteplayer.PlaybackError
+import io.github.yuroyami.kiteplayer.PlaybackException
+import io.github.yuroyami.kiteplayer.rt.cinterop.KPRT_SINK_DEVICE_REFUSED
 import io.github.yuroyami.kiteplayer.rt.cinterop.KPRT_SINK_OK
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_attach_ring
-import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_create
+import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_create_on_device
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_destroy
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_format
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_read_stats
@@ -154,6 +157,8 @@ public class CoreAudioSink private constructor(
     private val leaseManager: AppleAudioSessionLeaseManager,
     private val destroyer: CoreAudioSinkDestroyer,
     private val outputDevices: AppleOutputDevices,
+    /** The id of the output device this sink is bound to, or null for the system default. */
+    private val device: String?,
 ) : AudioSink, NativeRingAudioSink {
 
     /** Preserves the original clock-first API and uses KitePlayer's managed playback policy. */
@@ -163,6 +168,7 @@ public class CoreAudioSink private constructor(
         sharedAppleAudioSessionLeaseManager,
         PlatformCoreAudioSinkDestroyer,
         platformAppleOutputDevices(),
+        null,
     )
 
     /** Selects who owns the process-wide iOS audio session while retaining the Apple host clock. */
@@ -175,6 +181,21 @@ public class CoreAudioSink private constructor(
         sharedAppleAudioSessionLeaseManager,
         PlatformCoreAudioSinkDestroyer,
         platformAppleOutputDevices(),
+        null,
+    )
+
+    /** A sink bound to the output device [device] names; see [AppleOutputBackend.withAudioOutputDevice]. */
+    internal constructor(
+        policy: AppleAudioSessionPolicy,
+        clock: MonotonicClock,
+        device: String?,
+    ) : this(
+        policy,
+        clock,
+        sharedAppleAudioSessionLeaseManager,
+        PlatformCoreAudioSinkDestroyer,
+        platformAppleOutputDevices(),
+        device,
     )
 
     /** Test seam for proving session ownership and device notices around every C lifecycle exit. */
@@ -184,7 +205,8 @@ public class CoreAudioSink private constructor(
         clock: MonotonicClock = AppleHostClock,
         destroyer: CoreAudioSinkDestroyer = PlatformCoreAudioSinkDestroyer,
         outputDevices: AppleOutputDevices = platformAppleOutputDevices(),
-    ) : this(policy, clock, leaseManager, destroyer, outputDevices)
+        device: String? = null,
+    ) : this(policy, clock, leaseManager, destroyer, outputDevices, device)
 
     init {
         require(clock === AppleHostClock) {
@@ -281,6 +303,13 @@ public class CoreAudioSink private constructor(
     ): NativeRingHandoff {
         check(handle == null && sessionLease == null) { "this sink is already open" }
 
+        // A chosen device that is not there now fails typed, before anything is made or leased.
+        val deviceId = device?.let { id ->
+            outputDevices.deviceFor(id) ?: throw PlaybackException(
+                PlaybackError.AudioDeviceUnavailable(id, "no output device has this id now"),
+            )
+        } ?: 0u
+
         // On iOS the process audio session must be active before RemoteIO is created. Acquiring is the
         // first step in the same transaction as the C device and ring. A later failure hands the lease
         // back only after C destruction is confirmed; uncertain destruction retains it fail-closed.
@@ -294,20 +323,29 @@ public class CoreAudioSink private constructor(
                 val out = allocPointerTo<kprt_sink>()
                 val accepted = alloc<kprt_sink_format>()
                 val status = alloc<IntVar>()
-                val verdict = kprt_sink_create(
+                val verdict = kprt_sink_create_on_device(
+                    deviceId,
                     request.sampleRate,
                     request.channels,
                     out.ptr,
                     accepted.ptr,
                     status.ptr,
                 )
+                if (verdict == KPRT_SINK_DEVICE_REFUSED.toInt()) {
+                    throw PlaybackException(
+                        PlaybackError.AudioDeviceUnavailable(
+                            device ?: "the default output",
+                            "CoreAudio refused to bind it, with status ${status.value}",
+                        ),
+                    )
+                }
                 if (verdict != KPRT_SINK_OK.toInt()) {
                     error(
                         "opening the audio device failed at ${verdictName(verdict)}" +
                             if (status.value != 0) " with CoreAudio status ${status.value}" else "",
                     )
                 }
-                val sink = out.value ?: error("kprt_sink_create reported success and produced no sink")
+                val sink = out.value ?: error("kprt_sink_create_on_device reported success and produced no sink")
                 ownedSink = sink
                 Opened(
                     sink = sink,
@@ -590,6 +628,8 @@ public class CoreAudioSink private constructor(
             10 -> "allocating the sink"
             11 -> "creating the ring"
             12 -> "attaching a second ring to a sink that already has one"
+            13 -> "tearing the device down, which could not prove the callback was out"
+            14 -> "binding the chosen output device"
             else -> "an unknown step (verdict $verdict)"
         }
     }
@@ -606,22 +646,25 @@ public class CoreAudioSink private constructor(
 public class CoreAudioSinkFactory private constructor(
     private val policy: AppleAudioSessionPolicy,
     private val clock: MonotonicClock,
-    @Suppress("UNUSED_PARAMETER") marker: Unit,
+    private val device: String?,
 ) : AudioSinkFactory {
 
     /** Preserves the original clock-first API and uses KitePlayer's managed playback policy. */
     public constructor(clock: MonotonicClock = AppleHostClock) : this(
         AppleAudioSessionPolicy.ManagedPlayback,
         clock,
-        Unit,
+        null,
     )
 
     /** Selects who owns the iOS audio session for every sink this factory creates. */
     public constructor(
         policy: AppleAudioSessionPolicy,
         clock: MonotonicClock = AppleHostClock,
-    ) : this(policy, clock, Unit)
+    ) : this(policy, clock, null)
+
+    /** Every sink it creates is bound to the output device [device] names. */
+    internal constructor(device: String) : this(AppleAudioSessionPolicy.ManagedPlayback, AppleHostClock, device)
 
     override val name: String = "CoreAudio"
-    override suspend fun create(): AudioSink = CoreAudioSink(policy, clock)
+    override suspend fun create(): AudioSink = CoreAudioSink(policy, clock, device)
 }

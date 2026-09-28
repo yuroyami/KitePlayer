@@ -132,6 +132,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   and the desktop renderers, `captureFrame` and `encode` read it through its downloaded copy. A
   custom renderer that reads planes itself uses `planeFormat`, or passes `HwdecPolicy.Off` to keep
   software frames (#237).
+- `DesktopOutputBackend` and `AppleOutputBackend` gain `audioOutputDevices()`, which lists the
+  devices a player can play through as `AudioOutputDevice` values, and `withAudioOutputDevice(id)`,
+  which returns the backend bound to one of them. On the desktop JVM the id is the mixer name. On
+  macOS it is CoreAudio's device UID, and the player stays on that device when the system default
+  changes. A device that has gone away fails the open with the new
+  `PlaybackError.AudioDeviceUnavailable` instead of falling back to the default. On iOS the audio
+  session owns the route, so the list holds the current route and nothing else can be chosen.
+  Android has no list for the same reason (#92).
 
 ## [0.0.27] - 2026-09-25
 

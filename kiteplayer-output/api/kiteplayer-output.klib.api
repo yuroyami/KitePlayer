@@ -179,6 +179,9 @@ final object io.github.yuroyami.kiteplayer.output/AppleOutputBackend : io.github
         final fun <get-clock>(): io.github.yuroyami.kiteplayer/MonotonicClock // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.clock.<get-clock>|<get-clock>(){}[0]
     final val subtitleRasterizer // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.subtitleRasterizer|{}subtitleRasterizer[0]
         final fun <get-subtitleRasterizer>(): io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.subtitleRasterizer.<get-subtitleRasterizer>|<get-subtitleRasterizer>(){}[0]
+
+    final fun audioOutputDevices(): kotlin.collections/List<io.github.yuroyami.kiteplayer/AudioOutputDevice> // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.audioOutputDevices|audioOutputDevices(){}[0]
+    final fun withAudioOutputDevice(kotlin/String): io.github.yuroyami.kiteplayer.spi/OutputBackend // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.withAudioOutputDevice|withAudioOutputDevice(kotlin.String){}[0]
 }
 
 // Targets: [ios]

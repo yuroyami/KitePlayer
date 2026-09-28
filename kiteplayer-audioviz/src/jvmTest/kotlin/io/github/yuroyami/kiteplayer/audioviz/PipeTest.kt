@@ -110,6 +110,27 @@ class PipeTest {
     }
 
     @Test
+    fun reducedMotionKeepsTheLaneCutAndTheLightSpeedSmall() {
+        fun widest(driver: VizDriver, motion: Float, read: (Pipe) -> Float): Float {
+            val pipe = Pipe()
+            var widest = 0f
+            RenderHarness.forEachFrameOf(pipe, 64, 36, 600, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(driver, step) },
+                beforeDraw = { it.motionScale = motion }) { _, _ -> widest = maxOf(widest, read(pipe)) }
+            return widest
+        }
+        val fullCut = widest(VizDriver.Section, 1f) { maxOf(abs(it.laneX), abs(it.laneY)) }
+        val calmCut = widest(VizDriver.Section, 0.15f) { maxOf(abs(it.laneX), abs(it.laneY)) }
+        val fullRush = widest(VizDriver.Drop, 1f) { it.streak }
+        val calmRush = widest(VizDriver.Drop, 0.15f) { it.streak }
+        println("pipe: lane cut $fullCut to $calmCut, streak $fullRush to $calmRush")
+        assertTrue(fullCut > 0.05f, "the fixture must cut the lane, had $fullCut")
+        assertTrue(calmCut <= fullCut * 0.2f, "the lane cut barely shrank: $calmCut against $fullCut")
+        assertTrue(fullRush > 0.9f, "the fixture must reach light speed, had $fullRush")
+        assertTrue(calmRush <= 0.2f, "light speed streaks stayed strong: $calmRush")
+    }
+
+    @Test
     fun silenceStopsTheFlightAndKeepsTheTubeLit() {
         val pipe = Pipe()
         var previous: IntArray? = null

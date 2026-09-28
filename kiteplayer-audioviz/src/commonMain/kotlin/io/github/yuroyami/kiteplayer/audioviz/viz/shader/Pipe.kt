@@ -130,6 +130,8 @@ internal class Pipe : ShaderPreset(
         val dt = state.deltaSeconds
         val step = state.stepSeconds
         val frame = state.frame
+        // Reduced motion keeps the cut to another lane and the rush of light speed, but small.
+        val motion = state.motionScale.coerceIn(0f, 1f)
 
         // Where the music is, in sixteenth notes: sixteen to a cycle of four pulses. The flight
         // moves only while music is heard, so a silence or a pause holds the tube where it is.
@@ -147,8 +149,8 @@ internal class Pipe : ShaderPreset(
         }
         val lightSpeed = lightSpeedUntil >= 0 && gestures.cycles < lightSpeedUntil
         if (!lightSpeed) lightSpeedUntil = -1
-        streak = if (lightSpeed) 1f else 0f
-        val pace = (if (lightSpeed) 3f else 1f) * (1f - 0.5f * calm)
+        streak = if (lightSpeed) motion else 0f
+        val pace = (if (lightSpeed) 1f + 2f * motion else 1f) * (1f - 0.5f * calm)
 
         // The live ring at the mouth follows the current spectrum until it leaves. On the first
         // frame every ring takes it, so the tube is whole from the start rather than filling up.
@@ -182,8 +184,8 @@ internal class Pipe : ShaderPreset(
         if (gestures.turn) {
             val angle = random.next() * TAU
             val reach = 0.15f + 0.3f * random.next()
-            laneX = reach * cos(angle)
-            laneY = reach * sin(angle)
+            laneX = reach * cos(angle) * motion
+            laneY = reach * sin(angle) * motion
             shapeFrom = shapeTo
             shapeTo = (shapeTo + 1 + (random.next() * 2f).toInt().coerceAtMost(1)) % SHAPES
             shapeMorph = 0f

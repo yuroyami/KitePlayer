@@ -104,7 +104,8 @@ internal class Iris : Visualization {
     private val mesh = TriangleMesh(maxVertices = MESH_VERTICES, maxIndices = MESH_INDICES)
 
     // The cached page background, rebuilt when the frame's size changes.
-    private var backgroundSize = -1f
+    private var backgroundWidth = -1f
+    private var backgroundHeight = -1f
     private var backgroundBrush: Brush? = null
 
     init {
@@ -114,9 +115,9 @@ internal class Iris : Visualization {
     override fun DrawScope.draw(state: VizRenderState) {
         advance(state)
         val light = state.lightScale.coerceIn(0f, 1f)
-        val longest = max(size.width, size.height)
-        if (longest != backgroundSize) {
-            backgroundSize = longest
+        if (size.width != backgroundWidth || size.height != backgroundHeight) {
+            backgroundWidth = size.width
+            backgroundHeight = size.height
             // `radial-gradient(circle, #060606, #010101)`: a circle reaching the farthest corner.
             val reach = sqrt(size.width * size.width + size.height * size.height) / 2f
             backgroundBrush = Brush.radialGradient(

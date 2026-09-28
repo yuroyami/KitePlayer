@@ -112,9 +112,19 @@ public actual class ShaderProgram actual constructor(source: String) {
         }
     }
 
+    // The shaders of the last two brushes. Each one holds native copies of the child pictures, and
+    // nothing else would release them before a garbage collection. Skia counts references, so a
+    // draw that still holds a shader is not affected when its wrapper is closed here.
+    private var lastShader: org.jetbrains.skia.Shader? = null
+    private var olderShader: org.jetbrains.skia.Shader? = null
+
     public actual fun brush(): Brush? {
         val holder = builder ?: return null
-        return SkiaProgramBrush(holder.makeShader().asComposeShader())
+        val shader = holder.makeShader()
+        olderShader?.close()
+        olderShader = lastShader
+        lastShader = shader
+        return SkiaProgramBrush(shader.asComposeShader())
     }
 
     internal actual fun childProgram(name: String, program: ShaderProgram) {

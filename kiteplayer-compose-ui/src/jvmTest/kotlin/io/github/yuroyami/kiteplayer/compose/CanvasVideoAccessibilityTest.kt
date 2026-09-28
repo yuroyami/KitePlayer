@@ -56,6 +56,25 @@ class CanvasVideoAccessibilityTest {
         waitForIdle()
         onNodeWithContentDescription("Video").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Failed"))
     }
+
+    /** An app that is not in English passes its own words, as the views allow (#309). */
+    @Test
+    fun `the canvas says what the application passed`() = runComposeUiTest {
+        val player = KitePlayer.create(
+            PlayerConfig(backends = Backends(backend = RefusingMediaBackend, output = SilentOutputBackend)),
+        ).also { players += it }
+        setContent {
+            KitePlayerVideo(
+                player,
+                Modifier.size(64.dp, 36.dp),
+                path = KiteRenderPath.ComposeCanvas,
+                keepDisplayAwake = false,
+                accessibilityVideoLabel = "Vídeo",
+                accessibilityStateFormat = { status, _, _ -> if (status == PlaybackStatus.Idle) "Sin contenido" else "Otro" },
+            )
+        }
+        onNodeWithContentDescription("Vídeo").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Sin contenido"))
+    }
 }
 
 private object RefusingMediaBackend : MediaBackend {

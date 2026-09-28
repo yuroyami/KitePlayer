@@ -38,6 +38,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   was when the player was set, unless the application called `updateAccessibilityState()`. None
   of them follows the position on every tick, so a screen reader does not speak continuously
   (#307).
+- `KitePlayerVideo` and `KitePlayerSurface` gain `accessibilityVideoLabel` and
+  `accessibilityStateFormat`, the same two settings the platform views have, so an app that is
+  not in English can translate what a screen reader says about the video. Null keeps the English
+  default. The new parameters change the compiled signatures of both composables, so recompile
+  (#309).
 - Swift and Objective-C: every `KitePlayer` call that can fail now declares `@Throws`, so a
   failure arrives as an error instead of ending the app (#204). The suspend calls convert any
   `Exception`. The setters, `play`, `pause`, `seekLater` and the renderer and tap calls throw on a

@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.PlaybackStatus
+import kotlin.time.Duration
 
 /**
  * The BASELINE Compose path: the platform player view, wrapped once.
@@ -26,14 +28,30 @@ import io.github.yuroyami.kiteplayer.KitePlayer
  * [keepDisplayAwake] keeps the display from dimming and locking while the player plays video and
  * this surface is on screen, as the platform view's own property of that name does. True by
  * default; the desktop view accepts it and does nothing.
+ *
+ * [accessibilityVideoLabel] and [accessibilityStateFormat] are what a screen reader says about the
+ * video, as the platform view's properties of those names. Null keeps the view's English default.
+ * The desktop view has no screen reader support, so the desktop ignores both.
  */
 @Composable
-public fun KitePlayerSurface(player: KitePlayer?, modifier: Modifier = Modifier, keepDisplayAwake: Boolean = true) {
-    platformKitePlayerSurface(player, modifier, keepDisplayAwake)
+public fun KitePlayerSurface(
+    player: KitePlayer?,
+    modifier: Modifier = Modifier,
+    keepDisplayAwake: Boolean = true,
+    accessibilityVideoLabel: String? = null,
+    accessibilityStateFormat: ((PlaybackStatus, Duration, Duration?) -> String)? = null,
+) {
+    platformKitePlayerSurface(player, modifier, keepDisplayAwake, accessibilityVideoLabel, accessibilityStateFormat)
 }
 
 @Composable
-internal expect fun platformKitePlayerSurface(player: KitePlayer?, modifier: Modifier, keepDisplayAwake: Boolean)
+internal expect fun platformKitePlayerSurface(
+    player: KitePlayer?,
+    modifier: Modifier,
+    keepDisplayAwake: Boolean,
+    accessibilityVideoLabel: String?,
+    accessibilityStateFormat: ((PlaybackStatus, Duration, Duration?) -> String)?,
+)
 
 /** Keeps sizing and modifier semantics intact on an explicitly unavailable placeholder target. */
 @Composable

@@ -5,8 +5,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.mobile.installDesktopRenderer
 import io.github.yuroyami.kiteplayer.view.KitePlayerAwtView
+import kotlin.time.Duration
 
 /**
  * Hosts the desktop platform video view, an AWT canvas painted off the Compose frame clock.
@@ -23,7 +25,13 @@ import io.github.yuroyami.kiteplayer.view.KitePlayerAwtView
  * picture rather than the playback.
  */
 @Composable
-internal actual fun platformKitePlayerSurface(player: KitePlayer?, modifier: Modifier, keepDisplayAwake: Boolean) {
+internal actual fun platformKitePlayerSurface(
+    player: KitePlayer?,
+    modifier: Modifier,
+    keepDisplayAwake: Boolean,
+    accessibilityVideoLabel: String?,
+    accessibilityStateFormat: ((PlaybackStatus, Duration, Duration?) -> String)?,
+) {
     val view = androidx.compose.runtime.remember {
         KitePlayerAwtView().also { it.installDesktopRenderer() }
     }

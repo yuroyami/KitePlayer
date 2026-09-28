@@ -1,4 +1,4 @@
 public final class io/github/yuroyami/kiteplayer/compose/KitePlayerSurfaceKt {
-	public static final fun KitePlayerSurface (Lio/github/yuroyami/kiteplayer/KitePlayer;Landroidx/compose/ui/Modifier;ZLandroidx/compose/runtime/Composer;II)V
+	public static final fun KitePlayerSurface (Lio/github/yuroyami/kiteplayer/KitePlayer;Landroidx/compose/ui/Modifier;ZLjava/lang/String;Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V
 }
 

@@ -43,6 +43,11 @@ import kotlin.time.Duration
  * this composable is on screen. True by default. A paused or ended player, or one that plays
  * audio only, lets the display sleep again. The desktop accepts it and does nothing, because the
  * desktop JVM has no call for it.
+ *
+ * [accessibilityVideoLabel] and [accessibilityStateFormat] are what a screen reader says about the
+ * video, on both paths: the label, and the state built from the status, the position and the
+ * duration. Null keeps the English default, "Video" and `accessibilityStateText`. The desktop
+ * native view has no screen reader support, so that path ignores both.
  */
 @Composable
 public fun KitePlayerVideo(
@@ -52,6 +57,8 @@ public fun KitePlayerVideo(
     onEffectivePath: ((KiteRenderPath) -> Unit)? = null,
     onRendererAttached: ((KitePlayer) -> Unit)? = null,
     keepDisplayAwake: Boolean = true,
+    accessibilityVideoLabel: String? = null,
+    accessibilityStateFormat: ((PlaybackStatus, Duration, Duration?) -> String)? = null,
 ) {
     val effective = resolveRenderPath(path)
     val currentOnEffectivePath by rememberUpdatedState(onEffectivePath)
@@ -59,13 +66,21 @@ public fun KitePlayerVideo(
     SideEffect { currentOnEffectivePath?.invoke(effective) }
     key(effective) {
         when (effective) {
-            KiteRenderPath.NativeView -> NativeViewVideo(player, modifier, keepDisplayAwake = keepDisplayAwake) {
+            KiteRenderPath.NativeView -> NativeViewVideo(
+                player,
+                modifier,
+                keepDisplayAwake = keepDisplayAwake,
+                accessibilityVideoLabel = accessibilityVideoLabel,
+                accessibilityStateFormat = accessibilityStateFormat,
+            ) {
                 currentOnRendererAttached?.invoke(it)
             }
             KiteRenderPath.ComposeCanvas -> {
                 ComposeCanvasVideo(
                     player = player,
                     modifier = modifier,
+                    accessibilityVideoLabel = accessibilityVideoLabel ?: DEFAULT_VIDEO_ACCESSIBILITY_LABEL,
+                    accessibilityStateFormat = accessibilityStateFormat ?: ::accessibilityStateText,
                     onRendererAttached = { currentOnRendererAttached?.invoke(it) },
                 )
                 // The native view holds the display itself; the canvas has no view to do it.
@@ -86,12 +101,20 @@ internal fun NativeViewVideo(
     modifier: Modifier,
     surface: (@Composable (KitePlayer?, Modifier) -> Unit)? = null,
     keepDisplayAwake: Boolean = true,
+    accessibilityVideoLabel: String? = null,
+    accessibilityStateFormat: ((PlaybackStatus, Duration, Duration?) -> String)? = null,
     onRendererAttached: (KitePlayer) -> Unit,
 ) {
     if (surface != null) {
         surface(player, modifier)
     } else {
-        KitePlayerSurface(player = player, modifier = modifier, keepDisplayAwake = keepDisplayAwake)
+        KitePlayerSurface(
+            player = player,
+            modifier = modifier,
+            keepDisplayAwake = keepDisplayAwake,
+            accessibilityVideoLabel = accessibilityVideoLabel,
+            accessibilityStateFormat = accessibilityStateFormat,
+        )
     }
     // Once per player, and again when a path swap composes this afresh, but not on a recomposition:
     // an unkeyed SideEffect here reported an attachment whenever the modifier changed. The view holds
@@ -125,6 +148,8 @@ internal expect fun rememberPlatformKiteVideoState(): KiteVideoState
 private fun ComposeCanvasVideo(
     player: KitePlayer?,
     modifier: Modifier,
+    accessibilityVideoLabel: String,
+    accessibilityStateFormat: (PlaybackStatus, Duration, Duration?) -> String,
     onRendererAttached: (KitePlayer) -> Unit,
 ) {
     val videoState = rememberPlatformKiteVideoState()
@@ -136,13 +161,13 @@ private fun ComposeCanvasVideo(
     val snapshot = player?.state?.collectAsState()?.value
     val status = snapshot?.status ?: PlaybackStatus.Idle
     val duration = snapshot?.duration
-    val stateText = remember(player, status, duration) {
-        accessibilityStateText(status, player?.progress?.value?.position ?: Duration.ZERO, duration)
+    val stateText = remember(player, status, duration, accessibilityStateFormat) {
+        accessibilityStateFormat(status, player?.progress?.value?.position ?: Duration.ZERO, duration)
     }
     KiteVideo(
         state = videoState,
         modifier = modifier.semantics {
-            contentDescription = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+            contentDescription = accessibilityVideoLabel
             stateDescription = stateText
         },
     )

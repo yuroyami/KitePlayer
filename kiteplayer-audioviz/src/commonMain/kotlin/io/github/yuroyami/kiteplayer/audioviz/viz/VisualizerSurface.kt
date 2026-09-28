@@ -853,24 +853,37 @@ public fun DrawScope.drawVisualization(visualization: Visualization, state: VizR
  *
  * At full motion the reading passes through untouched.
  */
-private class CalmReading {
+internal class CalmReading {
     private var last: SpectrumFrame? = null
+    private var lastHeard: SpectrumFrame? = null
 
     fun of(heard: SpectrumFrame, motionScale: Float, deltaSeconds: Float): SpectrumFrame {
         if (motionScale >= 1f) {
             last = null
+            lastHeard = null
             return heard
         }
+        // A redraw of the same step gets the same frame back, so a consumer can tell it is a repeat.
+        if (heard === lastHeard) last?.let { return it }
         val before = last
         val settled = if (before == null || !before.hasTimestamp || !heard.hasTimestamp ||
             before.generation != heard.generation || before.analysisRevision != heard.analysisRevision
         ) {
             heard
         } else {
-            // Half a second to cross, which is slower than any flash the policy counts.
-            before.blend(heard, (deltaSeconds / 0.5f).coerceIn(0f, 1f))
+            // Half a second to cross, which is slower than any flash the policy counts. Only the
+            // smooth values glide. The trace, the hits, the delivered events and the pause are
+            // this frame's own, so they come from [heard] and not from the old reading.
+            val glided = heard.blend(before, 1f - (deltaSeconds / 0.5f).coerceIn(0f, 1f))
+            glided.withEvents(heard.beat, heard.kick, heard.snare, heard.hat, heard.onsetStrength,
+                heard.drop, heard.events,
+                rhythm = if (heard.held) heard.rhythm else glided.rhythm,
+                beatConfidence = if (heard.held) heard.beatConfidence else glided.beatConfidence,
+                beatInSeconds = if (heard.held) heard.beatInSeconds else glided.beatInSeconds,
+                held = heard.held)
         }
         last = settled
+        lastHeard = heard
         return settled
     }
 }

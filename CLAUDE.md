@@ -92,6 +92,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
   Adding a member to an interface in one module changes the dump of every published module that
   implements it, because the override joins their public surface too. The host gate catches it, one
   commit later than the change.
+- One unresolved KDoc link fails the macOS CI job, because the publication build runs Dokka with
+  warnings as errors, and it stops the job before its size and conformance steps. A link to a type
+  in another package needs an import or the full name, even in an internal class. Run
+  `./gradlew :<module>:dokkaGeneratePublicationHtml` locally; it takes about a minute.
 
 ### Tests that fail for reasons that are not bugs
 

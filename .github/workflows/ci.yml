@@ -1265,14 +1265,18 @@ jobs:
         run: ./gradlew --stacktrace :kiteplayer-network:wasmJsTest
 
       # The browser matrix cannot write a file, so it prints its conformance table into the test
-      # result. This copies the table from there into the run summary, beside the macOS one.
+      # result. This copies the table from there into the run summary, beside the macOS one, and
+      # into the log, which a reader who is not signed in can see.
       - name: The browser conformance report
         if: always()
         run: |
+          found=0
           for result in kiteplayer-ffmpeg/build/test-results/wasmJsBrowserTest/*WebFormatMatrixTest*.xml; do
             [ -f "$result" ] || continue
-            sed -n '/^# Format conformance/,/]]>/p' "$result" | sed 's/]]>.*//' >> "$GITHUB_STEP_SUMMARY"
+            found=1
+            sed -n '/^# Format conformance/,/]]>/p' "$result" | sed 's/]]>.*//' | tee -a "$GITHUB_STEP_SUMMARY"
           done
+          [ "$found" = 1 ] || echo "::warning::The browser format matrix left no test result"
 
       - name: Upload test reports
         if: failure()

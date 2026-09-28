@@ -56,6 +56,10 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
         eventCursor = feed?.timeline?.eventCursor()
         sampledAnalysisRevision = null
         sampledMicros = null
+        sampledAligned = null
+        sampledHeld = false
+        resetEpoch++
+        sampleSerial++
         frame = SILENT
     }
 
@@ -186,6 +190,10 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
         private set
 
     private var sampledMicros: Long? = null
+    private var sampledAligned: SpectrumFrame? = null
+    private var sampledHeld = false
+    private var sampleSerial = 0L
+    private var resetEpoch = 0L
     private var sampledGeneration: Generation? = null
     private var sampledAnalysisRevision: Long? = null
     private var sampledRate = 0.0
@@ -196,11 +204,45 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
     private var refreshCount = 0
     private var refreshIndex = 0
 
+    /** Forgets what every event cursor has read, for a stall, a new track or a new feed. */
+    private fun resetCursors() {
+        eventCursor?.reset()
+        resetEpoch++
+    }
+
+    /**
+     * A reader of this state that may skip display frames, such as a surface capped below the
+     * display rate. It keeps an event cursor of its own, so it gets every event once whatever its
+     * rate. Reading [frame] on a slower clock would lose the events of the frames it skips.
+     */
+    internal fun frameSource(): AudioVizFrameSource = AudioVizFrameSource(this)
+
+    /** The frame for [source]: the moment last sampled, with every event since its last take. */
+    internal fun frameFor(source: AudioVizFrameSource): SpectrumFrame {
+        if (source.serial == sampleSerial) return source.frame
+        val at = sampledMicros
+        val feed = analysisFeed
+        val next = if (at == null || feed == null) {
+            source.forget()
+            SILENT
+        } else {
+            source.follow(feed, resetEpoch)
+            val aligned = sampledAligned
+            val delivery = source.cursor?.sample(at, paused = sampledHeld || aligned == null)
+            val sampled = if (delivery != null) (aligned ?: SILENT).withDeliveredEvents(delivery) else aligned ?: SILENT
+            // A paused picture keeps its levels but carries no beat progression.
+            if (sampledHeld) sampled.withPulseHeld() else sampled
+        }
+        source.serial = sampleSerial
+        source.frame = next
+        return next
+    }
+
     /** Samples the analysis for the moment this frame reaches the eye. Called once a display frame. */
     internal fun nextFrame(frameTimeNanos: Long? = null): SpectrumFrame {
         if (frameTimeNanos != null) {
             val interval = previousFrameNanos?.let { frameTimeNanos - it }
-            if (interval != null && interval > 250_000_000L) eventCursor?.reset()
+            if (interval != null && interval > 250_000_000L) resetCursors()
             // A stall is not a new refresh rate. This estimates cadence only, never the media clock.
             if (interval != null && interval in 4_000_000L..50_000_000L) {
                 refreshIntervals[refreshIndex] = interval
@@ -225,16 +267,21 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
             it + (estimatedDisplayDelay.inWholeNanoseconds / 1_000.0 * reading.rate).toLong()
         }
         sampledMicros = at
+        sampleSerial++
         if (at == null || feed == null || feed.timeline.generation != reading.generation) {
-            eventCursor?.reset()
+            resetCursors()
+            sampledAligned = null
+            sampledHeld = false
             frame = SILENT
             return frame
         }
-        if (changed) eventCursor?.reset()
+        if (changed) resetCursors()
         val aligned = feed.timeline.interpolated(at)?.takeIf {
             it.generation == reading.generation && it.analysisRevision == revision
         }
         val held = reading.rate == 0.0
+        sampledAligned = aligned
+        sampledHeld = held
         val delivery = eventCursor?.sample(at, paused = held || aligned == null)
         val sampled = if (delivery != null) (aligned ?: SILENT).withDeliveredEvents(delivery) else aligned ?: SILENT
         // A paused picture keeps its levels but carries no beat progression.
@@ -279,6 +326,40 @@ public fun rememberAudioVizState(
     // A later composition with another policy or store reaches the shared feed as well.
     SideEffect { state.boundFeed?.configureScan(songScan, songMapStore) }
     return state
+}
+
+/**
+ * One reader's view of an [AudioVizState]: its frames, with the events it has not seen yet.
+ *
+ * Take a frame with [take] as often or as rarely as the reader draws. Two readers of one state do
+ * not take events from each other.
+ */
+internal class AudioVizFrameSource(private val state: AudioVizState) {
+    internal var cursor: AudioEventCursor? = null
+        private set
+    private var feed: AudioVizFeed? = null
+    private var epoch = -1L
+    internal var serial = -1L
+    internal var frame: SpectrumFrame = SILENT
+
+    fun take(): SpectrumFrame = state.frameFor(this)
+
+    /** Reads from [feed]'s events, starting afresh when the feed changed or the state reset its cursors. */
+    fun follow(feed: AudioVizFeed, resetEpoch: Long) {
+        if (this.feed !== feed) {
+            this.feed = feed
+            cursor = feed.timeline.eventCursor()
+        } else if (epoch != resetEpoch) {
+            cursor?.reset()
+        }
+        epoch = resetEpoch
+    }
+
+    /** No feed or no clock: the next reading starts afresh. */
+    fun forget() {
+        cursor?.reset()
+        epoch = -1L
+    }
 }
 
 internal data class VizClockReading(

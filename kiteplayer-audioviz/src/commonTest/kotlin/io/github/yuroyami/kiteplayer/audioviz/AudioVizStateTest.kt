@@ -114,6 +114,82 @@ class AudioVizStateTest {
         assertEquals(16_666_667L, state.estimatedDisplayDelay.inWholeNanoseconds)
     }
 
+    private fun keyOf(delivered: DeliveredAudioEvent): String {
+        val detection = delivered.event.detection
+        return "${detection.kind}:${detection.ptsMicros}:${delivered.event.sequence}"
+    }
+
+    @Test
+    fun `a reader that skips display frames still gets every event once`() {
+        var position = 0L
+        val state = AudioVizState(feed = feed) { VizClockReading(position) }
+        state.displayDelay = Duration.ZERO
+        hear(0L, 8f)
+        val slow = state.frameSource()
+        val everyFrame = HashSet<String>()
+        val slowGot = ArrayList<String>()
+        val skippingFrameProperty = HashSet<String>()
+        var displayFrames = 0
+        fun readSlow() {
+            slow.take().events?.let { for (i in 0 until it.size) slowGot += keyOf(it[i]) }
+        }
+        // A 240 Hz display, read every fourth frame, as a surface capped at 60 would.
+        while (position < 7_000_000L) {
+            position += 1_000_000L / 240
+            val frame = state.nextFrame()
+            frame.events?.let { for (i in 0 until it.size) everyFrame += keyOf(it[i]) }
+            if (displayFrames % 4 == 0) {
+                readSlow()
+                frame.events?.let { for (i in 0 until it.size) skippingFrameProperty += keyOf(it[i]) }
+            }
+            displayFrames++
+        }
+        readSlow()
+        assertTrue(everyFrame.size > 10, "the drum loop should deliver events, had ${everyFrame.size}")
+        assertTrue(skippingFrameProperty.size < everyFrame.size,
+            "reading the frame property on a slower clock loses events, had ${skippingFrameProperty.size} of ${everyFrame.size}")
+        assertEquals(slowGot.size, slowGot.toSet().size, "an event was delivered twice")
+        assertEquals(everyFrame, slowGot.toSet(), "the slow reader must get every event")
+    }
+
+    @Test
+    fun `two readers of one state do not take events from each other`() {
+        var position = 0L
+        val state = AudioVizState(feed = feed) { VizClockReading(position) }
+        state.displayDelay = Duration.ZERO
+        hear(0L, 8f)
+        val first = state.frameSource()
+        val second = state.frameSource()
+        val firstGot = HashSet<String>()
+        val secondGot = HashSet<String>()
+        var displayFrames = 0
+        while (position < 7_000_000L) {
+            position += 1_000_000L / 120
+            state.nextFrame()
+            if (displayFrames % 2 == 0) first.take().events?.let { for (i in 0 until it.size) firstGot += keyOf(it[i]) }
+            if (displayFrames % 3 == 0) second.take().events?.let { for (i in 0 until it.size) secondGot += keyOf(it[i]) }
+            displayFrames++
+        }
+        first.take().events?.let { for (i in 0 until it.size) firstGot += keyOf(it[i]) }
+        second.take().events?.let { for (i in 0 until it.size) secondGot += keyOf(it[i]) }
+        assertTrue(firstGot.size > 10, "the drum loop should deliver events, had ${firstGot.size}")
+        assertEquals(firstGot, secondGot, "both readers must get the same events")
+    }
+
+    @Test
+    fun `the same display frame gives a reader the same frame twice`() {
+        var position = 0L
+        val state = AudioVizState(feed = feed) { VizClockReading(position) }
+        hear(0L, 2f)
+        val source = state.frameSource()
+        position = 500_000L
+        state.nextFrame()
+        assertSame(source.take(), source.take())
+        position = 516_000L
+        state.nextFrame()
+        assertTrue(source.take().ptsMicros > 500_000L)
+    }
+
     @Test
     fun `views sharing analysis keep independent event intervals`() {
         var position = 0L

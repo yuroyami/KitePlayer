@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import io.github.yuroyami.kiteplayer.audioviz.viz.DirectedVisualizerSurface
@@ -18,10 +19,13 @@ public fun KiteAudioViz(state: AudioVizState, modifier: Modifier = Modifier, pos
     LaunchedEffect(state) {
         while (true) withFrameNanos { state.nextFrame(it) }
     }
+    // This surface may draw less often than the display refreshes, so it reads through a source of
+    // its own. Reading state.frame would lose the events of the display frames it skips.
+    val source = remember(state) { state.frameSource() }
     if (state.directed) {
         DirectedVisualizerSurface(
             director = state.director,
-            frame = { state.frame },
+            frame = { source.take() },
             palette = state.palette,
             modifier = modifier,
             future = state.future,
@@ -36,7 +40,7 @@ public fun KiteAudioViz(state: AudioVizState, modifier: Modifier = Modifier, pos
     } else {
         VisualizerSurface(
             visualization = state.drawing,
-            frame = { state.frame },
+            frame = { source.take() },
             palette = state.palette,
             modifier = modifier,
             future = state.future,

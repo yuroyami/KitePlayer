@@ -62,14 +62,16 @@ public fun AudioVizBrowser(state: AudioVizState, modifier: Modifier = Modifier, 
         }
     }
     var query by remember { mutableStateOf("") }
-    var shown by remember { mutableStateOf(state.frame) }
+    // The tiles redraw at fifteen a second, so they read through a source of their own and see every event.
+    val source = remember(state) { state.frameSource() }
+    var shown by remember { mutableStateOf(source.take()) }
     val tileRate = if (state.framesPerSecond > 0) minOf(TILE_RATE, state.framesPerSecond) else TILE_RATE
     LaunchedEffect(state, tileRate, previewParams) {
         while (true) {
             // Separate animation state, but the same settings as the drawing being previewed.
             for ((configured, preview) in previewParams) preview.value = configured.value
             for ((configured, preview) in neonPreviews) preview.copyRecipeFrom(configured)
-            shown = state.frame
+            shown = source.take()
             delay(1_000L / tileRate)
         }
     }

@@ -79,7 +79,8 @@ you declare, and you do not install FFmpeg or add a Gradle plugin. On Android, e
 `minSdk` 26 or higher.
 
 An iOS app that links a static framework adds linker flags, and every iOS app declares two
-categories of required reason APIs in its privacy manifest. [iOS](#ios) says how.
+categories of required reason APIs in its privacy manifest. [iOS](#ios) says how. A web app serves
+two WebAssembly modules beside its page, and [Web](#web) says which.
 
 What each line pulls in:
 
@@ -145,6 +146,26 @@ store, and `3B52.1` for files the user picked. Keep only the reasons that apply 
     </dict>
 </array>
 ```
+
+### Web
+
+In a browser, FFmpeg and libass cannot live inside the Kotlin binary, so the page serves them as two
+WebAssembly modules. Each comes as a `web` zip beside its artifact on Maven Central:
+
+1. Unpack `kiteffmpeg-wasm-js-<version>-web.zip` beside `index.html`, with the kiteffmpeg version
+   KitePlayer depends on (0.3.0 for 0.0.27). The page then serves `kite.mjs`, `kite.wasm` and
+   `licenses/`.
+2. Unpack `kiteplayer-libass-wasm-js-<version>-web.zip` there too, for `kiteass.mjs` and
+   `kiteass.wasm`. The first ASS track loads them. Without them, ASS falls back to the built-in
+   styling.
+3. Call `KiteFFmpegWeb.load()` before you create a player. It fetches `./kite.mjs`. Under a bundler,
+   instantiate the module from a plain `<script type="module">` and pass it to
+   `KiteFFmpegWeb.attach()` instead.
+
+Serve `.mjs` as `text/javascript` and `.wasm` as `application/wasm`. The page needs no
+cross-origin isolation headers, because both modules are single-threaded. A browser starts audio
+only after the user interacts with the page, so the position stays at zero until then. Network
+media does not play in the browser yet, so play files from memory, as [Network](#network) says.
 
 ## Play something
 

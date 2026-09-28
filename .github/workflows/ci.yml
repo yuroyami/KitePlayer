@@ -801,8 +801,18 @@ jobs:
               [ -n "$pid" ] && adb shell debuggerd -b "$pid" > "$RUNNER_TEMP/test-logs/reopen-native-stacks.txt" 2>&1
             ) &
             watcher=$!
+            before=$status
             run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.ReopenDeviceTest
             kill "$watcher" 2> /dev/null || true
+            # This emulator's graphics host sometimes stalls for 15 to 17 s, and every process that
+            # draws or decodes waits with it, SystemUI included (#301). A failed run gets one rerun.
+            # The summary and the uploaded logs keep the failed run.
+            if [ "$status" != "$before" ]; then
+              echo "::warning::ReopenDeviceTest failed, so it runs once more (#301)"
+              echo "rerun=true" >> "$GITHUB_OUTPUT"
+              status=$before
+              run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.ReopenDeviceTest
+            fi
           fi
           adb unroot > /dev/null || true
           exit $status
@@ -847,6 +857,8 @@ jobs:
       # wrote no results shows "no results".
       - name: The test counts
         if: always()
+        env:
+          REOPEN_RERUN: ${{ steps.clips.outputs.rerun }}
         run: |
           python3 - >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           import glob, os, re, xml.etree.ElementTree as ET
@@ -876,6 +888,8 @@ jobs:
               tests = sum(oks) + sum(a for a, _ in bads)
               cells = f"{tests} | {sum(b for _, b in bads)}" if oks or bads else "no results |"
               print(f"| {pkg} | {cells} |")
+          if os.environ.get("REOPEN_RERUN") == "true":
+              print("\nReopenDeviceTest failed once and ran again, and both runs count above (#301).")
           print("\nThe classes marked `@NeedsPushedMedia`:\n")
           for path in sorted(glob.glob("*/src/androidDeviceTest/**/*.kt", recursive=True)):
               if "\n@NeedsPushedMedia\n" in open(path, errors="replace").read():
@@ -896,7 +910,7 @@ jobs:
           EOF
 
       - name: Collect the emulator log and the device log
-        if: failure()
+        if: failure() || steps.clips.outputs.rerun == 'true'
         run: |
           mkdir -p build/emulator-logs
           cp "$RUNNER_TEMP/emulator.log" build/emulator-logs/ || true
@@ -904,7 +918,7 @@ jobs:
           timeout 60 adb logcat -d > build/emulator-logs/logcat.txt 2>&1 || true
 
       - name: Upload test reports
-        if: failure()
+        if: failure() || steps.clips.outputs.rerun == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: android-emulator-reports

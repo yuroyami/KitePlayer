@@ -171,6 +171,40 @@ class DirectorTest {
         assertTrue(starts >= 3, "injected boundaries must actually change scenes")
     }
 
+    /** The ways a director changes over a minute of lively music, one change every six seconds. */
+    private fun transitionsUsed(calm: Boolean, preferred: VizTransition?): Set<VizTransition> {
+        val director = VizDirector(catalogue, seed = 5L)
+        director.calmChanges = calm
+        director.preferred = preferred
+        val used = HashSet<VizTransition>()
+        repeat(60 * 60) { index ->
+            val plain = SpectrumFrame((index / 60f * 1_000_000L).toLong(), FloatArray(8), FloatArray(8),
+                FloatArray(8), 0.5f, 0.5f, 0.5f, 0.5f, 0f, 0f,
+                mood = 0.75f, bpm = 120f, beatConfidence = 0.9f, barPhase = 0.37f)
+            val accepted = index > 0 && index % 360 == 0
+            val wasChanging = director.changing
+            director.advance(if (accepted) boundary(plain, index.toLong()) else plain, 1f / 60f)
+            if (director.changing && !wasChanging) used += director.transition
+        }
+        assertTrue(used.isNotEmpty(), "the run must change scenes")
+        return used
+    }
+
+    @Test
+    fun reducedMotionNeverChangesWithTheStrobe() {
+        assertEquals(setOf(VizTransition.Crossfade), transitionsUsed(calm = true, preferred = VizTransition.StrobeCut))
+    }
+
+    @Test
+    fun aCallerStillGetsTheStrobeItAsksForByName() {
+        assertEquals(setOf(VizTransition.StrobeCut), transitionsUsed(calm = false, preferred = VizTransition.StrobeCut))
+    }
+
+    @Test
+    fun reducedMotionKeepsAnotherPreferredWay() {
+        assertEquals(setOf(VizTransition.Iris), transitionsUsed(calm = true, preferred = VizTransition.Iris))
+    }
+
     @Test
     fun onlyDrawingsWithEchoesAreHandedOff() {
         for (drawing in catalogue) {

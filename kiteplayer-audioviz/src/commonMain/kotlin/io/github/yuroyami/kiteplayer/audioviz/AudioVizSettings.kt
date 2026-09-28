@@ -193,7 +193,9 @@ private fun Detail(state: AudioVizState, tick: Int) {
 private fun Transition(state: AudioVizState) {
     var preferred by remember(state) { mutableStateOf(state.director.preferred) }
     fun step(by: Int) {
-        val all = listOf<VizTransition?>(null) + VizTransition.entries
+        // Reduced motion allows no flash, and the strobe alternates the whole screen.
+        val all = listOf<VizTransition?>(null) +
+            VizTransition.entries.filter { !state.reducedMotion || it != VizTransition.StrobeCut }
         preferred = all[(all.indexOf(preferred) + by + all.size) % all.size]
         state.director.preferred = preferred
     }

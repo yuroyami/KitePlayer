@@ -111,7 +111,7 @@ public class VizDirector(
      * True keeps every change to a plain fade, whatever a drawing offers.
      *
      * A reduced-motion setting turns it on. A preferred way still wins, so a caller that asks for
-     * one by name gets it.
+     * one by name gets it, except [VizTransition.StrobeCut], which reduced motion never allows.
      */
     public var calmChanges: Boolean = false
 
@@ -245,7 +245,7 @@ public class VizDirector(
     /** A way to change that suits the music and that [next] can arrive by. */
     private fun chooseTransition(frame: SpectrumFrame, next: Visualization): VizTransition {
         val offered = next.transitions
-        preferred?.let { if (it in offered) return it }
+        preferred?.let { if (it in offered && !(calmChanges && it == VizTransition.StrobeCut)) return it }
         if (calmChanges) return VizTransition.Crossfade
         val suited = when {
             frame.mood > 0.7f -> LIVELY
@@ -259,7 +259,8 @@ public class VizDirector(
 
     /** [how], unless a preferred way was set and [next] can arrive by it. */
     private fun allowed(how: VizTransition, next: Visualization): VizTransition {
-        val wanted = preferred ?: if (calmChanges) VizTransition.Crossfade else return how
+        val asked = preferred?.takeUnless { calmChanges && it == VizTransition.StrobeCut }
+        val wanted = asked ?: if (calmChanges) VizTransition.Crossfade else return how
         return if (wanted in next.transitions) wanted else how
     }
 

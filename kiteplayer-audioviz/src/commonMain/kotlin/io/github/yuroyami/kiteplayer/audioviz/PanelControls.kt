@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
@@ -26,6 +28,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,7 +70,7 @@ internal fun Note(text: String, modifier: Modifier = Modifier, color: Color = Pa
 internal fun PanelButton(label: String, onClick: () -> Unit) {
     BasicText(
         label,
-        Modifier.clip(Rounded).background(PanelColors.Raised).clickable(onClick = onClick)
+        Modifier.clip(Rounded).background(PanelColors.Raised).clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         style = TextStyle(color = PanelColors.Bright, fontSize = 12.sp),
     )
@@ -73,7 +81,8 @@ internal fun PanelButton(label: String, onClick: () -> Unit) {
 internal fun Toggle(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.clip(Rounded).clickable { onChange(!on) }.padding(vertical = 3.dp),
+        modifier = Modifier.clip(Rounded).toggleable(value = on, role = Role.Checkbox, onValueChange = onChange)
+            .padding(vertical = 3.dp),
     ) {
         Canvas(Modifier.size(16.dp)) {
             drawRoundRect(if (on) PanelColors.Bright else PanelColors.Raised, cornerRadius = CornerRadius(3.dp.toPx()))
@@ -97,14 +106,19 @@ internal fun Chip(label: String, chosen: Boolean, onPick: () -> Unit) {
     BasicText(
         label,
         Modifier.clip(RoundedCornerShape(4.dp)).background(if (chosen) PanelColors.Bright else PanelColors.Raised)
-            .clickable(onClick = onPick).padding(horizontal = 10.dp, vertical = 4.dp),
+            .selectable(selected = chosen, role = Role.RadioButton, onClick = onPick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         style = TextStyle(color = if (chosen) PanelColors.Dark else PanelColors.Bright, fontSize = 12.sp),
     )
 }
 
-/** A horizontal slider over [range]. A tap or a drag anywhere along it sets the value. */
+/**
+ * A horizontal slider over [range]. A tap or a drag anywhere along it sets the value.
+ *
+ * [label] names it for a screen reader, which can also set the value through the slider's progress action.
+ */
 @Composable
-internal fun Slider(value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+internal fun Slider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
     val latest by rememberUpdatedState(onChange)
     val span = range.endInclusive - range.start
     fun valueAt(x: Float, width: Float, radius: Float): Float =
@@ -113,6 +127,14 @@ internal fun Slider(value: Float, range: ClosedFloatingPointRange<Float>, onChan
         Modifier
             .fillMaxWidth()
             .height(22.dp)
+            .semantics {
+                contentDescription = label
+                progressBarRangeInfo = ProgressBarRangeInfo(value.coerceIn(range.start, range.endInclusive), range)
+                setProgress { target ->
+                    latest(target.coerceIn(range.start, range.endInclusive))
+                    true
+                }
+            }
             .pointerInput(range) {
                 detectTapGestures { latest(valueAt(it.x, size.width.toFloat(), ThumbRadius.toPx())) }
             }

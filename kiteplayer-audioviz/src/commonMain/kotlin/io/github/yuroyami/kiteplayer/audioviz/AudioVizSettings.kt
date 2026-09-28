@@ -131,7 +131,7 @@ private fun Params(params: List<VizParam>, tick: Int) {
             val label = param.choices.getOrNull((value - param.min).roundToInt())
                 ?: if (param.step >= 1f) value.roundToInt().toString() else value.hundredths()
             Note("${param.name}  $label")
-            Slider(value, param.min..param.max) {
+            Slider(param.name, value, param.min..param.max) {
                 param.value = it
                 value = param.value
             }
@@ -152,7 +152,7 @@ private fun GeneControl(gene: Gene, tick: Int) {
             // Follows the song's own changes; while a finger drags, the two are the same number.
             LaunchedEffect(gene, tick) { value = gene.target }
             Note("${gene.name}  ${value.hundredths()}")
-            Slider(value, gene.min..gene.max) {
+            Slider(gene.name, value, gene.min..gene.max) {
                 value = it
                 gene.target = it
             }
@@ -175,7 +175,7 @@ private fun Detail(state: AudioVizState, tick: Int) {
     var scale by remember(state) { mutableFloatStateOf(state.quality.scale) }
     var dynamic by remember(state) { mutableStateOf(state.quality.dynamic) }
     Note("Trailing drawings render at ${(scale * 100).roundToInt()}% of the view")
-    Slider(scale, 0.25f..1f) {
+    Slider("Trailing drawing resolution", scale, 0.25f..1f) {
         scale = it
         state.quality.scale = it
     }

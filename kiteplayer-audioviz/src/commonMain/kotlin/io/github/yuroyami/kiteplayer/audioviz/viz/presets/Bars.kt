@@ -250,15 +250,17 @@ internal class Bars : Layered(
         val base = baseline * size.height
         val half = size.width * span() / 2f
         val middle = centreX * size.width
+        // The flash guard lowers this when the light has to be held back.
+        val light = state.lightScale.coerceIn(0f, 1f)
         for (wall in walls.value.toInt() downTo 1) {
             val scale = 1f - 0.16f * wall
             val row = history.row(wall * 0.8f)
             addEchoMeter(state, middle - half * scale, middle + half * scale,
-                base - size.height * 0.08f * wall, height * size.height * scale, row, 0.4f / wall)
+                base - size.height * 0.08f * wall, height * size.height * scale, row, 0.4f / wall * light)
         }
         if (depth.value > 0f) {
             addEchoMeter(state, middle - half, middle + half, base,
-                -(size.height - base) * 1.6f * depth.value, -1, 0.35f)
+                -(size.height - base) * 1.6f * depth.value, -1, 0.35f * light)
         }
         drawMesh(meter)
     }
@@ -284,12 +286,14 @@ internal class Bars : Layered(
         val middle = centreX * size.width
         val from = middle - half
         val to = middle + half
+        // The flash guard lowers this when the light has to be held back.
+        val light = state.lightScale.coerceIn(0f, 1f)
         drawOverlappingMeters(state, from, to)
         if (grid.value >= 0.5f && gridOpacity.value > 0f) drawGrid(state, from, to)
-        drawMeter(state, from, to, 1f, paired = opposing.value >= 0.5f, caps = true)
+        drawMeter(state, from, to, light, paired = opposing.value >= 0.5f, caps = true)
         if (sides.value >= 0.5f) {
-            drawMeter(state, 0f, size.width / 6f, 0.8f, reverse = true)
-            drawMeter(state, size.width * 5f / 6f, size.width, 0.8f, reverse = true)
+            drawMeter(state, 0f, size.width / 6f, 0.8f * light, reverse = true)
+            drawMeter(state, size.width * 5f / 6f, size.width, 0.8f * light, reverse = true)
         }
         val slot = (to - from) / heights.size
         val reach = size.minDimension * 0.05f
@@ -300,10 +304,10 @@ internal class Bars : Layered(
                 if (snareSweep >= 0f) closeness(snareSweep, position) else 0f)
             if (near <= 0.05f) continue
             val at = Offset(from + (index + 0.5f) * slot, base - peaks[index] * height * size.height)
-            drawCircle(Brush.radialGradient(0f to state.palette.cap.copy(alpha = 0.7f * near),
+            drawCircle(Brush.radialGradient(0f to state.palette.cap.copy(alpha = 0.7f * near * light),
                 1f to Color.Transparent, center = at, radius = reach), reach, at, blendMode = BlendMode.Plus)
         }
-        if (emberAmount.value > 0f) with(embers) { drawSprites(state.palette, genes.walk) }
+        if (emberAmount.value > 0f) with(embers) { drawSprites(state.palette, genes.walk, alpha = light) }
     }
 
     private fun DrawScope.drawOverlappingMeters(state: VizRenderState, from: Float, to: Float) {
@@ -320,7 +324,7 @@ internal class Bars : Layered(
                 direction * fan.value * offset * 1.5f
             val y = direction * offset * 0.65f + sin(phase) * offset * layerDrift.value
             val layerScale = 1f - 0.1f * depth
-            val alpha = layerOpacity.value * (1f - 0.25f * depth)
+            val alpha = layerOpacity.value * (1f - 0.25f * depth) * state.lightScale.coerceIn(0f, 1f)
             val colourShift = direction * layerColour.value * (0.6f + 0.4f * sin(phase))
             withTransform({
                 translate(x * size.width, y * size.height)
@@ -343,7 +347,7 @@ internal class Bars : Layered(
             for (row in 0 until rows.value.toInt()) {
                 val bottom = base - row * step
                 val colour = state.palette.ramp((row + 0.5f) / rows.value)
-                    .copy(alpha = gridOpacity.value).toArgb()
+                    .copy(alpha = gridOpacity.value * state.lightScale.coerceIn(0f, 1f)).toArgb()
                 meter.bar(left, left + slot * width.value, bottom - step * fill.value, bottom, colour, colour)
             }
             if ((index + 1) % COLUMN_BATCH == 0) {
@@ -426,7 +430,8 @@ internal class Bars : Layered(
                 if (nearer <= near) continue
                 // A checkerboard that travels with the cells, so the whole floor runs rather than only its lines.
                 val checker = if (((row - scrolled + column) % 2 + 2) % 2 == 0) 1f else 0.2f
-                val alpha = (0.25f + 0.5f * value) * (0.3f + 0.7f * near) * checker * floorStrength.value
+                val alpha = (0.25f + 0.5f * value) * (0.3f + 0.7f * near) * checker * floorStrength.value *
+                    state.lightScale.coerceIn(0f, 1f)
                 val colour = state.palette.argb(column / CELLS.toFloat() + genes.walk, value = 0.5f + 0.5f * value, alpha = alpha)
                 cell(column, near, nearer, baseline, 1f, colour)
                 cell(column, near, nearer, ceiling, 0f, colour)

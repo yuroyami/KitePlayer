@@ -211,14 +211,17 @@ internal class Alchemy : ShaderPreset(
         program.uniform("uGold", goldSpread, goldCool, rayGold, 0f)
         program.uniform("uRayTurn", gestures.cyclePhase * TAU + rayShift)
         program.uniform("uRayDensity", rayDensity.value)
+        // The flash guard lowers this when the light has to be held back.
+        program.uniform("uLight", state.lightScale.coerceIn(0f, 1f))
         program.uniform("uNested", nested.weight(1))
         program.uniform("uTwoRings", rings.weight(1))
     }
 
     override fun DrawScope.drawTop(state: VizRenderState) {
         // Blue and white are the idea here, so the sparks and comets ignore the chosen palette too.
-        with(sparks) { drawSprites(VizPalette.Ice, genes.walk) }
-        with(comets) { drawComets(VizPalette.Ice, genes.walk) }
+        val light = state.lightScale.coerceIn(0f, 1f)
+        with(sparks) { drawSprites(VizPalette.Ice, genes.walk, alpha = light) }
+        with(comets) { drawComets(VizPalette.Ice, genes.walk, alpha = light) }
         if (arcFrames > 0) drawArc(state)
     }
 
@@ -282,6 +285,7 @@ uniform float2 uCentre;
 uniform float uZoom;
 uniform float uRayTurn;
 uniform float uRayDensity;
+uniform float uLight;
 uniform float uNested;
 uniform float uTwoRings;
 uniform float4 uGold;
@@ -365,7 +369,7 @@ half4 main(float2 position) {
     colour += mix(blueDeep, paleGold * 0.5, uGold.z) * rays;
     colour += blueMid * electric + mix(blueMid, paleGold, uGold.z) * rays * 3.2 + laceMid * core * 2.0;
     colour += float3(0.72, 0.94, 1.0) * (pow(clamp(electric, 0.0, 1.0), 5.0) + nodes * (0.5 + uHat));
-    colour *= 0.28 + 0.72 * uDrive;
+    colour *= (0.28 + 0.72 * uDrive) * uLight;
     // The negative space still breathes: dim rays from the figure over dim stars.
     float backRays = pow(0.5 + 0.5 * sin(angle * 12.0 + uRayTurn * 0.5), 8.0) * exp(-radius * 0.6) * 0.09;
     float star = pow(hash21(floor(position * 0.5) + uSeed), 80.0) * 0.35;

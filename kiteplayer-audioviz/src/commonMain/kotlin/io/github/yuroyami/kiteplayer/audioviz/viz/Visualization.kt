@@ -408,11 +408,12 @@ public interface Visualization {
      *
      * The mood alone does not settle them. It reads 0 in a silence, which gives a drawing its calm
      * zoom rather than none, and a trail that swims at the same rate with nothing playing is the
-     * clearest way for a drawing to look like a screen saver.
+     * clearest way for a drawing to look like a screen saver. A paused player or a silence holds
+     * the trail still.
      */
     public fun echo(state: VizRenderState): EchoFrame {
         val mood = state.frame.mood
-        val pace = (0.08f + 1.6f * state.frame.energy).coerceIn(0f, 1f) * state.motionScale
+        val pace = (0.08f + 1.6f * state.frame.energy).coerceIn(0f, 1f) * state.motionScale * state.frame.audible
         return EchoFrame(
             zoomX = 1f + (feedbackZoomAt(mood) - 1f) * pace,
             spin = feedbackSpinAt(mood) * pace,

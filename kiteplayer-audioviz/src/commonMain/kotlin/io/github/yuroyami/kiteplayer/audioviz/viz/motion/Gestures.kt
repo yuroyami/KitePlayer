@@ -167,8 +167,10 @@ public class Gestures {
         val freeSeconds = (4.2f - 2.4f * frame.mood).coerceIn(1.8f, 4.2f)
         pulseUsable = frame.rhythm?.usable == true
         cycleSeconds = if (pulseUsable) 240f / checkNotNull(frame.rhythm).bpm else freeSeconds
-        val next = cycleClock.advance(dt, frame, 1f / freeSeconds)
-        val slow = slowClock.advance(dt, frame, 1f / (freeSeconds * 4f))
+        // A paused player does not turn the picture over. A silence keeps the cycles running.
+        val heardDt = if (frame.held) 0f else dt
+        val next = cycleClock.advance(heardDt, frame, 1f / freeSeconds)
+        val slow = slowClock.advance(heardDt, frame, 1f / (freeSeconds * 4f))
         if (next < cyclePhase - 0.5f) cycles++
         if (slow < slowCyclePhase - 0.5f) slowCycles++
         cyclePhase = next

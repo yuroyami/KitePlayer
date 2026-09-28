@@ -98,7 +98,8 @@ public class Camera2D(
         // A reduced-motion setting damps everything that throws the picture about and leaves the
         // slow wander, so the drawing still breathes rather than freezing.
         val scale = state.motionScale
-        val jitter = shake * frame.hatPulse * scale
+        // A held frame keeps its pulse, so the jitter has to follow the audible time as well.
+        val jitter = shake * frame.hatPulse * scale * frame.audible
 
         panX = noise.layered(drift * 0.5f, 2) * wander + laneX * scale + nudge.value * NUDGE * scale +
             orbit * cos(orbitPhase * TAU) + random.signed() * jitter

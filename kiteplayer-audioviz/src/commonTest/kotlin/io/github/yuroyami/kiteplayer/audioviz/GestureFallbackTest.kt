@@ -1,10 +1,14 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
+import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Comets
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** The visual cadence a drawing falls back on when the detectors accept nothing. */
@@ -24,6 +28,58 @@ class GestureFallbackTest {
         assertEquals(0, gestures.sections, "a hand-built frame carries no boundary")
         assertTrue(gestures.cycles >= 8, "four minutes of free motion should complete eight cycles, had ${gestures.cycles}")
         assertEquals(gestures.cycles / 8, gestures.turns, "one turn per eight cycles")
+    }
+
+    @Test
+    fun aPausedPlayerDoesNotTurnTheCycles() {
+        val gestures = Gestures()
+        repeat(60 * 4) { index ->
+            gestures.update(VizRenderState(frame(index, 0.5f), index / 60f, 1f / 60f, VizPalette.Classic))
+        }
+        val cycles = gestures.cycles
+        val phase = gestures.cyclePhase
+        val slowPhase = gestures.slowCyclePhase
+        val turns = gestures.turns
+        val paused = frame(240, 0.5f).withEvents(held = true)
+        repeat(60 * 240) { index ->
+            gestures.update(VizRenderState(paused, 4f + index / 60f, 1f / 60f, VizPalette.Classic))
+            assertFalse(gestures.turn, "a paused picture must not turn over at ${index / 60f} seconds")
+        }
+        assertEquals(cycles, gestures.cycles)
+        assertEquals(phase, gestures.cyclePhase)
+        assertEquals(slowPhase, gestures.slowCyclePhase)
+        assertEquals(turns, gestures.turns)
+    }
+
+    @Test
+    fun aPausedPlayerLaunchesNoComet() {
+        val gestures = Gestures()
+        val comets = Comets()
+        val random = Rng(3L)
+        val paused = frame(0, 0.5f).withEvents(held = true)
+        repeat(240) { index ->
+            val state = VizRenderState(paused, index / 60f, 1f / 60f, VizPalette.Classic)
+            gestures.update(state)
+            comets.advance(state, gestures, random)
+        }
+        assertFalse(comets.travellers.anyNewest, "a comet crossed the picture under a paused player")
+    }
+
+    @Test
+    fun aPausedCameraDoesNotShake() {
+        val camera = Camera2D(wander = 0f, shake = 0.02f, seed = 5)
+        val hatty = SpectrumFrame(
+            0L, FloatArray(1), FloatArray(1), FloatArray(1), 0.3f, 0.3f, 0.3f, 0.3f, 0f, 0f,
+            energy = 0.5f, hatPulse = 1f,
+        ).withEvents(held = true)
+        var restX = Float.NaN
+        var restY = Float.NaN
+        repeat(60) { index ->
+            camera.advance(VizRenderState(hatty, index / 60f, 1f / 60f, VizPalette.Classic))
+            if (index == 0) { restX = camera.panX; restY = camera.panY }
+            assertEquals(restX, camera.panX, "the camera shook under a paused player")
+            assertEquals(restY, camera.panY, "the camera shook under a paused player")
+        }
     }
 
     @Test

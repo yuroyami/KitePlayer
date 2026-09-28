@@ -183,7 +183,7 @@ internal class Orbiter(
     var direction: Float = 1f
 
     fun advance(state: VizRenderState, gestures: Gestures) {
-        angle += direction * state.deltaSeconds * lapsPerBar * TAU / gestures.cycleSeconds * (0.12f + 1.7f * state.drive)
+        angle += direction * state.stepSeconds * lapsPerBar * TAU / gestures.cycleSeconds * (0.12f + 1.7f * state.drive)
         x = centreX + radiusX * cos(angle)
         y = centreY + radiusY * sin(angle)
     }

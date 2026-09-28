@@ -216,6 +216,8 @@ internal class Comets(capacity: Int = 3, private val kind: Int = Sprite.GLOW, pr
     private val mesh = TriangleMesh(maxVertices = capacity * 12 + 8)
 
     fun advance(state: VizRenderState, gestures: Gestures, random: Rng) {
+        // A pause holds the comets where they are, and launches none.
+        if (state.frame.held) return
         // One in flight while anything plays; a section launches another once most of the way flown.
         val flown = travellers.anyNewest && travellers.progress[travellers.newest] > 0.6f
         if (!gestures.silence && (!travellers.anyNewest || (gestures.section && flown))) {

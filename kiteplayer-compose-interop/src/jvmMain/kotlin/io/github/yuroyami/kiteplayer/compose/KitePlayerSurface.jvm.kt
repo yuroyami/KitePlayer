@@ -7,7 +7,9 @@ import androidx.compose.ui.awt.SwingPanel
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.mobile.installDesktopRenderer
+import io.github.yuroyami.kiteplayer.view.DEFAULT_VIDEO_ACCESSIBILITY_LABEL
 import io.github.yuroyami.kiteplayer.view.KitePlayerAwtView
+import io.github.yuroyami.kiteplayer.view.accessibilityStateText
 import kotlin.time.Duration
 
 /**
@@ -40,6 +42,11 @@ internal actual fun platformKitePlayerSurface(
         modifier = modifier,
         update = {
             it.keepDisplayAwake = keepDisplayAwake
+            // Only on a change: each assignment makes the view tell a screen reader again.
+            val label = accessibilityVideoLabel ?: DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+            if (it.accessibilityVideoLabel != label) it.accessibilityVideoLabel = label
+            val format = accessibilityStateFormat ?: ::accessibilityStateText
+            if (it.accessibilityStateFormat != format) it.accessibilityStateFormat = format
             it.player = player
         },
     )

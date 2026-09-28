@@ -15,9 +15,12 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import io.github.yuroyami.kiteplayer.PlaybackStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.runBlocking
 import java.awt.Canvas
+import java.awt.EventQueue
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -219,6 +222,42 @@ class KitePlayerAwtViewTest {
         view.floatingCanvas = null
 
         assertNull(renderer.current, "a view without a peer cannot take the picture back")
+    }
+
+    @Test
+    fun aScreenReaderReadsTheLabelAsTheNameAndTheStateAsTheDescription() {
+        val view = KitePlayerAwtView()
+        assertEquals(DEFAULT_VIDEO_ACCESSIBILITY_LABEL, view.accessibleContext.accessibleName)
+        assertEquals("No media", view.accessibleContext.accessibleDescription)
+
+        view.accessibilityVideoLabel = "Vídeo"
+        view.accessibilityStateFormat = { status, _, _ -> if (status == PlaybackStatus.Idle) "Sin contenido" else "Otro" }
+        assertEquals("Vídeo", view.accessibleContext.accessibleName)
+        assertEquals("Sin contenido", view.accessibleContext.accessibleDescription)
+    }
+
+    /** The application does not have to tell the view: it follows the status while it has its peer (#310). */
+    @Test
+    fun theDescriptionFollowsThePlayersStatusWhileTheViewHasItsPeer() {
+        val view = KitePlayerAwtView()
+        view.canvasAvailable()
+        val player = player()
+        view.player = player
+        assertEquals("No media", description(view))
+
+        // The backend refuses every open, so the status moves on to Failed.
+        runBlocking { runCatching { player.open(MediaItem("refused.mp4")) } }
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (description(view) != "Failed" && System.nanoTime() < deadline) Thread.sleep(10)
+        assertEquals("Failed", description(view))
+        view.release()
+    }
+
+    /** Read on the event dispatch thread, which is where the view refreshes it. */
+    private fun description(view: KitePlayerAwtView): String? {
+        var text: String? = null
+        EventQueue.invokeAndWait { text = view.accessibleContext.accessibleDescription }
+        return text
     }
 }
 

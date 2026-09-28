@@ -1,8 +1,16 @@
 package io.github.yuroyami.kiteplayer.view
 
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.VideoSize
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import java.awt.Canvas
+import java.awt.EventQueue
+import javax.accessibility.AccessibleContext
+import kotlin.time.Duration
 
 /**
  * A desktop player view: an ordinary AWT canvas that a renderer paints video into.
@@ -107,7 +115,87 @@ public open class KitePlayerAwtView : Canvas() {
         set(value) {
             field = value
             binding.setPlayer(value)
+            updateAccessibilityState()
+            watchPlayer()
         }
+
+    /** What a screen reader calls this view, as its accessible name. English by default; pass a translated one. */
+    public var accessibilityVideoLabel: String = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+        set(value) {
+            val old = field
+            field = value
+            getAccessibleContext().firePropertyChange(AccessibleContext.ACCESSIBLE_NAME_PROPERTY, old, value)
+        }
+
+    /**
+     * Builds what a screen reader says about the state from the status, the position and the
+     * duration. The default, [accessibilityStateText], is English; pass a translated one.
+     */
+    public var accessibilityStateFormat: (PlaybackStatus, Duration, Duration?) -> String = ::accessibilityStateText
+        set(value) {
+            field = value
+            updateAccessibilityState()
+        }
+
+    /** The state a screen reader reads as this view's accessible description. */
+    private var accessibilityState: String = accessibilityStateText(PlaybackStatus.Idle, Duration.ZERO, null)
+
+    /**
+     * Re-reads what a screen reader should say about the player and tells the platform.
+     *
+     * This view calls it when the player is assigned, and while it has its peer, each time the
+     * player's status or duration changes. It does not follow the position, because a value that
+     * changed on every tick would make a screen reader speak continuously. So the position read
+     * out is the one from the last change. An application that wants a fresh position, for example
+     * after a seek, calls this beside its own controls.
+     */
+    public fun updateAccessibilityState() {
+        val snapshot = player?.state?.value
+        val text = if (snapshot == null) {
+            accessibilityStateFormat(PlaybackStatus.Idle, Duration.ZERO, null)
+        } else {
+            accessibilityStateFormat(snapshot.status, player?.progress?.value?.position ?: Duration.ZERO, snapshot.duration)
+        }
+        val old = accessibilityState
+        accessibilityState = text
+        if (old != text) {
+            getAccessibleContext().firePropertyChange(AccessibleContext.ACCESSIBLE_DESCRIPTION_PROPERTY, old, text)
+        }
+    }
+
+    private var videoAccessibleContext: AccessibleContext? = null
+
+    override fun getAccessibleContext(): AccessibleContext =
+        videoAccessibleContext ?: VideoAccessibleContext().also { videoAccessibleContext = it }
+
+    /** The canvas's own context, with the label as its name and the state as its description. */
+    private inner class VideoAccessibleContext : AccessibleAWTCanvas() {
+        override fun getAccessibleName(): String = accessibilityVideoLabel
+
+        override fun getAccessibleDescription(): String = accessibilityState
+    }
+
+    /** Follows the player's state for what a screen reader hears, only while this view has its peer and a player. */
+    private var stateWatch: Job? = null
+
+    private fun watchPlayer() {
+        stateWatch?.cancel()
+        stateWatch = null
+        val watched = player ?: return
+        if (!hasPeer) return
+        stateWatch = CoroutineScope(Dispatchers.Default).launch {
+            var announced: Pair<PlaybackStatus, Duration?>? = null
+            watched.state.collect { snapshot ->
+                // The status and the duration, never the position; see updateAccessibilityState.
+                val heard = snapshot.status to snapshot.duration
+                if (heard != announced) {
+                    announced = heard
+                    // Every member of this view belongs to the event dispatch thread.
+                    EventQueue.invokeLater { if (player === watched) updateAccessibilityState() }
+                }
+            }
+        }
+    }
 
     /**
      * Accepted for symmetry with the Android and iOS views, and does nothing: the desktop JVM has
@@ -178,6 +266,7 @@ public open class KitePlayerAwtView : Canvas() {
         hasPeer = true
         binding.activeRenderer?.setCanvas(rendererCanvas())
         binding.surfaceReady()
+        watchPlayer()
     }
 
     /**
@@ -188,6 +277,7 @@ public open class KitePlayerAwtView : Canvas() {
         hasPeer = false
         binding.activeRenderer?.setCanvas(rendererCanvas())
         binding.surfaceGone()
+        watchPlayer()
     }
 }
 

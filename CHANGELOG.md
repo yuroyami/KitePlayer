@@ -43,6 +43,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   not in English can translate what a screen reader says about the video. Null keeps the English
   default. The new parameters change the compiled signatures of both composables, so recompile
   (#309).
+- On the desktop JVM, `KitePlayerAwtView` now tells a screen reader that it is the video, as its
+  accessible name, and what the player is doing, as its accessible description. It gains
+  `accessibilityVideoLabel`, `accessibilityStateFormat` and `updateAccessibilityState()`, as the
+  Android and iOS views have, and refreshes the state by itself while it is shown. Before, a
+  screen reader found an unnamed canvas, and so did a Compose desktop app on the default path of
+  `KitePlayerVideo` (#310).
 - Swift and Objective-C: every `KitePlayer` call that can fail now declares `@Throws`, so a
   failure arrives as an error instead of ending the app (#204). The suspend calls convert any
   `Exception`. The setters, `play`, `pause`, `seekLater` and the renderer and tap calls throw on a

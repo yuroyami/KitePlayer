@@ -46,8 +46,7 @@ import kotlin.time.Duration
  *
  * [accessibilityVideoLabel] and [accessibilityStateFormat] are what a screen reader says about the
  * video, on both paths: the label, and the state built from the status, the position and the
- * duration. Null keeps the English default, "Video" and `accessibilityStateText`. The desktop
- * native view has no screen reader support, so that path ignores both.
+ * duration. Null keeps the English default, "Video" and `accessibilityStateText`.
  */
 @Composable
 public fun KitePlayerVideo(

@@ -199,6 +199,13 @@ internal class ThinIce : Layered(
     /** Hairline cracks in the ice now. For tests. */
     internal val cracks: Int get() = (0 until CRACKS).count { crackAlpha[it] > 0f }
 
+    /** Where well [well] is, in shares of the screen, for tests. */
+    internal fun wellAt(well: Int): Pair<Float, Float> = wellX(well) to wellY(well)
+
+    /** The centres of the live rings of [well], in shares of the screen, for tests. */
+    internal fun ringCentresOf(well: Int): List<Pair<Float, Float>> =
+        (0 until PER_WELL).map { well * PER_WELL + it }.filter { alive[it] }.map { centreX[it] to centreY[it] }
+
     /** Pieces of broken ice still sinking. For tests. */
     internal val sinking: Int get() = if (breakAge < 0f) 0 else pieceCount
 
@@ -319,16 +326,33 @@ internal class ThinIce : Layered(
         }
     }
 
-    /** Keeps the screen's size in shorter sides. */
+    /**
+     * Keeps the screen's size in shorter sides. A turn between landscape and portrait swaps the
+     * roles of the two sides of the wells, so the rings already born swap their centres to stay on
+     * their wells. The first draw on a phone in portrait is such a turn, because a drawing starts
+     * out with the landscape shape.
+     */
     private fun updateScreen(aspect: Float) {
-        if (aspect >= 1f) {
+        val landscape = aspect >= 1f
+        if (landscape) {
             screenW = aspect
             screenH = 1f
         } else {
             screenW = 1f
             screenH = 1f / aspect.coerceAtLeast(0.1f)
         }
+        if (landscape != wasLandscape) {
+            wasLandscape = landscape
+            for (slot in 0 until SLOTS) {
+                val across = centreX[slot]
+                centreX[slot] = centreY[slot]
+                centreY[slot] = across
+            }
+        }
     }
+
+    /** Whether the screen was landscape the last time its size was read. */
+    private var wasLandscape = true
 
     /** Where well [well] is, in shares of the screen: along its long side and across it. */
     private fun wellX(well: Int): Float = if (screenW >= screenH) wellAlong[well] else wellAcross[well]

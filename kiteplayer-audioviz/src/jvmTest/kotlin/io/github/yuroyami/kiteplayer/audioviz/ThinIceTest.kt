@@ -61,6 +61,21 @@ class ThinIceTest {
     }
 
     @Test
+    fun theFirstRingsSitOnTheWellsOfAPortraitScreen() {
+        // A drawing starts out with the landscape shape and only learns the screen when it draws.
+        val ice = ThinIce()
+        RenderHarness.forEachFrame(ice, 36, 64, 3, VizPalette.Prism, RenderHarness.Song.Silence) { _, _ -> }
+        for (well in 0 until 2) {
+            val (x, y) = ice.wellAt(well)
+            val centres = ice.ringCentresOf(well)
+            assertTrue(centres.isNotEmpty(), "well $well has no rings")
+            for ((cx, cy) in centres) {
+                assertTrue(abs(cx - x) < 1e-5f && abs(cy - y) < 1e-5f, "a ring of well $well is centred at $cx, $cy and the well is at $x, $y")
+            }
+        }
+    }
+
+    @Test
     fun ringsBornABeatApartSitTheSameDistanceApart() {
         val ice = ThinIce()
         var radii = emptyList<Float>()

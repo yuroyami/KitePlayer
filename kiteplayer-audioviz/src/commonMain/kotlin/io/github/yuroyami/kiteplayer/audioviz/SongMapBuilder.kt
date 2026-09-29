@@ -30,6 +30,9 @@ internal class SongMapBuilder(
     private var format: AudioFormat? = null
     private var coveredThrough = 0L
 
+    // Where the next block should start if the audio is continuous.
+    private var expectedMicros: Long? = null
+
     private val histogram = IntArray(HISTOGRAM_BINS)
     private var readings = 0
     private var curve = FloatArray(1_024)
@@ -53,14 +56,19 @@ internal class SongMapBuilder(
 
     fun feed(pts: Pts, interleaved: FloatArray, frames: Int, format: AudioFormat) {
         if (frames <= 0 || format.channels !in 1..64 || format.sampleRate !in 1_000..768_000) return
-        if (format != this.format) {
-            // A format change starts a new analysis; what was learned so far stays in the map.
+        // A gap or a jump in the timestamps starts a new analysis too, as it does for live audio. The
+        // analyser counts samples, so without the restart everything after the jump lands early.
+        val jumped = expectedMicros?.let { abs(pts.micros - it) > JUMP_MICROS } ?: false
+        if (format != this.format || jumped) {
+            // A new analysis; what was learned so far stays in the map.
             closeKey(pts.micros)
             analyzer = SpectrumAnalyzer(sampleRate = format.sampleRate).also { it.onAnalysis = ::collect }
             this.format = format
         }
         checkNotNull(analyzer).feed(interleaved, frames, format, pts.micros)
-        coveredThrough = maxOf(coveredThrough, pts.micros + frames * 1_000_000L / format.sampleRate)
+        val endMicros = pts.micros + frames * 1_000_000L / format.sampleRate
+        expectedMicros = endMicros
+        coveredThrough = maxOf(coveredThrough, endMicros)
     }
 
     private fun collect(frame: SpectrumFrame) {
@@ -190,6 +198,9 @@ internal class SongMapBuilder(
         const val PROFILE_STEPS = 300
         const val KEY_GAP_MICROS = 8_000_000L
         const val KEY_BOUNDARY_SPACING_MICROS = 4_000_000L
+
+        /** A timestamp step over this restarts the analysis, as for live audio. Container timestamps are rounded to 1 ms. */
+        const val JUMP_MICROS = 2_000L
 
         /**
          * Audio a part analyses before the stretch it owns, so every detector is warm at the seam.

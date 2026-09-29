@@ -107,6 +107,36 @@ class SongMapBuilderTest {
         assertTrue(map.levelCurve.size <= 201, "one value per 100 ms, got ${map.levelCurve.size}")
     }
 
+    /** The same audio, with the timestamps of every block from [jumpAtSample] on moved by [jumpMicros]. */
+    private fun buildWithJump(mono: FloatArray, jumpAtSample: Int, jumpMicros: Long): SongMap {
+        val builder = SongMapBuilder(TrackId(1))
+        val block = FloatArray(1024 * 2)
+        var start = 0
+        while (start < mono.size) {
+            val frames = minOf(1024, mono.size - start)
+            for (i in 0 until frames) { block[2 * i] = mono[start + i]; block[2 * i + 1] = mono[start + i] }
+            val shift = if (start >= jumpAtSample) jumpMicros else 0L
+            builder.feed(Pts(start * 1_000_000L / 48_000 + shift), block, frames, format)
+            start += frames
+        }
+        return builder.build(true)
+    }
+
+    private fun eventSeconds(map: SongMap): List<Double> =
+        (0 until map.structureCount).map { map.structure(it).ptsMicros / 1_000_000.0 }
+
+    @Test
+    fun aJumpInTheTimestampsMovesTheEventsAfterItWithTheAudio() {
+        // Ten seconds of pad, ten more of pad, then the drums at sample time 20 s.
+        val mono = SyntheticSong.calmPad(20f) + SyntheticSong.drumLoop(20f)
+        val plain = eventSeconds(build(mono))
+        val jumped = eventSeconds(buildWithJump(mono, jumpAtSample = 48_000 * 10, jumpMicros = 5_000_000L))
+        println("song map events: plain $plain, jumped $jumped")
+        assertTrue(plain.any { abs(it - 20.0) < 1.5 }, "the fixture must show the change to drums near 20 s: $plain")
+        assertTrue(jumped.any { abs(it - 25.0) < 1.5 }, "after a 5 s jump the change to drums is at 25 s: $jumped")
+        assertTrue(jumped.none { abs(it - 20.0) < 1.5 }, "nothing may stay at the unshifted 20 s: $jumped")
+    }
+
     private fun part(firstCell: Int, cells: Int, db: Float) = SongMapPart(
         coveredThroughMicros = (firstCell + cells) * SongMap.CURVE_STEP_MICROS,
         histogram = IntArray(SongMapBuilder.HISTOGRAM_BINS), readings = 0,

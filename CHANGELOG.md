@@ -10,8 +10,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
-### Upgrading
+## [0.2.0] - 2026-09-29
 
+### Upgrading from 0.0.27
+
+- KitePlayer builds on KiteFFmpeg 0.4.0, which is not binary compatible with 0.3.0. Code that
+  also calls KiteFFmpeg directly must be compiled against 0.4.0. KiteFFmpeg's own changelog lists
+  its changes.
 - `kiteplayer-libass` links the libass chain from KiteFFmpeg's `ass-chain-r2` release, which
   builds HarfBuzz 14.5.0 instead of 14.2.1. HarfBuzz's own notes for 14.4.0 and 14.5.0 list fixes
   for crashes and hangs with malformed fonts, which matters because a Matroska file can carry its
@@ -97,10 +102,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   uses `KiteFFmpegWebPainter` instead (#97).
 - `KitePlayer.create` refuses `SyncMode.ExternalMaster` with `ConfigurationInvalid`, because
   nothing follows an external clock yet. Members that nothing produced or called are removed:
-  `MasterClock.External`, `PlaybackError.DecoderUnavailable`, `PlaybackError.AudioDeviceUnavailable`,
-  `OutputBackend.videoRenderer` and `AudioSinkBuffer.writePlane`. A custom output backend or
-  audio sink deletes its override of the last two, and a `when` deletes its branch for the other
-  three (#218).
+  `MasterClock.External`, `PlaybackError.DecoderUnavailable`, `OutputBackend.videoRenderer` and
+  `AudioSinkBuffer.writePlane`. A custom output backend or audio sink deletes its override of the
+  last two, and a `when` deletes its branch for the other two. `PlaybackError.AudioDeviceUnavailable`
+  was removed here too, and came back with `device` and `detail` for bound output devices (#218,
+  #92).
 - `setSleepTimer` throws `IllegalArgumentException` at the call for a negative fade or an `After`
   that is not in the future, and a refused A-B loop is published as `CommandRefused` (#217).
 - `setAudioDelay` was documented the wrong way round. A positive value presents the picture
@@ -116,9 +122,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `Thumbnail` and `Waveform` compare their arrays by content, so two results with the same bytes
   or buckets are equal and hash the same (#264).
 - Every JVM and Android class is Java 11 bytecode, where it was Java 21, and the JVM main code is
-  checked against the Java 11 API. The API is unchanged. On the desktop JVM the KiteFFmpeg 0.3.0
-  jar is still Java 21 bytecode, so Java 21 stays the minimum there until a later KiteFFmpeg
-  release is pinned (#268).
+  checked against the Java 11 API. The API is unchanged. The KiteFFmpeg 0.4.0 jar is Java 11
+  bytecode too, so the desktop JVM also runs on Java 11 (#268).
 - The fixed English text an app could not change is now configurable, with the same English as
   the default. `MediaNotificationOptions.labels` names the notification buttons.
   `accessibilityVideoLabel` and `accessibilityStateFormat` on `KitePlayerView` and

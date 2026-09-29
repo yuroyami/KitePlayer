@@ -144,8 +144,13 @@ class DirectorTest {
 
     @Test
     fun everyTransitionIsOneOfTheKnownKinds() {
-        // Cheap, but it catches an ordinal added to the enum without a branch in the shader.
-        assertEquals(6, VizTransition.entries.size, "the blend program knows about six kinds")
+        // The blend program branches on the position of each kind, so a kind added or moved in the
+        // enum without a change to the program draws another transition.
+        assertEquals(
+            listOf("Crossfade", "NoiseWipe", "Iris", "ZoomThrough", "StrobeCut", "WarpHandoff"),
+            VizTransition.entries.map { it.name },
+            "the blend program branches on the position of each kind",
+        )
     }
 
     @Test

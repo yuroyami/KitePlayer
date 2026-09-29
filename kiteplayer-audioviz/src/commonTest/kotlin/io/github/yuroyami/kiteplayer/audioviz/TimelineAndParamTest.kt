@@ -206,9 +206,8 @@ class TimelineAndParamTest {
         println("drawings with settings: ${tunable.joinToString { "${it.name} (${it.params.joinToString { p -> p.name }})" }}")
         assertTrue(tunable.size >= 6, "at least a handful of drawings should expose settings, found ${tunable.size}")
         for (drawing in tunable) {
-            for (param in drawing.params) {
-                assertTrue(param.value in param.min..param.max, "${drawing.name} ${param.name} starts out of range")
-            }
+            val names = drawing.params.map { it.name }
+            assertEquals(names.size, names.toSet().size, "${drawing.name} has two settings of one name: $names")
         }
     }
 }

@@ -25,9 +25,13 @@ class MappingLintTest {
         // The strongest signal a viewer has for how busy the music is, is how fast things move.
         // A rate built from the wall clock cannot answer that. Drawings use the music clock, which
         // slows in quiet passages, or ask for a paced rate, or lock to the bar.
+        // Any reading of the wall clock is refused, not only a product with it: `2f * state.timeSeconds`
+        // and `sin(uTime * 3.0)` are the same mistake. The header that declares `uTime` and the code
+        // that hands it to a program are the two places that may name it.
+        val wallClock = Regex("""\bstate\.timeSeconds\b|\buTime\b""")
         val check: (String) -> String? = { line ->
-            if (Regex("""state\.timeSeconds\s*\*""").containsMatchIn(line)) {
-                "a speed taken from the wall clock. Use state.musicTime, state.paced() or a MusicClock"
+            if (wallClock.containsMatchIn(line) && !line.contains("uniform float uTime;") && !line.contains("uniform(\"uTime\"")) {
+                "the wall clock. Use state.musicTime, state.paced(), state.stepSeconds or a MusicClock"
             } else {
                 null
             }
@@ -106,7 +110,7 @@ class MappingLintTest {
             file.readLines().forEachIndexed { index, line ->
                 val trimmed = line.trimStart()
                 // Comments explain the rules, so they are allowed to mention them.
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
+                if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return@forEachIndexed
                 check(line)?.let { complaints += Complaint(file.name, index + 1, line, it) }
             }
         }

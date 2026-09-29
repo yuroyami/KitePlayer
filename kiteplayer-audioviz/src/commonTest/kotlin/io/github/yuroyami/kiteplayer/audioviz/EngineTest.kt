@@ -141,8 +141,13 @@ class EngineTest {
         val gestures = Gestures()
         gestures.update(state(frame(1f, drop = true), 1f))
         genes.advance(gestures, 1f / 60f)
-        val arms = genes.all.first { it.name == "arms" } as NumberGene
-        assertEquals(12f, arms.target, "a drop aims the arms at their most")
+        fun number(name: String) = genes.all.first { it.name == name } as NumberGene
+        fun choice(name: String) = genes.all.first { it.name == name } as io.github.yuroyami.kiteplayer.audioviz.viz.motion.ChoiceGene
+        assertEquals(12f, number("arms").target, "a drop aims the arms at their most")
+        assertEquals(1f, number("spin").target, "a drop aims the spin at its most")
+        assertEquals(3, choice("layout").value, "a drop picks the busiest layout")
+        assertEquals(1, choice("echo copy").value, "a drop switches the echo copy on")
+        assertEquals(2, choice("ground").value, "a drop picks the busiest ground")
     }
 
     @Test

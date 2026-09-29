@@ -294,6 +294,7 @@ class AnalysisFeaturesTest {
         )
         val onset = timeline.nextOnsetSeconds(now)
         println("next queued onset in $onset s")
-        assertTrue(onset != 0f, "either an onset is queued or there is none, never exactly zero")
+        // The loop hits a drum every 0.23 seconds, so an onset is queued within a beat of the play position.
+        assertTrue(onset > 0f && onset <= 0.46f, "the next queued onset should be within a beat, was $onset")
     }
 }

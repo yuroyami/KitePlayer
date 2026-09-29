@@ -51,6 +51,64 @@ class SpectrumAnalyzerTest {
     }
 
     @Test
+    fun anAnalyserThatWasResetAnalysesLikeANewOne() {
+        class Run(val frames: List<SpectrumFrame>, val structure: List<Pair<AudioEventKind, Long>>)
+
+        fun run(analyzer: SpectrumAnalyzer, song: FloatArray): Run {
+            val frames = ArrayList<SpectrumFrame>()
+            val structure = ArrayList<Pair<AudioEventKind, Long>>()
+            analyzer.onAnalysis = { frame ->
+                frames += frame
+                frame.structure?.let { batch -> for (index in 0 until batch.size) structure += batch[index].kind to batch[index].ptsMicros }
+            }
+            var start = 0
+            while (start < song.size) {
+                val count = minOf(1024, song.size - start)
+                analyzer.feed(song.copyOfRange(start, start + count), count, channels = 1, ptsMicros = start * 1_000_000L / rate)
+                start += count
+            }
+            return Run(frames, structure)
+        }
+        // A quiet pad into loud drums holds a drop, which the section detector must find again after a reset.
+        val song = SyntheticSong.calmPad(20f) + SyntheticSong.drumLoop(20f)
+        val fresh = run(SpectrumAnalyzer(sampleRate = rate), song)
+        val used = SpectrumAnalyzer(sampleRate = rate)
+        // Other music first, long enough to leave a tempo, a mood, a key, sections and a loudness range behind.
+        run(used, SyntheticSong.drumLoop(20f) + SyntheticSong.calmPad(20f))
+        used.reset()
+        val again = run(used, song)
+        assertTrue(fresh.structure.isNotEmpty(), "the fixture must hold a structural decision")
+        assertEquals(fresh.structure, again.structure, "the structural decisions differ after a reset")
+        assertTrue(fresh.frames.size > 1000 && fresh.frames.size == again.frames.size,
+            "${fresh.frames.size} frames from a new analyser and ${again.frames.size} after a reset")
+        for (index in fresh.frames.indices) {
+            val a = fresh.frames[index]
+            val b = again.frames[index]
+            fun same(name: String, x: Float, y: Float) = assertEquals(x, y, 1e-5f, "$name of frame $index differs after a reset")
+            assertEquals(a.ptsMicros, b.ptsMicros, "frame $index")
+            same("level", a.level, b.level)
+            same("bass", a.bass, b.bass)
+            same("energy", a.energy, b.energy)
+            same("mood", a.mood, b.mood)
+            same("density", a.density, b.density)
+            same("novelty", a.novelty, b.novelty)
+            same("bpm", a.bpm, b.bpm)
+            same("beatConfidence", a.beatConfidence, b.beatConfidence)
+            same("beatPhase", a.beatPhase, b.beatPhase)
+            same("keyConfidence", a.keyConfidence, b.keyConfidence)
+            same("loudShort", a.loudShort, b.loudShort)
+            same("loudLong", a.loudLong, b.loudLong)
+            same("dropPulse", a.dropPulse, b.dropPulse)
+            same("kickPulse", a.kickPulse, b.kickPulse)
+            same("snarePulse", a.snarePulse, b.snarePulse)
+            same("width", a.width, b.width)
+            same("centroid", a.centroid, b.centroid)
+            same("flatness", a.flatness, b.flatness)
+            assertTrue(a.bands.contentEquals(b.bands), "bands of frame $index differ after a reset")
+        }
+    }
+
+    @Test
     fun resettingTheAnalyzerAndTimelineKeepsFreshAnalysisPublishable() {
         val analyzer = SpectrumAnalyzer(sampleRate = rate)
         val timeline = SpectrumTimeline()

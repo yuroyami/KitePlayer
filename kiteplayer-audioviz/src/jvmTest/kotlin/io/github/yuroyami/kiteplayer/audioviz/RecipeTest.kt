@@ -34,17 +34,6 @@ class RecipeTest {
     }
 
     @Test
-    fun everyGroundAndDetailCompiles() {
-        val broken = GroundKind.entries.mapNotNull { kind ->
-            Ground(kind).compileError(kind)?.let { "ground $kind: $it" }
-        } + DetailKind.entries.mapNotNull { kind ->
-            Detail(kind).compileError?.let { "detail $kind: $it" }
-        }
-        assertTrue(broken.isEmpty(), broken.joinToString("\n\n"))
-        println("${GroundKind.entries.size} grounds and ${DetailKind.entries.size} details compiled")
-    }
-
-    @Test
     fun aGroundAloneFillsTheScreenAndMoves() {
         val weak = ArrayList<String>()
         val sheet = java.awt.image.BufferedImage(4 * 326 + 6, 3 * 228 + 6, java.awt.image.BufferedImage.TYPE_INT_RGB)

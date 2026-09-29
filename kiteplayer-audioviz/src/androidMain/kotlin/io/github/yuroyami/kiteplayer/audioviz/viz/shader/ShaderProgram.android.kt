@@ -1,10 +1,6 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 
 import android.graphics.BitmapShader
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.RenderEffect
-import android.graphics.RenderNode
 import android.graphics.RuntimeShader
 import android.os.Build
 import androidx.compose.ui.geometry.Size
@@ -17,7 +13,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.nativeCanvas
 import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
-import kotlin.math.ceil
 
 internal actual val runtimeShadersSupported: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
@@ -37,8 +32,6 @@ internal actual fun DrawScope.canDrawRuntimeShaders(): Boolean =
 public actual class ShaderProgram actual constructor(source: String) {
 
     private val shader: RuntimeShader?
-    private var passNode: RenderNode? = null
-    private val passPaint by lazy { Paint() }
 
     public actual val error: String?
 
@@ -120,37 +113,6 @@ public actual class ShaderProgram actual constructor(source: String) {
     public actual fun brush(): Brush? {
         val target = shader ?: return null
         return AndroidProgramBrush(target)
-    }
-
-    internal actual fun childProgram(name: String, program: ShaderProgram) {
-        val target = checkNotNull(shader) { error ?: "parent shader is unavailable" }
-        val child = checkNotNull(program.shader) { program.error ?: "child shader is unavailable" }
-        target.setInputShader(name, child)
-    }
-
-    internal actual fun drawPasses(scope: DrawScope, input: ShaderProgram, width: Float, height: Float,
-        passes: List<ShaderProgram>, sampler: String) {
-        val node = passNode ?: RenderNode("KitePlayer shader passes").also { passNode = it }
-        val w = ceil(scope.size.width).toInt()
-        val h = ceil(scope.size.height).toInt()
-        node.setPosition(0, 0, w, h)
-        val canvas = node.beginRecording(w, h)
-        try {
-            // The full opaque extent gives the later native-resolution passes their output bounds.
-            canvas.drawColor(Color.BLACK)
-            passPaint.shader = checkNotNull(input.shader)
-            canvas.drawRect(0f, 0f, ceil(width), ceil(height), passPaint)
-        } finally {
-            node.endRecording()
-        }
-        var effect: RenderEffect? = null
-        for (pass in passes) {
-            val next = RenderEffect.createRuntimeShaderEffect(checkNotNull(pass.shader), sampler)
-            effect = effect?.let { RenderEffect.createChainEffect(next, it) } ?: next
-        }
-        val finish = RenderEffect.createRuntimeShaderEffect(checkNotNull(shader), sampler)
-        node.setRenderEffect(effect?.let { RenderEffect.createChainEffect(finish, it) } ?: finish)
-        scope.drawContext.canvas.nativeCanvas.drawRenderNode(node)
     }
 }
 

@@ -7,6 +7,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.pow
 import kotlin.math.sin
 
 /**
@@ -36,10 +37,56 @@ public class Spring(
 
     public var target: Float = initial
 
+    // The springs were tuned by eye with one Euler step every sixtieth of a second. That step is a
+    // 2 by 2 map of the offset and the speed, and this keeps its power for any step length: the map
+    // is written as mu * (cos(theta) * I + sin(theta) * J), with J * J = -I, and a step of r sixtieths
+    // is mu^r * (cos(r * theta) * I + sin(r * theta) * J). At 60 Hz that is the tuned step itself, and
+    // on any other refresh rate it is the same motion. A spring whose map does not turn, which is a
+    // very heavy damping, keeps the Euler step.
+    private val logMu: Double
+    private val theta: Double
+    private val j11: Double
+    private val j12: Double
+    private val j21: Double
+    private val j22: Double
+
+    init {
+        val friction = 2.0 * damping * kotlin.math.sqrt(stiffness.toDouble())
+        val h = TUNED_STEP
+        val m11 = 1.0 - stiffness * h * h
+        val m12 = h * (1.0 - friction * h)
+        val m21 = -stiffness * h
+        val m22 = 1.0 - friction * h
+        val trace = m11 + m22
+        val determinant = m11 * m22 - m12 * m21
+        val turns = determinant > 0.0 && trace * trace < 4.0 * determinant
+        val root = if (turns) kotlin.math.sqrt(determinant) else Double.NaN
+        val cosine = if (turns) (trace / (2.0 * root)).coerceIn(-1.0, 1.0) else Double.NaN
+        val sine = if (turns) kotlin.math.sqrt(1.0 - cosine * cosine) else Double.NaN
+        val scale = root * sine
+        logMu = kotlin.math.ln(root)
+        theta = if (turns && sine > 1e-9) kotlin.math.acos(cosine) else Double.NaN
+        j11 = (m11 - trace / 2.0) / scale
+        j12 = m12 / scale
+        j21 = m21 / scale
+        j22 = (m22 - trace / 2.0) / scale
+    }
+
     /** Moves the spring on by one frame. */
     public fun advance(deltaSeconds: Float) {
         // Clamped, because a stalled window would otherwise hand it a huge step and explode it.
         val step = deltaSeconds.coerceIn(0f, 0.05f)
+        if (!theta.isNaN()) {
+            val sixtieths = step / TUNED_STEP
+            val grow = kotlin.math.exp(sixtieths * logMu)
+            val c = grow * cos(sixtieths * theta)
+            val s = grow * sin(sixtieths * theta)
+            val offset = (value - target).toDouble()
+            val velocity = speed.toDouble()
+            value = (target + c * offset + s * (j11 * offset + j12 * velocity)).toFloat()
+            speed = (c * velocity + s * (j21 * offset + j22 * velocity)).toFloat()
+            return
+        }
         val pull = (target - value) * stiffness
         val friction = speed * 2f * damping * kotlin.math.sqrt(stiffness)
         speed += (pull - friction) * step
@@ -59,6 +106,7 @@ public class Spring(
      */
     public val peakDelay: Float
         get() {
+            if (!theta.isNaN()) return (atan2(theta, -logMu) / (theta / TUNED_STEP)).toFloat()
             val natural = kotlin.math.sqrt(stiffness)
             val ratio = damping.coerceIn(0f, 0.99f)
             val ringing = natural * kotlin.math.sqrt(1f - ratio * ratio)
@@ -69,6 +117,11 @@ public class Spring(
         value = to
         speed = 0f
         target = to
+    }
+
+    private companion object {
+        /** The step the springs were tuned at, in seconds. */
+        const val TUNED_STEP = 1.0 / 60.0
     }
 }
 
@@ -118,8 +171,12 @@ public class Envelope(
 
     public fun advance(target: Float, deltaSeconds: Float): Float {
         val rate = if (target > value) attackPerSecond else releasePerSecond
-        val share = (rate * deltaSeconds).coerceIn(0f, 1f)
-        value += (target - value) * share
+        // The rates were tuned as the share of the gap that one sixtieth of a second closes. What is
+        // left after one sixtieth carries on to any step length, so a step of 1/30 closes the gap by
+        // as much as two of 1/60 and the value looks the same on any refresh rate.
+        val kept = (1f - rate / 60f).coerceIn(0f, 1f).toDouble()
+        val share = 1.0 - kept.pow(deltaSeconds.coerceAtLeast(0f) * 60.0)
+        value += (target - value) * share.toFloat()
         return value
     }
 

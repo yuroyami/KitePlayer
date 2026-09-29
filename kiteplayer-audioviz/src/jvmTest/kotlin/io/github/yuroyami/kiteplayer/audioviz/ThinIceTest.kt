@@ -1,6 +1,15 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.audioviz.viz.drawComposedFrame
+import io.github.yuroyami.kiteplayer.audioviz.viz.restart
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFuture
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
@@ -72,6 +81,38 @@ class ThinIceTest {
             for ((cx, cy) in centres) {
                 assertTrue(abs(cx - x) < 1e-5f && abs(cy - y) < 1e-5f, "a ring of well $well is centred at $cx, $cy and the well is at $x, $y")
             }
+        }
+    }
+
+    @Test
+    fun aTurnOfTheScreenTurnsTheCracksAndTheRingsTogether() {
+        val ice = ThinIce()
+        var step = 0
+        val dropAt = 150
+        val scope = CanvasDrawScope()
+        fun draw(width: Int, height: Int) {
+            val state = VizRenderState(InjectedFrames.frame(null, step), step / 60f, 1f / 60f, VizPalette.Prism, future = dropAhead(dropAt) { step })
+            val bitmap = ImageBitmap(width, height)
+            scope.draw(Density(1f), LayoutDirection.Ltr, Canvas(bitmap), Size(width.toFloat(), height.toFloat())) { drawComposedFrame(ice, state, null) }
+            step++
+        }
+        ice.restart()
+        repeat(dropAt - 1) { draw(160, 90) }
+        val before = ice.crackStarts()
+        val ringsBefore = ice.ringCentresOf(0).size
+        assertTrue(before.isNotEmpty() && ringsBefore > 0, "the fixture needs cracks and rings to turn: ${before.size}, $ringsBefore")
+        // The next frame is drawn on a portrait screen. Cracks that creep out only move their far end.
+        draw(90, 160)
+        val after = ice.crackStarts()
+        assertTrue(after.size >= before.size)
+        for ((index, start) in before.withIndex()) {
+            val (x, y) = after[index]
+            assertTrue(abs(x - start.second) < 1e-4f && abs(y - start.first) < 1e-4f,
+                "crack $index started at ${start.first}, ${start.second} and stands at $x, $y after the turn")
+        }
+        val (wellX, wellY) = ice.wellAt(0)
+        for ((cx, cy) in ice.ringCentresOf(0)) {
+            assertTrue(abs(cx - wellX) < 1e-4f && abs(cy - wellY) < 1e-4f, "a ring left its well: $cx, $cy against $wellX, $wellY")
         }
     }
 

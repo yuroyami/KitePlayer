@@ -199,6 +199,10 @@ internal class ThinIce : Layered(
     /** Hairline cracks in the ice now. For tests. */
     internal val cracks: Int get() = (0 until CRACKS).count { crackAlpha[it] > 0f }
 
+    /** Where the first point of each live crack is, in shorter sides from the top left, for tests. */
+    internal fun crackStarts(): List<Pair<Float, Float>> =
+        (0 until CRACKS).filter { crackAlpha[it] > 0f }.map { crackX[it * CRACK_POINTS] to crackY[it * CRACK_POINTS] }
+
     /** Where well [well] is, in shares of the screen, for tests. */
     internal fun wellAt(well: Int): Pair<Float, Float> = wellX(well) to wellY(well)
 
@@ -348,6 +352,16 @@ internal class ThinIce : Layered(
                 centreX[slot] = centreY[slot]
                 centreY[slot] = across
             }
+            // The cracks and the well of the sinking pieces are in shorter sides from the top left, and
+            // the two sides of the screen swap the same way.
+            for (point in crackX.indices) {
+                val across = crackX[point]
+                crackX[point] = crackY[point]
+                crackY[point] = across
+            }
+            val well = pieceWellX
+            pieceWellX = pieceWellY
+            pieceWellY = well
         }
     }
 

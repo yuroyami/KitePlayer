@@ -18,7 +18,7 @@ import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
  *
  * Build it once and reuse it: [clear] at the start of every frame, add corners with [vertex], join
  * them with [triangle] or [quad], then hand it to [drawMesh]. Nothing is allocated after the first
- * frame unless the number of triangles changes.
+ * frame unless the number of triangles grows to a size the mesh has not drawn before.
  */
 @AudioVizAuthoringApi
 public class TriangleMesh(
@@ -96,6 +96,64 @@ public class TriangleMesh(
         if (exactIndices.size != indexCount) exactIndices = ShortArray(indexCount)
         indices.copyInto(exactIndices, 0, 0, indexCount)
         return exactIndices
+    }
+
+    // The Skia call takes arrays as long as the corners they hold. Audio makes the number of corners
+    // change from frame to frame, and a drawing may flush several batches in one frame, so an exact
+    // copy would be a new array each time. These copies are padded up to the next power of two, with
+    // extra corners that sit on the first corner and extra triangles of no area, which draw nothing.
+    // One array is kept for each size, so a mesh that alternates between sizes still allocates once.
+    private val paddedPositions = arrayOfNulls<FloatArray>(SIZES)
+    private val paddedColors = arrayOfNulls<IntArray>(SIZES)
+    private val paddedIndices = arrayOfNulls<ShortArray>(SIZES)
+
+    /** The size class of [count] items, where class k holds [first] shl k items. */
+    private fun sizeClass(count: Int, first: Int): Int {
+        var size = first
+        var k = 0
+        while (size < count && k < SIZES - 1) {
+            size = size shl 1
+            k++
+        }
+        return k
+    }
+
+    internal fun positionsPadded(): FloatArray {
+        val k = sizeClass(vertexCount, FIRST_CORNERS)
+        val padded = paddedPositions[k] ?: FloatArray((FIRST_CORNERS shl k) * 2).also { paddedPositions[k] = it }
+        positions.copyInto(padded, 0, 0, vertexCount * 2)
+        for (at in vertexCount * 2 until padded.size step 2) {
+            padded[at] = positions[0]
+            padded[at + 1] = positions[1]
+        }
+        return padded
+    }
+
+    internal fun colorsPadded(): IntArray {
+        val k = sizeClass(vertexCount, FIRST_CORNERS)
+        val padded = paddedColors[k] ?: IntArray(FIRST_CORNERS shl k).also { paddedColors[k] = it }
+        colors.copyInto(padded, 0, 0, vertexCount)
+        padded.fill(0, vertexCount, padded.size)
+        return padded
+    }
+
+    internal fun indicesPadded(): ShortArray {
+        val k = sizeClass(indexCount, FIRST_INDICES)
+        val padded = paddedIndices[k] ?: ShortArray(FIRST_INDICES shl k).also { paddedIndices[k] = it }
+        indices.copyInto(padded, 0, 0, indexCount)
+        padded.fill(0, indexCount, padded.size)
+        return padded
+    }
+
+    private companion object {
+        /** The smallest padded size in corners. Larger sizes double up to 32768. */
+        const val FIRST_CORNERS = 256
+
+        /** The smallest padded size in indices, a multiple of three so it ends on a whole triangle. */
+        const val FIRST_INDICES = 768
+
+        /** Size classes: 256 to 32768 corners, and 768 to 196608 indices. */
+        const val SIZES = 9
     }
 }
 

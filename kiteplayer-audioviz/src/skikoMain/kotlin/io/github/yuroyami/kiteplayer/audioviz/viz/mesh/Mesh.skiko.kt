@@ -18,10 +18,10 @@ public actual fun DrawScope.drawMesh(mesh: TriangleMesh, blendMode: BlendMode) {
     drawIntoCanvas { canvas ->
         canvas.skiaCanvas.drawVertices(
             VertexMode.TRIANGLES,
-            mesh.positionsExact(),
-            mesh.colorsExact(),
+            mesh.positionsPadded(),
+            mesh.colorsPadded(),
             null,
-            mesh.indicesExact(),
+            mesh.indicesPadded(),
             // How corner colours combine with the paint's own colour. The paint is plain white,
             // so multiplying leaves the corner colours exactly as they were given.
             SkiaBlendMode.MODULATE,

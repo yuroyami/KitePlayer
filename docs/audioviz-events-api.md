@@ -153,18 +153,19 @@ budget at the live detector's 30 ms combination floor. Legacy author-created sca
 their single-hit compatibility behaviour and cannot provide this identity or multiplicity guarantee.
 
 Camera physics advances the previous state to the current display instant before applying new
-event impulses. The flat and flying impulse springs have theoretical peak delays of about 96 ms
-and 92 ms respectively, within the 100 ms lookahead limit. The flying camera's preparatory dip
+event impulses. The flat and flying impulse springs peak about 89 ms and 84 ms after a kick,
+within the 100 ms lookahead limit. A spring advances by the power of its tuned 60 Hz step that
+matches the step length, so it peaks at the same time on every refresh rate. The flying camera's preparatory dip
 is a separate sine-shaped speed offset that returns to zero at the event; it does not move the
 impulse spring's equilibrium and shift its peak.
 
 `CameraPresentationTimingTest` drives known event identities at 60/90/120/240 Hz with three
-offsets relative to the display cadence and a maximum 100 ms future. On JVM on 2026-09-19:
+offsets relative to the display cadence and a maximum 100 ms future. On JVM on 2026-09-29:
 
 | Camera | Cases | Signed median peak error | Absolute p95 / maximum | Signed range |
 | --- | ---: | ---: | ---: | ---: |
-| Flat | 12 | -1.278 ms | 11.000 ms | -11.000 to +3.777 ms |
-| Flying | 12 | +4.222 ms | 13.000 ms | +0.111 to +13.000 ms |
+| Flat | 12 | +4.222 ms | 9.333 ms | -3.667 to +9.333 ms |
+| Flying | 12 | +5.666 ms | 14.888 ms | +0.500 to +14.888 ms |
 
 This is an ideal display-clock simulation of the camera response, not an end-to-end timing
 measurement. It excludes onset estimation, worker scheduling, audio output, rasterisation and

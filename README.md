@@ -106,11 +106,11 @@ each target you declare.
 
 ```kotlin
 commonMain.dependencies {
-    implementation("io.github.yuroyami:kiteplayer:0.0.27")            // native views, no Compose
+    implementation("io.github.yuroyami:kiteplayer:0.2.0")            // native views, no Compose
     // or
-    implementation("io.github.yuroyami:kiteplayer-compose:0.0.27")    // Compose, plus everything above
+    implementation("io.github.yuroyami:kiteplayer-compose:0.2.0")    // Compose, plus everything above
 
-    implementation("io.github.yuroyami:kiteplayer-audioviz:0.0.27")   // optional: a visualiser for audio
+    implementation("io.github.yuroyami:kiteplayer-audioviz:0.2.0")   // optional: a visualiser for audio
 }
 ```
 
@@ -180,7 +180,7 @@ A browser cannot link FFmpeg or libass into the Kotlin binary, so the page serve
 WebAssembly modules. Each one comes as a `web` zip beside its artifact on Maven Central:
 
 1. Unpack `kiteffmpeg-wasm-js-<version>-web.zip` beside `index.html`, with the KiteFFmpeg version
-   that KitePlayer depends on (0.3.0 for 0.0.27). The page then serves `kite.mjs`, `kite.wasm`
+   that KitePlayer depends on (0.4.0 for 0.2.0). The page then serves `kite.mjs`, `kite.wasm`
    and `licenses/`.
 2. Unpack `kiteplayer-libass-wasm-js-<version>-web.zip` there too, for `kiteass.mjs` and
    `kiteass.wasm`. The first ASS track loads them. Without them, ASS falls back to the built-in
@@ -574,8 +574,8 @@ already listening when a song starts. Album art does not count as a picture.
 | tvOS, watchOS, iOS x64, Android native | Only the engine modules build there; CI runs the tvOS and watchOS tests on their simulators. |
 | js | The facade reports unavailable. |
 
-KitePlayer's JVM and Android classes are Java 11 bytecode. The KiteFFmpeg 0.3.0 jar is Java 21
-bytecode, so a desktop app needs Java 21 until KitePlayer depends on a later KiteFFmpeg release.
+KitePlayer's JVM and Android classes are Java 11 bytecode, and so is the KiteFFmpeg 0.4.0 jar, so a
+desktop app runs on Java 11 or later.
 
 <details>
 <summary><b>Which artifact publishes which target</b></summary>

@@ -53,7 +53,8 @@ public class Detail(
         }
         program.uniform("uPhase", phase)
         program.uniform("uTravel", phase)
-        program.uniform("uDim", strength * alpha * (0.3f + 0.7f * state.frame.level.coerceIn(0f, 1f)))
+        // The flash guard lowers lightScale when the light has to be held back, and this is added light.
+        program.uniform("uDim", strength * alpha * state.lightScale.coerceIn(0f, 1f) * (0.3f + 0.7f * state.frame.level.coerceIn(0f, 1f)))
         program.uniform("uWalk", walk)
         val brush = program.brush() ?: return
         drawRect(brush, blendMode = BlendMode.Plus)

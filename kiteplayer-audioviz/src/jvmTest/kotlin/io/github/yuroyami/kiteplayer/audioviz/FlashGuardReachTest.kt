@@ -61,6 +61,50 @@ class FlashGuardReachTest {
         )
     }
 
+    /** The mean luma of the ground alone, drawn over the background, at one allowed light. */
+    private fun groundLuma(index: Int, light: Float): Pair<String, Float>? {
+        val drawing = DriverProbe.drawing(index)
+        if (drawing.ground == null) return null
+        val player = RenderHarness.player(RenderHarness.Song.Lively, 6f)
+        var shown = 0f
+        RenderHarness.forEachFrameOf(
+            drawing, DriverProbe.WIDTH, DriverProbe.HEIGHT, 60, VizPalette.Prism,
+            source = { player.next(1f / 60f) },
+            groundAt = { it == 59 },
+            onGround = { bitmap, _ ->
+                val pixels = IntArray(bitmap.width * bitmap.height).also { bitmap.readPixels(it) }
+                var sum = 0f
+                for (pixel in pixels) {
+                    sum += (0.2126f * ((pixel shr 16) and 255) + 0.7152f * ((pixel shr 8) and 255) +
+                        0.0722f * (pixel and 255)) / 255f
+                }
+                shown = sum / pixels.size
+            },
+            beforeDraw = { it.lightScale = light },
+        ) { _, _ -> }
+        return drawing.name to shown
+    }
+
+    @Test
+    fun theGroundFollowsTheAllowedLightToo() {
+        val indices = VizCatalog.create().indices.toList()
+        // What the ground adds is what it lifts above the plain background it is drawn over.
+        val background = VizPalette.Prism.background.let { 0.2126f * it.red + 0.7152f * it.green + 0.0722f * it.blue }
+        val rows = RenderHarness.inParallel(indices) { index ->
+            val full = groundLuma(index, 1f) ?: return@inParallel null
+            val half = groundLuma(index, 0.5f)!!
+            Triple(full.first, full.second - background, half.second - background)
+        }.filterNotNull()
+        for ((name, full, half) in rows) println("ground $name: added light at full $full, at half $half")
+        assertTrue(rows.isNotEmpty(), "no drawing has a ground")
+        val stubborn = rows.filter { (_, full, half) -> full > 0.002f && half > full * 0.75f }
+        assertTrue(
+            stubborn.isEmpty(),
+            "grounds that ignore the light the guard allows:\n" +
+                stubborn.joinToString("\n") { (name, full, half) -> "$name: full $full, half $half" },
+        )
+    }
+
     private companion object {
         /** Long enough for every trail and spring to settle. */
         const val FRAMES = 150

@@ -99,7 +99,8 @@ public class Ground(
         program.uniform("uDim", dim * (0.3f + 0.7f * state.frame.level.coerceIn(0f, 1f)))
         program.uniform("uWalk", walk)
         val brush = program.brush() ?: return
-        drawRect(brush, alpha = alpha)
+        // The flash guard lowers lightScale when the light has to be held back, and the bed is light too.
+        drawRect(brush, alpha = alpha * state.lightScale.coerceIn(0f, 1f))
     }
 
     /** Where shaders cannot run: two colours of the palette sliding past each other. Dull, and still moving. */
@@ -114,6 +115,7 @@ public class Ground(
                 start = androidx.compose.ui.geometry.Offset(sway, 0f),
                 end = androidx.compose.ui.geometry.Offset(size.width + sway, size.height),
             ),
+            alpha = state.lightScale.coerceIn(0f, 1f),
         )
     }
 

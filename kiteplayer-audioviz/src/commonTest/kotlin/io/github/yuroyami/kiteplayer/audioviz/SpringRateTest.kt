@@ -17,6 +17,9 @@ class SpringRateTest {
         50f to 0.55f, 60f to 0.5f, 140f to 0.55f, 160f to 0.5f,
     )
 
+    /** Springs that barely overshoot or do not overshoot at all. Their tuned step has two real eigenvalues. */
+    private val heavy = listOf(260f to 0.9f, 120f to 1.2f, 14f to 2f, 400f to 1.2f)
+
     /** One Euler step every sixtieth of a second: the spring as it was before, kept here as the reference. */
     private fun tuned(stiffness: Float, damping: Float, kick: Float, steps: Int): List<Float> {
         var value = 0f
@@ -42,7 +45,7 @@ class SpringRateTest {
 
     @Test
     fun atSixtyHertzASpringMovesAsItDidWhenTheDrawingsWereTuned() {
-        for ((stiffness, damping) in shipped) {
+        for ((stiffness, damping) in shipped + heavy) {
             val reference = tuned(stiffness, damping, 14f, 120)
             val now = run(stiffness, damping, 14f, 60, 2f)
             val scale = reference.maxOf { abs(it) }
@@ -54,11 +57,12 @@ class SpringRateTest {
 
     @Test
     fun theSpringIsInTheSamePlaceAtTheSameTimeOnEveryRefreshRate() {
-        for ((stiffness, damping) in shipped) {
+        for ((stiffness, damping) in shipped + heavy) {
             val reference = run(stiffness, damping, 14f, 60, 1f)
             val peak = reference.maxOf { abs(it) }
             // Every one of these rates has a step ending on each of these times.
-            for (hertz in listOf(30, 45, 90, 120, 150, 240)) {
+            // 15 Hz is the rate of a browser tile, and its step is longer than 50 ms.
+            for (hertz in listOf(15, 30, 45, 90, 120, 150, 240)) {
                 val other = run(stiffness, damping, 14f, hertz, 1f)
                 for (time in listOf(0.2f, 0.4f, 0.6f, 0.8f)) {
                     val a = reference[(time * 60).toInt() - 1]
@@ -90,7 +94,7 @@ class SpringRateTest {
 
     @Test
     fun thePeakDelayIsWhenTheSpringPeaks() {
-        for ((stiffness, damping) in shipped) {
+        for ((stiffness, damping) in shipped + heavy) {
             val spring = Spring(stiffness, damping)
             spring.kick(14f)
             var peakAt = 0f

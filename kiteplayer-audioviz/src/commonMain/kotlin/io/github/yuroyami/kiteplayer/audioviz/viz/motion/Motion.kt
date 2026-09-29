@@ -38,17 +38,23 @@ public class Spring(
     public var target: Float = initial
 
     // The springs were tuned by eye with one Euler step every sixtieth of a second. That step is a
-    // 2 by 2 map of the offset and the speed, and this keeps its power for any step length: the map
-    // is written as mu * (cos(theta) * I + sin(theta) * J), with J * J = -I, and a step of r sixtieths
-    // is mu^r * (cos(r * theta) * I + sin(r * theta) * J). At 60 Hz that is the tuned step itself, and
-    // on any other refresh rate it is the same motion. A spring whose map does not turn, which is a
-    // very heavy damping, keeps the Euler step.
-    private val logMu: Double
-    private val theta: Double
-    private val j11: Double
-    private val j12: Double
-    private val j21: Double
-    private val j22: Double
+    // 2 by 2 map M of the offset and the speed, and this keeps its power for any step length, so a step
+    // of r sixtieths is M^r. At 60 Hz that is the tuned step itself, and on any other refresh rate it
+    // is the same motion. Two shapes of M are handled:
+    // - It turns (the eigenvalues are complex, which is every spring that overshoots and some that
+    //   barely do): M = mu * (cos(theta) * I + sin(theta) * J) with J * J = -I, so
+    //   M^r = mu^r * (cos(r * theta) * I + sin(r * theta) * J).
+    // - It does not turn but has two positive real eigenvalues l1 above l2, as a heavily damped spring
+    //   has: M^r = l2^r * I + (l1^r - l2^r) * A, with A = (M - l2 * I) / (l1 - l2).
+    // A map with neither shape, a spring too stiff or too damped for a step of a sixtieth to stand for,
+    // keeps the Euler step.
+    private val kind: Int
+    private val growA: Double
+    private val growB: Double
+    private val k11: Double
+    private val k12: Double
+    private val k21: Double
+    private val k22: Double
 
     init {
         val friction = 2.0 * damping * kotlin.math.sqrt(stiffness.toDouble())
@@ -59,38 +65,74 @@ public class Spring(
         val m22 = 1.0 - friction * h
         val trace = m11 + m22
         val determinant = m11 * m22 - m12 * m21
-        val turns = determinant > 0.0 && trace * trace < 4.0 * determinant
-        val root = if (turns) kotlin.math.sqrt(determinant) else Double.NaN
-        val cosine = if (turns) (trace / (2.0 * root)).coerceIn(-1.0, 1.0) else Double.NaN
-        val sine = if (turns) kotlin.math.sqrt(1.0 - cosine * cosine) else Double.NaN
-        val scale = root * sine
-        logMu = kotlin.math.ln(root)
-        theta = if (turns && sine > 1e-9) kotlin.math.acos(cosine) else Double.NaN
-        j11 = (m11 - trace / 2.0) / scale
-        j12 = m12 / scale
-        j21 = m21 / scale
-        j22 = (m22 - trace / 2.0) / scale
+        var shape = EULER
+        var a = Double.NaN
+        var b = Double.NaN
+        var scale = Double.NaN
+        var shift = trace / 2.0
+        if (determinant > 0.0 && trace.isFinite()) {
+            val gap = trace * trace - 4.0 * determinant
+            if (gap < 0.0) {
+                // Turns: a is ln(mu), b is theta, and J is the map less half its trace, over mu * sin(theta).
+                val root = kotlin.math.sqrt(determinant)
+                val cosine = (trace / (2.0 * root)).coerceIn(-1.0, 1.0)
+                val sine = kotlin.math.sqrt(1.0 - cosine * cosine)
+                if (sine > 1e-9) {
+                    shape = TURNS
+                    a = kotlin.math.ln(root)
+                    b = kotlin.math.acos(cosine)
+                    scale = root * sine
+                }
+            } else {
+                // Two real eigenvalues: a is ln(l1), b is ln(l2), and A is the map less l2, over l1 - l2.
+                val spread = kotlin.math.sqrt(gap)
+                val fast = (trace + spread) / 2.0
+                val slow = (trace - spread) / 2.0
+                if (slow > 1e-9 && fast - slow > 1e-9) {
+                    shape = REAL
+                    a = kotlin.math.ln(fast)
+                    b = kotlin.math.ln(slow)
+                    scale = fast - slow
+                    shift = slow
+                }
+            }
+        }
+        kind = shape
+        growA = a
+        growB = b
+        k11 = (m11 - shift) / scale
+        k12 = m12 / scale
+        k21 = m21 / scale
+        k22 = (m22 - shift) / scale
     }
 
     /** Moves the spring on by one frame. */
     public fun advance(deltaSeconds: Float) {
-        // Clamped, because a stalled window would otherwise hand it a huge step and explode it.
-        val step = deltaSeconds.coerceIn(0f, 0.05f)
-        if (!theta.isNaN()) {
-            val sixtieths = step / TUNED_STEP
-            val grow = kotlin.math.exp(sixtieths * logMu)
-            val c = grow * cos(sixtieths * theta)
-            val s = grow * sin(sixtieths * theta)
-            val offset = (value - target).toDouble()
-            val velocity = speed.toDouble()
-            value = (target + c * offset + s * (j11 * offset + j12 * velocity)).toFloat()
-            speed = (c * velocity + s * (j21 * offset + j22 * velocity)).toFloat()
+        if (kind == EULER) {
+            // Clamped, because a stalled window would otherwise hand it a huge step and explode it.
+            val step = deltaSeconds.coerceIn(0f, 0.05f)
+            val pull = (target - value) * stiffness
+            val friction = speed * 2f * damping * kotlin.math.sqrt(stiffness)
+            speed += (pull - friction) * step
+            value += speed * step
             return
         }
-        val pull = (target - value) * stiffness
-        val friction = speed * 2f * damping * kotlin.math.sqrt(stiffness)
-        speed += (pull - friction) * step
-        value += speed * step
+        // The power of the map is stable for a step of any length, so a stall only lets the spring settle.
+        val sixtieths = deltaSeconds.coerceIn(0f, 1f) / TUNED_STEP
+        val offset = (value - target).toDouble()
+        val velocity = speed.toDouble()
+        if (kind == TURNS) {
+            val grow = kotlin.math.exp(sixtieths * growA)
+            val c = grow * cos(sixtieths * growB)
+            val s = grow * sin(sixtieths * growB)
+            value = (target + c * offset + s * (k11 * offset + k12 * velocity)).toFloat()
+            speed = (c * velocity + s * (k21 * offset + k22 * velocity)).toFloat()
+        } else {
+            val slow = kotlin.math.exp(sixtieths * growB)
+            val lift = kotlin.math.exp(sixtieths * growA) - slow
+            value = (target + slow * offset + lift * (k11 * offset + k12 * velocity)).toFloat()
+            speed = (slow * velocity + lift * (k21 * offset + k22 * velocity)).toFloat()
+        }
     }
 
     /** Adds speed. This is how a beat pushes something rather than placing it. */
@@ -106,7 +148,9 @@ public class Spring(
      */
     public val peakDelay: Float
         get() {
-            if (!theta.isNaN()) return (atan2(theta, -logMu) / (theta / TUNED_STEP)).toFloat()
+            if (kind == TURNS) return (atan2(growB, -growA) / (growB / TUNED_STEP)).toFloat()
+            // Heavily damped: the response is l1^r - l2^r, which peaks where l1^r * ln(l1) = l2^r * ln(l2).
+            if (kind == REAL) return (kotlin.math.ln(growB / growA) / (growA - growB) * TUNED_STEP).toFloat()
             val natural = kotlin.math.sqrt(stiffness)
             val ratio = damping.coerceIn(0f, 0.99f)
             val ringing = natural * kotlin.math.sqrt(1f - ratio * ratio)
@@ -122,6 +166,11 @@ public class Spring(
     private companion object {
         /** The step the springs were tuned at, in seconds. */
         const val TUNED_STEP = 1.0 / 60.0
+
+        // The shape of the tuned step's map.
+        const val EULER = 0
+        const val TURNS = 1
+        const val REAL = 2
     }
 }
 

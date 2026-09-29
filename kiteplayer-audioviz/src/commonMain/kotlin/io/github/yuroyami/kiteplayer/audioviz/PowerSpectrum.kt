@@ -54,4 +54,20 @@ public class PowerSpectrum internal constructor(
     public fun copyBinPowers(): FloatArray = bins.copyOf()
     public fun copyBandPowers(): FloatArray = bands.copyOf()
     public fun copyBandEdgesHz(): DoubleArray = edges.copyOf()
+
+    /**
+     * This spectrum moved [mix] of the way towards [other], on the same bins. The window, the layout
+     * and the revision stay this spectrum's. A spectrum of another size is not blended.
+     */
+    internal fun movedTowards(other: PowerSpectrum, mix: Float): PowerSpectrum {
+        if (bins.size != other.bins.size || bands.size != other.bands.size) return this
+        val t = mix.coerceIn(0f, 1f)
+        return PowerSpectrum(
+            window, generation, analysisRevision, channelCount, channelLayout, channelLayoutMask,
+            totalMeanSquare + (other.totalMeanSquare - totalMeanSquare) * t,
+            FloatArray(bins.size) { bins[it] + (other.bins[it] - bins[it]) * t },
+            FloatArray(bands.size) { bands[it] + (other.bands[it] - bands[it]) * t },
+            edges,
+        )
+    }
 }

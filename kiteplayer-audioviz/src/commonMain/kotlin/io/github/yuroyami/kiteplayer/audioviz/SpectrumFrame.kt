@@ -337,6 +337,7 @@ public class SpectrumFrame internal constructor(
         beatConfidence: Float = this.beatConfidence,
         beatInSeconds: Float = this.beatInSeconds,
         held: Boolean = this.held,
+        power: PowerSpectrum? = this.power,
     ): SpectrumFrame = SpectrumFrame(
         ptsMicros = ptsMicros,
         bands = bands,

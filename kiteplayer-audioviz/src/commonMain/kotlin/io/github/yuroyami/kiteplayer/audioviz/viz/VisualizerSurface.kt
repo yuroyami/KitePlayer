@@ -852,6 +852,9 @@ public fun DrawScope.drawVisualization(visualization: Visualization, state: VizR
  * for a restrained spectrum rather than none.
  *
  * At full motion the reading passes through untouched.
+ *
+ * The smooth values and the power spectrum glide. The waveform, the hits, the delivered events and
+ * the pause are the newest frame's own.
  */
 internal class CalmReading {
     private var last: SpectrumFrame? = null
@@ -874,13 +877,18 @@ internal class CalmReading {
             // Half a second to cross, which is slower than any flash the policy counts. Only the
             // smooth values glide. The trace, the hits, the delivered events and the pause are
             // this frame's own, so they come from [heard] and not from the old reading.
-            val glided = heard.blend(before, 1f - (deltaSeconds / 0.5f).coerceIn(0f, 1f))
+            val keep = 1f - (deltaSeconds / 0.5f).coerceIn(0f, 1f)
+            val glided = heard.blend(before, keep)
+            // The ported drawings draw from the power spectrum, so it glides too. The waveform, which
+            // cannot be averaged without flattening it, stays the newest frame's own.
+            val power = heard.power?.let { newest -> before.power?.let { newest.movedTowards(it, keep) } ?: newest }
             glided.withEvents(heard.beat, heard.kick, heard.snare, heard.hat, heard.onsetStrength,
                 heard.drop, heard.events,
                 rhythm = if (heard.held) heard.rhythm else glided.rhythm,
                 beatConfidence = if (heard.held) heard.beatConfidence else glided.beatConfidence,
                 beatInSeconds = if (heard.held) heard.beatInSeconds else glided.beatInSeconds,
-                held = heard.held)
+                held = heard.held,
+                power = power)
         }
         last = settled
         lastHeard = heard

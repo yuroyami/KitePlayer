@@ -2,7 +2,9 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.CalmReading
 import kotlin.test.Test
+import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -23,13 +25,12 @@ class CalmReadingTest {
     }
 
     @Test
-    fun theTraceTheHitsAndTheEventsAreTheNewestFramesOwn() {
+    fun theWaveformTheHitsAndTheEventsAreTheNewestFramesOwn() {
         val reading = CalmReading()
         var withEvents = 0
         for (frame in heard(240)) {
             val shown = reading.of(frame, calm, step)
             assertSame(frame.scope, shown.scope)
-            assertSame(frame.power, shown.power)
             assertSame(frame.events, shown.events)
             assertEquals(frame.kick, shown.kick)
             assertEquals(frame.snare, shown.snare)
@@ -69,6 +70,33 @@ class CalmReadingTest {
             previous = shown
         }
         assertTrue(glided > 0, "the fixture never changed level enough to test the glide")
+    }
+
+    @Test
+    fun thePowerSpectrumGlidesToo() {
+        val reading = CalmReading()
+        var previous: SpectrumFrame? = null
+        var glided = 0
+        for (frame in heard(300)) {
+            val shown = reading.of(frame, calm, step)
+            val before = previous
+            val newest = frame.power
+            val old = before?.power
+            if (old != null && newest != null && before.hasTimestamp && frame.hasTimestamp &&
+                abs(newest.totalMeanSquare - old.totalMeanSquare) > 1e-5f
+            ) {
+                val low = minOf(old.totalMeanSquare, newest.totalMeanSquare)
+                val high = maxOf(old.totalMeanSquare, newest.totalMeanSquare)
+                val power = assertNotNull(shown.power)
+                assertTrue(power.totalMeanSquare in low..high && power.totalMeanSquare != newest.totalMeanSquare,
+                    "the power should move part of the way: ${old.totalMeanSquare} to ${newest.totalMeanSquare}, shown ${power.totalMeanSquare}")
+                assertEquals(newest.window.referenceMicros, power.window.referenceMicros, "the window stays the newest one")
+                assertEquals(newest.binCount, power.binCount)
+                glided++
+            }
+            previous = shown
+        }
+        assertTrue(glided > 0, "the fixture never changed power enough to test the glide")
     }
 
     @Test

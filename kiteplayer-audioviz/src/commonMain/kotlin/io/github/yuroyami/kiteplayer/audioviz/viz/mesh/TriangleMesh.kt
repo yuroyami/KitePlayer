@@ -345,4 +345,16 @@ public fun TriangleMesh.strip(xs: FloatArray, ys: FloatArray, count: Int, width:
 @AudioVizAuthoringApi
 public fun headlight(radius: Float, distance: Float): Float = radius / sqrt(radius * radius + distance * distance)
 
+/**
+ * The mean of three corner colours, channel by channel and alpha included, rounded to the nearest.
+ *
+ * A canvas that cannot blend colours across a face fills the face with this. A fade from a colour to
+ * clear then keeps a third of its alpha, which is the light the fade holds, where the colour of one
+ * corner alone would be a solid shape or nothing.
+ */
+internal fun meanColour(a: Int, b: Int, c: Int): Int {
+    fun channel(shift: Int): Int = ((((a ushr shift) and 0xFF) + ((b ushr shift) and 0xFF) + ((c ushr shift) and 0xFF)) * 2 + 3) / 6
+    return (channel(24) shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+}
+
 private const val FULL_TURN = 6.2831855f

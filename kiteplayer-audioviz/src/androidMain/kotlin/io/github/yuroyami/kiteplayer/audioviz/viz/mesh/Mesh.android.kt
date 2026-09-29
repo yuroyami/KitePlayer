@@ -16,8 +16,9 @@ import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
  * Android's triangle call, with a way round the versions that cannot use it.
  *
  * Before Android 10 a hardware accelerated canvas silently ignored this call, which is every canvas
- * Compose draws on. Those versions get the triangles one at a time as filled paths, each in the
- * colour of its first corner. Slower and flatter, but visibly the same shape.
+ * Compose draws on. Those versions get the triangles one at a time as filled paths, each in the mean
+ * colour of its three corners. Slower and flatter: a soft spot becomes a flat disc a third as strong,
+ * which holds the light of the fade it stands for.
  */
 @AudioVizAuthoringApi
 public actual fun DrawScope.drawMesh(mesh: TriangleMesh, blendMode: BlendMode) {
@@ -62,7 +63,7 @@ private fun drawOneByOne(canvas: AndroidCanvas, mesh: TriangleMesh, adding: Bool
         path.lineTo(mesh.positions[b * 2], mesh.positions[b * 2 + 1])
         path.lineTo(mesh.positions[c * 2], mesh.positions[c * 2 + 1])
         path.close()
-        paint.color = mesh.colors[a]
+        paint.color = meanColour(mesh.colors[a], mesh.colors[b], mesh.colors[c])
         canvas.drawPath(path, paint)
         at += 3
     }

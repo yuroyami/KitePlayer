@@ -100,6 +100,25 @@ class CalmReadingTest {
     }
 
     @Test
+    fun aFrameThatRepeatsOnNewStepsStillGlidesToItsValues() {
+        val reading = CalmReading()
+        val frames = heard(300).filter { it.hasTimestamp }
+        val loud = frames.maxBy { it.level }
+        val quiet = frames.minBy { it.level }
+        val gap = loud.level - quiet.level
+        println("calm reading fixture: loud ${loud.level}, quiet ${quiet.level}")
+        assertTrue(gap > 0.03f, "the fixture needs a loud and a quiet frame, gap $gap")
+        // The analysis has ended on the quiet frame, so every step gets that one object again.
+        reading.of(loud, calm, step)
+        val first = reading.of(quiet, calm, step)
+        assertTrue(first.level > quiet.level + gap * 0.5f, "one step should only start the glide: ${first.level}")
+        var shown = first
+        repeat(120) { shown = reading.of(quiet, calm, step) }
+        assertTrue(abs(shown.level - quiet.level) < gap * 0.1f,
+            "two seconds of the same frame should reach its level ${quiet.level}, was ${shown.level}")
+    }
+
+    @Test
     fun aRedrawOfTheSameStepGetsTheSameFrame() {
         val reading = CalmReading()
         val frames = heard(120)

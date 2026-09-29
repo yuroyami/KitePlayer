@@ -866,8 +866,10 @@ internal class CalmReading {
             lastHeard = null
             return heard
         }
-        // A redraw of the same step gets the same frame back, so a consumer can tell it is a repeat.
-        if (heard === lastHeard) last?.let { return it }
+        // A redraw of the same step, which passes no time, gets the same frame back, so a consumer can
+        // tell it is a repeat. A new step with the same frame object, such as the end of the analysis,
+        // still glides.
+        if (heard === lastHeard && deltaSeconds <= 0f) last?.let { return it }
         val before = last
         val settled = if (before == null || !before.hasTimestamp || !heard.hasTimestamp ||
             before.generation != heard.generation || before.analysisRevision != heard.analysisRevision

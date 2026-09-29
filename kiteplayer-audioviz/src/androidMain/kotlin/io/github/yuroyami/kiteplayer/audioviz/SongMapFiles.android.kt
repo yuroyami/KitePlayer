@@ -1,6 +1,9 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /** Song map files on Android. A write lands through a temporary file, so a crash leaves no half map. */
 internal actual object SongMapFiles {
@@ -8,14 +11,25 @@ internal actual object SongMapFiles {
         File(path).takeIf { it.isFile }?.readBytes()
     }.getOrNull()
 
-    actual fun write(path: String, bytes: ByteArray): Boolean = runCatching {
+    actual fun write(path: String, bytes: ByteArray): Boolean {
         val file = File(path)
-        file.parentFile?.mkdirs()
         val partial = File("$path.part")
-        partial.writeBytes(bytes)
-        file.delete()
-        partial.renameTo(file) || run { partial.delete(); false }
-    }.getOrDefault(false)
+        return try {
+            file.parentFile?.mkdirs()
+            partial.writeBytes(bytes)
+            // One move that replaces the old map, so a crash keeps either the old map or the new one.
+            try {
+                Files.move(partial.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(partial.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+            true
+        } catch (_: Exception) {
+            // A failed write must not leave its temporary file behind.
+            partial.delete()
+            false
+        }
+    }
 
     actual fun delete(path: String) {
         runCatching { File(path).delete() }

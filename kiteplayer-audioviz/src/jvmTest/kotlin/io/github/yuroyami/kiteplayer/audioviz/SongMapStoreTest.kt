@@ -40,6 +40,26 @@ class SongMapStoreTest {
     }
 
     @Test
+    fun aSecondWriteReplacesTheFirstAndLeavesNoTemporaryFile() = runBlocking {
+        val store = SongMapStore.inDirectory(directory.absolutePath)
+        store.write(key(0), encodeSongMap(map(1_000_000L)))
+        store.write(key(0), encodeSongMap(map(2_000_000L)))
+        val back = assertNotNull(decodeSongMap(assertNotNull(store.read(key(0)))))
+        assertEquals(2_000_000L, back.coveredThroughMicros)
+        assertEquals(listOf(".songmap"), directory.listFiles().orEmpty().map { it.name.substringAfterLast('.').let { ext -> ".$ext" } },
+            "expected one map file and nothing else: ${directory.listFiles().orEmpty().map { it.name }}")
+    }
+
+    @Test
+    fun aFailedWriteLeavesNothingBehind() {
+        directory.mkdirs()
+        val blocker = File(directory, "blocked")
+        blocker.writeText("a file where a directory is needed")
+        assertTrue(!SongMapFiles.write(File(blocker, "x.songmap").path, byteArrayOf(1, 2, 3)))
+        assertEquals(listOf("blocked"), directory.listFiles().orEmpty().map { it.name })
+    }
+
+    @Test
     fun aKeyWithSeparatorsStaysInsideTheDirectory() = runBlocking {
         val store = SongMapStore.inDirectory(directory.absolutePath)
         store.write("../../escape/1/2/3/${SongMap.VERSION}", encodeSongMap(map(1_000L)))

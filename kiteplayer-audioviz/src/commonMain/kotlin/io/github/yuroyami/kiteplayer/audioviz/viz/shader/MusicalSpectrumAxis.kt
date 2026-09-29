@@ -27,14 +27,18 @@ internal class NoteAxis {
     private val letters = Path()
     private val digits = Path()
     private val dots = Path()
-    private var builtFor = Size.Zero
+    private var builtWidth = Float.NaN
     private var builtTop = Float.NaN
     private var scaleY = 1f
+
+    /** How often the paths were rebuilt, for a test that checks the cache holds. */
+    internal var builds = 0
+        private set
 
     /** Draws the ruler over the band from [top], [height] pixels tall, across the whole width. */
     fun DrawScope.drawAxis(top: Float, height: Float) {
         if (size.width <= 0f || height <= 0f) return
-        if (size != builtFor || top != builtTop || height / IMAGE_ROWS != scaleY) build(size.width, top, height)
+        if (size.width != builtWidth || top != builtTop || height / IMAGE_ROWS != scaleY) build(size.width, top, height)
         val y = scaleY
         drawRect(BAND, Offset(0f, top + 10f * y), Size(size.width, 28f * y))
         drawRect(Color.White, Offset(0f, top + 8f * y), Size(size.width, 2f * y))
@@ -45,8 +49,9 @@ internal class NoteAxis {
     }
 
     private fun build(width: Float, top: Float, height: Float) {
-        builtFor = Size(width, top + height)
+        builtWidth = width
         builtTop = top
+        builds++
         scaleY = height / IMAGE_ROWS
         val semitone = width / SEMITONES
         // The image's x runs over 1920 pixels, 16 to a semitone.

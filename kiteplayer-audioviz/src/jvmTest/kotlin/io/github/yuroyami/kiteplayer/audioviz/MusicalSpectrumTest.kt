@@ -12,6 +12,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.BassCutStream
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ConstantQBars
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.MusicalSpectrum
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NoteAxis
 import java.awt.image.BufferedImage
 import kotlin.math.PI
 import kotlin.math.abs
@@ -40,6 +41,20 @@ class MusicalSpectrumTest {
         }
         assertTrue(peakInk > 0.004f, "the bars should put ink down, had $peakInk")
         assertTrue(peakBlown <= 0.3f, "the picture should not saturate to white, had $peakBlown")
+    }
+
+    @Test
+    fun theNoteRulerIsBuiltOnceForOneSize() {
+        val axis = NoteAxis()
+        val bitmap = ImageBitmap(400, 200)
+        val scope = CanvasDrawScope()
+        fun draw(width: Float) = scope.draw(Density(1f), LayoutDirection.Ltr, Canvas(bitmap), Size(width, 200f)) {
+            with(axis) { drawAxis(76f, 48f) }
+        }
+        repeat(3) { draw(320f) }
+        assertEquals(1, axis.builds, "the ruler was rebuilt on a frame of the same size")
+        draw(400f)
+        assertEquals(2, axis.builds, "a new width needs a new ruler")
     }
 
     @Test

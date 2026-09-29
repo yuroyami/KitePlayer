@@ -232,6 +232,67 @@ class PostProcessTest {
         return count
     }
 
+    /** [count] successive renders of the same frame, each drawn again as a new step would be. */
+    private fun renderSteps(spec: PostSpec, frame: SpectrumFrame, calm: Boolean, count: Int): List<PixelMap> {
+        val tick = mutableStateOf(0)
+        val scene = ImageComposeScene(width, height, Density(1f), content = {
+            PostProcessedBox(spec = { spec }, frame = { frame }, modifier = Modifier.fillMaxSize(), calm = calm) {
+                Canvas(Modifier.fillMaxSize()) {
+                    // Read, so each step draws the picture again.
+                    tick.value
+                    drawRect(Color.Black)
+                    for (bar in 0 until 6) {
+                        drawRect(
+                            Color.White,
+                            topLeft = androidx.compose.ui.geometry.Offset(20f + bar * 36f, 0f),
+                            size = androidx.compose.ui.geometry.Size(10f, size.height),
+                        )
+                    }
+                    drawCircle(Color.White, radius = 5f, center = center)
+                }
+            }
+        })
+        try {
+            return List(count) { step ->
+                tick.value = step
+                scene.render(step * 16_666_667L).toComposeImageBitmap().toPixelMap()
+            }
+        } finally {
+            scene.close()
+        }
+    }
+
+    private fun bareFrame(dropPulse: Float = 0f, kick: Float = 0f) = SpectrumFrame(
+        ptsMicros = 0L, bands = FloatArray(8), peaks = FloatArray(8), scope = FloatArray(16),
+        level = 0f, bass = 0f, mid = 0f, treble = 0f, beat = 0f, pulse = 0f, kick = kick, dropPulse = dropPulse,
+    )
+
+    @Test
+    fun aPausedPictureHoldsItsTearStill() {
+        val spec = PostSpec(bloom = 0f, vignette = 0f, grain = 0f, glitch = true, aberration = 0f)
+        val paused = bareFrame(dropPulse = 0.6f).withPulseHeld()
+        assertTrue(paused.held && paused.audible == 0f, "the fixture must be a paused frame")
+        val pictures = renderSteps(spec, paused, calm = false, count = 4)
+        val plain = renderSteps(PostSpec.Off, paused, calm = false, count = 1).first()
+        assertTrue(differing(pictures[0], plain) > width * height / 200, "the fixture must show a tear")
+        for (step in 1 until pictures.size) {
+            assertTrue(differing(pictures[0], pictures[step]) == 0, "the tear moved on step $step of a paused picture")
+        }
+    }
+
+    @Test
+    fun aKickMakesTheGlowFlareUnlessMotionIsReduced() {
+        val spec = PostSpec(bloom = 1f, bloomRadius = 0.05f, threshold = 0.3f, vignette = 0f, grain = 0f, glitch = false, aberration = 0f)
+        fun glow(kick: Float, calm: Boolean) = ring(renderSteps(spec, bareFrame(kick = kick), calm, 1).first(), 8f, 30f)
+        val steady = glow(0f, calm = false)
+        val flared = glow(1f, calm = false)
+        val calmSteady = glow(0f, calm = true)
+        val calmKick = glow(1f, calm = true)
+        println("glow round a bright dot: $steady without a kick and $flared with one; calm: $calmSteady and $calmKick")
+        assertTrue(flared > steady + 0.005f, "a kick should make the glow flare: $steady then $flared")
+        assertTrue(kotlin.math.abs(calmKick - calmSteady) < 0.0005f, "under reduced motion a kick must not: $calmSteady then $calmKick")
+    }
+
     @Test
     fun offLeavesThePictureAlone() {
         val pixels = render(PostSpec.Off, fill = Color(0.4f, 0.4f, 0.4f), dot = false)

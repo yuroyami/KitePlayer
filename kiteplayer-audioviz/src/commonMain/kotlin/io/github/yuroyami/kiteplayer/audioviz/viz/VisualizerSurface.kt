@@ -97,6 +97,7 @@ public fun VisualizerSurface(
         frame = { clock.tick?.frame ?: frame() },
         modifier = modifier,
         stats = stats,
+        calm = reducedMotion,
     ) {
         VisualizerCanvas(visualization, frame, palette, clock, Modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond, motion, flashes)
     }
@@ -651,6 +652,7 @@ public fun DirectedVisualizerSurface(
         frame = { clock.tick?.frame ?: frame() },
         modifier = modifier,
         stats = stats,
+        calm = reducedMotion,
     ) {
         DirectedCanvas(director, frame, palette, clock, framesPerSecond, Modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
     }

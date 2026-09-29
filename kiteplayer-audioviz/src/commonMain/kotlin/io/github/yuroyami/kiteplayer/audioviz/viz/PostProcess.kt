@@ -139,7 +139,8 @@ internal expect val blurAvailable: Boolean
  *
  * The glow keeps only highlights above the threshold and spreads them over four widths. On Skia,
  * successive levels use smaller images with filtering between reductions to preserve tiny sparks.
- * A kick makes the glow flare. Older Android devices and the brief tearing effect use separate layers.
+ * A kick makes the glow flare, except under reduced motion. Older Android devices and the brief tearing effect use
+ * separate layers.
  */
 @Composable
 internal fun PostProcessedBox(
@@ -147,6 +148,8 @@ internal fun PostProcessedBox(
     frame: () -> SpectrumFrame,
     modifier: Modifier = Modifier,
     stats: RenderStats? = null,
+    /** True under reduced motion: a kick no longer makes the glow flare. */
+    calm: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val scene = rememberGraphicsLayer()
@@ -161,6 +164,9 @@ internal fun PostProcessedBox(
     val filters = remember { HashMap<Float, ColorFilter>() }
     val hold = remember { Hold() }
     val grainOffset = remember { FloatArray(2) }
+    // The torn strips as a top, a height and a slide each. New ones are picked only while the music
+    // plays, so a picture paused in the middle of a tear holds it still.
+    val tears = remember { FloatArray(TORN_STRIPS * 3) }
     val effect = remember { lazy { ScenePostEffect() } }
     DisposableEffect(effect) { onDispose { if (effect.isInitialized()) effect.value.close() } }
 
@@ -181,8 +187,9 @@ internal fun PostProcessedBox(
             }
             val started = if (stats != null) TimeSource.Monotonic.markNow() else null
 
-            val split = post.aberration * (0.25f + 0.75f * current.trebleRel + current.kick)
-            val strength = (post.bloom * (0.6f + 0.6f * current.energy + 0.5f * current.kick)).coerceIn(0f, 1f)
+            val flare = if (calm) 0f else current.kick
+            val split = post.aberration * (0.25f + 0.75f * current.trebleRel + flare)
+            val strength = (post.bloom * (0.6f + 0.6f * current.energy + 0.5f * flare)).coerceIn(0f, 1f)
             val tearing = post.glitch && current.dropPulse > 0.02f
             val combined = if (!tearing && (post.bloom > 0f || split > MIN_SPLIT)) {
                 effect.value.prepare(post, size.width, size.height, strength, if (split > MIN_SPLIT) split else 0f)
@@ -209,10 +216,17 @@ internal fun PostProcessedBox(
                 blueSplit.alpha = 0.55f * amount
                 blueSplit.record { translate(-shift, 0f) { drawLayer(scene) } }
                 drawLayer(blueSplit)
+                if (current.audible > 0f) {
+                    for (strip in 0 until TORN_STRIPS) {
+                        tears[strip * 3] = random.next()
+                        tears[strip * 3 + 1] = random.next()
+                        tears[strip * 3 + 2] = random.signed()
+                    }
+                }
                 for (strip in 0 until TORN_STRIPS) {
-                    val top = random.next() * size.height
-                    val tall = size.height * (0.015f + 0.05f * random.next())
-                    val slide = random.signed() * size.width * 0.06f * amount
+                    val top = tears[strip * 3] * size.height
+                    val tall = size.height * (0.015f + 0.05f * tears[strip * 3 + 1])
+                    val slide = tears[strip * 3 + 2] * size.width * 0.06f * amount
                     clipRect(0f, top, size.width, top + tall) {
                         translate(slide, 0f) { drawLayer(scene) }
                     }

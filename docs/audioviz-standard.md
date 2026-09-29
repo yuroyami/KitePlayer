@@ -457,7 +457,8 @@ audio format and output route. A GPU class alone is not a reproducible test devi
   player with audio, UI and an active scan. Include every built-in drawing that is advertised as
   available on the target. An unavailable preset is not a passing performance sample.
 - Song-scan targets: less than 5 core-seconds for a four-minute fixture and a serialised map below
-  2 MB. *Judgement*, unmeasured targets. Report wall time, format, bandwidth, peak working memory
+  2 MB. *Judgement.* Scan cost is measured on the host only, and a four-minute map is about 10 KB.
+  The phone figure is still open. Report wall time, format, bandwidth, peak working memory
   and cache size separately. Decoder cost and network waits prevent a universal five-second
   completion promise.
 - Quality changes must be reported beside performance. A lower-resolution trail is a tradeoff,
@@ -476,6 +477,7 @@ overhaul, not the implementation's current status or a second issue tracker. The
 [calibrated feature contract](audioviz-feature-api.md),
 [event-delivery contract](audioviz-events-api.md),
 [onset method](audioviz-onset-method.md),
+[rhythm and boundary contract](audioviz-rhythm-api.md),
 [structure and key contract](audioviz-structure-api.md),
 [song scan contract](audioviz-song-scan-api.md),
 [drawing mapping contract](audioviz-mapping-api.md) and

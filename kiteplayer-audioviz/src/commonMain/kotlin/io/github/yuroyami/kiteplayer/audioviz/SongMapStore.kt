@@ -13,9 +13,10 @@ import io.github.yuroyami.kiteplayer.TrackId
  * by the system and which are backed up. [SongMapStore.inDirectory] is the ordinary answer; an
  * application with its own database may implement this interface instead.
  *
- * A key is opaque, safe in a file name, and already carries the analysis version, so maps from
- * different versions never collide. The bytes are the visualiser's own format: write them back
- * unchanged, and answer null rather than throwing when an entry is missing or unreadable.
+ * A key is opaque and already carries the analysis version, so maps from different versions never
+ * collide. It contains slash characters, which a store that names files after keys has to replace.
+ * The bytes are the visualiser's own format: write them back unchanged, and answer null rather than
+ * throwing when an entry is missing or unreadable.
  *
  * Calls happen on a background dispatcher, never on the analysis worker, so they may block.
  */

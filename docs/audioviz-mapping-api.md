@@ -41,28 +41,29 @@ low confidence and high strength.
 The names `kick`, `snare` and `hat` are kept for compatibility. They do not identify
 instruments. They mean low, body and high transients.
 
-Each hit is counted once. The event cursor delivers a record once per view, a repeated frame at
-an instant already read delivers nothing, and a catch-up reset skips the missed burst rather than
-replaying it. A frame from a raw analysis, with detections but no delivery, counts its detections.
+Each hit is counted once. The event cursor delivers a record once to each reader of a view, so the
+surface and the browser tiles do not take events from each other. A repeated frame at an instant
+already read delivers nothing, and a catch-up reset skips the missed burst rather than replaying it. A frame from a raw analysis, with detections but no delivery, counts its detections.
 A frame built by hand with scalar fields only counts one hit per nonzero field, because it has no
 confidence to check.
 
-Spawns are bounded. `kickSpawn`, `snareSpawn` and `hatSpawn` sum the strengths of the frame's hits
-of one kind, cap the sum at 2 (*judgement*), and multiply the drawing's base count by it. A hit
-always spawns at least one thing. A dense run of high transients therefore cannot flood a drawing,
+Spawns are bounded. `kickSpawn`, `snareSpawn` and `hatSpawn` add 0.35 plus 0.65 times the strength
+of each of the frame's hits of one kind, cap the sum at 2 (*judgement*), multiply the drawing's
+base count by it and round. A hit always spawns at least one thing. A dense run of high transients therefore cannot flood a drawing,
 and a hard hit still spawns more than a soft one.
 
 Anything discrete on a visual cycle edge, such as a ring every quarter cycle, needs
 `Gestures.pulseUsable`. The cycles follow a supported pulse when there is one and run free
-otherwise, and a discrete response on a free cycle is a beat train the music does not have. Ten
-drawings held such a response; they now hold it only while the pulse is supported. Under music
-with no pulse to follow, their continuous motion carries them.
+otherwise, and a discrete response on a free cycle is a beat train the music does not have. Four
+drawings read `pulseUsable` for this: Pipe, Neon Lo-Fi, Twin Bloom and Glitch. They hold such a
+response only while the pulse is supported. Under music with no pulse to follow, their continuous
+motion carries them.
 
 ## Fixed levels, no hidden rescaling
 
 Every energy driver is a height under the one shared gain, so a fixed level means the same thing
-at every point of every song. A band at height 0.2 holds about a four-hundredth of the reference
-power, which is what one band of a loud mix holds when the energy is spread over a few dozen of
+at every point of every song. A band at height 0.2 holds about a 280th of the reference power, or
+minus 24 dB, which is what one band of a loud mix holds when the energy is spread over a few dozen of
 them. A quiet passage crosses that level less often, which is the contrast the standard asks for.
 
 - A drawing compares energy with fixed levels. It does not rank values within a frame, and it
@@ -75,9 +76,10 @@ them. A quiet passage crosses that level less often, which is the contrast the s
   fixture the mean height is 0.31 in the low third, 0.08 in the middle and 0.13 at the top, and
   the fixed tops are about two and a half times those. That is the tilt compensation the standard
   asks to be named rather than learned while the song plays. *Judgement.*
-- The four drawings that ranked bars now compare a height with `LOUD_BAND`, 0.2, or `LIT_BAND`,
-  0.1. About three bars in ten cross `LOUD_BAND` on the loud drum fixture, and almost none do
-  under a soft pad, which is the contrast a rank removed. *Judgement.*
+- `LOUD_BAND`, 0.2, and `LIT_BAND`, 0.1, are the fixed levels in `PresetKit.kt` for a drawing that
+  needs one. About three bars in ten cross `LOUD_BAND` on the loud drum fixture, and almost none do
+  under a soft pad, which is the contrast a rank removed. No built-in drawing reads them now.
+  *Judgement.*
 - A fixed artistic range is allowed and is declared as a `VizCurve.Range`.
 
 ## Light follows the level, speed follows the drive
@@ -100,11 +102,12 @@ A drawing's own paths run on `VizRenderState.idle` and `VizRenderState.tempo`. B
 a quiet passage, at about a tenth of their speed under drums, so a still picture reads as settled
 rather than as a screen saver.
 
-Nothing travels while the player is paused or the audio is silent. `SpectrumFrame.audible` is zero
-then: a held frame keeps its levels on screen but says so, and a level under the audible floor is
-silence whatever the section mood says. `motionRate`, `idle` and `VizRenderState.stepSeconds`
-follow it, and every camera, ground and scrolling field moves by `stepSeconds` rather than by the
-wall clock. Springs and fades keep settling on `deltaSeconds`, so a hit still lands and decays.
+Nothing travels while the player is paused, and what moves by `stepSeconds` stops in a silence too.
+`SpectrumFrame.audible` is zero then: a held frame keeps its levels on screen but says so, and a
+level under the audible floor is silence whatever the section mood says. `motionRate`, `idle` and
+`VizRenderState.stepSeconds` follow it, and every camera, ground and scrolling field moves by
+`stepSeconds` rather than by the wall clock. The visual cycle clocks of `Gestures` stop for a pause
+but keep running at their free rate in a silence, so a part that moves with a cycle still moves. Springs and fades keep settling on `deltaSeconds`, so a hit still lands and decays.
 `PausedPictureTest` renders every drawing through a pause and needs each picture to settle within
 five seconds.
 
@@ -233,14 +236,15 @@ against the baseline.
 - Every declared drive must move its property by at least the minimum effect for that property.
 - Every driver whose change moves the picture as much as the drawing's median declared drive must
   be declared. A declaration cannot hide a strong response.
-- A hit or structural drive must start in the frame that delivers the event, unless it declares
-  a delay.
-- A `Scaled` hit drive answers a hit of strength 0.9 more than a hit of strength 0.3. A detection
+- A hit or structural drive must start within two frames of the frame that delivers the event,
+  plus any delay it declares. The two frames allow for a drawing that spawns into its feedback
+  buffer.
+- A `Scaled` hit drive answers a hit of strength 0.9 more than a hit of strength 0.25. A detection
   below the confidence gate moves nothing.
 
 **Level step.** The drum loop plays twice with the song reference fixed, once 12 dB quieter. Every
-drawing must look louder in the loud run on the properties it declares for `Level`, `Bands`,
-`Bass`, `Mid` or `Treble`.
+drawing must lose at least 10 percent in mean brightness or in drawn share in the quiet run. The
+test does not look at the drivers a drawing declares.
 
 **Silence against music.** After the declared settling period, silence must produce at most 20%
 of the music render's mean change between frames. *Judgement.* The music render must itself reach
@@ -254,8 +258,10 @@ Both renders start from the same reset, so the only difference is when the drums
 pictures must differ. A drawing whose motion merely looks musical passes every other check here
 and fails this one.
 
-**Source lint.** `MappingLintTest` refuses ranks within a frame and automatic ranges. It no longer
-asks for them.
+**Source lint.** `MappingLintTest` reads the source of the drawings and refuses four things: a speed
+taken from the wall clock, a rank inside one frame, a spawn count with no frame time, and a position
+that is a clock times a changing speed. An automatic range cannot be seen in text, and the level
+step above catches it.
 
 **Held-out music.** `CorpusScoreTest` scores the detectors against annotated clips and prints
 onset precision, recall and F1 at 70 ms, the signed median of the onset times, beat F1, and how

@@ -65,7 +65,7 @@ also counted as discarded. No event is retimed to the current frame to hide late
 
 `AudioEventDelivery` exposes indexed immutable deliveries, the generation/revision, current
 detection-complete watermark, and per-call counts for late and catch-up discards. A delivered
-entry preserves the shared event and reports its per-view lateness. Cursor totals accumulate
+entry preserves the shared event and reports its per-reader lateness. Cursor totals accumulate
 these counts across resets for diagnostics.
 
 ## Bounds and compatibility

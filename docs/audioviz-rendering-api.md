@@ -37,7 +37,7 @@ stepped, so it costs less than a distance-field drawing.
 - A new view comes at each section, over one bar: under the ring plane, nearly edge on, or from
   the night side. A breakdown drifts into the planet's shadow until the next section or drop.
 - On a drop the sun rises over the planet's limb over one beat, after a short flare. When the audio
-  ahead already holds the drop, the sun sets behind the planet over the last bar first.
+  ahead already holds the drop, at most 100 ms ahead, the sun sets behind the planet just before it.
 - The planet keeps 35 percent of its light in a silence, and the night side is lifted to about
   four percent by light off the ring.
 
@@ -47,7 +47,9 @@ stepped, so it costs less than a distance-field drawing.
 `AudioVizBrowser` shows that same order as a searchable adaptive preview grid. There are no
 preset categories, category headers or grouped-catalogue entry points.
 
-The catalogue has 24 drawings. The first 14 are the library's own: Bars, Ocean Mist, Twin Bloom,
+The catalogue has 24 drawings on desktop, iOS and Android 13 and newer. On older Android it has 20,
+because Alchemy, Nebula Field, Pipe and Odyssey need runtime shaders and have no stand-in. The first
+14 are the library's own: Bars, Ocean Mist, Twin Bloom,
 Contour, Alchemy, Nebula Field, Kaleidoscope, Pipe, Thin Ice, Fluctus, Glitch, Odyssey, Neon Lo-Fi
 and Marble. The last 10 are ports of browser visualisers, each faithful to its original and credited
 below. Each port's class documentation carries the full credit and a list of every way it differs
@@ -110,7 +112,7 @@ tile, depth/refinement chain or underwater volume.
   or drop. On the coast, the stripes of light on the sea are the waveform.
 - A drop lifts the view off the road for one cycle: the horizon drops, the terraces spread out below
   like a lit map, and the sun stands whole. It lands on the first beat after that cycle. Under
-  reduced motion the camera stays down and only the sun closes.
+  reduced motion the camera rises about 15 percent as far, and the sun closes as usual.
 - The scene keeps 40 percent of its light in a silence, and the display transfer rolls bright light
   off on its brightest channel, so a bright colour keeps its hue.
 
@@ -142,7 +144,8 @@ local spectrum response.
 
 The thirteen parameters are Scene, Spectrum floor, Musical mountains, Brightness, Tape finish,
 Journey pace, Flight speed, Sun size, Sky ribbons, Rain, Hit accents, Neon intensity and Vividness.
-The existing Variation action changes a coherent route/layout gene. Browser instances copy both
+The Mutate now button (`AudioVizState.mutate()`) changes its one gene, Route variation, which is a
+coherent route and layout choice. Browser instances copy both
 the chosen parameters and this layout configuration, retaining independent histories and actors.
 Searching for Terrain March finds the single Neon Lo-Fi entry; `VizDirector.startWith` resolves
 that former name too. No external app's persisted settings format is assumed.
@@ -158,7 +161,7 @@ browser cap of at most 15 FPS (or a lower configured cap).
 
 `NeonLoFiHistoryTest`, `NeonLoFiWorldTest`, `NeonLoFiMusicTest`, `NeonLoFiCatalogTest`,
 `NeonLoFiRenderTest`, `NeonLoFiQualificationTest` and `NeonLoFiLightTest` cover the replacement's
-clock/history, event accounting, scene policy, real Variation/preview transfer, fixed-camera
+clock/history, event accounting, scene policy, real route variation and preview transfer, fixed-camera
 musical response, native phone-sized output, portable output, framing, bounded geometry,
 finished light and host CPU cost. The light fixture uses decoded linear sRGB and a separate
 saturated-red swing trace; it is a bounded fixture, not general photosensitivity certification.
@@ -204,7 +207,9 @@ kick that pushes the old ink outward, the growth of the lace, the breakdown and 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative
 luminance of at least 0.10, where the darker of the two states is below 0.80. A red flash is the
 same pattern in saturated red. The project's policy is stricter than WCAG's: at most three in any
-rolling second, with no area exception, and no saturated red flashing at all.
+rolling second, with no area exception, and no saturated red flashing at all. The red rule holds in
+`FlashGuard.limit`. The surface calls `FlashGuard.allowance`, which watches one number, the light
+level, and cannot see red.
 
 The guard scales the light every drawing is told to give, through `VizRenderState.lightScale`. A
 held frame is dimmer, not dropped, so the picture keeps moving, and because every drawing's
@@ -225,7 +230,7 @@ slow fade halfway, which is worse than the flash it was built to prevent.
 **What checks the rest.** `FlashCaptureTest` renders every drawing through the same surface, with
 the finishing pass on, and counts the flashes in the composed frames. The fixture is 200 beats a
 minute with hits on the half beat, plus the ordinary drum loop, and each drawing is rendered again
-with reduced motion on, which must bring it inside the policy and never raise its count. It renders
+with reduced motion on, which must bring it inside the policy and add at most one flash. It renders
 for minutes, so it runs in `./gradlew :kiteplayer-audioviz:audiovizSurvey` and not in `jvmTest`.
 `FlashGuardTest` fixes the runtime guard's own counter against known pass and fail signals.
 
@@ -243,9 +248,10 @@ report the rate it was given, and nothing at all for the rest.
 
 Three earlier versions of this counter each gave a different verdict on the catalogue, and none of
 them had been measured against anything. The first averaged the whole frame, which reads a drawing
-whose bars grow on the beat as a flash and called seventeen drawings unsafe. The second compared
+whose bars grow on the beat as a flash and called seventeen drawings of the old 78-drawing
+catalogue unsafe. The second compared
 each frame with the last turning point, which cannot tell a jump after a long rest from a slow
-drift, and called sixty-five unsafe. Brightness changes were made against the first reading and
+drift, and called sixty-five of the old catalogue unsafe. Brightness changes were made against the first reading and
 then taken back out. Calibrate the counter before trusting it about a drawing.
 
 **What it cannot see, measured.** A drawing draws its own bright marks, and the guard reads only
@@ -255,8 +261,9 @@ both on the drum loop: Honeycomb at six flashes in its busiest second and Pipe a
 limit of three. On the 200 beats a minute fixture both stay at two. In both, a large share of the
 picture brightens at once, up to 92 percent for Honeycomb and 40 percent for Pipe. Bars, Fracture,
 Iris and Odyssey reach three, the limit itself, and the other eighteen stay below it. With reduced
-motion on, no drawing flashes at all. Bringing Honeycomb and Pipe inside the policy is a change to
-how they look, and the capture test is the tool to check any such change.
+motion on, every drawing stays inside the policy. Pipe and Honeycomb still flash once in their
+busiest second, and the other twenty-two flash not at all. Bringing Honeycomb and Pipe inside the
+policy is a change to how they look, and the capture test is the tool to check any such change.
 
 The test also prints the widest area that swung together for every drawing, so one that is close to
 the limit is visible before it crosses it.
@@ -279,31 +286,33 @@ preferred way, except that a preferred way other than the strobe still wins. The
 used. The camera still wanders slowly, because a still picture with a moving spectrum in it reads as
 broken rather than as calm.
 
-The reading a drawing sees is slowed down: its smooth values glide to each new frame over half a
-second. The waveform, the power spectrum, the hits, the delivered events and the pause stay those
-of the newest frame, so a drawing that draws the spectrum still follows the music and a pause still
+The reading a drawing sees is slowed down: its smooth values and its power spectrum glide to each
+new frame over half a second. The waveform, the hits, the delivered events and the pause stay those
+of the newest frame, so a drawing that draws the waveform still follows the music and a pause still
 stops the picture.
 
-It also holds back the hits themselves, to about a third of their strength. Without that the
-setting kept none of its promise about flashes: a drawing flashes mostly through what it draws on a
-hit, not through the light it is given, and the captured output with reduced motion on was
-identical to the output without it. The hits are the one lever that reaches every drawing without
-each of them knowing about the setting.
+It also holds back the hits that `Gestures` reads, to about a third of their strength. A drawing
+flashes mostly through what it draws on a hit, not through the light it is given, and the captured
+output with reduced motion on was once identical to the output without it. Only the drawings that
+use `Gestures` feel this. The others get reduced motion from the slowed reading and from their own
+use of `motionScale`.
 
 `AudioVizState.visible` draws the background alone. The analysis keeps running and the player keeps
 playing, so a viewer who turns the picture off keeps the music.
 
-Both reach a drawing as `VizRenderState.motionScale`, so a drawing written outside this repository
-gets the same setting without knowing about it.
+The reduced motion setting reaches a drawing as `VizRenderState.motionScale`, so a drawing written
+outside this repository gets it without knowing about it. The visible setting never reaches a
+drawing: the surface draws the background and returns.
 
 ## Still open
 
-- **Glow is on by default.** The standard says glow is an additional layer, off unless the drawing
-  asks for it. Every drawing inherits a bloom of 0.8 through `PostSpec.Default`. Changing that
-  changes the look of most of the catalogue, so it is a decision for the owner rather than a
-  mechanical fix.
-- **No evidence of the destination backend.** A shader compiled by Skia does not prove its
-  destination is the graphics card. That needs a device.
+- **Bars glows by default.** The standard says glow is an additional layer, off unless the drawing
+  asks for it. Bars is the one drawing that inherits the bloom of 0.8 from `PostSpec.Default`.
+  Seventeen drawings turn the finishing pass off and six set a smaller bloom of their own. Changing
+  Bars changes its look, so it is a decision for the owner rather than a mechanical fix.
+- **No evidence of the destination backend on a phone.** A shader compiled by Skia does not prove
+  its destination is the graphics card. The desktop benchmark reports the window's graphics backend,
+  and Android and iOS have no such evidence yet. That needs a device.
 - **The governor owns no total budget.** Drawings declare what they can give up through
   `VizQualityControl`, and the quality control shrinks the echo buffer, but there is no
   surface-wide budget across two scenes, glow, history and the interface.

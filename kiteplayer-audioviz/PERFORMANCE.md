@@ -33,7 +33,8 @@ across its 48 columns. Its colour-rule endpoints also skip colour-space blending
 ## Measurements
 
 Measured on the development Mac on 2026-09-12. These are observations, not a
-universal speedup or an Android/iPhone device claim.
+universal speedup or an Android/iPhone device claim. Twist, Flow Field, Cathedral and Equaliser
+were removed from the catalogue later, so those numbers describe drawings that no longer exist.
 
 The CPU benchmark includes Compose rendering and the finishing pass at 640x360.
 Before the change, enabling the default finishing pass increased median frame
@@ -138,5 +139,5 @@ failed as intended when immediate recovery was temporarily disabled.
 
 The Linux JVM step failed 19 of 91 tests because the published KiteFFmpeg
 dependency lacks its linux-arm64 `kitecodec_jni` library, the existing limitation
-documented in `CLAUDE.md`. The remaining gate steps were resumed and passed.
+recorded in `docs/records/verification-0.0.25.md`. The remaining gate steps were resumed and passed.
 Physical Android/iPhone performance and browser execution were not measured.

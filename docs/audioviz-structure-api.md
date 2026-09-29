@@ -116,7 +116,8 @@ relative major, and `keyConfidence` is its confidence, zero while unknown.
 
 ### Palette
 
-The palette leans towards the key hue only while a key is known. The lean comes in over two
+The palette leans towards the key hue only while the key confidence is above 0.6, and the lean is
+full at 1.0. It turns the palette by at most 20 degrees. The lean comes in over two
 seconds and its hue moves around the circle at most a quarter turn per second. When the key
 becomes unknown, the lean keeps its last hue and fades out over eight seconds instead of snapping
 back (*judgement*).

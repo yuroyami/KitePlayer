@@ -72,8 +72,12 @@ that a picture nobody asked to shuffle never shuffles.
 `Gestures.section` and `sections` describe accepted structural edges. Its `cyclePhase`,
 `slowCyclePhase`, `cycles`, `slowCycles` and `cycleSeconds` describe artistic animation cycles.
 The old bar/phrase edges, counts and phases are deprecated and report unknown rather than
-manufacturing meter. Built-in preset changes use the structural edge; their ongoing animation
-uses the visual cycles. Camera cuts and drop gestures use the same boundary gate as the director.
+manufacturing meter. Built-in drawings change recipe on `Gestures.turn`. A turn is an accepted
+section boundary, or the eighth visual cycle since the last turn while sound plays. A drawing's big
+moment fires on `Gestures.surge`. A surge is an accepted drop, or a strong energy rise after six
+quiet seconds, at most once a minute. Only section, drop and breakdown are structural. Their ongoing
+animation uses the visual cycles. Camera cuts and drop gestures use the same boundary gate as the
+director.
 
 Built-in shader programs read `uCyclePhase` and `uSlowCyclePhase` for artistic motion. The
 legacy `uBarPhase` and `uPhrasePhase` uniforms remain zero because no corresponding musical

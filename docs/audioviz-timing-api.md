@@ -44,7 +44,9 @@ without changing the video epoch.
 
 Views created with `rememberAudioVizState` share one analysis session per player. The first attached
 view starts the session; detaching the last view removes its tap, cancels its worker and releases
-its PCM pool. Each view keeps its own playback cursor. Remembering a state in an abandoned Compose
+its PCM pool. Each view keeps its own playback cursor, and each reader of a view keeps its own
+event cursor: the surface and the browser tiles take their frames through separate sources, so they
+do not take events from each other. Remembering a state in an abandoned Compose
 composition does not start a worker. A retained diagnostic object does not retain queued PCM after
 the session closes.
 

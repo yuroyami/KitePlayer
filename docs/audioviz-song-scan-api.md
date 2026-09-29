@@ -90,13 +90,12 @@ A four minute song holds about 2400 values; the whole map stays far below the st
 | An item with its own reader factory | Only with `customReaders = true` |
 
 An item with no known duration, or that is not seekable, is live or read-once and is never
-scanned. A scan starts when the player's item or selected audio track changes, after one second of
-playback, so a quick skip through a queue scans nothing.
+scanned. A scan starts when the player's item or selected audio track has stayed the same for one
+second, so a quick skip through a queue scans nothing.
 
 At most one scan runs at a time in the process by default, whatever the number of players and
-views. A newer request cancels an older one for the same player. A result is installed only when
-its item, track and audio generation lineage still match; a late result from a replaced request is
-dropped. Scans run on a background dispatcher.
+views. A new item or track cancels the running scan of the same player, so the map of a replaced
+request is never installed. Scans run on a background dispatcher.
 
 ## Ranges
 
@@ -150,12 +149,15 @@ val viz = rememberAudioVizState(player, songMapStore = maps)
 128 by default. A map of a four minute song is about ten kilobytes. Give it a directory of its own.
 
 An application with its own database may implement the interface instead. It receives an opaque
-key that is safe in a file name and already carries the analysis version, and bytes to store
-unchanged. It answers null for anything missing or unreadable rather than raising. Calls happen on
+key that already carries the analysis version and contains slash characters, so replace them before
+using it as a file name, and bytes to store unchanged. It answers null for anything missing or unreadable rather than raising. Calls happen on
 a background dispatcher, so they may block.
 
 The stored form is checked on every read: a file from another analysis version, a half-written
-file and a file that is not a map at all are all misses, never wrong numbers. A map that live
+file and a file that is not a map at all are all misses, never wrong numbers. So is a file with a
+number the analysis cannot use: a reference power that is not positive and finite, a level or score
+that is not a number, or a key tonic outside 0 to 11. A curve that starts before zero is valid,
+because media time can start there. A map that live
 audio disagrees with is dropped from the store as well as from the session cache, so it cannot
 come back on the next launch.
 
@@ -168,7 +170,8 @@ installs its structure for the covered range only and never supplies a reference
 
 Verification: during the first five seconds of live analysis with a map installed, the live
 programme level is compared with the map's curve at the same media times. A mean absolute
-difference above 1.5 dB discards the map and its cache entry, and live analysis continues alone.
+difference above 1.5 dB, or one that is not a number, discards the map and its cache entry, and live
+analysis continues alone.
 This catches changed content behind the same URI and any timestamp convention mismatch.
 
 ## Views and migration
@@ -196,7 +199,8 @@ first tap block is skipped because the start of playback may trim it.
 Shifting the scan's timestamps by one microsecond failed all four. Scripted-backend tests check
 stream choice, ordering, pacing by the sink, cancellation and the closing of the decoder, packets
 and session. Scanner tests on fakes check the settle delay, the policy table, cancellation of a
-replaced scan, one scan at a time across players, the cache and its key, and the pacer's share.
+replaced scan, one scan at a time across players, the cache and its key, the join of scanned ranges,
+the stored map, and the fall back to one pass when a reader refuses a range.
 Feed tests check that a map of the same audio stays and moves the shared gain to its reference,
 that a map of other audio is withdrawn within five seconds of readings, and that mapped structure
 arrives on time with the live duplicate counted.

@@ -1,8 +1,11 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDirector
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizTransition
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -41,9 +44,10 @@ class DirectorTest {
         seconds: Float,
         seed: Long = 1L,
         boundaries: Boolean = true,
+        shelves: List<Visualization> = catalogue,
         onChange: (String) -> Unit = {},
     ): VizDirector {
-        val director = VizDirector(catalogue, seed = seed)
+        val director = VizDirector(shelves, seed = seed)
         // Only injected boundary IDs belong to this scene-decision fixture.
         val player = SongPlayer(mono)
         var showing = director.current.name
@@ -112,6 +116,35 @@ class DirectorTest {
             calm <= buckets.size / 3,
             "a drum loop should mostly get lively drawings, got $calm calm ones out of ${buckets.size}",
         )
+    }
+
+    /** A drawing that draws nothing, for a catalogue in which only the shelf it stands on matters. */
+    private class Shelved(override val name: String, override val bucket: VizEnergy) : Visualization {
+        override fun DrawScope.draw(state: VizRenderState) {}
+    }
+
+    /** Twelve drawings on each of two shelves, so neither shelf is used up in the run. */
+    private fun shelves(vararg buckets: VizEnergy): List<Visualization> =
+        buckets.flatMap { bucket -> List(12) { Shelved("$bucket $it", bucket) } }
+
+    @Test
+    fun busyMusicNeverGetsACalmDrawingWhileALivelyOneIsFree() {
+        val seen = ArrayList<VizEnergy>()
+        run(SyntheticSong.drumLoop(140f), seconds = 130f, shelves = shelves(VizEnergy.Calm, VizEnergy.High)) {
+            seen += VizEnergy.valueOf(it.substringBefore(' '))
+        }
+        assertTrue(seen.size >= 6, "the run must change a few times, changed ${seen.size}")
+        assertTrue(seen.none { it == VizEnergy.Calm }, "a drum loop got a calm drawing: $seen")
+    }
+
+    @Test
+    fun calmMusicNeverGetsALivelyDrawingWhileACalmOneIsFree() {
+        val seen = ArrayList<VizEnergy>()
+        run(SyntheticSong.calmPad(140f), seconds = 130f, shelves = shelves(VizEnergy.Calm, VizEnergy.High)) {
+            seen += VizEnergy.valueOf(it.substringBefore(' '))
+        }
+        assertTrue(seen.size >= 6, "the run must change a few times, changed ${seen.size}")
+        assertTrue(seen.none { it == VizEnergy.High }, "a pad got a lively drawing: $seen")
     }
 
     @Test

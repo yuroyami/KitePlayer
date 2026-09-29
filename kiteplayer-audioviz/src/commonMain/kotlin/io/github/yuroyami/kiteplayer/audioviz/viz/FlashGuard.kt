@@ -3,16 +3,18 @@ package io.github.yuroyami.kiteplayer.audioviz.viz
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
 
 /**
- * Holds the finished picture to a flash limit, whatever produced the light.
+ * Holds the light of a picture to a flash limit, whatever asked for the light.
  *
  * WCAG 2.2 calls one flash a pair of opposing changes in relative luminance of at least 0.10,
  * where the darker of the two states is below 0.80. A red flash is the same pattern in saturated
- * red. This guard watches the light of the composed picture rather than the flashes a drawing asks
- * for, because feedback, a palette change, a transition and a shader can all flash without asking.
+ * red. This guard watches one light value that the caller supplies each frame, and not the flashes
+ * a drawing asks for, because feedback, a palette change, a transition and a shader can all flash
+ * without asking. The built-in surface supplies the light its drawings are told to give and scales
+ * them by [allowance]. It does not read the composed frame back.
  *
  * Call [limit] once a frame with the light the picture is about to show. It answers the light the
- * picture may show. The caller scales the finished frame by the ratio of the two, so a held frame
- * is dimmer rather than dropped, and the picture keeps moving.
+ * picture may show, which is never above the light asked for. The caller scales by the ratio of
+ * the two, so a held frame is dimmer rather than dropped, and the picture keeps moving.
  *
  * The policy is the project's own and is stricter than WCAG's: at most [mostPerSecond] flashes in
  * any rolling second, no area exception, and no saturated red flashing at all.
@@ -121,9 +123,12 @@ public class FlashGuard(
                 return wanted
             }
             // This swing completes a leg. Two legs are one flash, so only the second one counts.
-            if (halfway && flashes.size >= most) {
+            // Light can only be taken away, so the leg that can be held is a rise, and at the limit
+            // every rise is held whichever leg it is. A slow fade turns the guard round, and a pair
+            // that starts with a rise would then complete on a fall, which cannot be held.
+            if (!rising && flashes.size >= most) {
                 // Hold just inside the step. The picture still moves and the pair never qualifies.
-                return if (rising) extreme - step * HOLD else extreme + step * HOLD
+                return extreme + step * HOLD
             }
             if (halfway) {
                 flashes.addLast(now)

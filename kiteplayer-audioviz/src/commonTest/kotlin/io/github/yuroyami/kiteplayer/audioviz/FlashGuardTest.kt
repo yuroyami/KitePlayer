@@ -21,6 +21,10 @@ class FlashGuardTest {
     private fun run(guard: FlashGuard, frames: List<Float>, red: (Int) -> Float = { 0f }): List<Float> =
         frames.mapIndexed { index, wanted -> guard.limit(wanted, red(index), step) }
 
+    /** What a surface shows: each light scaled by the allowance, which can only take light away. */
+    private fun runAllowance(guard: FlashGuard, frames: List<Float>): List<Float> =
+        frames.map { wanted -> wanted * guard.allowance(wanted, step) }
+
     /** How many flashes, as the policy counts them, are in [shown] at its busiest second. */
     private fun busiest(shown: List<Float>): Int {
         val counter = FlashGuard(mostPerSecond = 1_000)
@@ -90,6 +94,41 @@ class FlashGuardTest {
             abs(shown.last() - fade.last()) < 0.02f,
             "the fade ended at ${shown.last()} rather than ${fade.last()}",
         )
+    }
+
+    @Test
+    fun aFlashTrainAfterASlowFadeDownIsHeldToThePolicyToo() {
+        // A slow fade down turns the guard round: the first leg of the next pair is a rise, and the
+        // pair then completes on a fall. Light can only be taken away, so a fall cannot be held.
+        val steady = List(30) { 0.9f }
+        val fade = List(240) { 0.9f - 0.4f * it / 239f }
+        val train = List(180) { if ((it / 6) % 2 == 0) 0.9f else 0.3f }
+        val frames = steady + fade + train
+        val shown = runAllowance(FlashGuard(), frames)
+        assertTrue(busiest(frames.drop(steady.size + fade.size)) > 3, "the fixture does not flash")
+        assertTrue(busiest(shown) <= 3, "the guard let ${busiest(shown)} flashes through after a fade")
+    }
+
+    @Test
+    fun aFlashTrainIsHeldWhicheverWayItStartsWhenTheAllowanceScalesTheLight() {
+        val rising = List(180) { if ((it / 3) % 2 == 0) 0.05f else 0.85f }
+        val falling = List(180) { if ((it / 3) % 2 == 0) 0.85f else 0.05f }
+        for ((name, frames) in listOf("rising" to rising, "falling" to falling)) {
+            val shown = runAllowance(FlashGuard(), frames)
+            assertTrue(busiest(frames) > 3, "the $name fixture does not flash")
+            assertTrue(busiest(shown) <= 3, "a $name train let ${busiest(shown)} flashes through")
+        }
+    }
+
+    @Test
+    fun theLightAHeldFrameMayShowIsNeverAboveWhatItAsked() {
+        val frames = List(120) { 0.9f - 0.4f * it / 119f } +
+            List(180) { if ((it / 6) % 2 == 0) 0.9f else 0.3f }
+        val guard = FlashGuard()
+        for (wanted in frames) {
+            val allowed = guard.limit(wanted, 0f, step)
+            assertTrue(allowed <= wanted + 1e-5f, "the guard asked for $wanted and allowed the brighter $allowed")
+        }
     }
 
     @Test

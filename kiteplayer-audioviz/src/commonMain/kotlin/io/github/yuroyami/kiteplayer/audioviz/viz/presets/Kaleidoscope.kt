@@ -144,8 +144,8 @@ internal class Kaleidoscope : Layered(
 
     override fun advance(state: VizRenderState) {
         val frame = state.frame
-        // A paused player keeps the last picture, so nothing of the drawing's own moves on, although
-        // the shared bar clock keeps turning.
+        // A paused player keeps the last picture, so nothing of the drawing's own moves on. The shared
+        // bar clock stops with it, and these guards keep a held frame from starting or ending a change.
         val live = !frame.held
         val dt = if (live) state.deltaSeconds else 0f
         val heard = frame.audible >= HEARD

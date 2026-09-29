@@ -105,6 +105,50 @@ class FlashGuardReachTest {
         )
     }
 
+    /** The 99.5th percentile luma of the last 30 frames of a loud run at one allowed light. */
+    private fun brightestMarks(index: Int, light: Float): Float {
+        val drawing = DriverProbe.drawing(index)
+        val (width, height) = if (drawing is ShaderPreset) {
+            DriverProbe.SHADER_WIDTH to DriverProbe.SHADER_HEIGHT
+        } else {
+            DriverProbe.WIDTH to DriverProbe.HEIGHT
+        }
+        val player = RenderHarness.player(RenderHarness.Song.Lively, 8f)
+        var sum = 0f
+        var counted = 0
+        RenderHarness.forEachFrameOf(
+            drawing, width, height, FRAMES, VizPalette.Prism,
+            source = { player.next(1f / 60f) },
+            beforeDraw = { it.lightScale = light },
+        ) { bitmap, step ->
+            if (step < FRAMES - 30) return@forEachFrameOf
+            val pixels = IntArray(bitmap.width * bitmap.height).also { bitmap.readPixels(it) }
+            val lumas = FloatArray(pixels.size) {
+                (0.2126f * ((pixels[it] shr 16) and 255) + 0.7152f * ((pixels[it] shr 8) and 255) + 0.0722f * (pixels[it] and 255)) / 255f
+            }
+            lumas.sort()
+            sum += lumas[(lumas.size * 0.995f).toInt().coerceAtMost(lumas.size - 1)]
+            counted++
+        }
+        return sum / counted
+    }
+
+    /**
+     * The mean cannot see a small mark that ignores the light, such as a ring or a glint that keeps a
+     * floor under the allowed share. At a quarter of the light the brightest marks of these two must
+     * fall to well under half.
+     */
+    @Test
+    fun theBrightestMarksOfThinIceAndOceanMistFollowTheAllowedLight() {
+        val catalogue = VizCatalog.create()
+        for (name in listOf("Thin Ice", "Ocean Mist")) {
+            val index = catalogue.indexOfFirst { it.name == name }
+            val full = brightestMarks(index, 1f)
+            val quarter = brightestMarks(index, 0.25f)
+            assertTrue(quarter <= full * 0.4f, "$name: the brightest marks are $quarter at a quarter of the light and $full at full")
+        }
+    }
+
     private companion object {
         /** Long enough for every trail and spring to settle. */
         const val FRAMES = 150

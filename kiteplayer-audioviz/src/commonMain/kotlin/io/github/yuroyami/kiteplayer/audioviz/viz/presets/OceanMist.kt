@@ -166,6 +166,9 @@ internal class OceanMist : Layered(
     private var rightArgb = 0
     private var groundArgb = 0
     private var light = 0.35f
+
+    /** The share of light the flash guard allows. The glitter floor sits under it. */
+    private var allowed = 1f
     private var lit = 0f
     private var motion = 1f
 
@@ -523,7 +526,8 @@ internal class OceanMist : Layered(
         // Squared, so a quieter passage reads clearly darker while a silence keeps the idle light.
         val level = ((lightFor(energy) - LIGHT_FLOOR) / (1f - LIGHT_FLOOR)).coerceIn(0f, 1f)
         lit = level * level
-        light = (IDLE_LIGHT + (1f - IDLE_LIGHT) * lit) * state.lightScale
+        allowed = state.lightScale.coerceIn(0f, 1f)
+        light = (IDLE_LIGHT + (1f - IDLE_LIGHT) * lit) * allowed
         glitterArgb = colourOf(GLITTER_L, min(GLITTER_C, limitOf(GLITTER_L, glitterHue)), glitterHue).toArgb()
         mistArgb = colourOf(MIST_L, min(MIST_C, limitOf(MIST_L, mistHue)), mistHue).toArgb()
         haloArgb = colourOf(HALO_L, min(HALO_C, limitOf(HALO_L, mistHue)), mistHue).toArgb()
@@ -850,7 +854,7 @@ internal class OceanMist : Layered(
             val y = ys[low] + (ys[low + 1] - ys[low]) * (at - low) - 0.5f
             val length = (2f + 7f * near) * (unit / REFERENCE_HEIGHT).coerceIn(0.6f, 2f)
             // A glint is either there or not; the twinkle mostly decides whether, and a little how bright.
-            val argb = scaled(glitterArgb, max(light, GLITTER_LIGHT) * (0.55f + 0.45f * min(1f, strength * 2f)))
+            val argb = scaled(glitterArgb, max(light, GLITTER_LIGHT * allowed) * (0.55f + 0.45f * min(1f, strength * 2f)))
             addGlint(x, y, length, argb)
             if (strength > GLINT_GLOW) sea.glow(x, y, length * 1.1f, withAlpha(argb, 0.45f * strength), sides = 6)
         }

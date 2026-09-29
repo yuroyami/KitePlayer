@@ -151,6 +151,9 @@ internal class ThinIce : Layered(
     private var glint = 0f
     private var hats = 0
     private var light = IDLE_LIGHT
+
+    /** The share of light the flash guard allows. The floors below sit under it, so they follow it too. */
+    private var allowed = 1f
     private val keyTurn = Slew(maxPerSecond = 20f)
 
     // The break: a copy of the picture, the pieces cut from it, and how long ago it broke.
@@ -219,7 +222,8 @@ internal class ThinIce : Layered(
         calm += ((if (breakdown) 1f else 0f) - calm) * (1f - exp(-step / 0.5f))
 
         val loud = ((state.lift / state.lightScale.coerceAtLeast(1e-3f) - 0.06f) / 0.94f).coerceIn(0f, 1f)
-        light = state.lightScale.coerceIn(0f, 1f) * (IDLE_LIGHT + (1f - IDLE_LIGHT) * loud) * (1f - 0.4f * calm)
+        allowed = state.lightScale.coerceIn(0f, 1f)
+        light = allowed * (IDLE_LIGHT + (1f - IDLE_LIGHT) * loud) * (1f - 0.4f * calm)
         updateKey(state, step)
 
         // A section rings both wells once where they stand, then glides them to new places during its first bar.
@@ -606,7 +610,7 @@ internal class ThinIce : Layered(
         forEachCrossing { a, b, x, y ->
             val fadeA = ((1f - radius[a] / reachFrom(centreX[a], centreY[a])) / 0.15f).coerceIn(0f, 1f)
             val fadeB = ((1f - radius[b] / reachFrom(centreX[b], centreY[b])) / 0.15f).coerceIn(0f, 1f)
-            val heat = (min(strength[a] * fadeA, strength[b] * fadeB) * (0.5f + 0.7f * light)).coerceIn(0f, 1f)
+            val heat = (min(strength[a] * fadeA, strength[b] * fadeB) * (0.5f + 0.7f * light) * allowed).coerceIn(0f, 1f)
             if (heat < 0.02f) return@forEachCrossing
             val size = max(thickness[a], thickness[b]) * unit
             val px = x * unit
@@ -682,10 +686,10 @@ internal class ThinIce : Layered(
             val flash = wellFlash[well]
             val colour = hot[well]
             bandInto(x, y, WELL_RING * unit, SWING * unit, max(0.6f, WELL_WIDTH * unit * 0.5f),
-                colour[0], colour[1], colour[2], 0.45f + 0.55f * light, liveProfile, 0, liveShade, 0)
-            val glowLight = (0.35f + 0.65f * light) * (0.5f + 0.8f * flash)
+                colour[0], colour[1], colour[2], (0.45f + 0.55f * light) * allowed, liveProfile, 0, liveShade, 0)
+            val glowLight = (0.35f + 0.65f * light) * allowed * (0.5f + 0.8f * flash)
             glows.glow(x, y, unit * (0.05f + 0.07f * flash), argb(colour[0] * glowLight, colour[1] * glowLight, colour[2] * glowLight), 16)
-            val core = (0.5f + 0.5f * light).coerceIn(0f, 1f)
+            val core = ((0.5f + 0.5f * light) * allowed).coerceIn(0f, 1f)
             marks.polygon(x, y, max(1.5f, unit * 0.006f), 10, 0f, argb(core, core, core))
         }
     }
@@ -693,7 +697,7 @@ internal class ThinIce : Layered(
     /** The hairline cracks, each drawn as far as it has crept. */
     private fun crackLines(unit: Float) {
         val width = max(1f, unit / 900f)
-        val brightness = (0.55f + 0.45f * light).coerceIn(0f, 1f)
+        val brightness = ((0.55f + 0.45f * light) * allowed).coerceIn(0f, 1f)
         for (crack in 0 until CRACKS) {
             val alpha = crackAlpha[crack]
             if (alpha <= 0f || crackGrow[crack] <= 0f) continue
@@ -716,7 +720,7 @@ internal class ThinIce : Layered(
     /** The break itself: every ring and straight lines out of both wells, drawn into the copy it leaves. */
     private fun breakLines(unit: Float) {
         val width = max(1.5f, unit / 500f)
-        val white = argb(1f, 1f, 1f)
+        val white = argb(allowed, allowed, allowed)
         for (slot in 0 until SLOTS) {
             if (!alive[slot]) continue
             val cx = centreX[slot] * screenW
@@ -763,7 +767,7 @@ internal class ThinIce : Layered(
             val unit = min(this.size.width, this.size.height)
             for (index in 0 until pieceCount) {
                 outline(index, unit)
-                drawPath(piece, Color.White, style = Stroke(max(1.5f, unit / 500f)))
+                drawPath(piece, Color(allowed, allowed, allowed), style = Stroke(max(1.5f, unit / 500f)))
             }
         }
         alive.fill(false)
@@ -864,7 +868,7 @@ internal class ThinIce : Layered(
                 clipPath(piece) { drawImage(picture, alpha = fade) }
                 // The edge is white hot as the ice breaks and cools as the piece sinks.
                 val edge = (1f - 2.5f * t).coerceIn(0f, 1f)
-                if (edge > 0f) drawPath(piece, Color.White.copy(alpha = edge), style = Stroke(max(1.5f, unit / 450f)))
+                if (edge > 0f) drawPath(piece, Color(allowed, allowed, allowed, edge), style = Stroke(max(1.5f, unit / 450f)))
             }
         }
     }

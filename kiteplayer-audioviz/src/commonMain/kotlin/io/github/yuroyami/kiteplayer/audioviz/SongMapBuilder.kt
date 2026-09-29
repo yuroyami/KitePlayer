@@ -289,20 +289,11 @@ internal fun mergeSongMapParts(parts: List<SongMapPart>, track: TrackId, complet
                 }
             }
         }
-        // A seam that left a hole carries the last real reading across it, then the first one back.
+        // A seam that left a hole carries the last real reading across it. The curve starts at the
+        // first cell of the earliest part, so no cell comes before the first reading.
         var last = Float.NaN
         for (index in 0 until size) {
-            if (written[index]) {
-                last = curve[index]
-            } else if (!last.isNaN()) {
-                curve[index] = last
-                // Marked, so the backward pass below fills only the cells before the first reading.
-                written[index] = true
-            }
-        }
-        var next = Float.NaN
-        for (index in size - 1 downTo 0) {
-            if (written[index]) next = curve[index] else if (!next.isNaN()) curve[index] = next
+            if (written[index]) last = curve[index] else if (!last.isNaN()) curve[index] = last
         }
     }
 

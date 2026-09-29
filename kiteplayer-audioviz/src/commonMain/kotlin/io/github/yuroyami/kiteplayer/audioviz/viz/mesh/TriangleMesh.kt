@@ -73,9 +73,9 @@ public class TriangleMesh(
         triangle(a, c, d)
     }
 
-    // Some drawing calls work out how many corners there are from the length of the array they are
-    // handed, so they need copies trimmed to size. These are kept and only rebuilt when the size
-    // actually changes, which for most drawings is never.
+    // Copies trimmed to the exact size, for tests and fixtures that read the corners as they are. The
+    // drawing calls on desktop and iOS use the padded copies further down instead, because the size
+    // of an audio-driven mesh changes on most frames.
     private var exactPositions = FloatArray(0)
     private var exactColors = IntArray(0)
     private var exactIndices = ShortArray(0)

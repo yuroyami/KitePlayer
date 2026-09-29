@@ -68,7 +68,13 @@ public expect class ShaderProgram(source: String) {
     internal fun drawPasses(scope: DrawScope, input: ShaderProgram, width: Float, height: Float,
         passes: List<ShaderProgram>, sampler: String)
 
-    /** Something to paint with, or null when this device cannot run the program. */
+    /**
+     * Something to paint with, or null when this device cannot run the program.
+     *
+     * Draw with the brush before you make another one. On desktop and iOS the shader of a brush made
+     * two calls earlier is closed, so an older brush paints nothing. On Android every brush shares the
+     * program's uniforms, so an older brush paints with the newest values.
+     */
     public fun brush(): Brush?
 }
 

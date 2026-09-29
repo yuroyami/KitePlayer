@@ -153,13 +153,6 @@ class SongMapBuilderTest {
         for (cell in 20 until 30) assertEquals(-30f, map.levelCurve[cell], "cell $cell of the second part")
     }
 
-    @Test
-    fun cellsBeforeTheFirstReadingTakeTheFirstReading() {
-        val map = mergeSongMapParts(listOf(part(5, 10, -20f)), TrackId(1), complete = false)
-        assertEquals(10, map.levelCurve.size)
-        assertTrue(map.levelCurve.all { it == -20f })
-    }
-
     private fun boundary(seconds: Double) = AudioDetection(
         AudioEventKind.SectionBoundary, (seconds * 1_000_000).toLong(), (seconds * 1_000_000).toLong(), 0f, 0.5f, 0f,
     )

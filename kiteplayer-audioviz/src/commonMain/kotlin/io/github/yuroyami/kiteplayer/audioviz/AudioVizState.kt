@@ -39,13 +39,17 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
     /** Shared event retention and detector completion, separate from this view's cursor. */
     public val eventStats: AudioEventHistoryStats? get() = analysisFeed?.timeline?.eventStats
 
-    /** Events this view discarded as too late: over 30 ms for a transient, over 3 s for structure. */
+    /**
+     * Events this state's own cursor discarded as too late: over 30 ms for a transient, over 3 s for
+     * structure. That cursor reads on every display frame. A surface or a browser tile that takes
+     * frames less often keeps a cursor of its own, which these counters do not include.
+     */
     public val lateEventDiscards: Long get() = eventCursor?.lateDiscards ?: 0L
 
-    /** Past events discarded on attachment, pause, discontinuity, long suspension or overflow. */
+    /** Past events discarded on attachment, pause, discontinuity, long suspension or overflow, by the same cursor. */
     public val catchUpEventDiscards: Long get() = eventCursor?.catchUpDiscards ?: 0L
 
-    /** Live structural events this view dropped because a complete song map covered their time. */
+    /** Live structural events the same cursor dropped because a complete song map covered their time. */
     public val duplicateEventDiscards: Long get() = eventCursor?.duplicateDiscards ?: 0L
 
     /** The feed this view reads, or null while unbound. */
@@ -213,8 +217,12 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
 
     /**
      * A reader of this state that may skip display frames, such as a surface capped below the
-     * display rate. It keeps an event cursor of its own, so it gets every event once whatever its
+     * display rate. It keeps an event cursor of its own, so it gets every event once at its own
      * rate. Reading [frame] on a slower clock would lose the events of the frames it skips.
+     *
+     * The cursor treats a step of more than 250 ms of media time between two takes as a jump and
+     * drops the events it spans. A reader that takes a frame 15 times a second at four times speed
+     * takes one every 267 ms of media, so it receives none.
      */
     internal fun frameSource(): AudioVizFrameSource = AudioVizFrameSource(this)
 

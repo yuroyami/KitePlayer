@@ -51,6 +51,29 @@ class SongMapStoreTest {
     }
 
     @Test
+    fun aReaderNeverFindsTheFileMissingWhileItIsReplaced() {
+        directory.mkdirs()
+        val target = File(directory, "replaced.songmap").path
+        assertTrue(SongMapFiles.write(target, byteArrayOf(0)))
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val misses = java.util.concurrent.atomic.AtomicInteger()
+        val file = File(target)
+        // Only a missing file counts. A read can fail for other reasons while a file is replaced on Windows.
+        val reader = Thread {
+            while (!stop.get()) if (!file.exists()) misses.incrementAndGet()
+        }
+        reader.start()
+        try {
+            repeat(3_000) { SongMapFiles.write(target, byteArrayOf((it % 100).toByte(), 1, 2, 3)) }
+        } finally {
+            stop.set(true)
+            reader.join(10_000)
+        }
+        // Delete and rename leaves a moment in which the file does not exist. One move does not.
+        assertEquals(0, misses.get(), "a reader found the map missing ${misses.get()} times during a replace")
+    }
+
+    @Test
     fun aFailedWriteLeavesNothingBehind() {
         directory.mkdirs()
         val blocker = File(directory, "blocked")

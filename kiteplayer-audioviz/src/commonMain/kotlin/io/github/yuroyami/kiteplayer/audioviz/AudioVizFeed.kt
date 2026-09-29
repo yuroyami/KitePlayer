@@ -236,9 +236,7 @@ internal class AudioVizFeed(
         appliedMap = pending
         verification = pending?.let { MapVerification(it.map) }
         analyzer.setSongReferencePower(pending?.map?.referencePower)
-        timeline.installSongMap(pending?.let {
-            SongMapEvents(it.identity, it.map.curveStartMicros, it.map.coveredThroughMicros, it.map.structureList())
-        })
+        timeline.installSongMap(pending?.let { SongMapEvents.from(it.identity, it.map) })
     }
 
     /** Worker only: compares live programme levels with the applied map and withdraws a map that disagrees. */

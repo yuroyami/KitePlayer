@@ -50,6 +50,31 @@ class SongMapFeedTest {
     }
 
     @Test
+    fun aMapOfAVeryLongTrackDoesNotBreakTheAnalysis() {
+        // Five thousand boundaries, one for every five seconds of a seven hour mix, are more than a map delivers.
+        val boundaries = Array(5_000) {
+            AudioDetection(AudioEventKind.SectionBoundary, it * 5_000_000L, it * 5_000_000L, 0.8f, 0.9f, 0f)
+        }
+        val map = SongMap(SongMap.VERSION, TrackId(1), 25_000_000_000L, true, 1e-4, boundaries, emptyArray(), FloatArray(0), 0L)
+        feed.install(MapInstall(map, "long", 1L) {})
+        play(SyntheticSong.drumLoop(2f))
+        assertEquals(0L, feed.stats.analysisFailures, "installing the map broke the analysis")
+        assertTrue(feed.stats.publishedAnalyses > 0L, "the analysis stopped")
+    }
+
+    @Test
+    fun onlyTheEventsThatFitAreDeliveredAndTheCoverageEndsWhereTheyEnd() {
+        val boundaries = Array(5_000) {
+            AudioDetection(AudioEventKind.SectionBoundary, it * 5_000_000L, it * 5_000_000L, 0.8f, 0.9f, 0f)
+        }
+        val map = SongMap(SongMap.VERSION, TrackId(1), 25_000_000_000L, true, 1e-4, boundaries, emptyArray(), FloatArray(0), 0L)
+        val events = SongMapEvents.from(7L, map)
+        assertEquals(SongMapEvents.MAX_EVENTS, events.detections.size)
+        assertEquals(boundaries[SongMapEvents.MAX_EVENTS - 1].ptsMicros, events.coveredThroughMicros)
+        assertTrue(!events.covers(boundaries[SongMapEvents.MAX_EVENTS].ptsMicros), "a live event after the last kept one is not a duplicate")
+    }
+
+    @Test
     fun aMatchingMapStaysAndMovesTheSharedGainToItsReference() {
         val song = SyntheticSong.drumLoop(12f)
         val map = mapOf(song)

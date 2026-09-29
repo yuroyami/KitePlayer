@@ -37,5 +37,20 @@ internal class SongMapEvents(
     companion object {
         const val MAX_EVENTS = 4096
         val STRUCTURAL = setOf(AudioEventKind.SectionBoundary, AudioEventKind.Drop, AudioEventKind.Breakdown)
+
+        /**
+         * The events of [map] that can be delivered. A map of a very long track can hold more than
+         * [MAX_EVENTS], and one that holds another kind of event has no use for it. The events beyond
+         * the limit are left out, and the range that counts as covered then ends at the last one kept,
+         * so a live event after it is still delivered.
+         */
+        fun from(identity: Long, map: SongMap): SongMapEvents {
+            val all = map.structureList().filter { it.kind in STRUCTURAL }.sortedBy { it.ptsMicros }
+            val kept = if (all.size > MAX_EVENTS) all.subList(0, MAX_EVENTS) else all
+            val from = map.curveStartMicros
+            var through = map.coveredThroughMicros
+            if (kept.size < all.size) through = minOf(through, kept.last().ptsMicros)
+            return SongMapEvents(identity, from, maxOf(from, through), kept)
+        }
     }
 }

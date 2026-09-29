@@ -92,6 +92,28 @@ class HoneycombTest {
     }
 
     @Test
+    fun theCornersFollowTheJumpAtThePoleAtABoundedSpeed() {
+        // The drum loop carries the volume across the tangent's pole, where the page's factor jumps
+        // from 2 to -20 in one read and blanks the honeycomb for a frame: a flash at every crossing.
+        val honeycomb = Honeycomb()
+        var page = Honeycomb.mentalFactor(0)
+        var used = honeycomb.factor
+        var widestJump = 0.0
+        var widestStep = 0.0
+        run(honeycomb, RenderHarness.Song.Lively, rate = 60, seconds = 4f) {
+            val next = Honeycomb.mentalFactor(honeycomb.volume)
+            widestJump = maxOf(widestJump, abs(next - page))
+            widestStep = maxOf(widestStep, abs(honeycomb.factor - used))
+            page = next
+            used = honeycomb.factor
+        }
+        assertTrue(widestJump > 10.0, "the song should carry the page's factor across the pole, it jumped $widestJump")
+        // The harness steps by 1f / 60, a Float, so the bound takes the same frame time.
+        val bound = Honeycomb.FACTOR_SPEED * (1f / 60).toDouble()
+        assertTrue(widestStep <= bound + 1e-9, "the corners moved $widestStep of the factor in one frame, against $bound")
+    }
+
+    @Test
     fun theTurnReversesAboveAVolumeOf10000() {
         assertEquals(0.001, Honeycomb.rotationStep(0))
         assertEquals(0.001, Honeycomb.rotationStep(10_000))
@@ -147,6 +169,7 @@ class HoneycombTest {
         width: Int = 320,
         height: Int = 200,
         density: Float = 1f,
+        onFrame: () -> Unit = {},
     ) {
         val player = RenderHarness.player(song, seconds + 4f)
         val bitmap = ImageBitmap(width, height)
@@ -167,6 +190,7 @@ class HoneycombTest {
                     drawFront(state)
                 }
             }
+            onFrame()
         }
     }
 

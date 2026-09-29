@@ -255,15 +255,23 @@ drift, and called sixty-five of the old catalogue unsafe. Brightness changes wer
 then taken back out. Calibrate the counter before trusting it about a drawing.
 
 **What it cannot see, measured.** A drawing draws its own bright marks, and the guard reads only
-the shared light, so a picture that flashes through what it draws passes the guard. The capture
-test ran on all 24 drawings on 2026-09-27. Two of them cross the policy in the captured output,
-both on the drum loop: Honeycomb at six flashes in its busiest second and Pipe at five, against a
-limit of three. On the 200 beats a minute fixture both stay at two. In both, a large share of the
-picture brightens at once, up to 92 percent for Honeycomb and 40 percent for Pipe. Bars, Fracture,
-Iris and Odyssey reach three, the limit itself, and the other eighteen stay below it. With reduced
-motion on, every drawing stays inside the policy. Pipe and Honeycomb still flash once in their
-busiest second, and the other twenty-two flash not at all. Bringing Honeycomb and Pipe inside the
-policy is a change to how they look, and the capture test is the tool to check any such change.
+the shared light, so a picture that flashes through what it draws passes the guard. Each drawing
+has to keep its own marks inside the policy. The capture test ran on all 24 drawings on
+2026-09-29, and none of them crosses the policy in the captured output. Bars, Fracture, Iris and
+Odyssey reach three on the drum loop, the limit itself, and the other twenty stay below it. With
+reduced motion on, every drawing stays inside the policy. Pipe and Honeycomb still flash once in
+their busiest second, and the other twenty-two flash not at all.
+
+Before 2026-09-29, Honeycomb and Pipe crossed the policy on the drum loop, at six and five flashes
+in their busiest second (#298). In Honeycomb, a push that turned from outward to ten times as far
+inward in one read threw every tile off the screen for a frame. The corners now follow that turn at
+a limited speed. In Pipe, a snare's ring lit the nearest rings, which cover much of the screen, and
+hats and chord stabs are heard as snares too. The ring now shows only past those rings. Both
+drawings now reach two on each fixture.
+
+The two fixtures are not every kind of music. Measured by hand with the same counter on
+2026-09-29, a loop of hats alone at 150 beats a minute brings Honeycomb to five, and a loop without
+hats at 190 beats a minute brings Pipe to four.
 
 The test also prints the widest area that swung together for every drawing, so one that is close to
 the limit is visible before it crosses it.

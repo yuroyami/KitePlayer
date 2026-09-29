@@ -58,6 +58,10 @@ import kotlin.random.Random
  *   resolution, where the page stretched a canvas of CSS pixels.
  * - A seeded generator places the stars instead of `Math.random()`, so a render repeats.
  * - A reduced-motion setting slows the spin and the star flight.
+ * - The corners follow the page's `mentalFactor` at [FACTOR_SPEED] at most. The page jumps from 2 to
+ *   -20 in one read where the tangent passes its pole, which throws every tile off the screen for a
+ *   frame. On a drum loop those jumps brought the picture to six flashes in its busiest second,
+ *   against a limit of three.
  * - The flash guard's light share multiplies every colour. It is 1 unless the picture would flash.
  * - The page's SoundCloud player, track panel and controls are left out.
  *
@@ -96,6 +100,13 @@ internal class Honeycomb : Visualization {
 
     /** `audioSource.volume`: the sum of bins 0 to 79, taken at each read. */
     internal var volume: Int = 0
+        private set
+
+    /**
+     * The page's [mentalFactor] as the corners use it this frame: followed at [FACTOR_SPEED] at most,
+     * so a crossing of the tangent's pole moves the tiles rather than blanking them.
+     */
+    internal var factor: Double = 0.0
         private set
 
     /** How many 20 ms steps have run since the last reset. */
@@ -201,6 +212,8 @@ internal class Honeycomb : Visualization {
             tick(state)
         }
         if (steps == MAX_TICKS) owed = min(owed, TICK_SECONDS)
+        val reach = FACTOR_SPEED * heard
+        factor += (mentalFactor(volume) - factor).coerceIn(-reach, reach)
         // The page's per-frame steps, for a page drawing 60 frames a second.
         val frames = heard * 60.0
         moveStars(frames, state.motionScale.toDouble())
@@ -456,7 +469,7 @@ internal class Honeycomb : Visualization {
             val y = vertexY[num * SIDES + corner]
             val angle = atan(y / x)
             val distance = sqrt(x.pow(2) + y.pow(2))
-            val push = offsetFactor(distance, volume, high[num])
+            val push = offsetFactor(distance, volume, high[num], factor)
             if (push.isNaN()) return false
             var offsetX = cos(angle) * push
             var offsetY = sin(angle) * push
@@ -487,6 +500,7 @@ internal class Honeycomb : Visualization {
         analyser.reset()
         random = Random(SEED)
         volume = 0
+        factor = 0.0
         ticks = 0L
         owed = 0.0
         width = -1.0
@@ -499,6 +513,12 @@ internal class Honeycomb : Visualization {
     internal companion object {
         const val TILES = 127
         const val SIDES = 6
+
+        /**
+         * How fast the corners follow the page's factor, in units a heard second. The widest swing,
+         * from 2 to -20, then takes three quarters of a second. *Judgement.*
+         */
+        const val FACTOR_SPEED = 30.0
 
         /** The bins `volume` adds up: 0 to 79 of 128. */
         const val VOLUME_BINS = 80
@@ -536,10 +556,10 @@ internal class Honeycomb : Visualization {
         /**
          * calculateOffset's `offsetFactor`: how far a corner [distance] dp from the middle moves along its
          * line from the middle, outward when positive, for a tile whose peak is [high]. Not a number for a
-         * peak below zero.
+         * peak below zero. [factor] is the page's [mentalFactor] unless the caller holds it back.
          */
-        fun offsetFactor(distance: Double, volume: Int, high: Double): Double =
-            (distance / 3).pow(2) * (volume / 2000000.0) * (high.pow(1.3) / 300) * mentalFactor(volume)
+        fun offsetFactor(distance: Double, volume: Int, high: Double, factor: Double = mentalFactor(volume)): Double =
+            (distance / 3).pow(2) * (volume / 2000000.0) * (high.pow(1.3) / 300) * factor
 
         /** rotateForeground's angle per 20 ms: 0.001, and turned back by sin(volume / 800,000) above 10,000. */
         fun rotationStep(volume: Int): Double {

@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Pipe
 import kotlin.math.abs
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -131,6 +132,37 @@ class PipeTest {
     }
 
     @Test
+    fun aSnareRingRunsOutWithoutLightingTheNearestRings() {
+        // The nearest rings cover much of the screen. A snare's ring that lit them for a frame made a
+        // drum loop flash five times in its busiest second, because hats and chord stabs are heard as
+        // snares too (#298).
+        val width = 160
+        val height = 90
+        fun run(driver: VizDriver?): List<FloatArray> {
+            val out = ArrayList<FloatArray>()
+            RenderHarness.forEachFrameOf(Pipe(), width, height, 80, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(driver, step) }) { bitmap, _ ->
+                val pixels = IntArray(width * height)
+                bitmap.readPixels(pixels)
+                out += nearAndFar(pixels, width, height)
+            }
+            return out
+        }
+        val still = run(null)
+        val hit = run(VizDriver.BodyHit)
+        val first = InjectedFrames.HIT_STEPS.first()
+        var near = 0f
+        var far = 0f
+        for (step in first until first + 12) {
+            near = maxOf(near, hit[step][0] - still[step][0])
+            far = maxOf(far, hit[step][1] - still[step][1])
+        }
+        println("pipe: a snare brightens the nearest rings by $near and the far rings by $far")
+        assertTrue(far > 0.05f, "the snare's ring should still run out to the far point, brightened it by $far")
+        assertTrue(near < 0.02f, "the snare's ring lit the nearest rings by $near")
+    }
+
+    @Test
     fun silenceStopsTheFlightAndKeepsTheTubeLit() {
         val pipe = Pipe()
         var previous: IntArray? = null
@@ -154,6 +186,31 @@ class PipeTest {
         assertEquals(0L, pipe.ringsPassed, "no ring leaves the mouth in silence")
         assertTrue(mean < 0.0005f, "the wall stands still in silence, changed $mean")
         assertTrue(firstInk > 0.02f, "the first silent frame still shows the tube, had $firstInk")
+    }
+
+    /**
+     * The mean light of the nearest rings, out towards the corners, and of the far rings around the
+     * middle. Distances are in half heights from the middle, as the shader measures them.
+     */
+    private fun nearAndFar(pixels: IntArray, width: Int, height: Int): FloatArray {
+        var near = 0f
+        var nearCount = 0
+        var far = 0f
+        var farCount = 0
+        for (y in 0 until height) for (x in 0 until width) {
+            val dx = (x + 0.5f - width / 2f) / (height / 2f)
+            val dy = (y + 0.5f - height / 2f) / (height / 2f)
+            val distance = sqrt(dx * dx + dy * dy)
+            val light = luma(pixels[y * width + x])
+            if (distance > 1f) {
+                near += light
+                nearCount++
+            } else if (distance in 0.25f..0.6f) {
+                far += light
+                farCount++
+            }
+        }
+        return floatArrayOf(near / nearCount, far / farCount)
     }
 
     private fun luma(pixel: Int): Float =

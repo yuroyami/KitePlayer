@@ -36,11 +36,12 @@ import kotlin.math.sin
  * current spectrum lights the ring at the mouth, and one ring leaves the mouth for every sixteenth
  * note, so the tube is the song's recent past running away to a small white point far ahead. A gate
  * ring passes at the start of each cycle while the beat is clear, and the rings that start a beat
- * have thicker gaps. A kick flares the nearest rings and squeezes the tube, a snare sends a bright ring
- * out to the far point, hats throw sparks, and the far point follows the tune. A section cuts to
- * another lane and turns the tube round, square or six-sided over one cycle. A breakdown halves
- * the speed and leaves only the cells' lit edges. On a drop the tube goes to light speed for one
- * cycle and every cell stretches into a streak, and on the next cycle's first beat they snap back.
+ * have thicker gaps. A kick flares the nearest rings and squeezes the tube, a snare sends a bright
+ * ring from just past the nearest rings out to the far point, hats throw sparks, and the far point
+ * follows the tune. A section cuts to another lane and turns the tube round, square or six-sided
+ * over one cycle. A breakdown halves the speed and leaves only the cells' lit edges. On a drop the
+ * tube goes to light speed for one cycle and every cell stretches into a streak, and on the next
+ * cycle's first beat they snap back.
  */
 internal class Pipe : ShaderPreset(
     source = SOURCE,
@@ -427,9 +428,11 @@ half4 main(float2 position) {
     // ring runs out to the far point.
     float kick = uHits.x * clamp(1.0 - (index - 1.0) / 5.0, 0.0, 1.0);
     lit = min(lit * (1.0 + 2.0 * kick) + 0.4 * kick, max(lit, 0.85));
-    // The snare's ring lights whole cells: the ring it has reached, and the one behind at half.
+    // The snare's ring lights whole cells: the ring it has reached, and the one behind at half. It
+    // shows only past the nearest rings: those rings are large, and hats and chord stabs are heard
+    // as snares too, so lighting them would be a strobe.
     float behind = floor(uHits.y) - index;
-    lit += uHits.z * (behind == 0.0 ? 1.0 : (behind == 1.0 ? 0.5 : 0.0));
+    lit += uHits.z * (behind == 0.0 ? 1.0 : (behind == 1.0 ? 0.5 : 0.0)) * smoothstep(3.0, 6.0, index);
     // Light speed gathers light along each streak, and the whole tube rushes brighter.
     lit = lit * (1.0 + 0.35 * uFlow.y) + 0.2 * uFlow.y;
     lit = clamp(lit, 0.0, 1.3);

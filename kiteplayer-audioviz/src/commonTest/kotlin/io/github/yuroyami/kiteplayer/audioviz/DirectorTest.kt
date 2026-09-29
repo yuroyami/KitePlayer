@@ -64,9 +64,9 @@ class DirectorTest {
         return director
     }
 
-    private fun boundary(frame: SpectrumFrame, sequence: Long): SpectrumFrame {
+    private fun boundary(frame: SpectrumFrame, sequence: Long, kind: AudioEventKind = AudioEventKind.SectionBoundary): SpectrumFrame {
         val hit = AudioEvent(frame.generation, frame.analysisRevision, sequence,
-            AudioDetection(AudioEventKind.SectionBoundary, frame.ptsMicros, frame.ptsMicros,
+            AudioDetection(kind, frame.ptsMicros, frame.ptsMicros,
                 0.3f, 0.9f, 0.8f))
         return frame.withDeliveredEvents(AudioEventDelivery(frame.generation, frame.analysisRevision,
             frame.ptsMicros, arrayOf(DeliveredAudioEvent(hit, 0L))))
@@ -172,7 +172,11 @@ class DirectorTest {
     }
 
     /** The ways a director changes over a minute of lively music, one change every six seconds. */
-    private fun transitionsUsed(calm: Boolean, preferred: VizTransition?): Set<VizTransition> {
+    private fun transitionsUsed(
+        calm: Boolean,
+        preferred: VizTransition?,
+        kind: AudioEventKind = AudioEventKind.SectionBoundary,
+    ): Set<VizTransition> {
         val director = VizDirector(catalogue, seed = 5L)
         director.calmChanges = calm
         director.preferred = preferred
@@ -183,7 +187,7 @@ class DirectorTest {
                 mood = 0.75f, bpm = 120f, beatConfidence = 0.9f, barPhase = 0.37f)
             val accepted = index > 0 && index % 360 == 0
             val wasChanging = director.changing
-            director.advance(if (accepted) boundary(plain, index.toLong()) else plain, 1f / 60f)
+            director.advance(if (accepted) boundary(plain, index.toLong(), kind) else plain, 1f / 60f)
             if (director.changing && !wasChanging) used += director.transition
         }
         assertTrue(used.isNotEmpty(), "the run must change scenes")
@@ -198,6 +202,16 @@ class DirectorTest {
     @Test
     fun aCallerStillGetsTheStrobeItAsksForByName() {
         assertEquals(setOf(VizTransition.StrobeCut), transitionsUsed(calm = false, preferred = VizTransition.StrobeCut))
+    }
+
+    @Test
+    fun reducedMotionNeverRushesEvenWhenThePreferredWayCannotArrive() {
+        // A drop asks for the zoom rush. The hand-off is only on offer to drawings with echoes, so for the
+        // others the fallback has to be the plain fade and not the rush.
+        val used = transitionsUsed(calm = true, preferred = VizTransition.WarpHandoff, kind = AudioEventKind.Drop)
+        assertTrue(used.isNotEmpty() && used.all { it == VizTransition.Crossfade || it == VizTransition.WarpHandoff },
+            "reduced motion changed with $used")
+        assertTrue(VizTransition.Crossfade in used, "the fixture must reach a drawing without echoes: $used")
     }
 
     @Test

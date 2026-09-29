@@ -192,16 +192,18 @@ private fun Detail(state: AudioVizState, tick: Int) {
 @Composable
 private fun Transition(state: AudioVizState) {
     var preferred by remember(state) { mutableStateOf(state.director.preferred) }
+    // Reduced motion allows no flash, and the strobe alternates the whole screen. The director
+    // ignores a strobe then, so the panel shows that nothing is chosen rather than the strobe.
+    val shown = preferred?.takeUnless { state.reducedMotion && it == VizTransition.StrobeCut }
     fun step(by: Int) {
-        // Reduced motion allows no flash, and the strobe alternates the whole screen.
         val all = listOf<VizTransition?>(null) +
             VizTransition.entries.filter { !state.reducedMotion || it != VizTransition.StrobeCut }
-        preferred = all[(all.indexOf(preferred) + by + all.size) % all.size]
+        preferred = all[(all.indexOf(shown) + by + all.size) % all.size]
         state.director.preferred = preferred
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         PanelButton("Back") { step(-1) }
-        Note(preferred?.name ?: "Music decides")
+        Note(shown?.name ?: "Music decides")
         PanelButton("Next") { step(1) }
     }
 }

@@ -99,8 +99,9 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
      * Keeps the spectrum, the colours and the shapes, and damps what throws the picture about.
      *
      * The camera stops punching, shaking and cutting, the trail stops swimming, every change of
-     * drawing becomes a plain fade, and the flash limit drops to none at all. Follow the host's own
-     * reduced-motion setting where the platform has one.
+     * drawing becomes a plain fade, and the flash limit drops to none at all. A way of changing that
+     * the director's `preferred` names still wins, except the strobe, which is never used. Follow
+     * the host's own reduced-motion setting where the platform has one.
      */
     public var reducedMotion: Boolean by mutableStateOf(false)
 

@@ -611,7 +611,8 @@ public fun DirectedVisualizerSurface(
     /**
      * Keeps the spectrum, the colours and the shapes, and damps what throws the picture about:
      * the camera's punch, shake and cuts, the trail's swim, any flash, and every change of drawing
-     * becomes a plain fade.
+     * becomes a plain fade. A way of changing that the director's `preferred` names still wins,
+     * except the strobe, which is never used.
      */
     reducedMotion: Boolean = false,
     /**

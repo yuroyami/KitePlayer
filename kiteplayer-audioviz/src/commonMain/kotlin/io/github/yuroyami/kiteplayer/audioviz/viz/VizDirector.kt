@@ -261,7 +261,8 @@ public class VizDirector(
     private fun allowed(how: VizTransition, next: Visualization): VizTransition {
         val asked = preferred?.takeUnless { calmChanges && it == VizTransition.StrobeCut }
         val wanted = asked ?: if (calmChanges) VizTransition.Crossfade else return how
-        return if (wanted in next.transitions) wanted else how
+        // The fallback under reduced motion is the plain fade too, not the rush that [how] may be.
+        return if (wanted in next.transitions) wanted else if (calmChanges) VizTransition.Crossfade else how
     }
 
     /**

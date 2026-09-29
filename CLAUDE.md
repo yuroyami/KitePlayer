@@ -146,6 +146,13 @@ Each line is something that bit someone. Delete a line when it stops being true.
   that, the drawings that read smooth values look undamped and the test measures nothing.
 - A test that pauses a drawing must feed it `withPulseHeld()` and then `withEvents(held = true)`.
   Repeating the last playing frame keeps its events, so the drawing sees a kick on every frame.
+- The flash guard has two doors. `limit` may answer a light above the one asked for, and the
+  surface calls `allowance`, which can only take light away. A test that reads `limit` can pass
+  while the surface lets a flash through, so test the guard through `allowance` (#357).
+- `FrameRateTest` exempts Fireworks for a real reason. Its burst trigger fires when the lowest bin
+  rises by more than 15 in one read, the drum loop drives that bin to its ceiling, and a few bytes
+  of where the read falls decide each burst. The count ran from 15 to 28 in 24 seconds across
+  refresh rates while the analysis itself stayed identical for every rate and block size (#348).
 
 ### Language and toolchain
 
@@ -273,6 +280,14 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - Each reader of `AudioVizState` takes its frames through its own `frameSource()`. The event cursor
   hands an event to its caller once, so a surface capped below the display rate would lose the
   events of the display frames it skips if it read `state.frame` (#312).
+- Compare `VizRenderState.instant`, a Double, to tell one display step from the next, never
+  `timeSeconds`. A Float clock stops adding a frame to itself after about 36 hours at 144 Hz, and
+  every drawing then stands still (#349).
+- `Spring` and `Envelope` carry the Euler step that the drawings were tuned with at 60 Hz over to any
+  step length, as a power of its 2 by 2 map. The textbook solution of a spring would raise every
+  punch by about a quarter at 60 Hz, so do not swap it in as a simplification (#361).
+- The spectrum histories take 60 rows for each heard second, not one row for each display step. A
+  row per step shortens the span on a fast screen and keeps writing under a pause (#355).
 
 ### The web target
 

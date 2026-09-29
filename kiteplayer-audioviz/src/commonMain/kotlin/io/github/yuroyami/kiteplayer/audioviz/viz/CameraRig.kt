@@ -112,9 +112,10 @@ public class CameraRig(
         } else 0f
 
         sideways.advance(dt)
-        if (frame.snare > 0f) sideways.kick(frame.snare * (if (random.next() < 0.5f) -NUDGE else NUDGE))
+        // Reduced motion damps the shove of a snare and the fling of a drop, and leaves the slow wander.
+        if (frame.snare > 0f) sideways.kick(frame.snare * (if (random.next() < 0.5f) -NUDGE else NUDGE) * state.motionScale)
         widen.advance(dt)
-        if (boundary?.detection?.kind == AudioEventKind.Drop) widen.kick(boundary.detection.strength * WIDEN)
+        if (boundary?.detection?.kind == AudioEventKind.Drop) widen.kick(boundary.detection.strength * WIDEN * state.motionScale)
 
         if (cutsEnabled && boundary != null && random.next() < 0.3f * state.motionScale) {
             laneX = random.signed() * sway * 1.2f
@@ -159,7 +160,7 @@ public class CameraRig(
     }
 
     private companion object {
-        /** How much speed a kick adds to the surge spring, which peaks at about one. */
+        /** How much speed a kick adds to the surge spring, which then peaks at about 0.4. */
         const val KICK = 14f
 
         /** How far the camera sinks back before a kick it can see coming, and how early it starts. */

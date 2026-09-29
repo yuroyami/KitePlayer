@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 /** The one camera the flying drawings share. */
 class CameraRigTest {
 
-    private fun frame(kick: Float = 0f, drop: Boolean = false, level: Float = 0.5f): SpectrumFrame = SpectrumFrame(
+    private fun frame(kick: Float = 0f, drop: Boolean = false, level: Float = 0.5f, snare: Float = 0f): SpectrumFrame = SpectrumFrame(
         ptsMicros = 0L,
         bands = FloatArray(4),
         peaks = FloatArray(4),
@@ -23,6 +23,7 @@ class CameraRigTest {
         beat = kick,
         pulse = 0f,
         kick = kick,
+        snare = snare,
         energy = 0.5f,
         mood = 0.5f,
         drop = drop,
@@ -109,5 +110,28 @@ class CameraRigTest {
         println("a drop widened the lens to $widest degrees, and four seconds later it was ${rig.fov}")
         assertTrue(widest > 80f, "a drop should widen the lens clearly, it reached $widest")
         assertTrue(abs(rig.fov - 70f) < 2f, "and it should settle back within about a bar or two, was ${rig.fov}")
+    }
+
+    @Test
+    fun reducedMotionDampsTheSnareNudgeAndTheDropWiden() {
+        fun swing(motionScale: Float): Pair<Float, Float> {
+            val rig = CameraRig(topSpeed = 10f, baseFov = 70f)
+            var widest = 0f
+            var farthest = 0f
+            for (index in 0 until 240 * 3) {
+                val time = index / 240f
+                val now = frame(drop = index == 10, snare = if (index == 20) 1f else 0f)
+                rig.advance(VizRenderState(now, time, 1f / 240f, VizPalette.Classic, time).also { it.motionScale = motionScale })
+                widest = maxOf(widest, rig.fov - 70f)
+                farthest = maxOf(farthest, abs(rig.nudgeX))
+            }
+            return widest to farthest
+        }
+        val (wide, nudge) = swing(1f)
+        val (calmWide, calmNudge) = swing(0.15f)
+        println("full motion: the lens widened $wide degrees and the nudge reached $nudge; reduced: $calmWide and $calmNudge")
+        assertTrue(wide > 10f && nudge > 0.05f, "the fixture must move the lens and the eye: $wide, $nudge")
+        assertTrue(calmWide <= wide * 0.3f, "reduced motion should damp the drop's fling: $calmWide against $wide")
+        assertTrue(calmNudge <= nudge * 0.3f, "reduced motion should damp the snare's nudge: $calmNudge against $nudge")
     }
 }

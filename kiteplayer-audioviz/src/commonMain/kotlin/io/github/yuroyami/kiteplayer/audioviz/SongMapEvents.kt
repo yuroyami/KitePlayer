@@ -5,7 +5,8 @@ package io.github.yuroyami.kiteplayer.audioviz
  *
  * [identity] changes whenever a different map is installed. [coveredFromMicros] through
  * [coveredThroughMicros] is the media time with complete structural analysis; a live structural
- * event inside it is a duplicate of the map's own decision there.
+ * event inside it is a duplicate of the map's own decision there. A map with more events than this
+ * holds ([from] keeps the first [MAX_EVENTS]) covers the time up to the last event it holds.
  */
 internal class SongMapEvents(
     val identity: Long,

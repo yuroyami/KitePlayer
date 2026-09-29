@@ -32,7 +32,10 @@ public class CameraRig(
      * does under music, which is the clearest way to look unconnected to the song.
      */
     private val restSpeed: Float = topSpeed * 0.04f,
-    /** How much faster a kick makes it at the top of the surge, in world units a second. */
+    /**
+     * How much faster a kick makes it when the surge is at 1, in world units a second. A kick lifts the
+     * surge to about 0.4, so it adds about 0.4 times this at its peak.
+     */
     private val shove: Float = topSpeed * 0.5f,
     /** How far the camera wanders across, in world units. */
     private val sway: Float = 0.4f,
@@ -75,7 +78,7 @@ public class CameraRig(
     public var fov: Float = baseFov
         private set
 
-    // About 92 ms to peak after an impulse, inside the 100 ms anticipation limit.
+    // About 84 ms to peak after an impulse, inside the 100 ms anticipation limit.
     private val surge = Spring(stiffness = 160f, damping = 0.6f)
     private val impulse = AnticipatedImpulse(surge)
     private val sideways = Spring(stiffness = 60f, damping = 0.5f)

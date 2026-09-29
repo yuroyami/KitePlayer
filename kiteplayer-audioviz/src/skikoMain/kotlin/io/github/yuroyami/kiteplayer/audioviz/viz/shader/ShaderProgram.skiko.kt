@@ -8,7 +8,6 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asComposeShader
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.nativeCanvas
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
 import org.jetbrains.skia.FilterTileMode
 import org.jetbrains.skia.Image

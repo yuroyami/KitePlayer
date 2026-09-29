@@ -22,21 +22,6 @@ import kotlin.math.roundToInt
 /** How many of something a choice gene asks for: [base] plus [step] for each option. */
 internal fun ChoiceGene.count(base: Int, step: Int = 1): Int = base + step * value
 
-/**
- * How much of item [index] to draw when a choice gene sets how many there are: all of it while it is
- * in both the old and the new count, fading in or out over the bar a change takes.
- */
-internal fun ChoiceGene.presence(index: Int, base: Int, step: Int = 1): Float {
-    val now = base + step * value
-    val before = base + step * previous
-    return when {
-        index < minOf(now, before) -> 1f
-        index < now -> mix
-        index < before -> 1f - mix
-        else -> 0f
-    }
-}
-
 /** Points anchor [index] at the newest live traveller, and leaves it where it was otherwise. */
 internal fun Kit.follow(index: Int, travellers: Travellers) {
     val newest = travellers.newest

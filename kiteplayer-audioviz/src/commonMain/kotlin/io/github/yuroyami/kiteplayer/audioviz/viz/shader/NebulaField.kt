@@ -750,7 +750,8 @@ half4 main(float2 position) {
 
     /**
      * The shader's history of the spectrum, kept on the processor as well, so the sparks see the dust
-     * lanes where the shader draws them. Written once a frame, the same way the shader's strip is.
+     * lanes where the shader draws them. Written on the same rule as the shader's strip: 60 rows for
+     * each heard second.
      */
     internal class SpectrumPast {
         private val rows = Array(ShaderLibrary.HISTORY) { FloatArray(ShaderLibrary.BANDS) }

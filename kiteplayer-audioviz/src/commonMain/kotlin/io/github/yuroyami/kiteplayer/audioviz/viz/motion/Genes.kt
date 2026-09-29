@@ -77,7 +77,7 @@ public class ChoiceGene internal constructor(
     public var previous: Int = start
         private set
 
-    /** How far the change from [previous] to [value] has come, 0 to 1. */
+    /** How far the running change towards [value] has come, 0 to 1. See [weight] for what it blends. */
     public var mix: Float = 1f
         private set
 

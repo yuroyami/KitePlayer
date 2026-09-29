@@ -20,8 +20,8 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.WaveformResampler
  *
  * The cost is one small strip per frame. A sixty four pixel strip is 256 bytes.
  *
- * The history is the one taller picture: the last few seconds of spectrum, one row per frame, so a
- * shader can draw a spectrogram or be pushed about by what the music did a moment ago. Its rows are
+ * The history is the one taller picture: the last few seconds of spectrum, 60 rows for each heard
+ * second, so a shader can draw a spectrogram or be pushed about by what the music did a moment ago. Its rows are
  * written round and round rather than shifted, and the shader is told which one is newest.
  */
 internal class ShaderData {

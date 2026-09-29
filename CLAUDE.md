@@ -146,9 +146,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
   that, the drawings that read smooth values look undamped and the test measures nothing.
 - A test that pauses a drawing must feed it `withPulseHeld()` and then `withEvents(held = true)`.
   Repeating the last playing frame keeps its events, so the drawing sees a kick on every frame.
-- The flash guard has two doors. `limit` may answer a light above the one asked for, and the
-  surface calls `allowance`, which can only take light away. A test that reads `limit` can pass
-  while the surface lets a flash through, so test the guard through `allowance` (#357).
+- The flash guard has two doors. `limit` answers a light and `allowance` answers a ratio that cannot
+  go above 1, and the surface calls `allowance`. The old guard answered a light above the one asked
+  for when it held a fall, so a test that read `limit` passed while the surface let the flash
+  through. Test the guard through `allowance` (#357).
 - `FrameRateTest` exempts Fireworks for a real reason. Its burst trigger fires when the lowest bin
   rises by more than 15 in one read, the drum loop drives that bin to its ceiling, and a few bytes
   of where the read falls decide each burst. The count ran from 15 to 28 in 24 seconds across

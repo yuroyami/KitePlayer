@@ -110,7 +110,9 @@ class FlashGuardTest {
     }
 
     @Test
-    fun aFlashTrainIsHeldWhicheverWayItStartsWhenTheAllowanceScalesTheLight() {
+    fun aFlashTrainIsHeldThroughTheAllowanceThatTheSurfaceUses() {
+        // The guard starts out following a rise, so both trains reach their first pair as a fall and then a rise.
+        // The pair that starts with a rise is the one after a slow fade, in the test above.
         val rising = List(180) { if ((it / 3) % 2 == 0) 0.05f else 0.85f }
         val falling = List(180) { if ((it / 3) % 2 == 0) 0.85f else 0.05f }
         for ((name, frames) in listOf("rising" to rising, "falling" to falling)) {

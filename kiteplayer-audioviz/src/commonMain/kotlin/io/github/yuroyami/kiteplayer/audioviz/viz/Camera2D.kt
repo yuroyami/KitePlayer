@@ -42,7 +42,7 @@ public class Camera2D(
     /** Laps per four-pulse visual cycle when rhythm is usable. */
     public var orbitRate: Float = 0.5f
 
-    // Its theoretical peak is about 96 ms after an impulse, inside the 100 ms lookahead limit.
+    // Its peak is about 89 ms after an impulse, inside the 100 ms lookahead limit.
     private val punchSpring = Spring(stiffness = 160f, damping = 0.5f)
     private val impulse = AnticipatedImpulse(punchSpring)
     private val nudge = Spring(stiffness = 50f, damping = 0.55f)

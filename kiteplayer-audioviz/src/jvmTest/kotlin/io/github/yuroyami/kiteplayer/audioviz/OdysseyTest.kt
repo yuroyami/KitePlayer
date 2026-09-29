@@ -137,6 +137,7 @@ class OdysseyTest {
         println("odyssey: the view moves at $full a frame, and at $reduced with reduced motion")
         assertTrue(full > 0.002f, "the section must move the view, moved $full")
         assertTrue(reduced <= full * 0.7f, "reduced motion should slow the move: $reduced against $full")
+        assertTrue(reduced > 0.0005f, "reduced motion slows the move and does not freeze it: $reduced")
     }
 
     private fun luma(pixel: Int): Float =

@@ -1,0 +1,41 @@
+public final class io/github/yuroyami/kiteplayer/libass/KiteLibass {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/libass/KiteLibass;
+	public static final field PROVIDER_ID Ljava/lang/String;
+	public final fun getFontDirectories ()Ljava/util/List;
+	public final fun getNeedsSystemFontFiles ()Z
+	public final fun getSystemFontBudgetBytes ()J
+	public final fun isAvailable ()Z
+	public final fun libraryVersion ()I
+	public final fun setFontDirectories (Ljava/util/List;)V
+	public final fun setSystemFontBudgetBytes (J)V
+}
+
+public final class io/github/yuroyami/kiteplayer/libass/LibassRenderer : java/lang/AutoCloseable {
+	public fun <init> ()V
+	public final fun addFont (Ljava/lang/String;[B)V
+	public fun close ()V
+	public final fun renderDocument (Ljava/lang/String;JIIJJ)Lio/github/yuroyami/kiteplayer/subtitle/SubtitleCue$Bitmap;
+	public static synthetic fun renderDocument$default (Lio/github/yuroyami/kiteplayer/libass/LibassRenderer;Ljava/lang/String;JIIJJILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/subtitle/SubtitleCue$Bitmap;
+}
+
+public final class io/github/yuroyami/kiteplayer/libass/LibassTypesetter : io/github/yuroyami/kiteplayer/spi/SubtitleTypesetter {
+	public static final field Companion Lio/github/yuroyami/kiteplayer/libass/LibassTypesetter$Companion;
+	public fun addEvent ([BJJ)V
+	public fun addFont (Ljava/lang/String;[B)V
+	public fun clearEvents ()V
+	public fun close ()V
+	public fun openDocument ([B)V
+	public fun openTrack ([B)V
+	public fun render (JLio/github/yuroyami/kiteplayer/spi/TypesetFrame;)Ljava/util/List;
+}
+
+public final class io/github/yuroyami/kiteplayer/libass/LibassTypesetter$Companion {
+	public final fun createOrNull ()Lio/github/yuroyami/kiteplayer/libass/LibassTypesetter;
+}
+
+public final class io/github/yuroyami/kiteplayer/libass/LibassTypesetterProvider : io/github/yuroyami/kiteplayer/spi/SubtitleTypesetterProvider {
+	public fun <init> ()V
+	public fun create ()Lio/github/yuroyami/kiteplayer/spi/SubtitleTypesetter;
+	public fun getId ()Ljava/lang/String;
+}
+

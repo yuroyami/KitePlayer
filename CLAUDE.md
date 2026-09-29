@@ -164,14 +164,16 @@ Each line is something that bit someone. Delete a line when it stops being true.
   depending on a class-compilation task the Android plugin's multiplatform library variant does not
   create. The library dependency itself is fine. This is the trap most likely to be re-triggered by
   tidying a build file.
-- The one remaining Gradle deprecation here belongs to the Kotlin Gradle plugin, not the Android
-  plugin: its web target wiring (`addDependsOnTaskInOtherProjects`) calls
-  `Configuration.getTaskDependencyFromProjectDependency`, which Gradle 10 removes. Proven with
-  `--warning-mode all --stacktrace` on Gradle 9.7.1 with AGP 9.4.0; `help` alone shows nothing,
-  a wasmJs task must be in the graph. Nothing here is workable. Re-measure at the next Kotlin bump.
-- Kotlin's ABI validation currently emits only JVM and klib dumps, so the Android public API is in
-  no dump and ships unguarded. A hand-rolled checker was refused as overbuild. Re-measure at each
-  Kotlin bump.
+- The one remaining Gradle deprecation here belongs to Dokka 2.2.0: its dependency manager calls
+  `Configuration.setVisible`, which Gradle 11 removes. The Kotlin plugin's old one
+  (`getTaskDependencyFromProjectDependency`, from its web target wiring) is gone on Kotlin 2.4.20.
+  Measured with `--warning-mode all --stacktrace` on Gradle 9.8.0 with AGP 9.4.1; `help` alone
+  shows nothing, a wasmJs task must be in the graph. Nothing here is workable. Re-measure at the
+  next Dokka bump.
+- From Kotlin 2.4.20, ABI validation also writes an Android dump for each module, under
+  `api/android/`, so the Android public API is guarded too. A Kotlin bump can add lines to every
+  dump at once: 2.4.20 adds a no-argument JVM constructor to each class whose parameters all have
+  defaults. Run `./gradlew updateKotlinAbi` and read the diff before you commit it.
 
 - An Objective-C category member is not on the Kotlin class: it is a package-level extension and
   needs its own import. `AVSampleBufferDisplayLayer.enqueueSampleBuffer`, its `status` and `error`,

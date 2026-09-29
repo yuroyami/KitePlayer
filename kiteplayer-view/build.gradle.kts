@@ -18,12 +18,8 @@ kotlin {
     explicitApi()
     jvmToolchain(21)
 
-    // This tracks the jvm and klib surfaces and NOT the Android one. Measured on Kotlin
-    // 2.4.10, 2026-08-25: `internalDumpKotlinAbi` emits exactly two variants, `jvm` and `.klib.api`,
-    // so `KitePlayerView` and `SubtitleOverlayView` in androidMain appear in no committed dump and
-    // have nothing to disagree with. Renaming or removing an Android public member ships silently.
-    // Waiting on Kotlin to add an Android variant rather than hand-rolling a second checker;
-    // re-measure on each Kotlin bump.
+    // From Kotlin 2.4.20 this tracks the Android surface too, in api/android/, so `KitePlayerView`
+    // and `SubtitleOverlayView` in androidMain are guarded like the jvm and klib surfaces.
     @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
     abiValidation {}
 

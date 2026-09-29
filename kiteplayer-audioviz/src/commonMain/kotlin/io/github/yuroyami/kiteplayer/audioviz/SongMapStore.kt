@@ -186,7 +186,8 @@ internal fun decodeSongMap(bytes: ByteArray): SongMap? = try {
 private fun SongMap.usable(): Boolean {
     val reference = referencePower
     if (reference != null && !(reference.isFinite() && reference > 0.0)) return false
-    if (curveStartMicros < 0L || levelCurve.any { !it.isFinite() }) return false
+    // Media time can start below zero, so a negative curve start is a valid map.
+    if (levelCurve.any { !it.isFinite() }) return false
     for (index in 0 until structureCount) {
         val detection = structure(index)
         if (!(detection.strength.isFinite() && detection.confidence.isFinite() && detection.surprise.isFinite())) return false

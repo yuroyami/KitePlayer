@@ -94,6 +94,17 @@ class SongMapCodecTest {
     }
 
     @Test
+    fun aMapWhoseCurveStartsBeforeZeroIsStillUsable() {
+        // Media time can start below zero, for example with an encoder delay trimmed by the container.
+        val map = sample().let {
+            SongMap(it.version, it.track, it.coveredThroughMicros, it.complete, it.referencePower,
+                arrayOf(it.structure(0)), arrayOf(it.key(0)), it.levelCurve, -100_000L)
+        }
+        val copy = assertNotNull(decodeSongMap(encodeSongMap(map)))
+        assertEquals(-100_000L, copy.curveStartMicros)
+    }
+
+    @Test
     fun aStoredKeyOutsideTheOctaveIsACacheMiss() {
         val map = sample().let {
             SongMap(it.version, it.track, it.coveredThroughMicros, it.complete, it.referencePower,

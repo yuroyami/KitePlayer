@@ -49,13 +49,11 @@ internal actual object SongMapFiles {
         if (separator > 0) makeDirectories(path.substring(0, separator))
         val partial = "$path.part"
         val file = fopen(partial, "wb") ?: return false
-        val written = try {
-            if (bytes.isEmpty()) 0uL
-            else bytes.usePinned { pinned -> fwrite(pinned.addressOf(0), 1u, bytes.size.toULong(), file) }
-        } finally {
-            fclose(file)
-        }
-        if (written.toInt() != bytes.size) {
+        val written = if (bytes.isEmpty()) 0uL
+        else bytes.usePinned { pinned -> fwrite(pinned.addressOf(0), 1u, bytes.size.toULong(), file) }
+        // The close flushes the last buffer, so a full disk shows up here. A short file must not replace a good one.
+        val closed = fclose(file)
+        if (written.toInt() != bytes.size || closed != 0) {
             unlink(partial)
             return false
         }
@@ -81,7 +79,10 @@ internal actual object SongMapFiles {
                 val full = "$directory/$name"
                 memScoped {
                     val info = alloc<stat>()
-                    if (stat(full, info.ptr) == 0) found += info.st_mtimespec.tv_sec.toLong() to full
+                    // Nanoseconds, as the other platforms order by milliseconds, so two maps written in one second are told apart.
+                    if (stat(full, info.ptr) == 0) {
+                        found += (info.st_mtimespec.tv_sec.toLong() * 1_000_000_000L + info.st_mtimespec.tv_nsec.toLong()) to full
+                    }
                 }
             }
         } finally {

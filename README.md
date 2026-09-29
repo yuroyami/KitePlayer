@@ -476,6 +476,8 @@ if (snapshot.isAudioOnly) {
 - `AudioVizBrowser(viz)` shows every drawing live in a searchable grid. `AudioVizSettings(viz)`
   holds the drawing's own settings, the palette and the finishing pass.
 - `VizPalette.fromImage` builds a palette from a picture, such as an album cover.
+- `viz.reducedMotion` calms the picture. Set it from your platform's own setting. `viz.framesPerSecond`
+  caps the redraw rate, and `viz.visible = false` draws the background alone while the sound plays on.
 - The toolkit the drawings are written with is public behind `@AudioVizAuthoringApi`.
 
 ## Where it runs

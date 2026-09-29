@@ -141,6 +141,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - Kotlin/Native creates and then permanently disables the Linux test tasks on a macOS host, so
   naming them is green by definition. Linux evidence is the container script or the CI Linux job.
   Windows native evidence on a Mac is a link claim only.
+- The audioviz render harness hands frames straight to a drawing. The surface first slows the
+  reading down with `CalmReading`, so a reduced-motion test must wrap its source in it. Without
+  that, the drawings that read smooth values look undamped and the test measures nothing.
+- A test that pauses a drawing must feed it `withPulseHeld()` and then `withEvents(held = true)`.
+  Repeating the last playing frame keeps its events, so the drawing sees a kick on every frame.
 
 ### Language and toolchain
 
@@ -176,6 +181,8 @@ Each line is something that bit someone. Delete a line when it stops being true.
   Pass cosine and sine pairs and unit normals from the host instead (#147).
 - A depth pass that reads its step budget from `uFinish.w` renders black when that uniform is
   unset, which reads like a broken field rather than a missing budget (#147).
+- Compose has no slider role, so `Role.Slider` does not compile. A custom slider gets
+  `progressBarRangeInfo` and a `setProgress` action instead (#326).
 
 ### Engine invariants, each of which caused a real bug when violated
 
@@ -252,6 +259,20 @@ Each line is something that bit someone. Delete a line when it stops being true.
   that to call libass from the actor is a data race with the render in flight.
 - Overlay pixels cross into the web renderer as one Latin-1 string per image, never one byte per
   JavaScript call. The per-byte form cost more than the video once typesetting redrew every frame.
+- A held frame, which is a paused player, keeps its levels and its pulses. Anything in a drawing
+  that runs on wall time or draws random motion must multiply by `frame.audible` or check
+  `frame.held`, or the picture moves under a pause. The trail feedback, the camera shake and the
+  cycle clocks each did that (#321). `PausedPictureTest` renders all 24 drawings through a pause.
+- Every drawing multiplies its light by `VizRenderState.lightScale`, because the flash guard cannot
+  dim a finished frame. Bars and Alchemy did not, and the guard could not touch them (#313).
+  `FlashGuardReachTest` renders every drawing at half the allowed light.
+- The Skia triangle call needs arrays as long as the corners they hold. `TriangleMesh` therefore
+  draws from copies padded to a power of two, one array per size. The extra corners sit on corner
+  zero and the extra triangles are `0, 0, 0`, so they draw nothing. Exact copies allocated 598 KiB
+  a frame in Fracture, because it flushes several batches of different sizes (#331).
+- Each reader of `AudioVizState` takes its frames through its own `frameSource()`. The event cursor
+  hands an event to its caller once, so a surface capped below the display rate would lose the
+  events of the display frames it skips if it read `state.frame` (#312).
 
 ### The web target
 

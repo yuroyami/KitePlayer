@@ -55,6 +55,23 @@ class EnergyIntegrationTest {
     }
 
     @Test
+    fun aLayoutTheMeterCannotReadStillGetsAReferenceThatAdapts() {
+        val rate = 8_000
+        val unknown = AudioFormat(rate, 6, SampleFormat.F32, ChannelLayout.Unknown)
+        val analyzer = SpectrumAnalyzer(sampleRate = rate)
+        fun square(amplitude: Float) = FloatArray(rate * 6) { index -> if ((index / 6) % 2 == 0) amplitude else -amplitude }
+        repeat(4) { analyzer.feed(square(0.6f), rate, unknown) }
+        assertEquals(AnalysisAvailability.Unavailable, analyzer.latest.programme?.availability, "no loudness is invented")
+        val loud = analyzer.latest.level
+        val gain = assertNotNull(analyzer.latest.drivers).powerGain
+        assertTrue(gain < 20.0, "the gain stayed at its starting value: $gain")
+        // Twelve decibels quieter has to read quieter. With a gain pinned at 100 both read 1.0.
+        analyzer.feed(square(0.15f), rate, unknown)
+        val quiet = analyzer.latest.level
+        assertTrue(quiet < loud - 0.2f && quiet < 0.8f, "loud $loud, twelve decibels down $quiet")
+    }
+
+    @Test
     fun everyLegacyLevelAliasUsesTheSameGainAndQuietPassagesStayQuiet() {
         val analyzer = SpectrumAnalyzer(sampleRate = 8_000)
         analyzer.setSongReferencePower(1.0)

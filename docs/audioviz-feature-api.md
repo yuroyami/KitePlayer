@@ -101,7 +101,9 @@ identical stereo has twice the mono programme power, while its mean spectral pow
 
 One bounded power gain applies to all energy drivers. The causal reference starts at 0.01,
 follows non-silent complete momentary power with a 1 s rise and 15 s fall, and clamps gain to
-+/-24 dB. `SpectrumAnalyzer.setSongReferencePower` accepts a positive finite complete-song
++/-24 dB. When the programme meter reports unavailable loudness, the reference follows the
+unweighted spectral power of the short window instead, so the bars are not pinned at the starting
+gain. No programme loudness is claimed for such a stream. `SpectrumAnalyzer.setSongReferencePower` accepts a positive finite complete-song
 reference in this same linear-power convention, transitions log gain over 2 s, and holds it.
 `reset` retains that fixed reference for same-song seeks; call the setter with null before
 feeding a different song. Player-managed map identity and scan delivery are separate integration.

@@ -245,15 +245,18 @@ public class SpectrumAnalyzer(
 
         val programme = checkNotNull(programmePower)
         val delta = hop.toDouble() / sampleRate
-        displayScale.advance(programme.meanSquare, programme.digitalSilence, delta)
+        // A padded warmup window is not a measurement and cannot drive a false opening attack.
+        val ready = samplesSeen >= fftSize
+        // A layout the loudness meter cannot read has no programme power, but its bars still need a
+        // reference, or they stay pinned at the starting gain. The spectral power stands in for it.
+        val momentary = programme.meanSquare ?: if (!programme.supported && ready) spectralPower.totalPower.toDouble() else null
+        displayScale.advance(momentary, programme.digitalSilence, delta)
         var saturated = 0
         fun advance(envelope: EnergyEnvelope, power: Double) {
             val normalised = power * displayScale.gain
             if (normalised > 1.0) saturated++
             envelope.advance(normalised, delta)
         }
-        // A padded warmup window is not a measurement and cannot drive a false opening attack.
-        val ready = samplesSeen >= fftSize
         for (band in 0 until bandCount) {
             advance(bandEnvelopes[band], if (ready) spectralPower.bands[band].toDouble() else 0.0)
         }

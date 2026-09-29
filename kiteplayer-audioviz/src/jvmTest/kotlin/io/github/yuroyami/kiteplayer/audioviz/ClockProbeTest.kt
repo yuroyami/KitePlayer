@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import org.junit.Assume.assumeTrue
 import java.io.File
 import javax.sound.sampled.AudioSystem
 import kotlin.math.abs
@@ -31,8 +32,10 @@ class ClockProbeTest {
 
     @Test
     fun `queued analysis follows the device anchored media clock`() = runBlocking {
-        val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
-        if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
+        // Skipped, not passed: a host without the clip or a sound device did not run this test.
+        assumeTrue("no $MEDIA to play", media != null)
+        assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
+        val file = checkNotNull(media)
 
         val player = assertNotNull(KitePlayerPlatform.createOrNull(), "no default desktop player")
         val feed = AudioVizFeed()

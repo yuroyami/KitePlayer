@@ -25,13 +25,14 @@ class MappingLintTest {
         // The strongest signal a viewer has for how busy the music is, is how fast things move.
         // A rate built from the wall clock cannot answer that. Drawings use the music clock, which
         // slows in quiet passages, or ask for a paced rate, or lock to the bar.
-        val complaints = scan { line ->
+        val check: (String) -> String? = { line ->
             if (Regex("""state\.timeSeconds\s*\*""").containsMatchIn(line)) {
                 "a speed taken from the wall clock. Use state.musicTime, state.paced() or a MusicClock"
             } else {
                 null
             }
         }
+        val complaints = scan(root, check) + scan(shaders, check)
         assertTrue(complaints.isEmpty(), "motion that ignores the music:\n" + complaints.joinToString("\n"))
     }
 
@@ -61,13 +62,20 @@ class MappingLintTest {
     fun nothingIsSpawnedPerFrameRatherThanPerSecond() {
         // A count worked out per frame doubles on a 120 Hz display and halves on a 30 Hz one. Rates
         // are per second, multiplied by the time the frame took.
-        val complaints = scan { line ->
-            if (!line.contains("repeat(")) return@scan null
-            if (!Regex("""(state\.(energy|drive|mood)|state\.frame\.\w+)""").containsMatchIn(line)) return@scan null
-            if (line.contains("deltaSeconds")) return@scan null
-            if (ALLOWED_BURSTS.any { line.contains(it) }) return@scan null
-            "a count taken from the music with no frame time in it. Multiply a per second rate by deltaSeconds"
+        val check: (String) -> String? = { line ->
+            if (!line.contains("repeat(")) {
+                null
+            } else if (!Regex("""(state\.(energy|drive|mood)|state\.frame\.\w+)""").containsMatchIn(line)) {
+                null
+            } else if (line.contains("deltaSeconds")) {
+                null
+            } else if (ALLOWED_BURSTS.any { line.contains(it) }) {
+                null
+            } else {
+                "a count taken from the music with no frame time in it. Multiply a per second rate by deltaSeconds"
+            }
         }
+        val complaints = scan(root, check) + scan(shaders, check)
         assertTrue(
             complaints.isEmpty(),
             "spawning that changes with the refresh rate:\n" + complaints.joinToString("\n"),
@@ -89,8 +97,6 @@ class MappingLintTest {
         val complaints = scan(root, check) + scan(shaders, check)
         assertTrue(complaints.isEmpty(), "positions that jump when the music changes:\n" + complaints.joinToString("\n"))
     }
-
-    private fun scan(check: (String) -> String?): List<Complaint> = scan(root, check)
 
     private fun scan(folder: File, check: (String) -> String?): List<Complaint> {
         val files = folder.listFiles { file: File -> file.name.endsWith(".kt") }

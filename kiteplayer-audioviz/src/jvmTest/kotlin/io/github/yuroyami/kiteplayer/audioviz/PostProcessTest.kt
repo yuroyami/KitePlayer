@@ -26,6 +26,9 @@ import kotlin.test.assertTrue
  */
 class PostProcessTest {
 
+    init { useSkiaGraphics() }
+
+
     private val width = 240
     private val height = 160
 

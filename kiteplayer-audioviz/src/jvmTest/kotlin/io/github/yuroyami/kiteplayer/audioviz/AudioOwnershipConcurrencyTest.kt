@@ -51,8 +51,16 @@ class AudioOwnershipConcurrencyTest {
                     queue.release(held)
                 }
             }
-            producer.get(15, TimeUnit.SECONDS)
-            consumer.get(15, TimeUnit.SECONDS)
+            // A failure in either task is reported at once. If the consumer threw, the producer would
+            // otherwise spin on a full queue until the timeout and hide the real assertion.
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
+            while (!(producer.isDone && consumer.isDone)) {
+                for (task in listOf(producer, consumer)) if (task.isDone) task.get()
+                check(System.nanoTime() < deadline) { "the producer and the consumer did not finish in 15 seconds" }
+                Thread.sleep(5)
+            }
+            producer.get()
+            consumer.get()
             assertEquals(0, queue.pendingSlots)
             assertEquals(0L, queue.pendingNanos)
         } finally {

@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDirector
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 
 /**
@@ -18,6 +19,9 @@ import kotlin.test.Test
  */
 class DirectorRateProbe {
 
+    init { useSkiaGraphics() }
+
+
     private fun songs(): List<File> = sequenceOf(
         File("../kiteplayer-sample-shared/media"),
         File("kiteplayer-sample-shared/media"),
@@ -28,8 +32,10 @@ class DirectorRateProbe {
     @Test
     fun report() = runBlocking {
         val files = songs()
-        if (files.isEmpty()) return@runBlocking println("SKIP: no songs")
-        val player = KitePlayerPlatform.createOrNull() ?: return@runBlocking println("SKIP: no desktop player")
+        assumeTrue("no songs in the sample media folder", files.isNotEmpty())
+        val created = KitePlayerPlatform.createOrNull()
+        assumeTrue("no desktop player on this host", created != null)
+        val player = checkNotNull(created)
         val out = StringBuilder()
         try {
             for (file in files) {

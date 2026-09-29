@@ -8,6 +8,7 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.lang.management.ManagementFactory
+import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 
 /**
@@ -38,8 +39,12 @@ class ScanCostProbe {
 
     @Test
     fun report() = runBlocking {
-        val file = song() ?: return@runBlocking println("SKIP: no song")
-        val player = KitePlayerPlatform.createOrNull() ?: return@runBlocking println("SKIP: no desktop player")
+        val found = song()
+        assumeTrue("no song in the sample media folder", found != null)
+        val created = KitePlayerPlatform.createOrNull()
+        assumeTrue("no desktop player on this host", created != null)
+        val file = checkNotNull(found)
+        val player = checkNotNull(created)
         val out = StringBuilder()
         val blocks = ArrayList<Block>()
         var track = TrackId(-1)

@@ -164,7 +164,8 @@ internal object RenderHarness {
             val futures = items.map { item -> pool.submit(Callable { work(item) }) }
             return futures.map { it.get() }
         } finally {
-            pool.shutdown()
+            // After a failure the rest of the work must not keep rendering into the next test.
+            pool.shutdownNow()
         }
     }
 

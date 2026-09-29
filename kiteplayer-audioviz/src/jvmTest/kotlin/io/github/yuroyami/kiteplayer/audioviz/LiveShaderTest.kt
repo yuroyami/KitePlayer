@@ -25,7 +25,12 @@ class LiveShaderTest {
 
         // Still draws, on the program from before the broken edit.
         val picture = RenderHarness.render(live, 80, 50, frames = 3, palette = VizPalette.Classic)
-        assertTrue(picture.width == 80, "the drawing should still render")
+        var lit = 0
+        for (y in 0 until picture.height) for (x in 0 until picture.width) {
+            val pixel = picture.getRGB(x, y)
+            if (((pixel shr 16) and 255) + ((pixel shr 8) and 255) + (pixel and 255) > 30) lit++
+        }
+        assertTrue(lit > 0, "the drawing should still put light down on the earlier program")
 
         assertNull(live.replace("half4 main(float2 p) { return half4(1.0); }"), "a fixed edit should compile")
         assertNull(live.error, "and clear the message")

@@ -11,6 +11,7 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import org.junit.Assume.assumeTrue
 import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 import javax.sound.sampled.AudioSystem
@@ -35,8 +36,11 @@ class ScanAlignmentTest {
     ).filterNotNull().firstOrNull { it.isFile }
 
     private fun compare(name: String, alternateTrack: Boolean = false) = runBlocking {
-        val file = clip(name) ?: return@runBlocking println("SKIP: no $name")
-        if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
+        val found = clip(name)
+        // Skipped, not passed: a host without the clips or a sound device did not run this test.
+        assumeTrue("no $name in the test media folder", found != null)
+        assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
+        val file = checkNotNull(found)
         val player = assertNotNull(KitePlayerPlatform.createOrNull(), "no default desktop player")
         val heard = ConcurrentLinkedQueue<Block>()
         val tap = object : AudioTap {

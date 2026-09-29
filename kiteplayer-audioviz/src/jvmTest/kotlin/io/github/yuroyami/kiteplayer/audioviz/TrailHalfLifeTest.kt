@@ -17,6 +17,9 @@ import kotlin.test.assertTrue
  */
 class TrailHalfLifeTest {
 
+    init { useSkiaGraphics() }
+
+
     @Test
     fun theSameSecondFadesTheSameAtAnyFrameRate() {
         for (declared in listOf(0.58f, 0.8f, 0.9f, 0.95f, 0.98f)) {

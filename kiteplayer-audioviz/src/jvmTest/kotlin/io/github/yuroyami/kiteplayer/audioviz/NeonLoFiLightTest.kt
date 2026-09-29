@@ -48,6 +48,9 @@ class NeonLoFiLightTest {
                     }
                 } finally { scene.close() }
                 report.appendText("${palette.name},$maxima,$flashes,$redFlashes,${luma / 180},${general.widest}\n")
+                // A black or frozen picture has no flashes either, so it has to show light and movement first.
+                assertTrue(luma / 180 > 0.02, "Finished light $palette maxima=$maxima drew almost nothing: mean ${luma / 180}")
+                assertTrue(general.widest > 0.02f, "Finished light $palette maxima=$maxima never moved: widest ${general.widest}")
                 assertTrue(flashes <= 3 && redFlashes <= 3, "Finished light $palette maxima=$maxima: luma=$flashes red=$redFlashes")
             }
         }

@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicLongArray
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
+import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /** Structural confirmations and resets race readers without mixing identities or repeating events. */
@@ -115,5 +116,12 @@ class EventSourcesConcurrencyTest {
                 thread.stackTrace.forEach { append("\n    at ").append(it) }
             }
         })
+        // Nothing failed, but the run proved something only if the race really happened: the timeline
+        // was reset several times and both readers took a large share of the events. A run measured
+        // 16 to 18 resets and about 8,200 events for each reader.
+        assertTrue(resets.get() >= 3, "the timeline was reset only ${resets.get()} times, so the race was not exercised")
+        for (index in 0 until 2) {
+            assertTrue(received.get(index) >= 1_000, "reader $index received only ${received.get(index)} events")
+        }
     }
 }

@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 
 /**
@@ -19,7 +20,7 @@ class DriverMatrixReport {
 
     @Test
     fun printTheMatrix() {
-        if (System.getenv("AUDIOVIZ_MATRIX") == null) return println("SKIP: set AUDIOVIZ_MATRIX to print it")
+        assumeTrue("set AUDIOVIZ_MATRIX to print it", System.getenv("AUDIOVIZ_MATRIX") != null)
         val catalogue = VizCatalog.create()
         val drivers = VizDriver.entries
         val rows = RenderHarness.inParallel(catalogue.indices.toList()) { index ->

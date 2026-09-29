@@ -7,6 +7,7 @@ import java.awt.Font
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
+import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 
 /**
@@ -23,7 +24,7 @@ class PeekTest {
     @Test
     fun peek() {
         val names = System.getenv("AUDIOVIZ_PEEK")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
-        if (names.isEmpty()) return
+        assumeTrue("Set AUDIOVIZ_PEEK to a list of drawing names to look at them", names.isNotEmpty())
         val song = when (System.getenv("AUDIOVIZ_SONG")?.lowercase()) {
             "calm" -> RenderHarness.Song.Calm
             "silence" -> RenderHarness.Song.Silence

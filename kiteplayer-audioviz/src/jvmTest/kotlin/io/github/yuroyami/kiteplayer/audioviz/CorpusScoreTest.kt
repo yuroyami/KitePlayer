@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 import java.io.File
 import javax.sound.sampled.AudioSystem
 import kotlin.math.abs
+import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -31,14 +32,10 @@ class CorpusScoreTest {
 
     @Test
     fun scoreTheCorpus() {
-        val folder = folder()
-        if (folder == null) {
-            println(
-                "SKIP: no corpus. Put clips in kiteplayer-audioviz/corpus or set AUDIOVIZ_CORPUS.\n" +
-                    "      Each clip is name.wav with name.beats.txt, and name.onsets.txt if it has one.",
-            )
-            return
-        }
+        val found = folder()
+        // Skipped, not passed. Each clip is name.wav with name.beats.txt, and name.onsets.txt if it has one.
+        assumeTrue("no corpus: put clips in kiteplayer-audioviz/corpus or set AUDIOVIZ_CORPUS", found != null)
+        val folder = checkNotNull(found)
         val clips = folder.listFiles { file: File -> file.name.endsWith(".wav") }?.sortedBy { it.name }.orEmpty()
         assertTrue(clips.isNotEmpty(), "corpus folder ${folder.absolutePath} holds no wav clips")
         println("corpus at ${folder.absolutePath}, ${clips.size} clips")

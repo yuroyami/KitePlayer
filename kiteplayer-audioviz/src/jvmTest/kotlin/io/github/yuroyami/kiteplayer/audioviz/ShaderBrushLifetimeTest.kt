@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import org.jetbrains.skia.impl.Stats
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -17,8 +18,16 @@ class ShaderBrushLifetimeTest {
 
     init { useSkiaGraphics() }
 
+    private var countedBefore = false
+
+    @AfterTest
+    fun restoreTheCounters() {
+        Stats.enabled = countedBefore
+    }
+
     @Test
     fun aShaderDrawingKeepsOnlyAFewShadersAlive() {
+        countedBefore = Stats.enabled
         Stats.enabled = true
         val catalogue = VizCatalog.create()
         val drawing = DriverProbe.drawing(catalogue.indexOfFirst { it.name == "Odyssey" })

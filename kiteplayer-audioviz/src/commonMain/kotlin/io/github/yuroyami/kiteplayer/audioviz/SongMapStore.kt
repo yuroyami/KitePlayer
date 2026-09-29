@@ -189,13 +189,15 @@ private fun SongMap.usable(): Boolean {
     if (reference != null && !(reference.isFinite() && reference > 0.0)) return false
     // Media time can start below zero, so a negative curve start is a valid map.
     if (levelCurve.any { !it.isFinite() }) return false
+    // The live history accepts a detection only when strength, confidence and surprise are in 0 to 1.
+    // A value that is not a number is outside every range.
     for (index in 0 until structureCount) {
         val detection = structure(index)
-        if (!(detection.strength.isFinite() && detection.confidence.isFinite() && detection.surprise.isFinite())) return false
+        if (detection.strength !in 0f..1f || detection.confidence !in 0f..1f || detection.surprise !in 0f..1f) return false
     }
     for (index in 0 until keyCount) {
         val key = key(index)
-        if (key.tonic !in 0..11 || !key.confidence.isFinite()) return false
+        if (key.tonic !in 0..11 || key.confidence !in 0f..1f) return false
     }
     return true
 }

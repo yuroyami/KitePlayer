@@ -105,6 +105,21 @@ class SongMapCodecTest {
     }
 
     @Test
+    fun aStoredStrengthOrConfidenceOutsideZeroToOneIsACacheMiss() {
+        fun withDetection(detection: AudioDetection, keyConfidence: Float = 0.5f) = sample().let {
+            SongMap(it.version, it.track, it.coveredThroughMicros, it.complete, it.referencePower,
+                arrayOf(detection), arrayOf(KeySegment(0L, 1_000_000L, 3, KeyMode.Major, keyConfidence)),
+                it.levelCurve, it.curveStartMicros)
+        }
+        val kind = AudioEventKind.SectionBoundary
+        assertNotNull(decodeSongMap(encodeSongMap(withDetection(AudioDetection(kind, 1L, 2L, 0.5f, 0.5f, 0.5f)))))
+        assertNull(decodeSongMap(encodeSongMap(withDetection(AudioDetection(kind, 1L, 2L, 50f, 0.5f, 0.5f)))), "strength 50")
+        assertNull(decodeSongMap(encodeSongMap(withDetection(AudioDetection(kind, 1L, 2L, 0.5f, -0.1f, 0.5f)))), "confidence below 0")
+        assertNull(decodeSongMap(encodeSongMap(withDetection(AudioDetection(kind, 1L, 2L, 0.5f, 0.5f, 2f)))), "surprise 2")
+        assertNull(decodeSongMap(encodeSongMap(withDetection(AudioDetection(kind, 1L, 2L, 0.5f, 0.5f, 0.5f), keyConfidence = 3f))), "key confidence 3")
+    }
+
+    @Test
     fun aStoredKeyOutsideTheOctaveIsACacheMiss() {
         val map = sample().let {
             SongMap(it.version, it.track, it.coveredThroughMicros, it.complete, it.referencePower,

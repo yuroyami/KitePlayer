@@ -76,12 +76,15 @@ internal object RenderHarness {
     ) {
         val player = player(song, frames / 60f + 4f)
         forEachFrameOf(visualization, width, height, frames, palette, { player.next(1f / 60f) },
-            { player.future }, groundAt, onGround, beforeDraw, onFrame)
+            { player.future }, groundAt, onGround, beforeDraw, onFrame = onFrame)
     }
 
     /**
      * The same render, fed frame by frame from [source] rather than by an analyser. The injection
      * tests build their frames by hand, so two runs differ only by what they changed.
+     *
+     * [delta] is the time of one frame in seconds, 1/60 unless a test renders another refresh rate.
+     * The [source] has to advance its song by the same amount.
      */
     fun forEachFrameOf(
         visualization: Visualization,
@@ -94,9 +97,9 @@ internal object RenderHarness {
         groundAt: (Int) -> Boolean = { false },
         onGround: (ImageBitmap, Int) -> Unit = { _, _ -> },
         beforeDraw: (VizRenderState) -> Unit = {},
+        delta: Float = 1f / 60f,
         onFrame: (ImageBitmap, Int) -> Unit,
     ) {
-        val delta = 1f / 60f
         val scale = if (visualization.bloom > 0) SOFT_BUFFER_SCALE else 1f
         val echoWidth = (width * scale).toInt().coerceAtLeast(1)
         val echoHeight = (height * scale).toInt().coerceAtLeast(1)

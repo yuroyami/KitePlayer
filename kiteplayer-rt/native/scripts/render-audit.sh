@@ -320,15 +320,20 @@ audit_callback_object() {
 # Mach-O only, and CoreAudio only: the four-character subtype lives in __TEXT,__literal8, a section
 # ELF does not have, and the value it pins is an AudioComponentDescription's. A non-Apple sink has
 # no equivalent to check, so this is skipped rather than failed.
+#
+# The description's type, subtype and manufacturer are adjacent fields, and clang stores whichever
+# pair it likes as one 8-byte literal: type 'auou' before the subtype, or the subtype before
+# manufacturer 'appl'. Either pair pins the subtype to a description; the layout moved from the
+# first to the second on iOS when the output device functions joined kite_rt_coreaudio.c.
 audit_device_subtype() {
     local label="$1" object="$2" expected="$3" forbidden="$4"
     local before="$FAILURES"
     local literals
     literals="$("$OTOOL" -s __TEXT __literal8 "$object" 2>/dev/null)"
-    if printf '%s\n' "$literals" | grep -Eq "61756f75[[:space:]]+$expected"; then
+    if printf '%s\n' "$literals" | grep -Eq "61756f75[[:space:]]+$expected|$expected[[:space:]]+6170706c"; then
         ok "$label embeds the expected AudioUnit subtype 0x$expected"
     else
-        bad "$label does not embed type Output followed by expected subtype 0x$expected"
+        bad "$label does not embed the expected subtype 0x$expected beside type Output or manufacturer Apple"
     fi
     if printf '%s\n' "$literals" | grep -Eq "[[:space:]]$forbidden([[:space:]]|$)"; then
         bad "$label also embeds the opposite AudioUnit subtype 0x$forbidden"

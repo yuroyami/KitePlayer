@@ -1,7 +1,17 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.audioviz.viz.drawComposedFrame
+import io.github.yuroyami.kiteplayer.audioviz.viz.drawVisualizationFrame
+import io.github.yuroyami.kiteplayer.audioviz.viz.restart
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -36,5 +46,30 @@ class OddCanvasTest {
             problems
         }.flatten()
         assertTrue(failures.isEmpty(), "drawings that failed at an odd size:\n" + failures.joinToString("\n"))
+    }
+
+    @Test
+    fun everyDrawingSurvivesADrawScopeOfZeroSize() {
+        val indices = VizCatalog.create().indices.toList()
+        val failures = RenderHarness.inParallel(indices) { index ->
+            val drawing = DriverProbe.drawing(index)
+            val player = RenderHarness.player(RenderHarness.Song.Lively, 6f)
+            drawing.restart()
+            val image = ImageBitmap(2, 2)
+            val scope = CanvasDrawScope()
+            try {
+                repeat(20) { step ->
+                    val state = VizRenderState(player.next(1f / 60f), step / 60f, 1f / 60f, VizPalette.Prism)
+                    for (size in listOf(Size.Zero, Size(0f, 40f), Size(40f, 0f))) {
+                        scope.draw(Density(1f), LayoutDirection.Ltr, Canvas(image), size) { drawVisualizationFrame(drawing, state, null) }
+                        scope.draw(Density(1f), LayoutDirection.Ltr, Canvas(image), size) { drawComposedFrame(drawing, state, null) }
+                    }
+                }
+                null
+            } catch (failure: Throwable) {
+                "${drawing.name}: $failure"
+            }
+        }.filterNotNull()
+        assertTrue(failures.isEmpty(), "drawings that failed at zero size:\n" + failures.joinToString("\n"))
     }
 }

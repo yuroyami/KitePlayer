@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
 import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Orbiter
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Comets
 import kotlin.test.Test
@@ -66,6 +67,44 @@ class GestureFallbackTest {
     }
 
     @Test
+    fun aPausedOrbitDoesNotMove() {
+        val gestures = Gestures()
+        val orbit = Orbiter()
+        repeat(60) { orbit.advance(VizRenderState(frame(it, 0.5f), it / 60f, 1f / 60f, VizPalette.Classic), gestures) }
+        val angle = orbit.angle
+        val x = orbit.x
+        assertTrue(angle != 0f, "the orbit should have moved while playing")
+        val paused = frame(60, 0.5f).withEvents(held = true)
+        repeat(120) { orbit.advance(VizRenderState(paused, 1f + it / 60f, 1f / 60f, VizPalette.Classic), gestures) }
+        assertEquals(angle, orbit.angle)
+        assertEquals(x, orbit.x)
+    }
+
+    @Test
+    fun aCometInFlightStopsWhereItIsWhenThePlayerPauses() {
+        val gestures = Gestures()
+        val comets = Comets()
+        val random = Rng(3L)
+        repeat(30) { index ->
+            val state = VizRenderState(frame(index, 0.5f), index / 60f, 1f / 60f, VizPalette.Classic)
+            gestures.update(state)
+            comets.advance(state, gestures, random)
+        }
+        assertTrue(comets.travellers.anyNewest, "a comet should be in flight after half a second of playing")
+        val comet = comets.travellers.newest
+        val x = comets.travellers.x[comet]
+        val progress = comets.travellers.progress[comet]
+        val paused = frame(30, 0.5f).withEvents(held = true)
+        repeat(120) { index ->
+            val state = VizRenderState(paused, 0.5f + index / 60f, 1f / 60f, VizPalette.Classic)
+            gestures.update(state)
+            comets.advance(state, gestures, random)
+        }
+        assertEquals(x, comets.travellers.x[comet], "the comet moved under a pause")
+        assertEquals(progress, comets.travellers.progress[comet], "the comet aged under a pause")
+    }
+
+    @Test
     fun aPausedCameraDoesNotShake() {
         val camera = Camera2D(wander = 0f, shake = 0.02f, seed = 5)
         val hatty = SpectrumFrame(
@@ -80,6 +119,42 @@ class GestureFallbackTest {
             assertEquals(restX, camera.panX, "the camera shook under a paused player")
             assertEquals(restY, camera.panY, "the camera shook under a paused player")
         }
+    }
+
+    @Test
+    fun aPauseKeepsTheCycleLengthAndThePulseFlag() {
+        val gestures = Gestures()
+        val player = SongPlayer(SyntheticSong.drumLoop(14f))
+        var last: SpectrumFrame? = null
+        repeat(60 * 9) { index ->
+            val frame = player.next(1f / 60f).also { last = it }
+            gestures.update(VizRenderState(frame, index / 60f, 1f / 60f, VizPalette.Classic))
+        }
+        assertTrue(gestures.pulseUsable, "the drum loop should have a usable pulse by now")
+        val length = gestures.cycleSeconds
+        val paused = checkNotNull(last).withPulseHeld().withEvents(held = true)
+        repeat(120) { index ->
+            gestures.update(VizRenderState(paused, 9f + index / 60f, 1f / 60f, VizPalette.Classic))
+            assertEquals(length, gestures.cycleSeconds, "the cycle length changed under a pause")
+            assertTrue(gestures.pulseUsable, "the pulse flag changed under a pause")
+        }
+    }
+
+    @Test
+    fun aLongPauseDoesNotArmASurgeForTheFirstLoudHitAfterIt() {
+        val gestures = Gestures()
+        var index = 0
+        // Three quiet seconds are not the six that a surge needs.
+        repeat(60 * 3) { gestures.update(VizRenderState(frame(index, 0.1f), index / 60f, 1f / 60f, VizPalette.Classic)); index++ }
+        val quiet = frame(index, 0.1f).withEvents(held = true)
+        repeat(60 * 30) { gestures.update(VizRenderState(quiet, index / 60f, 1f / 60f, VizPalette.Classic)); index++ }
+        var surged = false
+        repeat(60 * 3) {
+            gestures.update(VizRenderState(frame(index, 0.9f), index / 60f, 1f / 60f, VizPalette.Classic))
+            if (gestures.surge) surged = true
+            index++
+        }
+        assertTrue(!surged, "thirty paused seconds counted as a quiet stretch")
     }
 
     @Test

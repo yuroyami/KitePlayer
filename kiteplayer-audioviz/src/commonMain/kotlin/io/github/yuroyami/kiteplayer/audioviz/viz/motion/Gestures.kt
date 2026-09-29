@@ -165,8 +165,12 @@ public class Gestures {
         quietFor = if (frame.level < 0.02f) quietFor + dt else 0f
         silence = quietFor > 2f
         val freeSeconds = (4.2f - 2.4f * frame.mood).coerceIn(1.8f, 4.2f)
-        pulseUsable = frame.rhythm?.usable == true
-        cycleSeconds = if (pulseUsable) 240f / checkNotNull(frame.rhythm).bpm else freeSeconds
+        // A held frame's pulse is not usable, which would make the cycle length jump at the pause and
+        // back at the resume. The length from before the pause stands while the frame is held.
+        if (!frame.held) {
+            pulseUsable = frame.rhythm?.usable == true
+            cycleSeconds = if (pulseUsable) 240f / checkNotNull(frame.rhythm).bpm else freeSeconds
+        }
         // A paused player does not turn the picture over. A silence keeps the cycles running.
         val heardDt = if (frame.held) 0f else dt
         val next = cycleClock.advance(heardDt, frame, 1f / freeSeconds)
@@ -184,8 +188,9 @@ public class Gestures {
         // The slow energy lags a rise by seconds, so a stretch that was quiet still reads as quiet
         // for the first moments of the rise, which is when the rise is seen.
         energySlow += (frame.energy - energySlow) * (dt / SLOW_ENERGY_SECONDS).coerceAtMost(1f)
-        quietStretch = if (energySlow < QUIET_ENERGY) quietStretch + dt else 0f
-        sinceSurge += dt
+        // These count heard time, so a long pause cannot arm a surge for the first loud hit after it.
+        quietStretch = if (energySlow < QUIET_ENERGY) quietStretch + heardDt else 0f
+        sinceSurge += heardDt
         val rise = quietStretch >= QUIET_SECONDS && frame.energy > energySlow + SURGE_RISE && sinceSurge >= SURGE_SPACING
         surge = drop || rise
         if (surge) {

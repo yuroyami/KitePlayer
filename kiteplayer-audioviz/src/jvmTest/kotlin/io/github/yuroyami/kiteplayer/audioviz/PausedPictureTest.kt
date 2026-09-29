@@ -32,8 +32,21 @@ class PausedPictureTest {
     private fun luma(pixel: Int): Float =
         (0.2126f * ((pixel shr 16) and 255) + 0.7152f * ((pixel shr 8) and 255) + 0.0722f * (pixel and 255)) / 255f
 
-    /** The largest change between two neighbouring frames of the last second of a pause. */
-    private fun changedWhilePaused(index: Int): Pair<String, Float> {
+    /** How many pixels differ by more than a few levels between two frames. */
+    private fun differing(a: IntArray, b: IntArray): Int {
+        var count = 0
+        for (index in a.indices) if (abs(luma(a[index]) - luma(b[index])) > PIXEL_STEP) count++
+        return count
+    }
+
+    /**
+     * The largest mean change between two neighbouring frames of the last second of a pause, and
+     * how many pixels differ between its first frame and its last.
+     *
+     * The mean cannot see a small mark such as one comet of a shader at this size, and a slow drift
+     * is too small between neighbours, so the second measure compares the ends of the second.
+     */
+    private fun changedWhilePaused(index: Int): Triple<String, Float, Int> {
         val drawing = DriverProbe.drawing(index)
         val (width, height) = if (drawing is ShaderPreset) {
             DriverProbe.SHADER_WIDTH to DriverProbe.SHADER_HEIGHT
@@ -43,6 +56,7 @@ class PausedPictureTest {
         val player = RenderHarness.player(RenderHarness.Song.Lively, 12f)
         var last: SpectrumFrame? = null
         var previous: IntArray? = null
+        var first: IntArray? = null
         var widest = 0f
         RenderHarness.forEachFrameOf(
             drawing, width, height, PLAY_FRAMES + SETTLE_FRAMES + WATCH_FRAMES, VizPalette.Prism,
@@ -54,21 +68,22 @@ class PausedPictureTest {
             if (step < PLAY_FRAMES + SETTLE_FRAMES) return@forEachFrameOf
             val pixels = IntArray(bitmap.width * bitmap.height).also { bitmap.readPixels(it) }
             previous?.let { widest = maxOf(widest, change(it, pixels)) }
+            if (first == null) first = pixels
             previous = pixels
         }
-        return drawing.name to widest
+        return Triple(drawing.name, widest, differing(checkNotNull(first), checkNotNull(previous)))
     }
 
     @Test
     fun everyDrawingStandsStillWhileThePlayerIsPaused() {
         val indices = VizCatalog.create().indices.toList()
         val rows = RenderHarness.inParallel(indices) { changedWhilePaused(it) }
-        for ((name, widest) in rows) println("paused $name: widest change between frames $widest")
-        val moving = rows.filter { it.second > MOST_CHANGE }
+        for ((name, widest, drift) in rows) println("paused $name: widest change between frames $widest, $drift pixels differ across the second")
+        val moving = rows.filter { it.second > MOST_CHANGE || it.third > MOST_DRIFT }
         assertTrue(
             moving.isEmpty(),
-            "drawings that changed while paused (limit $MOST_CHANGE):\n" +
-                moving.joinToString("\n") { "${it.first}: ${it.second}" },
+            "drawings that changed while paused (limits $MOST_CHANGE and $MOST_DRIFT pixels):\n" +
+                moving.joinToString("\n") { "${it.first}: ${it.second}, ${it.third} pixels" },
         )
     }
 
@@ -84,5 +99,11 @@ class PausedPictureTest {
 
         /** About a quarter of one level in 255 on average. The eye cannot see a picture move by less. */
         const val MOST_CHANGE = 0.001f
+
+        /** A pixel counts as changed when its luma moves by more than three levels in 255. */
+        const val PIXEL_STEP = 0.012f
+
+        /** Pixels allowed to differ across the second. *Judgement.* */
+        const val MOST_DRIFT = 3
     }
 }

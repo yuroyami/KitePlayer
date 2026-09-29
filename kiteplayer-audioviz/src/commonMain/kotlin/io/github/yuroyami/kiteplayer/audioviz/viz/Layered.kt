@@ -55,6 +55,7 @@ internal class Kit(
             else VizRenderState(state.frame, state.timeSeconds, dt, state.palette, state.musicTime, state.future).also {
                 it.motionScale = state.motionScale
                 it.lightScale = state.lightScale
+                it.instant = state.instant
             }
     }
 

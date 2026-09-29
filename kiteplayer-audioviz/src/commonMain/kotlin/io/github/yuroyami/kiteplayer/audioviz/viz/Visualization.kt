@@ -175,6 +175,13 @@ public class VizRenderState(
         internal set
 
     /**
+     * The surface's clock as a Double, which keeps counting exactly where a Float [timeSeconds] stops.
+     * A Float clock stops adding one frame to itself after about 36 hours at 144 Hz. Compare this,
+     * not [timeSeconds], to tell one display step from the next.
+     */
+    internal var instant: Double = timeSeconds.toDouble()
+
+    /**
      * Seconds of audible time this frame, for anything that travels: [deltaSeconds] while there is
      * something to hear, zero while the player is paused or the audio is silent. Springs and fades
      * keep settling on [deltaSeconds]; a camera, a ground or a scrolling field moves by this.

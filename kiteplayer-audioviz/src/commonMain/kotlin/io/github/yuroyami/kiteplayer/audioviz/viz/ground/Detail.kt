@@ -32,14 +32,14 @@ public class Detail(
     }
     private val inputs = ShaderInputs(5f)
     private var phase = 0f
-    private var advancedAt = Float.NaN
+    private var advancedAt = Double.NaN
 
     /** An extra turn of the palette, for a colour that walks over the song. */
     public var walk: Float = 0f
 
     internal fun DrawScope.draw(state: VizRenderState, alpha: Float = 1f) {
-        if (state.timeSeconds != advancedAt) {
-            advancedAt = state.timeSeconds
+        if (state.instant != advancedAt) {
+            advancedAt = state.instant
             phase += state.stepSeconds * (0.06f + state.paced(2f))
         }
         if (strength <= 0f || !program.available || !canDrawRuntimeShaders()) return
@@ -66,7 +66,7 @@ public class Detail(
     public fun reset() {
         phase = 0f
         inputs.reset()
-        advancedAt = Float.NaN
+        advancedAt = Double.NaN
     }
 
     private companion object {

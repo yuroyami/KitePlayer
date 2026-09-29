@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
+import io.github.yuroyami.kiteplayer.audioviz.viz.DisplayStep
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
@@ -62,5 +63,16 @@ class DisplayInstantTest {
         twice.advance(later)
         once.advance(later)
         assertEquals(once.zoom, twice.zoom, 1e-6f)
+    }
+
+    @Test
+    fun twoStepsWhoseFloatTimesAreEqualAreTwoSteps() {
+        // After about 36 hours a Float clock can hold one value for two steps at 144 Hz.
+        val step = DisplayStep()
+        val first = state(frame(), 200_000f, 0.007f).also { it.instant = 200_000.0 }
+        val second = state(frame(), 200_000f, 0.007f).also { it.instant = 200_000.007 }
+        assertEquals(0.007f, step.of(first))
+        assertEquals(0.007f, step.of(second))
+        assertEquals(null, step.of(second), "the same step twice is consumed once")
     }
 }

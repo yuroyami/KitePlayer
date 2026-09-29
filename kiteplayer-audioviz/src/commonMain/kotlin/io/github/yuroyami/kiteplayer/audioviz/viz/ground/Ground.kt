@@ -49,12 +49,12 @@ public class Ground(
     private val inputs = ShaderInputs(seed)
     private var phase = 0f
     private var travel = 0f
-    private var advancedAt = Float.NaN
+    private var advancedAt = Double.NaN
 
     /** Moves the ground's own clocks on by one frame. Safe to call twice in a frame. */
     internal fun advance(state: VizRenderState) {
-        if (state.timeSeconds == advancedAt) return
-        advancedAt = state.timeSeconds
+        if (state.instant == advancedAt) return
+        advancedAt = state.instant
         val dt = state.deltaSeconds
         val frame = state.frame
         // A small floor keeps a ground alive in a quiet passage; a pause or a silence holds it,
@@ -140,7 +140,7 @@ public class Ground(
         leaving = null
         fade = 1f
         inputs.reset()
-        advancedAt = Float.NaN
+        advancedAt = Double.NaN
     }
 }
 

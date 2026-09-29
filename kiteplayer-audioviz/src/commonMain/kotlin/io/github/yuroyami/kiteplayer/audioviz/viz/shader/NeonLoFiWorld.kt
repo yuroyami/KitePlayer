@@ -54,7 +54,7 @@ internal class NeonLoFiWorld {
     private val seen = arrayOfNulls<AudioEvent>(96)
     private var seenAt = 0
     private var epoch = 0L
-    private var lastTime = Float.NaN
+    private var lastTime = Double.NaN
     private var lastFrame: SpectrumFrame? = null
     private var settingsInitialized = false
     private var layoutInitialized = false
@@ -68,9 +68,9 @@ internal class NeonLoFiWorld {
     }
 
     fun advance(state: VizRenderState, values: FloatArray, layout: Float, beatSeconds: Float = 0f) {
-        if (state.timeSeconds == lastTime && state.frame === lastFrame) return
-        val dt = if (state.timeSeconds == lastTime) 0f else state.deltaSeconds.coerceIn(0f, 0.25f)
-        lastTime = state.timeSeconds; lastFrame = state.frame
+        if (state.instant == lastTime && state.frame === lastFrame) return
+        val dt = if (state.instant == lastTime) 0f else state.deltaSeconds.coerceIn(0f, 0.25f)
+        lastTime = state.instant; lastFrame = state.frame
         val f = state.frame
         history.record(f)
         if (epoch != history.epoch) { clearActors(); epoch = history.epoch }
@@ -224,7 +224,7 @@ internal class NeonLoFiWorld {
         breakdownRain = false
     }
     fun reset() {
-        history.clear(); clearActors(); epoch = history.epoch; lastFrame = null; lastTime = Float.NaN
+        history.clear(); clearActors(); epoch = history.epoch; lastFrame = null; lastTime = Double.NaN
         slowLevel = 0f; air = 0f; body = 0f; settingsInitialized = false
     }
 }

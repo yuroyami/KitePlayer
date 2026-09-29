@@ -150,6 +150,7 @@ private fun VisualizerCanvas(
             musicTime = tick?.musicTime ?: 0f,
             future = future,
         )
+        state.instant = tick?.instant ?: 0.0
         state.motionScale = motionScale
         state.lightScale = guard.allowance(lightFor(current.energy), deltaSeconds)
         val trail = visualization.trailAt(current.mood).coerceIn(0f, 0.995f)
@@ -193,14 +194,30 @@ private fun VisualizerCanvas(
  * A frame draws from the newest step alone, so the analysis cannot redraw a surface between steps,
  * and a redraw of a step already drawn passes no time.
  */
-private class VizTick(
+internal class VizTick(
     /** Counts the steps, so a redraw of this one can be told from a new one. */
     val serial: Long,
     val frame: SpectrumFrame,
-    val timeSeconds: Float,
+    /** The surface's clock, in a Double, because a Float clock stops adding a frame after about 36 hours at 144 Hz. */
+    val instant: Double,
     val deltaSeconds: Float,
-    val musicTime: Float,
-)
+    /** The music clock, in a Double for the same reason. */
+    val music: Double,
+) {
+    val timeSeconds: Float get() = instant.toFloat()
+    val musicTime: Float get() = music.toFloat()
+
+    /** The step [delta] seconds after this one, which hears [heard]. */
+    fun after(heard: SpectrumFrame, delta: Float): VizTick =
+        // The music clock slows in a quiet passage and stops in silence.
+        VizTick(serial + 1L, heard, instant + delta, delta, music + delta * heard.motionRate)
+
+    companion object {
+        /** The first step of a clock, [delta] seconds after it started. */
+        fun first(heard: SpectrumFrame, delta: Float): VizTick =
+            VizTick(1L, heard, delta.toDouble(), delta, delta * heard.motionRate.toDouble())
+    }
+}
 
 /** The steps of one surface's clock, and which of them was drawn last. */
 private class VizClock {
@@ -246,14 +263,7 @@ private class VizClock {
         val before = tick
         // Clamped, so a stalled window does not teleport every particle off screen.
         val delta = waited.coerceIn(0f, 0.1f)
-        val next = VizTick(
-            serial = (before?.serial ?: 0L) + 1L,
-            frame = heard,
-            timeSeconds = (before?.timeSeconds ?: 0f) + delta,
-            deltaSeconds = delta,
-            // The music clock slows in a quiet passage and stops in silence.
-            musicTime = (before?.musicTime ?: 0f) + delta * heard.motionRate,
-        )
+        val next = before?.after(heard, delta) ?: VizTick.first(heard, delta)
         tick = next
         return next
     }
@@ -687,6 +697,7 @@ private fun DirectedCanvas(
         val current = calmReading.of(heard, motionScale, deltaSeconds)
         val shown = fade.advance(palette, current, deltaSeconds)
         val state = VizRenderState(current, tick?.timeSeconds ?: 0f, deltaSeconds, shown, tick?.musicTime ?: 0f, future)
+        state.instant = tick?.instant ?: 0.0
         state.motionScale = motionScale
         state.lightScale = guard.allowance(lightFor(current.energy), deltaSeconds)
         stage.follow(director)

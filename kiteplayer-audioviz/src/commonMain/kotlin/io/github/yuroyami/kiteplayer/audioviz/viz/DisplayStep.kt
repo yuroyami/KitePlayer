@@ -10,24 +10,24 @@ import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
  * instant twice.
  */
 internal class DisplayStep {
-    private var instant = Float.NaN
+    private var instant = Double.NaN
     private var frame: SpectrumFrame? = null
 
     /** Seconds to integrate, zero for a new frame at the same instant, or null when already consumed. */
     fun of(state: VizRenderState): Float? {
-        if (state.timeSeconds == instant) {
+        if (state.instant == instant) {
             if (state.frame === frame) return null
             frame = state.frame
             return 0f
         }
-        instant = state.timeSeconds
+        instant = state.instant
         frame = state.frame
         val delta = state.deltaSeconds
         return if (delta.isFinite() && delta > 0f) delta else 0f
     }
 
     fun reset() {
-        instant = Float.NaN
+        instant = Double.NaN
         frame = null
     }
 }

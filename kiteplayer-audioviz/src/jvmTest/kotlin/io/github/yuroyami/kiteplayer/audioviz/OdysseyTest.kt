@@ -113,6 +113,32 @@ class OdysseyTest {
         assertTrue(atDrop < 0.2f && risen >= 1f, "the sun rises over one beat after a drop: $atDrop then $risen")
     }
 
+    /** The largest mean change of one pixel from one frame to the next while a section moves the view. */
+    private fun fastestMove(motionScale: Float): Float {
+        var earlier: FloatArray? = null
+        var fastest = 0f
+        RenderHarness.forEachFrameOf(Odyssey(), 96, 54, 150, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Section, step) },
+            beforeDraw = { it.motionScale = motionScale }) { bitmap, step ->
+            val pixels = IntArray(96 * 54).also { bitmap.readPixels(it) }
+            val lumas = FloatArray(pixels.size) { luma(pixels[it]) }
+            if (step > InjectedFrames.STRUCTURE_STEP) earlier?.let { before ->
+                fastest = maxOf(fastest, lumas.indices.sumOf { abs(lumas[it] - before[it]).toDouble() }.toFloat() / lumas.size)
+            }
+            earlier = lumas
+        }
+        return fastest
+    }
+
+    @Test
+    fun reducedMotionSlowsTheMoveToANewView() {
+        val full = fastestMove(1f)
+        val reduced = fastestMove(0.15f)
+        println("odyssey: the view moves at $full a frame, and at $reduced with reduced motion")
+        assertTrue(full > 0.002f, "the section must move the view, moved $full")
+        assertTrue(reduced <= full * 0.7f, "reduced motion should slow the move: $reduced against $full")
+    }
+
     private fun luma(pixel: Int): Float =
         (0.2126f * (pixel shr 16 and 0xFF) + 0.7152f * (pixel shr 8 and 0xFF) + 0.0722f * (pixel and 0xFF)) / 255f
 }

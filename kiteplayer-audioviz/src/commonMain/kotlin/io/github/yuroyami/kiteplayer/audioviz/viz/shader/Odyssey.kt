@@ -167,6 +167,8 @@ internal class Odyssey : ShaderPreset(
     override fun advance(state: VizRenderState) {
         val frame = state.frame
         val step = state.stepSeconds
+        // Reduced motion slows the camera moves and every turn of the planet, the storm and the clouds.
+        val pace = 0.3f + 0.7f * state.motionScale.coerceIn(0f, 1f)
         aspect = kit.aspect
         val loud = frame.energy.coerceIn(0f, 1f).pow(0.6f)
         light = state.lightScale.coerceIn(0f, 1f) * (IDLE_LIGHT + (1f - IDLE_LIGHT) * loud)
@@ -182,7 +184,7 @@ internal class Odyssey : ShaderPreset(
             inBreakdown = false
             if (gestures.turn || leaving) moveTo(if (leaving) viewFrom.coerceAtMost(2) else (viewTo + 1 + (random.next() * 2f).toInt()) % 3)
         }
-        if (viewBlend < 1f) viewBlend = (viewBlend + step / viewSeconds).coerceAtMost(1f)
+        if (viewBlend < 1f) viewBlend = (viewBlend + step * pace / viewSeconds).coerceAtMost(1f)
         blendViews()
 
         // On a drop the sun rises over the planet's edge: its light runs across the clouds and
@@ -200,12 +202,12 @@ internal class Odyssey : ShaderPreset(
         flare *= exp(-step / 0.35f)
 
         // The clouds stream at the pace of the music, and nothing moves in a silence.
-        cloudPhase += step * (0.01f + 0.12f * frame.energy) * cloudSpeed.value
-        spin += step * 0.012f
+        cloudPhase += step * pace * (0.01f + 0.12f * frame.energy) * cloudSpeed.value
+        spin += step * pace * 0.012f
         stormSize += ((0.6f + 1.4f * frame.bass) - stormSize) * (1f - exp(-step / 0.3f))
         stir += (frame.bass - stir) * (1f - exp(-step / 0.3f))
-        stormSpin += step * (0.6f + 2.4f * frame.bass)
-        stormLongitude += step * 0.02f
+        stormSpin += step * pace * (0.6f + 2.4f * frame.bass)
+        stormLongitude += step * pace * 0.02f
 
         recordHistory(frame.bands, step)
         readRinglets(frame.bands, step)

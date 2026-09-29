@@ -23,7 +23,7 @@ internal object ShaderLibrary {
     /** How many steps the colour ramp is handed over as. */
     const val PALETTE = 64
 
-    /** How many past spectra the history picture keeps. About four seconds at sixty frames a second. */
+    /** How many past spectra the history picture keeps. About four seconds, at sixty rows for each heard second. */
     const val HISTORY = 256
 
     val HEADER: String = """

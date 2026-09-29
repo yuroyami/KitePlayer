@@ -8,21 +8,25 @@ import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 /** The readings every program gets. Strips are written once a frame, then handed to any number of programs. */
 internal class ShaderInputs(private val seed: Float = 1f) {
     private val data = ShaderData()
-    private var writtenAt = Float.NaN
+    private var writtenAt = Double.NaN
+    private val clock = HistoryClock()
+
+    /** How many history rows were written since the last reset, for tests. */
+    internal val historyRowsWritten: Long get() = data.historyRowsWritten
     private var lastFrame: SpectrumFrame? = null
     private val cycles = Gestures()
 
     /** Rewrites the spectrum, waveform, palette and history strips. Safe to call twice in a frame. */
     fun update(state: VizRenderState) {
-        if (state.timeSeconds == writtenAt && state.frame === lastFrame) return
-        writtenAt = state.timeSeconds
+        if (state.instant == writtenAt && state.frame === lastFrame) return
+        writtenAt = state.instant
         val frame = state.frame
         lastFrame = frame
         cycles.update(state)
         data.writeBands(frame.bandsRel)
         data.writeScope(frame.scope, frame.waveformGain)
         data.writePalette(state.palette)
-        data.writeHistory(frame.bandsRel)
+        data.writeHistory(frame.bandsRel, clock.rows(state.stepSeconds))
     }
 
     /** Sets the shared uniform block and the strips on [program]. */
@@ -68,7 +72,8 @@ internal class ShaderInputs(private val seed: Float = 1f) {
 
     fun reset() {
         data.clearHistory()
-        writtenAt = Float.NaN
+        clock.reset()
+        writtenAt = Double.NaN
         lastFrame = null
         cycles.reset()
     }

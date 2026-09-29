@@ -33,6 +33,10 @@ internal class ShaderData {
     private val palette = PixelImage(PALETTE_STEPS, 1)
     private val history = PixelImage(ShaderLibrary.BANDS, ShaderLibrary.HISTORY)
     private var historyRow = 0
+
+    /** How many history rows were written since the last clear, for tests. */
+    internal var historyRowsWritten = 0L
+        private set
     private var historyFresh = true
     private var paletteFor: VizPalette? = null
 
@@ -60,23 +64,26 @@ internal class ShaderData {
         writeStrip(palette, PALETTE_STEPS) { at -> from.ramp(at).toArgb() }
     }
 
-    /** Writes this frame's spectrum as the newest row of the history. */
-    fun writeHistory(values: FloatArray) {
-        // The very first spectrum fills every row, so the past starts as the present rather than as
-        // silence, which would show as a hard edge sweeping across anything the history drives.
-        val row = historyRow * ShaderLibrary.BANDS
-        for (pixel in 0 until ShaderLibrary.BANDS) {
-            history.pixels[row + pixel] = red(sample(values, pixel.toFloat() / (ShaderLibrary.BANDS - 1)))
-        }
-        if (historyFresh) {
-            for (other in 0 until ShaderLibrary.HISTORY) {
-                if (other == historyRow) continue
-                history.pixels.copyInto(history.pixels, other * ShaderLibrary.BANDS, row, row + ShaderLibrary.BANDS)
+    /** Writes this frame's spectrum as the newest [rows] rows of the history, and uploads once. */
+    fun writeHistory(values: FloatArray, rows: Int = 1) {
+        repeat(rows) {
+            // The very first spectrum fills every row, so the past starts as the present rather than as
+            // silence, which would show as a hard edge sweeping across anything the history drives.
+            val row = historyRow * ShaderLibrary.BANDS
+            for (pixel in 0 until ShaderLibrary.BANDS) {
+                history.pixels[row + pixel] = red(sample(values, pixel.toFloat() / (ShaderLibrary.BANDS - 1)))
             }
+            if (historyFresh) {
+                for (other in 0 until ShaderLibrary.HISTORY) {
+                    if (other == historyRow) continue
+                    history.pixels.copyInto(history.pixels, other * ShaderLibrary.BANDS, row, row + ShaderLibrary.BANDS)
+                }
+            }
+            historyFresh = false
+            historyRow = (historyRow + 1) % ShaderLibrary.HISTORY
+            historyRowsWritten++
         }
-        historyFresh = false
-        history.upload()
-        historyRow = (historyRow + 1) % ShaderLibrary.HISTORY
+        if (rows > 0) history.upload()
     }
 
     /** Forgets the history, so a drawing shown again does not start from last time's music. */
@@ -84,6 +91,7 @@ internal class ShaderData {
         history.pixels.fill(0xFF000000.toInt())
         history.upload()
         historyRow = 0
+        historyRowsWritten = 0L
         historyFresh = true
     }
 

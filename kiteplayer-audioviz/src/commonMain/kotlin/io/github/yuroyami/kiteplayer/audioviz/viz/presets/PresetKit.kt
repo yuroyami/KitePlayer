@@ -52,19 +52,24 @@ internal fun VizPalette.argb(position: Float, saturation: Float = 0.85f, value: 
     cycled(position, saturation, value, alpha.coerceIn(0f, 1f)).toArgb()
 
 /**
- * The last few seconds of a row of values, such as the bands or a trace, one row a frame, so a
- * drawing can show where the music has been.
+ * The last few seconds of a row of values, such as the bands or a trace, so a drawing can show
+ * where the music has been.
+ *
+ * Times are heard seconds, which stand still while the player is paused. A row is kept only when
+ * at least a sixtieth of a heard second has passed since the last one, so 200 rows always reach
+ * back more than three seconds, whatever the refresh rate.
  */
 internal class History(private val rows: Int = 200) {
     private var width = 0
     private var data = FloatArray(0)
-    private val times = FloatArray(rows)
+    private val times = DoubleArray(rows)
     private var newest = -1
     private var count = 0
 
-    /** Stores [values] as the row for [time]. */
-    fun push(values: FloatArray, time: Float) {
+    /** Stores [values] as the row for [time], heard seconds, unless the last row is too near in time. */
+    fun push(values: FloatArray, time: Double) {
         if (values.isEmpty()) return
+        if (count > 0 && width == values.size && time - times[newest] < MIN_GAP) return
         if (values.size != width) {
             width = values.size
             data = FloatArray(rows * width)
@@ -103,6 +108,11 @@ internal class History(private val rows: Int = 200) {
     fun clear() {
         newest = -1
         count = 0
+    }
+
+    private companion object {
+        /** A little under a sixtieth, so every frame of a 60 Hz screen is kept. */
+        const val MIN_GAP = 0.0165
     }
 }
 

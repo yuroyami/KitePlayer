@@ -110,6 +110,9 @@ internal class Bars : Layered(
     private val centreX: Float get() = 0.5f + (stage.x - 0.5f) * stageMotion.value
     private val height: Float get() = baseline - ceiling
     private val history = History()
+
+    /** Heard seconds since the drawing started, the clock of [history]. */
+    private var heard = 0.0
     private var heights = FloatArray(0)
     private var peaks = FloatArray(0)
     private var octaveBalance = FloatArray(0)
@@ -137,7 +140,8 @@ internal class Bars : Layered(
         activity = (0.5f * frame.mood + 0.3f * frame.density +
             0.2f * (frame.novelty / 4f).coerceIn(0f, 1f)) * frame.audible
         stage.advance(dt * state.idle)
-        history.push(bands, state.timeSeconds)
+        heard += state.stepSeconds
+        history.push(bands, heard)
         scroll += 4f * state.stepSeconds / gestures.beatSeconds
         sweep.advance(gestures)
         if (frame.snare > 0f) snareSweep = 0f
@@ -463,6 +467,7 @@ internal class Bars : Layered(
     override fun onReset() {
         stage.reset()
         history.clear()
+        heard = 0.0
         lastPeak.fill(0f)
         heights.fill(0f)
         peaks.fill(0f)

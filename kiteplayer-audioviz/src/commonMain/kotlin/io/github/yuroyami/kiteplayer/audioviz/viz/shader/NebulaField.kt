@@ -92,6 +92,7 @@ internal class NebulaField : ShaderPreset(
     // a test can hold them to the picture the shader draws.
     internal val gas = GasField()
     internal val past = SpectrumPast()
+    private val pastClock = HistoryClock()
     internal val sparks = Sparks(SPARKS, seed = 3_119L)
     private val recipes = FoldRecipes(seed = 1_907L)
     private val comets = Travellers(2)
@@ -248,7 +249,7 @@ internal class NebulaField : ShaderPreset(
         gas.strandSin = sin(recipes.strand)
         gas.along = recipes.along
         gas.across = recipes.across
-        past.push(frame.bandsRel)
+        repeat(pastClock.rows(step)) { past.push(frame.bandsRel) }
 
         val wanted = (SPARKS * ((treble - 0.1f) * 1.6f).coerceIn(0f, 1f) * frame.audible * (1f - calm)).toInt()
         sparks.advance(gas, past, wanted, step * (0.4f + 0.6f * motion), dt, aspect)
@@ -399,6 +400,7 @@ internal class NebulaField : ShaderPreset(
     override fun onReset() {
         gas.reset()
         past.clear()
+        pastClock.reset()
         recipes.reset()
         sparks.clear()
         comets.clear()

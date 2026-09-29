@@ -128,4 +128,27 @@ class ShaderDataTest {
         inputs.reset()
         assertTrue(pixel(program).red < 0.01f, "reset clears visual phase without a false boundary")
     }
+
+    private fun loudFrame(step: Int) = SpectrumFrame(step * 1_000L, FloatArray(40), FloatArray(40), FloatArray(256), 0.5f, 0f, 0f, 0f, 0f, 0f)
+
+    @Test
+    fun theHistoryGetsSixtyRowsAHeardSecondAtAnyRefreshRate() {
+        for (hertz in listOf(30, 60, 120, 144)) {
+            val inputs = ShaderInputs()
+            repeat(hertz * 10) { step ->
+                inputs.update(VizRenderState(loudFrame(step), (step + 1f) / hertz, 1f / hertz, VizPalette.Prism))
+            }
+            assertTrue(inputs.historyRowsWritten in 599L..602L, "$hertz Hz wrote ${inputs.historyRowsWritten} rows in ten seconds, not 600")
+        }
+    }
+
+    @Test
+    fun aPausedPlayerWritesNoMoreHistoryRows() {
+        val inputs = ShaderInputs()
+        repeat(60) { step -> inputs.update(VizRenderState(loudFrame(step), (step + 1) / 60f, 1f / 60f, VizPalette.Prism)) }
+        val before = inputs.historyRowsWritten
+        val paused = loudFrame(60).withPulseHeld()
+        repeat(300) { step -> inputs.update(VizRenderState(paused.withPulseHeld(), (61 + step) / 60f, 1f / 60f, VizPalette.Prism)) }
+        assertEquals(before, inputs.historyRowsWritten, "rows were written under a pause")
+    }
 }

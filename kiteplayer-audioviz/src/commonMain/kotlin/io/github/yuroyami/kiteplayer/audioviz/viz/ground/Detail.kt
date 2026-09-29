@@ -65,6 +65,7 @@ public class Detail(
 
     public fun reset() {
         phase = 0f
+        walk = 0f
         inputs.reset()
         advancedAt = Double.NaN
     }

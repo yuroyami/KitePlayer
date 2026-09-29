@@ -134,8 +134,7 @@ public class Ground(
     public fun reset() {
         phase = 0f
         travel = 0f
-        fade = 1f
-        leaving = null
+        walk = 0f
         kind = startKind
         leaving = null
         fade = 1f

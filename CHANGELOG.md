@@ -12,6 +12,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Upgrading
 
+- `kiteplayer-libass` links the libass chain from KiteFFmpeg's `ass-chain-r2` release, which
+  builds HarfBuzz 14.5.0 instead of 14.2.1. HarfBuzz's own notes for 14.4.0 and 14.5.0 list fixes
+  for crashes and hangs with malformed fonts, which matters because a Matroska file can carry its
+  own fonts. HarfBuzz 14.3.0 also changes where marks sit in some scripts, so a typeset ASS line
+  can shift by a pixel from the previous release. The API is unchanged.
 - Queue items now follow each other without a gap. The next item opens five seconds before the
   current one ends, and its sound follows the last sample on the same audio device, which is not
   stopped, paused or drained between the items. `PlayerEvent.Ended` and then `PlayerEvent.Opened`

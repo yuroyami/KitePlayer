@@ -25,7 +25,7 @@ https://yuroyami.github.io/KiteFFmpeg/licensing/
 (source: docs/licensing.md in the KiteFFmpeg repository).
 
 kiteplayer-libass links, statically, into its published artifacts:
-libass 0.17.5 (ISC, https://github.com/libass/libass), HarfBuzz 14.2.1 (MIT,
+libass 0.17.5 (ISC, https://github.com/libass/libass), HarfBuzz 14.5.0 (MIT,
 https://github.com/harfbuzz/harfbuzz), FreeType 2.14.3 (FreeType License,
 https://freetype.org) and FriBidi 1.0.17 (LGPL-2.1-or-later,
 https://github.com/fribidi/fribidi). Their license texts ship inside the JVM

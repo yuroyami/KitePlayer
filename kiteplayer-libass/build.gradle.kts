@@ -42,7 +42,7 @@ plugins {
  */
 
 /** The KiteFFmpeg release whose assets are `ass-chain-<target>.zip`; see FetchAssChainTask. */
-val assChainReleaseTag = "ass-chain-r1"
+val assChainReleaseTag = "ass-chain-r2"
 
 val chainRootProperty: File? = providers.gradleProperty("kiteplayer.libass.root")
     .map { File(it).absoluteFile.normalize() }

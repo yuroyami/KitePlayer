@@ -107,6 +107,9 @@ public actual class ShaderProgram actual constructor(source: String) {
         // blends rather than steps.
         val mode = if (tiled) android.graphics.Shader.TileMode.REPEAT else android.graphics.Shader.TileMode.CLAMP
         val bitmap = BitmapShader(image.asAndroidBitmap(), mode, mode)
+        // Fed to a RuntimeShader, a BitmapShader samples the nearest pixel unless it is told to
+        // blend. The desktop and iOS programs sample smoothly, so this matches them.
+        bitmap.filterMode = BitmapShader.FILTER_MODE_LINEAR
         try {
             target.setInputShader(name, bitmap)
         } catch (ignored: Throwable) {

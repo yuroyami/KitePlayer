@@ -81,11 +81,15 @@ public class ChoiceGene internal constructor(
     public var mix: Float = 1f
         private set
 
+    // The weights the running change started from. A change that begins inside another one fades on
+    // from where the picture stands, so no option jumps.
+    private val from = FloatArray(options).also { it[start.coerceIn(0, options - 1)] = 1f }
+
     /** How much of [option] to draw right now: 1 when settled on it, fading in or out during a change. */
-    public fun weight(option: Int): Float = when (option) {
-        value -> if (previous == value) 1f else mix
-        previous -> 1f - mix
-        else -> 0f
+    public fun weight(option: Int): Float {
+        if (option !in 0 until options) return 0f
+        val target = if (option == value) 1f else 0f
+        return if (mix >= 1f) target else (1f - mix) * from[option] + mix * target
     }
 
     /** True for a two-way choice that is on. */
@@ -94,6 +98,7 @@ public class ChoiceGene internal constructor(
     public fun choose(option: Int) {
         val wanted = option.coerceIn(0, options - 1)
         if (wanted == value) return
+        for (option in from.indices) from[option] = weight(option)
         previous = value
         value = wanted
         mix = 0f
@@ -119,6 +124,8 @@ public class ChoiceGene internal constructor(
         value = start
         previous = start
         mix = 1f
+        from.fill(0f)
+        from[start.coerceIn(0, options - 1)] = 1f
     }
 }
 

@@ -262,10 +262,20 @@ class PostProcessTest {
         }
     }
 
-    private fun bareFrame(dropPulse: Float = 0f, kick: Float = 0f) = SpectrumFrame(
+    private fun bareFrame(dropPulse: Float = 0f, kick: Float = 0f, level: Float = 0f) = SpectrumFrame(
         ptsMicros = 0L, bands = FloatArray(8), peaks = FloatArray(8), scope = FloatArray(16),
-        level = 0f, bass = 0f, mid = 0f, treble = 0f, beat = 0f, pulse = 0f, kick = kick, dropPulse = dropPulse,
+        level = level, bass = 0f, mid = 0f, treble = 0f, beat = 0f, pulse = 0f, kick = kick, dropPulse = dropPulse,
     )
+
+    @Test
+    fun aPlayingPictureTearsDifferentlyOnEveryDraw() {
+        val spec = PostSpec(bloom = 0f, vignette = 0f, grain = 0f, glitch = true, aberration = 0f)
+        val playing = bareFrame(dropPulse = 0.6f, level = 0.5f)
+        assertTrue(playing.audible > 0f && !playing.held, "the fixture must be a playing frame")
+        val pictures = renderSteps(spec, playing, calm = false, count = 4)
+        val moved = (1 until pictures.size).count { differing(pictures[0], pictures[it]) > 0 }
+        assertTrue(moved >= 2, "the strips should move on most draws of a playing picture, moved on $moved of 3")
+    }
 
     @Test
     fun aPausedPictureHoldsItsTearStill() {

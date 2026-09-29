@@ -166,7 +166,16 @@ internal fun PostProcessedBox(
     val grainOffset = remember { FloatArray(2) }
     // The torn strips as a top, a height and a slide each. New ones are picked only while the music
     // plays, so a picture paused in the middle of a tear holds it still.
-    val tears = remember { FloatArray(TORN_STRIPS * 3) }
+    val tears = remember {
+        FloatArray(TORN_STRIPS * 3).also {
+            // A first tear on a paused picture, after a seek, shows valid strips rather than five at the top.
+            for (strip in 0 until TORN_STRIPS) {
+                it[strip * 3] = random.next()
+                it[strip * 3 + 1] = random.next()
+                it[strip * 3 + 2] = random.signed()
+            }
+        }
+    }
     val effect = remember { lazy { ScenePostEffect() } }
     DisposableEffect(effect) { onDispose { if (effect.isInitialized()) effect.value.close() } }
 

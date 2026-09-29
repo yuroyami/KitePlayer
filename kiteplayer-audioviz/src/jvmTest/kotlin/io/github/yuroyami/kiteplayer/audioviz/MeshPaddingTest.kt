@@ -109,6 +109,20 @@ class MeshPaddingTest {
     }
 
     @Test
+    fun aMeshWithMoreIndicesThanTheLargestSizeStillDraws() {
+        val mesh = TriangleMesh(maxVertices = 64, maxIndices = 300_000)
+        val a = mesh.vertex(2f, 2f, -1)
+        val b = mesh.vertex(20f, 2f, -1)
+        val c = mesh.vertex(2f, 20f, -1)
+        repeat(100_000) { mesh.triangle(a, b, c) }
+        assertTrue(mesh.indexCount > 196_608, "the fixture must exceed the largest size class")
+        val indices = mesh.indicesPadded()
+        assertTrue(indices.size >= mesh.indexCount && indices.size % 3 == 0)
+        for (at in mesh.indexCount until indices.size) assertTrue(indices[at].toInt() == 0)
+        assertTrue(pixels { drawMesh(mesh) }.any { it != 0 }, "the mesh drew nothing")
+    }
+
+    @Test
     fun theExtraCornersAndTrianglesAreEmptyWhateverWasDrawnBefore() {
         val mesh = TriangleMesh(maxVertices = 4096)
         fill(mesh, 200)

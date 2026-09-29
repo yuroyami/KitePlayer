@@ -138,12 +138,22 @@ public class TriangleMesh(
     }
 
     internal fun indicesPadded(): ShortArray {
-        val k = sizeClass(indexCount, FIRST_INDICES)
-        val padded = paddedIndices[k] ?: ShortArray(FIRST_INDICES shl k).also { paddedIndices[k] = it }
+        val largest = FIRST_INDICES shl (SIZES - 1)
+        val padded = if (indexCount <= largest) {
+            val k = sizeClass(indexCount, FIRST_INDICES)
+            paddedIndices[k] ?: ShortArray(FIRST_INDICES shl k).also { paddedIndices[k] = it }
+        } else {
+            // A mesh with more indices than the largest size class, which maxIndices allows. It gets
+            // one array that grows in steps, so it still allocates only when it outgrows itself.
+            val length = (indexCount + FIRST_INDICES - 1) / FIRST_INDICES * FIRST_INDICES
+            if (hugeIndices.size < length) hugeIndices = ShortArray(length)
+            hugeIndices
+        }
         indices.copyInto(padded, 0, 0, indexCount)
         padded.fill(0, indexCount, padded.size)
         return padded
     }
+    private var hugeIndices = ShortArray(0)
 
     private companion object {
         /** The smallest padded size in corners. Larger sizes double up to 32768. */

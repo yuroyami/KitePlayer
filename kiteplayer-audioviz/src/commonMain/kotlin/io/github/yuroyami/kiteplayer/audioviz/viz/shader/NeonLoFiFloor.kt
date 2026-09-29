@@ -74,7 +74,10 @@ internal class NeonLoFiFloor {
                 flight.project(flight.road(z0) + inner * side, 0f, z0, width, height, points, 8)
                 flight.project(flight.road(z0) + outer * side, 0f, z0, width, height, points, 10)
                 flight.project(flight.road(z1) + inner * side, 0f, z1, width, height, points, 12)
-                if ((0..6 step 2).all { points[it] < -4f } || (0..6 step 2).all { points[it] > width + 4f }) continue
+                // Every x of the top face, on the same side of the frame. No range: this runs for every cell.
+                val x0 = points[0]; val x1 = points[2]; val x2 = points[4]; val x3 = points[6]
+                if ((x0 < -4f && x1 < -4f && x2 < -4f && x3 < -4f) ||
+                    (x0 > width + 4f && x1 > width + 4f && x2 > width + 4f && x3 > width + 4f)) continue
                 // A face at an equal/lower depth is submitted later. Each cell is opaque even in silence.
                 val at = row * 16 + lane
                 if (h < flight.height) {

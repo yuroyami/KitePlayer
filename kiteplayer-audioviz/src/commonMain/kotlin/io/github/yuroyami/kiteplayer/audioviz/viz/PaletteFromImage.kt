@@ -2,7 +2,6 @@ package io.github.yuroyami.kiteplayer.audioviz.viz
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.toPixelMap
 import kotlin.math.atan2
 import kotlin.math.cbrt
 import kotlin.math.pow
@@ -50,15 +49,17 @@ internal fun Color.toOklab(): Oklab {
  * result the same every time for the same picture.
  */
 internal fun dominantColors(image: ImageBitmap, count: Int = 5): List<Color> {
-    val pixels = image.toPixelMap()
     val stepX = (image.width / GRID).coerceAtLeast(1)
     val stepY = (image.height / GRID).coerceAtLeast(1)
     val samples = ArrayList<Oklab>()
+    // One pixel at a time: reading the whole picture would allocate an array of every pixel of a cover.
+    val pixel = IntArray(1)
     var y = 0
     while (y < image.height) {
         var x = 0
         while (x < image.width) {
-            val colour = pixels[x, y]
+            image.readPixels(pixel, x, y, 1, 1)
+            val colour = Color(pixel[0])
             if (colour.alpha > 0.5f) samples += colour.toOklab()
             x += stepX
         }

@@ -1,5 +1,5 @@
 [versions] #######################################################################################
-# Toolchain. Kept in lock-step with KiteImage / KiteAudio / KiteFFmpeg / KitePDF so the Kite
+# Toolchain. Kept in lock-step with KiteImageCodec / KiteAudio / KiteFFmpeg / KitePDF so the Kite
 # lineage builds with one shared stack. Values are pushed here by KiteVersions.
 kotlin = "2.4.10"
 agp = "9.4.0"

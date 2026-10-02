@@ -10,6 +10,23 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
+### Upgrading from 0.2.0
+
+- HLS plays through the default stack (#209). An address that ends in `.m3u8`, an HLS content
+  type, or `formatHint = "hls"` marks a playlist. A master playlist plays one variant, the one with
+  the highest bitrate within the new `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.
+  The README's Network section lists what plays.
+- `MediaIo` gains `location`, `contentType` and `openRelated`, each with a default that changes
+  nothing. A reader that wraps another one by hand must pass the three on, or an HLS stream read
+  through it cannot open its segments. Kotlin's `by` delegation passes them on already.
+- `DemuxPolicy` gains `maxBitrate` and `maxVideoHeight`, which change its generated data-class
+  methods, so recompile. `PlayerMemento.FORMAT_VERSION` is 5 because the memento stores them, and
+  a build older than this one refuses a memento that this one wrote.
+- `PlaybackWarning` gains `SegmentSkipped`, so a `when` that lists every warning needs the new
+  branch.
+- `Progress.bufferedRanges` is empty for an HLS stream, and `PlaybackStats.ioBytesTotal` counts the
+  bytes of its segments and keys.
+
 ## [0.2.0] - 2026-09-29
 
 ### Upgrading from 0.0.27

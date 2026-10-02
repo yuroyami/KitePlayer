@@ -52,8 +52,23 @@ public data class DemuxPolicy(
     val lowLatency: Boolean = false,
     /** Bytes to skip before probing, for a file with junk in front of its header. */
     val skipInitialBytes: Long = 0,
+    /**
+     * The highest bitrate, in bits per second, of the variant that an adaptive stream plays, or
+     * null for no limit. An HLS master playlist offers the same media as several variants, and the
+     * backend plays the variant with the highest bitrate within this limit and [maxVideoHeight].
+     * When no variant fits, it plays the one with the lowest bitrate. Media with one variant has no
+     * choice to make, so the limit does not apply to it.
+     */
+    val maxBitrate: Long? = null,
+    /**
+     * The tallest picture, in pixels, of the variant that an adaptive stream plays, or null for no
+     * limit. It works with [maxBitrate], and a variant that does not state its size passes.
+     */
+    val maxVideoHeight: Int? = null,
 ) {
     init {
         require(skipInitialBytes >= 0) { "skipInitialBytes must not be negative, was $skipInitialBytes" }
+        require(maxBitrate == null || maxBitrate > 0) { "maxBitrate must be positive, was $maxBitrate" }
+        require(maxVideoHeight == null || maxVideoHeight > 0) { "maxVideoHeight must be positive, was $maxVideoHeight" }
     }
 }

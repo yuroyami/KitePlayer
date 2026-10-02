@@ -194,6 +194,8 @@ public data class Progress(
      *
      * Empty for opens that read through no [MediaIo] (a local file on FFmpeg's own path), when
      * the cache is disabled, or when the source declares no size or duration to map against.
+     * Empty for an HLS stream too: the cached reader holds the playlist, and the segments come
+     * from other addresses. [bufferedAhead] still says how far ahead the demuxer has read.
      */
     val bufferedRanges: List<ClosedRange<Duration>> = emptyList(),
 )
@@ -309,7 +311,7 @@ public data class PlaybackStats(
      * Counts what came over the wire: a seek served from the engine's byte cache adds nothing, and
      * an item opened as a plain path, which the backend reads through its own protocol rather than
      * through the engine's cache, stays at zero throughout. Zero therefore means "not measurable
-     * here", not "nothing was read".
+     * here", not "nothing was read". The segments and keys of an HLS stream count too.
      */
     val ioBytesTotal: Long = 0,
     /** Bytes pulled over the last stats interval, per second. Same caveat as [ioBytesTotal]. */

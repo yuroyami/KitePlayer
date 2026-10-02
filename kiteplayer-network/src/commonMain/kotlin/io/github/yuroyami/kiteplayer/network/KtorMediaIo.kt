@@ -10,6 +10,7 @@ import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
 import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.cancel
@@ -54,14 +55,25 @@ import kotlinx.coroutines.withTimeoutOrNull
  * a changed tag or total size fails the read. Each reconnect is reported through [setWarningSink]
  * as [PlaybackWarning.SourceReconnecting]. A reader whose server has no ranges can start again
  * only before its first byte.
+ *
+ * [openRelated] opens the other addresses that the media names, such as the segments of an HLS
+ * playlist, as readers of their own on the same client. Only http and https addresses open. The
+ * item's own headers go only to the scheme, host and port of the item's address, because the
+ * addresses come from the media. Headers that a [KtorMediaIoResolver] adds by default go to every
+ * address. An open that times out, fails to connect or meets a server error tries again after a
+ * backoff, as a read does.
  */
 public class KtorMediaIo private constructor(
     private val client: HttpClient,
     private val ownsClient: Boolean,
     private val uri: String,
     private val requestHeaders: Map<String, String>,
+    /** The headers a related reader gets: the defaults on every address, the rest on the item's own. */
+    private val related: RelatedRequests,
     override val size: Long?,
     override val seekable: Boolean,
+    override val location: String,
+    override val contentType: String?,
     /** The strong entity tag of the first response, or null. Every ranged request asks for it. */
     private val entityTag: String?,
     firstBody: ByteReadChannel,
@@ -115,6 +127,36 @@ public class KtorMediaIo private constructor(
 
     override fun setWarningSink(sink: (PlaybackWarning) -> Unit) {
         warningSink = sink
+    }
+
+    /**
+     * A new reader for [uri] on this reader's client, or null when [uri] is not http or https.
+     * The reader reports through this reader's warning sink, and the caller closes it.
+     */
+    override suspend fun openRelated(uri: String): MediaIo? {
+        if (closed) throw KtorMediaIoException("openRelated after close on $shown")
+        if (!uri.isHttpUri()) return null
+        var attempts = 0
+        while (true) {
+            val failure = try {
+                return open(uri, client, ownsClient = false, related.headersFor(uri), related, policy, redirects)
+                    .also { it.setWarningSink(warningSink) }
+            } catch (failure: Throwable) {
+                // The caller's own cancellation ends the open. Anything else is the connection's.
+                currentCoroutineContext().ensureActive()
+                failure
+            }
+            if (closed || attempts >= policy.maxReconnects || !mayOpenAgainAfter(failure)) throw failure
+            attempts++
+            warningSink(PlaybackWarning.SourceReconnecting(0, attempts, failure.message ?: failure.toString()))
+            delay(policy.backoff(attempts))
+        }
+    }
+
+    /** True when a new attempt may open what [failure] refused: a timeout, a dropped connection or a server error. */
+    private fun mayOpenAgainAfter(failure: Throwable): Boolean {
+        if (failure is KtorMediaIoException && !failure.retryable) return false
+        return redirects?.isRefusal(failure) != true
     }
 
     /** One read from the current response, or from a new one at [position]. */
@@ -294,10 +336,23 @@ public class KtorMediaIo private constructor(
             headers: Map<String, String>,
             policy: HttpReaderPolicy,
             redirects: RedirectRule?,
+            defaultHeaders: Map<String, String> = emptyMap(),
+        ): KtorMediaIo {
+            val related = RelatedRequests(uri, defaultHeaders, headers)
+            return open(uri, client ?: HttpClient(), ownsClient = client == null, headers, related, policy, redirects)
+        }
+
+        /** Probes [uri] on [http], which the new reader closes when it [ownsClient]. */
+        private suspend fun open(
+            uri: String,
+            http: HttpClient,
+            ownsClient: Boolean,
+            headers: Map<String, String>,
+            related: RelatedRequests,
+            policy: HttpReaderPolicy,
+            redirects: RedirectRule?,
         ): KtorMediaIo {
             val shown = shownUri(uri)
-            val ownsClient = client == null
-            val http = client ?: HttpClient()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val probe = CompletableDeferred<Probe>()
             val pipe = ByteChannel(autoFlush = true)
@@ -312,6 +367,9 @@ public class KtorMediaIo private constructor(
                             redirects?.refuseHidden(response, shown)
                             // A weak tag cannot make a range request conditional, so only a strong one is kept.
                             val tag = response.headers[HttpHeaders.ETag]?.takeUnless { it.startsWith("W/") }
+                            // The request that answered, after every redirect Ktor followed.
+                            val location = response.call.request.url.toString()
+                            val type = response.headers[HttpHeaders.ContentType]
                             when (response.status) {
                                 HttpStatusCode.PartialContent -> {
                                     // Content-Range: bytes 0-last/total, total possibly "*". A range that
@@ -323,13 +381,19 @@ public class KtorMediaIo private constructor(
                                                 "${response.headers[HttpHeaders.ContentRange]}",
                                         )
                                     }
-                                    probe.complete(Probe(range.complete, seekable = true, tag))
+                                    probe.complete(Probe(range.complete, seekable = true, tag, location, type))
                                 }
                                 HttpStatusCode.OK -> {
                                     val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                                    probe.complete(Probe(total, seekable = false, tag))
+                                    probe.complete(Probe(total, seekable = false, tag, location, type))
                                 }
-                                else -> throw KtorMediaIoException("cannot open $shown: ${response.status}")
+                                else -> throw KtorMediaIoException(
+                                    "cannot open $shown: ${response.status}",
+                                    // A server error, an overloaded server or a slow request may pass.
+                                    retryable = response.status.value >= 500 ||
+                                        response.status == HttpStatusCode.RequestTimeout ||
+                                        response.status == HttpStatusCode.TooManyRequests,
+                                )
                             }
                             response.bodyAsChannel().copyTo(pipe)
                             pipe.close()
@@ -340,9 +404,9 @@ public class KtorMediaIo private constructor(
                     probe.completeExceptionally(failure)
                 }
             }
-            val (size, seekable, entityTag) = try {
+            val answer = try {
                 withTimeoutOrNull(policy.connectTimeout) { probe.await() }
-                    ?: throw KtorMediaIoException("no answer from $shown within ${policy.connectTimeout}")
+                    ?: throw KtorMediaIoException("no answer from $shown within ${policy.connectTimeout}", retryable = true)
             } catch (failure: Throwable) {
                 scope.cancel()
                 if (ownsClient) http.close()
@@ -353,9 +417,12 @@ public class KtorMediaIo private constructor(
                 ownsClient = ownsClient,
                 uri = uri,
                 requestHeaders = headers,
-                size = size,
-                seekable = seekable,
-                entityTag = entityTag,
+                related = related,
+                size = answer.size,
+                seekable = answer.seekable,
+                location = answer.location,
+                contentType = answer.contentType,
+                entityTag = answer.entityTag,
                 firstBody = pipe,
                 firstJob = job,
                 scope = scope,
@@ -367,7 +434,31 @@ public class KtorMediaIo private constructor(
 }
 
 /** What the first response said about the file. */
-private data class Probe(val size: Long?, val seekable: Boolean, val entityTag: String?)
+private class Probe(
+    val size: Long?,
+    val seekable: Boolean,
+    val entityTag: String?,
+    val location: String,
+    val contentType: String?,
+)
+
+/**
+ * The headers of the requests that a reader's related readers send. [defaults] go to every address.
+ * [itemHeaders] go only to the scheme, host and port of [itemUri], because the addresses come from
+ * the media and a header there may be a credential.
+ */
+internal class RelatedRequests(
+    itemUri: String,
+    private val defaults: Map<String, String>,
+    private val itemHeaders: Map<String, String>,
+) {
+    private val itemOrigin = originOrNull(itemUri)
+
+    fun headersFor(uri: String): Map<String, String> =
+        if (itemOrigin != null && originOrNull(uri) == itemOrigin) itemHeaders else defaults
+
+    private fun originOrNull(uri: String): String? = runCatching { originOf(Url(uri)) }.getOrNull()
+}
 
 /** A typed failure from the http reader, surfaced to FFmpeg as an I/O error on the read. */
 public class KtorMediaIoException internal constructor(
@@ -386,6 +477,9 @@ public class KtorMediaIoException internal constructor(
  * Adding this module already supplies automatic transport for standard opens, whose private
  * clients close with each reader. Use this resolver when the application owns a shared client
  * or wants resolver-wide defaults. Per-item headers override these defaults.
+ *
+ * The defaults also go to every related address a reader opens, such as an HLS segment on another
+ * server. Per-item headers go only to the scheme, host and port of the item's own address.
  *
  * The lazily created client lives for the resolver's lifetime, which is normally the process:
  * exactly how OkHttp and NSURLSession want to be held. A resolver with a shorter life closes
@@ -410,7 +504,7 @@ public class KtorMediaIoResolver(
         if (!uri.isHttpUri()) return null
         val itemNames = headers.keys.map { it.lowercase() }.toSet()
         val merged = this.headers.filterKeys { it.lowercase() !in itemNames } + headers
-        return KtorMediaIo.open(uri, shared, merged, policy)
+        return KtorMediaIo.open(uri, shared, merged, policy, redirects = null, defaultHeaders = this.headers)
     }
 
     /** Closes the client this resolver created, if it ever created one. Idempotent. */

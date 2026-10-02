@@ -21,10 +21,9 @@ import kotlinx.coroutines.runBlocking
  */
 internal actual class BlockingMediaIo actual constructor(
     private val io: MediaIo,
+    /** The parent of every read and seek, shared by every bridge of one source. Cancelled only by [interrupt]. */
+    private val lifetime: Job,
 ) : MediaByteSource {
-
-    /** The parent of every read and seek. Cancelled only by [interrupt]. */
-    private val lifetime = Job()
 
     actual override val size: Long? get() = io.size
     actual override val seekable: Boolean get() = io.seekable
@@ -48,3 +47,7 @@ internal actual class BlockingMediaIo actual constructor(
         lifetime.cancel(CancellationException("the media source was interrupted"))
     }
 }
+
+internal actual fun <T> blockingIn(lifetime: Job, block: suspend () -> T): T = runBlocking(lifetime) { block() }
+
+internal actual val nestedOpensSupported: Boolean = true

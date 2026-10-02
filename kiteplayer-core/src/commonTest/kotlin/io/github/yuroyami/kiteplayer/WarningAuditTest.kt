@@ -47,9 +47,14 @@ class WarningAuditTest {
         PlaybackWarning.RecordingStopped("x.mkv", "x"),
         PlaybackWarning.SourceReconnecting(1_024, 1, "x"),
         PlaybackWarning.GaplessFallback(1, "x"),
+        PlaybackWarning.SegmentSkipped("https://cdn.example/seg-1.ts", "x"),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
+        is PlaybackWarning.SegmentSkipped -> listOf(
+            "HlsLedger in :kiteplayer-ffmpeg, when an address that an HLS playlist names fails to open or " +
+                "fails during a read; it reaches the player through KiteFFmpegSource.onWarning",
+        )
         is PlaybackWarning.GaplessFallback -> listOf(
             "PlaybackCore's queue handoff, when the next item cannot follow the current one without a " +
                 "gap: its preload failed or was not ready, an item has no audio, its audio format differs, " +

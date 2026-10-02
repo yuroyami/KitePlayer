@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteffmpeg.MediaByteSource
+import kotlinx.coroutines.Job
 
 /**
  * Adapts the engine's suspending [MediaIo] onto KiteFFmpeg's blocking [MediaByteSource].
@@ -20,7 +21,7 @@ import io.github.yuroyami.kiteffmpeg.MediaByteSource
  * a publication is built from. That is why this was red from the day the expect/actual split
  * landed until the first publish after it.
  */
-internal expect class BlockingMediaIo(io: MediaIo) : MediaByteSource {
+internal expect class BlockingMediaIo(io: MediaIo, lifetime: Job) : MediaByteSource {
     override val size: Long?
     override val seekable: Boolean
     override fun read(into: ByteArray, offset: Int, length: Int): Int
@@ -28,10 +29,20 @@ internal expect class BlockingMediaIo(io: MediaIo) : MediaByteSource {
     override fun close()
 
     /**
-     * Ends the read or seek in flight and makes every later one fail at once. FFmpeg's own
-     * interrupt flag cannot do this, because FFmpeg reads that flag before it calls the bridge and
-     * never while the bridge waits. One way, because the source this bridge feeds is being given
-     * up. Safe from any thread.
+     * Ends the read or seek in flight and makes every later one fail at once, by cancelling the
+     * lifetime. Every bridge of one source shares that lifetime: the playlist's and those of the
+     * segments it names. FFmpeg's own interrupt flag cannot do this, because FFmpeg reads that flag
+     * before it calls the bridge and never while the bridge waits. One way, because the source
+     * this bridge feeds is being given up. Safe from any thread.
      */
     fun interrupt()
 }
+
+/**
+ * Runs [block] to its end on this thread, as a child of [lifetime], or throws on a target that
+ * cannot block. The HLS opener calls it, because FFmpeg asks for each address synchronously.
+ */
+internal expect fun <T> blockingIn(lifetime: Job, block: suspend () -> T): T
+
+/** False on the web, whose binding of KiteFFmpeg refuses a nested opener and which cannot block. */
+internal expect val nestedOpensSupported: Boolean

@@ -70,7 +70,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         // The same open KiteFFmpegMediaBackend.open runs. This factory once dropped headers,
         // openOptions, formatHint and videoFilter and skipped the FFmpeg identity mapping, so the
         // documented SPI door behaved differently from the backend door for the same MediaItem.
-        val source = mappingFFmpegRuntimeRejection { openItem(media).let { KiteFFmpegSource(it.source, it.bridge) } }
+        val source = mappingFFmpegRuntimeRejection { openItem(media).let { KiteFFmpegSource(it.source, it.bridge, it.hls) } }
         source.attachItemFilters(media)
         return source
     }
@@ -99,6 +99,8 @@ public class KiteFFmpegSource internal constructor(
     private val source: MediaSource,
     /** The bridge that reads the item's own reader, when it has one. [interrupt] must reach it too. */
     private val bridge: BlockingMediaIo? = null,
+    /** What happened to the addresses of an HLS stream read through the item's reader. */
+    private val hls: HlsLedger? = null,
 ) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null
@@ -112,8 +114,14 @@ public class KiteFFmpegSource internal constructor(
      *
      * The callback runs on whichever thread called `receive`, which is the decoder's own thread, so it
      * must be cheap and must not block. Set it before decoding starts. The default discards.
+     *
+     * An HLS stream also reports each address it could not read here, those from the open included.
      */
     public var onWarning: (PlaybackWarning) -> Unit = {}
+        set(value) {
+            field = value
+            hls?.attach(value)
+        }
 
     /** Reads [onWarning] when it warns, because the engine replaces that listener after construction. */
     private val recorder = SourceRecorder(source) { onWarning(it) }
@@ -159,8 +167,12 @@ public class KiteFFmpegSource internal constructor(
     /**
      * Read from the input, never assumed. False for a pipe or a capture device, and a player that
      * offers a seek bar for one of those offers a control that fails on every use.
+     *
+     * An HLS stream can seek when its playlist has a duration, which FFmpeg sets for a finished
+     * playlist and an event playlist, the two it can seek in. The playlist's own bytes say nothing,
+     * because a server may answer a playlist without byte ranges.
      */
-    override val seekable: Boolean = source.isSeekable
+    override val seekable: Boolean = if (source.formatName == "hls") duration != null else source.isSeekable
 
     override val metadata: Map<String, String> = source.metadata
 
@@ -200,10 +212,11 @@ public class KiteFFmpegSource internal constructor(
     /**
      * MPEG-TS and friends declare that their timestamps may jump. The engine uses this to pick a
      * 10 second rather than a 3600 second ceiling on a frame's duration, and to decide how large a
-     * jump is a discontinuity rather than drift.
+     * jump is a discontinuity rather than drift. HLS joins segments that may each start a new
+     * timeline, and FFmpeg passes those jumps on.
      */
     override val timestampsMayJump: Boolean =
-        source.formatName.let { it.contains("mpegts") || it.contains("rtsp") || it.contains("rtp") }
+        source.formatName.let { it.contains("mpegts") || it.contains("rtsp") || it.contains("rtp") || it == "hls" }
 
     override fun selectStreams(indices: Set<Int>) {
         check(reader == null) { "streams must be selected before the first read" }
@@ -249,7 +262,11 @@ public class KiteFFmpegSource internal constructor(
 
     override suspend fun readPacket(): PlayerPacket? {
         val reader = reader ?: error("selectStreams must be called before readPacket")
-        val packet = reader.read() ?: return null
+        val packet = reader.read() ?: run {
+            // FFmpeg skips what it cannot read, so a stream whose server stopped answering ends here too.
+            hls?.failureAtEnd()?.let { throw it }
+            return null
+        }
         recorder.copy(packet)
         return KiteFFmpegPacket(packet, mapper)
     }

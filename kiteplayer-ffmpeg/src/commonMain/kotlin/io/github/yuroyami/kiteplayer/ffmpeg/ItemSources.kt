@@ -13,9 +13,10 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * One opened item: the KiteFFmpeg source, and the blocking bridge when the item brought its own
  * reader. An interrupt must reach the bridge as well as the source, because FFmpeg's own flag
- * cannot end a read that waits inside the reader.
+ * cannot end a read that waits inside the reader. [hls] is set for an HLS stream read through the
+ * item's reader.
  */
-internal class OpenedItem(val source: MediaSource, val bridge: BlockingMediaIo?)
+internal class OpenedItem(val source: MediaSource, val bridge: BlockingMediaIo?, val hls: HlsLedger? = null)
 
 /**
  * Opens a KiteFFmpeg source for [item]. Playback, thumbnails, waveforms and loudness all open
@@ -29,6 +30,9 @@ internal class OpenedItem(val source: MediaSource, val bridge: BlockingMediaIo?)
  * rather than a media error. The cancel raises an [OpenInterrupt], which FFmpeg sees inside its
  * network protocols and during stream discovery, and it interrupts the bridge of an item's own
  * reader. A wait anywhere else inside FFmpeg finishes before the cancel is seen.
+ *
+ * An HLS playlist read through the item's reader opens through [openHls]: the playlist is read
+ * here, a master playlist keeps one variant, and the reader opens the addresses the playlist names.
  */
 internal suspend fun openItem(item: MediaItem): OpenedItem {
     FFmpegLogForwarding.install()
@@ -42,11 +46,34 @@ internal suspend fun openItem(item: MediaItem): OpenedItem {
     return when {
         // The custom AVIO bridge: the reader carries the media, with no path and no FFmpeg protocol.
         io != null -> {
-            val bridge = BlockingMediaIo(io)
-            val source = openCancellably({ cancel.interrupt(); bridge.interrupt() }) {
-                MediaSource.open(bridge, options, cancel)
+            // Every bridge of this source lives on it, the bridges of an HLS stream's segments too.
+            val lifetime = Job()
+            val hls = if (looksLikeHls(item.formatHint, io.contentType, io.location ?: item.uri)) {
+                try {
+                    openHls(item, io, lifetime)
+                } catch (failure: Throwable) {
+                    io.close()
+                    throw failure
+                }
+            } else {
+                null
             }
-            OpenedItem(source, bridge)
+            val bridge = BlockingMediaIo(hls?.playlist ?: io, lifetime)
+            val source = openCancellably({ cancel.interrupt(); bridge.interrupt() }) {
+                if (hls == null) {
+                    MediaSource.open(bridge, options, cancel)
+                } else {
+                    MediaSource.open(
+                        bridge,
+                        options + hls.options(item),
+                        cancel,
+                        url = hls.url,
+                        mimeType = HLS_MEDIA_TYPE,
+                        nestedOpener = hls.opener,
+                    )
+                }
+            }
+            OpenedItem(source, bridge, hls?.ledger)
         }
         // No protocol reads the descriptor now, so no protocol is left to consume its key.
         descriptor != null ->

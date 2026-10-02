@@ -33,6 +33,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A Gradle compile task with no sources prints `NO-SOURCE` and exits zero, so "the target compiles
   now" can mean "there was never anything there to compile". Grep the log for that word against the
   exact task name, or check that the run reports a test count rather than a build result.
+- A Kotlin/Native test report gives every test a time near zero, so a test that returned early
+  because it found no fixture reads exactly like one that ran. To prove a native test reads its
+  media, hide the fixture once and watch it fail.
 - `./gradlew ... | tail` reports the exit code of `tail`. A background build once reported success
   with BUILD FAILED sitting in its own log.
 - Moving or renaming the checkout breaks the prebuilt C test binaries: they carry an absolute path
@@ -311,6 +314,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
   punch by about a quarter at 60 Hz, so do not swap it in as a simplification (#361).
 - The spectrum histories take 60 rows for each heard second, not one row for each display step. A
   row per step shortens the span on a fast screen and keeps writing under a pause (#355).
+- FFmpeg's HLS demuxer seeks backward to the start of the segment that holds the target, so a
+  keyframe seek lands up to one segment early and a precise seek decodes forward from there. It
+  reads a run of byte-range fragments of one file through one reader, so playing from the start
+  asks for that file from byte 0 only, and a range request appears only after a seek (#209).
 
 ### The web target
 

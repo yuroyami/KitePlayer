@@ -118,3 +118,9 @@ kotlin {
         }
     }
 }
+
+// The HLS end-to-end test serves the fixtures at the repo root, and a native test's working
+// directory is the module, so the location is passed in explicitly.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
+    environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+}

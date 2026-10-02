@@ -531,6 +531,45 @@ else
     -map 0:v -map 1 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:s ass typeset.mkv
 fi
 
+echo "HLS streams in hls/: two variants, a separate audio rendition, AES-128, and fMP4 byte ranges"
+# Read by the HLS tests through a reader that maps addresses to these files, so every playlist
+# names its segments relatively, as a server's would. Two second segments with a keyframe at each.
+mkdir -p hls
+hls_video=(-c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 30 -keyint_min 30 -sc_threshold 0)
+hls_vod=(-f hls -hls_time 2 -hls_playlist_type vod -hls_list_size 0)
+# A master playlist with a 320x180 and a 640x360 variant, each with its own muxed sound.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=30:duration=12" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=12" \
+  -filter_complex "[0:v]split=2[hi][lo0];[lo0]scale=320:180[lo]" \
+  -map "[lo]" -map 1:a -map "[hi]" -map 1:a \
+  "${hls_video[@]}" -b:v:0 300k -b:v:1 900k -c:a aac -b:a 96k \
+  "${hls_vod[@]}" -hls_segment_filename "hls/ts-%v-%d.ts" -master_pl_name ts.m3u8 \
+  -var_stream_map "v:0,a:0 v:1,a:1" "hls/ts-%v.m3u8"
+# A master playlist whose one variant has no sound, and whose sound is an EXT-X-MEDIA rendition.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=12" \
+  -f lavfi -i "sine=frequency=660:sample_rate=48000:duration=12" \
+  -map 0:v -map 1:a "${hls_video[@]}" -b:v 300k -c:a aac -b:a 96k \
+  "${hls_vod[@]}" -hls_segment_filename "hls/alt-%v-%d.ts" -master_pl_name alt.m3u8 \
+  -var_stream_map "v:0,agroup:sound a:0,agroup:sound,language:en,default:yes" "hls/alt-%v.m3u8"
+# A media playlist of AES-128 segments. The key info names the key's address in the playlist,
+# the key file, and a fixed IV.
+printf '0123456789abcdef' > hls/aes.key
+printf 'aes.key\nhls/aes.key\n000102030405060708090a0b0c0d0e0f\n' > hls-aes.keyinfo
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=8" \
+  -f lavfi -i "sine=frequency=550:sample_rate=48000:duration=8" \
+  "${hls_video[@]}" -b:v 300k -c:a aac -b:a 96k \
+  "${hls_vod[@]}" -hls_key_info_file hls-aes.keyinfo -hls_segment_filename "hls/aes-%d.ts" hls/aes.m3u8
+rm -f hls-aes.keyinfo
+# A media playlist of fMP4 fragments in one file, each named by a byte range, after an init range.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=12" \
+  -f lavfi -i "sine=frequency=770:sample_rate=48000:duration=12" \
+  "${hls_video[@]}" -b:v 300k -c:a aac -b:a 96k \
+  "${hls_vod[@]}" -hls_segment_type fmp4 -hls_flags single_file hls/fmp4.m3u8
+
 # ---------------------------------------------------------------------------------------------
 # Provenance.
 #

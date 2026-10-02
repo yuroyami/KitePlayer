@@ -572,4 +572,14 @@ public sealed class PlaybackWarning {
     public data class GaplessFallback(val index: Int, val reason: String) : PlaybackWarning() {
         override val message: String get() = "queue item $index opened without the gapless handoff: $reason"
     }
+
+    /**
+     * An address that an HLS stream names could not be read: a segment, the key of a segment, or
+     * a playlist that a live stream reloads. [detail] says what failed. The demuxer skips a segment
+     * it cannot read, so the picture and the sound jump past it. A stream that ends while its last
+     * addresses fail ends with [PlaybackError.SourceUnavailable] instead of as complete.
+     */
+    public data class SegmentSkipped(val uri: String, val detail: String) : PlaybackWarning() {
+        override val message: String get() = "${redactUri(uri)} could not be read and was skipped: ${redactUrisIn(detail)}"
+    }
 }

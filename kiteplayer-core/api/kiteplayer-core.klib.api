@@ -828,11 +828,16 @@ abstract interface io.github.yuroyami.kiteplayer/MediaIo : kotlin/AutoCloseable 
         abstract fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/MediaIo.seekable.<get-seekable>|<get-seekable>(){}[0]
     abstract val size // io.github.yuroyami.kiteplayer/MediaIo.size|{}size[0]
         abstract fun <get-size>(): kotlin/Long? // io.github.yuroyami.kiteplayer/MediaIo.size.<get-size>|<get-size>(){}[0]
+    open val contentType // io.github.yuroyami.kiteplayer/MediaIo.contentType|{}contentType[0]
+        open fun <get-contentType>(): kotlin/String? // io.github.yuroyami.kiteplayer/MediaIo.contentType.<get-contentType>|<get-contentType>(){}[0]
+    open val location // io.github.yuroyami.kiteplayer/MediaIo.location|{}location[0]
+        open fun <get-location>(): kotlin/String? // io.github.yuroyami.kiteplayer/MediaIo.location.<get-location>|<get-location>(){}[0]
 
     abstract fun close() // io.github.yuroyami.kiteplayer/MediaIo.close|close(){}[0]
     abstract suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer/MediaIo.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
     abstract suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer/MediaIo.seek|seek(kotlin.Long){}[0]
     open fun setWarningSink(kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit>) // io.github.yuroyami.kiteplayer/MediaIo.setWarningSink|setWarningSink(kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>){}[0]
+    open suspend fun openRelated(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer/MediaIo.openRelated|openRelated(kotlin.String){}[0]
 
     final object Companion // io.github.yuroyami.kiteplayer/MediaIo.Companion|null[0]
 }
@@ -2161,7 +2166,7 @@ final class io.github.yuroyami.kiteplayer/Chapter { // io.github.yuroyami.kitepl
 }
 
 final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.kiteplayer/DemuxPolicy|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ...) // io.github.yuroyami.kiteplayer/DemuxPolicy.<init>|<init>(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/DemuxPolicy.<init>|<init>(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?){}[0]
 
     final val corruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.corruptPackets|{}corruptPackets[0]
         final fun <get-corruptPackets>(): io.github.yuroyami.kiteplayer/CorruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.corruptPackets.<get-corruptPackets>|<get-corruptPackets>(){}[0]
@@ -2169,6 +2174,10 @@ final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.ki
         final fun <get-generateTimestamps>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.generateTimestamps.<get-generateTimestamps>|<get-generateTimestamps>(){}[0]
     final val lowLatency // io.github.yuroyami.kiteplayer/DemuxPolicy.lowLatency|{}lowLatency[0]
         final fun <get-lowLatency>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.lowLatency.<get-lowLatency>|<get-lowLatency>(){}[0]
+    final val maxBitrate // io.github.yuroyami.kiteplayer/DemuxPolicy.maxBitrate|{}maxBitrate[0]
+        final fun <get-maxBitrate>(): kotlin/Long? // io.github.yuroyami.kiteplayer/DemuxPolicy.maxBitrate.<get-maxBitrate>|<get-maxBitrate>(){}[0]
+    final val maxVideoHeight // io.github.yuroyami.kiteplayer/DemuxPolicy.maxVideoHeight|{}maxVideoHeight[0]
+        final fun <get-maxVideoHeight>(): kotlin/Int? // io.github.yuroyami.kiteplayer/DemuxPolicy.maxVideoHeight.<get-maxVideoHeight>|<get-maxVideoHeight>(){}[0]
     final val probe // io.github.yuroyami.kiteplayer/DemuxPolicy.probe|{}probe[0]
         final fun <get-probe>(): io.github.yuroyami.kiteplayer/ProbeDepth // io.github.yuroyami.kiteplayer/DemuxPolicy.probe.<get-probe>|<get-probe>(){}[0]
     final val skipInitialBytes // io.github.yuroyami.kiteplayer/DemuxPolicy.skipInitialBytes|{}skipInitialBytes[0]
@@ -2179,7 +2188,9 @@ final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.ki
     final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.component3|component3(){}[0]
     final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.component4|component4(){}[0]
     final fun component5(): kotlin/Long // io.github.yuroyami.kiteplayer/DemuxPolicy.component5|component5(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ...): io.github.yuroyami.kiteplayer/DemuxPolicy // io.github.yuroyami.kiteplayer/DemuxPolicy.copy|copy(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long){}[0]
+    final fun component6(): kotlin/Long? // io.github.yuroyami.kiteplayer/DemuxPolicy.component6|component6(){}[0]
+    final fun component7(): kotlin/Int? // io.github.yuroyami.kiteplayer/DemuxPolicy.component7|component7(){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ...): io.github.yuroyami.kiteplayer/DemuxPolicy // io.github.yuroyami.kiteplayer/DemuxPolicy.copy|copy(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/DemuxPolicy.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/DemuxPolicy.toString|toString(){}[0]
@@ -3929,6 +3940,23 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ResourcesNotReleased.hashCode|hashCode(){}[0]
+    }
+
+    final class SegmentSkipped : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped|null[0]
+        constructor <init>(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.detail.<get-detail>|<get-detail>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.message.<get-message>|<get-message>(){}[0]
+        final val uri // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.uri|{}uri[0]
+            final fun <get-uri>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.uri.<get-uri>|<get-uri>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.component1|component1(){}[0]
+        final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.copy|copy(kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.hashCode|hashCode(){}[0]
     }
 
     final class SourceReconnecting : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting|null[0]

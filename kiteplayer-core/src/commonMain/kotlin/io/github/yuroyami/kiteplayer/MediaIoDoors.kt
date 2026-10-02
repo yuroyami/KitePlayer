@@ -9,7 +9,10 @@ package io.github.yuroyami.kiteplayer
 public fun MediaIo.Companion.ofBytes(bytes: ByteArray): MediaIoFactory =
     MediaIoFactory { ByteArrayMediaIo(bytes) }
 
-/** An item read through [io], with [label] used as its URI for probing, logs and display. */
+/**
+ * An item read through [io], with [label] used as its URI in logs and on screen. The FFmpeg backend
+ * also reads the label's extension to recognise an HLS playlist.
+ */
 public fun MediaItem.Companion.from(io: MediaIoFactory, label: String): MediaItem =
     MediaItem(uri = label, io = io)
 

@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteffmpeg.MediaByteSource
+import kotlinx.coroutines.Job
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.EmptyCoroutineContext
@@ -27,13 +28,14 @@ import kotlin.coroutines.intrinsics.startCoroutineUninterceptedOrReturn
  */
 internal actual class BlockingMediaIo actual constructor(
     private val io: MediaIo,
+    /** Cancelled by [interrupt]. Nothing here ever waits, so refusing every later call is all it can do. */
+    private val lifetime: Job,
 ) : MediaByteSource {
 
     actual override val size: Long? get() = io.size
     actual override val seekable: Boolean get() = io.seekable
 
-    /** Set by [interrupt]. Nothing here ever waits, so refusing every later call is all it can do. */
-    private var interrupted = false
+    private val interrupted: Boolean get() = lifetime.isCancelled
 
     actual override fun read(into: ByteArray, offset: Int, length: Int): Int {
         if (interrupted) throw CancellationException("the media source was interrupted")
@@ -64,9 +66,14 @@ internal actual class BlockingMediaIo actual constructor(
     actual override fun close(): Unit = io.close()
 
     actual fun interrupt() {
-        interrupted = true
+        lifetime.cancel(CancellationException("the media source was interrupted"))
     }
 }
+
+internal actual fun <T> blockingIn(lifetime: Job, block: suspend () -> T): T =
+    throw UnsupportedOperationException("the web backend cannot wait for a reader, so it opens no related address")
+
+internal actual val nestedOpensSupported: Boolean = false
 
 /**
  * Runs [block] and returns its value, or null if it SUSPENDED.

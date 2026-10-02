@@ -7,7 +7,10 @@ import kotlin.time.Duration
 public data class MediaItem(
     /**
      * Where the media is. A file path, or a URL with any scheme the linked FFmpeg supports.
-     * Ignored when [io] is set, except as a hint for format probing and as a label.
+     *
+     * When [io] is set, the bytes come from that reader and this is a label. The FFmpeg backend
+     * still reads its extension to recognise an HLS playlist, and resolves the playlist's relative
+     * addresses against it when the reader reports no [MediaIo.location].
      */
     val uri: String,
     /**
@@ -236,6 +239,29 @@ public interface MediaIo : AutoCloseable {
      * stay cheap. The default ignores it, for a reader with nothing to report.
      */
     public fun setWarningSink(sink: (PlaybackWarning) -> Unit) {}
+
+    /**
+     * The address these bytes came from, after any redirect, or null when the reader has none.
+     * The backend resolves the relative addresses inside the media against it, such as the
+     * segments of an HLS playlist. A reader that sets it should implement [openRelated] too.
+     */
+    public val location: String? get() = null
+
+    /**
+     * The media type the bytes arrived with, such as the `Content-Type` of an HTTP response, or
+     * null when the reader does not know it. The backend uses it to recognise an HLS playlist
+     * whose address does not end in `.m3u8`.
+     */
+    public val contentType: String? get() = null
+
+    /**
+     * A new reader for [uri], an absolute address that this reader's media names, or null to
+     * refuse it. An HLS playlist names its variant playlists, segments and keys this way, and the
+     * backend opens each one through here. The addresses come from the media, which is untrusted
+     * input, so open only the schemes and hosts you expect. The caller closes the reader. The
+     * default refuses every address.
+     */
+    public suspend fun openRelated(uri: String): MediaIo? = null
 }
 
 /**

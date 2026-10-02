@@ -2716,6 +2716,7 @@ internal class PlaybackCore(
                 renderer = renderer,
                 negotiatedFormat = negotiated,
                 cachingIo = cachingIo,
+                relatedTraffic = watchedIo?.related,
                 stallWatch = stallWatch,
             ).also { built ->
                 // What the device was opened for, which a gapless handoff compares the next item against.
@@ -4220,7 +4221,7 @@ internal class PlaybackCore(
                 cause?.message ?: "the audio decoder stopped $context",
                 cause,
             )
-            DEMUX_WORKER -> PlaybackError.SourceUnavailable(
+            DEMUX_WORKER -> (cause as? PlaybackException)?.error ?: PlaybackError.SourceUnavailable(
                 media?.uri ?: "",
                 cause ?: IllegalStateException("the demuxer stopped $context"),
                 "the demuxer stopped $context${cause?.let(::causeDetail).orEmpty()}",
@@ -7399,8 +7400,12 @@ internal class PlaybackCore(
         retiredRefused += session.video?.refusedFrames ?: 0
         retiredRepeated += session.video?.repeatedFrames ?: 0
         if (session.ownsAudio) retiredUnderruns += session.audio?.underruns ?: 0
-        retiredIoBytes += session.cachingIo?.upstreamBytesRead?.value ?: 0L
+        retiredIoBytes += ioBytesOf(session)
     }
+
+    /** The bytes a session read over its reader and over every reader opened for its media. */
+    private fun ioBytesOf(session: OpenSession?): Long =
+        (session?.cachingIo?.upstreamBytesRead?.value ?: 0L) + (session?.relatedTraffic?.bytes?.value ?: 0L)
 
     private suspend fun releaseSession(session: OpenSession) {
         // Once detached, this is the only remaining owner of the graph. Cancellation and the close
@@ -7545,7 +7550,7 @@ internal class PlaybackCore(
             return
         }
         val error = when {
-            outcome.name == DEMUX_WORKER -> PlaybackError.SourceUnavailable(
+            outcome.name == DEMUX_WORKER -> (cause as? PlaybackException)?.error ?: PlaybackError.SourceUnavailable(
                 media?.uri ?: "", cause, "the demuxer failed: ${cause.message}",
             )
             outcome.name == VIDEO_DECODE_WORKER -> (cause as? PlaybackException)?.error
@@ -7735,7 +7740,7 @@ internal class PlaybackCore(
             // Bytes over the wire. The rate is a difference between two samples divided by the
             // interval the sampler actually runs on, so a late tick reports a lower rate rather
             // than a spike, which is the honest way round for a figure used to explain a rebuffer.
-            val ioBytesNow = retiredIoBytes + (session?.cachingIo?.upstreamBytesRead?.value ?: 0L)
+            val ioBytesNow = retiredIoBytes + ioBytesOf(session)
             val ioDelta = (ioBytesNow - lastStatsIoBytes).coerceAtLeast(0)
             lastStatsIoBytes = ioBytesNow
             val ioPerSecond = if (config.statsInterval > Duration.ZERO) {
@@ -7778,10 +7783,14 @@ internal class PlaybackCore(
     /**
      * The byte cache window as a time range, byte-to-time mapped PROPORTIONALLY (byte fraction
      * times duration). Exact for constant bitrate, approximate for variable, honest about both
-     * in the Progress KDoc; empty whenever size or duration is unknown or no cache is running.
+     * in the Progress KDoc; empty whenever size or duration is unknown, no cache is running, or
+     * the media is read from other addresses than the cached one.
      */
     private fun bufferedRanges(session: OpenSession?): List<ClosedRange<Duration>> {
         val cache = session?.cachingIo ?: return emptyList()
+        // Media read in parts from other addresses, such as an HLS stream: the cached reader holds
+        // the playlist, whose bytes say nothing about the timeline.
+        if ((session.relatedTraffic?.opens?.value ?: 0) > 0) return emptyList()
         val sizeBytes = cache.size ?: return emptyList()
         if (sizeBytes <= 0L) return emptyList()
         val durationUs = session.source.duration?.micros ?: return emptyList()
@@ -8963,6 +8972,8 @@ internal class PlaybackCore(
         var negotiatedFormat: AudioFormat?,
         /** Non-null when this open reads through the byte cache; progress reads its window. */
         val cachingIo: CachingMediaIo? = null,
+        /** What the readers opened for the media's other addresses did, such as HLS segments. */
+        val relatedTraffic: RelatedTraffic? = null,
         /** How long the demux lane has waited for the source; see `BufferPolicy.stallTimeout`. */
         val stallWatch: StallWatch,
     ) {

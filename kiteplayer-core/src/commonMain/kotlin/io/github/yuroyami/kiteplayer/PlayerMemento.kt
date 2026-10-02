@@ -139,7 +139,7 @@ public data class PlayerMemento(
 
     public companion object {
         /** The version [asProperties] stamps. [fromProperties] also reads every older one. */
-        public const val FORMAT_VERSION: Int = 4
+        public const val FORMAT_VERSION: Int = 5
 
         /**
          * Reads what [asProperties] wrote.
@@ -150,9 +150,10 @@ public data class PlayerMemento(
         public fun fromProperties(properties: Map<String, String>): PlayerMemento {
             val version = properties["version"]?.toIntOrNull()
             // Version 1 knew nothing about balance, the equaliser or any picture and subtitle
-            // setting, version 2 nothing about the demux settings, and version 3 nothing about the
-            // item titles or the shuffle order. Each reads back with the defaults for those, which
-            // is what a player that had never been told about them would have had anyway.
+            // setting, version 2 nothing about the demux settings, version 3 nothing about the
+            // item titles or the shuffle order, and version 4 nothing about the variant limits.
+            // Each reads back with the defaults for those, which is what a player that had never
+            // been told about them would have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
                 "unsupported memento format version $version; this build reads 1 to $FORMAT_VERSION"
             }
@@ -274,6 +275,8 @@ private fun MutableMap<String, String>.putDemux(prefix: String, demux: DemuxPoli
     if (demux.generateTimestamps) put("${prefix}generateTimestamps", "true")
     if (demux.lowLatency) put("${prefix}lowLatency", "true")
     if (demux.skipInitialBytes != 0L) put("${prefix}skipInitialBytes", demux.skipInitialBytes.toString())
+    demux.maxBitrate?.let { put("${prefix}maxBitrate", it.toString()) }
+    demux.maxVideoHeight?.let { put("${prefix}maxVideoHeight", it.toString()) }
 }
 
 /** Reads what [putDemux] wrote. A missing key is the default for its field. */
@@ -292,5 +295,7 @@ private fun demuxFrom(properties: Map<String, String>, prefix: String): DemuxPol
         generateTimestamps = properties["${prefix}generateTimestamps"]?.toBooleanStrict() ?: false,
         lowLatency = properties["${prefix}lowLatency"]?.toBooleanStrict() ?: false,
         skipInitialBytes = properties["${prefix}skipInitialBytes"]?.toLong() ?: 0,
+        maxBitrate = properties["${prefix}maxBitrate"]?.toLong(),
+        maxVideoHeight = properties["${prefix}maxVideoHeight"]?.toInt(),
     )
 }

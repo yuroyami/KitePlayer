@@ -445,6 +445,21 @@ point includes it. You do not build a resolver or a Ktor client.
   Network playback in the browser waits for a web worker
   ([#100](https://github.com/yuroyami/KitePlayer/issues/100)).
 
+HLS plays through the same transport. An address that ends in `.m3u8`, an HLS content type from
+the server, or `formatHint = "hls"` marks a playlist.
+
+- A master playlist plays one variant: the one with the highest bitrate within
+  `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`. The variant does not change during
+  playback.
+- MPEG-TS and fMP4 segments, byte ranges, AES-128 keys, separate audio and subtitle renditions, and
+  live playlists play. A finished playlist can seek.
+- A segment that cannot be read is skipped, and `PlaybackWarning.SegmentSkipped` says so. A stream
+  that ends while its last segments fail ends with `PlaybackError.SourceUnavailable`.
+- `MediaItem.headers` go only to the scheme, host and port of the item's own address, because a
+  playlist can name segments on any server.
+- Your own `MediaIo` can serve HLS too: report the address it read in `location`, and open the
+  addresses the playlist names in `openRelated`.
+
 <details>
 <summary><b>Which transport wins</b>, and when a client exists</summary>
 <br>
@@ -607,7 +622,7 @@ summary.
 
 | Topic | What to expect |
 | --- | --- |
-| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere but the browser. `Dash.mediaItemFor` plays one representation of an on-demand DASH manifest, with no bitrate switching. HLS ([#209](https://github.com/yuroyami/KitePlayer/issues/209)), live DASH and a persistent cache do not work yet. |
+| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere but the browser. HLS plays one variant, chosen when the stream opens, with no bitrate switching during playback. `Dash.mediaItemFor` plays one representation of an on-demand DASH manifest, with no bitrate switching. Live DASH and a persistent cache do not work yet. |
 | Native Linux and Windows | No audio output and no HTTPS. Use the desktop JVM target, or pass your own `OutputBackend`. |
 | Desktop JVM sound | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | AV1 on the web | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |

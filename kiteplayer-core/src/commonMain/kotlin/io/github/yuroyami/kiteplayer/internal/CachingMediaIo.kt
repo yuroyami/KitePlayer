@@ -32,6 +32,11 @@ internal class CachingMediaIo(
 
     override val size: Long? get() = upstream.size
     override val seekable: Boolean get() = upstream.seekable
+    override val location: String? get() = upstream.location
+    override val contentType: String? get() = upstream.contentType
+
+    /** A related reader skips this cache: a segment is read once, from start to end. */
+    override suspend fun openRelated(uri: String): MediaIo? = upstream.openRelated(uri)
 
     /** The window's bytes: dense, variable-length chunks; copyOut walks their actual sizes. */
     private val chunks = ArrayDeque<ByteArray>()

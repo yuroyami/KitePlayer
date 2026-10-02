@@ -256,6 +256,10 @@ final class io.github.yuroyami.kiteplayer.network/HttpReaderPolicy { // io.githu
 }
 
 final class io.github.yuroyami.kiteplayer.network/KtorMediaIo : io.github.yuroyami.kiteplayer/MediaIo { // io.github.yuroyami.kiteplayer.network/KtorMediaIo|null[0]
+    final val contentType // io.github.yuroyami.kiteplayer.network/KtorMediaIo.contentType|{}contentType[0]
+        final fun <get-contentType>(): kotlin/String? // io.github.yuroyami.kiteplayer.network/KtorMediaIo.contentType.<get-contentType>|<get-contentType>(){}[0]
+    final val location // io.github.yuroyami.kiteplayer.network/KtorMediaIo.location|{}location[0]
+        final fun <get-location>(): kotlin/String // io.github.yuroyami.kiteplayer.network/KtorMediaIo.location.<get-location>|<get-location>(){}[0]
     final val seekable // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seekable|{}seekable[0]
         final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seekable.<get-seekable>|<get-seekable>(){}[0]
     final val size // io.github.yuroyami.kiteplayer.network/KtorMediaIo.size|{}size[0]
@@ -263,6 +267,7 @@ final class io.github.yuroyami.kiteplayer.network/KtorMediaIo : io.github.yuroya
 
     final fun close() // io.github.yuroyami.kiteplayer.network/KtorMediaIo.close|close(){}[0]
     final fun setWarningSink(kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit>) // io.github.yuroyami.kiteplayer.network/KtorMediaIo.setWarningSink|setWarningSink(kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>){}[0]
+    final suspend fun openRelated(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer.network/KtorMediaIo.openRelated|openRelated(kotlin.String){}[0]
     final suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer.network/KtorMediaIo.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
     final suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seek|seek(kotlin.Long){}[0]
 

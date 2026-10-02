@@ -398,6 +398,8 @@ class MementoTest {
                         generateTimestamps = true,
                         lowLatency = true,
                         skipInitialBytes = 188,
+                        maxBitrate = 3_000_000,
+                        maxVideoHeight = 720,
                     ),
                 ),
                 MediaItem("fast.mp4", demux = DemuxPolicy(probe = ProbeDepth.Fast)),

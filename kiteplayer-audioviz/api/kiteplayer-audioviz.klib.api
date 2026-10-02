@@ -407,6 +407,31 @@ final class io.github.yuroyami.kiteplayer.audioviz.viz.motion/Envelope { // io.g
     final fun reset(kotlin/Float = ...) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Envelope.reset|reset(kotlin.Float){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution { // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution|null[0]
+    constructor <init>(kotlin/Float = ...) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.<init>|<init>(kotlin.Float){}[0]
+
+    final var activity // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.activity|{}activity[0]
+        final fun <get-activity>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.activity.<get-activity>|<get-activity>(){}[0]
+    final var birth // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.birth|{}birth[0]
+        final fun <get-birth>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.birth.<get-birth>|<get-birth>(){}[0]
+    final var births // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.births|{}births[0]
+        final fun <get-births>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.births.<get-births>|<get-births>(){}[0]
+    final var bloom // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.bloom|{}bloom[0]
+        final fun <get-bloom>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.bloom.<get-bloom>|<get-bloom>(){}[0]
+    final var collapse // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.collapse|{}collapse[0]
+        final fun <get-collapse>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.collapse.<get-collapse>|<get-collapse>(){}[0]
+    final var morph // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.morph|{}morph[0]
+        final fun <get-morph>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.morph.<get-morph>|<get-morph>(){}[0]
+    final var morphBudget // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.morphBudget|{}morphBudget[0]
+        final fun <get-morphBudget>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.morphBudget.<get-morphBudget>|<get-morphBudget>(){}[0]
+        final fun <set-morphBudget>(kotlin/Float) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.morphBudget.<set-morphBudget>|<set-morphBudget>(kotlin.Float){}[0]
+    final var morphs // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.morphs|{}morphs[0]
+        final fun <get-morphs>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.morphs.<get-morphs>|<get-morphs>(){}[0]
+
+    final fun reset() // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.reset|reset(){}[0]
+    final fun update(io.github.yuroyami.kiteplayer.audioviz.viz/VizRenderState, io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Evolution.update|update(io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState;io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes { // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes|null[0]
     constructor <init>(kotlin/Long) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes.<init>|<init>(kotlin.Long){}[0]
 
@@ -418,7 +443,7 @@ final class io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes { // io.gith
     final var walk // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes.walk|{}walk[0]
         final fun <get-walk>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes.walk.<get-walk>|<get-walk>(){}[0]
 
-    final fun advance(io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures, kotlin/Float) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes.advance|advance(io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures;kotlin.Float){}[0]
+    final fun advance(io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures, kotlin/Float, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes.advance|advance(io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures;kotlin.Float;kotlin.Boolean){}[0]
     final fun choice(kotlin/String, kotlin/Int, kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer.audioviz.viz.motion/ChoiceGene // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes.choice|choice(kotlin.String;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
     final fun mutateNow(kotlin/Int = ...) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes.mutateNow|mutateNow(kotlin.Int){}[0]
     final fun number(kotlin/String, kotlin/Float, kotlin/Float, kotlin/Float, kotlin/Boolean = ...): io.github.yuroyami.kiteplayer.audioviz.viz.motion/NumberGene // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes.number|number(kotlin.String;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Boolean){}[0]
@@ -1800,6 +1825,7 @@ final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_k
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_ChoiceGene$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_ChoiceGene$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_ChoiceGene$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Ease$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Ease$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Ease$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Envelope$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Envelope$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Envelope$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Evolution$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Evolution$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Evolution$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop[0]
@@ -1891,6 +1917,7 @@ final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_k
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_ChoiceGene$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_ChoiceGene$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_ChoiceGene$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Ease$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Ease$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Ease$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Envelope$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Envelope$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Envelope$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Evolution$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Evolution$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Evolution$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop_getter(){}[0]

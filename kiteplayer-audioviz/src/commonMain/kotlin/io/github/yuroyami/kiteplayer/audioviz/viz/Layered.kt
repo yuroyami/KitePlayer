@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.ground.Detail
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.DetailKind
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.Ground
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.GroundKind
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Evolution
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Genes
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 
@@ -25,6 +26,7 @@ internal class Kit(
 ) {
     val gestures = Gestures()
     val genes = Genes(seed)
+    val evolution = Evolution()
     val random = Rng(seed * 31L + 17L)
     val split = SpectrumSplit(splitParts)
     val ground: Ground? = groundKind?.let { Ground(it, groundDim, groundParallax, camera, (seed % 97L).toFloat()) }
@@ -46,7 +48,8 @@ internal class Kit(
         val dt = step.of(state) ?: return null
         if (size.height > 0f) aspect = size.width / size.height
         gestures.update(state)
-        genes.advance(gestures, dt)
+        evolution.update(state, gestures)
+        genes.advance(gestures, dt, evolution.morph)
         camera.advance(state)
         split.update(state.frame.bandsRel)
         ground?.walk = genes.walk
@@ -68,6 +71,7 @@ internal class Kit(
     fun reset() {
         gestures.reset()
         genes.restart()
+        evolution.reset()
         camera.reset()
         random.reset()
         split.reset()
@@ -96,6 +100,7 @@ internal abstract class Layered(
 
     protected val camera: Camera2D get() = kit.camera
     protected val gestures: Gestures get() = kit.gestures
+    protected val evolution: Evolution get() = kit.evolution
     protected val random: Rng get() = kit.random
     protected val split: SpectrumSplit get() = kit.split
 

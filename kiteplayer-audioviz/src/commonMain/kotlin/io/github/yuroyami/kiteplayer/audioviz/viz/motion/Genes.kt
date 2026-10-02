@@ -132,8 +132,9 @@ public class ChoiceGene internal constructor(
 /**
  * A drawing's recipe, and the rules that change it.
  *
- * One or two genes change at the accepted section boundary, three or more on every fourth accepted boundary, all go to
- * their busiest end on a drop and their sparest on a breakdown. Seeded, so a run replays exactly.
+ * One or two genes change at the accepted section boundary, three or more on every fourth accepted
+ * boundary, one on every morph of the evolution pacer, all go to their busiest end on a drop and
+ * their sparest on a breakdown. Seeded, so a run replays exactly.
  */
 public class Genes(seed: Long) {
     public val all: List<Gene>
@@ -159,8 +160,8 @@ public class Genes(seed: Long) {
     public fun toggle(name: String, start: Boolean, most: Boolean = true): ChoiceGene =
         ChoiceGene(name, 2, if (start) 1 else 0, if (most) 1 else 0, if (most) 0 else 1).also { all.add(it) }
 
-    /** Moves the recipe on by one frame, after [gestures] has read the same frame. */
-    public fun advance(gestures: Gestures, deltaSeconds: Float) {
+    /** Moves the recipe on by one frame, after [gestures] has read the same frame. [morph] mutates one gene. */
+    public fun advance(gestures: Gestures, deltaSeconds: Float, morph: Boolean = false) {
         when {
             gestures.drop -> {
                 all.forEach { it.toMost() }
@@ -175,6 +176,7 @@ public class Genes(seed: Long) {
                 val big = sectionsSeen % 4 == 0
                 mutate(if (big) maxOf(3, (all.size + 1) / 2) else 1 + (random.next() * 2f).toInt())
             }
+            morph -> mutate(1)
         }
         for (gene in all) gene.advance(deltaSeconds, gestures.cycleSeconds)
         walk = (gestures.slowCycles + gestures.slowCyclePhase) / 8f

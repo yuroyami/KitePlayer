@@ -1227,6 +1227,24 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/motion/Envelope {
 	public static synthetic fun reset$default (Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Envelope;FILjava/lang/Object;)V
 }
 
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/motion/Evolution {
+	public static final field $stable I
+	public fun <init> ()V
+	public fun <init> (F)V
+	public synthetic fun <init> (FILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getActivity ()F
+	public final fun getBirth ()Z
+	public final fun getBirths ()I
+	public final fun getBloom ()Z
+	public final fun getCollapse ()Z
+	public final fun getMorph ()Z
+	public final fun getMorphBudget ()F
+	public final fun getMorphs ()I
+	public final fun reset ()V
+	public final fun setMorphBudget (F)V
+	public final fun update (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState;Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Gestures;)V
+}
+
 public abstract class io/github/yuroyami/kiteplayer/audioviz/viz/motion/Gene {
 	public static final field $stable I
 	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -1236,7 +1254,8 @@ public abstract class io/github/yuroyami/kiteplayer/audioviz/viz/motion/Gene {
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes {
 	public static final field $stable I
 	public fun <init> (J)V
-	public final fun advance (Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Gestures;F)V
+	public final fun advance (Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Gestures;FZ)V
+	public static synthetic fun advance$default (Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes;Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Gestures;FZILjava/lang/Object;)V
 	public final fun choice (Ljava/lang/String;IIII)Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/ChoiceGene;
 	public static synthetic fun choice$default (Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes;Ljava/lang/String;IIIIILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/ChoiceGene;
 	public final fun getAll ()Ljava/util/List;

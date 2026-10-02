@@ -350,6 +350,9 @@ internal class FaultPlan(
     /** True makes every audio decoder factory refuse. */
     var audioDecodersRefuse: Boolean = false
 
+    /** Set makes every subtitle decoder factory throw it, as a build without that decoder does. */
+    var subtitleDecodersThrow: Throwable? = null
+
     /** True makes [ScriptedSource.selectStreams] throw, which is buildSession's reachable thrower
      * AFTER the audio path has gone live. */
     var failSelectStreams: Boolean = false
@@ -455,9 +458,11 @@ internal class ScriptTrace {
  */
 internal class ScriptedSubtitleDecoderFactory(
     private val script: MediaScript,
+    private val faults: FaultPlan? = null,
 ) : SubtitleDecoderFactory {
     override val name: String = "scripted-subtitle"
     override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? {
+        faults?.subtitleDecodersThrow?.let { throw it }
         val track = script.subtitleTracks.firstOrNull { it.index == stream.index } ?: return null
         if (!track.decoderAccepted) return null
         return ScriptedSubtitleDecoder(track, script.subtitleProbe)
@@ -654,7 +659,7 @@ internal class ScriptedSession(
         )
 
     override val subtitleDecoders: List<SubtitleDecoderFactory> =
-        if (script.hasSubtitles) listOf(ScriptedSubtitleDecoderFactory(script)) else emptyList()
+        if (script.hasSubtitles) listOf(ScriptedSubtitleDecoderFactory(script, faults)) else emptyList()
 
     var closeCount: Int = 0
         private set

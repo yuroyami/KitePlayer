@@ -67,6 +67,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   macOS. Before, it stayed Playing with no sound. The sink checks once a second that the mixer is
   still listed, so the failure comes within about a second. A player on the system default is
   unchanged (#308).
+- A subtitle track whose decoder cannot open is dropped with `PlaybackWarning.TrackDeselected`, and
+  the file plays without it. Before, the whole open failed. The web build has no subtitle decoders
+  of the media library, so on the web a file whose default track was picture subtitles or captions
+  did not open at all (#381).
 
 ## [0.2.0] - 2026-09-29
 

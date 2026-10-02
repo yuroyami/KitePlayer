@@ -2595,19 +2595,24 @@ internal class PlaybackCore(
                 )
                 audioStream = null
             }
+            // A subtitle decoder that cannot open costs its track and not the file, as on a
+            // switch: the web build of the media library has no subtitle decoders at all.
+            var subtitleRefusal = "no decoder accepted this subtitle stream"
             val subtitleDecoder = subtitleStream?.let { stream ->
-                backendSession.subtitleDecoders.firstNotNullOfOrNull { factory -> factory.create(stream) }
+                try {
+                    backendSession.subtitleDecoders.firstNotNullOfOrNull { factory -> factory.create(stream) }
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (failure: Throwable) {
+                    subtitleRefusal = "the subtitle decoder could not be created${causeDetail(failure)}"
+                    null
+                }
             }
             if (subtitleDecoder != null) {
                 rollback += { subtitleDecoder.close() }
             }
             if (subtitleStream != null && subtitleDecoder == null) {
-                report(
-                    PlaybackWarning.TrackDeselected(
-                        TrackId(subtitleStream.index),
-                        "no decoder accepted this subtitle stream",
-                    ),
-                )
+                report(PlaybackWarning.TrackDeselected(TrackId(subtitleStream.index), subtitleRefusal))
                 subtitleStream = null
             }
             if (videoStream == null && audioStream == null) {

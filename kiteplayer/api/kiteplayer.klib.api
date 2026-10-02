@@ -213,4 +213,30 @@ final class io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory : io.g
 }
 
 // Targets: [wasmJs]
+final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/KitePlayerWorker|null[0]
+    final val events // io.github.yuroyami.kiteplayer/KitePlayerWorker.events|{}events[0]
+        final fun <get-events>(): kotlinx.coroutines.flow/SharedFlow<io.github.yuroyami.kiteplayer/PlayerEvent> // io.github.yuroyami.kiteplayer/KitePlayerWorker.events.<get-events>|<get-events>(){}[0]
+    final val progress // io.github.yuroyami.kiteplayer/KitePlayerWorker.progress|{}progress[0]
+        final fun <get-progress>(): kotlinx.coroutines.flow/StateFlow<io.github.yuroyami.kiteplayer/Progress> // io.github.yuroyami.kiteplayer/KitePlayerWorker.progress.<get-progress>|<get-progress>(){}[0]
+    final val state // io.github.yuroyami.kiteplayer/KitePlayerWorker.state|{}state[0]
+        final fun <get-state>(): kotlinx.coroutines.flow/StateFlow<io.github.yuroyami.kiteplayer/PlayerSnapshot> // io.github.yuroyami.kiteplayer/KitePlayerWorker.state.<get-state>|<get-state>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer/KitePlayerWorker.close|close(){}[0]
+    final fun pause() // io.github.yuroyami.kiteplayer/KitePlayerWorker.pause|pause(){}[0]
+    final fun play() // io.github.yuroyami.kiteplayer/KitePlayerWorker.play|play(){}[0]
+    final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
+    final suspend fun closeAndAwait() // io.github.yuroyami.kiteplayer/KitePlayerWorker.closeAndAwait|closeAndAwait(){}[0]
+    final suspend fun open(io.github.yuroyami.kiteplayer/MediaItem) // io.github.yuroyami.kiteplayer/KitePlayerWorker.open|open(io.github.yuroyami.kiteplayer.MediaItem){}[0]
+    final suspend fun seek(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/KitePlayerWorker.seek|seek(kotlin.time.Duration){}[0]
+    final suspend fun stop() // io.github.yuroyami.kiteplayer/KitePlayerWorker.stop|stop(){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion|null[0]
+        final suspend fun start(kotlin.js/JsAny?, kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/KitePlayerWorker // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion.start|start(kotlin.js.JsAny?;kotlin.String;kotlin.String){}[0]
+    }
+}
+
+// Targets: [wasmJs]
 final fun (io.github.yuroyami.kiteplayer/KitePlayer).io.github.yuroyami.kiteplayer.session/attachMediaSession(kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession // io.github.yuroyami.kiteplayer.session/attachMediaSession|attachMediaSession@io.github.yuroyami.kiteplayer.KitePlayer(kotlin.time.Duration){}[0]
+
+// Targets: [wasmJs]
+final fun io.github.yuroyami.kiteplayer/runKitePlayerWorker() // io.github.yuroyami.kiteplayer/runKitePlayerWorker|runKitePlayerWorker(){}[0]

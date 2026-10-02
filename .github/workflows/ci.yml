@@ -1242,6 +1242,10 @@ jobs:
       #
       # `:kiteplayer` runs its shared session tests here, and drives the web media session against a
       # fake session object, so nothing in it needs a browser's real media session.
+      #
+      # `:kiteplayer-web-worker` has only a browser half. It starts a real worker player and plays a
+      # clip by its address while the page's frame loop is timed (#100); karma.config.d/worker.js
+      # serves the worker binary, the codec module and the clips.
       - name: wasmJs tests, node and browser
         run: |
           ./gradlew --stacktrace \
@@ -1250,7 +1254,8 @@ jobs:
             :kiteplayer-output:wasmJsTest \
             :kiteplayer-ffmpeg:wasmJsTest \
             :kiteplayer:wasmJsTest \
-            :kiteplayer-libass:wasmJsTest
+            :kiteplayer-libass:wasmJsTest \
+            :kiteplayer-web-worker:wasmJsTest
 
       # This was NODE ONLY until 2026-08-30, because the browser half used to abort inside webpack
       # with "RangeError: Invalid array length" while it timestamped a context directory. It no

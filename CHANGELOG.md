@@ -43,6 +43,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   bytes, so code that read `item.io` directly sees a playlist. A WebM manifest still plays through
   the one-stream reader. The manifest model gains fields with defaults, so a constructor or `copy`
   call compiled against 0.2.0 must be compiled again.
+- `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
+  page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
+  cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third
+  module, the worker binary, whose `main` calls `runKitePlayerWorker()`. `kiteplayer-output` gains
+  `WebWorkletAudio` and `workerOutputBackend`, the two halves of its sound.
 - `KitePlayer.awaitClose()` suspends until the player is asked to close, for helpers that go away
   with it (#385).
 - `KitePlayer.requestSeek` replaces `seekLater`, which is deprecated (#386). It asks for a seek and

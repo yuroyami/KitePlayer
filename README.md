@@ -231,8 +231,17 @@ WebAssembly modules. Each one comes as a `web` zip beside its artifact on Maven 
 Serve `.mjs` as `text/javascript` and `.wasm` as `application/wasm`. With gzip, the codec module is
 about 1.42 MiB to download, and CI holds it to that. Both modules are single-threaded, so the page
 needs no cross-origin isolation headers. A browser starts audio only after the user interacts with
-the page, so the position stays at zero until then. The browser does not play network media yet,
-so play files from memory, as [Network](#network) says.
+the page, so the position stays at zero until then. A player on the page's own thread does not play
+network media, so play files from memory, as [Network](#network) says, or use the worker player.
+
+`KitePlayerWorker.start(canvas)` runs the player in a web worker, so opening, decoding and drawing
+leave the page's thread free (#100). The worker draws on the canvas and sends its sound straight to
+the page's audio device, and it plays `http`, `https` and `blob` addresses. It needs a third
+module beside `index.html`, `kiteplayer-web-worker.mjs`: a wasm executable whose `main` calls
+`runKitePlayerWorker()`. This repository's `kiteplayer-web-worker` builds one; it is not in a web
+zip yet (#58). The worker player has open, play, pause, seek, stop and the state, progress and
+events flows so far. An item with its own reader, external subtitles, a filter or a demux policy
+cannot cross to the worker yet.
 
 </details>
 
@@ -491,10 +500,12 @@ point includes it. You do not build a resolver or a Ktor client.
 - `MediaItem.headers` reach whichever transport is selected.
 - The Android artifact declares the `INTERNET` permission for you. Cleartext HTTP follows your app's
   own policy.
-- In a browser, network media does not play yet, because a read cannot wait on the page's thread.
-  Fetch the file and play it from memory with `MediaItem.from(MediaIo.ofBytes(bytes), name)`.
-  Network playback in the browser waits for a web worker
-  ([#100](https://github.com/yuroyami/KitePlayer/issues/100)).
+- In a browser, a player on the page's own thread cannot play network media, because a read cannot
+  wait there. `KitePlayerWorker` plays it from a web worker
+  ([#100](https://github.com/yuroyami/KitePlayer/issues/100)), see [Web setup](#web-setup). It
+  downloads the whole file before it plays, up to 512 MiB, and HLS and DASH do not play there yet.
+  On the page's thread, fetch the file and play it from memory with
+  `MediaItem.from(MediaIo.ofBytes(bytes), name)`.
 
 HLS plays through the same transport. An address that ends in `.m3u8`, an HLS content type from
 the server, or `formatHint = "hls"` marks a playlist.
@@ -640,7 +651,7 @@ already listening when a song starts. Album art does not count as a picture.
 | Android | Plays real media on phones, checked by hand. CI runs the host tests, and an emulator job runs the device tests of five modules and the sample app on every push. A failure there does not fail the run yet. |
 | iOS | Plays real media on devices, checked by hand. CI runs the tests of every iOS module on the simulator. |
 | macOS arm64, native and desktop JVM | Plays real media. CI runs every module's tests on both, the format matrix included. |
-| Web, wasmJs | Plays through the FFmpeg WebAssembly module with browser audio, from memory, not yet from the network. CI runs the web tests under Node and in a headless browser. |
+| Web, wasmJs | Plays through the FFmpeg WebAssembly module with browser audio, from memory. `KitePlayerWorker` runs the player in a web worker, which plays single files from the network too. CI runs the web tests under Node and in a headless browser. |
 | Linux and Windows, native | No audio output and no HTTPS, so `KitePlayer()` throws and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own `OutputBackend` to `KitePlayer.create`. CI runs the media-free tests. |
 | Linux and Windows, desktop JVM | The native libraries are linked. The Linux FFmpeg backend decodes in a container, and neither has played sound on a real machine. |
 | tvOS, watchOS, iOS x64, Android native | Only the engine modules build there; CI runs the tvOS and watchOS tests on their simulators. |
@@ -679,7 +690,7 @@ summary.
 
 | Topic | What to expect |
 | --- | --- |
-| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere but the browser. HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment. `Dash.mediaItemFor` plays a DASH manifest of fMP4 or MPEG-TS segments through the HLS path, live ones included, with a variant for each video representation. A manifest of WebM segments plays one representation, cannot seek, and is refused when it is live or keeps its audio in a set of its own (#392). A manifest with more than one Period, TTML subtitles and a persistent cache do not work yet. |
+| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays. HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment. `Dash.mediaItemFor` plays a DASH manifest of fMP4 or MPEG-TS segments through the HLS path, live ones included, with a variant for each video representation. A manifest of WebM segments plays one representation, cannot seek, and is refused when it is live or keeps its audio in a set of its own (#392). A manifest with more than one Period, TTML subtitles and a persistent cache do not work yet. |
 | Native Linux and Windows | No audio output and no HTTPS. Use the desktop JVM target, or pass your own `OutputBackend`. |
 | Desktop JVM sound | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | AV1 on the web | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |

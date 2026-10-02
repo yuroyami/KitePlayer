@@ -1,0 +1,14 @@
+Use case: precise-object-edit.
+Edit the supplied KitePlayer feature graphic. Make ONE change only: convert all the flowing fabric curtains behind the logo to neutral grayscale.
+
+The curtains should contain only charcoal, gray, and muted silver tones, with no purple, blue, magenta, pink, red, orange, or other color tint. Preserve their existing shapes, positions, folds, layering, fine matte fabric texture, transparency, and relative light/dark shading. Keep their contrast understated. No glow, neon rims, bloom, metallic shine, or bright traced edges.
+
+Preserve everything else exactly: the KitePlayer logo stays fully colored with its existing blue-violet, magenta, plum, and coral sail sections and white play form. Do not desaturate any part of the logo. Preserve the dark background, all text and its colors, typography, size, alignment, margins, and the 2:1 composition.
+
+Exact text to preserve:
+KitePlayer
+The power of FFmpeg.
+Built with Kotlin/Native.
+github.com/yuroyami/KitePlayer
+
+No redesign, no new elements, no text changes. Only the curtains become grayscale.

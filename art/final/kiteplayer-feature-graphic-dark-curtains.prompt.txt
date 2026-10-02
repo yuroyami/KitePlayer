@@ -1,0 +1,24 @@
+Use case: ads-marketing.
+Task: revise the supplied light KitePlayer feature graphic into a dark version, retaining its successful fluid-curtain artwork and updating the message to the product's actual differentiators. One finished opaque 2:1 landscape banner, high resolution.
+
+Input image 1: EDIT TARGET. This is the previous light banner. The user specifically LIKES its elegant flowing translucent fabric / fluid curtains behind the large KitePlayer logo. Preserve that visual idea, composition, typography character, and the large hero logo on the right.
+Input image 2: ORIGINAL BRAND LOGO. Preserve the real KitePlayer identity: asymmetric wind-loaded kite silhouette, violet left sail, magenta upper sail, plum inner sail, coral lower/right sail, white rounded right-facing play form. Use it to keep the hero logo faithful. Transparent areas are not black artwork.
+
+Changes:
+1. Replace the white background with a rich, very dark charcoal-plum / near-black background. Use a subtle, spacious ambient violet depth around the curtains. The left text field remains calm and very dark. The result is an elegant dark editorial banner, with high contrast and restrained cinematic lighting.
+2. Keep the original fluid curtains. Re-light the SAME KIND of flowing, fine layered translucent silk sheets for the dark setting: refined violet, magenta and coral, flowing diagonally and horizontally behind the logo. Preserve the silky fine striations and sculptural folds seen in image 1, with soft glowing edges and deep transparent shadows. They should be tangible flowing fabric/light, not an equalizer, waveform bars, neon squiggles, generic aurora sky, or simple flat sine curves. Let them breathe and trail off the right edge; keep them behind the mark and away from the text.
+3. Change the large "KitePlayer" title to crisp warm-white. Preserve its bold, clean geometric sans-serif character. Single color title, no gradient lettering, no bevel.
+4. REPLACE all supporting copy with the exact two-line message below, in a lighter-weight clean sans-serif, smaller than the title but prominent and very readable.
+5. DELETE the entire "VIDEO · AUDIO · SUBTITLES" line. In its place, at the quiet lower-left margin, put only the repository URL below in a small restrained muted-lavender monospace.
+6. There is NO code block, NO code excerpt, NO panel or box anywhere.
+
+Exact text in the entire finished image:
+Main title: "KitePlayer"
+Supporting copy, these two lines:
+"The power of FFmpeg."
+"Built with Kotlin/Native."
+Footer: "github.com/yuroyami/KitePlayer"
+
+Respect exact capitalization: FFmpeg, Kotlin/Native, KitePlayer. No extra words or punctuation. This is a feature graphic about FFmpeg's power and Kotlin/Native, not a list of obvious media-player capabilities. Do not mention video, audio, subtitles, multiplatform, APIs, platform factory names, mpv, VLC, comparison claims, speed claims, or certifications. No eyebrow label, badges, chips, frames, arrows, devices, charts, UI controls, small icons, watermark, top accent rule or code.
+
+Preserve the generous margins and clean left-text / right-logo composition of image 1. Make the type and logo feel deliberately balanced, with a little more breathing room than the source image. The rich fluid curtains should be the distinctive visual attraction, while all copy is immediately legible. The hero logo remains fully visible, large, and correctly colored, with its white play form. High finish, crisp edges, subtle sophisticated depth, controlled luminosity.

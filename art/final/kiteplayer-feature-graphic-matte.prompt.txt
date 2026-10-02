@@ -1,0 +1,16 @@
+Use case: lighting-weather / precise-object-edit.
+Edit the supplied KitePlayer feature graphic. Change ONLY the treatment of the curtains, logo edges, and background illumination. Preserve the 2:1 composition, all positions, logo geometry, brand colors, typography, exact wording and spacing.
+
+Remove ALL emissive light effects: no neon rims, bright edge outlines, bloom, halos, backlight, radiating purple cloud, shining hairlines, lens glow or electric filaments. This includes the thin bright outline around the kite logo and every bright traced edge of the curtains.
+
+Render the flowing curtains as MATTE, softly shaded, translucent folded fabric with broad calm areas of violet, muted magenta, plum and coral. Keep the existing attractive flowing shapes and layered folds. Their depth comes from gentle diffuse surface shading and overlap, with natural soft shadow. The curtain edges are simply the boundary of the colored material: they do not become brighter than the face of the material. Smooth restrained surfaces, no dense luminous striations. Think matte colored silk photographed with a very broad softbox against charcoal; absolutely nothing emits light.
+
+The original KitePlayer logo stays crisp, saturated, fully recognizable and large, with clean flat colored sail faces, very gentle broad shading at most, and a clean white play form. No rim lighting or bevel highlight. The surrounding background is quiet near-black charcoal-plum, with extremely subtle nonluminous tonal variation. Do not just dim the entire image: keep the white text clear, the logo colors strong, and the curtains visibly colored, while removing the luminous look.
+
+Keep this text EXACTLY as already shown:
+"KitePlayer"
+"The power of FFmpeg."
+"Built with Kotlin/Native."
+"github.com/yuroyami/KitePlayer"
+
+No other text. No new objects. No code, badge or border. Preserve the generous left text area and the large right kite logo. The result should have a restrained, tactile, deliberate graphic-design finish.

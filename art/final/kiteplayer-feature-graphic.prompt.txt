@@ -1,0 +1,30 @@
+Use case: ads-marketing.
+Asset type: finished wide feature graphic / README banner for KitePlayer. Create one standalone opaque raster banner, exactly 2:1 landscape composition, high resolution.
+
+Input image 1 is the user's unionKt feature graphic: STYLE REFERENCE ONLY. Borrow lightly its dark ink background, sophisticated gradient accents, large confident type and developer-facing code illustration. Do NOT copy its two stacked cards, downward arrow, rainbow top rule, layout details or unionKt identity.
+Input image 2 is KitePlayer's EXISTING BRAND LOGO: preserve its recognizable wind-loaded diamond silhouette, violet left sail, magenta upper sail, plum curved inner sail, coral lower/right sail, and rounded white right-facing play cutout. Transparent pixels outside it should take on the new dark backdrop. Do not redesign the logo into a rounded square or generic play button.
+
+Creative direction: a premium, visually striking developer-library feature graphic. Very deep midnight navy/ink background, with a subtle diffuse plum atmosphere around the media artwork. Restrained luminous violet, magenta and coral details from the existing KitePlayer brand. Crisp white and soft pale lavender typography. Intentional generous negative space. Elegant and technically credible, clean enough to remain readable at README and social-preview sizes. No orange-heavy unionKt palette: use the KitePlayer logo's own colors.
+
+Layout: a calm left text column and a distinctive media-and-code composition on the right. Left title very large, in bold contemporary sans serif; "Kite" in near-white and "Player" in a refined violet-to-magenta-to-coral gradient. A small unboxed widely-spaced eyebrow above the title. Beneath the title, a concise two-line subtitle. Quiet repository URL at the lower left. No additional marketing paragraph.
+
+Right composition: the existing KitePlayer kite/play logo is a recognizable floating centerpiece above a SINGLE refined code panel. Behind the logo, a few broad faint curved wave contours and a very subtle horizontal audio-wave motif suggest playback and sound, with restrained soft depth. The entire logo is visible. The code panel sits beneath it with an understated fine violet/plum edge, dark interior, clean rounded corners, no rainbow border and no fake app toolbar. It should be large enough for truly legible code. Use beautiful real monospace typography and restrained syntax highlighting: lavender for types, coral for the string, muted white for the remaining code. Do not let decorative forms interfere with code or title.
+
+ALL text must be rendered EXACTLY and ONLY as follows:
+Eyebrow: "VIDEO · AUDIO · SUBTITLES"
+Main title: "KitePlayer"
+Subtitle, two lines:
+"Media playback for"
+"Kotlin Multiplatform."
+Footer URL: "github.com/yuroyami/KitePlayer"
+Small code-panel heading: "Playback in Kotlin"
+
+Verbatim code, preserving capitalization, punctuation, question marks, quotes, spaces and these FOUR line breaks:
+val player = KitePlayerPlatform.createOrNull()
+    ?: error("Player unavailable")
+player.open(MediaItem("movie.mp4"))
+player.play()
+
+Keep those four lines in one code panel. They are a real Kotlin usage excerpt, so do not invent any additional methods, line numbers, imports, labels or annotations.
+
+Avoid: copying unionKt composition verbatim, generic glowing tech spheres, glassmorphism dashboards, device mockups, busy chips, unnecessary grid backgrounds, excessive bloom, bevelled text, large UI playback controls, photographic clutter, arbitrary icons, platform logos, claims about speed or certification, KSP/union types, stars/forks, and watermarks. All important content stays safely inside broad canvas margins. The output must read immediately as KitePlayer, with a modest influence from the supplied dark developer banner.

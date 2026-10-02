@@ -122,11 +122,14 @@ public class KitePlayerJavaTest {
             CompletableFuture<Void> open = player.openAsync(new MediaItemBuilder(address).build());
             heard.awaitStatus(PlaybackStatus.Opening);
 
+            long cancelledAt = System.nanoTime();
             assertTrue("the open finished before it could be cancelled", open.cancel(true));
             assertTrue(open.isCancelled());
-            // Idle comes once the request the open was waiting on gives up, which takes the network
-            // reader's ten second read timeout: a cancelled Kotlin open takes as long.
             heard.awaitStatus(PlaybackStatus.Idle);
+            // The cancel stops the request the open was waiting on, rather than waiting out the
+            // network reader's ten second read timeout (#398).
+            long idleAfterMillis = (System.nanoTime() - cancelledAt) / 1_000_000;
+            assertTrue("Idle came " + idleAfterMillis + " ms after the cancel", idleAfterMillis < 2_000);
             assertNull(player.getPlayer().getState().getValue().getMedia());
 
             player.openAsync(new MediaItemBuilder(clip.file.getAbsolutePath()).build()).get(WAIT_SECONDS, TimeUnit.SECONDS);

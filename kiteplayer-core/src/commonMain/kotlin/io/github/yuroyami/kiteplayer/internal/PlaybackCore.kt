@@ -2615,7 +2615,7 @@ internal class PlaybackCore(
         // a live reader precisely because this line runs again for every rebuild: a track switch, a
         // decoder recovery, a loop and a queue returning to the same item all come back through it,
         // and the reader the previous session was given has been closed since.
-        val suppliedIo = resolveMediaIo(item, config.network)
+        val suppliedIo = resolveReader(item, preemptible = pending == null)
         // A reader that recovers from a dropped connection says so through the player's warnings.
         suppliedIo?.setWarningSink { warning -> report(warning) }
         // Every byte the reader delivers is progress for the stall timeout, so a slow reader that
@@ -3127,6 +3127,57 @@ internal class PlaybackCore(
      * answers it the way it answers any other preemption.
      */
     private class OpenPreempted : Exception("a stop or a close preempted the backend open")
+
+    /**
+     * [resolveMediaIo] as a job that this actor can cancel, the way [openBackendSession] runs the
+     * backend open (#398).
+     *
+     * The resolve is the item's own reader factory, a configured resolver or the automatic network
+     * provider, and the network reader asks the server for its first bytes before it returns. Run
+     * inline, a server that took the connection and stayed silent held every stop and close behind
+     * it until the reader's read timeout, ten seconds by default, so a cancelled open stayed Opening
+     * that long. The actor now reads its mailbox while it waits, and a stop or a close cancels the
+     * resolve. A reader the resolve made anyway is closed here.
+     *
+     * The resolve stays on this actor's own dispatcher, where it always ran, and a gapless preload,
+     * which must not answer the player's mailbox, still resolves inline.
+     *
+     * @throws OpenPreempted when a stop or a close cancelled the resolve.
+     */
+    private suspend fun resolveReader(item: MediaItem, preemptible: Boolean): MediaIo? {
+        if (!preemptible) return resolveMediaIo(item, config.network)
+        var outcome: Result<MediaIo?>? = null
+        var abandoned = false
+        try {
+            supervisorScope {
+                val resolving = launch {
+                    outcome = try {
+                        Result.success(resolveMediaIo(item, config.network))
+                    } catch (failure: Throwable) {
+                        Result.failure(failure)
+                    }
+                }
+                while (!resolving.isCompleted) {
+                    if (!abandoned && preempted()) {
+                        abandoned = true
+                        resolving.cancel()
+                    }
+                    // Woken by the resolve's end, or by the poll that reads the mailbox again.
+                    withTimeoutOrNull(WORKER_POLL) { resolving.join() }
+                }
+            }
+        } finally {
+            val made = outcome?.getOrNull()
+            if (made != null && (abandoned || !currentCoroutineContext().isActive)) runCatching { made.close() }
+        }
+        if (abandoned) throw OpenPreempted()
+        val result = outcome ?: error("the reader's resolve ended without an answer")
+        val failure = result.exceptionOrNull() ?: return result.getOrThrow()
+        // As in openBackendSession: a cancellation this actor did not ask for is a failed resolve,
+        // not the actor's own cancellation.
+        if (failure is CancellationException) throw IllegalStateException("the reader's resolve was cancelled", failure)
+        throw failure
+    }
 
     /**
      * Opens the backend session on the demux lane, as a job that this actor can cancel.

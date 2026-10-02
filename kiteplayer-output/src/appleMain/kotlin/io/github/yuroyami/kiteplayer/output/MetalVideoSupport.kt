@@ -1092,11 +1092,13 @@ internal fun quadUniformsFor(
     ndcY *= transform.zoom
     val offsetX = transform.panX * 2f * ndcX
     val offsetY = -transform.panY * 2f * ndcY
-    // Clockwise picture rotation = sampling basis turned the opposite way.
+    // Each screen point, from the centre with y down, reads the stored picture at basis times
+    // itself. A clockwise quarter turn reads (y, -x), so the screen's top left shows the stored
+    // bottom left (#379).
     val basis = when (turn) {
-        90 -> floatArrayOf(0f, -1f, 1f, 0f)
+        90 -> floatArrayOf(0f, 1f, -1f, 0f)
         180 -> floatArrayOf(-1f, 0f, 0f, -1f)
-        270 -> floatArrayOf(0f, 1f, -1f, 0f)
+        270 -> floatArrayOf(0f, -1f, 1f, 0f)
         else -> floatArrayOf(1f, 0f, 0f, 1f)
     }
     return floatArrayOf(ndcX, ndcY, basis[0], basis[1], basis[2], basis[3], offsetX, offsetY)

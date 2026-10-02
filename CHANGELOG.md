@@ -49,6 +49,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   brighter master. On Android the stream's metadata also reaches MediaCodec as
   `KEY_HDR_STATIC_INFO` (#378). `PlayerStreamInfo` changes its generated data-class methods, so
   recompile.
+- The Metal renderer turns a quarter-turned picture clockwise, as the display matrix says. Before,
+  it turned 90 and 270 degrees the other way, so a portrait phone recording played upside down on
+  macOS and iOS (#379).
 
 ## [0.2.0] - 2026-09-29
 

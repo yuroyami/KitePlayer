@@ -117,7 +117,7 @@ public class SampleBufferVideoRenderer internal constructor(
     private val failed = atomic(0L)
     private val closed = atomic(false)
     private val eventFlow = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 8)
-    private val toneMapAnnouncer = ToneMapAnnouncer { eventFlow.tryEmit(it) }
+    private val hdrAnnouncer = HdrAnnouncer { eventFlow.tryEmit(it) }
 
     override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
 
@@ -222,7 +222,7 @@ public class SampleBufferVideoRenderer internal constructor(
             burner = makeBurner()
         }
         val composed = burner?.burn(picture.buffer, picture.facts, text) ?: return null
-        if (picture.facts.colorSpace.willToneMap()) toneMapAnnouncer.announce(picture.facts.colorSpace.transfer.name)
+        if (picture.facts.colorSpace.willToneMap()) hdrAnnouncer.announce(picture.facts.colorSpace.transfer.name)
         return composed
     }
 

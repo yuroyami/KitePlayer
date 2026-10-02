@@ -50,6 +50,10 @@ private class MobileAndroidPlayerViewRenderer(
         delegate.setDisplayRefreshRate(hz)
     }
 
+    override fun setDisplayHdr(types: IntArray, headroom: Float) {
+        delegate.setDisplayHdr(types, headroom)
+    }
+
     /**
      * The software path frames the picture itself; the MediaCodec path cannot, because the codec
      * writes straight into the Surface. So the view is told too, and it sizes that Surface.

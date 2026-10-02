@@ -176,7 +176,7 @@ public class UIKitVideoRenderer internal constructor(
      */
     override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
 
-    private val toneMapAnnouncer = ToneMapAnnouncer { eventFlow.tryEmit(it) }
+    private val hdrAnnouncer = HdrAnnouncer { eventFlow.tryEmit(it) }
 
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 
@@ -209,7 +209,7 @@ public class UIKitVideoRenderer internal constructor(
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         val image = try {
-            if (toneMapped(frame)) toneMapAnnouncer.announce(frame.colorSpace.transfer.name)
+            if (toneMapped(frame)) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
             val rgba = convert(frame)
             // The newest source pixels stay behind, worker-confined, so an overlay
             // change during a pause can re-composite without a frame arriving. One RGBA frame

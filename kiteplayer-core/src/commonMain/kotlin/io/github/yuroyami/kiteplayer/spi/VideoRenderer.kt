@@ -83,6 +83,13 @@ public interface VideoRenderer : AutoCloseable {
     public fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {}
 
     /**
+     * How HDR video reaches the screen. A renderer that can show HDR as HDR does so under
+     * [io.github.yuroyami.kiteplayer.HdrPolicy.Auto] and reports [RendererEvent.HdrShown]. The
+     * default ignores it, for a renderer that always tone maps.
+     */
+    public fun setHdrPolicy(policy: io.github.yuroyami.kiteplayer.HdrPolicy) {}
+
+    /**
      * The framing controls (aspect override, zoom, pan), folded into the same geometry pass the
      * scale mode drives. The same delivery law as [setScaleMode]; defaulted the same way.
      */
@@ -161,6 +168,14 @@ public sealed interface RendererEvent {
      * renderer that genuinely knows may say so, and its answer is used as given.
      */
     public data class ToneMapEngaged(val transfer: String, val streamIndex: Int = -1) : RendererEvent
+
+    /**
+     * This renderer showed HDR as HDR, with the source transfer [transfer], on a display that can
+     * show [headroom] times the brightness of standard range white. The engine turns it into
+     * [io.github.yuroyami.kiteplayer.VideoDynamicRange.High]. A renderer repeats it while it lasts,
+     * as it repeats [ToneMapEngaged].
+     */
+    public data class HdrShown(val transfer: String, val headroom: Float) : RendererEvent
 
     /**
      * This renderer showed a frame's colour only approximately, because of a limit of its own

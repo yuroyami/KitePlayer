@@ -31,6 +31,18 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   most once a second, so every open of HDR media on the same renderer warns, not only the first.
   `AndroidSurfaceVideoRenderer` gains a `toneMapped` parameter, which changes its compiled
   constructor, so recompile.
+- HDR10 and HLG show as HDR on a display that can show them (#68): through Metal on a Mac or an
+  iPhone with extended range, and through `KitePlayerView` on an Android HDR display. Elsewhere they
+  are tone mapped, as before. `HdrPolicy.ToneMap`, through `PlayerConfig.hdrPolicy` or
+  `KitePlayer.setHdrPolicy`, keeps the old behaviour everywhere, and `PlayerSnapshot` gains
+  `hdrPolicy` and `videoDynamicRange`, which says what the screen shows. `PlayerConfig`,
+  `PlayerSnapshot` and `PlayerMemento` change their generated data-class methods, so recompile.
+- `VideoRenderer` gains `setHdrPolicy`, with a default that does nothing, and `RendererEvent` gains
+  `HdrShown`, so a `when` that lists every renderer event needs the new branch.
+  `AndroidPlayerViewRenderer` gains `setDisplayHdr`, which `KitePlayerView` calls with what its
+  display can show.
+- A `setRenderQuality` call while media plays now reaches the renderer. Before, only the value in
+  force when the renderer was attached arrived (#377).
 
 ## [0.2.0] - 2026-09-29
 

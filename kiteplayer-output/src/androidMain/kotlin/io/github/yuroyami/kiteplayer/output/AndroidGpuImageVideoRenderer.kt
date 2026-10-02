@@ -162,7 +162,7 @@ public class AndroidGpuImageVideoRenderer(
 
     override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
 
-    private val toneMapAnnouncer = ToneMapAnnouncer { eventFlow.tryEmit(it) }
+    private val hdrAnnouncer = HdrAnnouncer { eventFlow.tryEmit(it) }
 
     override fun videoDecoderFactories(): List<VideoDecoderFactory> = listOf(decoderFactory)
 
@@ -192,7 +192,7 @@ public class AndroidGpuImageVideoRenderer(
         )
         if (!accepted) failed.incrementAndGet()
         // The codec rolled HDR off to SDR on request, because this tier's bitmap is SDR.
-        if (accepted) (direct as? MediaCodecBufferFrame)?.toneMappedFrom?.let(toneMapAnnouncer::announce)
+        if (accepted) (direct as? MediaCodecBufferFrame)?.toneMappedFrom?.let(hdrAnnouncer::announce)
         return accepted
     }
 

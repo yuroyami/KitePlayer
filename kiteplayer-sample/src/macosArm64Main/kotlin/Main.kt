@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.sample
 
 import io.github.yuroyami.kiteplayer.Backends
+import io.github.yuroyami.kiteplayer.HdrPolicy
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.LoopMode
@@ -69,7 +70,7 @@ fun main(args: Array<String>) {
     val path = args.firstOrNull { !it.startsWith("--") }
     if (path == null || args.contains("-h") || args.contains("--help")) {
         println("usage: kiteplayer <media file> [--window] [--pip] [--no-video] [--seek=<seconds>]")
-        println("                 [--loop-for=<seconds>] [--hwdec=off] [--hold-4k]")
+        println("                 [--loop-for=<seconds>] [--hwdec=off] [--hold-4k] [--tone-map]")
         println()
         println("Plays the file and reports the position, the audio to video drift, and the frame")
         println("accounting, all taken from the player's own flows.")
@@ -83,6 +84,7 @@ fun main(args: Array<String>) {
         println("  --hwdec=off       decode in software, the measured download-path leg")
         println("  --hold-4k         S2.e verdict: exit 1 unless failed frames are zero and late")
         println("                    drops stay under one percent of decoded (needs --window)")
+        println("  --tone-map        tone map HDR to standard range even on a display that shows HDR")
         exitProcess(if (path == null) 2 else 0)
     }
     val videoEnabled = !args.contains("--no-video")
@@ -123,6 +125,7 @@ fun main(args: Array<String>) {
             ),
             statsInterval = STATS_INTERVAL,
             hardwareDecode = if (softwareDecode) HwdecPolicy.Off else HwdecPolicy.Auto,
+            hdrPolicy = if (args.contains("--tone-map")) HdrPolicy.ToneMap else HdrPolicy.Auto,
         ),
     )
 
@@ -354,10 +357,17 @@ private suspend fun playToEnd(
     var basePosition: Duration? = null
     var seekPending = seekTo
     val total = player.state.value.duration?.let { format(it) } ?: "  --:--.---"
+    var shownRange = player.state.value.videoDynamicRange
 
     while (true) {
         val snapshot = player.state.value
         if (snapshot.status == PlaybackStatus.Ended || snapshot.status == PlaybackStatus.Failed) break
+        // What the renderer says the screen shows of the video's dynamic range, when it changes.
+        if (snapshot.videoDynamicRange != shownRange) {
+            shownRange = snapshot.videoDynamicRange
+            println()
+            println("  dynamic range: $shownRange")
+        }
         if (runFor != null && (AppleHostClock.nanos() - startedAt).nanoseconds >= runFor) {
             player.pause()
             break

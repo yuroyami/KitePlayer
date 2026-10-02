@@ -45,11 +45,22 @@ import platform.QuartzCore.CAMetalLayer
  * Presentation is snapped by the layer itself: `presentDrawable` on a CAMetalLayer with display
  * sync enabled lands on the display's own refresh, so [vsyncIntervalNanos] honestly answers null
  * and the engine's clock keeps pacing DECODE while Metal paces the glass.
+ *
+ * HDR. Under `HdrPolicy.Auto`, on a display that can go beyond standard range white, an HDR frame
+ * is drawn into a half-float, extended-range layer as linear light, tone mapped only down to the
+ * display's current headroom, and the renderer reports `RendererEvent.HdrShown`. Anywhere else HDR
+ * is tone mapped to standard range, as before, and the renderer reports
+ * `RendererEvent.ToneMapEngaged`. The layer goes back to its standard format for SDR frames.
  */
-public class MetalVideoRenderer public constructor(
+public class MetalVideoRenderer internal constructor(
     private val layer: CAMetalLayer,
     private val resolver: MetalPictureResolver,
+    /** Makes the display's headroom reader; a test passes a fixed one. */
+    headroomSource: ((onChange: () -> Unit) -> HeadroomSource)?,
 ) : VideoRenderer {
+
+    /** Draws into [layer], whose display the renderer reads for its HDR headroom. */
+    public constructor(layer: CAMetalLayer, resolver: MetalPictureResolver) : this(layer, resolver, null)
 
     // CAMetalLayer speaks the forward-declared protocol type; the casts bridge the two names of
     // the same ObjC protocol.
@@ -60,6 +71,25 @@ public class MetalVideoRenderer public constructor(
     }
 
     private val composer = MetalFrameComposer(device)
+
+    /** The composer for an extended-range layer, made at its first use. Render thread only. */
+    private var extendedComposer: MetalFrameComposer? = null
+
+    private val hdrPolicy = atomic(io.github.yuroyami.kiteplayer.HdrPolicy.Auto)
+
+    /** A change of the display's headroom redraws a paused extended-range picture. */
+    private val headroom: HeadroomSource =
+        (headroomSource ?: { change -> displayHeadroom(layer, change) }) { if (layerExtended.value) requestRedraw() }
+
+    /** True while the layer is set up for extended range. Changed by the render thread only. */
+    private val layerExtended = atomic(false)
+
+    /** The layer's own settings, kept at the first change so standard range restores them exactly. */
+    private var standardPixelFormat: ULong = 0uL
+    private var standardColorspace: platform.CoreGraphics.CGColorSpaceRef? = null
+
+    /** Linear light in BT.709 primaries, with values above 1 for HDR. Made at the first use. */
+    private var extendedColorspace: platform.CoreGraphics.CGColorSpaceRef? = null
 
     private val presented = atomic(0L)
     private val failed = atomic(0L)
@@ -113,11 +143,75 @@ public class MetalVideoRenderer public constructor(
     )
     override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
 
-    private val toneMapAnnouncer = ToneMapAnnouncer { eventFlow.tryEmit(it) }
+    private val hdrAnnouncer = HdrAnnouncer { eventFlow.tryEmit(it) }
 
     /** Says that this renderer rolled HDR off to SDR, for a frame it really did roll off. */
     private fun announceToneMap(frame: VideoFrame) {
-        if (frame.colorSpace.willToneMap()) toneMapAnnouncer.announce(frame.colorSpace.transfer.name)
+        if (frame.colorSpace.willToneMap()) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
+    }
+
+    /**
+     * True when [colorSpace] is HDR, the policy allows extended range, and the display can show
+     * more than standard white. Decided with the potential headroom, because the current one stays
+     * at 1 until a layer asks for extended range.
+     */
+    private fun wantsExtendedRange(colorSpace: io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo): Boolean {
+        headroom.refresh()
+        return hdrPolicy.value == io.github.yuroyami.kiteplayer.HdrPolicy.Auto &&
+            colorSpace.willToneMap() &&
+            headroom.potential > MIN_EXTENDED_HEADROOM
+    }
+
+    /**
+     * Sets the layer up for extended range or back to standard range. Render thread only, inside an
+     * explicit transaction, because this thread has no run loop to commit an implicit one. The next
+     * drawable has the new format.
+     */
+    private fun configureLayer(extended: Boolean) {
+        if (extended == layerExtended.value) return
+        if (extended && extendedColorspace == null) {
+            standardPixelFormat = layer.pixelFormat
+            standardColorspace = layer.colorspace
+            extendedColorspace = platform.CoreGraphics.CGColorSpaceCreateWithName(
+                platform.CoreGraphics.kCGColorSpaceExtendedLinearSRGB,
+            )
+        }
+        platform.QuartzCore.CATransaction.begin()
+        platform.QuartzCore.CATransaction.setDisableActions(true)
+        try {
+            layer.pixelFormat = if (extended) platform.Metal.MTLPixelFormatRGBA16Float else standardPixelFormat
+            layer.colorspace = if (extended) extendedColorspace else standardColorspace
+            setExtendedRangeContent(layer, extended)
+        } finally {
+            platform.QuartzCore.CATransaction.commit()
+        }
+        layerExtended.value = extended
+    }
+
+    /** The composer whose pipelines match [target], which a drawable of either format may be. */
+    private fun composerFor(target: platform.Metal.MTLTextureProtocol): MetalFrameComposer =
+        if (target.pixelFormat == platform.Metal.MTLPixelFormatRGBA16Float) {
+            extendedComposer ?: MetalFrameComposer(device, platform.Metal.MTLPixelFormatRGBA16Float).also { extendedComposer = it }
+        } else {
+            composer
+        }
+
+    /** The headroom to tone map to on [target], or null for a standard-range target. */
+    private fun headroomFor(target: platform.Metal.MTLTextureProtocol): Float? =
+        if (target.pixelFormat == platform.Metal.MTLPixelFormatRGBA16Float) headroom.current else null
+
+    /**
+     * Says what this renderer did with an HDR frame on [target]: showed it, or tone mapped it. Says
+     * nothing before the display's first reading, because a frame drawn then tone mapped only for
+     * want of knowing the display.
+     */
+    private fun announceRange(frame: VideoFrame, target: platform.Metal.MTLTextureProtocol) {
+        if (!frame.colorSpace.willToneMap() || !headroom.known) return
+        if (headroomFor(target) != null) {
+            hdrAnnouncer.announceShown(frame.colorSpace.transfer.name, headroom.current)
+        } else {
+            announceToneMap(frame)
+        }
     }
 
     private val dispatcher: CloseableCoroutineDispatcher = newSingleThreadContext("kiteplayer-metal")
@@ -197,6 +291,7 @@ public class MetalVideoRenderer public constructor(
                 )
                 return
             }
+            configureLayer(wantsExtendedRange(frame.colorSpace))
             val drawable = layer.nextDrawable()
             if (drawable == null) {
                 // The layer has no backing store right now (offscreen, zero size, teardown).
@@ -218,8 +313,11 @@ public class MetalVideoRenderer public constructor(
                 ?: layer.drawableSize.useContents { width }.toInt().coerceAtLeast(1)
             val height = viewportHeight.value.takeIf { it > 0 }
                 ?: layer.drawableSize.useContents { height }.toInt().coerceAtLeast(1)
-            composer.encode(
-                target = drawable.texture as platform.Metal.MTLTextureProtocol,
+            // Picked by the drawable's own format, not by the request: a drawable made before the
+            // layer changed format still has the old one.
+            val target = drawable.texture as platform.Metal.MTLTextureProtocol
+            composerFor(target).encode(
+                target = target,
                 frame = frame,
                 picture = picture,
                 overlay = overlay.value,
@@ -231,8 +329,9 @@ public class MetalVideoRenderer public constructor(
                 adjustUniforms = adjustUniforms.value,
                 qualityUniforms = qualityUniformsFor(frame),
                 toneMapped = true,
+                extendedRangeHeadroom = headroomFor(target),
             )
-            announceToneMap(frame)
+            announceRange(frame, target)
             presented.incrementAndGet()
             retainForRedraw(frame, picture)
         } catch (failure: Throwable) {
@@ -290,13 +389,15 @@ public class MetalVideoRenderer public constructor(
         val picture = retainedPicture ?: return
         val meta = retainedMeta ?: return
         try {
+            configureLayer(wantsExtendedRange(meta.colorSpace))
             val drawable = layer.nextDrawable() ?: return
             val width = viewportWidth.value.takeIf { it > 0 }
                 ?: layer.drawableSize.useContents { width }.toInt().coerceAtLeast(1)
             val height = viewportHeight.value.takeIf { it > 0 }
                 ?: layer.drawableSize.useContents { height }.toInt().coerceAtLeast(1)
-            composer.encode(
-                target = drawable.texture as platform.Metal.MTLTextureProtocol,
+            val target = drawable.texture as platform.Metal.MTLTextureProtocol
+            composerFor(target).encode(
+                target = target,
                 frame = meta,
                 picture = picture,
                 overlay = overlay.value,
@@ -308,6 +409,7 @@ public class MetalVideoRenderer public constructor(
                 adjustUniforms = adjustUniforms.value,
                 qualityUniforms = qualityUniformsFor(meta),
                 toneMapped = true,
+                extendedRangeHeadroom = headroomFor(target),
             )
         } catch (failure: Throwable) {
             eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "Metal redraw failed"))
@@ -339,6 +441,12 @@ public class MetalVideoRenderer public constructor(
     override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
         this.quality.value = quality
         // The old paused-picture limit is gone: the retained picture re-encodes now.
+        requestRedraw()
+    }
+
+    /** A paused HDR picture re-encodes at once, in the range the new policy asks for. */
+    override fun setHdrPolicy(policy: io.github.yuroyami.kiteplayer.HdrPolicy) {
+        hdrPolicy.value = policy
         requestRedraw()
     }
 
@@ -390,6 +498,10 @@ public class MetalVideoRenderer public constructor(
         // After the join no draw is in flight from this renderer, so the composer can fence the
         // GPU and give back its texture cache and native holder.
         composer.close()
+        extendedComposer?.close()
+        headroom.close()
+        extendedColorspace?.let { platform.CoreGraphics.CGColorSpaceRelease(it) }
+        extendedColorspace = null
         dispatcher.close()
     }
 
@@ -401,6 +513,9 @@ public class MetalVideoRenderer public constructor(
         }
     }
 }
+
+/** Below this headroom a display shows nothing beyond standard range worth a half-float layer. */
+private const val MIN_EXTENDED_HEADROOM = 1.05f
 
 /**
  * A drawable's presented time as [AppleHostClock] nanoseconds, or null when the drawable was never

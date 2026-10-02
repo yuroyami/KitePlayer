@@ -381,6 +381,7 @@ class MementoTest {
             videoTransform = VideoTransform(aspectOverride = 2.35f, zoom = 1.1f),
             videoAdjustments = VideoAdjustments(saturation = 0.5f, gamma = 1.6f),
             renderQuality = RenderQuality(dither = true, scaler = VideoScaler.CatmullRom),
+            hdrPolicy = HdrPolicy.ToneMap,
             videoEnabled = false,
         )
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))

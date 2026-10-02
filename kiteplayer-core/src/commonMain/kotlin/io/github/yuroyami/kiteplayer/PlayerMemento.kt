@@ -58,6 +58,7 @@ public data class PlayerMemento(
      * items already heard do not come round again.
      */
     val queueOrder: List<Int> = emptyList(),
+    val hdrPolicy: HdrPolicy = HdrPolicy.Auto,
 ) {
 
     /**
@@ -121,6 +122,7 @@ public data class PlayerMemento(
         put("quality.debandGrain", renderQuality.debandGrain.toString())
         put("quality.scaler", renderQuality.scaler.name)
         put("quality.linearLight", renderQuality.linearLight.toString())
+        put("hdrPolicy", hdrPolicy.name)
         subtitleStyle?.let { style ->
             put("subtitleStyle.present", "true")
             put("subtitleStyle.backgroundPaddingPx", style.backgroundPaddingPx.toString())
@@ -151,7 +153,8 @@ public data class PlayerMemento(
             val version = properties["version"]?.toIntOrNull()
             // Version 1 knew nothing about balance, the equaliser or any picture and subtitle
             // setting, version 2 nothing about the demux settings, version 3 nothing about the
-            // item titles or the shuffle order, and version 4 nothing about the variant limits.
+            // item titles or the shuffle order, and version 4 nothing about the variant limits or
+            // the HDR policy.
             // Each reads back with the defaults for those, which is what a player that had never
             // been told about them would have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
@@ -229,6 +232,7 @@ public data class PlayerMemento(
                     scaler = properties["quality.scaler"]?.let { VideoScaler.valueOf(it) } ?: VideoScaler.Bilinear,
                     linearLight = properties["quality.linearLight"]?.toBooleanStrict() ?: false,
                 ),
+                hdrPolicy = properties["hdrPolicy"]?.let { HdrPolicy.valueOf(it) } ?: HdrPolicy.Auto,
                 videoEnabled = properties["videoEnabled"]?.toBooleanStrict() ?: true,
                 queueOrder = properties["queueOrder"]
                     ?.split(" ")?.filter { it.isNotBlank() }?.map { it.toInt() }

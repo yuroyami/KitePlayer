@@ -75,6 +75,11 @@ public data class PlayerConfig(
     val deinterlace: DeinterlacePolicy = DeinterlacePolicy.Auto,
     /** How a queue moves from one item to the next, including the gapless handoff. See [QueueConfig]. */
     val queue: QueueConfig = QueueConfig(),
+    /**
+     * How HDR video reaches the screen. Change it live with [KitePlayer.setHdrPolicy]; this is only
+     * the value a fresh player starts at.
+     */
+    val hdrPolicy: HdrPolicy = HdrPolicy.Auto,
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive

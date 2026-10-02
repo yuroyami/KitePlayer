@@ -140,6 +140,13 @@ public data class PlayerSnapshot(
      * gapless handoff, or null. See [QueueConfig].
      */
     val preloadedIndex: Int? = null,
+    /** How HDR video reaches the screen. */
+    val hdrPolicy: HdrPolicy = HdrPolicy.Auto,
+    /**
+     * What the screen shows of this item's dynamic range, as the renderer last reported it. Back to
+     * [VideoDynamicRange.Standard] at every open.
+     */
+    val videoDynamicRange: VideoDynamicRange = VideoDynamicRange.Standard,
 )
 
 /**

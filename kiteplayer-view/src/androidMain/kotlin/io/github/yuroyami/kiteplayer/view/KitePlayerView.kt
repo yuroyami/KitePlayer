@@ -366,6 +366,7 @@ public open class KitePlayerView @JvmOverloads constructor(
             override fun surfaceCreated(holder: SurfaceHolder) {
                 binding.activeRenderer?.setSurface(holder.surface)
                 feedDisplayRefreshRate()
+                feedDisplayHdr()
                 binding.surfaceReady()
                 if (surfaceLost) {
                     surfaceLost = false
@@ -377,6 +378,7 @@ public open class KitePlayerView @JvmOverloads constructor(
                 binding.activeRenderer?.setSurface(holder.surface)
                 // Re-read on every change: the window may have moved to another display.
                 feedDisplayRefreshRate()
+                feedDisplayHdr()
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -400,6 +402,22 @@ public open class KitePlayerView @JvmOverloads constructor(
      */
     private fun feedDisplayRefreshRate() {
         binding.activeRenderer?.setDisplayRefreshRate(display?.refreshRate ?: 0f)
+    }
+
+    /**
+     * The same reason for HDR: the view hands the renderer what its display can show. Android 14
+     * answers per display mode and reports the current headroom; older versions answer per display.
+     */
+    private fun feedDisplayHdr() {
+        val display = display ?: return
+        val types = if (Build.VERSION.SDK_INT >= 34) {
+            display.mode.supportedHdrTypes
+        } else {
+            @Suppress("DEPRECATION")
+            display.hdrCapabilities?.supportedHdrTypes ?: IntArray(0)
+        }
+        val headroom = if (Build.VERSION.SDK_INT >= 34 && display.isHdrSdrRatioAvailable) display.hdrSdrRatio else 1f
+        binding.activeRenderer?.setDisplayHdr(types, headroom)
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -481,6 +499,14 @@ public interface AndroidPlayerViewRenderer : PlayerViewRenderer {
      * not know its display. 0 means unknown. Default: ignored, for renderers that do not pace.
      */
     public fun setDisplayRefreshRate(hz: Float) {}
+
+    /**
+     * What the display this view sits on can show of HDR, fed by the view: the
+     * `Display.HdrCapabilities` types it supports, such as `HDR_TYPE_HDR10` and `HDR_TYPE_HLG`, and
+     * how far beyond standard white it goes now, or 1 when unknown. Default: ignored, for renderers
+     * that report nothing about HDR.
+     */
+    public fun setDisplayHdr(types: IntArray, headroom: Float) {}
 }
 
 /** Creates the Android renderer adapter used by [KitePlayerView]. */

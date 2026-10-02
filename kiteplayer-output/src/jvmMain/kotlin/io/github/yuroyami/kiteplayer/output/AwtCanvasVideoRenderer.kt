@@ -94,7 +94,7 @@ public class AwtCanvasVideoRenderer(
     private val eventFlow = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 8)
     override val events: Flow<RendererEvent> get() = eventFlow
 
-    private val toneMapAnnouncer = ToneMapAnnouncer { eventFlow.tryEmit(it) }
+    private val hdrAnnouncer = HdrAnnouncer { eventFlow.tryEmit(it) }
 
     private val lock = Any()
     private var canvas: Canvas? = null
@@ -146,7 +146,7 @@ public class AwtCanvasVideoRenderer(
 
     /** Says that this painter rolled HDR off to SDR while painting. */
     private fun announceToneMap(frame: VideoFrame) {
-        if (painter.toneMapped(frame)) toneMapAnnouncer.announce(frame.colorSpace.transfer.name)
+        if (painter.toneMapped(frame)) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
     }
 
     override fun supports(format: PlayerPixelFormat): Boolean = true

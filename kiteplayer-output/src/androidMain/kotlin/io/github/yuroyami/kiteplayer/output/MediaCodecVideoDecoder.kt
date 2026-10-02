@@ -65,9 +65,28 @@ internal fun interface MediaCodecOutputAdmission {
 }
 
 private val DIRECT_SURFACE_ADMISSION = MediaCodecOutputAdmission { requirement ->
-    MediaCodecOutputContract().takeIf {
-        canRepresentMediaCodecColorExactly(requirement.colorSpace)
-    }
+    directSurfaceOutputContract(requirement, toneMap = false)
+}
+
+/**
+ * The direct Surface's contract with MediaCodec. The codec writes the source's own colour to the
+ * Surface, and the system shows HDR as HDR on a display that can. With [toneMap] an HDR source
+ * asks the codec for SDR output instead, from Android 12, where the request exists; the open fails
+ * when the codec does not accept it, and the software decoder takes over.
+ */
+internal fun directSurfaceOutputContract(
+    requirement: MediaCodecStreamRequirement,
+    toneMap: Boolean,
+    sdkInt: Int = Build.VERSION.SDK_INT,
+): MediaCodecOutputContract? {
+    val color = requirement.colorSpace
+    if (!canRepresentMediaCodecColorExactly(color)) return null
+    if (!toneMap || color == null || !color.isHdr || sdkInt < Build.VERSION_CODES.S) return MediaCodecOutputContract()
+    return MediaCodecOutputContract(
+        requestedColorTransfer = MediaFormat.COLOR_TRANSFER_SDR_VIDEO,
+        trustedOutputColor = ColorSpaceInfo(),
+        validateOutput = { detected -> detected.reliable && !detected.colorSpace.isHdr },
+    )
 }
 
 /** A hardware decoder paired with the Surface target owned by one Android video renderer. */

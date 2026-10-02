@@ -572,7 +572,8 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
                     "refused=${stats.refusedFrames} repeated=${stats.repeatedFrames} " +
                     "videoQ=${stats.videoQueueDepth.inWholeMilliseconds} audioQ=${stats.audioQueueDepth.inWholeMilliseconds} " +
                     "underruns=${stats.audioUnderruns} drift=${stats.avDrift.inWholeMilliseconds} " +
-                    "fps=${stats.videoDecodeFps.roundToInt()} hw=${stats.hardwareDecode} master=${stats.masterClock}",
+                    "fps=${stats.videoDecodeFps.roundToInt()} hw=${stats.hardwareDecode} master=${stats.masterClock} " +
+                    "range=${player.state.value.videoDynamicRange} edrHeadroom=${screenHeadroom()}",
             )
         }
     }
@@ -619,6 +620,13 @@ private class ScenarioTrace(path: String) {
     fun close() {
         fclose(file)
     }
+}
+
+/** The main screen's current and potential HDR headroom, from iOS 16; this sampler runs on the main thread. */
+private fun screenHeadroom(): String {
+    val screen = platform.UIKit.UIScreen.mainScreen
+    if (!screen.respondsToSelector(NSSelectorFromString("currentEDRHeadroom"))) return "n/a"
+    return "${screen.currentEDRHeadroom}/${screen.potentialEDRHeadroom}"
 }
 
 private fun documentsDirectory(): String = NSSearchPathForDirectoriesInDomains(

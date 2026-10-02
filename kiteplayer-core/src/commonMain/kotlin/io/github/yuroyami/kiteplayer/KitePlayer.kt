@@ -497,6 +497,16 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.SetRenderQuality(value, CompletableDeferred()))
     }
 
+    /**
+     * Sets how HDR video reaches the screen. A renderer that can show HDR applies the change to its
+     * next frame, and the Android Surface path to its next open. [PlayerSnapshot.videoDynamicRange]
+     * says what the screen shows.
+     */
+    @Throws(IllegalStateException::class)
+    public fun setHdrPolicy(value: HdrPolicy) {
+        core.post(CoreCommand.SetHdrPolicy(value, CompletableDeferred()))
+    }
+
     private fun checkRenderQuality(value: RenderQuality) {
         require(value.debandThreshold.isFinite() && value.debandThreshold >= 0f) {
             "the deband threshold must be finite and not negative, was ${value.debandThreshold}"
@@ -956,6 +966,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             videoTransform = snapshot.videoTransform,
             videoAdjustments = snapshot.videoAdjustments,
             renderQuality = snapshot.renderQuality,
+            hdrPolicy = snapshot.hdrPolicy,
             videoEnabled = snapshot.videoEnabled,
             queueOrder = if (snapshot.shuffle && snapshot.queue.isNotEmpty()) snapshot.queueOrder else emptyList(),
         )
@@ -1019,6 +1030,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setVideoTransform(memento.videoTransform)
         setVideoAdjustments(memento.videoAdjustments)
         setRenderQuality(memento.renderQuality)
+        setHdrPolicy(memento.hdrPolicy)
         setVideoEnabled(memento.videoEnabled)
         openQueue(memento.queue, memento.queueIndex)
         setLoop(memento.loop)

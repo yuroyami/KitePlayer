@@ -323,6 +323,10 @@ internal class AttachableRenderer : VideoRenderer {
         delegate?.setRenderQuality(quality)
     }
 
+    override fun setHdrPolicy(policy: io.github.yuroyami.kiteplayer.HdrPolicy) {
+        delegate?.setHdrPolicy(policy)
+    }
+
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         delegate?.setOverlay(overlay)
     }

@@ -666,6 +666,11 @@ internal class PlaybackCore(
     private var videoScale: VideoScale = VideoScale.Fit
     private var videoAdjustments: VideoAdjustments = VideoAdjustments.Identity
     private var renderQuality: io.github.yuroyami.kiteplayer.RenderQuality = config.renderQuality
+    private var hdrPolicy: io.github.yuroyami.kiteplayer.HdrPolicy = config.hdrPolicy
+
+    /** What the renderer last said the screen shows of this open's dynamic range. Reset with the session. */
+    private var videoDynamicRange: io.github.yuroyami.kiteplayer.VideoDynamicRange =
+        io.github.yuroyami.kiteplayer.VideoDynamicRange.Standard
     private var videoTransform: VideoTransform = VideoTransform.Identity
 
     /** Runtime subtitle timing shift, seeded from config. Positive shows cues later. */
@@ -1900,6 +1905,18 @@ internal class PlaybackCore(
                 if (session == null) pendingRenderer?.setRenderQuality(command.value)
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetHdrPolicy -> {
+                hdrPolicy = command.value
+                session?.renderer?.setHdrPolicy(command.value)
+                if (session == null) pendingRenderer?.setHdrPolicy(command.value)
+                command.reply.complete(Unit)
+            }
+            // The same rule as the tone map warning: only after this open's first frame, so a report
+            // about the previous item's last frames does not count for this one.
+            is CoreCommand.ReportDynamicRange -> {
+                if (firstFrameSeen) videoDynamicRange = command.value
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetVideoTransform -> {
                 videoTransform = command.value
                 session?.renderer?.setTransform(command.value)
@@ -1987,6 +2004,7 @@ internal class PlaybackCore(
         renderer?.setScaleMode(videoScale)
         renderer?.setAdjustments(videoAdjustments)
         renderer?.setRenderQuality(renderQuality)
+        renderer?.setHdrPolicy(hdrPolicy)
         renderer?.setTransform(videoTransform)
         val session = this.session
         if (session == null) {
@@ -2104,6 +2122,15 @@ internal class PlaybackCore(
     /** Latches [PlaybackWarning.HdrToneMapped] to once per open. Reset with the session. */
     private var toneMapWarned: Boolean = false
 
+    /**
+     * Hands what a renderer says the screen shows to the actor, which owns the snapshot. A
+     * renderer repeats its report while it lasts, so only a change costs a command.
+     */
+    private fun reportDynamicRange(range: io.github.yuroyami.kiteplayer.VideoDynamicRange) {
+        if (range == videoDynamicRange) return
+        commands.trySend(CoreCommand.ReportDynamicRange(range, CompletableDeferred()))
+    }
+
     /** The renderer's colour limits already warned about this open, by detail. Reset with the session. */
     private val colorLimitsWarned = mutableSetOf<String>()
 
@@ -2149,6 +2176,7 @@ internal class PlaybackCore(
                         // an announcement about the previous item's last frames is not taken for
                         // this one; the renderer repeats it a second later.
                         is RendererEvent.ToneMapEngaged -> {
+                            reportDynamicRange(io.github.yuroyami.kiteplayer.VideoDynamicRange.ToneMapped)
                             if (!toneMapWarned && firstFrameSeen) {
                                 toneMapWarned = true
                                 warn(
@@ -2162,6 +2190,7 @@ internal class PlaybackCore(
                                 )
                             }
                         }
+                        is RendererEvent.HdrShown -> reportDynamicRange(io.github.yuroyami.kiteplayer.VideoDynamicRange.High)
                         is RendererEvent.FramePresented -> if (config.frameEvents) {
                             val target = session?.video?.targetFor(event.pts.micros)
                             emitEvent(
@@ -2233,6 +2262,7 @@ internal class PlaybackCore(
         playRequested = false
         loopRefusalWarned = false
         toneMapWarned = false
+        videoDynamicRange = io.github.yuroyami.kiteplayer.VideoDynamicRange.Standard
         colorLimitsWarned.clear()
         pendingVideoRecovery = null
         videoRecoveryAttempted = false
@@ -5976,6 +6006,7 @@ internal class PlaybackCore(
         pendingExternalSubtitle = null
         loopRefusalWarned = false
         toneMapWarned = false
+        videoDynamicRange = io.github.yuroyami.kiteplayer.VideoDynamicRange.Standard
         colorLimitsWarned.clear()
         videoRecoveryAttempted = false
         forceBackendSoftwareForMedia = false
@@ -7287,6 +7318,8 @@ internal class PlaybackCore(
             videoScale = videoScale,
             videoAdjustments = videoAdjustments,
             renderQuality = renderQuality,
+            hdrPolicy = hdrPolicy,
+            videoDynamicRange = videoDynamicRange,
             videoTransform = videoTransform,
             subtitleDelay = subtitleDelay,
             subtitleScale = subtitleScale,
@@ -7641,6 +7674,8 @@ internal class PlaybackCore(
             videoScale = videoScale,
             videoAdjustments = videoAdjustments,
             renderQuality = renderQuality,
+            hdrPolicy = hdrPolicy,
+            videoDynamicRange = videoDynamicRange,
             videoTransform = videoTransform,
             subtitleDelay = subtitleDelay,
             subtitleScale = subtitleScale,
@@ -9752,6 +9787,10 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetVideoScale(val mode: VideoScale, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoScale", reply)
     class SetRenderQuality(val value: io.github.yuroyami.kiteplayer.RenderQuality, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setRenderQuality", reply)
+    class SetHdrPolicy(val value: io.github.yuroyami.kiteplayer.HdrPolicy, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setHdrPolicy", reply)
+    class ReportDynamicRange(val value: io.github.yuroyami.kiteplayer.VideoDynamicRange, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("reportDynamicRange", reply)
     class SetVideoAdjustments(val value: VideoAdjustments, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setVideoAdjustments", reply)
     class SetVideoTransform(val value: VideoTransform, val reply: CompletableDeferred<Unit>) :

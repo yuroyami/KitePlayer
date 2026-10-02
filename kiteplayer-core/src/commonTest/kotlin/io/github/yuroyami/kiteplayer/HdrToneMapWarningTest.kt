@@ -25,6 +25,10 @@ class HdrToneMapWarningTest {
 
     private class ScriptedRenderer : VideoRenderer {
         val published: MutableSharedFlow<RendererEvent> = MutableSharedFlow(extraBufferCapacity = 16)
+        var appliedHdrPolicy: HdrPolicy? = null
+        override fun setHdrPolicy(policy: HdrPolicy) {
+            appliedHdrPolicy = policy
+        }
         override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
             frame.close()
             return true
@@ -150,6 +154,47 @@ class HdrToneMapWarningTest {
         val warnings = harness.core.warningHistory().map { it.warning }
             .filterIsInstance<PlaybackWarning.HdrToneMapped>()
         assertEquals(2, warnings.size, "one warning per open, got ${warnings.size}")
+        harness.close()
+    }
+
+    /** The renderer's report becomes the snapshot's dynamic range, and an open starts it again. */
+    @Test
+    fun `the snapshot says what the renderer reports the screen shows`() = runTest {
+        val renderer = ScriptedRenderer()
+        val harness = CoreHarness(this, renderer = null)
+        harness.core.attachRenderer(renderer)
+        harness.open()
+        harness.run(100.milliseconds)
+        assertEquals(VideoDynamicRange.Standard, harness.core.snapshots.value.videoDynamicRange)
+
+        renderer.published.emit(RendererEvent.HdrShown("PQ", headroom = 2f))
+        harness.run(100.milliseconds)
+        assertEquals(VideoDynamicRange.High, harness.core.snapshots.value.videoDynamicRange)
+
+        renderer.published.emit(RendererEvent.ToneMapEngaged("PQ"))
+        harness.run(100.milliseconds)
+        assertEquals(VideoDynamicRange.ToneMapped, harness.core.snapshots.value.videoDynamicRange)
+
+        harness.core.stop()
+        harness.open()
+        harness.run(100.milliseconds)
+        assertEquals(VideoDynamicRange.Standard, harness.core.snapshots.value.videoDynamicRange)
+        harness.close()
+    }
+
+    @Test
+    fun `the hdr policy reaches the renderer at attach and on every change`() = runTest {
+        val renderer = ScriptedRenderer()
+        val harness = CoreHarness(this, renderer = null, config = PlayerConfig(hdrPolicy = HdrPolicy.ToneMap))
+        harness.core.attachRenderer(renderer)
+        assertEquals(HdrPolicy.ToneMap, renderer.appliedHdrPolicy)
+        harness.open()
+        harness.core.post(
+            io.github.yuroyami.kiteplayer.internal.CoreCommand.SetHdrPolicy(HdrPolicy.Auto, kotlinx.coroutines.CompletableDeferred()),
+        )
+        harness.run(100.milliseconds)
+        assertEquals(HdrPolicy.Auto, renderer.appliedHdrPolicy)
+        assertEquals(HdrPolicy.Auto, harness.core.snapshots.value.hdrPolicy)
         harness.close()
     }
 

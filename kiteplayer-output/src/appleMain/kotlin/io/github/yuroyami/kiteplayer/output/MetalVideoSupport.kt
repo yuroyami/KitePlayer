@@ -147,7 +147,8 @@ struct AdjustUniforms {
 };
 
 struct QualityUniforms {
-    int   flags;          // bit 0 dither, bit 1 deband, bit 2 bicubic, bit 3 linear light. 0 is the plain write.
+    int   flags;          // bit 0 dither, bit 1 deband, bit 2 bicubic, bit 3 linear light, bit 4 extended
+                          // range: the target holds linear light, 1.0 at standard white. 0 is the plain write.
     float ditherScale;    // one output step, so the pattern is exactly +/- half a step
     float debandThreshold;// how flat a neighbourhood must be to count as a band, in 0..1
     float debandRange;    // ring radius at the first iteration, in source pixels
@@ -161,7 +162,7 @@ struct ToneUniforms {
     int   mode;         // 0 off (bit-exact SDR path), 1 PQ, 2 HLG
     float srcPeak;      // source peak in nits; the EETF's source anchor
     int   gamut2020;    // 1 converts BT.2020 primaries to BT.709 in linear light
-    float pad;
+    float dstPeak;      // the brightest the output shows, in nits: 203 for SDR, 203 times the headroom beyond
 };
 
 /* An 8x8 ordered Bayer matrix, the classic recursive construction, as values in 0..63.
@@ -336,12 +337,14 @@ static inline float kp_pq_decode1(float e) {
     return pow(max(p - KP_PQ_C1, 0.0) / (KP_PQ_C2 - KP_PQ_C3 * p), 1.0 / KP_PQ_M1);
 }
 
-// BT.2390 EETF: maps one luminance in nits from [0, srcPeak] into [0, 203] (SDR reference
-// white per BT.2408), working in normalized PQ space. This is the same operator mpv defaults
-// to; below the knee luminance passes through unchanged, above it a Hermite spline rolls off.
-static float kp_eetf_nits(float nits, float srcPeak) {
+// BT.2390 EETF: maps one luminance in nits from [0, srcPeak] into [0, dstPeak], working in
+// normalized PQ space. dstPeak is 203 nits (SDR reference white per BT.2408) for SDR output and
+// the display's headroom times that for extended range. This is the same operator mpv defaults to;
+// below the knee luminance passes through unchanged, above it a Hermite spline rolls off, and a
+// source no brighter than the destination passes through whole.
+static float kp_eetf_nits(float nits, float srcPeak, float dstPeak) {
     float srcPq = kp_pq_encode1(srcPeak / 10000.0);
-    float dstPq = kp_pq_encode1(203.0 / 10000.0);
+    float dstPq = kp_pq_encode1(dstPeak / 10000.0);
     float e1 = clamp(kp_pq_encode1(nits / 10000.0) / srcPq, 0.0, 1.0);
     float maxLum = dstPq / srcPq;
     float ks = 1.5 * maxLum - 0.5;
@@ -357,8 +360,10 @@ static float kp_eetf_nits(float nits, float srcPeak) {
     return kp_pq_decode1(e2 * srcPq) * 10000.0;
 }
 
-// Applies the HDR-to-SDR law to one gamma-domain RGB sample. Returns SDR gamma 2.2 RGB.
-static float3 kp_tone_map(float3 rgb, constant ToneUniforms &tone) {
+// Applies the HDR law to one gamma-domain RGB sample. Returns SDR gamma 2.2 RGB, or with linearOut
+// linear light in BT.709 primaries with 1.0 at reference white, where a colour outside BT.709 stays
+// as a negative component and a highlight goes above 1.0 up to the destination peak.
+static float3 kp_tone_map(float3 rgb, constant ToneUniforms &tone, bool linearOut) {
     float3 nits;
     if (tone.mode == 1) {
         nits = kp_pq_decode(rgb) * 10000.0;
@@ -377,12 +382,15 @@ static float3 kp_tone_map(float3 rgb, constant ToneUniforms &tone) {
             float3(1.6605, -0.1246, -0.0182),
             float3(-0.5876, 1.1329, -0.1006),
             float3(-0.0728, -0.0083, 1.1187));
-        nits = max(to709 * nits, 0.0);
+        nits = to709 * nits;
+        if (!linearOut) nits = max(nits, 0.0);
     }
-    float luma = dot(nits, float3(0.2126, 0.7152, 0.0722));
-    float mapped = kp_eetf_nits(luma, tone.srcPeak);
+    float luma = dot(max(nits, 0.0), float3(0.2126, 0.7152, 0.0722));
+    float mapped = kp_eetf_nits(luma, tone.srcPeak, tone.dstPeak);
     float ratio = luma > 1e-4 ? mapped / luma : 1.0;
-    float3 sdr = clamp(nits * ratio * (1.0 / 203.0), 0.0, 1.0);
+    float3 light = nits * ratio * (1.0 / 203.0);
+    if (linearOut) return light;
+    float3 sdr = clamp(light, 0.0, 1.0);
     return pow(sdr, float3(1.0 / 2.2));
 }
 
@@ -462,16 +470,23 @@ fragment float4 kp_picture(
         float b = c.bY * y + c.bCb * cb + c.bCr * cr;
         rgb = clamp(float3(r, g, b) / 255.0, 0.0, 1.0);
     }
+    /* Extended range: the target holds linear light, so the tone map stops at light and an SDR
+     * picture is decoded to it. Highlights above 1.0 and colours outside BT.709 survive every step
+     * below, and only black is a floor. */
+    bool extended = (q.flags & 16) != 0;
     if (tone.mode != 0) {
-        rgb = kp_tone_map(rgb, tone);
+        rgb = kp_tone_map(rgb, tone, extended);
+    } else if (extended) {
+        rgb = kp_to_light(rgb);
     }
     if (adj.enabled != 0) {
         float3 p = rgb;
-        rgb = clamp(float3(
+        float3 adjusted = float3(
             adj.m[0] * p.x + adj.m[1] * p.y + adj.m[2] * p.z + adj.offset[0],
             adj.m[3] * p.x + adj.m[4] * p.y + adj.m[5] * p.z + adj.offset[1],
             adj.m[6] * p.x + adj.m[7] * p.y + adj.m[8] * p.z + adj.offset[2]
-        ), 0.0, 1.0);
+        );
+        rgb = extended ? max(adjusted, 0.0) : clamp(adjusted, 0.0, 1.0);
     }
     /* The gamma curve, on the matrix's output and only when asked, so a gamma of 1 writes the
      * same bits as before. The floor at zero is for the kernel, whose ringing can dip below
@@ -483,7 +498,11 @@ fragment float4 kp_picture(
      * at its own size, as light, and kp_light_scale scales it and dithers it. The composer clears
      * the dither and kernel bits for this pass, so neither runs twice. */
     if ((q.flags & 8) != 0) {
-        return float4(kp_to_light(rgb), 1.0);
+        return float4(extended ? rgb : kp_to_light(rgb), 1.0);
+    }
+    /* A half-float target has no eight bit steps to spread a value across. */
+    if (extended) {
+        return float4(rgb, 1.0);
     }
     /* Last, after every stage that could have produced an off-grid value: tone mapping, the eq
      * matrix and the YUV conversion all land between output steps, and this is the only place that
@@ -509,6 +528,10 @@ fragment float4 kp_light_scale(
     float3 scaled = ((q.flags & 4) != 0 && (q.flags & 2) == 0)
         ? kp_bicubic(light, s, in.texcoord, float2(light.get_width(), light.get_height())).rgb
         : light.sample(s, in.texcoord).rgb;
+    /* An extended-range target takes the light itself. */
+    if ((q.flags & 16) != 0) {
+        return float4(max(scaled, 0.0), 1.0);
+    }
     float3 rgb = clamp(kp_from_light(scaled), 0.0, 1.0);
     if ((q.flags & 1) != 0) {
         rgb = clamp(kp_dither(rgb, in.position.xy, q.ditherScale), 0.0, 1.0);
@@ -522,6 +545,21 @@ fragment float4 kp_overlay(
 ) {
     constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
     return image.sample(s, in.texcoord);
+}
+
+/* The overlay on an extended-range target. Its bitmaps hold premultiplied sRGB and the target holds
+ * linear light with 1.0 at reference white, so the colour is decoded before the blend, and subtitle
+ * white lands on the video's reference white. */
+fragment float4 kp_overlay_linear(
+    VertexOut in [[stage_in]],
+    texture2d<float> image [[texture(0)]]
+) {
+    constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
+    float4 c = image.sample(s, in.texcoord);
+    if (c.a <= 0.0) {
+        return float4(0.0);
+    }
+    return float4(kp_to_light(c.rgb / c.a) * c.a, c.a);
 }
 """
 
@@ -550,6 +588,8 @@ internal fun packQualityUniforms(
     frameSeed: Float = 0f,
 ): FloatArray {
     var flags = 0
+    // Bit 4, extended range, belongs to the target rather than to the quality setting; the composer
+    // sets it for a half-float extended-range target.
     if (quality.dither) flags = flags or 1
     // Debanding needs the source's texel size to walk a ring in it. Without a size there is no
     // ring, so the pass turns itself off rather than sampling a wrong neighbourhood.
@@ -608,7 +648,7 @@ internal fun ColorSpaceInfo.willToneMap(): Boolean =
     transfer == io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq ||
         transfer == io.github.yuroyami.kiteplayer.spi.ColorTransfer.Hlg
 
-internal fun packToneUniforms(colorSpace: ColorSpaceInfo): FloatArray {
+internal fun packToneUniforms(colorSpace: ColorSpaceInfo, dstPeakNits: Float = SDR_WHITE_NITS): FloatArray {
     val mode = when (colorSpace.transfer) {
         io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq -> 1
         io.github.yuroyami.kiteplayer.spi.ColorTransfer.Hlg -> 2
@@ -619,9 +659,15 @@ internal fun packToneUniforms(colorSpace: ColorSpaceInfo): FloatArray {
         Float.fromBits(mode),
         1000f,
         Float.fromBits(gamut),
-        0f,
+        dstPeakNits,
     )
 }
+
+/** Reference white in nits, BT.2408's graphics white: 1.0 on an extended-range target. */
+internal const val SDR_WHITE_NITS: Float = 203f
+
+/** The quality flag for an extended-range target, whose texels hold linear light. */
+internal const val EXTENDED_RANGE_FLAG: Int = 16
 
 /**
  * Packs the engine's one colour-matrix law and its gamma curve into the shader's AdjustUniforms
@@ -739,6 +785,8 @@ internal class MetalPipelines private constructor(
     val lightPicture: MTLRenderPipelineStateProtocol,
     /** The second pass: that texture scaled onto the target. */
     val lightScale: MTLRenderPipelineStateProtocol,
+    /** The overlay for an extended-range target, which decodes the bitmap's sRGB to light. */
+    val overlayLinear: MTLRenderPipelineStateProtocol,
 ) {
     companion object {
         private val lock = kotlinx.atomicfu.locks.SynchronizedObject()
@@ -753,6 +801,7 @@ internal class MetalPipelines private constructor(
                         overlay = device.makeOverlayPipeline(library, targetFormat),
                         lightPicture = device.makePicturePipeline(library, MTLPixelFormatRGBA16Float),
                         lightScale = device.makeLightScalePipeline(library, targetFormat),
+                        overlayLinear = device.makePipeline(library, "kp_overlay_linear", targetFormat, blended = true),
                     )
                 }
             }
@@ -783,7 +832,7 @@ internal fun MTLDeviceProtocol.makeOverlayPipeline(
     targetFormat: ULong,
 ): MTLRenderPipelineStateProtocol = makePipeline(library, "kp_overlay", targetFormat, blended = true)
 
-private fun MTLDeviceProtocol.makePipeline(
+internal fun MTLDeviceProtocol.makePipeline(
     library: MTLLibraryProtocol,
     fragment: String,
     targetFormat: ULong,

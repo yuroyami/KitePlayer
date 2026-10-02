@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.RectF
+import android.view.Display
 import android.view.Surface
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
@@ -20,6 +21,8 @@ import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
+import io.github.yuroyami.kiteplayer.HdrPolicy
+import io.github.yuroyami.kiteplayer.spi.ColorTransfer
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CloseableCoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -206,7 +209,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     )
     override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
 
-    private val toneMapAnnouncer = ToneMapAnnouncer { eventFlow.tryEmit(it) }
+    private val hdrAnnouncer = HdrAnnouncer { eventFlow.tryEmit(it) }
 
     /**
      * The ARGB pixels of the frame being drawn, kept between frames.
@@ -266,7 +269,71 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     public val failedFrames: Long get() = failed.value
 
     override fun videoDecoderFactories(): List<VideoDecoderFactory> =
-        codecTarget?.let { listOf(MediaCodecVideoDecoderFactory(it)) }.orEmpty()
+        codecTarget?.let { target ->
+            listOf(
+                MediaCodecVideoDecoderFactory(
+                    target,
+                    // Read at each decoder's creation, so a policy change applies from the next open.
+                    outputAdmission = MediaCodecOutputAdmission { requirement ->
+                        directSurfaceOutputContract(requirement, toneMap = hdrPolicy.value == HdrPolicy.ToneMap)
+                    },
+                ),
+            )
+        }.orEmpty()
+
+    private val hdrPolicy = atomic(HdrPolicy.Auto)
+
+    /**
+     * HDR from the decoder goes to the Surface as it is under [HdrPolicy.Auto], and the system shows
+     * it as HDR on a display that can. Under [HdrPolicy.ToneMap] the next open asks MediaCodec for
+     * SDR, and a software frame is tone mapped by the converter either way.
+     */
+    override fun setHdrPolicy(policy: HdrPolicy) {
+        hdrPolicy.value = policy
+    }
+
+    /** What the display can show of HDR, fed by the view; null until it says. */
+    private val displayHdr = atomic<DisplayHdr?>(null)
+
+    private class DisplayHdr(val types: IntArray, val headroom: Float)
+
+    /**
+     * What the display this renderer's Surface is on can show of HDR: the `Display.HdrCapabilities`
+     * types it supports and how far beyond standard white it goes now, or 1 when unknown. Fed by the
+     * view, because a Surface does not know its display. Until it is fed, the renderer reports
+     * nothing about HDR on the direct path, where only the display decides.
+     */
+    public fun setDisplayHdr(types: IntArray, headroom: Float) {
+        displayHdr.value = DisplayHdr(types.copyOf(), headroom.coerceAtLeast(1f))
+    }
+
+    /**
+     * Says what happened to an HDR frame the codec sent to the Surface: tone mapped on request,
+     * shown as HDR by a display that supports its transfer, or tone mapped by the system for one
+     * that does not.
+     */
+    private fun announceDirectRange(frame: DirectSurfaceVideoFrame) {
+        (frame as? MediaCodecBufferFrame)?.toneMappedFrom?.let {
+            hdrAnnouncer.announce(it)
+            return
+        }
+        val color = frame.colorSpace
+        if (!color.isHdr) return
+        val display = displayHdr.value ?: return
+        val shown = when (color.transfer) {
+            ColorTransfer.Pq -> display.types.any {
+                it == Display.HdrCapabilities.HDR_TYPE_HDR10 ||
+                    it == Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS ||
+                    it == Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION
+            }
+            else -> display.types.any { it == Display.HdrCapabilities.HDR_TYPE_HLG }
+        }
+        if (shown) {
+            hdrAnnouncer.announceShown(color.transfer.name, display.headroom)
+        } else {
+            hdrAnnouncer.announce(color.transfer.name)
+        }
+    }
 
     /** MediaCodec buffers go straight to the Surface; every other format uses the software fallback. */
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> =
@@ -327,6 +394,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             }
             if (!accepted) {
                 failWithLostSurface("there is no live Surface for the MediaCodec frame")
+            } else {
+                announceDirectRange(frame)
             }
             return accepted
         }
@@ -360,7 +429,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         geometryConsumer?.invoke(size, rotation)
-        if (toneMapped(frame)) toneMapAnnouncer.announce(frame.colorSpace.transfer.name)
+        if (toneMapped(frame)) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
         val converted = try {
             convert(frame)
         } catch (failure: Throwable) {

@@ -127,9 +127,21 @@ internal class MetalFrameComposer(
          * so the offscreen reader and the colour instrument keep comparing an untouched picture.
          */
         qualityUniforms: FloatArray = DISABLED_QUALITY_UNIFORMS,
+        /**
+         * Set for an extended-range target, a half-float texture whose texels hold linear light
+         * with 1.0 at reference white. HDR then rolls off at this many times reference white, the
+         * display's headroom, rather than at reference white itself. Null draws standard range.
+         */
+        extendedRangeHeadroom: Float? = null,
     ): MTLCommandBufferProtocol {
         pictureColor = frame.colorSpace
-        val toneUniforms = if (toneMapped) packToneUniforms(frame.colorSpace) else DISABLED_TONE_UNIFORMS
+        val dstPeak = SDR_WHITE_NITS * (extendedRangeHeadroom?.coerceAtLeast(1f) ?: 1f)
+        val toneUniforms = if (toneMapped) packToneUniforms(frame.colorSpace, dstPeak) else DISABLED_TONE_UNIFORMS
+        val qualityUniforms = if (extendedRangeHeadroom == null) {
+            qualityUniforms
+        } else {
+            qualityUniforms.copyOf().also { it[0] = Float.fromBits(it[0].toRawBits() or EXTENDED_RANGE_FLAG) }
+        }
         val inputs = when (picture) {
             is MetalPicture.SoftwarePlanes -> softwareInputs(picture)
             is MetalPicture.CorePixelBuffer -> hardwareInputs(picture, frame)
@@ -178,7 +190,9 @@ internal class MetalFrameComposer(
 
                 if (overlay != null && overlay.images.isNotEmpty()) {
                     refreshOverlayTextures(overlay, viewportWidth, viewportHeight)
-                    encoder.setRenderPipelineState(overlayPipeline)
+                    encoder.setRenderPipelineState(
+                        if (extendedRangeHeadroom == null) overlayPipeline else pipelines.overlayLinear,
+                    )
                     overlayTextures.forEach { (quadUniforms, texture) ->
                         quadUniforms.usePinned { pinned ->
                             encoder.setVertexBytes(pinned.addressOf(0), (quadUniforms.size * 4).toULong(), atIndex = 0u)

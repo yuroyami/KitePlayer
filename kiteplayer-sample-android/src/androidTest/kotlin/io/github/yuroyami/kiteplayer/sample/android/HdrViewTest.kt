@@ -35,12 +35,14 @@ class HdrViewTest {
     @Test
     fun anHdrClipShowsAsHdrAndToneMapsWhenAsked() {
         val context = instrumentation.targetContext
-        val clip = File(context.filesDir, "testmedia/hdr10.mp4")
-        check(clip.isFile) { "push an HDR10 clip to ${clip.absolutePath} first" }
+        // The display first: one without HDR10, such as the CI emulator's, skips the test whether
+        // or not the clip was pushed.
         val display = context.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
         @Suppress("DEPRECATION")
         val hdrTypes = display.hdrCapabilities?.supportedHdrTypes ?: IntArray(0)
         assumeTrue("this display shows no HDR10", Display.HdrCapabilities.HDR_TYPE_HDR10 in hdrTypes)
+        val clip = File(context.filesDir, "testmedia/hdr10.mp4")
+        check(clip.isFile) { "push an HDR10 clip to ${clip.absolutePath} first" }
 
         val intent = Intent(context, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_SOURCE, MainActivity.SOURCE_PATH)

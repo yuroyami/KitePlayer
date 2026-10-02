@@ -80,14 +80,27 @@ internal class ReopenDeviceTest {
                         player.state.value.status == PlaybackStatus.Paused,
                         "the replacement open left status ${player.state.value.status}",
                     )
+                    // On a phone the stop and the open together are held to the bound. The
+                    // emulator's graphics host stalls for 10 to 18 s now and then, SystemUI
+                    // included, and a stop waits it out inside MediaCodec.stop (#301). There the
+                    // open alone is held to the bound, and the stop only to coming back.
+                    val onEmulator = isProbablyEmulator()
+                    val boundedMs = if (onEmulator) reopenNanos / 1_000_000 else secondMs
                     assertTrue(
-                        secondMs < firstMs + 3_000,
+                        boundedMs < firstMs + 3_000,
                         "the second open took ${secondMs}ms against ${firstMs}ms for the first: " +
                             "replacing the media must prime the new pipeline, not wait out the " +
                             "initial-fill and first-frame deadlines. The stop took " +
                             "${stopNanos / 1_000_000}ms and the open ${reopenNanos / 1_000_000}ms; " +
                             "warnings: $warnings",
                     )
+                    if (onEmulator) {
+                        assertTrue(
+                            stopNanos / 1_000_000 < EMULATOR_STOP_LIMIT_MILLIS,
+                            "the stop took ${stopNanos / 1_000_000}ms, longer than any graphics " +
+                                "host stall measured on the emulator",
+                        )
+                    }
                 }
             } finally {
                 runBlocking { withTimeout(15_000) { player.closeAndAwait() } }
@@ -129,5 +142,8 @@ internal class ReopenDeviceTest {
     private companion object {
         const val TAG = "KiteReopen"
         const val WATCHDOG_MILLIS = 3_000L
+
+        /** The longest stall measured in a stop on the emulator was 17.6 s (#301). */
+        const val EMULATOR_STOP_LIMIT_MILLIS = 30_000L
     }
 }

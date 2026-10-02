@@ -1048,8 +1048,14 @@ public class AudioPlayback(
     }
 
     private companion object {
-        /** Ring capacity as a multiple of the device buffer, when that is the larger figure. */
-        const val DEVICE_BUFFER_MULTIPLE = 8
+        /**
+         * Ring capacity as a multiple of the device buffer, when that is the larger figure.
+         *
+         * Two, not more. Android reports its whole AudioTrack buffer here, about 120 ms on a
+         * current phone, and eight of those made a 960 ms ring: a speed, balance or equaliser
+         * change was heard more than a second late. The device holds its own buffer on top.
+         */
+        const val DEVICE_BUFFER_MULTIPLE = 2
 
         /** The shortest wait on a full ring, for a ring so small that a quarter of it is less. */
         val FULL_RING_WAIT_MIN: Duration = 2.milliseconds

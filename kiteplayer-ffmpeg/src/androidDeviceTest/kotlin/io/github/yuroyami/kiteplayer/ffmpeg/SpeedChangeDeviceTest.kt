@@ -109,7 +109,7 @@ internal class SpeedChangeDeviceTest {
                 reachedAfter += assertNotNull(reached, "the audible rate never reached $speed")
             }
             println(
-                "SPEED DEVICE heard after ${reachedAfter.map { it.inWholeMilliseconds }} ms, opens=${counts.opens.get()} " +
+                "SPEED DEVICE buffered=${player.stats.value.audioQueueDepth} heard after ${reachedAfter.map { it.inWholeMilliseconds }} ms, opens=${counts.opens.get()} " +
                     "stops=${counts.stops.get()} pauses=${counts.pauses.get()} drains=${counts.drains.get()} " +
                     "underruns=${player.stats.value.audioUnderruns - underrunsAtStart}",
             )
@@ -118,7 +118,8 @@ internal class SpeedChangeDeviceTest {
             assertEquals(0, counts.pauses.get(), "a speed change paused the AudioTrack")
             assertEquals(0, counts.drains.get(), "a speed change drained the AudioTrack")
             assertEquals(underrunsAtStart, player.stats.value.audioUnderruns, "a speed change ran the ring dry")
-            assertTrue(reachedAfter.all { it < 1500.milliseconds }, "the new rate was heard after ${reachedAfter.max()}")
+            // About 500 ms on an ASUS ROG Phone 9: the ring, the AudioTrack buffer and the output.
+            assertTrue(reachedAfter.all { it < 900.milliseconds }, "the new rate was heard after ${reachedAfter.max()}")
         } finally {
             player.closeAndAwait()
         }

@@ -211,9 +211,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
   version of the volume latency test used it, set a volume, and measured nothing at all.
 - **Volume and mute belong to the ring, not to the pipeline.** A gain applied as samples are
   written cannot reach audio that is already buffered, so a change stays inaudible for the ring's
-  whole depth: at least 200 ms, and 300 to 600 ms on Android where the audio track buffer sets it.
-  Measured at 174 ms of lag on a 171 ms ring. Moving the gain back into the pipeline would be a
-  regression that looks like a simplification.
+  whole depth: at least 200 ms, and twice the AudioTrack buffer on Android (240 ms on the ASUS; it
+  was 960 ms before #375). Measured at 174 ms of lag on a 171 ms ring. Moving the gain back into the
+  pipeline would be a regression that looks like a simplification.
 - **Three things stop a paused player aging: the freeze at pause, the re-anchor at resume, and
   the anchor floor at resume.** The ring keeps its last anchor through a pause. Applied after play,
   that anchor counts the whole pause as played time: on real macOS output a two second pause read

@@ -131,3 +131,36 @@ kotlin {
         }
     }
 }
+
+/*
+ * ── The worker binary, as the `web` zip of the wasmJs publication (#58) ───
+ *
+ * KitePlayerWorker runs the player in a Web Worker, which loads a program of its own:
+ * kiteplayer-web-worker.mjs and the three files beside it, which :kiteplayer-web-worker builds
+ * from this module. A page serves them beside index.html, as it serves kite.mjs, and a browser
+ * distribution does not inherit a library's files, so they travel as
+ * kiteplayer-wasm-js-<version>-web.zip for a consumer to unpack. The production build, optimised
+ * and without its source map. scripts/check-web-size.sh measures what this zip holds.
+ */
+val workerBinaryDir = project(":kiteplayer-web-worker").layout.buildDirectory
+    .dir("compileSync/wasmJs/main/productionExecutable/kotlin")
+val workerWebZip = tasks.register<Zip>("workerWebZip") {
+    group = "kiteplayer"
+    description = "The worker binary that KitePlayerWorker loads, as one zip, attached to the wasmJs publication."
+    dependsOn(":kiteplayer-web-worker:wasmJsProductionExecutableCompileSync")
+    from(workerBinaryDir) {
+        include("kiteplayer-web-worker.mjs", "kiteplayer-web-worker.wasm", "kiteplayer-web-worker.*.mjs")
+    }
+    // Everything in the binary is Kotlin under the Apache License; the codec and the typesetter are
+    // the other two zips, with their own licences.
+    from(rootProject.files("LICENSE", "NOTICE")) { into("licenses/kiteplayer") }
+    archiveBaseName.set("kiteplayer-wasm-js")
+    archiveClassifier.set("web")
+    destinationDirectory.set(layout.buildDirectory.dir("worker-zip"))
+}
+// Attached once the publications exist; the wasmJs one is named after the target.
+afterEvaluate {
+    extensions.findByType<PublishingExtension>()?.publications
+        ?.matching { it.name == "wasmJs" }
+        ?.configureEach { (this as MavenPublication).artifact(workerWebZip) }
+}

@@ -236,6 +236,14 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
 }
 
 // Targets: [wasmJs]
+final object io.github.yuroyami.kiteplayer/KiteWebModules { // io.github.yuroyami.kiteplayer/KiteWebModules|null[0]
+    final val isCrossOriginIsolated // io.github.yuroyami.kiteplayer/KiteWebModules.isCrossOriginIsolated|{}isCrossOriginIsolated[0]
+        final fun <get-isCrossOriginIsolated>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/KiteWebModules.isCrossOriginIsolated.<get-isCrossOriginIsolated>|<get-isCrossOriginIsolated>(){}[0]
+
+    final fun codecModuleUrl(kotlin/String = ..., kotlin/String? = ...): kotlin/String // io.github.yuroyami.kiteplayer/KiteWebModules.codecModuleUrl|codecModuleUrl(kotlin.String;kotlin.String?){}[0]
+}
+
+// Targets: [wasmJs]
 final fun (io.github.yuroyami.kiteplayer/KitePlayer).io.github.yuroyami.kiteplayer.session/attachMediaSession(kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession // io.github.yuroyami.kiteplayer.session/attachMediaSession|attachMediaSession@io.github.yuroyami.kiteplayer.KitePlayer(kotlin.time.Duration){}[0]
 
 // Targets: [wasmJs]

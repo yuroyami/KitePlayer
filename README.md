@@ -166,7 +166,7 @@ You do not install FFmpeg, and there is no Gradle plugin. On Android, every arti
 | --- | --- |
 | An iOS app with a **static** framework (`isStatic = true`) | **Linker flags** in Xcode. See [iOS setup](#ios-setup). |
 | Any iOS app | **Two privacy manifest entries**, for boot time and file timestamp APIs. See [iOS setup](#ios-setup). |
-| A web app (`wasmJs`) | **Two WebAssembly modules** that the page serves, for FFmpeg and libass. See [Web setup](#web-setup). |
+| A web app (`wasmJs`) | **Two WebAssembly modules** that the page serves, for FFmpeg and libass, and a third for the worker player. See [Web setup](#web-setup). |
 | Playback that goes on in the background on Android | **A service and three permissions** in your manifest. See [Background playback](#background-playback). |
 
 <a name="ios-setup"></a>
@@ -212,7 +212,7 @@ For background audio, declare `UIBackgroundModes` with `audio` in `Info.plist`.
 
 <a name="web-setup"></a>
 <details>
-<summary><b>Web setup</b>: the two modules a page serves</summary>
+<summary><b>Web setup</b>: the modules a page serves</summary>
 <br>
 
 A browser cannot link FFmpeg or libass into the Kotlin binary, so the page serves them as two
@@ -236,12 +236,19 @@ network media, so play files from memory, as [Network](#network) says, or use th
 
 `KitePlayerWorker.start(canvas)` runs the player in a web worker, so opening, decoding and drawing
 leave the page's thread free (#100). The worker draws on the canvas and sends its sound straight to
-the page's audio device, and it plays `http`, `https` and `blob` addresses. It needs a third
-module beside `index.html`, `kiteplayer-web-worker.mjs`: a wasm executable whose `main` calls
-`runKitePlayerWorker()`. This repository's `kiteplayer-web-worker` builds one; it is not in a web
-zip yet (#58). The worker player has open, play, pause, seek, stop and the state, progress and
-events flows so far. An item with its own reader, external subtitles, a filter or a demux policy
-cannot cross to the worker yet.
+the page's audio device, and it plays `http`, `https` and `blob` addresses. It loads a third module:
+unpack `kiteplayer-wasm-js-<version>-web.zip` beside `index.html` too, for
+`kiteplayer-web-worker.mjs` and the three files beside it. With gzip it is about 1.21 MiB to
+download, and CI holds it to 1.25 MiB. The worker player has open, play, pause, seek, stop and the
+state, progress and events flows so far. An item with its own reader, external subtitles, a filter
+or a demux policy cannot cross to the worker yet.
+
+A multi-threaded codec module would need the page served with
+`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, and
+imported without them it hangs rather than failing. `KiteWebModules.codecModuleUrl(threaded = ...)`
+names it only on a page that has them, and the single-threaded module otherwise; pass its answer to
+`KiteFFmpegWeb.load` or `KitePlayerWorker.start`. KiteFFmpeg publishes only the single-threaded
+module today.
 
 </details>
 

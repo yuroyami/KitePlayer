@@ -31,10 +31,11 @@ These are not style preferences. Each one exists because ignoring it cost someon
   `./scripts/check-artifact-size.sh`, against `artifact-size-baseline.txt`. When the growth is
   intended, run the script with `--update` and commit the baseline with the change. Put the old
   and new numbers in the commit message.
-- **The web codec module stays within its gzipped budget.** `./scripts/check-web-size.sh` measures
-  `kite.wasm` and `kite.mjs` from the pinned KiteFFmpeg web zip against the budget at its top. A
-  KiteFFmpeg pin that grows the module raises the budget in the same commit, with both numbers in
-  the commit message.
+- **The web modules stay within their gzipped budgets.** `./scripts/check-web-size.sh` measures
+  `kite.wasm` and `kite.mjs` from the pinned KiteFFmpeg web zip, and the worker binary from
+  kiteplayer's own web zip, against the budgets at its top. A KiteFFmpeg pin, or player code, that
+  grows a module past its budget raises the budget in the same commit, with both numbers in the
+  commit message.
 - **When the tree contradicts an issue or a document, stop and say so.** Do not improvise the
   document back into truth. Prose drifting from the tree is this project's measured failure mode.
 - **Size estimates rot the same way claims do.** An estimate made behind a blocker is a guess about

@@ -56,6 +56,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   public `build()`, and `Progress`, `PlayerSnapshot`, `PlayerEvent.SeekCompleted` and `Tracks`
   gain Java-readable `positionMillis`, `bufferedAheadMillis`, `durationMillis`, `landedAtMillis`
   and `selectedTrack(kind)`.
+- The worker player's binary ships as `kiteplayer-wasm-js-<version>-web.zip` beside the wasmJs
+  artifact, for a page to unpack beside `index.html` (#58). `KiteWebModules.codecModuleUrl` picks a
+  multi-threaded codec module only on a cross-origin isolated page, before it is imported.
 - `KitePlayer.awaitClose()` suspends until the player is asked to close, for helpers that go away
   with it (#385).
 - `KitePlayer.requestSeek` replaces `seekLater`, which is deprecated (#386). It asks for a seek and

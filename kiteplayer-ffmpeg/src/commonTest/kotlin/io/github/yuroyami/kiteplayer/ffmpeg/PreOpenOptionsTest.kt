@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
+import io.github.yuroyami.kiteffmpeg.dsl.DemuxOptions
 import io.github.yuroyami.kiteplayer.DemuxPolicy
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoFactory
@@ -38,9 +39,9 @@ class PreOpenOptionsTest {
     }
 
     @Test
-    fun formatHintBecomesAFormatWhitelistOfOne() {
+    fun formatHintBecomesTheForcedDemuxer() {
         val options = preOpenOptions(MediaItem("pipe:0", formatHint = "mpegts"))
-        assertEquals("mpegts", options["format_whitelist"])
+        assertEquals(forcedFormat("mpegts"), options)
     }
 
     @Test
@@ -55,8 +56,8 @@ class PreOpenOptionsTest {
             MediaItem(
                 "pipe:0",
                 formatHint = "mpegts",
-                openOptions = mapOf("format_whitelist" to "matroska,webm"),
-            ) to ("format_whitelist" to "formatHint"),
+                openOptions = forcedFormat("matroska"),
+            ) to (forcedFormat("matroska").keys.single() to "formatHint"),
             MediaItem(
                 "file.mkv",
                 demux = DemuxPolicy(probe = ProbeDepth.Fast),
@@ -85,8 +86,8 @@ class PreOpenOptionsTest {
                 readersMade++
                 MediaIo.ofBytes(ByteArray(188)).open()
             },
-            formatHint = "mpegts",
-            openOptions = mapOf("format_whitelist" to "mpegts"),
+            demux = DemuxPolicy(probe = ProbeDepth.Fast),
+            openOptions = mapOf("probesize" to "32768"),
         )
         assertFailsWith<PlaybackException> { KiteFFmpegMediaBackend().open(item) }
         assertFailsWith<PlaybackException> { KiteFFmpegSourceFactory().open(item) }
@@ -104,8 +105,7 @@ class PreOpenOptionsTest {
             ),
         )
         assertEquals(
-            mapOf(
-                "format_whitelist" to "mpegts",
+            forcedFormat("mpegts") + mapOf(
                 "probesize" to "524288",
                 "analyzeduration" to "200000",
                 "fflags" to "+igndts",
@@ -114,6 +114,9 @@ class PreOpenOptionsTest {
             options,
         )
     }
+
+    /** The pre-open option that forces the demuxer named [format], as KiteFFmpeg spells it. */
+    private fun forcedFormat(format: String): Map<String, String> = DemuxOptions(format = format).compile().toMap()
 
     @Test
     fun anItemWithNeitherAddsNothing() {

@@ -1444,9 +1444,15 @@ internal class ScriptedSink(
      * that consumes ten times faster than real time makes the audio clock run at ten times speed.
      */
     suspend fun runDevice(clock: MonotonicClock) {
+        // The next pull is scheduled on an exact running total. Waiting the period truncated to
+        // whole milliseconds pulled 512 frames every 10 ms at 48 kHz, so the device played 10.67 ms
+        // of audio per 10 ms and the audio clock ran 6.7 percent fast against the picture.
+        var due = clock.nanos()
         while (true) {
             pump(clock.nanos())
-            delay((bufferNanos() / 1_000_000).coerceAtLeast(1))
+            due += bufferNanos().coerceAtLeast(1_000_000)
+            val waitNanos = due - clock.nanos()
+            delay(((waitNanos + 999_999) / 1_000_000).coerceAtLeast(1))
         }
     }
 

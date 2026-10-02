@@ -23,16 +23,17 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /**
- * What a live speed change does to the real CoreAudio device (#16). The change rides a precise seek,
- * which stops the device, flushes the ring and starts the device again once the ring refills. So the
- * device plays silence between the stop and the start, and this test measures that gap on each
- * change. It requires only that playback comes back after every change.
+ * What a live speed change does to the real CoreAudio device (#16). A change applies to the next
+ * audio the feeder converts, so the device must keep running through every change: no stop, no
+ * underrun, no Buffering, and the rate the listener hears reaches the new speed once the audio
+ * already in the ring has played.
  */
 class SpeedChangeRealMediaTest {
 
@@ -75,41 +76,49 @@ class SpeedChangeRealMediaTest {
     }
 
     @Test
-    fun eachLiveSpeedChangeStopsTheDeviceAndPlaybackComesBack() = runBlocking {
+    fun liveSpeedChangesNeverStopTheDevice() = runBlocking {
         val log = DeviceLog()
         val player = KitePlayer.create(
             PlayerConfig(
                 backends = Backends(backend = KiteFFmpegMediaBackend(), output = LoggingOutput(AppleOutputBackend, log)),
                 progressInterval = 50.milliseconds,
+                videoEnabled = false,
             ),
         )
         try {
-            player.open(MediaItem("$mediaDir/audio-flac.flac"))
+            player.open(MediaItem("$mediaDir/soak30min.mp4"))
             player.play()
             waitFor(10.seconds) { player.position() >= 500.milliseconds }
+            val eventsAtStart = log.snapshot().size
+            val underrunsAtStart = player.stats.value.audioUnderruns
 
-            val gaps = mutableListOf<Duration>()
-            for (speed in listOf(1.25, 1.5, 0.75, 1.0, 2.0)) {
-                val before = log.snapshot().size
+            // The nudges a watch-together room makes, then the speeds a viewer picks.
+            val plan = listOf(0.995, 1.0, 1.005, 1.0, 1.25, 1.5, 0.75, 2.0, 0.5, 1.0)
+            val reachedAfter = mutableListOf<Duration>()
+            var lastPosition = player.position()
+            for (speed in plan) {
+                val asked = TimeSource.Monotonic.markNow()
                 player.setSpeed(speed)
-                // Back when the device started again after the stop this change caused. The limit is
-                // wide for a loaded runner; the gap measured on an Apple M2 is about 60 ms.
-                waitFor(5.seconds) {
-                    val after = log.snapshot().drop(before)
-                    after.any { it.first == "stop" } && after.last().first == "start"
+                var reached: Duration? = null
+                while (asked.elapsedNow() < 1500.milliseconds) {
+                    assertEquals(PlaybackStatus.Playing, player.state.value.status, "a change to $speed left Playing")
+                    val position = player.position()
+                    assertTrue(position >= lastPosition, "the position went back from $lastPosition to $position at $speed")
+                    lastPosition = position
+                    if (reached == null && player.audioClock().rate == speed) reached = asked.elapsedNow()
+                    delay(20.milliseconds)
                 }
-                val after = log.snapshot().drop(before)
-                gaps += after.last { it.first == "start" }.second - after.first { it.first == "stop" }.second
-                waitFor(5.seconds) { player.state.value.status == PlaybackStatus.Playing }
-                delay(300.milliseconds)
+                reachedAfter += assertNotNull(reached, "the audible rate never reached $speed")
             }
-            val sorted = gaps.sorted()
+            val deviceEvents = log.snapshot().drop(eventsAtStart).map { it.first }
             println(
-                "speed change: the device was stopped for ${gaps.map { it.inWholeMicroseconds / 1000.0 }} ms, " +
-                    "median ${sorted[sorted.size / 2].inWholeMicroseconds / 1000.0} ms, " +
-                    "underruns ${player.stats.value.audioUnderruns}",
+                "live speed change: the audible rate followed after ${reachedAfter.map { it.inWholeMilliseconds }} ms, " +
+                    "device events during the changes $deviceEvents, " +
+                    "underruns ${player.stats.value.audioUnderruns - underrunsAtStart}",
             )
-            assertEquals(PlaybackStatus.Playing, player.state.value.status, "playback came back after every change")
+            assertEquals(emptyList(), deviceEvents, "a speed change stopped or restarted the device")
+            assertEquals(underrunsAtStart, player.stats.value.audioUnderruns, "a speed change ran the ring dry")
+            assertTrue(reachedAfter.all { it < 1.seconds }, "the new rate was heard after ${reachedAfter.max()}")
         } finally {
             player.closeAndAwait()
         }

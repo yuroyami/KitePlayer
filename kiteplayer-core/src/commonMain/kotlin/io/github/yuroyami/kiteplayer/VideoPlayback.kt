@@ -9,6 +9,7 @@ import io.github.yuroyami.kiteplayer.internal.SyncAction
 import io.github.yuroyami.kiteplayer.internal.SyncLaw
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
+import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlin.time.Duration
@@ -67,39 +68,50 @@ public class VideoPlayback(
 
     private var generation: Generation = Generation.Initial
 
-    /**
-     * The rate the NEXT generation will pace at. Like the audio path, a speed change rides a
-     * flush: the engine spells a live change as a precise seek, whose flush is the only moment
-     * the schedule is quiescent, so [appliedSpeed] can never tear mid-tick.
-     */
-    private var wantedSpeed: Double = 1.0
+    /** The rate the caller asked for. Written from any thread; the scheduler picks it up. */
+    private val wantedSpeed = atomic(1.0)
 
     /**
-     * The rate of the current generation. Read by [tick] on the scheduler; written by [flush]
-     * while the scheduler is quiescent, which is the whole synchronisation story.
+     * The rate the schedule paces at now. The scheduler's own: [tick] and [presentNext] adopt
+     * the master's audible rate, or [wantedSpeed] when video is its own master, at the top of each
+     * step, so a change never tears a step in half.
      */
     private var appliedSpeed: Double = 1.0
 
     /**
      * The playback rate as a multiplier of real time. Frame durations and sync corrections are
-     * computed in media time and divided by this into wall time, and the video clock
+     * computed in media time and divided by the rate into wall time, and the video clock
      * extrapolates at the same rate, so a video-only file paces correctly with no audio to
      * follow.
      *
-     * Before the schedule's first frame the value applies immediately, which is what a freshly
-     * built playback needs. Once frames are flowing it applies from the next [flush], because
-     * the flush is the one moment the scheduler is quiescent and nothing can tear.
+     * Applies from the schedule's next step, with no flush. When audio is the master the schedule
+     * paces at the rate the audio clock reports instead, which is the rate the listener hears: the
+     * audio already buffered still plays the old rate for a moment after a change.
      */
     public var speed: Double
-        get() = wantedSpeed
+        get() = wantedSpeed.value
         set(value) {
             require(value.isFinite() && value > 0.0) { "speed must be finite and positive, was $value" }
-            wantedSpeed = value
-            if (!started) {
-                appliedSpeed = value
-                videoClock.speed = value
-            }
+            wantedSpeed.value = value
         }
+
+    /**
+     * Adopts [rate] for this step. The video clock re-anchors so the change is not retroactive,
+     * and the schedule keeps the media time already spent on the frame on screen: that time was
+     * paced at the old rate, so it is rescaled to the new one. Left as it was, a jump to 2x made
+     * the frames already due look late by half their time, and three were dropped at once.
+     */
+    private fun pace(rate: Double?) {
+        val wanted = rate?.takeIf { it.isFinite() && it > 0.0 } ?: wantedSpeed.value
+        if (wanted == appliedSpeed) return
+        if (started) {
+            val now = clock.nanos()
+            val spent = now - frameTimerNanos
+            if (spent > 0) frameTimerNanos = now - (spent * appliedSpeed / wanted).toLong()
+        }
+        appliedSpeed = wanted
+        videoClock.speed = wanted
+    }
 
     /**
      * The wall time at which the frame currently on screen was nominally shown.
@@ -289,7 +301,11 @@ public class VideoPlayback(
      *        paces itself from its own timestamps.
      * @return how long to wait before calling again. Zero means there is work to do immediately.
      */
-    public suspend fun tick(masterClock: Pts?): Duration {
+    public suspend fun tick(masterClock: Pts?): Duration = tick(masterClock, null)
+
+    /** [tick], pacing at [masterRate], the rate the master clock runs at, or at [speed] when null. */
+    internal suspend fun tick(masterClock: Pts?, masterRate: Double?): Duration {
+        pace(masterRate)
         val next = queue.peek() ?: return IDLE_WAIT
 
         // A frame from a superseded generation belongs to a position the viewer has left. Discarding
@@ -480,10 +496,9 @@ public class VideoPlayback(
         durations.reset()
         generation = newGeneration
         started = false
-        // The speed epoch turns over with the generation, while the scheduler is quiescent and
-        // the clock is invalid anyway; see [speed].
-        appliedSpeed = wantedSpeed
-        videoClock.speed = wantedSpeed
+        // The clock is invalid anyway, so the wanted rate can apply without re-anchoring anything.
+        appliedSpeed = wantedSpeed.value
+        videoClock.speed = appliedSpeed
     }
 
     override fun close() {

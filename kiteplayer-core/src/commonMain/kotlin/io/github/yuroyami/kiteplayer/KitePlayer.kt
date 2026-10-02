@@ -201,24 +201,20 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /**
      * Sets the playback rate as a multiplier of real time, within [SPEED_MIN] to [SPEED_MAX].
      *
-     * Real, on both halves. Audio runs through a pitch-synchronous tempo stage, so 2x is twice
-     * as fast at the same pitch rather than a chipmunk; the video schedule divides its frame
-     * durations by the rate; and the shared clock extrapolates at the rate, so audio, video and
-     * the reported position agree at every speed, including for video-only media.
+     * Real, on both halves. Audio runs through a time stretch, so 2x is twice as fast at the same
+     * pitch rather than a chipmunk; the video schedule divides its frame durations by the rate; and
+     * the shared clock runs at the rate, so audio, video and the reported position agree at every
+     * speed, including for video-only media.
      *
-     * A change while media is playing re-anchors through an internal precise seek at the current
-     * position, which sounds like the small rebuffer it is. That is also why a live change on an
-     * UNSEEKABLE source is refused rather than half-applied: without a seek there is no boundary
-     * at which the queued audio at the old rate ends and the new rate begins. On such sources
-     * set the speed before [open].
+     * A change while media plays is seamless: nothing stops, nothing is flushed, and the player
+     * stays [PlaybackStatus.Playing]. The audio already buffered for the device plays out at the
+     * old rate, so the new rate is heard after that buffer: about 200 ms, longer on Android where
+     * the device's own buffer sets it. The clock and the picture change rate at that same moment.
+     * Small changes, such as the half-percent nudges a watch-together app uses to stay in step,
+     * are inaudible. It works the same way on a source that cannot seek.
      *
      * @param value finite, within [SPEED_MIN] to [SPEED_MAX].
-     * @throws IllegalArgumentException outside that range. Below and above it, time-stretch
-     *         splices dominate the signal, and a player that pretends otherwise is lying.
-     *
-     * A live change on an unseekable source is refused and the refusal is published as a
-     * [PlaybackWarning.CommandRefused] on [events] and the warning history: this member does
-     * not wait for the engine, so a throw could never reach its caller.
+     * @throws IllegalArgumentException outside that range.
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setSpeed(value: Double) {
@@ -233,16 +229,14 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /**
      * Chooses whether [setSpeed] keeps pitch.
      *
-     * True, the default, runs the tempo stage: 2x sounds like faster speech at its own pitch.
-     * False folds the rate into the resampler instead, which is cheaper by a whole
-     * time-stretch pass and shifts pitch with the rate, exactly mpv's
-     * `audio-pitch-correction=no`: 2x sounds a whole octave up. Musicians slowing a piece down
-     * to transcribe it often want the false setting; everyone else wants the default.
+     * True, the default, stretches the sound in time: 2x sounds like faster speech at its own
+     * pitch. False plays it faster or slower like a tape instead, so pitch moves with the rate,
+     * exactly mpv's `audio-pitch-correction=no`: 2x sounds a whole octave up. Musicians slowing a
+     * piece down to transcribe it often want the false setting; everyone else wants the default.
      *
-     * Seeded from [AudioConfig.preservePitch]. A live change away from 1.0 speed rides the
-     * same internal precise seek a speed change does, for the same epoch reason, and is refused
-     * the same way on an unseekable source; at 1.0 the two mechanisms are the same bypass and
-     * the change is free. Published as [PlayerSnapshot.preservePitch].
+     * Seeded from [AudioConfig.preservePitch]. A live change is seamless, the same way a speed
+     * change is, on every source. At 1.0 the two laws sound the same. Published as
+     * [PlayerSnapshot.preservePitch].
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setPreservePitch(value: Boolean) {
@@ -1007,8 +1001,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             "queueOrder ${memento.queueOrder} is not an order of a queue of ${memento.queue.size}"
         }
 
-        // A session still open would take the speed as a live change, which a source that cannot
-        // seek refuses. Stopped, the player keeps each setting for the open that follows.
+        // The queue opens only from a stopped player. Stopped, the player keeps each setting for
+        // the open that follows.
         if (state.value.status != PlaybackStatus.Idle) stop()
         setSpeed(memento.speed)
         setPreservePitch(memento.preservePitch)

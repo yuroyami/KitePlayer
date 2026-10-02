@@ -128,6 +128,15 @@ Each line is something that bit someone. Delete a line when it stops being true.
   space in a method name only from minimum SDK 30. Every module with a device test puts
   `commonTest` into it, and the host tests and CI never dex, so nothing else goes red. Name the
   shared tests of those modules in camel case (#154).
+- The scripted test device pulled 512 frames per wait of 10 ms, truncated from 10.67 ms, so its
+  audio clock ran 6.7 percent fast and every audio-video harness test saw a sawtooth drift of up to
+  40 ms. It now pulls on an exact running total. A test that needs an underrun must stall decoding
+  (`stallAudioDecodeReceive`): with an honest device a slow reader makes the engine buffer while the
+  ring still holds sound (#373).
+- A fake audio device pumped by the same loop that feeds the ring deadlocks when one buffer
+  releases more audio than the ring has room for, and runTest then reports a test that never
+  finished. After a change from 2x to 0.5x the tempo stage releases about 120 ms at once, the
+  lookahead it gathered for 2x, so `AudioPlaybackSpeedTest` uses a 500 ms ring.
 - A state flow's `first { }` samples the current element before it waits, so a test that seeks and
   then waits for "the position advanced" can match the reading from before the seek and return
   instantly, proving nothing. Wait for a reading that reflects the new position first.
@@ -214,6 +223,14 @@ Each line is something that bit someone. Delete a line when it stops being true.
   position from 1.3 seconds to one minute 1.3. The ring's anchor is the authority while the device
   runs, and the frozen clock is the authority when it does not. Do not simplify any of the three on
   the reasoning that another covers it.
+- **A speed change never seeks, and the ring never carries a speed.** `AudioPlayback` writes one
+  timestamp into the ring per epoch and dates the rest by counting frames. Each speed change, each
+  gap in the decoder's timestamps and each gapless join is a line in its playout timeline, placed at
+  the output frame where the tempo stage reaches it. Flushing on a speed change brings back the 60
+  to 110 ms silence and the Buffering blink that a half-percent sync nudge caused (#373).
+- The tempo stage reports the ideal line the speed asks for, not where each block came from. Blocks
+  lead or lag that line by up to 20 ms, and by about 60 ms at most while a splice waits for an attack
+  to pass. Dating the clock from block positions would make it jump at every splice (#373).
 - All session mutation happens on the actor, in a command execution or a pass handler. Never mutate
   session fields from another coroutine.
 - A decoder belongs to its worker's dispatcher. Park the worker, mutate, release. A refusal to park

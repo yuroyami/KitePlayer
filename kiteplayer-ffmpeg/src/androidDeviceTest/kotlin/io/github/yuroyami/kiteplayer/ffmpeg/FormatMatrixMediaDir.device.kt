@@ -16,6 +16,11 @@ import androidx.test.platform.app.InstrumentationRegistry
  */
 internal actual fun formatMatrixMediaDir(): String? {
     val context = InstrumentationRegistry.getInstrumentation().context
+    // A phone without root cannot hand clips to the external directory, but `run-as` can write the
+    // app's own files: `adb shell "run-as <pkg> sh -c 'mkdir -p files/testmedia && cat >
+    // files/testmedia/<clip>'" < testmedia/<clip>`. Clips found there win.
+    val internal = java.io.File(context.filesDir, "testmedia")
+    if (internal.isDirectory) return internal.absolutePath
     val root = context.getExternalFilesDir(null) ?: return null
     return "${root.absolutePath}/testmedia"
 }

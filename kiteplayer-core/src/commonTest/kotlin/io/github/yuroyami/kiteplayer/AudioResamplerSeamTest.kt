@@ -229,8 +229,10 @@ class AudioResamplerSeamTest {
         audio.close()
     }
 
+    // The speed belongs to the tempo stage, after the rate conversion, so the factory is asked for
+    // the decoder's own rate whatever the speed and pitch law are.
     @Test
-    fun `without pitch correction the speed is folded into the input rate`() = runTest {
+    fun `the speed never changes the rates the factory converts between`() = runTest {
         val factory = RecordingFactory()
         val sink = PumpedSink(rate = 48_000)
         val audio = AudioPlayback(sink, TestClock(), resampler = factory)
@@ -240,12 +242,12 @@ class AudioResamplerSeamTest {
         audio.play()
         audio.submitDecoded(null, tone(2_205, 44_100), 2_205, format(44_100))
 
-        assertEquals(listOf(66_150), factory.made.map { it.inputRate })
+        assertEquals(listOf(44_100), factory.made.map { it.inputRate })
         audio.close()
     }
 
     @Test
-    fun `a speed change without pitch correction replaces the resampler and closes the old one`() = runTest {
+    fun `a speed or pitch law change keeps the resampler it has`() = runTest {
         val factory = RecordingFactory()
         val sink = PumpedSink(rate = 48_000)
         val audio = AudioPlayback(sink, TestClock(), resampler = factory)
@@ -254,11 +256,12 @@ class AudioResamplerSeamTest {
         audio.play()
         audio.submitDecoded(null, tone(2_205, 44_100), 2_205, format(44_100))
         audio.speed = 2.0
-        audio.flush(Generation.Initial.next())
+        audio.submitDecoded(null, tone(2_205, 44_100), 2_205, format(44_100))
+        audio.preservePitch = true
         audio.submitDecoded(null, tone(2_205, 44_100), 2_205, format(44_100))
 
-        assertEquals(listOf(44_100, 88_200), factory.made.map { it.inputRate })
-        assertTrue(factory.made[0].closed, "the resampler for the old speed was never closed")
+        assertEquals(listOf(44_100), factory.made.map { it.inputRate })
+        assertTrue(factory.made.none { it.closed }, "a live change closed the resampler")
         audio.close()
     }
 

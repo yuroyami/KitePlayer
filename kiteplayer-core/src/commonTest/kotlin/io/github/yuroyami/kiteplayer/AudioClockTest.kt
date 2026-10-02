@@ -77,7 +77,8 @@ class AudioClockTest {
         val fast = player.audioClock()
         assertNotNull(fast.position)
         assertEquals(2.0, fast.rate)
-        assertTrue(fast.generation > paused.generation)
+        // A live rate change is no seek: the clock carries on in the same generation.
+        assertEquals(paused.generation, fast.generation)
         harness.close()
     }
 

@@ -60,9 +60,8 @@ public interface AudioResampler : AutoCloseable {
 /**
  * Makes an [AudioResampler] for one pair of rates. Set it in `AudioConfig.resampler`.
  *
- * The engine asks only when the two rates differ, and asks again after a format change. While
- * pitch correction is off, the playback speed is folded into `inputRate`, so expect any rate, not
- * only the standard ones.
+ * The engine asks only when the two rates differ, and asks again after a format change. The
+ * playback speed never changes the rates: the tempo stage after the resampler applies it.
  *
  * When [create] throws, the engine keeps its own resampler for that stream, stops asking for the
  * rest of the player's life, and reports `PlaybackWarning.ResamplerUnavailable` once. A factory

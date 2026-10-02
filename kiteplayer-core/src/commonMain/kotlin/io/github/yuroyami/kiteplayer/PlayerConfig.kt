@@ -246,9 +246,9 @@ public data class AudioConfig(
     /** Preferred language tags, best first, matched against the container's track languages. */
     val preferredLanguages: List<String> = emptyList(),
     /**
-     * Play at a different rate without changing pitch. True runs the tempo stage; false folds
-     * the rate into the resampler, which is cheaper and shifts pitch with the rate. The seed
-     * for [KitePlayer.setPreservePitch], which can change it at runtime.
+     * Play at a different rate without changing pitch. True stretches the sound in time; false
+     * plays it faster or slower like a tape, so pitch moves with the rate. The seed for
+     * [KitePlayer.setPreservePitch], which can change it at runtime.
      */
     val preservePitch: Boolean = true,
     /** How multichannel audio is folded down when the device has fewer speakers. */

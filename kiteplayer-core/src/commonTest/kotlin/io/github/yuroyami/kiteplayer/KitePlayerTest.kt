@@ -177,8 +177,7 @@ class KitePlayerTest {
         val player = player(harness)
         player.open(MediaItem("scripted://audio"))
 
-        // The live change rides an internal precise seek, so the window covers the seek's own
-        // quiescence and landing, not just one actor pass.
+        // A live change applies to the next audio the feeder converts; the window is generous.
         player.setSpeed(2.0)
         harness.run(3.seconds)
         assertEquals(2.0, player.state.value.speed, "an accepted rate is published")
@@ -352,10 +351,9 @@ class KitePlayerTest {
         harness.run(100.milliseconds)
         assertTrue(player.state.value.preservePitch, "pitch preservation is the default")
 
-        // The toggle at speed rides an internal precise seek exactly like a speed change, so the
-        // window covers that seek's quiescence and landing. The audible difference between the
-        // two mechanisms is proven at the pipeline level; what belongs here is the surface: the
-        // value is accepted, published, and survives the seek it rides.
+        // The toggle at speed applies live, like a speed change. The audible difference between
+        // the two mechanisms is proven at the pipeline level; what belongs here is the surface:
+        // the value is accepted and published.
         player.setSpeed(2.0)
         player.setPreservePitch(false)
         harness.run(3.seconds)

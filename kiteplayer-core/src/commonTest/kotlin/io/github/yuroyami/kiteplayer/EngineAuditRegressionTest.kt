@@ -139,21 +139,25 @@ class EngineAuditRegressionTest {
         harness.close()
     }
 
-    // A refused speed change must leave no trace. The old order wrote the rate into both
-    // pipelines first and decided to refuse afterwards, so a paused video clock kept the rate.
+    // A live speed change needs no seek, so a source that cannot seek changes speed like any
+    // other. It used to be refused, because the change rode a precise seek.
     @Test
-    fun `a refused speed change leaves the video clock at the old rate`() = runTest {
-        val harness = CoreHarness(this, script = MediaScript(hasAudio = false, seekable = false, durationUs = 4_000_000))
+    fun `an unseekable source changes speed live`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(hasAudio = false, seekable = false, durationUs = 8_000_000))
         harness.openWithRenderer()
 
-        assertFailsWith<UnsupportedOperationException> { harness.core.setSpeed(2.0) }
-
+        harness.core.setSpeed(2.0)
         harness.core.play()
         harness.run(2.seconds)
         val position = harness.core.progress.value.position
         assertTrue(
-            position <= 2400.milliseconds,
-            "after two wall seconds at a refused 2x the position must still obey 1x, was $position",
+            position >= 3200.milliseconds,
+            "two wall seconds at 2x must cover about four media seconds, was $position",
+        )
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        assertTrue(
+            harness.core.warningHistory().none { it.warning is PlaybackWarning.CommandRefused },
+            "nothing is refused",
         )
         harness.close()
     }
@@ -220,14 +224,21 @@ class EngineAuditRegressionTest {
     // than real time starves the ring, and the starvation must reach the warning history.
     @Test
     fun `a starved ring says AudioUnderrun out loud`() = runTest {
+        // Decoding stops while packets keep arriving, so the ring runs dry before anything can
+        // call it buffering. A slow reader no longer does that: the engine sees the empty packet
+        // queue and buffers while the ring still holds sound.
+        val faults = FaultPlan()
         val harness = CoreHarness(
             this,
-            script = MediaScript(hasVideo = false, durationUs = 3_000_000, readDelayUs = 60_000),
+            script = MediaScript(hasVideo = false, durationUs = 3_000_000),
+            faults = faults,
             renderer = null,
         )
         harness.open()
         harness.core.play()
-        harness.run(3.seconds)
+        harness.run(1.seconds)
+        faults.stallAudioDecodeReceive = true
+        harness.run(2.seconds)
         assertTrue(
             harness.core.warningHistory().any { it.warning is PlaybackWarning.AudioUnderrun },
             "a device running dry is worth a typed warning, history: " +

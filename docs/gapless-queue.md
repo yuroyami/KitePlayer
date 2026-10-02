@@ -65,7 +65,7 @@ These actions drop a preload and release everything it opened:
 - `stop`, `open`, `openQueue`, `previous` and `close`
 - every queue edit, `setShuffle` and `restoreQueueOrder`
 - `setLoop`, `setSleepTimer` and `setAbLoop`
-- a seek, which includes a change of speed or of the pitch law, and `stepFrame`
+- a seek and `stepFrame`. A change of speed or of the pitch law is not a seek and keeps the preload
 - a track selection, `setVideoEnabled` and a renderer attach or detach
 - a video decoder recovery and a failure of the current item
 

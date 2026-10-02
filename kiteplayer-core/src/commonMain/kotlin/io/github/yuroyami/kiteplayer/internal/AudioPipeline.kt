@@ -7,7 +7,6 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioResampler
 import io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.math.roundToInt
 import kotlin.time.Duration
 
 /**
@@ -19,13 +18,12 @@ import kotlin.time.Duration
  *    conversion runs on two channels instead of eight.
  * 2. The resampler makes the rate the one the device accepted: [SincResampler], or what the
  *    configured [AudioResamplerFactory] makes.
- * 3. [TempoStage] makes the sound take `1/speed` as long without moving its pitch. After the
- *    resampler, so pitch detection runs at one known rate; before the gain, so mute stays the
- *    last word.
+ * 3. [TempoStage] plays the sound at `speed`, keeping its pitch or not. After the resampler, so
+ *    it works at the device's rate, and before the equaliser and the trim.
+ *
  * The gain is NOT here. Volume and mute moved to the ring's read side on 2026-08-31, because a gain
  * applied on the way INTO the ring cannot reach audio already buffered and a change stayed inaudible
  * for the ring's whole depth. See AudioRingHandle.setGain.
- *    smears it.
  *
  * A stage that has nothing to do costs nothing beyond a copy: matching layouts copy channels,
  * matching rates skip the conversion entirely, and unity gain skips its own multiply.
@@ -59,12 +57,8 @@ internal class AudioPipeline(
     /** What the device accepted, which is what the ring and the sink expect. */
     val targetFormat: AudioFormat,
     private val onWarning: (PlaybackWarning) -> Unit = {},
-    /**
-     * True runs [speed] through the tempo stage, which keeps pitch. False folds the rate into
-     * the resampler instead: cheaper by a whole WSOLA pass, and the pitch moves with the rate,
-     * which is mpv's `audio-pitch-correction=no` and sometimes exactly what a caller wants.
-     */
-    val preservePitch: Boolean = true,
+    /** The tempo stage's first pitch law; see [preservePitch]. */
+    preservePitch: Boolean = true,
     /** The LFE and headroom policy the downmix applies; see `DownmixConfig`. */
     private val downmix: io.github.yuroyami.kiteplayer.DownmixConfig =
         io.github.yuroyami.kiteplayer.DownmixConfig(),
@@ -75,10 +69,7 @@ internal class AudioPipeline(
     private var resamplerFactory: AudioResamplerFactory? = null,
     /** Told when [resamplerFactory] throws, after this pipeline fell back to [SincResampler]. */
     private val onResamplerRefused: (Throwable) -> Unit = {},
-    /**
-     * The epoch's speed. Without pitch correction it is folded into the resampler, so a pipeline
-     * built mid-epoch makes its resampler once, at the right rate.
-     */
+    /** The tempo stage's first rate; see [speed]. */
     initialSpeed: Double = 1.0,
     /** Whether mono or stereo also fills a surround device; see `UpmixMode`. */
     private val upmix: io.github.yuroyami.kiteplayer.UpmixMode = io.github.yuroyami.kiteplayer.UpmixMode.Off,
@@ -93,23 +84,11 @@ internal class AudioPipeline(
 
     private val mixer = ChannelMixer(sourceFormat, targetFormat, onWarning, downmix, upmix)
 
-    /**
-     * The uncorrected-pitch rate. Always 1.0 while [preservePitch] is true. When it is not,
-     * the rate is folded into the resampler below: playing S times as fast IS resampling from
-     * `source * S` to the device rate, and pitch moves with it by that same arithmetic.
-     */
-    private var resampleSpeed: Double = if (preservePitch) 1.0 else checkedSpeed(initialSpeed)
-
     /** The rate conversion, or null when the rates match and there is nothing to convert. */
     private var resampler: AudioResampler? = buildResampler()
 
-    /** The rate the resampler converts from: the source's, with the speed folded in when pitch moves. */
-    private fun conversionRate(): Int =
-        if (resampleSpeed == 1.0) {
-            sourceFormat.sampleRate
-        } else {
-            (sourceFormat.sampleRate * resampleSpeed).roundToInt().coerceAtLeast(1)
-        }
+    /** The rate the resampler converts from. The speed never changes it: the tempo stage owns that. */
+    private fun conversionRate(): Int = sourceFormat.sampleRate
 
     private fun buildResampler(): AudioResampler? {
         val sourceRate = conversionRate()
@@ -128,7 +107,13 @@ internal class AudioPipeline(
         }
     }
 
-    private val tempo = TempoStage(targetFormat.channels, targetFormat.sampleRate)
+    private val tempo = TempoStage(targetFormat.channels, targetFormat.sampleRate).also {
+        it.speed = checkedSpeed(initialSpeed)
+        it.preservePitch = preservePitch
+    }
+
+    /** Source frames per device frame, which turns the tempo stage's positions into source frames. */
+    private val sourcePerTarget: Double = sourceFormat.sampleRate.toDouble() / targetFormat.sampleRate
 
     private val targetChannels = targetFormat.channels
 
@@ -150,28 +135,25 @@ internal class AudioPipeline(
         private set
 
     /**
-     * The playback rate. 1.0 bypasses both mechanisms entirely.
-     *
-     * With [preservePitch] the tempo stage applies it; without, the resampler is rebuilt with
-     * the rate folded into its source rate, which is safe for exactly the reason the tempo
-     * route is: the engine routes a change here through a flush with the feeder quiescent, so
-     * no buffer is ever spliced from two speeds and the discarded carry frame was going to be
-     * dropped by [reset] anyway.
+     * The playback rate. 1.0 passes the sound through untouched. A new value applies to the next
+     * buffer, with no seam: see [TempoStage].
      *
      * Owned by the feeder, like every stage of the pipeline.
      */
     var speed: Double
-        get() = if (preservePitch) tempo.speed else resampleSpeed
+        get() = tempo.speed
         set(value) {
-            if (preservePitch) {
-                tempo.speed = value
-                return
-            }
-            checkedSpeed(value)
-            if (resampleSpeed == value) return
-            resampleSpeed = value
-            resampler?.close()
-            resampler = buildResampler()
+            tempo.speed = checkedSpeed(value)
+        }
+
+    /**
+     * True keeps pitch at speeds other than 1.0; false lets pitch move with the rate, mpv's
+     * `audio-pitch-correction=no`. A new value applies to the next buffer, with no seam.
+     */
+    var preservePitch: Boolean
+        get() = tempo.preservePitch
+        set(value) {
+            tempo.preservePitch = value
         }
 
     private fun checkedSpeed(value: Double): Double {
@@ -181,8 +163,42 @@ internal class AudioPipeline(
         return value
     }
 
-    /** Frames the tempo stage has emitted since the last [reset]. The pts law reads this. */
-    val tempoEmittedFrames: Long get() = tempo.emittedFrames
+    // Where the last call's output came from, in source frames since construction or the last
+    // [reset]: [pieceCount] runs, each from [pieceStart] in the output, reading the source from
+    // [pieceSource] at [pieceSlope] source frames per output frame. The audio clock is dated from
+    // these, so it follows every change of rate exactly where the output changes.
+    private val pieceStarts = IntArray(MAX_PIECES)
+    private val pieceSources = DoubleArray(MAX_PIECES)
+    private val pieceSlopes = DoubleArray(MAX_PIECES)
+    private val pieceRates = DoubleArray(MAX_PIECES)
+
+    /** Runs of output the last [process] or [finish] made. */
+    var pieceCount: Int = 0
+        private set
+
+    fun pieceStart(index: Int): Int = pieceStarts[index]
+
+    fun pieceSource(index: Int): Double = pieceSources[index]
+
+    fun pieceSlope(index: Int): Double = pieceSlopes[index]
+
+    /**
+     * Media seconds per output second across piece [index]: the speed it plays at. Taken from the
+     * tempo stage as it is, so a speed of 1.5 reads 1.5 exactly whatever the two sample rates.
+     */
+    fun pieceRate(index: Int): Double = pieceRates[index]
+
+    /** Copies the tempo stage's runs after any already recorded, shifted to start at [at] in the output. */
+    private fun takePieces(at: Int) {
+        for (index in 0 until tempo.pieceCount) {
+            if (pieceCount == MAX_PIECES) return
+            pieceStarts[pieceCount] = at + tempo.pieceStart(index)
+            pieceSources[pieceCount] = tempo.pieceSource(index) * sourcePerTarget
+            pieceSlopes[pieceCount] = tempo.pieceSlope(index) * sourcePerTarget
+            pieceRates[pieceCount] = tempo.pieceSlope(index)
+            pieceCount++
+        }
+    }
 
     /** True when this pipeline was built for exactly the format [decoderFormat] describes. */
     fun matches(decoderFormat: AudioFormat): Boolean = decoderFormat == sourceFormat
@@ -219,6 +235,7 @@ internal class AudioPipeline(
      *         input frame carry to the next call, so the conversion stays continuous across it.
      */
     fun process(input: FloatArray, frames: Int): Int {
+        pieceCount = 0
         if (frames <= 0) return 0
 
         /* An identity mixer used to copy the whole buffer anyway. Skipping it means
@@ -248,15 +265,15 @@ internal class AudioPipeline(
         }
 
         // The tempo stage owns lookahead, so at speeds other than 1.0 it may answer zero while it
-        // accumulates, and its output buffer replaces ours. At 1.0 with nothing queued the stage
-        // is skipped outright, so normal playback pays not even a copy for it; the counters are
-        // advanced so the pts law upstairs never notices which branch ran.
-        if (tempo.speed != 1.0 || tempo.hasQueuedInput) {
+        // accumulates, and its output buffer replaces ours. At 1.0 with nothing held the samples
+        // stay where they are, so normal playback pays not even a copy for it.
+        if (tempo.isBypassing) {
+            tempo.passThrough(result, produced)
+        } else {
             produced = tempo.process(result, produced)
             result = tempo.output
-        } else {
-            tempo.countBypassed(produced)
         }
+        takePieces(0)
 
         /* Last, so it scales exactly what reaches the ring, and skipped entirely at unity so a file
          * with no ReplayGain tags pays nothing for the feature. In place: `result` is either our own
@@ -306,6 +323,7 @@ internal class AudioPipeline(
      * @return sample frames written to [output], zero when no stage was holding anything.
      */
     fun finish(): Int {
+        pieceCount = 0
         var total = 0
         // 1. The rate conversion's tail, through the tempo stage like any other buffer.
         val conversion = resampler
@@ -315,18 +333,22 @@ internal class AudioPipeline(
             val drained = conversion.flush(resampled)
             checkWritten(drained, capacity)
             if (drained > 0) {
-                if (tempo.speed != 1.0 || tempo.hasQueuedInput) {
+                if (tempo.isBypassing) {
+                    tempo.passThrough(resampled, drained)
+                    total = appendFinished(resampled, drained, 0)
+                } else {
                     val stretched = tempo.process(resampled, drained)
                     total = appendFinished(tempo.output, stretched, 0)
-                } else {
-                    tempo.countBypassed(drained)
-                    total = appendFinished(resampled, drained, 0)
                 }
+                takePieces(0)
             }
         }
         // 2. Whatever the tempo stage was still holding, after it.
         val last = tempo.finish()
-        if (last > 0) total = appendFinished(tempo.output, last, total)
+        if (last > 0) {
+            takePieces(total)
+            total = appendFinished(tempo.output, last, total)
+        }
 
         if (total <= 0) return 0
         // The same last two stages as process, in the same order (#257).
@@ -354,6 +376,7 @@ internal class AudioPipeline(
      * flush. The gain keeps its position: the volume did not change because the position did.
      */
     fun reset() {
+        pieceCount = 0
         mixer.reset()
         resampler?.reset()
         tempo.reset()
@@ -412,6 +435,9 @@ internal class AudioPipeline(
          * 65,535 frames of 7.1 audio converted from 44.1 kHz to 192 kHz needs about 2.3 Mi.
          */
         const val MAX_STAGE_VALUES: Int = 4 * 1024 * 1024
+
+        /** More than any call makes: a pitch-law change and its settling come to three runs. */
+        private const val MAX_PIECES = 16
 
         /** The typed refusal. The audio feed replaces "audio" with the stream's codec. */
         fun refused(detail: String): PlaybackException =

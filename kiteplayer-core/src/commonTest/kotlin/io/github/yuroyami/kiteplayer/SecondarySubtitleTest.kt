@@ -84,7 +84,8 @@ class SecondarySubtitleTest {
         assertFailsWith<IllegalArgumentException> {
             harness.core.selectSecondarySubtitle(primary)
         }
-        harness.run(200.milliseconds)
+        // Past the cue's start at 0.5 s with room to spare: the clock runs at real time.
+        harness.run(400.milliseconds)
         assertEquals(
             listOf("primary line"),
             texts(harness.core.subtitleCues.value),

@@ -641,7 +641,7 @@ internal class PlaybackCore(
     private var abLoopB: Duration? = null
     private var speed: Double = 1.0
 
-    /** Whether speed keeps pitch, seeded from config. A live change rides a precise seek like speed. */
+    /** Whether speed keeps pitch, seeded from config. A live change applies at once, like speed. */
     private var preservePitch: Boolean = config.audio.preservePitch
     private var volume: Float = 1.0f
 
@@ -1804,35 +1804,20 @@ internal class PlaybackCore(
             }
             is CoreCommand.SetSpeed -> {
                 val active = session
-                // The refusal is decided BEFORE any pipeline sees the value: the
-                // old order wrote the rate into both pipelines and refused afterwards, so a
-                // later flush promoted a rate the caller was told did not apply. A live change
-                // rides a precise seek to the current position: the seek's own flush is the
-                // epoch boundary both pipelines apply their new rate at. On an unseekable source
-                // there is no such boundary to ride, and pretending the rate changed while every
-                // queued sample kept the old one would be a lie.
-                if (active != null && command.value != speed && !active.source.seekable) {
-                    val reason = "a live speed change re-anchors by precise seek, and this source is not seekable"
-                    warn(PlaybackWarning.CommandRefused("setSpeed", reason))
-                    command.reply.completeExceptionally(UnsupportedOperationException(reason))
+                // A live change needs no seek: the audio feeder applies the rate to the next buffer
+                // it converts, the audio already in the ring plays out at the rate it was made at,
+                // and the audio clock dates the boundary where the device reaches it. The video
+                // schedule paces at the rate the clock reports, so it changes at the same moment.
+                // Nothing stops, nothing is flushed, and an unseekable source changes speed too.
+                val failure = runCatching {
+                    active?.audio?.speed = command.value
+                    active?.video?.speed = command.value
+                }.exceptionOrNull()
+                if (failure != null) {
+                    command.reply.completeExceptionally(failure)
                 } else {
-                    val failure = runCatching {
-                        active?.audio?.speed = command.value
-                        active?.video?.speed = command.value
-                    }.exceptionOrNull()
-                    if (failure != null) {
-                        command.reply.completeExceptionally(failure)
-                    } else {
-                        val changedLive = active != null && command.value != speed
-                        speed = command.value
-                        if (changedLive) {
-                            queueSeek(
-                                SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise),
-                                null,
-                            )
-                        }
-                        command.reply.complete(Unit)
-                    }
+                    speed = command.value
+                    command.reply.complete(Unit)
                 }
             }
             is CoreCommand.SetVolume -> {
@@ -1963,32 +1948,11 @@ internal class PlaybackCore(
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetPreservePitch -> {
-                val active = session
-                when {
-                    command.value == preservePitch -> command.reply.complete(Unit)
-                    // The same boundary law as SetSpeed, because it IS the same boundary: the
-                    // mechanism can only change where the ring is empty, which is a flush, which
-                    // a live change reaches by precise seek, which an unseekable source cannot make.
-                    active?.audioLane != null && !active.source.seekable -> {
-                        val reason = "a live pitch-law change re-anchors by precise seek, and this source is not seekable"
-                        warn(PlaybackWarning.CommandRefused("setPreservePitch", reason))
-                        command.reply.completeExceptionally(UnsupportedOperationException(reason))
-                    }
-                    else -> {
-                        preservePitch = command.value
-                        active?.audio?.preservePitch = command.value
-                        if (active?.audioLane != null && speed != 1.0) {
-                            // Audible only away from 1.0, so the rebuffer is only paid there. At
-                            // 1.0 both mechanisms are the same bypass and the flush would buy
-                            // nothing; the stored value rules the next epoch anyway.
-                            queueSeek(
-                                SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise),
-                                null,
-                            )
-                        }
-                        command.reply.complete(Unit)
-                    }
-                }
+                // Live, like a speed change: the tempo stage settles onto an exact input frame and
+                // carries on with the other law from there, with no seek and no seam.
+                preservePitch = command.value
+                session?.audio?.preservePitch = command.value
+                command.reply.complete(Unit)
             }
             is CoreCommand.SetAbLoop -> {
                 val active = session
@@ -4422,7 +4386,7 @@ internal class PlaybackCore(
                 // Wake when the next marker lands rather than a whole pass later, the way the A-B
                 // loop does: media distance over rate is wall distance.
                 markers.firstOrNull { it.position.inWholeMicroseconds > positionUs }?.let { next ->
-                    wakeIn(((next.position.inWholeMicroseconds - positionUs) / speed).toLong().microseconds)
+                    wakeIn(((next.position.inWholeMicroseconds - positionUs) / wakeRate()).toLong().microseconds)
                 }
             }
         }
@@ -4452,7 +4416,7 @@ internal class PlaybackCore(
             } else {
                 // Wake when B lands rather than a whole pass later. Media distance over rate is
                 // wall distance, the same division the schedule itself makes.
-                wakeIn(((bUs - positionUs) / speed).toLong().microseconds)
+                wakeIn(((bUs - positionUs) / wakeRate()).toLong().microseconds)
             }
         }
     }
@@ -5707,7 +5671,7 @@ internal class PlaybackCore(
         if (leftUs > leadUs) {
             // Woken when the lead begins rather than a whole pass later. Media distance over rate
             // is wall distance.
-            if (status == PlaybackStatus.Playing) wakeIn(((leftUs - leadUs) / speed).toLong().microseconds)
+            if (status == PlaybackStatus.Playing) wakeIn(((leftUs - leadUs) / wakeRate()).toLong().microseconds)
             return
         }
         val item = queueItems[index]
@@ -6034,6 +5998,9 @@ internal class PlaybackCore(
         refreshTypesetting()
         startAudioEventCollector(incoming)
         if (incoming.videoDecoderDeferred) startDeferredVideo(incoming)
+        // The preload built its schedule at the speed of that moment; the speed may have changed
+        // since, and the schedule has not started, so the current one applies at once.
+        incoming.video?.speed = speed
         startVideoSchedule(incoming)
         reportContainerDivergences(incoming)
         emitEvent(PlayerEvent.Opened(next.item, tracks))
@@ -8861,7 +8828,8 @@ internal class PlaybackCore(
                     // instant playback resumes: measured, one frame dropped and one repeated at the start
                     // of every file, because an open ends paused on its first frame.
                     video.resumeSchedule()
-                    val wait = video.tick(masterPosition(session))
+                    val master = masterReading(session)
+                    val wait = video.tick(master?.pts, master?.speed)
                     recordVideoClock(session, video)
                     // The pacing wait yields to a park request like every other idle wait: while
                     // playing, this sleep IS the schedule, so a seek that did not interrupt it paid
@@ -8909,6 +8877,27 @@ internal class PlaybackCore(
         // much earlier, which is exactly what a sound that arrives late at the ear needs.
         session.audioLane == null -> null
         else -> session.audio?.position()?.let { Pts(it.micros + audioDelay.inWholeMicroseconds) }
+    }
+
+    /**
+     * The audio clock in one reading, for the schedule: its position, biased like [masterPosition],
+     * and the rate the listener hears. Null when video is the master or nothing is audible yet.
+     */
+    private fun masterReading(session: OpenSession): ClockSnapshot? {
+        if (config.syncMode == SyncMode.VideoMaster || session.audioLane == null) return null
+        val reading = session.audio?.clockSnapshot() ?: return null
+        val pts = reading.pts ?: return null
+        return reading.copy(pts = Pts(pts.micros + audioDelay.inWholeMicroseconds))
+    }
+
+    /**
+     * The rate that turns a media distance into a wake-up delay. After a speed change the device
+     * still plays the old rate for the ring's depth, so the faster of the two is used: waking early
+     * costs one pass, waking late misses the moment.
+     */
+    private fun wakeRate(): Double {
+        val audible = publishedAudioClock.value.rate
+        return if (audible > 0.0) maxOf(speed, audible) else speed
     }
 
     /** Publishes what the scheduler alone may read, so the actor never touches the video clock. */

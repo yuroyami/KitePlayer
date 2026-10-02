@@ -213,10 +213,14 @@ class CommandTruthTest {
         }
         harness.run(10.milliseconds)
 
-        // A refused live speed change on an unseekable source warns, typed, every time it is
-        // asked for, which is a deterministic event generator that touches nothing else.
+        // An A-B loop armed on an unseekable source is refused with a typed warning every time
+        // it is asked for, which is a deterministic event generator that touches nothing else.
         repeat(200) {
-            runCatching { harness.core.setSpeed(if (it % 2 == 0) 1.5 else 2.5) }
+            harness.core.post(
+                io.github.yuroyami.kiteplayer.internal.CoreCommand.SetAbLoop(
+                    1.seconds, 2.seconds, kotlinx.coroutines.CompletableDeferred(),
+                ),
+            )
         }
         // Past one stats interval, because the counter is published on that interval like every
         // other total on PlaybackStats.

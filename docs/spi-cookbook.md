@@ -170,8 +170,8 @@ val player = KitePlayerPlatform.createOrNull(
 ```
 
 The engine calls `create(inputRate, outputRate, channels)` for each audio stream, and again after
-a format change. It asks only when the two rates differ. While pitch correction is off, the
-playback speed is folded into `inputRate`, so expect any rate, not only the standard ones.
+a format change. It asks only when the two rates differ. The playback speed never changes the
+rates: the tempo stage after the resampler applies it.
 
 - The resampler runs after the channel mix, so `channels` is the device's channel count. Samples
   are interleaved floats.

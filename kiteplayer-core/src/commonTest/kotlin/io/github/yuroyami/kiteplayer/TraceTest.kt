@@ -114,14 +114,20 @@ class TraceTest {
     @Test
     fun `an audio underrun records an instant`() = runTest {
         val sink = RecordingSink().also { KiteTrace.install(it) }
+        // Decoding stops while packets keep arriving, so the ring runs dry; see the AudioUnderrun
+        // case in EngineAuditRegressionTest.
+        val faults = FaultPlan()
         val harness = CoreHarness(
             this,
-            script = MediaScript(hasVideo = false, durationUs = 3_000_000, readDelayUs = 60_000),
+            script = MediaScript(hasVideo = false, durationUs = 3_000_000),
+            faults = faults,
             renderer = null,
         )
         harness.open()
         harness.core.play()
-        harness.run(3.seconds)
+        harness.run(1.seconds)
+        faults.stallAudioDecodeReceive = true
+        harness.run(2.seconds)
 
         assertTrue(sink.named("audio", "underrun").isNotEmpty(), "a starved ring runs dry")
         harness.close()

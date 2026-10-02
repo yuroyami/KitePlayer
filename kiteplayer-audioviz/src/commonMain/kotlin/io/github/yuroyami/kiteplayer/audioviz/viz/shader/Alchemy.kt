@@ -6,94 +6,122 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
-import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Orbiter
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprites
-import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
-import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Comets
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flow
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flows
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.MemoryField
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Impulses
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.hatSpawn
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.follow
-import kotlin.math.PI
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.lift
+import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.max
-import kotlin.math.pow
 import kotlin.math.sin
 
 /**
- * Electric blue orbit traps, a waveform corona and radial filaments, all set moving. The Julia
- * constant walks the edge of the main cardioid, so the filigree never stops changing; the figure's
- * centre orbits inside the middle third of the frame and breathes an octave each slow cycle; two
- * corona rings turn against each other; rays sweep once a cycle and filaments stream outward. A
- * snare discharges one lightning arc from the corona into the lace. A drop jumps to another part of
- * the cardioid and turns lead into gold: the lace turns gold from the core out to the corona over
- * one beat, the rays turn pale gold, and after four cycles it cools back to blue from the rim in.
+ * The classic visualiser loop, drawn sharp: a drawer paints the signal into a memory field every
+ * frame, a flow carries the field, and the shader draws the field as banded, lit ink with crisp
+ * iso-lines under the live drawer. The flow's parameters move all the time and jump on morphs, a
+ * birth changes the flow with a cross fade and seeds a new drawer, so the picture never settles.
+ * The palette's cool end is the default; a drop turns the ink gold from the core out over one beat
+ * and it cools back from the rim over two cycles. A snare strikes a lightning arc and flips the
+ * spin, a hat throws sparks, a kick pushes the whole field outward for a moment.
+ *
+ * Drawers: Ring (the waveform round a circle), Radar (the waveform along a turning line), Dots (the
+ * spectrum as a plane of dots), Polygon (the waveform on an N-gon), Twin (left and right traces as
+ * two rings), Edge (the spectrum along the frame edges), Fan (two arms of the waveform). Flows: Swirl,
+ * Kaleido, Tunnel, Burst, Blocks, Shimmer, Julia, Drift. The Gas form (Dots plus Drift) also draws
+ * thin gas filaments over the ink.
+ *
+ * Positions are the field's centred units, with y pointing down the screen.
  */
 internal class Alchemy : ShaderPreset(
-    source = SOURCE,
+    source = AlchemyShader.SOURCE,
     name = "Alchemy",
-    bucket = VizEnergy.Mid,
-    // The camera holds still: a camera that wandered would carry the core out of the middle third.
+    bucket = VizEnergy.High,
+    seed = 7.932f,
+    // No camera moves: all motion is flow.
     kit = Kit(7_932L, detailKind = null,
         camera = Camera2D(wander = 0f, punch = 0f, roll = 0f, shake = 0f, cuts = false, seed = 7_932)),
 ) {
 
     override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Waveform, VizProperty.Shape),
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
         VizDrive(VizDriver.Level, VizProperty.Brightness),
-        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.3f)),
-        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
-        // The discharge: one arc for three frames, at most twice a second.
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.4f)),
         VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Discrete, VizResponse.lifetime(0.05f)),
-        VizDrive(VizDriver.Drop, VizProperty.Colour, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Cut, VizCurve.Discrete),
+        VizDrive(VizDriver.HighHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(0.55f)),
+        VizDrive(VizDriver.Drop, VizProperty.Colour, VizCurve.Discrete, VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Cut, VizCurve.Discrete),
+        VizDrive(VizDriver.Breakdown, VizProperty.Cut, VizCurve.Discrete),
+        VizDrive(VizDriver.Section, VizProperty.Cut, VizCurve.Discrete),
+        VizDrive(VizDriver.Key, VizProperty.Colour),
         VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        silence = VizSilence.Fade,
     )
-    // The look relies on sharp blue filigree and black negative space. A wide bloom
-    // erases both. The filaments have their own analytical glow in the one scene draw.
+
+    // Sharp ink and black space are the look; the shader puts its own glow on the core.
     override val post: PostSpec get() = PostSpec.Off
 
-    private val lobe = genes.choice("Cardioid lobe", 3)
-    private val nested = genes.toggle("Nested figure", start = true)
-    private val rayDensity = genes.number("Ray density", 0.6f, 1.6f, 1f)
-    private val rings = genes.choice("Corona rings", 2, start = 1)
-    private val zoomPeriod = genes.choice("Zoom period", 2)
+    private val memory = MemoryField(rows = 108).also { it.halfLife = 1.4f }
+    override val field: MemoryField get() = memory
 
-    // Small enough that the core never leaves the middle third of the frame.
-    internal val centre = Orbiter(radiusX = 0.12f, radiusY = 0.1f, lapsPerBar = 0.25f)
-    private val walkAngle = Slew(maxPerSecond = 1.5f)
-    private var jump = 0f
-    private var rayShift = 0f
-    private val punch = Spring(stiffness = 160f, damping = 0.5f)
+    // The recipe the song changes.
+    private val foldCount = genes.number("Fold count", 3f, 9f, 6f)
+    private val inkSteps = genes.number("Ink steps", 4f, 9f, 6f)
+    private val twoDrawers = genes.toggle("Two drawers", start = false)
+
+    private var drawer = 0
+    private var flowKind = 0
+    private var previousFlow: Flow = Flows.Swirl(0.6f)
+    private var currentFlow: Flow = Flows.Swirl(0.6f)
+    private var flowMix = 1f
+    private var spin = 0.6f
+    private var spinSign = 1f
+    private var pull = 0.8f
+    private var amount = 0.5f
+    private var push = 0f
+    private var radarAngle = 0f
+    private var morphs = 0
+    private var births = 0
+    private var gas = 0f
+
+    private val xs = FloatArray(POINTS)
+    private val ys = FloatArray(POINTS)
+    private val path = Path()
     private val sparks = Sprites(200, 1_701L)
-    private val comets = Comets(size = 0.03f)
 
-    // The transmutation: music seconds since the drop, or below zero while none runs.
+    // The transmutation, in heard seconds since the drop, below zero while none runs.
     private var goldAge = -1f
-    /** How far the gold has spread from the core, and how far in it has cooled from the rim, in the shader's units. */
     internal var goldSpread = 0f
         private set
     internal var goldCool = GOLD_REACH
         private set
     private var rayGold = 0f
 
-    // The discharge, in the shader's own units round the figure, and how long it still shows.
+    // The discharge: a jagged arc from the ring into the core, in centred units.
     private val arcX = FloatArray(ARC_POINTS)
     private val arcY = FloatArray(ARC_POINTS)
-    /** Frames the current arc still shows, and how many arcs have been struck since the start. */
     internal var arcFrames = 0
         private set
     internal var arcsStruck = 0
@@ -101,47 +129,185 @@ internal class Alchemy : ShaderPreset(
     private var sinceArc = 99f
     private val arcPath = Path()
 
-    // What the shader was last handed, so the arc lands on the figure the shader drew.
-    private var drawnZoom = 1f
-    private var drawnCentreX = 0f
-    private var drawnCentreY = 0f
-    private var drawnTurn = 0f
+    internal val drawerName: String get() = DRAWERS[drawer]
+    internal val flowName: String get() = FLOWS[flowKind]
+
+    override val forms: FormReadout get() = FormReadout("$drawerName + $flowName", morphs, births)
 
     override fun advance(state: VizRenderState) {
+        memory.size(kit.aspect)
         val dt = state.deltaSeconds
-        centre.advance(state, gestures)
-        kit.place(1, centre.x, centre.y)
-        if (gestures.drop) jump += TAU / 3f
-        // One circuit of the cardioid every eight phrases, from where the lobe gene starts it.
-        walkAngle.advance(genes.walk * TAU + lobe.value * TAU / 3f + jump, dt)
-        if (gestures.snare > 0f) rayShift += 0.7f * gestures.snare
-        punch.kick(gestures.kick * 5f)
-        punch.advance(dt)
+        val heard = state.stepSeconds
+        val frame = state.frame
+
+        // The recipe moves on the evolution pace: a morph eases the flow, a birth changes it.
+        if (evolution.morph) {
+            morphs++
+            spin = 0.3f + 0.9f * random.next()
+            amount = 0.3f + 0.6f * random.next()
+            pull = 0.5f + 0.8f * random.next()
+            if (random.next() < 0.5f) drawer = (drawer + 1 + (random.next() * (DRAWERS.size - 1)).toInt()) % DRAWERS.size
+        }
+        if (evolution.birth) {
+            births++
+            previousFlow = blendedFlow()
+            flowKind = (flowKind + 1 + (random.next() * (FLOWS.size - 1)).toInt()) % FLOWS.size
+            flowMix = 0f
+            drawer = (random.next() * DRAWERS.size).toInt().coerceIn(0, DRAWERS.size - 1)
+        }
+        if (evolution.collapse) {
+            previousFlow = currentFlow
+            flowKind = FLOWS.indexOf("Drift")
+            drawer = DRAWERS.indexOf("Dots")
+            flowMix = 0f
+        }
+        if (evolution.bloom) {
+            previousFlow = currentFlow
+            flowKind = FLOWS.indexOf("Burst")
+            flowMix = 0f
+        }
+        if (flowMix < 1f) flowMix = (flowMix + heard / gestures.cycleSeconds.coerceAtLeast(0.4f)).coerceAtMost(1f)
+        currentFlow = flowFor(flowKind, state)
+        // A snare flips the spin, a kick pushes the whole field outward for a moment.
+        if (gestures.snare > 0f) spinSign = -spinSign
+        push = max(push - heard * 2.5f, 0f)
+        if (gestures.kick > 0f) {
+            push = (push + 0.8f * gestures.kick).coerceAtMost(1.2f)
+            impulses.add(Impulses.LOW, gestures.kick, 0f, 0f, random.next())
+        }
+        gas += ((if (flowName == "Drift" && drawerName == "Dots") 1f else 0f) - gas) * (dt / 1.5f).coerceAtMost(1f)
+        radarAngle += heard * state.paced(0.9f) * spinSign
+
+        // The field: carry what is there, then write this frame's signal into it.
+        val flow = if (push > 0f) Flows.Mixed(blendedFlow(), Flows.Tunnel(3f * push), 0.5f) else blendedFlow()
+        memory.advance(flow, heard)
+        if (frame.audible > 0f) {
+            draw(drawer, state)
+            if (twoDrawers.on) draw((drawer + 2) % DRAWERS.size, state)
+        }
+
         advanceGold(state)
-        // One arc on a snare, for three frames, never more than two a second.
-        val step = state.stepSeconds
-        sinceArc += step
+        sinceArc += heard
         if (arcFrames > 0) arcFrames--
-        if (gestures.snare > 0f && sinceArc >= ARC_GAP && state.frame.audible > 0f) {
-            buildArc(state.bassMotion)
+        if (gestures.snare > 0f && sinceArc >= ARC_GAP && frame.audible > 0f) {
+            buildArc()
             arcFrames = ARC_FRAMES
             arcsStruck++
             sinceArc = 0f
         }
         if (gestures.hat > 0f) {
             val a = random.next() * TAU
-            sparks.burst(centre.x + cos(a) * 0.32f / kit.aspect, centre.y + sin(a) * 0.32f,
+            sparks.burst(0.5f + cos(a) * 0.3f / kit.aspect, 0.5f + sin(a) * 0.3f,
                 gestures.hatSpawn(5), 0.25f, 0.5f, 0.01f, 0.55f, Sprite.SPARK)
         }
         sparks.advance(dt, drag = 1f)
-        comets.advance(state, gestures, random)
-        kit.follow(0, comets.travellers)
+    }
+
+    private fun blendedFlow(): Flow = if (flowMix >= 1f) currentFlow else Flows.Mixed(previousFlow, currentFlow, flowMix)
+
+    /** The flow of [kind] with this frame's parameters. Speeds are paced, so a ballad swirls slowly. */
+    private fun flowFor(kind: Int, state: VizRenderState): Flow {
+        val pace = 0.3f + 0.7f * state.frame.motionRate
+        return when (FLOWS[kind]) {
+            "Swirl" -> Flows.Swirl(spin * spinSign * pace)
+            "Kaleido" -> Flows.Mixed(Flows.Kaleido(foldCount.value.toInt().coerceIn(3, 12), pull * pace), Flows.Swirl(0.2f * spinSign * pace), 0.3f)
+            "Tunnel" -> Flows.Mixed(Flows.Tunnel(0.35f * pace), Flows.Swirl(0.25f * spinSign * pace), 0.4f)
+            "Burst" -> Flows.Mixed(Flows.Burst(0.4f * pace), Flows.Swirl(0.3f * spinSign * pace), 0.4f)
+            "Blocks" -> Flows.Blocks(3f + 3f * amount, 0.25f * pace)
+            "Shimmer" -> Flows.Mixed(Flows.Shimmer(0.3f * amount * pace, 6f), Flows.Drift(0f, 0.15f * pace), 0.5f)
+            "Julia" -> Flows.Julia(JULIA_X[kind % JULIA_X.size], JULIA_Y[kind % JULIA_Y.size], 0.6f * amount * pace)
+            else -> Flows.Drift(0.12f * spinSign * pace, 0.08f * pace)
+        }
+    }
+
+    /** Writes drawer [which] into the field from this frame's waveform and bands. */
+    private fun draw(which: Int, state: VizRenderState) {
+        val frame = state.frame
+        val gain = frame.waveformGain
+        val light = 0.55f + 0.45f * frame.energy
+        when (DRAWERS[which]) {
+            "Ring" -> {
+                for (i in 0 until POINTS) {
+                    val a = i / (POINTS - 1f) * TAU
+                    val r = 0.55f + 0.12f * frame.scope.sampleAt(i / (POINTS - 1f)) * gain + 0.08f * frame.bassRel
+                    xs[i] = cos(a) * r; ys[i] = sin(a) * r
+                }
+                memory.line(xs, ys, POINTS, 1.6f, light)
+            }
+            "Radar" -> {
+                val c = cos(radarAngle); val s = sin(radarAngle)
+                for (i in 0 until POINTS) {
+                    val along = (i / (POINTS - 1f) - 0.5f) * 2.2f * kit.aspect
+                    val across = 0.35f * frame.scope.sampleAt(i / (POINTS - 1f)) * gain
+                    xs[i] = along * c - across * s; ys[i] = along * s + across * c
+                }
+                memory.line(xs, ys, POINTS, 1.6f, light)
+            }
+            "Dots" -> {
+                val bands = frame.bandsRel
+                for (b in bands.indices) {
+                    val x = (b / (bands.size - 1f) - 0.5f) * 1.8f * kit.aspect
+                    // y points down, so a louder band sits higher on the screen.
+                    val y = 0.7f - 1.4f * bands[b]
+                    memory.disc(x, y, 0.025f + 0.05f * bands[b], light * (0.4f + 0.6f * bands[b]))
+                }
+            }
+            "Polygon" -> {
+                val sides = foldCount.value.toInt().coerceIn(3, 9)
+                for (i in 0 until POINTS) {
+                    val t = i / (POINTS - 1f)
+                    val corner = floor(t * sides) / sides * TAU
+                    val next = corner + TAU / sides
+                    val along = (t * sides) - floor(t * sides)
+                    val r = 0.55f + 0.1f * frame.scope.sampleAt(t) * gain
+                    xs[i] = (cos(corner) * (1f - along) + cos(next) * along) * r
+                    ys[i] = (sin(corner) * (1f - along) + sin(next) * along) * r
+                }
+                memory.line(xs, ys, POINTS, 1.6f, light)
+            }
+            "Twin" -> {
+                for (side in 0..1) {
+                    val trace = if (side == 0) frame.scopeLeft else frame.scopeRight
+                    val cx = if (side == 0) -0.45f else 0.45f
+                    for (i in 0 until POINTS) {
+                        val a = i / (POINTS - 1f) * TAU
+                        val r = 0.38f + 0.1f * trace.sampleAt(i / (POINTS - 1f)) * gain
+                        xs[i] = cx + cos(a) * r; ys[i] = sin(a) * r
+                    }
+                    memory.line(xs, ys, POINTS, 1.4f, light)
+                }
+            }
+            "Edge" -> {
+                // The bottom edge (y 0.95) rises with the bands, the top edge (y -0.95) falls with them.
+                val bands = frame.bandsRel
+                val half = POINTS / 2
+                for (i in 0 until half) {
+                    val t = i / (half - 1f)
+                    val level = bands.sampleAt(t)
+                    xs[i] = (t - 0.5f) * 2f * kit.aspect; ys[i] = 0.95f - 0.35f * level
+                    xs[half + i] = (0.5f - t) * 2f * kit.aspect; ys[half + i] = -0.95f + 0.35f * level
+                }
+                memory.line(xs, ys, half, 1.6f, light)
+                memory.line(xs.copyOfRange(half, POINTS), ys.copyOfRange(half, POINTS), half, 1.6f, light)
+            }
+            else -> {
+                for (arm in 0..1) {
+                    val base = radarAngle + arm * 3.1415927f
+                    for (i in 0 until POINTS) {
+                        val t = i / (POINTS - 1f)
+                        val r = 0.1f + 0.75f * t
+                        val sway = 0.25f * frame.scope.sampleAt(t) * gain * t
+                        xs[i] = cos(base + sway) * r; ys[i] = sin(base + sway) * r
+                    }
+                    memory.line(xs, ys, POINTS, 1.5f, light)
+                }
+            }
+        }
     }
 
     /**
-     * Lead into gold and back. The gold spreads from the core to past the corona over one beat,
-     * holds for four cycles, then cools back to blue from the rim inward over two cycles. It runs
-     * on the music's clock, so a pause holds it where it is.
+     * Lead into gold and back. The gold spreads from the core over one beat, holds for four cycles,
+     * then cools back from the rim inward over two cycles. It runs on heard time, so a pause holds it.
      */
     private fun advanceGold(state: VizRenderState) {
         if (gestures.surge) goldAge = 0f
@@ -163,17 +329,14 @@ internal class Alchemy : ShaderPreset(
         if (cooling >= 1f) goldAge = -1f
     }
 
-    /** A jagged arc from the corona into the brighter of the lace's two lobes, in the shader's units. */
-    private fun buildArc(bass: Float) {
-        val lobe = if (random.next() < 0.5f) LOBE_ONE else LOBE_TWO
-        val from = lobe + random.signed() * 0.35f
-        val to = from + random.signed() * 0.25f
-        val outer = 0.64f + 0.1f * bass
-        val inner = 0.36f + 0.12f * random.next()
-        arcX[0] = outer * cos(from)
-        arcY[0] = outer * sin(from)
-        arcX[ARC_POINTS - 1] = inner * cos(to)
-        arcY[ARC_POINTS - 1] = inner * sin(to)
+    /** A jagged arc from the ring into the core, in centred units. */
+    private fun buildArc() {
+        val from = random.next() * TAU
+        val to = from + random.signed() * 0.6f
+        val outer = 0.6f
+        val inner = 0.08f + 0.1f * random.next()
+        arcX[0] = outer * cos(from); arcY[0] = outer * sin(from)
+        arcX[ARC_POINTS - 1] = inner * cos(to); arcY[ARC_POINTS - 1] = inner * sin(to)
         // Midpoint displacement: each level halves the segments and the sideways jitter.
         var span = ARC_POINTS - 1
         var jitter = 0.32f
@@ -184,9 +347,9 @@ internal class Alchemy : ShaderPreset(
                 val ax = arcX[at]; val ay = arcY[at]
                 val bx = arcX[at + span]; val by = arcY[at + span]
                 val dx = bx - ax; val dy = by - ay
-                val push = random.signed() * jitter
-                arcX[at + half] = (ax + bx) * 0.5f - dy * push
-                arcY[at + half] = (ay + by) * 0.5f + dx * push
+                val pushAside = random.signed() * jitter
+                arcX[at + half] = (ax + bx) * 0.5f - dy * pushAside
+                arcY[at + half] = (ay + by) * 0.5f + dx * pushAside
                 at += span
             }
             span = half
@@ -195,51 +358,45 @@ internal class Alchemy : ShaderPreset(
     }
 
     override fun extraUniforms(program: ShaderProgram, state: VizRenderState) {
-        val aspect = kit.aspect
-        // A point on the edge of the main cardioid, just outside it, which is where the lace lives.
-        val theta = walkAngle.value + PI.toFloat()
-        program.uniform("uC", (0.5f * cos(theta) - 0.25f * cos(2f * theta)) * 1.03f, (0.5f * sin(theta) - 0.25f * sin(2f * theta)) * 1.03f)
-        drawnCentreX = (centre.x - 0.5f) * 2f * aspect
-        drawnCentreY = (centre.y - 0.5f) * 2f
-        program.uniform("uCentre", drawnCentreX, drawnCentreY)
-        val period = if (zoomPeriod.value == 0) 1f else 2f
-        val breathe = ((gestures.slowCycles % period.toInt()) + gestures.slowCyclePhase) / period
-        drawnZoom = 2f.pow(0.5f * sin(TAU * breathe)) * (1f + 0.08f * punch.value.coerceIn(0f, 1.5f))
-        program.uniform("uZoom", drawnZoom)
-        // The shader turns its picture by this much; the arc turns with it.
-        drawnTurn = 0.16f * sin(state.musicTime * 0.13f)
+        program.uniform("uInkSteps", inkSteps.value)
         program.uniform("uGold", goldSpread, goldCool, rayGold, 0f)
-        program.uniform("uRayTurn", gestures.cyclePhase * TAU + rayShift)
-        program.uniform("uRayDensity", rayDensity.value)
-        // The flash guard lowers this when the light has to be held back.
-        program.uniform("uLight", state.lightScale.coerceIn(0f, 1f))
-        program.uniform("uNested", nested.weight(1))
-        program.uniform("uTwoRings", rings.weight(1))
+        program.uniform("uPush", push)
+        program.uniform("uGas", gas)
+        program.uniform("uFold", foldCount.value)
     }
 
     override fun DrawScope.drawTop(state: VizRenderState) {
-        // Blue and white are the idea here, so the sparks and comets ignore the chosen palette too.
-        val light = state.lightScale.coerceIn(0f, 1f)
-        with(sparks) { drawSprites(VizPalette.Ice, genes.walk, alpha = light) }
-        with(comets) { drawComets(VizPalette.Ice, genes.walk, alpha = light) }
-        if (arcFrames > 0) drawArc(state)
+        val light = state.lift
+        if (light <= 0f) return
+        // The live drawer, crisp, over the field: the same points the field was just written with.
+        if (state.frame.audible > 0f) drawDrawer(state, light)
+        with(sparks) { drawSprites(state.palette, genes.walk, alpha = light) }
+        if (arcFrames > 0) drawArc(light)
     }
 
-    /** The discharge: blue-white, two pixels wide at 1080 lines, over a faint glow of its own. */
-    private fun DrawScope.drawArc(state: VizRenderState) {
-        val light = state.lightScale.coerceIn(0f, 1f)
-        if (light <= 0f) return
+    /** Strokes the drawer's last polyline at native resolution. Dots and Edge are drawn by the field alone. */
+    private fun DrawScope.drawDrawer(state: VizRenderState, light: Float) {
+        if (drawerName == "Dots" || drawerName == "Edge") return
         val half = size.height * 0.5f
-        // The shader's point p lands at the middle plus half the height times (centre + zoom * p),
-        // with p turned back by the shader's own turn.
-        val c = cos(-drawnTurn)
-        val s = sin(-drawnTurn)
+        path.reset()
+        for (i in 0 until POINTS) {
+            val x = size.width * 0.5f + half * xs[i]
+            val y = half + half * ys[i]
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        // The cool end of the ramp the shader inks with, lifted towards white, and leaning to the key.
+        val lean = state.frame.keyHue * state.frame.keyConfidence * KEY_LEAN
+        val at = 0.3f + genes.walk + lean
+        val colour = lerp(state.palette.ramp(at - floor(at)), Color.White, 0.4f).copy(alpha = light)
+        drawPath(path, colour, style = Stroke(max(1.5f, size.height / 720f), cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+
+    private fun DrawScope.drawArc(light: Float) {
+        val half = size.height * 0.5f
         arcPath.reset()
         for (i in 0 until ARC_POINTS) {
-            val px = arcX[i] * c - arcY[i] * s
-            val py = arcX[i] * s + arcY[i] * c
-            val x = size.width * 0.5f + half * (drawnCentreX + drawnZoom * px)
-            val y = half + half * (drawnCentreY + drawnZoom * py)
+            val x = size.width * 0.5f + half * arcX[i]
+            val y = half + half * arcY[i]
             if (i == 0) arcPath.moveTo(x, y) else arcPath.lineTo(x, y)
         }
         val width = max(2f, size.height / 540f)
@@ -247,14 +404,43 @@ internal class Alchemy : ShaderPreset(
         drawPath(arcPath, ARC_COLOUR.copy(alpha = light), style = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
 
+    /** The share of cells holding ink above a tenth, for tests. */
+    internal fun fieldInkShare(): Float {
+        var lit = 0
+        val step = 0.1f
+        var count = 0
+        var y = -0.95f
+        while (y < 1f) {
+            var x = -kit.aspect + 0.05f
+            while (x < kit.aspect) {
+                count++
+                if (memory.inkAt(x, y) > 0.1f) lit++
+                x += step
+            }
+            y += step
+        }
+        return if (count == 0) 0f else lit.toFloat() / count
+    }
+
+    internal fun fieldInkAt(x: Float, y: Float): Float = memory.inkAt(x, y)
+
     override fun onReset() {
-        centre.reset()
-        walkAngle.reset()
-        jump = 0f
-        rayShift = 0f
-        punch.reset()
+        memory.clear()
+        drawer = 0
+        flowKind = 0
+        previousFlow = Flows.Swirl(0.6f)
+        currentFlow = previousFlow
+        flowMix = 1f
+        spin = 0.6f
+        spinSign = 1f
+        pull = 0.8f
+        amount = 0.5f
+        push = 0f
+        radarAngle = 0f
+        morphs = 0
+        births = 0
+        gas = 0f
         sparks.clear()
-        comets.clear()
         goldAge = -1f
         goldSpread = 0f
         goldCool = GOLD_REACH
@@ -265,7 +451,20 @@ internal class Alchemy : ShaderPreset(
     }
 
     internal companion object {
-        /** How far the gold reaches, in the shader's units: to the corona and no further. */
+        val DRAWERS = listOf("Ring", "Radar", "Dots", "Polygon", "Twin", "Edge", "Fan")
+        val FLOWS = listOf("Swirl", "Kaleido", "Tunnel", "Burst", "Blocks", "Shimmer", "Julia", "Drift")
+
+        /** Points in a drawer's polyline. */
+        const val POINTS = 128
+
+        /** Julia constants on the edge of the main cardioid. */
+        val JULIA_X = floatArrayOf(-0.75f, -0.4f, 0.28f, -0.12f)
+        val JULIA_Y = floatArrayOf(0.11f, 0.6f, 0.53f, 0.74f)
+
+        /** How far a known key moves the palette positions, as a share of the ramp per turn of key hue. */
+        const val KEY_LEAN = 0.15f
+
+        /** How far the gold reaches from the core, in centred units. */
         const val GOLD_REACH = 0.9f
         const val GOLD_HOLD_CYCLES = 4f
         const val GOLD_COOL_CYCLES = 2f
@@ -274,109 +473,5 @@ internal class Alchemy : ShaderPreset(
         const val ARC_FRAMES = 3
         const val ARC_GAP = 0.5f
         val ARC_COLOUR = Color(0.72f, 0.94f, 1f)
-
-        /** Where the lace is brightest: the angles at which its two lobes peak, in the shader. */
-        const val LOBE_ONE = -0.6854f
-        const val LOBE_TWO = 2.4562f
-
-        const val SOURCE = """
-uniform float2 uC;
-uniform float2 uCentre;
-uniform float uZoom;
-uniform float uRayTurn;
-uniform float uRayDensity;
-uniform float uLight;
-uniform float uNested;
-uniform float uTwoRings;
-uniform float4 uGold;
-
-// A bounded Julia orbit: the minimum distance to its circular traps keeps detail at several scales.
-float julia(float2 z, float2 c) {
-    float trap = 10.0;
-    float orbitLight = 0.0;
-    for (int i = 0; i < 18; i++) {
-        float d = dot(z, z);
-        if (d > 16.0) break;
-        if (i > 3) trap = min(trap, abs(d - (0.72 + 0.10 * uMid)) / (1.0 + d));
-        orbitLight += 0.012 / (0.018 + abs(z.x * z.y));
-        z = float2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
-    }
-    float lace = 0.008 / (0.008 + trap);
-    return lace * lace * 3.8 + orbitLight * 0.22;
-}
-
-half4 main(float2 position) {
-    float2 p = (centred(camPoint(position)) - uCentre) / uZoom;
-    float t = uMusicTime * 0.13;
-    p = rotate(p, 0.16 * sin(t));
-    float radius = length(p);
-    float angle = atan(p.y, p.x);
-    float along = fract(angle / 6.2831853 + 0.5);
-    float wave = scopeAt(along);
-    float spectrum = bandFolded(along);
-    // In silence the rings settle to clean circles; the music puts the waves back in.
-    float live = uDrive;
-    float ringRadius = 0.64 + live * (0.08 * sin(angle * 3.0 + t) + 0.05 * sin(angle * 7.0 - t * 1.3)) +
-        0.10 * uBass + wave * 0.075 + spectrum * 0.055 +
-        0.012 * sin(angle * 89.0 + spectrum * 17.0) * (0.3 * live + uTreble);
-    float gap = abs(radius - ringRadius);
-    float pixel = 2.0 / uResolution.y / uZoom;
-    // A narrow line: about a pixel sharper than the soft ring it was.
-    float corona = (pixel * 1.3) / (gap + pixel * 0.9);
-    // A second ring outside the first, turning the other way.
-    float ringTwo = 0.8 + live * (0.06 * sin(angle * 5.0 - t * 1.7) + 0.04 * sin(angle * 11.0 + t)) + wave * 0.05;
-    corona += uTwoRings * (pixel * 1.0) / (abs(radius - ringTwo) + pixel * 0.9);
-    float halo = 0.018 / (gap + 0.025);
-
-    float2 z = rotate(p, -0.72) * 0.62;
-    z += float2(sin(p.y * 4.0 + t), sin(p.x * 4.0 - t)) * 0.055 * uMid;
-    float lobes = smoothstep(-0.6, 0.3, sin(angle * 2.0 + 3.0));
-    float outside = smoothstep(0.24, 0.95, radius);
-    float filigree = julia(z, uC) * lobes * outside;
-    // A second figure at half the size, turned, inside the first.
-    if (uNested > 0.01) {
-        float2 inner = rotate(p, 1.2 + t * 0.3) * 1.24;
-        filigree += uNested * julia(inner, float2(uC.x, -uC.y)) * 0.6 * (1.0 - smoothstep(0.1, 0.5, radius));
-    }
-
-    // Narrow rays belong to the current spectrum and sweep round once a bar.
-    float strand = pow(0.5 + 0.5 * sin(angle * 173.0 * uRayDensity + spectrum * 23.0 + radius * 5.0 * sin(angle * 3.0 + t) + uRayTurn * 3.0), 24.0);
-    strand += 0.7 * pow(0.5 + 0.5 * sin(angle * 51.0 * uRayDensity + radius * 9.0 + wave * 3.0 - uRayTurn), 10.0);
-    float fan = pow(0.5 + 0.5 * sin(angle * 2.0 + 0.1 + uRayTurn), 4.0);
-    float rays = strand * fan * (0.14 + 0.86 * spectrum) *
-        exp(-gap * (1.1 - 0.5 * uBass)) * (0.35 + 0.65 * uEnergy);
-    // Filaments streaming outward from the figure.
-    float stream = pow(0.5 + 0.5 * sin(angle * 37.0 + spectrum * 9.0), 12.0) *
-        pow(fract(radius * 2.5 - uMusicTime * 0.6), 6.0) * smoothstep(0.3, 0.9, radius);
-    float core = pow(0.5 + 0.5 * sin(angle * 24.0 + radius * 27.0 - t * 4.0), 16.0) *
-        exp(-radius * 6.0) * (0.4 + uKick);
-    float nodes = pow(0.5 + 0.5 * cos(angle * 41.0 + t * 1.7), 16.0) *
-        (pixel * 3.5) / (gap + pixel * 3.5);
-    float electric = corona * (0.6 + spectrum * 0.85 + uSnare * 0.45);
-
-    // The transmutation: gold inside the spreading front and inside the cooling one, blue elsewhere.
-    // The corona itself stays electric blue, so the gold lace burns inside a blue ring.
-    float gold = (1.0 - smoothstep(uGold.x - 0.08, uGold.x, radius)) * (1.0 - smoothstep(uGold.y - 0.08, uGold.y, radius));
-    float3 blueDeep = float3(0.005, 0.045, 1.0);
-    float3 blueMid = float3(0.01, 0.52, 1.0);
-    float3 laceMid = mix(blueMid, float3(1.0, 0.78, 0.12), gold);
-    float3 paleGold = float3(1.0, 0.9, 0.62);
-    // Saturated blue is dark and saturated gold is bright, so gold is not the blue's twin: broad
-    // fields of the figure turn a deep amber, and only the lace's bright lines burn pale gold.
-    float lace = filigree * 3.0 + stream * 0.8;
-    float3 goldLace = float3(0.45, 0.28, 0.01) * min(lace, 1.5) + float3(0.62, 0.6, 0.34) * smoothstep(1.5, 5.0, lace);
-    float3 colour = mix(blueDeep * lace, goldLace, gold) + blueDeep * halo * 0.25;
-    colour += mix(blueDeep, paleGold * 0.5, uGold.z) * rays;
-    colour += blueMid * electric + mix(blueMid, paleGold, uGold.z) * rays * 3.2 + laceMid * core * 2.0;
-    colour += float3(0.72, 0.94, 1.0) * (pow(clamp(electric, 0.0, 1.0), 5.0) + nodes * (0.5 + uHat));
-    colour *= (0.28 + 0.72 * uDrive) * uLight;
-    // The negative space still breathes: dim rays from the figure over dim stars.
-    float backRays = pow(0.5 + 0.5 * sin(angle * 12.0 + uRayTurn * 0.5), 8.0) * exp(-radius * 0.6) * 0.09;
-    float star = pow(hash21(floor(position * 0.5) + uSeed), 80.0) * 0.35;
-    // A faint blue haze over the whole of the negative space.
-    colour += float3(0.01, 0.06, 0.3) * backRays + float3(star * 0.6, star * 0.8, star) + float3(0.012, 0.035, 0.09);
-    return half4(clamp(colour, 0.0, 1.0), 1.0);
-}
-"""
     }
 }

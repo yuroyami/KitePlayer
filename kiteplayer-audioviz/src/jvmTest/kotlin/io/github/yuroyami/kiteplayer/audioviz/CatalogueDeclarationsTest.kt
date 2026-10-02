@@ -59,6 +59,9 @@ class CatalogueDeclarationsTest {
         if ((drawing.bloom > 0) != needs.contains(VizNeed.SoftBuffer)) {
             problems += "${drawing.name}: bloom is ${drawing.bloom}, declares $needs"
         }
+        if (drawing is ShaderPreset && drawing.keepsField != needs.contains(VizNeed.MemoryField)) {
+            problems += "${drawing.name}: keeps a field ${drawing.keepsField}, declares $needs"
+        }
         return problems
     }
 

@@ -86,6 +86,9 @@ internal abstract class ShaderPreset(
      */
     protected open val field: MemoryField? get() = null
 
+    // Inside an accessor a bare `field` is the backing field, so the member is named through `this`.
+    final override val keepsField: Boolean get() = this.field != null
+
     protected open fun shaderSize(width: Float, height: Float) {}
 
     /** Values belonging to this drawing alone, on top of the ones every drawing gets. */

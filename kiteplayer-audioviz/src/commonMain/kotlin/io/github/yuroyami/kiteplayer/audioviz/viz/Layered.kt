@@ -132,6 +132,7 @@ internal abstract class Layered(
         val needs = LinkedHashSet<VizNeed>()
         val quality = ArrayList<VizQualityControl>()
         if (isRuntimeShader) needs += VizNeed.RuntimeShader
+        if (keepsField) needs += VizNeed.MemoryField
         if (warp != null || ground != null || detail != null) needs += VizNeed.ShaderLayers
         if (echoes || trail > 0f || moodSpec != null) {
             needs += VizNeed.EchoBuffer
@@ -144,6 +145,9 @@ internal abstract class Layered(
 
     /** True for a drawing whose whole picture is one runtime shader. */
     protected open val isRuntimeShader: Boolean get() = false
+
+    /** True for a drawing that keeps a memory field, which its mapping then declares. */
+    internal open val keepsField: Boolean get() = false
 
     /** False for full-screen shaders, which apply the camera themselves. */
     protected open val cameraOnEcho: Boolean get() = true

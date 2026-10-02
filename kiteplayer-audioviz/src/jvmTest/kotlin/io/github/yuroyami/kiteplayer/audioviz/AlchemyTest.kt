@@ -7,22 +7,78 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** Alchemy's core stays in the middle third, a snare strikes one arc, and a drop turns the lace gold and back. */
+/** Alchemy keeps the signal in its field, changes drawer and flow with the music, and turns gold on a drop. */
 class AlchemyTest {
 
     init { useSkiaGraphics() }
 
     @Test
-    fun theCoreStaysInTheMiddleThird() {
+    fun itPublishesItsFormAndChangesItOnTheDrumLoop() {
         val alchemy = Alchemy()
-        var farthestX = 0f
-        var farthestY = 0f
-        RenderHarness.forEachFrame(alchemy, 160, 90, 900, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ ->
-            farthestX = maxOf(farthestX, kotlin.math.abs(alchemy.centre.x - 0.5f))
-            farthestY = maxOf(farthestY, kotlin.math.abs(alchemy.centre.y - 0.5f))
+        val seen = LinkedHashSet<String>()
+        RenderHarness.forEachFrame(alchemy, 96, 54, 7_200, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ ->
+            seen += alchemy.forms.form
         }
-        assertTrue(farthestX < 1f / 6f && farthestY < 1f / 6f,
-            "the core must stay in the middle third, reached $farthestX across and $farthestY down from the middle")
+        println("alchemy: forms seen $seen, ${alchemy.forms.morphs} morphs, ${alchemy.forms.births} births")
+        assertTrue(alchemy.forms.form.contains(" + "), "the form names its drawer and flow, had ${alchemy.forms.form}")
+        assertTrue(seen.size >= 3, "two minutes of drums must show at least three forms, showed $seen")
+        assertTrue(alchemy.forms.births >= 2, "two minutes of drums must birth at least twice")
+    }
+
+    @Test
+    fun theFieldHoldsTheWaveformAMomentLater() {
+        val playing = Alchemy()
+        val silent = Alchemy()
+        var inkAfterSilence = 1f
+        var inkWhilePlaying = 0f
+        RenderHarness.forEachFrame(playing, 96, 54, 600, VizPalette.Prism, RenderHarness.Song.Lively) { _, step ->
+            if (step == 599) inkWhilePlaying = playing.fieldInkShare()
+        }
+        RenderHarness.forEachFrame(silent, 96, 54, 600, VizPalette.Prism, RenderHarness.Song.Silence) { _, step ->
+            if (step == 599) inkAfterSilence = silent.fieldInkShare()
+        }
+        println("alchemy: ink share $inkWhilePlaying playing, $inkAfterSilence silent")
+        assertTrue(inkWhilePlaying > 0.05f, "the field holds ink while music plays")
+        assertTrue(inkAfterSilence < inkWhilePlaying, "silence writes nothing new")
+    }
+
+    @Test
+    fun aKickPushesTheFieldOutward() {
+        val plain = Alchemy()
+        val kicked = Alchemy()
+        var plainInk = 0f
+        var kickedInk = 0f
+        // Just outside the ring, which sits near 0.59 here: the ring itself is drawn anew every frame,
+        // so only the ink the push carries outward can differ.
+        RenderHarness.forEachFrameOf(plain, 96, 54, 70, VizPalette.Prism, source = { InjectedFrames.frame(null, it) }) { _, step ->
+            if (step == 69) plainInk = plain.fieldInkAt(0.65f, 0f)
+        }
+        RenderHarness.forEachFrameOf(kicked, 96, 54, 70, VizPalette.Prism, source = { InjectedFrames.frame(VizDriver.LowHit, it) }) { _, step ->
+            if (step == 69) kickedInk = kicked.fieldInkAt(0.65f, 0f)
+        }
+        println("alchemy: ink just outside the ring $plainInk plain, $kickedInk after a kick")
+        assertTrue(kickedInk > plainInk, "the kick on step 66 must have pushed ink outward by step 69: $plainInk against $kickedInk")
+    }
+
+    @Test
+    fun aDropTurnsTheInkGoldAndCoolsItBack() {
+        val alchemy = Alchemy()
+        var goldBefore = 0
+        var goldAfterABeat = 0
+        var spreadAtTheEnd = 1f
+        val afterABeat = InjectedFrames.STRUCTURE_STEP + 120
+        RenderHarness.forEachFrameOf(alchemy, 160, 90, 2_400, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Drop, step) }) { bitmap, step ->
+            val pixels = IntArray(160 * 90)
+            bitmap.readPixels(pixels)
+            if (step == InjectedFrames.STRUCTURE_STEP - 2) goldBefore = goldPixels(pixels)
+            if (step == afterABeat) goldAfterABeat = goldPixels(pixels)
+            if (step == 2_399) spreadAtTheEnd = alchemy.goldSpread
+        }
+        println("alchemy: gold pixels $goldBefore before the drop, $goldAfterABeat a beat after it")
+        assertEquals(0, goldBefore, "the ink is blue before the drop")
+        assertTrue(goldAfterABeat > 160 * 90 / 50, "a beat after the drop the ink shows gold, had $goldAfterABeat pixels")
+        assertEquals(0f, spreadAtTheEnd, "after the hold and the cooling the ink is blue again")
     }
 
     @Test
@@ -33,58 +89,11 @@ class AlchemyTest {
         RenderHarness.forEachFrame(alchemy, 160, 90, 600, VizPalette.Prism, RenderHarness.Song.Lively) { _, step ->
             if (alchemy.arcsStruck > last) struck += step
             last = alchemy.arcsStruck
-            assertTrue(alchemy.arcFrames <= 3, "an arc lasts three frames, had ${alchemy.arcFrames} left")
         }
-        println("alchemy: ${struck.size} arcs in ten seconds, at steps $struck")
         assertTrue(struck.isNotEmpty(), "the drum loop's snares should strike at least one arc")
         for (index in struck.indices) {
             val inOneSecond = struck.count { it in struck[index] until struck[index] + 60 }
             assertTrue(inOneSecond <= 2, "no second may hold more than two arcs, found $inOneSecond from step ${struck[index]}")
-        }
-    }
-
-    @Test
-    fun aDropTurnsTheLaceGoldAndCoolsItBackToBlue() {
-        val alchemy = Alchemy()
-        var goldBefore = 0
-        var goldAfterABeat = 0
-        var spreadAfterABeat = 0f
-        var spreadAtTheEnd = 1f
-        var cooledAt = -1
-        var peaked = false
-        // The injected drop lands at the structure step. Two seconds later is past one beat at any tempo.
-        val afterABeat = InjectedFrames.STRUCTURE_STEP + 120
-        RenderHarness.forEachFrameOf(alchemy, 160, 90, 2_400, VizPalette.Prism,
-            source = { step -> InjectedFrames.frame(VizDriver.Drop, step) }) { bitmap, step ->
-            val pixels = IntArray(160 * 90)
-            bitmap.readPixels(pixels)
-            if (step == InjectedFrames.STRUCTURE_STEP - 2) goldBefore = goldPixels(pixels)
-            if (step == afterABeat) {
-                goldAfterABeat = goldPixels(pixels)
-                spreadAfterABeat = alchemy.goldSpread
-            }
-            if (alchemy.goldSpread >= Alchemy.GOLD_REACH) peaked = true
-            if (peaked && cooledAt < 0 && alchemy.goldSpread == 0f) cooledAt = step
-            if (step == 2_399) spreadAtTheEnd = alchemy.goldSpread
-        }
-        println("alchemy: gold pixels $goldBefore before the drop, $goldAfterABeat a beat after it; blue again at step $cooledAt")
-        assertEquals(0, goldBefore, "the lace is blue before the drop")
-        assertEquals(Alchemy.GOLD_REACH, spreadAfterABeat, 1e-3f, "a beat after the drop the gold has reached past the corona")
-        assertTrue(goldAfterABeat > 160 * 90 / 50, "a beat after the drop the lace shows gold, had $goldAfterABeat pixels")
-        assertEquals(0f, spreadAtTheEnd, "after the hold and the cooling the lace is blue again")
-    }
-
-    @Test
-    fun outsideADropTheLaceStaysBlueWithAnyPalette() {
-        for (palette in listOf(VizPalette.Fire, VizPalette.Sunset, VizPalette.Acid)) {
-            var warm = 0
-            RenderHarness.forEachFrame(Alchemy(), 160, 90, 240, palette, RenderHarness.Song.Lively) { bitmap, step ->
-                if (step < 120) return@forEachFrame
-                val pixels = IntArray(160 * 90)
-                bitmap.readPixels(pixels)
-                warm = maxOf(warm, goldPixels(pixels))
-            }
-            assertEquals(0, warm, "${palette.name} must not turn the lace or its sparks warm")
         }
     }
 

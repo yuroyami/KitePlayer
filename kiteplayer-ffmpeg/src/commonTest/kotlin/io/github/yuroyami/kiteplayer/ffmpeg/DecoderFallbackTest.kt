@@ -114,8 +114,8 @@ class DecoderFallbackTest {
             listOf(FrameSpec(packet.id, keyframe = false))
         }
         val h = Harness().apply {
-            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 3, output = flagless) }
-            softwareFactory = { ScriptDecoder(ledger, HwdecStatus.Software, output = flagless) }
+            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 3, framesFor = flagless) }
+            softwareFactory = { ScriptDecoder(ledger, HwdecStatus.Software, framesFor = flagless) }
         }
         val decoder = requireNotNull(h.open(autoSelection()))
         assertDelivered(decoder, h.packet(1, keyframe = true), 1)
@@ -136,7 +136,7 @@ class DecoderFallbackTest {
             listOf(FrameSpec(packet.id, keyframe = false))
         }
         val h = Harness().apply {
-            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, output = flagless) }
+            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, framesFor = flagless) }
         }
         val decoder = requireNotNull(h.open(autoSelection()))
         val eightMiB = 8 * 1024 * 1024
@@ -173,7 +173,7 @@ class DecoderFallbackTest {
                     hardware = HwdecStatus.Software,
                     backpressureOnce = setOf(2),
                     backpressureOutput = { packet -> FrameSpec(packet.id - 1, keyframe = true) },
-                    output = { packet ->
+                    framesFor = { packet ->
                         if (packet.id == 1) emptyList() else listOf(FrameSpec(packet.id, packet.isKeyframe))
                     },
                 )
@@ -198,7 +198,7 @@ class DecoderFallbackTest {
                     hardware = HwdecStatus.Software,
                     backpressureOnce = setOf(3),
                     backpressureOutput = { FrameSpec(2, keyframe = false) },
-                    output = { packet ->
+                    framesFor = { packet ->
                         when (packet.id) {
                             1, 3 -> listOf(FrameSpec(packet.id, packet.isKeyframe))
                             else -> emptyList()
@@ -319,8 +319,8 @@ class DecoderFallbackTest {
                 if (packet.id == 3) listOf(FrameSpec(30, keyframe = false, pts = Pts(0)))
                 else listOf(FrameSpec(packet.id, packet.isKeyframe))
             }
-            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, output = delayedCandidate) }
-            softwareFactory = { ScriptDecoder(ledger, HwdecStatus.Software, output = delayedCandidate) }
+            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, framesFor = delayedCandidate) }
+            softwareFactory = { ScriptDecoder(ledger, HwdecStatus.Software, framesFor = delayedCandidate) }
         }
         val decoder = requireNotNull(h.open(autoSelection()))
         assertDelivered(decoder, h.packet(1, keyframe = true, bytes = 8 * 1024 * 1024), 1)
@@ -420,7 +420,7 @@ class DecoderFallbackTest {
                     hardware = hardwareStatus,
                     drainBackpressureOnce = true,
                     drainBackpressureOutput = FrameSpec(2, keyframe = false),
-                    output = { packet ->
+                    framesFor = { packet ->
                         if (packet.id == 1) listOf(FrameSpec(1, keyframe = true)) else emptyList()
                     },
                 )
@@ -774,7 +774,7 @@ private class ScriptDecoder(
     private val backpressureOutput: (TestPacket) -> FrameSpec? = { null },
     private val drainBackpressureOnce: Boolean = false,
     private val drainBackpressureOutput: FrameSpec? = null,
-    private val output: (TestPacket) -> List<FrameSpec> = { packet ->
+    private val framesFor: (TestPacket) -> List<FrameSpec> = { packet ->
         listOf(FrameSpec(packet.id, packet.isKeyframe))
     },
 ) : VideoDecoder {
@@ -821,7 +821,7 @@ private class ScriptDecoder(
             return false
         }
         acceptedPacketIds += testPacket.id
-        output(testPacket).forEach { spec ->
+        framesFor(testPacket).forEach { spec ->
             queued.addLast(TestFrame(spec.id, spec.keyframe, spec.pts, currentGeneration, ledger))
         }
         return true

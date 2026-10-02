@@ -1340,7 +1340,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         /** The largest shift, either way, that [setAudioDelay] and [setSubtitleDelay] accept. */
         public val DELAY_MAX: Duration = kotlin.time.Duration.parse("1h")
         /**
-         * Builds a player from [config].
+         * Builds a player from [config], on the backends it names and nothing else.
+         *
+         * For the default stack, call `KitePlayer()` from the `kiteplayer` module instead: it fills
+         * in FFmpeg and the platform's audio output. This is the door for a stack of your own.
          *
          * The backends in [PlayerConfig.backends] are resolved here, and nothing is discovered: Kotlin's
          * native targets have no classpath service lookup, so a missing backend is a typed configuration
@@ -1359,14 +1362,16 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         public fun create(config: PlayerConfig = PlayerConfig()): KitePlayer {
             val backend = config.backends.backend ?: throw PlaybackException(
                 PlaybackError.ConfigurationInvalid(
-                    "no media backend was supplied in PlayerConfig.backends.backend, and there is nothing " +
-                        "to discover one with. On macOS pass KiteFFmpegMediaBackend() from kiteplayer-ffmpeg",
+                    "no media backend was supplied in PlayerConfig.backends.backend. For the default stack call " +
+                        "KitePlayer() from the kiteplayer module; for your own, pass KiteFFmpegMediaBackend() " +
+                        "from kiteplayer-ffmpeg",
                 ),
             )
             val output = config.backends.output ?: throw PlaybackException(
                 PlaybackError.ConfigurationInvalid(
                     "no output backend was supplied in PlayerConfig.backends.output, so there is no clock " +
-                        "and no audio device. On macOS pass AppleOutputBackend from kiteplayer-output",
+                        "and no audio device. For the default stack call KitePlayer() from the kiteplayer " +
+                        "module; on macOS, pass AppleOutputBackend from kiteplayer-output",
                 ),
             )
             return KitePlayer(

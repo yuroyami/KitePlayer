@@ -44,6 +44,10 @@ class KitePlayerTest {
             backendError.detail.contains("KiteFFmpegMediaBackend"),
             "the error names what to pass: ${backendError.detail}",
         )
+        assertTrue(
+            backendError.detail.contains("KitePlayer()"),
+            "the error points at the default door: ${backendError.detail}",
+        )
 
         val noOutput = assertFailsWith<PlaybackException> {
             KitePlayer.create(PlayerConfig(backends = Backends(backend = ScriptedBackend())))

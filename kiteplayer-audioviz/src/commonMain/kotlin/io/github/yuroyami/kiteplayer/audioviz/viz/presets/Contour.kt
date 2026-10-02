@@ -118,7 +118,7 @@ internal class Contour : ShaderPreset(
     /** The ground in levels, one value per cell, row by row: seabed, shelves and islands. */
     private val terrain = FloatArray(CELLS)
     /** The terrain with the rings added: what is drawn. */
-    private val field = FloatArray(CELLS)
+    private val heights = FloatArray(CELLS)
     /** How brightly each cell's lines flicker, 0 to 1. */
     private val shimmer = FloatArray(CELLS)
     private val landscape by lazy { PixelImage(LONG, SHORT) }
@@ -190,8 +190,8 @@ internal class Contour : ShaderPreset(
 
         raiseGround()
         tide(state, dt)
-        terrain.copyInto(field, 0, 0, columns * rows)
-        rings.addTo(field, terrain, columns, rows, seaLevel)
+        terrain.copyInto(heights, 0, 0, columns * rows)
+        rings.addTo(heights, terrain, columns, rows, seaLevel)
         built++
         paint(state, dt)
         fresh = false
@@ -545,7 +545,7 @@ internal class Contour : ShaderPreset(
     /** The field as a picture: sixteen bits of height over red and green, the flicker in blue. */
     private fun pack(picture: PixelImage) {
         for (cell in 0 until columns * rows) {
-            val bits = ((field[cell] / TOP).coerceIn(0f, 1f) * 65535f + 0.5f).toInt()
+            val bits = ((heights[cell] / TOP).coerceIn(0f, 1f) * 65535f + 0.5f).toInt()
             val glint = (shimmer[cell].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
             picture.pixels[cell] = OPAQUE or ((bits shr 8) shl 16) or ((bits and 0xFF) shl 8) or glint
         }
@@ -620,7 +620,7 @@ internal class Contour : ShaderPreset(
         for (y in 0 until rows) {
             val row = y * columns
             for (u in 0 until fineColumns) {
-                wide[y * fineColumns + u] = spline(u) { field[row + it.coerceIn(0, columns - 1)] }
+                wide[y * fineColumns + u] = spline(u) { heights[row + it.coerceIn(0, columns - 1)] }
             }
         }
         for (u in 0 until fineColumns) {
@@ -769,7 +769,7 @@ internal class Contour : ShaderPreset(
         val bottom = (rows / 2f + halfY).toInt().coerceAtMost(rows)
         for (y in top until bottom) for (x in left until right) {
             seen++
-            if (field[y * columns + x] > seaLevel) landCells++
+            if (heights[y * columns + x] > seaLevel) landCells++
         }
         return if (seen == 0) 0f else landCells.toFloat() / seen
     }

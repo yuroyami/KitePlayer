@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.FieldShader
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderLibrary
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderPreset
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderProgram
@@ -101,5 +102,19 @@ half4 main(float2 position) {
 """
         val program = ShaderProgram(ShaderLibrary.HEADER + readsEverything)
         assertTrue(program.available, "the full uniform block does not compile:\n${program.error}")
+    }
+
+    @Test
+    fun theFieldHelpersCompile() {
+        val reads = """
+half4 main(float2 position) {
+    float2 f = fieldAt(position);
+    float2 slope = fieldSlope(position);
+    float sum = f.x + f.y + isoLine(f.x, 0.5, 1.0, slope) + bands(f.x, 6.0) + lit(slope) + fieldCell(position).x;
+    return half4(half3(sum), 1.0);
+}
+"""
+        val program = ShaderProgram(ShaderLibrary.HEADER + FieldShader.SOURCE + reads)
+        assertTrue(program.available, "the field helpers do not compile:\n${program.error}")
     }
 }

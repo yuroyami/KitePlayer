@@ -7,6 +7,8 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.withCamera
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.FieldShader
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.MemoryField
 
 /**
  * A drawing whose whole picture is one program run for every pixel.
@@ -27,7 +29,9 @@ internal abstract class ShaderPreset(
     kit: Kit = Kit((seed * 7_919f).toLong() + 13L, detailKind = null),
 ) : Layered(name, bucket, kit) {
 
-    private val program: ShaderProgram by lazy { ShaderProgram(ShaderLibrary.HEADER + source) }
+    private val program: ShaderProgram by lazy {
+        ShaderProgram(ShaderLibrary.HEADER + (if (field != null) FieldShader.SOURCE else "") + source)
+    }
     private val inputs = ShaderInputs(seed)
 
     /**
@@ -76,6 +80,12 @@ internal abstract class ShaderPreset(
     /** Allows the same portable branch to be exercised without changing platform capabilities. */
     protected open val useRuntimeShader: Boolean get() = true
 
+    /**
+     * The memory field this drawing keeps, or null. A field is uploaded and bound every frame, and its
+     * shader helpers join the program. Declare it as a property set before the first draw.
+     */
+    protected open val field: MemoryField? get() = null
+
     protected open fun shaderSize(width: Float, height: Float) {}
 
     /** Values belonging to this drawing alone, on top of the ones every drawing gets. */
@@ -98,6 +108,7 @@ internal abstract class ShaderPreset(
         inputs.update(state)
         inputs.publish(program, state, size.width, size.height)
         kit.impulses.bindTo(program)
+        field?.bindTo(program)
         program.uniform("uCam", camera.panX, camera.panY, camera.zoom, camera.angle)
         program.uniform("uWalk", genes.walk)
         shaderSize(size.width, size.height)

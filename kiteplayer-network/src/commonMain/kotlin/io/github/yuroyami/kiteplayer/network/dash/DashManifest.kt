@@ -7,12 +7,13 @@ import io.github.yuroyami.kiteplayer.network.xml.XmlMini
  * A DASH MPD parsed in pure commonMain Kotlin, because libxml2 was refused as a dependency.
  * The model keeps what segment resolution needs and nothing else:
  * periods, adaptation sets, representations, the three segment addressing forms (template
- * with number or timeline, and an explicit list), and BaseURL chains.
+ * with number or timeline, an explicit list, and one file with a segment index), BaseURL
+ * chains, and the clock of a live presentation.
  *
- * Honest scope, stated where it is true: static (VOD) presentations resolve fully; dynamic
- * (live) manifests parse but segment resolution refuses them, because a live window without
- * clock arithmetic is a lie. Multi-period joins, xlink and encryption descriptors are out of
- * this tier.
+ * Honest scope, stated where it is true: static (VOD) presentations resolve fully. A dynamic
+ * (live) manifest parses with its clock, and [Dash.mediaItemFor] plays it when HLS can carry its
+ * segments; [DashManifestParser.segmentPlan] still refuses it. Multi-period joins, xlink and
+ * encryption descriptors are out of this tier.
  */
 public data class DashManifest(
     val isDynamic: Boolean,
@@ -21,6 +22,14 @@ public data class DashManifest(
     val periods: List<DashPeriod>,
     /** The manifest-level BaseURL chain already applied onto the fetch URL. */
     val baseUrl: String,
+    /** availabilityStartTime, in microseconds since 1970 UTC: the moment a live presentation's time 0 became available. */
+    val availabilityStartTimeMicros: Long? = null,
+    /** minimumUpdatePeriod, microseconds: how long a live manifest stays current before it is fetched again. */
+    val minimumUpdatePeriodMicros: Long? = null,
+    /** timeShiftBufferDepth, microseconds: how far behind the live edge a live presentation's segments stay available. */
+    val timeShiftBufferDepthMicros: Long? = null,
+    /** suggestedPresentationDelay, microseconds: how far behind the live edge the manifest asks a player to play. */
+    val suggestedPresentationDelayMicros: Long? = null,
 )
 
 /** One `Period` of a manifest, with its BaseURL already resolved. */
@@ -28,6 +37,8 @@ public data class DashPeriod(
     val baseUrl: String,
     val durationMicros: Long?,
     val adaptationSets: List<DashAdaptationSet>,
+    /** start, microseconds from the presentation's time 0, or null when the Period does not state it. */
+    val startMicros: Long? = null,
 )
 
 /** One `AdaptationSet`: the interchangeable representations of one kind of content. */
@@ -36,6 +47,8 @@ public data class DashAdaptationSet(
     val mimeType: String?,
     val segmentTemplate: DashSegmentTemplate?,
     val representations: List<DashRepresentation>,
+    /** lang, the RFC 5646 language of the set, or null. */
+    val lang: String? = null,
 )
 
 /** One `Representation`: one encoding of the content, with its segments addressed by a template or a list. */
@@ -52,6 +65,12 @@ public data class DashRepresentation(
     val segmentUrls: List<String>,
     /** SegmentList initialization URL, base-resolved. */
     val initializationUrl: String?,
+    /** frameRate, of the representation or else its set, in frames per second, or null. */
+    val frameRate: Double? = null,
+    /** The SegmentList in force, with its byte ranges and its timing, or null without one. */
+    val segmentList: DashSegmentList? = null,
+    /** The SegmentBase in force, for one file whose segment index names its segments, or null without one. */
+    val segmentBase: DashSegmentBase? = null,
 )
 
 /** A `SegmentTemplate`, merged from every level that declares one, the lowest level winning each attribute. */
@@ -63,6 +82,40 @@ public data class DashSegmentTemplate(
     /** Per-segment duration in [timescale] units; null when a timeline speaks instead. */
     val duration: Long?,
     val timeline: List<DashTimelineEntry>,
+    /** presentationTimeOffset, in [timescale] units: the media time at which the Period starts. */
+    val presentationTimeOffset: Long = 0,
+)
+
+/**
+ * A `SegmentList`, with every URL base-resolved. A `SegmentURL` without `media` names a byte range
+ * of the representation's own BaseURL.
+ */
+public data class DashSegmentList(
+    val timescale: Long,
+    /** Per-segment duration in [timescale] units; null when a timeline speaks instead, or nothing does. */
+    val duration: Long?,
+    val startNumber: Long,
+    val timeline: List<DashTimelineEntry>,
+    val initializationUrl: String?,
+    /** The bytes of [initializationUrl] that hold the initialization, or null for all of it. */
+    val initializationRange: LongRange?,
+    val segments: List<DashSegmentUrl>,
+)
+
+/** One `SegmentURL`: a URL, and the bytes of it that hold the segment, or null for all of it. */
+public data class DashSegmentUrl(val url: String, val range: LongRange?)
+
+/**
+ * A `SegmentBase`: one file at the representation's BaseURL, whose own segment index (`sidx`)
+ * names its segments. [indexRange] says where the index is; without it the index is looked for at
+ * the start of the file.
+ */
+public data class DashSegmentBase(
+    val timescale: Long,
+    val indexRange: LongRange?,
+    /** Where the initialization is, base-resolved; the representation's BaseURL when no `sourceURL` names another. */
+    val initializationUrl: String?,
+    val initializationRange: LongRange?,
 )
 
 /** One `S` element: an explicit start [t] (timescale units), duration [d], and [r] repeats. */
@@ -208,6 +261,7 @@ public object DashManifestParser {
         val periods = root.children("Period").map { period ->
             val periodBase = resolveBaseUrl(mpdBase, period, policy, budget)
             val periodTemplate = TemplateLevel.under(null, period)
+            val periodSegmentBase = period.child("SegmentBase")
             DashPeriod(
                 baseUrl = periodBase.url,
                 durationMicros = period.attr("duration")?.let(::parseIsoDurationMicros),
@@ -219,18 +273,32 @@ public object DashManifestParser {
                     // representations, and each lookup walks the set's children.
                     val setTemplate = TemplateLevel.under(periodTemplate, set)
                     val setSegmentList = set.child("SegmentList")
+                    val setSegmentBase = set.child("SegmentBase") ?: periodSegmentBase
                     DashAdaptationSet(
                         contentType = set.attr("contentType"),
                         mimeType = set.attr("mimeType"),
                         segmentTemplate = setTemplate?.template,
                         representations = set.children("Representation").map { rep ->
-                            parseRepresentation(rep, setBase, set, setSegmentList, setTemplate, policy, budget, urlLimits)
+                            parseRepresentation(
+                                rep, setBase, set, setSegmentList, setSegmentBase, setTemplate, policy, budget, urlLimits,
+                            )
                         },
+                        lang = set.attr("lang"),
                     )
                 },
+                startMicros = period.attr("start")?.let(::parseIsoDurationMicros),
             )
         }
-        return DashManifest(isDynamic, duration, periods, mpdBase.url)
+        return DashManifest(
+            isDynamic = isDynamic,
+            durationMicros = duration,
+            periods = periods,
+            baseUrl = mpdBase.url,
+            availabilityStartTimeMicros = root.attr("availabilityStartTime")?.let(::parseDateTimeMicros),
+            minimumUpdatePeriodMicros = root.attr("minimumUpdatePeriod")?.let(::parseIsoDurationMicros),
+            timeShiftBufferDepthMicros = root.attr("timeShiftBufferDepth")?.let(::parseIsoDurationMicros),
+            suggestedPresentationDelayMicros = root.attr("suggestedPresentationDelay")?.let(::parseIsoDurationMicros),
+        )
     }
 
     private fun parseRepresentation(
@@ -238,6 +306,7 @@ public object DashManifestParser {
         setBase: UrlBase,
         set: XmlElement,
         setSegmentList: XmlElement?,
+        setSegmentBase: XmlElement?,
         setTemplate: TemplateLevel?,
         policy: DashUrlPolicy,
         budget: UrlBudget,
@@ -249,8 +318,14 @@ public object DashManifestParser {
         // and it also counts against the manifest's.
         val listBudget = UrlBudget(urlLimits.planUrls, urlLimits.planChars, "a representation's SegmentList", budget)
         fun take(reference: String): String = listBudget.resolve(repBase, reference, policy)
-        val media = segmentList?.children("SegmentURL")?.mapNotNull { it.attr("media") }.orEmpty()
-        listBudget.reserve(media.size.toLong())
+        val entries = segmentList?.children("SegmentURL").orEmpty()
+        listBudget.reserve(entries.count { it.attr("media") != null }.toLong())
+        // Each URL is resolved once. A SegmentURL without media names a range of the BaseURL.
+        val listed = entries.map { entry ->
+            entry.attr("media")?.let(::take) to entry.attr("mediaRange")?.let(::parseByteRange)
+        }
+        val initialization = segmentList?.child("Initialization")
+        val initializationUrl = initialization?.attr("sourceURL")?.let(::take)
         return DashRepresentation(
             id = rep.attr("id"),
             bandwidth = rep.attr("bandwidth")?.toLongOrNull() ?: 0L,
@@ -260,9 +335,60 @@ public object DashManifestParser {
             height = rep.attr("height")?.toIntOrNull(),
             baseUrl = repBase.url,
             segmentTemplate = TemplateLevel.under(setTemplate, rep)?.template,
-            segmentUrls = media.map(::take),
-            initializationUrl = segmentList?.child("Initialization")?.attr("sourceURL")?.let(::take),
+            segmentUrls = listed.mapNotNull { it.first },
+            initializationUrl = initializationUrl,
+            frameRate = (rep.attr("frameRate") ?: set.attr("frameRate"))?.let(::parseFrameRate),
+            segmentList = segmentList?.let { list ->
+                DashSegmentList(
+                    timescale = positiveTimescale(list.attr("timescale")),
+                    duration = list.attr("duration")?.toLongOrNull(),
+                    startNumber = list.attr("startNumber")?.toLongOrNull() ?: 1L,
+                    timeline = list.child("SegmentTimeline")?.let(::parseTimeline).orEmpty(),
+                    initializationUrl = initializationUrl
+                        ?: repBase.url.takeIf { initialization?.attr("range") != null },
+                    initializationRange = initialization?.attr("range")?.let(::parseByteRange),
+                    segments = listed.map { (url, range) -> DashSegmentUrl(url ?: repBase.url, range) },
+                )
+            },
+            segmentBase = (rep.child("SegmentBase") ?: setSegmentBase)?.let { base ->
+                val baseInitialization = base.child("Initialization")
+                DashSegmentBase(
+                    timescale = positiveTimescale(base.attr("timescale")),
+                    indexRange = base.attr("indexRange")?.let(::parseByteRange),
+                    initializationUrl = baseInitialization?.attr("sourceURL")?.let(::take) ?: repBase.url,
+                    initializationRange = baseInitialization?.attr("range")?.let(::parseByteRange),
+                )
+            },
         )
+    }
+
+    /** A timescale attribute, 1 when absent, refused when it is not positive. */
+    private fun positiveTimescale(raw: String?): Long =
+        (raw?.toLongOrNull() ?: 1L).also { require(it > 0) { "a timescale must be positive, not $it" } }
+
+    /** The `S` elements of a SegmentTimeline. */
+    private fun parseTimeline(timeline: XmlElement): List<DashTimelineEntry> =
+        timeline.children("S").map { s ->
+            DashTimelineEntry(
+                t = s.attr("t")?.toLongOrNull(),
+                d = s.attr("d")?.toLongOrNull() ?: 0L,
+                r = s.attr("r")?.toLongOrNull() ?: 0L,
+            )
+        }
+
+    /** A byte range written `first-last`, both inclusive, as the MPD writes them. */
+    internal fun parseByteRange(raw: String): LongRange {
+        val first = raw.substringBefore('-').trim().toLongOrNull()
+        val last = raw.substringAfter('-', "").trim().toLongOrNull()
+        require(first != null && last != null && first >= 0 && last >= first) { "not a byte range: $raw" }
+        return first..last
+    }
+
+    /** A frame rate written as a number or as `numerator/denominator`, or null when it is neither. */
+    internal fun parseFrameRate(raw: String): Double? {
+        val numerator = raw.substringBefore('/').trim().toDoubleOrNull() ?: return null
+        val denominator = if ('/' in raw) raw.substringAfter('/').trim().toDoubleOrNull() ?: return null else 1.0
+        return (numerator / denominator).takeIf { it.isFinite() && it > 0 }
     }
 
     /**
@@ -279,6 +405,7 @@ public object DashManifestParser {
         private val startNumber: String?,
         private val timescale: String?,
         private val duration: String?,
+        private val presentationTimeOffset: String?,
         private val timeline: List<DashTimelineEntry>?,
     ) {
         /** Built on first use, so a level that only passes attributes down is never checked alone. */
@@ -294,6 +421,7 @@ public object DashManifestParser {
                 },
                 duration = duration?.toLongOrNull(),
                 timeline = timeline ?: emptyList(),
+                presentationTimeOffset = presentationTimeOffset?.toLongOrNull() ?: 0L,
             )
         }
 
@@ -307,13 +435,8 @@ public object DashManifestParser {
                     startNumber = own.attr("startNumber") ?: parent?.startNumber,
                     timescale = own.attr("timescale") ?: parent?.timescale,
                     duration = own.attr("duration") ?: parent?.duration,
-                    timeline = own.child("SegmentTimeline")?.children("S")?.map { s ->
-                        DashTimelineEntry(
-                            t = s.attr("t")?.toLongOrNull(),
-                            d = s.attr("d")?.toLongOrNull() ?: 0L,
-                            r = s.attr("r")?.toLongOrNull() ?: 0L,
-                        )
-                    } ?: parent?.timeline,
+                    presentationTimeOffset = own.attr("presentationTimeOffset") ?: parent?.presentationTimeOffset,
+                    timeline = own.child("SegmentTimeline")?.let(::parseTimeline) ?: parent?.timeline,
                 )
             }
         }
@@ -818,6 +941,41 @@ public object DashManifestParser {
             (g[7].toDoubleOrNull() ?: 0.0)
         return (total * 1_000_000).toLong()
     }
+
+    /**
+     * An xs:dateTime such as `2026-10-02T10:00:00Z`, `2026-10-02T12:00:00.5+02:00` or
+     * `2026-10-02T10:00:00`, in microseconds since 1970 UTC. A time without a zone is read as
+     * UTC, which is what live packagers mean by it.
+     */
+    internal fun parseDateTimeMicros(raw: String): Long {
+        val match = DATE_TIME.matchEntire(raw.trim()) ?: throw IllegalArgumentException("not an xs:dateTime: $raw")
+        val g = match.groupValues
+        val year = g[1].toLong()
+        val month = g[2].toInt()
+        val day = g[3].toInt()
+        require(month in 1..12 && day in 1..31) { "not an xs:dateTime: $raw" }
+        val seconds = daysFromCivil(year, month, day) * 86_400 + g[4].toLong() * 3_600 + g[5].toLong() * 60 + g[6].toLong()
+        val fraction = g[7].takeIf { it.isNotEmpty() }?.let { (it.take(6).padEnd(6, '0')).toLong() } ?: 0L
+        val offsetSeconds = when {
+            g[8].isEmpty() || g[8] == "Z" -> 0L
+            else -> (if (g[8].startsWith('-')) -1 else 1) * (g[9].toLong() * 3_600 + g[10].toLong() * 60)
+        }
+        return (seconds - offsetSeconds) * 1_000_000 + fraction
+    }
+
+    /** Days from 1970-01-01 to the proleptic Gregorian [year]-[month]-[day]. */
+    private fun daysFromCivil(year: Long, month: Int, day: Int): Long {
+        val y = if (month <= 2) year - 1 else year
+        val era = (if (y >= 0) y else y - 399) / 400
+        val yearOfEra = y - era * 400
+        val dayOfYear = (153 * (if (month > 2) month - 3 else month + 9) + 2) / 5 + day - 1
+        val dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
+        return era * 146_097 + dayOfEra - 719_468
+    }
+
+    private val DATE_TIME = Regex(
+        """(-?\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-](\d{2}):(\d{2}))?""",
+    )
 
     /** Appendix B of RFC 3986 without the scheme, which [schemeOf] reads by its grammar first. */
     private val RELATIVE_PARTS = Regex("""(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#([\s\S]*))?""")

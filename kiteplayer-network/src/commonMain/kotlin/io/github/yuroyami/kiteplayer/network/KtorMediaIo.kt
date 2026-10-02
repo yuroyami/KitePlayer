@@ -15,7 +15,6 @@ import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.cancel
 import io.ktor.utils.io.close
-import io.ktor.utils.io.copyTo
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.TimeSource
 
 /**
  * Media bytes over http and https through Ktor (the Ktor half): the engine's
@@ -82,6 +82,8 @@ public class KtorMediaIo private constructor(
     private val policy: HttpReaderPolicy,
     /** Where a redirect of any request of this reader may lead, or null for Ktor's own rules. */
     private val redirects: RedirectRule?,
+    /** How fast the network delivered this reader's bytes, shared with every reader it opened. */
+    private val meter: DownloadMeter,
 ) : MediaIo {
 
     // What messages name instead of the URI, whose query may carry a signature (#241).
@@ -130,6 +132,13 @@ public class KtorMediaIo private constructor(
     }
 
     /**
+     * How fast the network delivered the bytes of this reader and of every reader it opened. Only
+     * the time a response waits for the network counts, from the request to the bytes, and a
+     * response stops counting once it has waited for the player to read.
+     */
+    override fun networkBitsPerSecond(): Long? = meter.bitsPerSecond()
+
+    /**
      * A new reader for [uri] on this reader's client, or null when [uri] is not http or https.
      * The reader reports through this reader's warning sink, and the caller closes it.
      */
@@ -139,7 +148,7 @@ public class KtorMediaIo private constructor(
         var attempts = 0
         while (true) {
             val failure = try {
-                return open(uri, client, ownsClient = false, related.headersFor(uri), related, policy, redirects)
+                return open(uri, client, ownsClient = false, related.headersFor(uri), related, policy, redirects, meter)
                     .also { it.setWarningSink(warningSink) }
             } catch (failure: Throwable) {
                 // The caller's own cancellation ends the open. Anything else is the connection's.
@@ -221,6 +230,7 @@ public class KtorMediaIo private constructor(
         val pipe = ByteChannel(autoFlush = true)
         val answered = CompletableDeferred<Unit>()
         bodyJob = scope.launch {
+            val sent = TimeSource.Monotonic.markNow()
             try {
                 guarded(client, redirects) { mark ->
                     client.prepareGet(uri) {
@@ -276,7 +286,7 @@ public class KtorMediaIo private constructor(
                             )
                         }
                         answered.complete(Unit)
-                        response.bodyAsChannel().copyTo(pipe)
+                        copyMeasured(response.bodyAsChannel(), pipe, meter, sent)
                         pipe.close()
                     }
                 }
@@ -339,7 +349,9 @@ public class KtorMediaIo private constructor(
             defaultHeaders: Map<String, String> = emptyMap(),
         ): KtorMediaIo {
             val related = RelatedRequests(uri, defaultHeaders, headers)
-            return open(uri, client ?: HttpClient(), ownsClient = client == null, headers, related, policy, redirects)
+            return open(
+                uri, client ?: HttpClient(), ownsClient = client == null, headers, related, policy, redirects, DownloadMeter(),
+            )
         }
 
         /** Probes [uri] on [http], which the new reader closes when it [ownsClient]. */
@@ -351,12 +363,14 @@ public class KtorMediaIo private constructor(
             related: RelatedRequests,
             policy: HttpReaderPolicy,
             redirects: RedirectRule?,
+            meter: DownloadMeter,
         ): KtorMediaIo {
             val shown = shownUri(uri)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val probe = CompletableDeferred<Probe>()
             val pipe = ByteChannel(autoFlush = true)
             val job = scope.launch {
+                val sent = TimeSource.Monotonic.markNow()
                 try {
                     guarded(http, redirects) { mark ->
                         http.prepareGet(uri) {
@@ -395,7 +409,7 @@ public class KtorMediaIo private constructor(
                                         response.status == HttpStatusCode.TooManyRequests,
                                 )
                             }
-                            response.bodyAsChannel().copyTo(pipe)
+                            copyMeasured(response.bodyAsChannel(), pipe, meter, sent)
                             pipe.close()
                         }
                     }
@@ -428,6 +442,7 @@ public class KtorMediaIo private constructor(
                 scope = scope,
                 policy = policy,
                 redirects = redirects,
+                meter = meter,
             )
         }
     }

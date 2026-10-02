@@ -879,6 +879,7 @@ abstract interface io.github.yuroyami.kiteplayer/MediaIo : kotlin/AutoCloseable 
     abstract fun close() // io.github.yuroyami.kiteplayer/MediaIo.close|close(){}[0]
     abstract suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer/MediaIo.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
     abstract suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer/MediaIo.seek|seek(kotlin.Long){}[0]
+    open fun networkBitsPerSecond(): kotlin/Long? // io.github.yuroyami.kiteplayer/MediaIo.networkBitsPerSecond|networkBitsPerSecond(){}[0]
     open fun setWarningSink(kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit>) // io.github.yuroyami.kiteplayer/MediaIo.setWarningSink|setWarningSink(kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>){}[0]
     open suspend fun openRelated(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer/MediaIo.openRelated|openRelated(kotlin.String){}[0]
 

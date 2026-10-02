@@ -5,8 +5,10 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -89,5 +91,122 @@ class SelectVariantTest {
         assertFailsWith<IllegalArgumentException> { plain.core.selectVariant(0) }
         harness.close()
         plain.close()
+    }
+
+    /** A link that runs at [slow] bits per second until [until] of the test's clock has passed, then at [fast]. */
+    private fun linkThatChanges(slow: Long, fast: Long, until: kotlin.time.Duration): (Long) -> Long {
+        var startUs: Long? = null
+        return { nowUs ->
+            val start = startUs ?: nowUs.also { startUs = it }
+            if (nowUs - start < until.inWholeMicroseconds) slow else fast
+        }
+    }
+
+    @Test
+    fun aLinkThatRecoversStepsBackUpAfterTheWait() = runTest {
+        // 2 Mbit/s cannot carry the 5 Mbit/s variant. From 30 s on the link carries 20 Mbit/s.
+        val script = MediaScript(
+            durationUs = 180_000_000,
+            variants = variants,
+            linkBitsPerSecond = linkThatChanges(slow = 2_000_000, fast = 20_000_000, until = 30.seconds),
+        )
+        val harness = CoreHarness(this, script = script)
+        harness.openThroughIo { LinkIo(script, harness.clock) }
+        harness.core.play()
+        harness.run(25.seconds)
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "the slow link stepped down")
+
+        harness.run(75.seconds)
+        val lowered = harness.core.warningHistory().map { it.warning }.filterIsInstance<PlaybackWarning.VariantLowered>()
+        assertEquals(1, lowered.size, "one step down and no more: $lowered")
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant, "the fast link stepped back up")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    @Test
+    fun aStepUpWaitsAfterAStepDown() = runTest {
+        // The link is fast again from 10 s on, long before the wait after the step down ends.
+        val script = MediaScript(
+            durationUs = 180_000_000,
+            variants = variants,
+            linkBitsPerSecond = linkThatChanges(slow = 2_000_000, fast = 20_000_000, until = 10.seconds),
+        )
+        val harness = CoreHarness(this, script = script)
+        harness.openThroughIo { LinkIo(script, harness.clock) }
+        harness.core.play()
+        var steppedUpAtNanos: Long? = null
+        repeat(100) {
+            harness.run(1.seconds)
+            val lowered = harness.core.warningHistory().any { it.warning is PlaybackWarning.VariantLowered }
+            if (lowered && steppedUpAtNanos == null && harness.core.snapshots.value.tracks.selectedVariant == 0) {
+                steppedUpAtNanos = harness.clock.nanos()
+            }
+        }
+        val down = harness.core.warningHistory().single { it.warning is PlaybackWarning.VariantLowered }
+        val up = assertNotNull(steppedUpAtNanos, "the fast link stepped back up")
+        assertTrue((up - down.atNanos).nanoseconds >= 30.seconds, "the step up came ${(up - down.atNanos).nanoseconds} after the step down")
+        harness.close()
+    }
+
+    @Test
+    fun aReaderThatMeasuresNothingNeverStepsUp() = runTest {
+        // The same recovering link, but the item has no reader to measure it.
+        val script = MediaScript(
+            durationUs = 180_000_000,
+            variants = variants,
+            linkBitsPerSecond = linkThatChanges(slow = 2_000_000, fast = 20_000_000, until = 30.seconds),
+        )
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(100.seconds)
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "no measure, no step up")
+        harness.close()
+    }
+
+    @Test
+    fun aLinkWithoutRoomToSpareStaysOnTheLowerVariant() = runTest {
+        // 4 Mbit/s is too slow for 5 Mbit/s and five times the 800 kbit/s variant, which is not the
+        // one and a half times 5 Mbit/s that a step up needs.
+        val script = MediaScript(durationUs = 180_000_000, variants = variants, linkBitsPerSecond = { 4_000_000 })
+        val harness = CoreHarness(this, script = script)
+        harness.openThroughIo { LinkIo(script, harness.clock) }
+        harness.core.play()
+        harness.run(100.seconds)
+
+        val lowered = harness.core.warningHistory().map { it.warning }.filterIsInstance<PlaybackWarning.VariantLowered>()
+        assertEquals(1, lowered.size, "one step down: $lowered")
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "no step up without room to spare")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    @Test
+    fun aStepUpNeverPassesTheItemsCap() = runTest {
+        val script = MediaScript(durationUs = 120_000_000, variants = variants, linkBitsPerSecond = { 50_000_000 })
+        val harness = CoreHarness(this, script = script)
+        harness.attachRenderer()
+        harness.core.open(
+            MediaItem("scripted://media", io = { LinkIo(script, harness.clock) }, demux = DemuxPolicy(maxBitrate = 1_000_000)),
+        )
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "the cap chose the lower variant")
+        harness.core.play()
+        harness.run(70.seconds)
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "the fast link did not pass the cap")
+        assertEquals(1, harness.backend.openCalls, "nothing opened the stream again")
+        harness.close()
+    }
+
+    @Test
+    fun aVariantTheCallerChoseIsNotRaised() = runTest {
+        val script = MediaScript(durationUs = 120_000_000, variants = variants, linkBitsPerSecond = { 50_000_000 })
+        val harness = CoreHarness(this, script = script)
+        harness.openThroughIo { LinkIo(script, harness.clock) }
+        harness.core.selectVariant(1)
+        harness.core.play()
+        harness.run(70.seconds)
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "a chosen variant stays")
+        harness.close()
     }
 }

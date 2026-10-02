@@ -56,8 +56,9 @@ public data class DemuxPolicy(
      * The highest bitrate, in bits per second, of the variant that an adaptive stream plays, or
      * null for no limit. An HLS master playlist offers the same media as several variants, and the
      * backend plays the variant with the highest bitrate within this limit and [maxVideoHeight].
-     * When no variant fits, it plays the one with the lowest bitrate. Media with one variant has no
-     * choice to make, so the limit does not apply to it.
+     * When no variant fits, it plays the one with the lowest bitrate. The player's own step up to a
+     * higher variant never passes this limit either. Media with one variant has no choice to make,
+     * so the limit does not apply to it.
      */
     val maxBitrate: Long? = null,
     /**
@@ -68,7 +69,8 @@ public data class DemuxPolicy(
     /**
      * The [StreamVariant.index] of the variant to play, or null to choose one by [maxBitrate] and
      * [maxVideoHeight]. An index that the master playlist does not have is ignored, and the choice
-     * is made as for null. [KitePlayer.selectVariant] sets it on the item that plays.
+     * is made as for null. [KitePlayer.selectVariant] sets it on the item that plays. With null,
+     * the player also steps down and up by itself as the network allows; a set index stays.
      */
     val variant: Int? = null,
 ) {

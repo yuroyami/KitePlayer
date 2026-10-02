@@ -87,7 +87,7 @@
 
 - HTTP and HTTPS with your headers, through OkHttp on Android and the JVM and NSURLSession on
   Apple.
-- HLS: master playlists, a choice of variant, an automatic step down when the network is slow,
+- HLS: master playlists, a choice of variant, automatic steps down and up with the network rate,
   MPEG-TS and fMP4 segments, AES-128, separate audio and subtitle renditions, and live playlists.
 - DASH: one representation of an on-demand manifest.
 - Files, memory, bytes that your code pushes, streams, and Android content URIs and assets.
@@ -501,9 +501,15 @@ the server, or `formatHint = "hls"` marks a playlist.
   with the highest bitrate within `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.
   `Tracks.variants` lists the variants, and `KitePlayer.selectVariant` plays another one from the
   current position. The stream opens again for that, so the picture holds for a moment.
-- When playback has waited 4 s for data, the player steps down to the next lower variant by itself,
-  and `PlaybackWarning.VariantLowered` says so. It never steps up by itself, and a variant that
-  you selected stays.
+- The player steps down when the stream reads slower than it plays, or when playback has waited
+  4 s for data, and `PlaybackWarning.VariantLowered` says so.
+- It steps up when the network carries the next higher variant with half again to spare and the
+  buffer is full. The network reader measures that rate on its downloads, and reports it through
+  `MediaIo.networkBitsPerSecond`. A reader of your own that answers null never steps up.
+- A step up waits 30 s after a step down, and twice as long after each step up that did not last,
+  up to 5 minutes.
+- Each step opens the stream again, so the picture holds for a moment. A variant that you
+  selected stays, and a step up never passes `DemuxPolicy.maxBitrate` or `maxVideoHeight`.
 - MPEG-TS and fMP4 segments, byte ranges, AES-128 keys, separate audio and subtitle renditions, and
   live playlists play. A finished playlist can seek.
 - A segment that cannot be read is skipped, and `PlaybackWarning.SegmentSkipped` says so. A stream
@@ -671,7 +677,7 @@ summary.
 
 | Topic | What to expect |
 | --- | --- |
-| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere but the browser. HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down by itself when the network cannot keep up, and never steps up by itself. `Dash.mediaItemFor` plays one representation of an on-demand DASH manifest, with no bitrate switching. Live DASH and a persistent cache do not work yet. |
+| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere but the browser. HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment. `Dash.mediaItemFor` plays one representation of an on-demand DASH manifest, with no bitrate switching. Live DASH and a persistent cache do not work yet. |
 | Native Linux and Windows | No audio output and no HTTPS. Use the desktop JVM target, or pass your own `OutputBackend`. |
 | Desktop JVM sound | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | AV1 on the web | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |

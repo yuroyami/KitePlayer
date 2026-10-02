@@ -135,10 +135,16 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `DemuxPolicy.variant`, which a memento stores too. `PlayerMediaSource` gains `variants` and
   `selectedVariant`, both with defaults. `Tracks` and `DemuxPolicy` change their generated
   data-class methods, so recompile (#376).
-- An HLS stream that keeps playback waiting for data for 4 s steps down to the next variant with a
-  lower bitrate, long before the 30 s stall timeout ends it. The new `PlaybackWarning.VariantLowered`
-  says so, so a `when` that lists every warning needs the new branch. Only a variant that the
-  player chose itself steps down, and the player never steps up by itself (#376).
+- An HLS stream changes its variant by itself (#376). It steps down when the stream reads slower
+  than it plays, or when playback has waited 4 s for data, long before the 30 s stall timeout
+  ends the session. It steps up when the network carries the next higher variant with half again
+  to spare and the buffer is full. A step up waits 30 s after a step down, and twice as long after
+  each step up that did not last. The new `PlaybackWarning.VariantLowered` reports a step down, so
+  a `when` that lists every warning needs the new branch. A variant that the caller selected
+  stays, and a step up never passes `DemuxPolicy.maxBitrate` or `maxVideoHeight`.
+- `MediaIo.networkBitsPerSecond` reports how fast the network delivers a reader's bytes. The
+  default answers null. `KtorMediaIo` measures it on its downloads, with the time a response
+  waits for the player left out, and the step up reads it (#376).
 
 ### Removed
 

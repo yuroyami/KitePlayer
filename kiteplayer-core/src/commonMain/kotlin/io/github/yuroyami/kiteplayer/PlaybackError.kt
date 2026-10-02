@@ -603,7 +603,8 @@ public sealed class PlaybackWarning {
 
     /**
      * The player stepped an HLS stream down from the variant at [from] to the one at [to], with a
-     * lower bitrate, because playback waited too long for data. [detail] says how long. The stream
+     * lower bitrate. Either playback waited too long for data, or the link read less media per
+     * second than playback uses. [detail] says which, with the wait or the measured rate. The stream
      * opens again on the lower variant at the current position.
      */
     public data class VariantLowered(val from: Int, val to: Int, val detail: String) : PlaybackWarning() {

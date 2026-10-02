@@ -26,6 +26,7 @@ public final class io/github/yuroyami/kiteplayer/network/KtorMediaIo : io/github
 	public fun getLocation ()Ljava/lang/String;
 	public fun getSeekable ()Z
 	public fun getSize ()Ljava/lang/Long;
+	public fun networkBitsPerSecond ()Ljava/lang/Long;
 	public fun openRelated (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -107,6 +108,7 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashMediaIo : io/g
 	public fun getLocation ()Ljava/lang/String;
 	public fun getSeekable ()Z
 	public fun getSize ()Ljava/lang/Long;
+	public fun networkBitsPerSecond ()Ljava/lang/Long;
 	public fun openRelated (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;

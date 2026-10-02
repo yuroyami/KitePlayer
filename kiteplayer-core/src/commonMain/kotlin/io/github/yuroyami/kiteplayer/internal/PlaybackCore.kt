@@ -30,6 +30,7 @@ import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.PlayerEvent
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import io.github.yuroyami.kiteplayer.Progress
+import io.github.yuroyami.kiteplayer.DemuxPolicy
 import io.github.yuroyami.kiteplayer.EqualizerSettings
 import io.github.yuroyami.kiteplayer.ReplayGainMode
 import io.github.yuroyami.kiteplayer.SleepTimer
@@ -38,6 +39,7 @@ import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.StepDirection
 import io.github.yuroyami.kiteplayer.FrameDropPolicy
+import io.github.yuroyami.kiteplayer.StreamVariant
 import io.github.yuroyami.kiteplayer.SyncMode
 import io.github.yuroyami.kiteplayer.TrackChange
 import io.github.yuroyami.kiteplayer.TrackId
@@ -106,6 +108,7 @@ import kotlin.random.Random
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -774,6 +777,15 @@ internal class PlaybackCore(
 
     /** When playback began to wait for data while playing, or [NO_POSITION]. */
     private var starvedSinceNanos: Long = NO_POSITION
+
+    /** The player tries no higher variant before this instant, or [NO_POSITION] for no wait (#376). */
+    private var stepUpNotBeforeNanos: Long = NO_POSITION
+
+    /** The wait after a step down before a step up. It doubles when a step up was followed by one. */
+    private var stepUpWait: Duration = VARIANT_STEP_UP_WAIT
+
+    /** True when the player's last variant change was a step up. */
+    private var lastStepWasUp = false
 
     /** One caller's track selection, waiting for the rebuild that will honour it. */
     private class SelectionRequest(
@@ -2363,6 +2375,9 @@ internal class PlaybackCore(
         media = item
         variantChosenByPlayer = false
         starvedSinceNanos = NO_POSITION
+        stepUpNotBeforeNanos = NO_POSITION
+        stepUpWait = VARIANT_STEP_UP_WAIT
+        lastStepWasUp = false
         lastChapterIndex = Int.MIN_VALUE
         markerCursorUs = NO_POSITION
         markerCursorEpoch = null
@@ -2868,6 +2883,7 @@ internal class PlaybackCore(
                 cachingIo = cachingIo,
                 relatedTraffic = watchedIo?.related,
                 stallWatch = stallWatch,
+                networkIo = suppliedIo,
             ).also { built ->
                 // What the device was opened for, which a gapless handoff compares the next item against.
                 built.deviceRequest = if (audioPlayback != null) audioDecoder?.outputFormat else null
@@ -4652,6 +4668,8 @@ internal class PlaybackCore(
         val session = session ?: return
         if (endStalledSession(session)) return
         stepDownWhenStarved(session)
+        stepDownWhenLinkTooSlow(session)
+        stepUpWhenFast(session)
         if (demuxerRanShort(session)) demuxUnderrunSeen = true else if (wellBuffered(session)) demuxUnderrunSeen = false
         if (!playRequested || status != PlaybackStatus.Playing) return
         if (endOfStream.demuxerEnded) return
@@ -4666,8 +4684,8 @@ internal class PlaybackCore(
     /**
      * Steps an HLS stream down to the next variant with a lower bitrate when playback has waited for
      * data for [VARIANT_STEP_DOWN_AFTER] while playing, long before the stall timeout would end it
-     * (#376). Only while the player chooses the variant itself: a variant the caller selected stays,
-     * and the player never steps up by itself.
+     * (#376). Only while the player chooses the variant itself: a variant the caller selected stays.
+     * [stepUpWhenFast] waits after this before it tries a higher variant again.
      */
     private fun stepDownWhenStarved(session: OpenSession) {
         val starving = playRequested && status == PlaybackStatus.Buffering && firstFrameSeen &&
@@ -4689,16 +4707,90 @@ internal class PlaybackCore(
         if (!session.source.seekable) return
         val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
         val lower = tracks.variants.filter { it.bitrate < current.bitrate }.maxByOrNull { it.bitrate } ?: return
-        variantChosenByPlayer = true
-        warn(
-            PlaybackWarning.VariantLowered(
-                current.index,
-                lower.index,
-                "playback waited ${waited.inWholeMilliseconds} ms for data at ${current.bitrate} bits per second",
-            ),
+        lowerVariant(current, lower, "playback waited ${waited.inWholeMilliseconds} ms for data at ${current.bitrate} bits per second")
+    }
+
+    /**
+     * Steps an HLS stream down when the link cannot carry the variant that plays, before the
+     * buffer runs dry (#376). A link a little too slow for its variant makes short pauses that
+     * never last the [VARIANT_STEP_DOWN_AFTER] of [stepDownWhenStarved], so this reads the link
+     * itself: when it reads less media per second than the playback speed uses, over at least
+     * [VARIANT_STEP_DOWN_SAMPLE] of media, the stream moves to the highest lower variant that the
+     * link carries with [VARIANT_FIT_HEADROOM] to spare, or else to the lowest.
+     */
+    private fun stepDownWhenLinkTooSlow(session: OpenSession) {
+        if (!playRequested || !firstFrameSeen) return
+        if (status != PlaybackStatus.Playing && status != PlaybackStatus.Buffering) return
+        if (pendingSeek != null || pendingVariant != null) return
+        val item = media ?: return
+        if (item.demux.variant != null && !variantChosenByPlayer) return
+        if (!session.source.seekable) return
+        val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
+        val read = session.readRate.mediaPerReadSecond(VARIANT_STEP_DOWN_SAMPLE.inWholeMicroseconds) ?: return
+        if (read >= speed) return
+        // The bits per second the link delivers, divided by the speed, which plays that much faster.
+        val linkBits = read * current.bitrate / speed
+        val lower = tracks.variants.filter { it.bitrate < current.bitrate }
+        if (lower.isEmpty()) return
+        val target = lower.filter { it.bitrate * VARIANT_FIT_HEADROOM <= linkBits }.maxByOrNull { it.bitrate }
+            ?: lower.minBy { it.bitrate }
+        lowerVariant(
+            current,
+            target,
+            "the link carried about ${linkBits.toLong()} bits per second of playback, too little for ${current.bitrate}",
         )
+    }
+
+    /** Moves the stream to [target], a lower variant, and makes the next step up wait. */
+    private fun lowerVariant(current: StreamVariant, target: StreamVariant, detail: String) {
+        variantChosenByPlayer = true
+        // A step up that ended in this step down was too early, so the next one waits twice as long.
+        if (lastStepWasUp) stepUpWait = (stepUpWait * 2).coerceAtMost(VARIANT_STEP_UP_WAIT_MAX)
+        lastStepWasUp = false
+        stepUpNotBeforeNanos = clock.nanos() + stepUpWait.inWholeNanoseconds
+        warn(PlaybackWarning.VariantLowered(current.index, target.index, detail))
         // Nobody waits on this reply: the variant change is the player's own.
-        pendingVariant = VariantRequest(lower.index, CompletableDeferred())
+        pendingVariant = VariantRequest(target.index, CompletableDeferred())
+    }
+
+    /**
+     * Steps an HLS stream up to the next variant with a higher bitrate when the link carries it with
+     * room to spare (#376). The link's rate is what the reader measured, `MediaIo.networkBitsPerSecond`,
+     * divided by the playback speed. It must reach [VARIANT_STEP_UP_HEADROOM] times the higher
+     * bitrate while every selected queue holds its soft target. [ReadRate] cannot answer this: a
+     * reader that fetches ahead serves its reads at once, however slow the link.
+     *
+     * Only while the player chooses the variant itself, and never past the item's
+     * `DemuxPolicy.maxBitrate` or `maxVideoHeight`. Each change opens the stream again, so the
+     * picture holds for a moment: after a step down this waits [VARIANT_STEP_UP_WAIT], and twice as
+     * long each time a step up was followed by another step down.
+     */
+    private fun stepUpWhenFast(session: OpenSession) {
+        if (!playRequested || status != PlaybackStatus.Playing || !firstFrameSeen) return
+        if (pendingSeek != null || pendingVariant != null) return
+        val item = media ?: return
+        if (item.demux.variant != null && !variantChosenByPlayer) return
+        if (!session.source.seekable) return
+        if (stepUpNotBeforeNanos != NO_POSITION && clock.nanos() < stepUpNotBeforeNanos) return
+        val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
+        val higher = tracks.variants
+            .filter { it.bitrate > current.bitrate && withinCaps(it, item.demux) }
+            .minByOrNull { it.bitrate } ?: return
+        if (!wellBuffered(session)) return
+        val linkBits = session.networkIo?.networkBitsPerSecond() ?: return
+        if (linkBits / speed < higher.bitrate * VARIANT_STEP_UP_HEADROOM) return
+        variantChosenByPlayer = true
+        lastStepWasUp = true
+        // Nobody waits on this reply either.
+        pendingVariant = VariantRequest(higher.index, CompletableDeferred())
+    }
+
+    /** True when [variant] stays within the caps the item set on the player's own choice. */
+    private fun withinCaps(variant: StreamVariant, demux: DemuxPolicy): Boolean {
+        val maxBitrate = demux.maxBitrate
+        val maxHeight = demux.maxVideoHeight
+        val height = variant.height
+        return (maxBitrate == null || variant.bitrate <= maxBitrate) && (maxHeight == null || height == null || height <= maxHeight)
     }
 
     /**
@@ -8532,6 +8624,8 @@ internal class PlaybackCore(
                 restarts = worker.releases
                 epoch = worker.epoch
                 ended = false
+                // A seek moved the reads, so the rate starts over from where they land.
+                session.readRate.restart()
             }
             if (ended) {
                 worker.nap(WORKER_POLL)
@@ -8553,11 +8647,18 @@ internal class PlaybackCore(
             }
             // Marked for the stall timeout: the actor measures how long this read waits.
             session.stallWatch.begin()
+            val readStartedNanos = clock.nanos()
             val packet = try {
                 session.source.readPacket()
             } finally {
                 session.stallWatch.end()
             }
+            // The timeline is measured on one stream, the video when there is one.
+            val measured = session.videoStream?.index ?: session.audioStream?.index
+            session.readRate.read(
+                clock.nanos() - readStartedNanos,
+                packet?.takeIf { it.streamIndex == measured }?.pts?.micros,
+            )
             if (packet == null) {
                 session.videoQueue?.signalEndOfStream(epoch)
                 session.audioQueues.values.forEach { it.signalEndOfStream(epoch) }
@@ -9350,6 +9451,8 @@ internal class PlaybackCore(
         val relatedTraffic: RelatedTraffic? = null,
         /** How long the demux lane has waited for the source; see `BufferPolicy.stallTimeout`. */
         val stallWatch: StallWatch,
+        /** The reader the item's address resolved to, before the engine's own layers, for its network rate. */
+        val networkIo: MediaIo? = null,
     ) {
         /**
          * True once the source answered that it cannot interrupt a stalled read. The session then
@@ -9378,6 +9481,9 @@ internal class PlaybackCore(
          * is false, so a session asks a renderer once (#384). Actor only.
          */
         var rendererDecodersAsked: Boolean = false
+
+        /** How fast the source delivers media while the demuxer reads, for the variant step down (#376). */
+        val readRate: ReadRate = ReadRate()
 
         /**
          * True while this session is the next queue item, open in the background. Its workers then
@@ -9832,6 +9938,21 @@ private val DISPATCHER_TICK: Duration = 1.milliseconds
 
 /** How long playback may wait for data before an HLS stream steps down a variant (#376). */
 private val VARIANT_STEP_DOWN_AFTER: Duration = 4.seconds
+
+/** How much media the read rate must cover before a step down trusts it (#376). */
+private val VARIANT_STEP_DOWN_SAMPLE: Duration = 6.seconds
+
+/** How far the link must exceed a lower variant's bitrate for a step down to choose it. */
+private const val VARIANT_FIT_HEADROOM: Double = 1.2
+
+/** How long a step up waits after a step down (#376). Doubled after each step up that did not last. */
+private val VARIANT_STEP_UP_WAIT: Duration = 30.seconds
+
+/** The longest wait between a step down and the next step up. */
+private val VARIANT_STEP_UP_WAIT_MAX: Duration = 5.minutes
+
+/** How far the link must exceed the higher bitrate: 1.5 leaves a third of it spare. */
+private const val VARIANT_STEP_UP_HEADROOM: Double = 1.5
 
 // Following an external clock (#91). The thresholds are the starting values of the design.
 private const val EXTERNAL_ASK_INTERVAL_NANOS: Long = 50_000_000L

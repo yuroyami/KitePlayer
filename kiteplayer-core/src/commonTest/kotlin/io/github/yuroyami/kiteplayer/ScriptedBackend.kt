@@ -21,15 +21,16 @@ import io.github.yuroyami.kiteplayer.spi.SubtitleDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
-import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.delay
-import kotlin.time.Duration
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlin.random.Random
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.microseconds
+import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * A whole media item written as a script, and a backend that plays it.
@@ -187,6 +188,12 @@ internal class MediaScript(
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
     /** A read delay for one variant, in place of [readDelayUs]: a link too slow for that variant. */
     val readDelayUsByVariant: Map<Int, Long> = emptyMap(),
+    /**
+     * A network link, in bits per second at a time of the test's clock in microseconds. Each video
+     * packet then takes as long as its media of the selected variant's bitrate takes over the link,
+     * so the same link is fast for a low variant and slow for a high one. Null is no link.
+     */
+    val linkBitsPerSecond: ((clockUs: Long) -> Long)? = null,
 ) {
     val videoIndex: Int = 0
     val audioIndex: Int = if (hasVideo) 1 else 0
@@ -617,8 +624,18 @@ internal class ScriptedBackend(
         val io = media.io?.open()
         repeat(readsDuringOpen) { io?.read(openScratch, 0, openScratch.size) }
         val itemScript = scriptFor?.invoke(media) ?: script
-        // The variant the item asks for, or the first, as a backend's own choice would be.
-        val variant = if (itemScript.variants.isEmpty()) null else media.demux.variant?.takeIf { it in itemScript.variants.indices } ?: 0
+        // The variant the item asks for, or else the highest bitrate within the item's caps, as the
+        // FFmpeg backend chooses.
+        val variant = if (itemScript.variants.isEmpty()) {
+            null
+        } else {
+            media.demux.variant?.takeIf { it in itemScript.variants.indices }
+                ?: itemScript.variants.filter { candidate ->
+                    (media.demux.maxBitrate?.let { candidate.bitrate <= it } ?: true) &&
+                        (media.demux.maxVideoHeight?.let { cap -> candidate.height?.let { it <= cap } ?: true } ?: true)
+                }.maxByOrNull { it.bitrate }?.index
+                ?: 0
+        }
         return ScriptedSession(itemScript, ledger, faults, trace, videoDecoderStatus, io, clock, variant)
             .also { sessions += it }
     }
@@ -724,6 +741,16 @@ internal class ScriptedSource(
 ) : PlayerMediaSource {
 
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
+
+    /** How long [mediaUs] of the selected variant takes over the script's link. */
+    private suspend fun waitForLink(mediaUs: Long) {
+        val link = script.linkBitsPerSecond ?: return
+        val bitrate = script.variants.firstOrNull { it.index == selectedVariant }?.bitrate ?: return
+        val bitsPerSecond = link((clock?.nanos() ?: 0L) / 1_000)
+        if (bitsPerSecond <= 0) return
+        val waitUs = mediaUs * bitrate / bitsPerSecond
+        if (waitUs > 0) delay(waitUs.microseconds)
+    }
 
     override val streams: List<PlayerStreamInfo> = buildList {
         if (script.hasVideo) {
@@ -966,6 +993,7 @@ internal class ScriptedSource(
             pickVideo -> {
                 val pts = videoCursorUs
                 videoCursorUs = script.videoPtsAfter(pts)
+                waitForLink(videoCursorUs - pts)
                 packetRead(
                     FakePacket(
                         streamIndex = script.videoIndex,
@@ -1576,4 +1604,21 @@ internal class ScriptedOutput(
                 }
             }
         }
+}
+
+/**
+ * A reader with no bytes of its own that reports the script's link as its measured network rate,
+ * as a network reader would. The scripted source still serves the packets.
+ */
+internal class LinkIo(private val script: MediaScript, private val clock: MonotonicClock) : MediaIo {
+    override val size: Long? get() = null
+    override val seekable: Boolean get() = true
+
+    override suspend fun read(into: ByteArray, offset: Int, length: Int): Int = -1
+
+    override suspend fun seek(position: Long) {}
+
+    override fun close() {}
+
+    override fun networkBitsPerSecond(): Long? = script.linkBitsPerSecond?.invoke(clock.nanos() / 1_000)
 }

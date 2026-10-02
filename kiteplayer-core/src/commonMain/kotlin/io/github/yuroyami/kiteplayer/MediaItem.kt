@@ -262,6 +262,20 @@ public interface MediaIo : AutoCloseable {
      * default refuses every address.
      */
     public suspend fun openRelated(uri: String): MediaIo? = null
+
+    /**
+     * How fast the network delivers this reader's bytes, in bits per second, or null when the
+     * reader does not measure it or has not measured enough yet. The default answers null.
+     *
+     * Count the bytes of the readers that [openRelated] made too, and count only the time that a
+     * download waits for the network. The time it waits for the player to read is not the
+     * network's. The player steps an HLS stream up to a higher variant only on this figure, so
+     * an HLS stream on a reader that answers null never steps up by itself.
+     *
+     * The player calls this from its own thread, unlike the other members, so it must be safe to
+     * call while a read runs.
+     */
+    public fun networkBitsPerSecond(): Long? = null
 }
 
 /**

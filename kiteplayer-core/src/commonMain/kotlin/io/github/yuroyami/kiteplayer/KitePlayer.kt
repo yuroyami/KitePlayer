@@ -1178,6 +1178,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * position, through the same rebuild as a video track change, and keeps playing or stays
      * paused. The choice is kept on the item, so a later rebuild keeps it too.
      *
+     * A selected variant stays. With null, the player changes the variant by itself as the network
+     * allows: down when the link cannot carry it, and up when [MediaIo.networkBitsPerSecond] shows
+     * room to spare for a higher one. Each change opens the stream again, so the picture holds for
+     * a moment.
+     *
      * @throws IllegalStateException when nothing is open, or when a stop, a close, a new open or a
      *         later call ended the change first.
      * @throws IllegalArgumentException when the media has no variant at [index].

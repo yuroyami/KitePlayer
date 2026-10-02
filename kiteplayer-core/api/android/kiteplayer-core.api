@@ -708,6 +708,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/MediaIo : java/lan
 	public fun getLocation ()Ljava/lang/String;
 	public abstract fun getSeekable ()Z
 	public abstract fun getSize ()Ljava/lang/Long;
+	public fun networkBitsPerSecond ()Ljava/lang/Long;
 	public fun openRelated (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -720,6 +721,7 @@ public final class io/github/yuroyami/kiteplayer/MediaIo$Companion {
 public final class io/github/yuroyami/kiteplayer/MediaIo$DefaultImpls {
 	public static fun getContentType (Lio/github/yuroyami/kiteplayer/MediaIo;)Ljava/lang/String;
 	public static fun getLocation (Lio/github/yuroyami/kiteplayer/MediaIo;)Ljava/lang/String;
+	public static fun networkBitsPerSecond (Lio/github/yuroyami/kiteplayer/MediaIo;)Ljava/lang/Long;
 	public static fun openRelated (Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static fun setWarningSink (Lio/github/yuroyami/kiteplayer/MediaIo;Lkotlin/jvm/functions/Function1;)V
 }
@@ -855,6 +857,7 @@ public final class io/github/yuroyami/kiteplayer/PipedMediaIo : io/github/yuroya
 	public fun getLocation ()Ljava/lang/String;
 	public fun getSeekable ()Z
 	public fun getSize ()Ljava/lang/Long;
+	public fun networkBitsPerSecond ()Ljava/lang/Long;
 	public fun openRelated (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;

@@ -47,6 +47,8 @@ internal actual fun kiteCodecRgbaConverter(): (VideoFrame) -> ByteArray {
     return { frame -> SoftwareConverter.toRgba(frame.asKiteFFmpegFrame(), buffers) }
 }
 
+internal actual fun kiteCodecToneMaps(frame: VideoFrame): Boolean = SoftwareConverter.toneMapsHdr(frame.colorSpace)
+
 internal actual fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap {
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(rgba))

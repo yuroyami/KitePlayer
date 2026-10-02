@@ -48,6 +48,11 @@ internal class MediaCodecBufferFrame(
     override val size: VideoSize,
     override val colorSpace: ColorSpaceInfo,
     override val rotationDegrees: Int = 0,
+    /**
+     * The source transfer, PQ or HLG, when the codec was asked for SDR output and the frame is
+     * that tone mapped output. Null when the frame shows its source's own range.
+     */
+    val toneMappedFrom: String? = null,
 ) : DirectSurfaceVideoFrame {
     private val released = AtomicBoolean(false)
 

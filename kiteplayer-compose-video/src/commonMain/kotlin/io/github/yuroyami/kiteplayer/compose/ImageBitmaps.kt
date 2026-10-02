@@ -55,6 +55,9 @@ internal class UnsupportedFrameType(
  */
 internal expect fun kiteCodecRgbaConverter(): (VideoFrame) -> ByteArray
 
+/** Whether the converter of [kiteCodecRgbaConverter] rolls [frame]'s HDR off to SDR. */
+internal expect fun kiteCodecToneMaps(frame: VideoFrame): Boolean
+
 /**
  * Builds a PREMULTIPLIED-alpha image for a subtitle overlay. A separate builder from
  * [FrameImagePool] on purpose: frames are opaque and pooled,

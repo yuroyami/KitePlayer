@@ -179,8 +179,7 @@ public class AppKitVideoRenderer internal constructor(
     )
     override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
 
-    /** Published once, not once per frame: the engine latches it anyway, and a flood is noise. */
-    private val toneMapAnnounced = atomic(false)
+    private val toneMapAnnouncer = ToneMapAnnouncer { eventFlow.tryEmit(it) }
 
     /**
      * The conversion thread, held so [close] can end it.
@@ -280,9 +279,7 @@ public class AppKitVideoRenderer internal constructor(
             if (width <= 0 || height <= 0) {
                 null
             } else {
-                if (toneMapped(frame) && toneMapAnnounced.compareAndSet(false, true)) {
-                    eventFlow.tryEmit(RendererEvent.ToneMapEngaged(transfer = frame.colorSpace.transfer.name))
-                }
+                if (toneMapped(frame)) toneMapAnnouncer.announce(frame.colorSpace.transfer.name)
                 val rgba = convert(frame)
                 // Retained for paused-overlay re-composites, worker-confined.
                 retainedRgba = rgba

@@ -23,6 +23,7 @@ public object MobileAndroidPlayerViewRendererFactory : AndroidPlayerViewRenderer
             convert = reusingConverter(),
             onOverlay = onOverlay,
             onVideoGeometry = onVideoGeometry,
+            toneMapped = { frame -> SoftwareConverter.toneMapsHdr(frame.colorSpace) },
         ),
         onScaleMode,
     )

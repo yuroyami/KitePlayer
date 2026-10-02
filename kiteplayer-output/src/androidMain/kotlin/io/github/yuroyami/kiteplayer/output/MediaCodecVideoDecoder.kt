@@ -499,6 +499,15 @@ private class MediaCodecVideoDecoder(
     private var configuredSurface: android.view.Surface = fallbackSurface
     private var configuredSurfaceVersion: Long? = null
 
+    /**
+     * The source transfer the codec rolls off when it was asked for SDR output from a PQ or HLG
+     * source. The open fails when the codec does not accept that request, and no frame leaves before
+     * its output colour is validated, so every frame of such a decoder is tone mapped.
+     */
+    private val toneMappedFrom: String? = stream.colorSpace
+        ?.takeIf { outputContract.requestedColorTransfer == MediaFormat.COLOR_TRANSFER_SDR_VIDEO && it.isHdr }
+        ?.transfer?.name
+
     override val isDrained: Boolean get() = drained
 
     init {
@@ -693,6 +702,7 @@ private class MediaCodecVideoDecoder(
                             size = outputSize,
                             colorSpace = outputColor,
                             rotationDegrees = frameRotationDegrees,
+                            toneMappedFrom = toneMappedFrom,
                         ),
                     )
                     if (eos) eosOutputSeen = true

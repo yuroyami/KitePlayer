@@ -91,6 +91,8 @@ internal class KiteVideoOverlay(
 internal class KiteVideoRenderer(
     /** Converts a frame to tightly packed RGBA, one byte per component, no row padding. */
     private val convert: (VideoFrame) -> ByteArray,
+    /** Whether [convert] rolls a frame's HDR off to SDR, which only the converter knows. */
+    private val toneMapped: (VideoFrame) -> Boolean = { false },
     /** Builds the drawable image and, when pooled, its asynchronous-consumer lease. */
     private val makeImage: (rgba: ByteArray, width: Int, height: Int) -> FrameImage,
     /** Publishes the newest finished frame, or null at close. Production writes snapshot state. */
@@ -176,6 +178,14 @@ internal class KiteVideoRenderer(
     )
     override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
 
+    /**
+     * When this renderer last said that it tone mapped, in milliseconds on [toneMapClock]. It says
+     * so at most once a second: the engine warns once per open and ignores the rest, and a once
+     * only announcement left every later HDR item on this renderer without its warning. Worker only.
+     */
+    private var toneMapSaidAt = Long.MIN_VALUE
+    private val toneMapClock = kotlin.time.TimeSource.Monotonic.markNow()
+
     private val dispatcher: CloseableCoroutineDispatcher = newSingleThreadContext("kiteplayer-kitevideo")
     private val worker = CoroutineScope(dispatcher + SupervisorJob())
     private val workerJob: Job = worker.launch {
@@ -259,6 +269,13 @@ internal class KiteVideoRenderer(
             frame.close()
             failed.incrementAndGet()
             return
+        }
+        if (toneMapped(frame)) {
+            val now = toneMapClock.elapsedNow().inWholeMilliseconds
+            if (toneMapSaidAt == Long.MIN_VALUE || now - toneMapSaidAt >= 1_000L) {
+                toneMapSaidAt = now
+                eventFlow.tryEmit(RendererEvent.ToneMapEngaged(transfer = frame.colorSpace.transfer.name))
+            }
         }
         val rgba = try {
             convert(frame)

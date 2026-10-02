@@ -113,14 +113,11 @@ public class MetalVideoRenderer public constructor(
     )
     override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
 
-    /** Published once, not once per frame: the engine latches it anyway, and a flood is noise. */
-    private val toneMapAnnounced = kotlinx.atomicfu.atomic(false)
+    private val toneMapAnnouncer = ToneMapAnnouncer { eventFlow.tryEmit(it) }
 
-    /** Says once that this renderer rolled HDR off to SDR, for a frame it really did roll off. */
+    /** Says that this renderer rolled HDR off to SDR, for a frame it really did roll off. */
     private fun announceToneMap(frame: VideoFrame) {
-        if (!frame.colorSpace.willToneMap()) return
-        if (!toneMapAnnounced.compareAndSet(false, true)) return
-        eventFlow.tryEmit(RendererEvent.ToneMapEngaged(transfer = frame.colorSpace.transfer.name))
+        if (frame.colorSpace.willToneMap()) toneMapAnnouncer.announce(frame.colorSpace.transfer.name)
     }
 
     private val dispatcher: CloseableCoroutineDispatcher = newSingleThreadContext("kiteplayer-metal")

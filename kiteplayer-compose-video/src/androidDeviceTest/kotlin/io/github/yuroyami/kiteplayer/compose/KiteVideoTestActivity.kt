@@ -26,6 +26,12 @@ internal class KiteVideoTestActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A locked phone never draws an activity, so the test shows over the lock screen and turns
+        // the screen on rather than waiting for someone to unlock it.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
         videoState = createAndroidKiteVideoState(window)
         setContent {
             KiteVideo(

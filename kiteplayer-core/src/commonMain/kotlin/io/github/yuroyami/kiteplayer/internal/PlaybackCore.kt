@@ -2143,11 +2143,13 @@ internal class PlaybackCore(
                             // must not remove the healthy renderer attached after it.
                             commands.trySend(CoreCommand.DetachRenderer(attached, CompletableDeferred()))
                         }
-                        // Once per open, not once per frame: a renderer that publishes this on
-                        // every tone mapped frame is behaving correctly and must not flood the
-                        // warning feed for it. The latch is reset when a session opens.
+                        // Once per open, not once per frame: a renderer repeats this while it
+                        // tone maps, and must not flood the warning feed for it. The latch is reset
+                        // when a session opens, and the open's first frame must have come out, so
+                        // an announcement about the previous item's last frames is not taken for
+                        // this one; the renderer repeats it a second later.
                         is RendererEvent.ToneMapEngaged -> {
-                            if (!toneMapWarned) {
+                            if (!toneMapWarned && firstFrameSeen) {
                                 toneMapWarned = true
                                 warn(
                                     PlaybackWarning.HdrToneMapped(

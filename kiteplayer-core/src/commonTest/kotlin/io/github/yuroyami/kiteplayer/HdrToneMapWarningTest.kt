@@ -128,6 +128,32 @@ class HdrToneMapWarningTest {
     }
 
     /**
+     * A renderer outlives an open. It repeats its announcement while it tone maps, so the second
+     * HDR item on the same renderer warns too, once its first frame is out.
+     */
+    @Test
+    fun `a second open on the same renderer warns again`() = runTest {
+        val renderer = ScriptedRenderer()
+        val harness = CoreHarness(this, renderer = null)
+        harness.core.attachRenderer(renderer)
+        harness.open()
+        harness.run(100.milliseconds)
+        renderer.published.emit(RendererEvent.ToneMapEngaged("PQ", 0))
+        harness.run(200.milliseconds)
+
+        harness.core.stop()
+        harness.open()
+        harness.run(100.milliseconds)
+        renderer.published.emit(RendererEvent.ToneMapEngaged("PQ", 0))
+        harness.run(200.milliseconds)
+
+        val warnings = harness.core.warningHistory().map { it.warning }
+            .filterIsInstance<PlaybackWarning.HdrToneMapped>()
+        assertEquals(2, warnings.size, "one warning per open, got ${warnings.size}")
+        harness.close()
+    }
+
+    /**
      * The arm that dies if anyone regresses to metadata-based emission.
      *
      * A renderer that never publishes the event is a renderer that never tone mapped: the Android

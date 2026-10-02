@@ -102,6 +102,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     private val overlayConsumer: ((SubtitleOverlay?) -> Unit)? = null,
     /** Keeps the view geometry in step with both direct and software decoder output. */
     private val geometryConsumer: ((VideoSize, Int) -> Unit)? = null,
+    /** Whether [convert] rolls this frame's HDR off to SDR. See the public constructors. */
+    private val toneMapped: (VideoFrame) -> Boolean = { false },
 ) : VideoRenderer {
 
     /**
@@ -125,27 +127,35 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      * decoder selection, then forward every Surface lifecycle change through [setSurface]. Software
      * frames still use [convert] as a fallback. [onOverlay] should draw into a separate view above the
      * Surface because MediaCodec owns the video Surface while the direct path is active.
+     *
+     * [toneMapped] answers whether [convert] rolls a frame's HDR off to SDR, because only the
+     * converter knows. The renderer then reports `RendererEvent.ToneMapEngaged`. The default
+     * answers false, for a converter that never tone maps.
      */
     public constructor(
         convert: (VideoFrame) -> ByteArray,
         onOverlay: (SubtitleOverlay?) -> Unit,
         onVideoGeometry: (VideoSize, Int) -> Unit = { _, _ -> },
+        toneMapped: (VideoFrame) -> Boolean = { false },
     ) : this(
         convert = convert,
         targets = AndroidSurfaceTargets(null, onVideoGeometry),
         overlayConsumer = onOverlay,
+        toneMapped = toneMapped,
     )
 
     private constructor(
         convert: (VideoFrame) -> ByteArray,
         targets: AndroidSurfaceTargets,
         overlayConsumer: ((SubtitleOverlay?) -> Unit)? = null,
+        toneMapped: (VideoFrame) -> Boolean,
     ) : this(
         convert = convert,
         target = targets.canvas,
         codecTarget = targets.codec,
         overlayConsumer = overlayConsumer,
         geometryConsumer = targets.geometryConsumer,
+        toneMapped = toneMapped,
     )
 
     private val presented = atomic(0L)
@@ -195,6 +205,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
+
+    private val toneMapAnnouncer = ToneMapAnnouncer { eventFlow.tryEmit(it) }
 
     /**
      * The ARGB pixels of the frame being drawn, kept between frames.
@@ -348,6 +360,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         geometryConsumer?.invoke(size, rotation)
+        if (toneMapped(frame)) toneMapAnnouncer.announce(frame.colorSpace.transfer.name)
         val converted = try {
             convert(frame)
         } catch (failure: Throwable) {

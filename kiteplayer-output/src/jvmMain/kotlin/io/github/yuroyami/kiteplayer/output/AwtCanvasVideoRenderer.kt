@@ -94,8 +94,7 @@ public class AwtCanvasVideoRenderer(
     private val eventFlow = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 8)
     override val events: Flow<RendererEvent> get() = eventFlow
 
-    /** Published once, not once per frame: the engine latches it anyway, and a flood is noise. */
-    private val toneMapAnnounced = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val toneMapAnnouncer = ToneMapAnnouncer { eventFlow.tryEmit(it) }
 
     private val lock = Any()
     private var canvas: Canvas? = null
@@ -145,11 +144,9 @@ public class AwtCanvasVideoRenderer(
     private var scaleMode: VideoScale = VideoScale.Fit
     private var transform: VideoTransform = VideoTransform.Identity
 
-    /** Says once, per renderer, that this painter rolled HDR off to SDR while painting. */
+    /** Says that this painter rolled HDR off to SDR while painting. */
     private fun announceToneMap(frame: VideoFrame) {
-        if (!painter.toneMapped(frame)) return
-        if (!toneMapAnnounced.compareAndSet(false, true)) return
-        eventFlow.tryEmit(RendererEvent.ToneMapEngaged(transfer = frame.colorSpace.transfer.name))
+        if (painter.toneMapped(frame)) toneMapAnnouncer.announce(frame.colorSpace.transfer.name)
     }
 
     override fun supports(format: PlayerPixelFormat): Boolean = true

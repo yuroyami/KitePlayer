@@ -665,4 +665,23 @@ class AndroidSurfaceAdjustmentsTest {
             renderer.close()
         }
     }
+
+    @Test
+    fun `a converter that tone maps makes the renderer say so`() = runBlocking {
+        val target = FakeTarget()
+        val renderer = AndroidSurfaceVideoRenderer(
+            convert = exactConverter(),
+            target = target,
+            toneMapped = { true },
+        )
+        try {
+            assertTrue(renderer.present(TestFrame(), 0))
+            awaitPresented(renderer, 1)
+            // The flow replays its last events, so this collector still hears it.
+            val announced = withTimeout(5_000) { renderer.events.filterIsInstance<RendererEvent.ToneMapEngaged>().first() }
+            assertEquals(ColorSpaceInfo.Unspecified.transfer.name, announced.transfer)
+        } finally {
+            renderer.close()
+        }
+    }
 }

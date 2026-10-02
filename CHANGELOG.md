@@ -26,6 +26,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   branch.
 - `Progress.bufferedRanges` is empty for an HLS stream, and `PlaybackStats.ioBytesTotal` counts the
   bytes of its segments and keys.
+- `PlaybackWarning.HdrToneMapped` now fires on the Android GPU path of the Compose video, on the
+  Android software surface and on the Compose canvas too (#23). A renderer repeats its report at
+  most once a second, so every open of HDR media on the same renderer warns, not only the first.
+  `AndroidSurfaceVideoRenderer` gains a `toneMapped` parameter, which changes its compiled
+  constructor, so recompile.
 
 ## [0.2.0] - 2026-09-29
 

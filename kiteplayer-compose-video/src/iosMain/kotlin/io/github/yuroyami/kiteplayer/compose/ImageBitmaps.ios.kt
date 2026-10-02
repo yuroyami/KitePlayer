@@ -65,6 +65,9 @@ private fun convertFrameToRgba(frame: VideoFrame): ByteArray {
     return SoftwareConverter.toRgba(decoded)
 }
 
+// The Metal reader rolls a hardware HDR frame off with the same rule the CPU converter uses.
+internal actual fun kiteCodecToneMaps(frame: VideoFrame): Boolean = SoftwareConverter.toneMapsHdr(frame.colorSpace)
+
 internal actual fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap {
     val info = ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.PREMUL)
     return Image.makeRaster(info, rgba, width * 4).toComposeImageBitmap()

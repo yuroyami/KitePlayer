@@ -140,6 +140,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   says so, so a `when` that lists every warning needs the new branch. Only a variant that the
   player chose itself steps down, and the player never steps up by itself (#376).
 
+### Removed
+
+- The Fireworks, Musical Spectrum and Muser drawings are gone from the audioviz catalogue, with
+  their licences. The catalogue has 21 drawings. A name saved for one of them falls back to the first
+  drawing (#390).
+
 ## [0.2.0] - 2026-09-29
 
 ### Upgrading from 0.0.27

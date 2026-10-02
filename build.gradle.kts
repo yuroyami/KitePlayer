@@ -157,8 +157,6 @@ val bundledLicenses: Map<String, List<Pair<String, String>>> = mapOf(
     ":kiteplayer-audioviz" to listOf(
         "MIT License (ported drawings and shader code; see NOTICE)" to "https://opensource.org/license/mit",
         "ISC License (the Lines drawing)" to "https://opensource.org/license/isc-license-txt",
-        "BSD 3-Clause License (chroma.js functions in Muser)" to "https://github.com/gka/chroma.js/blob/v2.1.0/LICENSE",
-        "zlib License (gl-matrix functions in Fireworks)" to "https://github.com/toji/gl-matrix/blob/v2.2.1/LICENSE.md",
     ),
     ":kiteplayer-subtitles" to listOf(
         "BSD 3-Clause License (bundled WHATWG encoding tables)" to "https://encoding.spec.whatwg.org/",

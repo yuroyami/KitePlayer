@@ -114,12 +114,7 @@ class FrameRateTest {
         /** The share of the 60 Hz figure that another rate may add or lose. *Judgement.* */
         const val MOST_CHANGE = 0.25f
 
-        /**
-         * Fireworks fires a burst when its lowest bin rises by more than 15 between two reads 30 ms
-         * apart. The drum loop drives that bin to its ceiling of 255, so whether one read rises by 15
-         * depends on a few bytes of where it falls, and the number of bursts in 24 seconds ran from 15
-         * to 28 across six refresh rates. The analysis itself is the same for every rate.
-         */
-        val BY_DESIGN = setOf("Fireworks")
+        /** Drawings exempt from the rate check. None is. */
+        val BY_DESIGN = emptySet<String>()
     }
 }

@@ -55,7 +55,7 @@ META-INF/licenses/kiteplayer-subtitles/.
 
 Visualiser drawings
 -------------------
-kiteplayer-audioviz ports ten browser visualisers, and it carries shader and
+kiteplayer-audioviz ports seven browser visualisers, and it carries shader and
 colour code from other open source projects. The class documentation of each
 drawing credits its original and lists every way it differs. The license
 texts ship inside the JVM and Android artifacts under
@@ -73,17 +73,8 @@ kiteplayer-audioviz/src/jvmMain/resources/META-INF/licenses/kiteplayer-audioviz/
   MIT.
 - Fracture, Threads and Iris port Vissonance, Copyright (c) 2020 Tariq
   Soliman, MIT.
-- Fireworks ports fireworks-webgl, Copyright (c) 2021 Ondřej Žára, MIT. It
-  also re-implements functions of gl-matrix 2.2.1, Copyright (c) 2013 Brandon
-  Jones, Colin MacKenzie IV, under the zlib license.
 - Wavy Spiral ports Audible Visuals by Sonia Boller, Apache License 2.0. The
   original's license file leaves the copyright line unfilled.
-- Muser ports Muser by Jon Shamir, MIT. Its license file reads "Copyright (c)
-  2017 Matt DesLauriers". It also carries functions of chroma.js 2.1.0,
-  Copyright (c) 2011-2019, Gregor Aisch, BSD 3-Clause, and the line width of
-  three.meshline, Copyright (c) 2016 Jaume Sanchez, MIT.
-- Musical Spectrum re-implements ShowCQTBar by Muhammad Faiz from its
-  formulas. No code of it is copied, and its page has no license.
 
 Sample media
 ------------

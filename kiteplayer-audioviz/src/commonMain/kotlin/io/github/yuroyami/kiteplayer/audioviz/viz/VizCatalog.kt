@@ -2,7 +2,6 @@ package io.github.yuroyami.kiteplayer.audioviz.viz
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Bars
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Contour
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fireworks
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fluctus
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fracture
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
@@ -10,7 +9,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Honeycomb
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Iris
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Kaleidoscope
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Lines
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Muser
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.OceanMist
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Silk
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ThinIce
@@ -19,7 +17,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.TwinBloom
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.WavySpiral
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Alchemy
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Marble
-import io.github.yuroyami.kiteplayer.audioviz.viz.shader.MusicalSpectrum
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NebulaField
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NeonLoFi
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Odyssey
@@ -59,10 +56,7 @@ public object VizCatalog {
         Fracture(),
         Threads(),
         Iris(),
-        Fireworks(),
         WavySpiral(),
-        MusicalSpectrum(),
-        Muser(),
     ).filter { it.canRunHere() }
 
     /** The former public catalogue name resolves to the single replacement. */

@@ -47,11 +47,11 @@ stepped, so it costs less than a distance-field drawing.
 `AudioVizBrowser` shows that same order as a searchable adaptive preview grid. There are no
 preset categories, category headers or grouped-catalogue entry points.
 
-The catalogue has 24 drawings on desktop, iOS and Android 13 and newer. On older Android it has 20,
+The catalogue has 21 drawings on desktop, iOS and Android 13 and newer. On older Android it has 17,
 because Alchemy, Nebula Field, Pipe and Odyssey need runtime shaders and have no stand-in. The first
 14 are the library's own: Bars, Ocean Mist, Twin Bloom,
 Contour, Alchemy, Nebula Field, Kaleidoscope, Pipe, Thin Ice, Fluctus, Glitch, Odyssey, Neon Lo-Fi
-and Marble. The last 10 are ports of browser visualisers, each faithful to its original and credited
+and Marble. The last 7 are ports of browser visualisers, each faithful to its original and credited
 below. Each port's class documentation carries the full credit and a list of every way it differs
 from the original.
 
@@ -63,10 +63,7 @@ from the original.
 | Fracture | Vissonance: Fracture | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
 | Threads | Vissonance: Silk | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
 | Iris | Vissonance: Iris | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
-| Fireworks | Fireworks with WebGL | Ondřej Žára | [page](http://ondras.github.io/fireworks-webgl/), [code](https://github.com/ondras/fireworks-webgl) | MIT |
 | Wavy Spiral | Audible Visuals: Wavy Spiral and Flower | Sonia Boller | [page](https://soniaboller.github.io/audible-visuals/), [code](https://github.com/soniaboller/soniaboller.github.io) | Apache 2.0 text in the older [audible-visuals](https://github.com/soniaboller/audible-visuals) repository, copyright line left blank |
-| Musical Spectrum | ShowCQTBar | Muhammad Faiz | [page](https://mfcc64.github.io/html5-showcqtbar/), [code](https://github.com/mfcc64/html5-showcqtbar) | None for the page. The transform is written from its formulas; no LGPL engine code is copied. |
-| Muser | Muser | Jon Shamir | [page](https://jonshamir.github.io/muser/), [code](https://github.com/jonshamir/muser) | MIT |
 
 Tariq Soliman's Silk is named Threads here, because the catalogue's Silk is Matt DesLauriers' piece.
 

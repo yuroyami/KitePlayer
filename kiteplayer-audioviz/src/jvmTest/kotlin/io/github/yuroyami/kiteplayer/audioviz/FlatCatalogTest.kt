@@ -13,8 +13,7 @@ class FlatCatalogTest {
     @Test fun onlyTheRetainedPresetsAreSelectable() {
         assertEquals(listOf("Bars", "Ocean Mist", "Twin Bloom", "Contour", "Alchemy", "Nebula Field",
             "Kaleidoscope", "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Neon Lo-Fi", "Marble",
-            "Silk", "Lines", "Honeycomb", "Fracture", "Threads", "Iris", "Fireworks", "Wavy Spiral",
-            "Musical Spectrum", "Muser"), VizCatalog.create().map { it.name })
+            "Silk", "Lines", "Honeycomb", "Fracture", "Threads", "Iris", "Wavy Spiral"), VizCatalog.create().map { it.name })
     }
 
     @Test fun removedImplementationsAreNotPackaged() {
@@ -22,11 +21,16 @@ class FlatCatalogTest {
             "Breath", "Tide", "Lantern", "Nebula", "Smoke", "Reactor", "RingFlight", "Mandala",
             "Drift", "Melt", "Lava", "PrismBurst", "OilSlick", "Ink", "LensRain", "Twist",
             "FlowField", "Phosphor", "FractalZoom", "BlobField", "Shatter", "RippleWell", "ReactionDiffusion", "SmokeRise", "SmokeVortices", "Aurora", "AuroraField", "Gemini", "Bloom", "Pulse",
-            "Plasma", "PlasmaMaterialKt", "Stereogram")
+            "Plasma", "PlasmaMaterialKt", "Stereogram", "Fireworks", "Muser")
         val root = "io.github.yuroyami.kiteplayer.audioviz.viz."
         for (name in removed) {
             val area = if (name == "BlobField" || name == "AuroraField") "shader" else "presets"
             assertTrue(runCatching { Class.forName("$root$area.$name") }.exceptionOrNull() is ClassNotFoundException,
+                "$name must be deleted, not merely hidden from the picker")
+        }
+        // Musical Spectrum and the classes its axis and transform files held.
+        for (name in listOf("MusicalSpectrum", "NoteAxis", "ConstantQBars", "PeakingBiquad", "BassCutStream")) {
+            assertTrue(runCatching { Class.forName("${root}shader.$name") }.exceptionOrNull() is ClassNotFoundException,
                 "$name must be deleted, not merely hidden from the picker")
         }
     }

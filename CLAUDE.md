@@ -162,10 +162,6 @@ Each line is something that bit someone. Delete a line when it stops being true.
   go above 1, and the surface calls `allowance`. The old guard answered a light above the one asked
   for when it held a fall, so a test that read `limit` passed while the surface let the flash
   through. Test the guard through `allowance` (#357).
-- `FrameRateTest` exempts Fireworks for a real reason. Its burst trigger fires when the lowest bin
-  rises by more than 15 in one read, the drum loop drives that bin to its ceiling, and a few bytes
-  of where the read falls decide each burst. The count ran from 15 to 28 in 24 seconds across
-  refresh rates while the analysis itself stayed identical for every rate and block size (#348).
 
 ### Language and toolchain
 

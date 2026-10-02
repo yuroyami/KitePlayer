@@ -10,7 +10,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.compose.rememberKitePlayer
+import io.github.yuroyami.kiteplayer.isAvailable
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.compose.KitePlayerVideo
 import io.github.yuroyami.kiteplayer.compose.KiteRenderPath
@@ -56,14 +58,14 @@ fun main() {
             state = state,
             title = "KitePlayer path comparison",
         ) {
-            val player = androidx.compose.runtime.remember { KitePlayerPlatform.createOrNull() }
-            if (player == null) {
+            if (!KitePlayer.isAvailable) {
                 LaunchedEffect(Unit) {
                     println("no player available on this platform")
                     exitProcess(1)
                 }
                 return@Window
             }
+            val player = rememberKitePlayer()
 
             Box(Modifier.fillMaxSize()) {
                 KitePlayerVideo(

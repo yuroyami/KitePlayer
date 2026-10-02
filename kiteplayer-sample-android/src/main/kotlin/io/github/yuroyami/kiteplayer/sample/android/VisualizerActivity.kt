@@ -9,18 +9,16 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import io.github.yuroyami.kiteplayer.KitePlayer
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.availability
+import io.github.yuroyami.kiteplayer.isAvailable
 import io.github.yuroyami.kiteplayer.audioviz.SongMapStore
 import io.github.yuroyami.kiteplayer.sample.shared.SampleButton
 import io.github.yuroyami.kiteplayer.sample.shared.SampleMedia
 import io.github.yuroyami.kiteplayer.sample.shared.SONG_TYPES
 import io.github.yuroyami.kiteplayer.sample.shared.SampleTrack
 import io.github.yuroyami.kiteplayer.sample.shared.SampleScreen
-import io.github.yuroyami.kiteplayer.session.KitePlayerMediaSession
 import io.github.yuroyami.kiteplayer.session.MediaNotificationOptions
-import io.github.yuroyami.kiteplayer.session.attachBackgroundHandling
-import io.github.yuroyami.kiteplayer.session.attachInterruptionHandling
-import io.github.yuroyami.kiteplayer.session.attachMediaNotification
+import io.github.yuroyami.kiteplayer.session.attachMediaSession
 import java.io.File
 
 /**
@@ -28,33 +26,20 @@ import java.io.File
  * conformance clip as video when the song is missing. "Other samples" opens the launcher with the
  * presentation comparisons.
  *
- * It also mirrors the player into the media session, shows the library's media notification, which
- * keeps the song playing after the app leaves the screen, and attaches the interruption and
- * background handling, so the song behaves like a music app's.
+ * Its media session shows the library's media notification, which keeps the song playing after the
+ * app leaves the screen, and takes audio focus, so the song behaves like a music app's. The session
+ * closes with the player.
  */
 internal class VisualizerActivity : ComponentActivity() {
     private var player: KitePlayer? = null
-
-    /** The session, the two guards and the notification, closed newest first, before the player. */
-    private val handles = mutableListOf<AutoCloseable>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Keep the display awake while this sample is visible, including between tracks.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val player = KitePlayerPlatform.createOrNull()
+        val player = if (KitePlayer.isAvailable) KitePlayer() else null
         this.player = player
-        if (player != null) {
-            val session = KitePlayerMediaSession(player, this)
-            handles += session
-            handles += KitePlayerPlatform.attachInterruptionHandling(player, this)
-            handles += KitePlayerPlatform.attachBackgroundHandling(player, this)
-            handles += KitePlayerPlatform.attachMediaNotification(
-                session,
-                this,
-                MediaNotificationOptions(smallIcon = android.R.drawable.ic_media_play),
-            )
-        }
+        player?.attachMediaSession(this, MediaNotificationOptions(smallIcon = android.R.drawable.ic_media_play))
         // A scanned song map outlives the process here, so a song played before is mapped at once.
         val songMaps = SongMapStore.inDirectory(File(cacheDir, "songmaps").absolutePath)
         // Every song in the APK, copied out once each. The player opens a path, so they all have
@@ -71,7 +56,7 @@ internal class VisualizerActivity : ComponentActivity() {
         setContent {
             if (player == null) {
                 BasicText(
-                    "KitePlayer cannot run here: ${KitePlayerPlatform.availability}",
+                    "KitePlayer cannot run here: ${KitePlayer.availability}",
                     style = TextStyle(color = Color.White),
                 )
             } else {
@@ -91,9 +76,7 @@ internal class VisualizerActivity : ComponentActivity() {
         try {
             super.onDestroy()
         } finally {
-            // The notification reads the session, so it closes first.
-            handles.asReversed().forEach { runCatching { it.close() } }
-            handles.clear()
+            // The media session closes itself with the player.
             player?.close()
         }
     }

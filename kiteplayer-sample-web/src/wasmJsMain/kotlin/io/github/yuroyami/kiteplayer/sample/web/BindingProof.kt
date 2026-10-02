@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteffmpeg.KiteFFmpegWeb
 import io.github.yuroyami.kiteffmpeg.MediaByteSource
 import io.github.yuroyami.kiteffmpeg.MediaSource
 import io.github.yuroyami.kiteffmpeg.MediaType
+import io.github.yuroyami.kiteplayer.availability
 import kotlin.js.JsAny
 
 /**
@@ -75,16 +76,16 @@ internal suspend fun runBackendProof(clip: ByteArray, report: (String) -> Unit) 
  * Asks the ENGINE whether the web is playable, which is the question a consumer asks.
  *
  * Everything above proves the codec works. This proves the player agrees: availability must flip
- * once the codec module is loaded, and `createOrNull` must return a real player rather than null.
+ * once the codec module is loaded, and `KitePlayer()` must build a real player rather than throw.
  */
 private suspend fun reportPlayerWiring(report: (String) -> Unit) {
-    val availability = io.github.yuroyami.kiteplayer.KitePlayerPlatform.availability
+    val availability = io.github.yuroyami.kiteplayer.KitePlayer.availability
     report("player availability: $availability")
-    val player = io.github.yuroyami.kiteplayer.KitePlayerPlatform.createOrNull()
+    val player = runCatching { io.github.yuroyami.kiteplayer.KitePlayer() }.getOrNull()
     if (player == null) {
-        report("player: createOrNull returned NULL, the web stack is not wired")
+        report("player: KitePlayer() refused, the web stack is not wired")
     } else {
-        report("player: CREATED through KitePlayerPlatform, backends resolved")
+        report("player: CREATED through KitePlayer(), backends resolved")
         player.closeAndAwait()
     }
 }

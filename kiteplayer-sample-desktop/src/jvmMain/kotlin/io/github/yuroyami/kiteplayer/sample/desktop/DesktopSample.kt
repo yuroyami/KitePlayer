@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
@@ -44,7 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.yuroyami.kiteplayer.KitePlayer
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.availability
+import io.github.yuroyami.kiteplayer.compose.rememberKitePlayer
+import io.github.yuroyami.kiteplayer.isAvailable
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
@@ -66,21 +67,16 @@ private val Muted = Color(0xFF9A9AAE)
 /** The whole sample: a player, a KiteVideo, four controls and the measurement driver. */
 @Composable
 internal fun DesktopSample(options: SampleOptions, onMeasurementDone: () -> Unit) {
-    val availability = remember { KitePlayerPlatform.availability }
-    val player = remember { KitePlayerPlatform.createOrNull() }
-    if (player == null) {
-        Refusal("KitePlayer is unavailable on this JVM: $availability")
+    if (!KitePlayer.isAvailable) {
+        Refusal("KitePlayer is unavailable on this JVM: ${KitePlayer.availability}")
         return
     }
+    val player = rememberKitePlayer()
 
     val video = rememberKiteVideoState()
     var modifiersOn by remember { mutableStateOf(!options.measure) }
     var opened by remember { mutableStateOf(false) }
     val drawCost = remember { DrawCost() }
-
-    DisposableEffect(player) {
-        onDispose { player.close() }
-    }
 
     LaunchedEffect(player, video) {
         // Let KiteVideo lay out once, so the renderer knows its viewport before the first frame.

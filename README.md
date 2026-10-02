@@ -114,15 +114,14 @@ what is missing where.
 This desktop JVM program plays a song, seeks, and closes the player:
 
 ```kotlin
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlin.time.Duration.Companion.seconds
 
 fun main() = runBlocking {
-    val player = KitePlayerPlatform.createOrNull()
-        ?: error("KitePlayer cannot run here: ${KitePlayerPlatform.availability}")
+    val player = KitePlayer()
     player.open(MediaItem("/path/to/song.mp3"))   // returns when the item is open and paused
     player.play()
     delay(10.seconds)
@@ -266,43 +265,54 @@ kiteplayer-audioviz                  optional audio visualiser over Kite3D
 
 ## Play something
 
-Three steps: create a player, show it, open something.
+Three steps: create a player, show it, open something. The order of the last two does not
+matter: media may open before the view is on screen.
 
 ```kotlin
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.KitePlayer
 
-val player = KitePlayerPlatform.createOrNull()
-    ?: error("KitePlayer cannot run here: ${KitePlayerPlatform.availability}")
+val player = KitePlayer()
 ```
 
-In Compose, show the player with `KitePlayerVideo`:
+`KitePlayer()` builds the player on this platform's default stack: FFmpeg, and the platform's own
+audio output. Where the platform cannot play, it throws a `PlaybackException` that says why;
+`KitePlayer.isAvailable` checks that first. Settings go in a block, for example
+`KitePlayer { subtitles { preferredLanguages = listOf("ja") } }`.
+
+In Compose, `rememberKitePlayer()` builds the player and closes it when the composable leaves.
+`KitePlayerVideo` shows it:
 
 ```kotlin
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.compose.KitePlayerVideo
+import io.github.yuroyami.kiteplayer.compose.rememberKitePlayer
 
-KitePlayerVideo(player = player, modifier = Modifier.fillMaxSize())
+val player = rememberKitePlayer()
+KitePlayerVideo(player, Modifier.fillMaxSize())
+LaunchedEffect(Unit) {
+    player.open(MediaItem("https://example.com/movie.mkv"))
+    player.play()
+}
 ```
 
-For a native view, create the view, install its renderer binding and hand it the player. The views
-are in `io.github.yuroyami.kiteplayer.view`, and the bindings in `io.github.yuroyami.kiteplayer.mobile`.
-
-| Platform | View | Binding |
-| --- | --- | --- |
-| Android | `KitePlayerView`, from XML or code | `view.installMobileRenderer()` |
-| iOS | `KitePlayerUIView` | `view.installMobileRenderer()` |
-| Desktop JVM | `KitePlayerAwtView` | `view.installDesktopRenderer()` |
+For a native view, give the view the player. The views are in `io.github.yuroyami.kiteplayer.view`:
+`KitePlayerView` on Android, from XML or code, `KitePlayerUIView` on iOS, and `KitePlayerAwtView` on
+the desktop JVM.
 
 ```kotlin
-import io.github.yuroyami.kiteplayer.mobile.installMobileRenderer
-
-view.installMobileRenderer()
 view.player = player
 ```
 
-Then open media from a coroutine that you own, once the view or composable is on screen. `open`,
-`seek` and `closeAndAwait` suspend. `play` and `pause` do not.
+A player from `KitePlayer()` gives the views their renderer. A player built with `KitePlayer.create`
+on backends of your own also needs `view.installMobileRenderer()`, or `installDesktopRenderer()` on
+the desktop, from `io.github.yuroyami.kiteplayer.mobile`.
+
+Then open media from a coroutine that you own. A call that takes time suspends until it is done:
+`open`, `seek` and `closeAndAwait`. `play`, `pause` and the setters return at once.
+`requestSeek` is the seek that does not wait, for a seek bar being dragged.
 
 ```kotlin
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -312,7 +322,7 @@ player.open(MediaItem("https://example.com/movie.mkv"))
 player.play()
 player.seek(90.seconds)
 
-// When the screen goes away:
+// When the screen goes away, unless rememberKitePlayer owns the player:
 player.closeAndAwait()
 ```
 
@@ -396,7 +406,7 @@ can read it back.
 
 | | |
 | --- | --- |
-| Playback | `open`, `play`, `pause`, `stop`, `seek`, `stepFrame`, `close`, `closeAndAwait` |
+| Playback | `open`, `play`, `pause`, `stop`, `seek`, `requestSeek`, `stepFrame`, `close`, `closeAndAwait` |
 | Queue | `openQueue`, `next`, `previous`, `setLoop`, and `addToQueue`, `removeFromQueue`, `moveInQueue`, `clearQueue` while it plays. Items follow each other on the same audio device with no gap; `PlayerConfig.queue` turns that off, and [the gapless design](docs/gapless-queue.md) says when an item opens from scratch instead |
 | Shuffle | `setShuffle`. The items never move. `queueOrder` tells you what plays next |
 | Speed | `setSpeed`, 0.25x to 4x with the pitch kept. `setPreservePitch(false)` lets the pitch change like a tape |
@@ -531,26 +541,19 @@ Android stops a process that plays in the background unless a foreground service
 </application>
 ```
 
-Then attach the media notification to the player's media session. `smallIcon` is your app's
-monochrome notification icon.
+Then attach the media session. With notification options, it shows the media notification and
+keeps the app playing in the background. It also takes audio focus, and it closes with the player.
+`smallIcon` is your app's monochrome notification icon.
 
 ```kotlin
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
-import io.github.yuroyami.kiteplayer.session.KitePlayerMediaSession
 import io.github.yuroyami.kiteplayer.session.MediaNotificationOptions
-import io.github.yuroyami.kiteplayer.session.attachMediaNotification
+import io.github.yuroyami.kiteplayer.session.attachMediaSession
 
-val session = KitePlayerMediaSession(player, context)
-val notification = KitePlayerPlatform.attachMediaNotification(
-    session,
-    context,
-    MediaNotificationOptions(smallIcon = R.drawable.ic_notification),
-)
+player.attachMediaSession(context, MediaNotificationOptions(smallIcon = R.drawable.ic_notification))
 ```
 
-Close the notification before the session, and the session before the player. On iOS, declare
-`UIBackgroundModes` with `audio` and create a `KitePlayerMediaSession` for the lock screen. A
-desktop app keeps playing without help, and a web page plays while its tab is open.
+On iOS, declare `UIBackgroundModes` with `audio` and call `player.attachMediaSession()` for the lock
+screen. A desktop app keeps playing without help, and a web page plays while its tab is open.
 
 <details>
 <summary><b>What the notification does</b>: buttons, wake locks and timeouts</summary>
@@ -560,8 +563,11 @@ desktop app keeps playing without help, and a web page plays while its tab is op
   `album` on the `MediaItem` to choose them; otherwise they come from the file's tags, then its
   file name. `session.setCustomActions` adds your own buttons, and `session.setArtworkLoader`
   supplies the picture.
-- Skip back and skip forward move 15 seconds. Pass `skipInterval` to `KitePlayerMediaSession` for
+- Skip back and skip forward move 15 seconds. Pass `skipInterval` to `attachMediaSession` for
   another interval.
+- The session takes audio focus, so a call or another app pauses or ducks the player, and the
+  player pauses when the headphones come out. `interruptions = null` turns that off, and
+  `background = null` leaves the app's background behaviour alone.
 - While the player plays or buffers, the notification keeps the processor and Wi-Fi awake, so a
   stream keeps loading with the screen off. That needs `WAKE_LOCK`. Pick another `wakeLocks` policy
   in `MediaNotificationOptions`, or `WakeLockPolicy.None` to hold nothing.
@@ -627,7 +633,7 @@ already listening when a song starts. Album art does not count as a picture.
 | iOS | Plays real media on devices, checked by hand. CI runs the tests of every iOS module on the simulator. |
 | macOS arm64, native and desktop JVM | Plays real media. CI runs every module's tests on both, the format matrix included. |
 | Web, wasmJs | Plays through the FFmpeg WebAssembly module with browser audio, from memory, not yet from the network. CI runs the web tests under Node and in a headless browser. |
-| Linux and Windows, native | No audio output and no HTTPS, so `createOrNull()` returns null. Pass `KiteFFmpegMediaBackend()` and your own `OutputBackend` to `KitePlayer.create`. CI runs the media-free tests. |
+| Linux and Windows, native | No audio output and no HTTPS, so `KitePlayer()` throws and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own `OutputBackend` to `KitePlayer.create`. CI runs the media-free tests. |
 | Linux and Windows, desktop JVM | The native libraries are linked. The Linux FFmpeg backend decodes in a container, and neither has played sound on a real machine. |
 | tvOS, watchOS, iOS x64, Android native | Only the engine modules build there; CI runs the tvOS and watchOS tests on their simulators. |
 | js | The facade reports unavailable. |

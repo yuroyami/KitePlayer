@@ -177,9 +177,7 @@ seam that replaces that filter. Give the engine an `AudioResamplerFactory` in
 and it runs FFmpeg's libswresample.
 
 ```kotlin
-val player = KitePlayerPlatform.createOrNull(
-    PlayerConfig(audio = AudioConfig(resampler = KiteFFmpegResampler())),
-)
+val player = KitePlayer { audio { resampler = KiteFFmpegResampler() } }
 ```
 
 The engine calls `create(inputRate, outputRate, channels)` for each audio stream, and again after

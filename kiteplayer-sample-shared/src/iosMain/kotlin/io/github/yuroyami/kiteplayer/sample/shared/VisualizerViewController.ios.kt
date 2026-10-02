@@ -1,15 +1,15 @@
 package io.github.yuroyami.kiteplayer.sample.shared
 
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.window.ComposeUIViewController
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
-import io.github.yuroyami.kiteplayer.session.KitePlayerMediaSession
-import io.github.yuroyami.kiteplayer.session.attachBackgroundHandling
-import io.github.yuroyami.kiteplayer.session.attachInterruptionHandling
+import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.availability
+import io.github.yuroyami.kiteplayer.compose.rememberKitePlayer
+import io.github.yuroyami.kiteplayer.isAvailable
+import io.github.yuroyami.kiteplayer.session.attachMediaSession
 import io.github.yuroyami.kiteplayer.audioviz.SongMapStore
 import platform.Foundation.NSBundle
 import platform.Foundation.NSCachesDirectory
@@ -25,28 +25,16 @@ import platform.UIKit.UIViewController
  * and pauses for a call.
  */
 fun visualizerViewController(): UIViewController = ComposeUIViewController {
-    val player = remember { KitePlayerPlatform.createOrNull() }
-    if (player == null) {
+    if (!KitePlayer.isAvailable) {
         BasicText(
-            "KitePlayer cannot run here: ${KitePlayerPlatform.availability}",
+            "KitePlayer cannot run here: ${KitePlayer.availability}",
             style = TextStyle(color = Color.White),
         )
         return@ComposeUIViewController
     }
-    // The now playing card and the two playback guards, closed before the player.
-    val handles = remember(player) {
-        listOf(
-            KitePlayerMediaSession(player),
-            KitePlayerPlatform.attachInterruptionHandling(player),
-            KitePlayerPlatform.attachBackgroundHandling(player),
-        )
-    }
-    DisposableEffect(player) {
-        onDispose {
-            handles.forEach { runCatching { it.close() } }
-            player.close()
-        }
-    }
+    val player = rememberKitePlayer()
+    // The now playing card, the background handling and the call handling. They close with the player.
+    remember(player) { player.attachMediaSession() }
     val media = remember {
         val bundle = NSBundle.mainBundle
         // sample-song, then sample-song-2 and up, so a build may carry several.

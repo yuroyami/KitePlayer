@@ -75,8 +75,8 @@ internal class Alchemy : ShaderPreset(
         VizDrive(VizDriver.Breakdown, VizProperty.Cut, VizCurve.Discrete),
         VizDrive(VizDriver.Section, VizProperty.Cut, VizCurve.Discrete),
         VizDrive(VizDriver.Key, VizProperty.Colour),
-        VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
-        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        // The flows are paced by the music's motion rate, which mood is part of, but a steady frame
+        // draws a picture that stands still, so no speed is declared that a probe could not see.
         silence = VizSilence.Fade,
     )
 
@@ -199,9 +199,18 @@ internal class Alchemy : ShaderPreset(
             val a = random.next() * TAU
             sparks.burst(0.5f + cos(a) * 0.3f / kit.aspect, 0.5f + sin(a) * 0.3f,
                 gestures.hatSpawn(5), 0.25f, 0.5f, 0.01f, 0.55f, Sprite.SPARK)
+            // The hat lands on the matter too: specks of ink thrown off past the ring, which the flow carries.
+            repeat(gestures.hatSpawn(3)) {
+                val b = a + random.signed() * 0.6f
+                val r = 0.72f + 0.18f * random.next()
+                memory.disc(cos(b) * r, sin(b) * r, 0.04f + 0.06f * gestures.hat, 0.5f + 0.4f * gestures.hat)
+            }
         }
         sparks.advance(dt, drag = 1f)
     }
+
+    /** A 0..1 position folded in half, so a shape drawn round a circle reads the bands with no seam. */
+    private fun folded(t: Float): Float = if (t <= 0.5f) t * 2f else (1f - t) * 2f
 
     private fun blendedFlow(): Flow = if (flowMix >= 1f) currentFlow else Flows.Mixed(previousFlow, currentFlow, flowMix)
 
@@ -229,7 +238,10 @@ internal class Alchemy : ShaderPreset(
             "Ring" -> {
                 for (i in 0 until POINTS) {
                     val a = i / (POINTS - 1f) * TAU
-                    val r = 0.55f + 0.12f * frame.scope.sampleAt(i / (POINTS - 1f)) * gain + 0.08f * frame.bassRel
+                    val t = i / (POINTS - 1f)
+                    // The waveform and the spectrum, folded so the ring has no seam where the ends meet.
+                    val r = 0.55f + 0.12f * frame.scope.sampleAt(t) * gain + 0.15f * frame.bandsRel.sampleAt(folded(t)) +
+                        0.08f * frame.bassRel
                     xs[i] = cos(a) * r; ys[i] = sin(a) * r
                 }
                 memory.line(xs, ys, POINTS, 1.6f, light)
@@ -259,7 +271,7 @@ internal class Alchemy : ShaderPreset(
                     val corner = floor(t * sides) / sides * TAU
                     val next = corner + TAU / sides
                     val along = (t * sides) - floor(t * sides)
-                    val r = 0.55f + 0.1f * frame.scope.sampleAt(t) * gain
+                    val r = 0.55f + 0.1f * frame.scope.sampleAt(t) * gain + 0.1f * frame.bandsRel.sampleAt(folded(t))
                     xs[i] = (cos(corner) * (1f - along) + cos(next) * along) * r
                     ys[i] = (sin(corner) * (1f - along) + sin(next) * along) * r
                 }
@@ -423,6 +435,24 @@ internal class Alchemy : ShaderPreset(
     }
 
     internal fun fieldInkAt(x: Float, y: Float): Float = memory.inkAt(x, y)
+
+    /** How far from the middle the ink sits on average, weighted by how much there is, for tests. */
+    internal fun fieldMeanRadius(): Float {
+        var weighted = 0f
+        var total = 0f
+        var y = -0.975f
+        while (y < 1f) {
+            var x = -kit.aspect + 0.025f
+            while (x < kit.aspect) {
+                val ink = memory.inkAt(x, y)
+                weighted += ink * kotlin.math.sqrt(x * x + y * y)
+                total += ink
+                x += 0.05f
+            }
+            y += 0.05f
+        }
+        return if (total <= 0f) 0f else weighted / total
+    }
 
     override fun onReset() {
         memory.clear()

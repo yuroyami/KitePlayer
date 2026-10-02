@@ -54,7 +54,7 @@ half4 main(float2 position) {
 
     // The core: a small white star with a halo the kick widens.
     float pixels = radius * uResolution.y * 0.5;
-    float coreSize = max(1.5, uResolution.y * 0.01) * (1.0 + 0.6 * uPush);
+    float coreSize = max(1.5, uResolution.y * 0.01) * (1.0 + 0.3 * uPush);
     float core = 1.0 - smoothstep(coreSize - 0.5, coreSize + 1.0, pixels);
     core += (0.5 + 0.5 * uPush) * exp(-pixels / (coreSize * 3.0));
     colour = mix(colour, float3(1.0), clamp(core, 0.0, 1.0));
@@ -69,7 +69,7 @@ half4 main(float2 position) {
         float4 a = impulseA(i);
         float front = radius - ringAge * 1.6;
         float ring = exp(-front * front * 900.0) * a.z * (1.0 - ringAge / 0.8);
-        colour += paletteCycled(0.55 + hue) * ring * 1.5;
+        colour += paletteCycled(0.55 + hue) * ring * 0.75;
     }
 
     // The transmutation: gold inside the spreading front and inside the cooling one.

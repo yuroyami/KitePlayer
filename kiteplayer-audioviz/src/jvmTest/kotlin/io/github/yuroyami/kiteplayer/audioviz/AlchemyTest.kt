@@ -48,15 +48,15 @@ class AlchemyTest {
         val kicked = Alchemy()
         var plainInk = 0f
         var kickedInk = 0f
-        // Just outside the ring, which sits near 0.59 here: the ring itself is drawn anew every frame,
-        // so only the ink the push carries outward can differ.
+        // The ring itself is drawn anew every frame in both runs, so the push shows in the ink it carries
+        // outward: the ink's mean distance from the middle grows.
         RenderHarness.forEachFrameOf(plain, 96, 54, 70, VizPalette.Prism, source = { InjectedFrames.frame(null, it) }) { _, step ->
-            if (step == 69) plainInk = plain.fieldInkAt(0.65f, 0f)
+            if (step == 69) plainInk = plain.fieldMeanRadius()
         }
         RenderHarness.forEachFrameOf(kicked, 96, 54, 70, VizPalette.Prism, source = { InjectedFrames.frame(VizDriver.LowHit, it) }) { _, step ->
-            if (step == 69) kickedInk = kicked.fieldInkAt(0.65f, 0f)
+            if (step == 69) kickedInk = kicked.fieldMeanRadius()
         }
-        println("alchemy: ink just outside the ring $plainInk plain, $kickedInk after a kick")
+        println("alchemy: mean ink radius $plainInk plain, $kickedInk after a kick")
         assertTrue(kickedInk > plainInk, "the kick on step 66 must have pushed ink outward by step 69: $plainInk against $kickedInk")
     }
 

@@ -31,6 +31,7 @@ internal class OpenedItem(val source: MediaSource, val bridge: BlockingMediaIo?)
  * reader. A wait anywhere else inside FFmpeg finishes before the cancel is seen.
  */
 internal suspend fun openItem(item: MediaItem): OpenedItem {
+    FFmpegLogForwarding.install()
     val options = preOpenOptions(item)
     // Called once per open: the reader it makes belongs to this source and is closed with it.
     val io = item.io?.open()

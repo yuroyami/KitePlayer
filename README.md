@@ -41,48 +41,75 @@
 
 ## What you get
 
-<table>
-<tr>
-<td width="33%" valign="top">
+**Formats**
 
-**Play**<br>
-Video, audio and subtitles from files, HTTP and HTTPS, memory, or a picked Android file.
+- Video: H.264, H.265 (HEVC) in 8 and 10 bit, AV1, VP9, MPEG-2, MPEG-4 Part 2 and the rest of
+  what FFmpeg decodes.
+- Audio: AAC, MP3, Opus, Vorbis, FLAC, ALAC, AC-3, E-AC-3, DTS, TrueHD and PCM.
+- Containers: MKV, WebM, MP4, MOV, MPEG-TS, AVI, FLV, VOB, WMV, WAV and raw streams.
+- Hardware decoding through MediaCodec on Android and VideoToolbox on Apple, with software decoding
+  when the device cannot. AV1 decodes with dav1d where the device has no AV1 hardware.
+- The web build carries a smaller set: H.264, HEVC, VP9, AAC, MP3, Opus, Vorbis, FLAC and PCM, in
+  MP4, MOV, MKV, WebM, MP3 and FLAC files.
 
-</td>
-<td width="33%" valign="top">
+**Picture**
 
-**Show**<br>
-A native view (Android View, UIKit or AWT), an AppKit window, or one Compose composable.
+- True HDR: HDR10 and HLG show as HDR on a display that can show it, through Metal on a Mac or an
+  iPhone and through `KitePlayerView` on an Android HDR display. Elsewhere they are tone mapped.
+- Picture-in-picture on Android, iOS and macOS, and a floating window on the desktop JVM.
+- Rotation and mirroring from the file, on every renderer.
+- Fit, fill and stretch, zoom, pan and a forced aspect ratio. Brightness, contrast, saturation and
+  hue.
+- Dithering, debanding and a sharper scaler, on Apple's Metal renderer and Android's GPU renderer.
+- A native view on each platform, or Compose with two paths: the platform's video view, or video
+  drawn by Compose that takes clipping, alpha and shared element transitions.
+- Frame stepping, screenshots to PNG or JPEG, and thumbnails.
 
-</td>
-<td width="33%" valign="top">
+**Sound**
 
-**Subtitles**<br>
-ASS and SSA drawn by libass as authored, plus SubRip, WebVTT and Blu-ray, DVD and DVB images.
+- Speed from 0.25x to 4x with the pitch kept. A speed change while it plays makes no pause and no
+  gap.
+- A ten band equaliser with a preamp, balance, ReplayGain, volume up to twice the normal level
+  through a limiter, audio delay, and a sleep timer that fades out.
+- Surround folds into the speakers the device has, and mono or stereo can fill a surround device.
+- A choice of output device on macOS and the desktop JVM.
+- Waveforms, and an optional audio visualiser for media with no picture.
 
-</td>
-</tr>
-<tr>
-<td width="33%" valign="top">
+**Subtitles**
 
-**Sound**<br>
-A ten band equaliser, ReplayGain, balance, speed from 0.25x to 4x with the pitch kept, and a sleep timer.
+- ASS and SSA drawn by libass as authored: signs, karaoke, animated transforms and the fonts the
+  file carries.
+- SubRip and WebVTT, and Blu-ray (PGS), DVD, DVB and XSUB image subtitles.
+- External subtitle files that load during playback, and a second subtitle track at the same time.
+- Delay, scale, position, style and a safe area that keeps text out of cutouts and controls.
 
-</td>
-<td width="33%" valign="top">
+**Streaming and input**
 
-**Queue**<br>
-Items that follow each other with no gap, shuffle, loops, chapters, and a saved place to resume.
+- HTTP and HTTPS with your headers, through OkHttp on Android and the JVM and NSURLSession on
+  Apple.
+- HLS: master playlists, a choice of variant, an automatic step down when the network is slow,
+  MPEG-TS and fMP4 segments, AES-128, separate audio and subtitle renditions, and live playlists.
+- DASH: one representation of an on-demand manifest.
+- Files, memory, bytes that your code pushes, streams, and Android content URIs and assets.
+- Recording of what plays into a Matroska file, with no re-encode.
 
-</td>
-<td width="33%" valign="top">
+**Playback**
 
-**Background**<br>
-A media notification and lock screen controls, and an optional audio visualiser.
+- A gapless queue, shuffle, loops, chapters, an A-B loop and position markers.
+- Precise seeks, or the nearest keyframe at once and the exact frame a moment later for fast
+  scrubbing.
+- Resume: one call saves the item, the position, the tracks and the speed.
+- An external clock that playback follows, for watching together.
+- Typed errors and warnings, a diagnostics dump, and a trace that Perfetto opens.
 
-</td>
-</tr>
-</table>
+**On the device**
+
+- A media notification and lock screen controls on Android and iOS, and playback in the
+  background.
+- Screen reader labels on the views and both Compose paths.
+
+Not every platform has every feature. [Where it runs](#where-it-runs) and [Limits](#limits) say
+what is missing where.
 
 This desktop JVM program plays a song, seeks, and closes the player:
 

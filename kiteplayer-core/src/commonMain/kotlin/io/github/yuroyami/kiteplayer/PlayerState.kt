@@ -403,10 +403,10 @@ public enum class SyncMode {
     VideoMaster,
 
     /**
-     * A wall clock drives playback and audio is resampled to follow it.
-     *
-     * Not implemented yet, so [KitePlayer.create] refuses it with
-     * [PlaybackError.ConfigurationInvalid] rather than play on the audio clock.
+     * A clock the caller owns drives playback, set with [KitePlayer.setExternalClock]: the audio
+     * speeds up or slows down slightly to follow it, and the picture follows the audio. See
+     * [ExternalClock]. Until a clock is set, playback runs on its audio clock, as [Auto] does, and
+     * [PlaybackWarning.ExternalClockSilent] says so once.
      */
     ExternalMaster,
 }

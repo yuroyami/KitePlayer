@@ -81,6 +81,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `PlaybackError.RendererIncompatible`, so a `when` that lists every error needs the new branch.
   Both new members have defaults, so existing decoders and renderers keep compiling and behave as
   before. The MediaCodec decoders of `kiteplayer-output` declare their frames.
+- Playback can follow a clock the application owns (#91). `KitePlayer.setExternalClock` takes an
+  `ExternalClock`, which answers the media position that should be audible at an instant. A small
+  difference closes through a speed change of at most `PlayerConfig.externalClock.maxTrim`, 0.5
+  percent by default, with the pitch kept. A jump is one precise seek. A clock that falls silent or
+  stops moving leaves playback running on its own, and `PlaybackWarning.ExternalClockSilent` says so
+  once. Play and pause stay with the commands. `KitePlayer.create` accepts `SyncMode.ExternalMaster`
+  now. `PlayerConfig` gains `externalClock`, which changes its generated data-class methods, so
+  recompile, and a `when` that lists every warning needs the new branch.
 
 ## [0.2.0] - 2026-09-29
 

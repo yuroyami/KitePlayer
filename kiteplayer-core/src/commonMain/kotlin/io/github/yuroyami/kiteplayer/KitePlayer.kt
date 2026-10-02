@@ -507,6 +507,16 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.SetHdrPolicy(value, CompletableDeferred()))
     }
 
+    /**
+     * Makes playback follow [clock], or nothing when it is null. Legal at any time, and it lasts
+     * across items until it is replaced. See [ExternalClock] for how each answer is followed, and
+     * [PlayerConfig.externalClock] for the largest speed change it may use.
+     */
+    @Throws(IllegalStateException::class)
+    public fun setExternalClock(clock: ExternalClock?) {
+        core.post(CoreCommand.SetExternalClock(clock, CompletableDeferred()))
+    }
+
     private fun checkRenderQuality(value: RenderQuality) {
         require(value.debandThreshold.isFinite() && value.debandThreshold >= 0f) {
             "the deband threshold must be finite and not negative, was ${value.debandThreshold}"
@@ -1315,8 +1325,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
          * written against. [close] requests that work; [closeAndAwait] proves its completion.
          *
          * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] when no media backend or no
-         *         output backend was supplied, or when [PlayerConfig.syncMode] is
-         *         [SyncMode.ExternalMaster], which is not implemented yet.
+         *         output backend was supplied.
          */
         @Throws(PlaybackException::class)
         public fun create(config: PlayerConfig = PlayerConfig()): KitePlayer {
@@ -1332,14 +1341,6 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
                         "and no audio device. On macOS pass AppleOutputBackend from kiteplayer-output",
                 ),
             )
-            if (config.syncMode == SyncMode.ExternalMaster) {
-                throw PlaybackException(
-                    PlaybackError.ConfigurationInvalid(
-                        "SyncMode.ExternalMaster is not implemented yet, so nothing can follow an external " +
-                            "clock. Use SyncMode.Auto, AudioMaster or VideoMaster",
-                    ),
-                )
-            }
             return KitePlayer(
                 PlaybackCore(
                     config = config,

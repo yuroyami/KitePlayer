@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -32,6 +33,21 @@ class VideoPlaybackTest {
         queueCapacity = 4,
         dropPolicy = FrameDropPolicy.LateOnly,
     )
+
+    // A wait cut down to whole microseconds read a frame due in 500 ns as no wait at all, while
+    // the frame was not shown, so a schedule asked again at once and never slept (#91).
+    @Test
+    fun `a frame due in under a microsecond is a wait and not a frame due now`() = runTest {
+        val clock = TestClock()
+        val renderer = RecordingRenderer()
+        val video = playback(renderer, clock)
+        listOf(0L, 40L).forEach { video.submit(FakeVideoFrame(pts(it))) }
+        video.tick(null)
+        clock.advance(40.milliseconds - 500.nanoseconds)
+        val wait = video.tick(null)
+        assertEquals(true, wait > Duration.ZERO, "500 ns before its slot the frame must be a wait, got $wait")
+        assertEquals(listOf(pts(0)), renderer.timestamps, "and it is not shown early")
+    }
 
     // A dropped frame still took its slot, so the frame after it is one period away, not two (#198).
     @Test

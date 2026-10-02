@@ -80,6 +80,8 @@ public data class PlayerConfig(
      * the value a fresh player starts at.
      */
     val hdrPolicy: HdrPolicy = HdrPolicy.Auto,
+    /** How playback follows a clock set with [KitePlayer.setExternalClock]. See [ExternalClock]. */
+    val externalClock: ExternalClockPolicy = ExternalClockPolicy(),
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive

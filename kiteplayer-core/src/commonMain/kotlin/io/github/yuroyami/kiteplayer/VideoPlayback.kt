@@ -505,7 +505,9 @@ public class VideoPlayback(
         queue.close()
     }
 
-    private fun Long.nanosAsDuration(): Duration = (this / 1_000).microseconds
+    // Rounded up: a wait cut down to zero made a frame due in under a microsecond look due now
+    // while it was not, and the schedule asked again at once without ever sleeping (#91).
+    private fun Long.nanosAsDuration(): Duration = ((this + 999) / 1_000).microseconds
 
     private companion object {
         /** How long to wait when there is nothing queued. Short enough to stay responsive. */

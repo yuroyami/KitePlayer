@@ -591,4 +591,13 @@ public sealed class PlaybackWarning {
     public data class SegmentSkipped(val uri: String, val detail: String) : PlaybackWarning() {
         override val message: String get() = "${redactUri(uri)} could not be read and was skipped: ${redactUrisIn(detail)}"
     }
+
+    /**
+     * Playback follows no external clock right now: none is set although the sync mode is
+     * [SyncMode.ExternalMaster], or the clock has given no moving answer for 2 s. Playback goes on
+     * at its own pace on its audio clock. Sent once, and armed again when answers move again.
+     */
+    public data class ExternalClockSilent(val detail: String) : PlaybackWarning() {
+        override val message: String get() = "playback follows no external clock: $detail"
+    }
 }

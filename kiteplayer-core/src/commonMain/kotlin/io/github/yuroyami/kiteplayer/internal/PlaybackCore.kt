@@ -54,7 +54,10 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSink
 import io.github.yuroyami.kiteplayer.spi.BackendSession
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
+import kotlin.math.abs
 import kotlin.math.log10
+import kotlin.math.round
+import kotlin.math.sign
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
@@ -641,6 +644,23 @@ internal class PlaybackCore(
     private var abLoopB: Duration? = null
     private var speed: Double = 1.0
 
+    /*
+     * Following an external clock (#91). The trim multiplies the caller's speed while a small
+     * difference closes; it is 1 whenever nothing is being followed. All actor-confined.
+     */
+    private var externalClock: io.github.yuroyami.kiteplayer.ExternalClock? = null
+    private var externalTrim: Double = 1.0
+    private var externalAskedAtNanos: Long = NO_POSITION
+    private var externalLastAnswerUs: Long = NO_POSITION
+    private var externalSilentSinceNanos: Long = NO_POSITION
+    private var externalSilentWarned: Boolean = false
+    private var externalSeekAtNanos: Long = NO_POSITION
+    private var externalSeekInFlight: Boolean = false
+    private var externalSeekLatencyNanos: Long = 0L
+
+    /** The speed the pipelines run at: the caller's, times the external clock's trim. */
+    private val effectiveSpeed: Double get() = speed * externalTrim
+
     /** Whether speed keeps pitch, seeded from config. A live change applies at once, like speed. */
     private var preservePitch: Boolean = config.audio.preservePitch
     private var volume: Float = 1.0f
@@ -902,6 +922,7 @@ internal class PlaybackCore(
         Handler("handleSubtitles") { handleSubtitles() },
         Handler("handleEof") { handleEof() },
         Handler("handleLoop") { handleLoop() },
+        Handler("handleExternalClock") { handleExternalClock() },
         Handler("handleSleepTimer") { handleSleepTimer() },
         Handler("handleQueueAdvance") { handleQueueAdvance() },
         Handler("handleQueuedSeek") { handleQueuedSeek() },
@@ -1192,6 +1213,12 @@ internal class PlaybackCore(
     suspend fun setSpeed(value: Double) {
         val reply = CompletableDeferred<Unit>()
         send(CoreCommand.SetSpeed(value, reply))
+        awaitReply(reply)
+    }
+
+    suspend fun setExternalClock(clock: io.github.yuroyami.kiteplayer.ExternalClock?) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.SetExternalClock(clock, reply))
         awaitReply(reply)
     }
 
@@ -1820,8 +1847,8 @@ internal class PlaybackCore(
                 // schedule paces at the rate the clock reports, so it changes at the same moment.
                 // Nothing stops, nothing is flushed, and an unseekable source changes speed too.
                 val failure = runCatching {
-                    active?.audio?.speed = command.value
-                    active?.video?.speed = command.value
+                    active?.audio?.speed = command.value * externalTrim
+                    active?.video?.speed = command.value * externalTrim
                 }.exceptionOrNull()
                 if (failure != null) {
                     command.reply.completeExceptionally(failure)
@@ -1908,6 +1935,11 @@ internal class PlaybackCore(
                 renderQuality = command.value
                 session?.renderer?.setRenderQuality(command.value)
                 if (session == null) pendingRenderer?.setRenderQuality(command.value)
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetExternalClock -> {
+                externalClock = command.value
+                resetExternalFollowing()
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetHdrPolicy -> {
@@ -2647,7 +2679,7 @@ internal class PlaybackCore(
                 rollback += { videoPlayback.close() }
                 // Pre-start, so it applies immediately; the scheduler for this playback does not
                 // exist yet, which is what makes the immediate path of the setter safe.
-                videoPlayback.speed = speed
+                videoPlayback.speed = effectiveSpeed
             }
 
             stage(OpenStage.Output)
@@ -2668,7 +2700,7 @@ internal class PlaybackCore(
                 rollback += { createdPlayback.close() }
                 // Before open: open() captures the wanted rate as the fresh path's epoch, so a
                 // player already at 2x opens its next file at 2x rather than at 1x until a seek.
-                createdPlayback.speed = speed
+                createdPlayback.speed = effectiveSpeed
                 createdPlayback.preservePitch = preservePitch
                 negotiated = createdPlayback.open(audioDecoder.outputFormat)
                 createdPlayback.volume = volume
@@ -3614,7 +3646,7 @@ internal class PlaybackCore(
         try {
             val playback = newAudioPlayback(createdSink)
             createdPlayback = playback
-            playback.speed = speed
+            playback.speed = effectiveSpeed
             playback.preservePitch = preservePitch
             val negotiated = playback.open(decoder.outputFormat)
             playback.volume = volume
@@ -5522,6 +5554,119 @@ internal class PlaybackCore(
      * impossible: by the time this pass ends the status has left Ended.
      */
     /**
+     * Follows the external clock, one question at a time (#91). See [io.github.yuroyami.kiteplayer.ExternalClock]
+     * for what each answer does. Only while playing, with no seek in hand: a pause, a seek or a
+     * reopen starts the following again from a trim of 1.
+     */
+    private fun handleExternalClock() {
+        val external = externalClock
+        val active = session
+        if (active == null || status != PlaybackStatus.Playing || pendingSeek != null) {
+            if (externalTrim != 1.0) applyExternalTrim(1.0)
+            externalAskedAtNanos = NO_POSITION
+            return
+        }
+        val now = clock.nanos()
+        if (externalSeekInFlight) {
+            // The first pass that plays again after the seek: what the seek cost, which the next
+            // seek adds to its target so that it lands where the clock will be.
+            externalSeekInFlight = false
+            externalSeekLatencyNanos = (now - externalSeekAtNanos).coerceIn(0L, EXTERNAL_SEEK_LATENCY_CAP_NANOS)
+        }
+        if (external == null) {
+            if (config.syncMode == SyncMode.ExternalMaster) {
+                noteExternalSilence(now, "no external clock is set, although the sync mode is ExternalMaster")
+            }
+            return
+        }
+        val askedAt = externalAskedAtNanos
+        if (askedAt != NO_POSITION && now - askedAt < EXTERNAL_ASK_INTERVAL_NANOS) {
+            wakeIn((EXTERNAL_ASK_INTERVAL_NANOS - (now - askedAt)).nanoseconds)
+            return
+        }
+        externalAskedAtNanos = now
+        wakeIn(EXTERNAL_ASK_INTERVAL_NANOS.nanoseconds)
+        val answer = try {
+            external.positionAt(now)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            null
+        }
+        val answerUs = answer?.inWholeMicroseconds
+        // Only an answer that moved since the last question is followed. A clock that stopped
+        // would otherwise pull playback back with a seek before anything could tell it stopped.
+        val moved = answerUs != null && externalLastAnswerUs != NO_POSITION &&
+            abs(answerUs - externalLastAnswerUs) > EXTERNAL_MOVED_US
+        externalLastAnswerUs = answerUs ?: NO_POSITION
+        if (answerUs == null || !moved) {
+            // No answer to follow, so the player runs on its own audio clock. A stopped clock is
+            // never read as a pause: play and pause belong to the caller's commands.
+            if (externalTrim != 1.0) applyExternalTrim(1.0)
+            noteExternalSilence(
+                now,
+                if (answerUs == null) "the external clock gave no answer" else "the external clock stopped moving",
+            )
+            return
+        }
+        externalSilentSinceNanos = NO_POSITION
+        externalSilentWarned = false
+
+        val errorUs = answerUs - currentPosition().micros
+        val maxTrim = config.externalClock.maxTrim
+        when {
+            abs(errorUs) >= EXTERNAL_SEEK_US && active.source.seekable && active.source.duration?.let { answerUs <= it.micros } != false -> {
+                val askedRecently = externalSeekAtNanos != NO_POSITION && now - externalSeekAtNanos < EXTERNAL_SEEK_COOLDOWN_NANOS
+                if (askedRecently) {
+                    // A second jump this soon is likely the last seek's own delay: lean on the trim.
+                    applyExternalTrim(1.0 + sign(errorUs.toDouble()) * maxTrim)
+                } else {
+                    externalSeekAtNanos = now
+                    externalSeekInFlight = true
+                    applyExternalTrim(1.0)
+                    val targetUs = (answerUs + externalSeekLatencyNanos / 1_000L).coerceAtLeast(0L)
+                    queueSeek(SeekRequest(SeekTarget.Absolute(Pts(targetUs)), SeekMode.Precise), null)
+                }
+            }
+            abs(errorUs) < EXTERNAL_DEADBAND_US -> applyExternalTrim(1.0)
+            else -> {
+                // Close the difference over about a second, within the cap, in steps of 0.05
+                // percent so the tempo stage is not retuned on every question.
+                val wanted = (errorUs / 1_000_000.0).coerceIn(-maxTrim, maxTrim)
+                applyExternalTrim(1.0 + round(wanted / EXTERNAL_TRIM_STEP) * EXTERNAL_TRIM_STEP)
+            }
+        }
+    }
+
+    /** Warns once that nothing is followed, after the silence has lasted [EXTERNAL_SILENT_NANOS]. */
+    private fun noteExternalSilence(now: Long, detail: String) {
+        if (externalSilentSinceNanos == NO_POSITION) externalSilentSinceNanos = now
+        if (!externalSilentWarned && now - externalSilentSinceNanos >= EXTERNAL_SILENT_NANOS) {
+            externalSilentWarned = true
+            warn(PlaybackWarning.ExternalClockSilent(detail))
+        }
+    }
+
+    /** Sets the trim and hands the new effective speed to both pipelines. */
+    private fun applyExternalTrim(trim: Double) {
+        if (trim == externalTrim) return
+        externalTrim = trim
+        session?.audio?.speed = effectiveSpeed
+        session?.video?.speed = effectiveSpeed
+    }
+
+    /** A new clock, or none: the following starts from the beginning. */
+    private fun resetExternalFollowing() {
+        applyExternalTrim(1.0)
+        externalAskedAtNanos = NO_POSITION
+        externalLastAnswerUs = NO_POSITION
+        externalSilentSinceNanos = NO_POSITION
+        externalSilentWarned = false
+        externalSeekAtNanos = NO_POSITION
+        externalSeekInFlight = false
+    }
+
+    /**
      * The sleep timer, one pass at a time.
      *
      * Runs only while playback is advancing, so a paused player does not sleep through its own
@@ -6011,7 +6156,7 @@ internal class PlaybackCore(
         val playback = newAudioPlayback(createdSink)
         try {
             // Before open, which captures the wanted rate as the fresh path's epoch.
-            playback.speed = speed
+            playback.speed = effectiveSpeed
             playback.preservePitch = preservePitch
             val negotiated = playback.open(lane.decoder.outputFormat)
             playback.volume = volume
@@ -6086,7 +6231,7 @@ internal class PlaybackCore(
         if (incoming.videoDecoderDeferred) startDeferredVideo(incoming)
         // The preload built its schedule at the speed of that moment; the speed may have changed
         // since, and the schedule has not started, so the current one applies at once.
-        incoming.video?.speed = speed
+        incoming.video?.speed = effectiveSpeed
         startVideoSchedule(incoming)
         reportContainerDivergences(incoming)
         emitEvent(PlayerEvent.Opened(next.item, tracks))
@@ -9536,6 +9681,16 @@ private fun Duration.atLeastOneTick(): Duration = if (this < DISPATCHER_TICK) DI
 
 private val DISPATCHER_TICK: Duration = 1.milliseconds
 
+// Following an external clock (#91). The thresholds are the starting values of the design.
+private const val EXTERNAL_ASK_INTERVAL_NANOS: Long = 50_000_000L
+private const val EXTERNAL_DEADBAND_US: Long = 2_000L
+private const val EXTERNAL_SEEK_US: Long = 150_000L
+private const val EXTERNAL_SEEK_COOLDOWN_NANOS: Long = 1_000_000_000L
+private const val EXTERNAL_SEEK_LATENCY_CAP_NANOS: Long = 2_000_000_000L
+private const val EXTERNAL_MOVED_US: Long = 1_000L
+private const val EXTERNAL_SILENT_NANOS: Long = 2_000_000_000L
+private const val EXTERNAL_TRIM_STEP: Double = 0.0005
+
 /**
  * Which stream of a kind a session should use.
  *
@@ -9839,6 +9994,8 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         CoreCommand("setRenderQuality", reply)
     class SetHdrPolicy(val value: io.github.yuroyami.kiteplayer.HdrPolicy, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setHdrPolicy", reply)
+    class SetExternalClock(val value: io.github.yuroyami.kiteplayer.ExternalClock?, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setExternalClock", reply)
     class ReportDynamicRange(val value: io.github.yuroyami.kiteplayer.VideoDynamicRange, val reply: CompletableDeferred<Unit>) :
         CoreCommand("reportDynamicRange", reply)
     class SetVideoAdjustments(val value: VideoAdjustments, val reply: CompletableDeferred<Unit>) :

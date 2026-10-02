@@ -48,9 +48,14 @@ class WarningAuditTest {
         PlaybackWarning.SourceReconnecting(1_024, 1, "x"),
         PlaybackWarning.GaplessFallback(1, "x"),
         PlaybackWarning.SegmentSkipped("https://cdn.example/seg-1.ts", "x"),
+        PlaybackWarning.ExternalClockSilent("x"),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
+        is PlaybackWarning.ExternalClockSilent -> listOf(
+            "PlaybackCore.handleExternalClock, after 2 s of playing with no moving answer from the " +
+                "external clock, or with none set under SyncMode.ExternalMaster",
+        )
         is PlaybackWarning.SegmentSkipped -> listOf(
             "HlsLedger in :kiteplayer-ffmpeg, when an address that an HLS playlist names fails to open or " +
                 "fails during a read; it reaches the player through KiteFFmpegSource.onWarning",

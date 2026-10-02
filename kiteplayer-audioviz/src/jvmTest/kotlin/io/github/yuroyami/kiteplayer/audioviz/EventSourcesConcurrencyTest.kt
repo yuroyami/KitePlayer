@@ -17,6 +17,10 @@ class EventSourcesConcurrencyTest {
     fun lateConfirmationsAndResetsNeverMixIdentitiesOrRepeatEvents() {
         val timeline = SpectrumTimeline(256)
         val steps = 40_000
+        // The race happened only if the timeline was reset while frames went out and both readers
+        // took a large share of the events (#397).
+        val minResets = 3
+        val minEvents = 1_000
         val stop = AtomicBoolean(false)
         val failure = AtomicReference<Throwable?>(null)
         val start = CountDownLatch(1)
@@ -29,6 +33,7 @@ class EventSourcesConcurrencyTest {
         val received = AtomicLongArray(2)
         val workers = ArrayList<Thread>()
         fun running() = !stop.get() && failure.get() == null
+        fun exercised() = resets.get() >= minResets && (0 until 2).all { received.get(it) >= minEvents }
         fun worker(name: String, body: () -> Unit) = Thread({
             try { start.await(); body() } catch (error: Throwable) { failure.compareAndSet(null, error) }
             finally { completed.countDown() }
@@ -39,7 +44,11 @@ class EventSourcesConcurrencyTest {
             var publisher = timeline.publisher()
             var at = 0L
             var structureThrough: Long? = null
-            for (step in 0 until steps) {
+            // A busy machine can wake the resetter late, or give the readers little time, until
+            // the frames are all out. So the producer goes on until the race has happened, up to
+            // ten times as many frames, after which the checks at the end say it was missed.
+            var step = 0
+            while (step < steps || (!exercised() && step < steps * 10)) {
                 // A failed reader ends the run; the producer has nothing left to prove.
                 if (failure.get() != null) return@worker
                 if (timeline.revision != publisher.revision || timeline.generation != generation) {
@@ -63,6 +72,7 @@ class EventSourcesConcurrencyTest {
                 newest.set(at)
                 pushed.set(step + 1L)
                 if (step % 13 == 0) Thread.yield()
+                step++
             }
             stop.set(true)
         }
@@ -119,9 +129,9 @@ class EventSourcesConcurrencyTest {
         // Nothing failed, but the run proved something only if the race really happened: the timeline
         // was reset several times and both readers took a large share of the events. A run measured
         // 16 to 18 resets and about 8,200 events for each reader.
-        assertTrue(resets.get() >= 3, "the timeline was reset only ${resets.get()} times, so the race was not exercised")
+        assertTrue(resets.get() >= minResets, "the timeline was reset only ${resets.get()} times, so the race was not exercised")
         for (index in 0 until 2) {
-            assertTrue(received.get(index) >= 1_000, "reader $index received only ${received.get(index)} events")
+            assertTrue(received.get(index) >= minEvents, "reader $index received only ${received.get(index)} events")
         }
     }
 }

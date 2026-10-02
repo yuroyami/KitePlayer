@@ -363,6 +363,7 @@ can read it back.
 | Queue | `openQueue`, `next`, `previous`, `setLoop`, and `addToQueue`, `removeFromQueue`, `moveInQueue`, `clearQueue` while it plays. Items follow each other on the same audio device with no gap; `PlayerConfig.queue` turns that off, and [the gapless design](docs/gapless-queue.md) says when an item opens from scratch instead |
 | Shuffle | `setShuffle`. The items never move. `queueOrder` tells you what plays next |
 | Speed | `setSpeed`, 0.25x to 4x with the pitch kept. `setPreservePitch(false)` lets the pitch change like a tape |
+| Sync | `setExternalClock` makes playback follow a clock your app owns, for watching together. A small difference closes through a speed change of at most 0.5 percent with the pitch kept, and a jump is one seek. Play and pause stay with your commands |
 | Sound | `setVolume`, `setMuted`, `setBalance`, `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), `setVideoEnabled(false)` for audio only |
 | Loudness | `PlayerConfig.audio.volumeCeiling` allows volume up to 2.0 through a limiter. `PlayerConfig.audio.replayGain` applies the file's own ReplayGain tags, off by default |
 | Surround | Multichannel audio folds into the speakers the device has. `PlayerConfig.audio.upmix = UpmixMode.Surround` also plays mono and stereo from the other speakers of a surround device, off by default |
@@ -374,7 +375,7 @@ can read it back.
 | Resume | `memento()` saves the item, position, tracks and speed. `restore(memento)` puts them back |
 | Screenshots | `captureFrame`. `kiteplayer-ffmpeg` encodes the frame to PNG or JPEG, and makes thumbnails and waveforms |
 | Recording | `startRecording` copies what the player reads into a Matroska file, with no re-encode. `stopRecording` finishes the file. A seek ends a recording |
-| Rendering | `attachRenderer`, `detachRenderer`, swappable while media plays |
+| Rendering | `attachRenderer`, `detachRenderer`, swappable while media plays. `attachRendererAndAwait` refuses a renderer that cannot show the running decoder's frames and keeps the one before |
 | Diagnosis | `diagnosticsDump`, `warningHistory`, `supportBundle`, and `KiteLog` as the one logging seam, silent by default. `KiteTrace` records a timeline that Chrome's trace viewer and Perfetto open, also silent by default |
 
 Five flows tell your UI what is happening: `state`, `progress`, `stats`, `events` and
@@ -394,7 +395,7 @@ On the desktop JVM and on macOS, you choose the audio output device when you bui
 `audioOutputDevices()` on `DesktopOutputBackend` or `AppleOutputBackend` lists the devices, and
 `withAudioOutputDevice(id)` returns the backend bound to one, for `PlayerConfig.backends`. A bound
 player never moves to another device: when its device is gone, the open fails with
-`PlaybackError.AudioDeviceUnavailable`, and on macOS so does playback when the device disappears.
+`PlaybackError.AudioDeviceUnavailable`, and so does playback when the device disappears.
 On Android and iOS the operating system owns the route.
 
 The Android, iOS and desktop views, and both paths of `KitePlayerVideo`, tell a screen reader that

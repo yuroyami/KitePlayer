@@ -117,6 +117,24 @@ internal object InjectedFrames {
         )
     }
 
+    /** The baseline with one band group raised: the lowest eight bands or the eight above 2 kHz. */
+    fun toneFrame(step: Int, lowBand: Boolean): SpectrumFrame {
+        val base = frame(null, step)
+        if (step < STEP_AT) return base
+        val from = if (lowBand) 0 else 30
+        val bands = base.bands.copyOf().also { for (b in from until from + 8) it[b] = 0.9f }
+        val peaks = base.peaks.copyOf().also { for (b in from until from + 8) it[b] = 0.95f }
+        return SpectrumFrame(
+            ptsMicros = base.ptsMicros, bands = bands, peaks = peaks, scope = base.scope,
+            level = base.level, bass = if (lowBand) 0.85f else 0.2f, mid = base.mid,
+            treble = if (lowBand) 0.2f else 0.85f, beat = 0f, pulse = 0f, bandsRel = bands,
+            levelRel = base.levelRel, bassRel = if (lowBand) 0.85f else 0.2f, midRel = base.midRel,
+            trebleRel = if (lowBand) 0.2f else 0.85f, energy = base.energy, density = base.density,
+            mood = base.mood, loudShort = base.loudShort, loudLong = base.loudLong, trend = base.trend,
+            generation = base.generation, hasTimestamp = true, events = base.events,
+        )
+    }
+
     /** Strengths of the low, body and high hits and the onset on this step. */
     private fun hitsAt(driver: VizDriver?, step: Int, strength: Float): FloatArray {
         val out = FloatArray(4)

@@ -588,6 +588,14 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/FlashGuard {
 	public final fun reset ()V
 }
 
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/FormReadout {
+	public static final field $stable I
+	public fun <init> (Ljava/lang/String;II)V
+	public final fun getBirths ()I
+	public final fun getForm ()Ljava/lang/String;
+	public final fun getMorphs ()I
+}
+
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/MoodSpec {
 	public static final field $stable I
 	public fun <init> (FFFFFFFFFFFFFF)V
@@ -735,6 +743,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/audioviz/viz/Visua
 	public fun getEchoBlend ()Lio/github/yuroyami/kiteplayer/audioviz/viz/EchoBlend;
 	public fun getFeedbackSpin ()F
 	public fun getFeedbackZoom ()F
+	public fun getForms ()Lio/github/yuroyami/kiteplayer/audioviz/viz/FormReadout;
 	public fun getGenes ()Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes;
 	public fun getGround ()Lio/github/yuroyami/kiteplayer/audioviz/viz/ground/Ground;
 	public fun getMapping ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizMapping;
@@ -765,6 +774,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/Visualization$Defa
 	public static fun getEchoBlend (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Lio/github/yuroyami/kiteplayer/audioviz/viz/EchoBlend;
 	public static fun getFeedbackSpin (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)F
 	public static fun getFeedbackZoom (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)F
+	public static fun getForms (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Lio/github/yuroyami/kiteplayer/audioviz/viz/FormReadout;
 	public static fun getGenes (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes;
 	public static fun getGround (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Lio/github/yuroyami/kiteplayer/audioviz/viz/ground/Ground;
 	public static fun getMapping (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizMapping;
@@ -929,9 +939,11 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizMapping {
 
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizNeed : java/lang/Enum {
 	public static final field EchoBuffer Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
+	public static final field MemoryField Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
 	public static final field RuntimeShader Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
 	public static final field ShaderLayers Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
 	public static final field SoftBuffer Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
+	public static final field WaveformHistory Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
@@ -1380,6 +1392,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/shader/LiveShader 
 	public final fun getError ()Ljava/lang/String;
 	public fun getFeedbackSpin ()F
 	public fun getFeedbackZoom ()F
+	public fun getForms ()Lio/github/yuroyami/kiteplayer/audioviz/viz/FormReadout;
 	public fun getGenes ()Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes;
 	public fun getGround ()Lio/github/yuroyami/kiteplayer/audioviz/viz/ground/Ground;
 	public fun getMapping ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizMapping;

@@ -200,6 +200,12 @@ public enum class VizNeed {
 
     /** That buffer runs at a reduced scale by design, because the drawing is soft. */
     SoftBuffer,
+
+    /** The drawing reads the waveform history strip, 128 points by 256 rows. */
+    WaveformHistory,
+
+    /** The drawing keeps a memory field on the processor and uploads it every frame. */
+    MemoryField,
 }
 
 /** What a drawing does when there is nothing to hear. */

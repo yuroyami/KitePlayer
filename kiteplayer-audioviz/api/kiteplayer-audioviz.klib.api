@@ -98,9 +98,11 @@ final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizEnergy : kotlin/E
 
 final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed|null[0]
     enum entry EchoBuffer // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.EchoBuffer|null[0]
+    enum entry MemoryField // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.MemoryField|null[0]
     enum entry RuntimeShader // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.RuntimeShader|null[0]
     enum entry ShaderLayers // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.ShaderLayers|null[0]
     enum entry SoftBuffer // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.SoftBuffer|null[0]
+    enum entry WaveformHistory // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.WaveformHistory|null[0]
 
     final val entries // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.entries|#static{}entries[0]
         final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed> // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.entries.<get-entries>|<get-entries>#static(){}[0]
@@ -259,6 +261,8 @@ abstract interface io.github.yuroyami.kiteplayer.audioviz.viz/Visualization { //
         open fun <get-feedbackSpin>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.feedbackSpin.<get-feedbackSpin>|<get-feedbackSpin>(){}[0]
     open val feedbackZoom // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.feedbackZoom|{}feedbackZoom[0]
         open fun <get-feedbackZoom>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.feedbackZoom.<get-feedbackZoom>|<get-feedbackZoom>(){}[0]
+    open val forms // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.forms|{}forms[0]
+        open fun <get-forms>(): io.github.yuroyami.kiteplayer.audioviz.viz/FormReadout? // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.forms.<get-forms>|<get-forms>(){}[0]
     open val genes // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.genes|{}genes[0]
         open fun <get-genes>(): io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes? // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.genes.<get-genes>|<get-genes>(){}[0]
     open val ground // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.ground|{}ground[0]
@@ -737,6 +741,17 @@ final class io.github.yuroyami.kiteplayer.audioviz.viz/FlashGuard { // io.github
     final fun allowance(kotlin/Float, kotlin/Float): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/FlashGuard.allowance|allowance(kotlin.Float;kotlin.Float){}[0]
     final fun limit(kotlin/Float, kotlin/Float, kotlin/Float): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/FlashGuard.limit|limit(kotlin.Float;kotlin.Float;kotlin.Float){}[0]
     final fun reset() // io.github.yuroyami.kiteplayer.audioviz.viz/FlashGuard.reset|reset(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.audioviz.viz/FormReadout { // io.github.yuroyami.kiteplayer.audioviz.viz/FormReadout|null[0]
+    constructor <init>(kotlin/String, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.audioviz.viz/FormReadout.<init>|<init>(kotlin.String;kotlin.Int;kotlin.Int){}[0]
+
+    final val births // io.github.yuroyami.kiteplayer.audioviz.viz/FormReadout.births|{}births[0]
+        final fun <get-births>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/FormReadout.births.<get-births>|<get-births>(){}[0]
+    final val form // io.github.yuroyami.kiteplayer.audioviz.viz/FormReadout.form|{}form[0]
+        final fun <get-form>(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz/FormReadout.form.<get-form>|<get-form>(){}[0]
+    final val morphs // io.github.yuroyami.kiteplayer.audioviz.viz/FormReadout.morphs|{}morphs[0]
+        final fun <get-morphs>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/FormReadout.morphs.<get-morphs>|<get-morphs>(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer.audioviz.viz/MoodSpec { // io.github.yuroyami.kiteplayer.audioviz.viz/MoodSpec|null[0]
@@ -1846,6 +1861,7 @@ final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplay
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_EchoCopy$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_EchoCopy$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_EchoCopy$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_EchoFrame$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_EchoFrame$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_EchoFrame$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_FlashGuard$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_FlashGuard$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_FlashGuard$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_FormReadout$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_FormReadout$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_FormReadout$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_MoodSpec$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_MoodSpec$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_MoodSpec$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_PostSpec$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_PostSpec$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_PostSpec$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_PostSwitches$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_PostSwitches$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_PostSwitches$stableprop[0]
@@ -1940,6 +1956,7 @@ final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplay
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_EchoCopy$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_EchoCopy$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_EchoCopy$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_EchoFrame$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_EchoFrame$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_EchoFrame$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_FlashGuard$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_FlashGuard$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_FlashGuard$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_FormReadout$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_FormReadout$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_FormReadout$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_MoodSpec$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_MoodSpec$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_MoodSpec$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_PostSpec$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_PostSpec$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_PostSpec$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_PostSwitches$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_PostSwitches$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_PostSwitches$stableprop_getter(){}[0]

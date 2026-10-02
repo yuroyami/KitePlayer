@@ -212,6 +212,10 @@ wait, for example a response held for the next visual cycle.
   those layers are left out and the rest of the drawing draws.
 - `EchoBuffer`: the drawing feeds its frames back through an offscreen buffer.
 - `SoftBuffer`: that buffer runs at a reduced scale by design, because the drawing is soft.
+- `WaveformHistory`: the drawing reads the waveform history strip, 128 points by 256 rows.
+- `MemoryField`: the drawing keeps a memory field on the processor and uploads it every frame. A
+  memory field is a small grid of ink that a flow carries across the screen and that the drawing
+  writes the signal into.
 
 `VizSilence` is what the drawing does when there is nothing to hear: `Idle` keeps a restrained
 motion, `Still` settles and holds, and `Fade` fades to the background.

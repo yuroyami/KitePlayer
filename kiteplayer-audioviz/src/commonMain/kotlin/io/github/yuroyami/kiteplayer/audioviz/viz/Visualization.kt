@@ -435,6 +435,9 @@ public interface Visualization {
     /** The parts of the recipe the song changes. Null for a drawing with none. */
     public val genes: Genes? get() = null
 
+    /** The form on screen and the count of its changes, or null for a drawing with no named forms. */
+    public val forms: FormReadout? get() = null
+
     /** Drawn after the echo layer, straight on the canvas, for things that must stay sharp. */
     public fun DrawScope.drawFront(state: VizRenderState) {}
 

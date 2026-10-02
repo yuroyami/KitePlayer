@@ -295,6 +295,9 @@ known events independently of detection, including two events inside one display
 - With no confident boundary, keep the scene and vary its continuous drivers. User-requested
   changes, recovery and accessibility controls remain allowed immediately. Randomness may pick
   a scene at an accepted boundary, with a reproducible seed; it must not invent musical timing.
+- A drawing may pace its own continuous form changes and births by accumulated musical activity
+  (events, novelty, density), never by elapsed time alone, and it must declare that pace. The
+  shared pacer is `Evolution`; its counts are published through `Visualization.forms`.
 
 Meier, Chiu and Müller report 74.72% beat F1 for RNN-PLP-On on GTZAN and use a ±70 ms scoring
 window. That window is not end-to-end latency; the paper's table also depends on the activation

@@ -28,6 +28,14 @@ import kotlin.time.Duration.Companion.seconds
  * returns, its independent close finalizer alone publishes the terminal snapshot and result. Calling from
  * any thread or coroutine is safe and no two callers can race each other into a state neither asked for.
  *
+ * ### Which calls wait
+ *
+ * A call that takes time suspends until it is done: [open], [seek], [stop], the queue and chapter
+ * moves, [selectTrack] and the others marked `suspend`. [play], [pause] and the setters only change
+ * what the player is asked to do, so they return at once and the state flows show the result.
+ * [requestSeek] is the seek that does not wait, for a dragged seek bar. [close] returns at once
+ * because `AutoCloseable` requires it, and [closeAndAwait] waits for the teardown.
+ *
  * ### State against events
  *
  * [state], [progress] and [stats] are state: they conflate, and a collector that misses an intermediate
@@ -171,20 +179,28 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Seeks without waiting, coalescing requests that arrive faster than the pipeline can serve them.
+     * Asks for a seek and returns at once, merging requests that arrive faster than the pipeline can
+     * serve them.
      *
      * This is what a seek bar being dragged calls sixty times a second. Requests merge by the rules the
      * engine documents, and one that is superseded is dropped rather than queued, so dragging costs one
-     * flush cycle and not sixty. Nothing is thrown when the source cannot seek: a fire-and-forget call has
-     * nobody to throw to, so it is ignored. Use [seek] when the answer matters.
+     * flush cycle and not sixty. Nothing is thrown when the source cannot seek: a call that does not
+     * wait has nobody to throw to, so it is ignored. Use [seek] when the answer matters.
      *
      * @param to a finite position at or after zero.
      * @throws IllegalArgumentException when [to] is infinite or negative.
      * @throws IllegalStateException after terminal close has been requested.
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
+    public fun requestSeek(to: Duration, mode: SeekMode = SeekMode.KeyframeThenRefine) {
+        core.seekLater(Pts.ofDuration(validPosition(to, "requestSeek")), mode)
+    }
+
+    /** The old name of [requestSeek]. It never waited, which the name did not say. */
+    @Deprecated("Renamed to requestSeek: it asks for a seek and returns at once.", ReplaceWith("requestSeek(to, mode)"))
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun seekLater(to: Duration, mode: SeekMode = SeekMode.KeyframeThenRefine) {
-        core.seekLater(Pts.ofDuration(validPosition(to, "seekLater")), mode)
+        requestSeek(to, mode)
     }
 
     /**

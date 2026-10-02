@@ -39,7 +39,7 @@ class ScrubTest {
             while (SystemClock.uptimeMillis() < scrubEnd) {
                 val target = random.nextLong(0, durationMillis - 1_000).milliseconds
                 val mode = if (random.nextInt(8) == 0) SeekMode.Precise else SeekMode.KeyframeThenRefine
-                player.seekLater(target, mode)
+                player.requestSeek(target, mode)
                 seeks++
                 SystemClock.sleep(random.nextLong(50, 150))
             }

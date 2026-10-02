@@ -280,7 +280,7 @@ public open class KitePlayerView @JvmOverloads constructor(
         val bound = player ?: return
         if (bound.state.value.status != PlaybackStatus.Paused) return
         // A closed player refuses; there is then no picture to bring back.
-        runCatching { bound.seekLater(bound.position(), SeekMode.Precise) }
+        runCatching { bound.requestSeek(bound.position(), SeekMode.Precise) }
     }
 
     /**

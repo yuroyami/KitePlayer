@@ -45,7 +45,7 @@ class AudioClockTest {
         val before = player.audioClock()
         assertNotNull(before.position)
 
-        player.seekLater(5.seconds)
+        player.requestSeek(5.seconds)
         assertEquals(5.seconds, player.position(), "the seek bar should reflect the request immediately")
         val requested = player.audioClock()
         assertTrue(requested.position == null || requested.position.micros < 1_000_000L)

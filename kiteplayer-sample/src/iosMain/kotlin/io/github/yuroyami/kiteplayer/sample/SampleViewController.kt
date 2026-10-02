@@ -529,13 +529,13 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
 
     private suspend fun scenarioSeekLater(player: KitePlayer, trace: ScenarioTrace, target: Duration) {
         val submittedBefore = player.stats.value.submittedFrames
-        player.seekLater(target, SeekMode.KeyframeThenRefine)
+        player.requestSeek(target, SeekMode.KeyframeThenRefine)
         val frameAfter = awaitWithin(15.seconds) { player.stats.value.submittedFrames > submittedBefore }
         val nearAfter = awaitWithin(15.seconds) {
             (player.position() - target).absoluteValue < 2.seconds && player.stats.value.submittedFrames > submittedBefore
         }
         trace.line(
-            "seekLater to $target: first frame after $frameAfter ms, within 2 s of target after $nearAfter ms, " +
+            "requestSeek to $target: first frame after $frameAfter ms, within 2 s of target after $nearAfter ms, " +
                 "position=${player.position()} status=${player.state.value.status}",
         )
     }

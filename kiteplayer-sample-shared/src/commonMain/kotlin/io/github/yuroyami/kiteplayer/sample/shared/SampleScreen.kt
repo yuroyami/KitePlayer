@@ -303,7 +303,7 @@ private fun BoxScope.Transport(player: KitePlayer, duration: Duration?) {
     val length = duration?.takeIf { it > Duration.ZERO }
     val seek by rememberUpdatedState<(Float) -> Unit> { fraction ->
         // A drag that leaves the bar reports a position outside it, and a negative one is refused.
-        length?.let { player.seekLater(it * fraction.coerceIn(0f, 1f).toDouble()) }
+        length?.let { player.requestSeek(it * fraction.coerceIn(0f, 1f).toDouble()) }
     }
     Row(
         Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(BAR_HEIGHT)

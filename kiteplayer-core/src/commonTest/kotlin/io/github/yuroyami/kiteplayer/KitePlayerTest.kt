@@ -145,8 +145,8 @@ class KitePlayerTest {
         // A position. Infinity is the one a plain range check lets through, which is why it is explicit.
         assertFailsWith<IllegalArgumentException> { player.seek(Duration.INFINITE) }
         assertFailsWith<IllegalArgumentException> { player.seek((-1).seconds) }
-        assertFailsWith<IllegalArgumentException> { player.seekLater(Duration.INFINITE) }
-        assertFailsWith<IllegalArgumentException> { player.seekLater((-1).milliseconds) }
+        assertFailsWith<IllegalArgumentException> { player.requestSeek(Duration.INFINITE) }
+        assertFailsWith<IllegalArgumentException> { player.requestSeek((-1).milliseconds) }
 
         // A rate. Zero is not a rate and infinity passes `value > 0`.
         assertFailsWith<IllegalArgumentException> { player.setSpeed(0.0) }

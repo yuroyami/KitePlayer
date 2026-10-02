@@ -512,6 +512,8 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun previous (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun previousChapter (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun removeFromQueue (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun requestSeek-VtjQ1oo (JLio/github/yuroyami/kiteplayer/SeekMode;)V
+	public static synthetic fun requestSeek-VtjQ1oo$default (Lio/github/yuroyami/kiteplayer/KitePlayer;JLio/github/yuroyami/kiteplayer/SeekMode;ILjava/lang/Object;)V
 	public final fun restore (Lio/github/yuroyami/kiteplayer/PlayerMemento;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun scanAudio-dXc-7Sg (Lio/github/yuroyami/kiteplayer/MediaItem;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/AudioScanRange;Lio/github/yuroyami/kiteplayer/AudioScanSink;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun scanAudio-dXc-7Sg$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/MediaItem;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/AudioScanRange;Lio/github/yuroyami/kiteplayer/AudioScanSink;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;

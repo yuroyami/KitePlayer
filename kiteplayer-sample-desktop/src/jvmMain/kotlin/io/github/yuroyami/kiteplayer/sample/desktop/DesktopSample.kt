@@ -235,7 +235,7 @@ private fun Controls(
         SeekBar(
             fraction = fractionOf(progress.position, duration),
             enabled = enabled && snapshot.seekable,
-            onSeek = { at -> player.seekLater(duration * at.toDouble(), SeekMode.KeyframeThenRefine) },
+            onSeek = { at -> player.requestSeek(duration * at.toDouble(), SeekMode.KeyframeThenRefine) },
         )
         Row(
             Modifier.fillMaxWidth(),

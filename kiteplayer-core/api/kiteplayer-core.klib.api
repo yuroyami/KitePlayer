@@ -2460,6 +2460,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final fun pause() // io.github.yuroyami.kiteplayer/KitePlayer.pause|pause(){}[0]
     final fun play() // io.github.yuroyami.kiteplayer/KitePlayer.play|play(){}[0]
     final fun position(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/KitePlayer.position|position(){}[0]
+    final fun requestSeek(kotlin.time/Duration, io.github.yuroyami.kiteplayer/SeekMode = ...) // io.github.yuroyami.kiteplayer/KitePlayer.requestSeek|requestSeek(kotlin.time.Duration;io.github.yuroyami.kiteplayer.SeekMode){}[0]
     final fun seekLater(kotlin.time/Duration, io.github.yuroyami.kiteplayer/SeekMode = ...) // io.github.yuroyami.kiteplayer/KitePlayer.seekLater|seekLater(kotlin.time.Duration;io.github.yuroyami.kiteplayer.SeekMode){}[0]
     final fun setAbLoop(kotlin.time/Duration?, kotlin.time/Duration? = ...) // io.github.yuroyami.kiteplayer/KitePlayer.setAbLoop|setAbLoop(kotlin.time.Duration?;kotlin.time.Duration?){}[0]
     final fun setAudioDelay(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/KitePlayer.setAudioDelay|setAudioDelay(kotlin.time.Duration){}[0]

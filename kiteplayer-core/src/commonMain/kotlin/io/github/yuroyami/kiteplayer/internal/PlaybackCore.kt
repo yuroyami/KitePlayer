@@ -1150,7 +1150,7 @@ internal class PlaybackCore(
 
     /** Fire and forget, coalescing by contract. What a seek bar drag calls sixty times a second. */
     fun seekLater(to: Pts, mode: SeekMode) {
-        checkOpenFor("seekLater")
+        checkOpenFor("requestSeek")
         // The mask is set from this very call, not from the actor's next pass: a fire-and-forget
         // caller polls position() in the gap before the command is drained, and an absolute target
         // needs no session state to name it. A request the drain drops withdraws the mask there.
@@ -1180,7 +1180,7 @@ internal class PlaybackCore(
      * moment it is resolved against a position.
      */
     fun seekByLater(offset: Duration, mode: SeekMode) {
-        checkOpenFor("seekLater")
+        checkOpenFor("requestSeek")
         commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Relative(offset), mode)))
     }
 
@@ -1189,7 +1189,7 @@ internal class PlaybackCore(
         require(fraction.isFinite() && fraction >= 0.0 && fraction <= 1.0) {
             "a seek bar position must be between 0 and 1, was $fraction"
         }
-        checkOpenFor("seekLater")
+        checkOpenFor("requestSeek")
         commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Factor(fraction), mode)))
     }
 

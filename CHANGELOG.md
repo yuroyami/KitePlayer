@@ -39,6 +39,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the `KitePlayerMediaSession` constructor behaves as before.
 - `KitePlayer.awaitClose()` suspends until the player is asked to close, for helpers that go away
   with it (#385).
+- `KitePlayer.requestSeek` replaces `seekLater`, which is deprecated (#386). It asks for a seek and
+  returns at once, as `seekLater` did. The `KitePlayer` documentation now states which calls wait.
 - HLS plays through the default stack (#209). An address that ends in `.m3u8`, an HLS content
   type, or `formatHint = "hls"` marks a playlist. A master playlist plays one variant, the one with
   the highest bitrate within the new `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.

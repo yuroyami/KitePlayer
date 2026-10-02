@@ -89,6 +89,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   once. Play and pause stay with the commands. `KitePlayer.create` accepts `SyncMode.ExternalMaster`
   now. `PlayerConfig` gains `externalClock`, which changes its generated data-class methods, so
   recompile, and a `when` that lists every warning needs the new branch.
+- The variants of an HLS master playlist are listed in `Tracks.variants`, as `StreamVariant`s with
+  their bitrate, size, frame rate and codecs, and `Tracks.selectedVariant` says which one plays.
+  `KitePlayer.selectVariant` plays another one from the current position, by opening the stream
+  again on it, and keeps playing or stays paused. The choice is kept as the new
+  `DemuxPolicy.variant`, which a memento stores too. `PlayerMediaSource` gains `variants` and
+  `selectedVariant`, both with defaults. `Tracks` and `DemuxPolicy` change their generated
+  data-class methods, so recompile (#376).
 
 ## [0.2.0] - 2026-09-29
 

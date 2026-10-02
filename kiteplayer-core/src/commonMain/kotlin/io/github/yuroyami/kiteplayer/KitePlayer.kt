@@ -1157,6 +1157,23 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.selectSecondarySubtitle(track)
 
     /**
+     * Plays the variant at [index] of [Tracks.variants], or chooses one again by the item's
+     * [DemuxPolicy] when [index] is null. The media opens again on that variant at the current
+     * position, through the same rebuild as a video track change, and keeps playing or stays
+     * paused. The choice is kept on the item, so a later rebuild keeps it too.
+     *
+     * @throws IllegalStateException when nothing is open, or when a stop, a close, a new open or a
+     *         later call ended the change first.
+     * @throws IllegalArgumentException when the media has no variant at [index].
+     * @throws UnsupportedOperationException when the source cannot seek back to the position.
+     * @throws PlaybackException when the reopen itself failed.
+     */
+    @Throws(Exception::class)
+    public suspend fun selectVariant(index: Int?) {
+        core.selectVariant(index)
+    }
+
+    /**
      * Attaches a renderer, or replaces the one attached. Legal at any time, including while playing.
      *
      * Video decoding never depends on a renderer existing. With none attached the schedule still paces

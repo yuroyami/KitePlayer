@@ -72,7 +72,9 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         // The same open KiteFFmpegMediaBackend.open runs. This factory once dropped headers,
         // openOptions, formatHint and videoFilter and skipped the FFmpeg identity mapping, so the
         // documented SPI door behaved differently from the backend door for the same MediaItem.
-        val source = mappingFFmpegRuntimeRejection { openItem(media).let { KiteFFmpegSource(it.source, it.bridge, it.hls) } }
+        val source = mappingFFmpegRuntimeRejection {
+            openItem(media).let { KiteFFmpegSource(it.source, it.bridge, it.hls, it.variants, it.selectedVariant) }
+        }
         source.attachItemFilters(media)
         return source
     }
@@ -103,6 +105,8 @@ public class KiteFFmpegSource internal constructor(
     private val bridge: BlockingMediaIo? = null,
     /** What happened to the addresses of an HLS stream read through the item's reader. */
     private val hls: HlsLedger? = null,
+    override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
+    override val selectedVariant: Int? = null,
 ) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null

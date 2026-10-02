@@ -85,6 +85,13 @@ public data class Tracks(
     val selectedSubtitle: TrackId? = null,
     /** The secondary subtitle track, drawn at the top of the picture, or null when off. */
     val selectedSecondarySubtitle: TrackId? = null,
+    /**
+     * The versions of the media at other qualities, such as the variants of an HLS master
+     * playlist, or empty for media with one version. Select one with [KitePlayer.selectVariant].
+     */
+    val variants: List<StreamVariant> = emptyList(),
+    /** The [StreamVariant.index] of the variant that plays, or null for media with one version. */
+    val selectedVariant: Int? = null,
 ) {
     public val video: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Video }
     public val audio: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Audio }

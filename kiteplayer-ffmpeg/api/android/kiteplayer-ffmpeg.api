@@ -35,9 +35,11 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public final fun getOnWarning ()Lkotlin/jvm/functions/Function1;
 	public fun getRecordingPath ()Ljava/lang/String;
 	public fun getSeekable ()Z
+	public fun getSelectedVariant ()Ljava/lang/Integer;
 	public fun getStreamDivergences ()Ljava/util/List;
 	public fun getStreams ()Ljava/util/List;
 	public fun getTimestampsMayJump ()Z
+	public fun getVariants ()Ljava/util/List;
 	public fun interrupt ()Z
 	public fun readPacket (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seekToKeyframe-HwpeAyI (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;

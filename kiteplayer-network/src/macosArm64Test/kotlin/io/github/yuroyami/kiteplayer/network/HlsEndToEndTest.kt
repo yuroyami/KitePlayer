@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.network
 
+import io.github.yuroyami.kiteplayer.DemuxPolicy
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegSource
@@ -33,6 +34,7 @@ import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -147,6 +149,30 @@ class HlsEndToEndTest {
         val names = requests.load()
         assertTrue(names.any { it.startsWith("ts-1-5.ts") }, "the last segment of the chosen variant was not read: $names")
         assertTrue(names.none { it.startsWith("ts-0") }, "the other variant was read: $names")
+    }
+
+    @Test
+    fun theVariantsAreListedAndAChosenOneIsTheOneRead() = withServer { port ->
+        val url = "http://127.0.0.1:$port/hls/ts.m3u8"
+        val resolver = KtorMediaIoResolver()
+        try {
+            val item = MediaItem(url, io = { checkNotNull(resolver.resolve(url)) }, demux = DemuxPolicy(variant = 0))
+            val source = KiteFFmpegSourceFactory().open(item) as KiteFFmpegSource
+            try {
+                assertEquals(listOf(320 to 180, 640 to 360), source.variants.map { it.width to it.height })
+                assertEquals(listOf(488_048L, 1_368_640L), source.variants.map { it.bitrate })
+                assertEquals(0, source.selectedVariant, "the variant the item asks for plays")
+                source.selectStreams(source.streams.map { it.index }.toSet())
+                while (true) source.readPacket()?.close() ?: break
+            } finally {
+                source.close()
+            }
+        } finally {
+            resolver.close()
+        }
+        val names = requests.load()
+        assertTrue(names.any { it.startsWith("ts-0-5.ts") }, "the last segment of the chosen variant was not read: $names")
+        assertTrue(names.none { it.startsWith("ts-1") }, "the other variant was read: $names")
     }
 
     @Test

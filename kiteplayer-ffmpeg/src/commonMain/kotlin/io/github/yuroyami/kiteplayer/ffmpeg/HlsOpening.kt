@@ -10,6 +10,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackWarning
+import io.github.yuroyami.kiteplayer.StreamVariant
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
@@ -34,6 +35,10 @@ internal class HlsOpen(
     /** Null when the reader opens no related address, and FFmpeg's own protocols read them. */
     val opener: MediaByteOpener?,
     val ledger: HlsLedger,
+    /** Every variant of a master playlist, in playlist order, or empty for a media playlist. */
+    val variants: List<StreamVariant> = emptyList(),
+    /** The index of the variant that plays, or null for a media playlist. */
+    val selectedVariant: Int? = null,
 ) {
     /**
      * The pre-open options this open adds. A segment address often has no file extension, so
@@ -53,14 +58,25 @@ internal const val MAX_PLAYLIST_BYTES: Int = 16 * 1024 * 1024
 internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job): HlsOpen {
     val base = io.location ?: item.uri
     val text = readPlaylist(io, item.uri).decodeToString()
-    val playlist = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight) ?: text
+    val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant)
+    val playlist = master?.playlist ?: text
     val ledger = HlsLedger(item.uri)
     val opener = if (io.location != null && nestedOpensSupported) {
         MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger) }
     } else {
         null
     }
-    return HlsOpen(PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger)
+    val variants = master?.variants.orEmpty().mapIndexed { index, variant ->
+        StreamVariant(
+            index = index,
+            bitrate = variant.bandwidth,
+            width = variant.width,
+            height = variant.height,
+            frameRate = variant.frameRate,
+            codecs = variant.attributes["CODECS"],
+        )
+    }
+    return HlsOpen(PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen)
 }
 
 /**

@@ -39,7 +39,7 @@ class HlsPlaylistsTest {
 
     @Test
     fun theHighestBitrateVariantStaysWithItsOwnRenditionsOnly() {
-        val kept = keepOneHlsVariant(MASTER, maxBitrate = null, maxVideoHeight = null)!!
+        val kept = keepOneHlsVariant(MASTER, maxBitrate = null, maxVideoHeight = null)!!.playlist
         assertEquals(
             listOf(
                 "#EXTM3U",
@@ -59,11 +59,11 @@ class HlsPlaylistsTest {
 
     @Test
     fun limitsChooseTheBestVariantThatFits() {
-        assertTrue("video/720.m3u8" in keepOneHlsVariant(MASTER, maxBitrate = 3_000_000, maxVideoHeight = null)!!)
-        assertTrue("video/720.m3u8" in keepOneHlsVariant(MASTER, maxBitrate = null, maxVideoHeight = 720)!!)
-        assertTrue("video/360.m3u8" in keepOneHlsVariant(MASTER, maxBitrate = 900_000, maxVideoHeight = null)!!)
+        assertTrue("video/720.m3u8" in keepOneHlsVariant(MASTER, maxBitrate = 3_000_000, maxVideoHeight = null)!!.playlist)
+        assertTrue("video/720.m3u8" in keepOneHlsVariant(MASTER, maxBitrate = null, maxVideoHeight = 720)!!.playlist)
+        assertTrue("video/360.m3u8" in keepOneHlsVariant(MASTER, maxBitrate = 900_000, maxVideoHeight = null)!!.playlist)
         // Nothing fits, so the variant with the lowest bitrate plays: the one with a picture.
-        val lowest = keepOneHlsVariant(MASTER, maxBitrate = 1_000, maxVideoHeight = null)!!
+        val lowest = keepOneHlsVariant(MASTER, maxBitrate = 1_000, maxVideoHeight = null)!!.playlist
         assertTrue("video/360.m3u8" in lowest, lowest)
         // The 5.1 group belongs to the 1080p HDR variant only, so it goes with that variant.
         assertFalse("surround" in lowest)
@@ -87,7 +87,18 @@ class HlsPlaylistsTest {
     @Test
     fun crlfLinesAndAByteOrderMarkAreRead() {
         val master = "﻿#EXTM3U\r\n#EXT-X-STREAM-INF:BANDWIDTH=100\r\nlow.m3u8\r\n#EXT-X-STREAM-INF:BANDWIDTH=200\r\nhigh.m3u8\r\n"
-        assertEquals(listOf("#EXTM3U", "#EXT-X-STREAM-INF:BANDWIDTH=200", "high.m3u8", ""), keepOneHlsVariant(master, null, null)!!.split('\n'))
+        assertEquals(listOf("#EXTM3U", "#EXT-X-STREAM-INF:BANDWIDTH=200", "high.m3u8", ""), keepOneHlsVariant(master, null, null)!!.playlist.split('\n'))
+    }
+
+    @Test
+    fun aChosenVariantIsKeptWhatEverTheLimitsSayAndAMissingOneIsIgnored() {
+        val all = keepOneHlsVariant(MASTER, maxBitrate = null, maxVideoHeight = null)!!
+        val lowestIndex = all.variants.indices.minBy { all.variants[it].bandwidth }
+        val chosen = keepOneHlsVariant(MASTER, maxBitrate = null, maxVideoHeight = null, wanted = lowestIndex)!!
+        assertEquals(lowestIndex, chosen.chosen)
+        assertTrue(all.variants[lowestIndex].attributes.getValue("BANDWIDTH") in chosen.playlist.lines().first { it.startsWith("#EXT-X-STREAM-INF") })
+        // An index the playlist does not have falls back to the choice by limits.
+        assertEquals(all.chosen, keepOneHlsVariant(MASTER, maxBitrate = null, maxVideoHeight = null, wanted = 99)!!.chosen)
     }
 
     /** RFC 3986, section 5.4, against its base `http://a/b/c/d;p?q`. */

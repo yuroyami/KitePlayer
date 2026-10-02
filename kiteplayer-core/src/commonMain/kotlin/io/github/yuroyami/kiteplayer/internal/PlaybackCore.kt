@@ -761,6 +761,11 @@ internal class PlaybackCore(
      */
     private val pendingSelections = mutableMapOf<TrackKind, SelectionRequest>()
 
+    /** A variant choice waiting for the rebuild that reopens the item on it, or null (#376). */
+    private var pendingVariant: VariantRequest? = null
+
+    private class VariantRequest(val index: Int?, val reply: CompletableDeferred<Unit>)
+
     /** One caller's track selection, waiting for the rebuild that will honour it. */
     private class SelectionRequest(
         val kind: TrackKind,
@@ -1191,6 +1196,12 @@ internal class PlaybackCore(
         return awaitReply(reply)
     }
 
+    suspend fun selectVariant(index: Int?) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.SelectVariant(index, reply))
+        awaitReply(reply)
+    }
+
     suspend fun selectSecondarySubtitle(track: TrackId?): TrackChange {
         val reply = CompletableDeferred<TrackChange>()
         send(CoreCommand.SelectSecondarySubtitle(track, reply))
@@ -1565,6 +1576,15 @@ internal class PlaybackCore(
                 )
                 else -> null
             }
+            is CoreCommand.SelectVariant -> when {
+                session == null -> IllegalStateException("selectVariant needs an open media item")
+                session?.source?.seekable != true -> UnsupportedOperationException(
+                    "this source is not seekable, so a variant change cannot reopen and seek back to where playback was",
+                )
+                command.index != null && tracks.variants.none { it.index == command.index } ->
+                    IllegalArgumentException("the media has no variant ${command.index}")
+                else -> null
+            }
             is CoreCommand.SelectTrack -> when {
                 command.kind == TrackKind.Subtitle && command.track != null &&
                     command.track == tracks.selectedSecondarySubtitle ->
@@ -1765,6 +1785,18 @@ internal class PlaybackCore(
             }
             is CoreCommand.Close -> runClose(command.reply)
             is CoreCommand.SelectSecondarySubtitle -> applySecondarySubtitle(command)
+            is CoreCommand.SelectVariant -> {
+                val asked = media?.demux?.variant
+                if (command.index == asked && (command.index == null || command.index == tracks.selectedVariant)) {
+                    command.reply.complete(Unit)
+                } else {
+                    // A later choice replaces one still waiting, which is told so by an error.
+                    pendingVariant?.reply?.completeExceptionally(
+                        IllegalStateException("a later selectVariant replaced this one before it applied"),
+                    )
+                    pendingVariant = VariantRequest(command.index, command.reply)
+                }
+            }
             is CoreCommand.SelectTrack -> {
                 traceUntilReplied(command.reply, "track", "switch") {
                     mapOf("kind" to command.kind.name, "track" to (command.track?.value?.toString() ?: "none"))
@@ -2569,7 +2601,7 @@ internal class PlaybackCore(
             // still be read.
             backendSession.setWarningSink { warning -> report(warning) }
             val source = backendSession.source
-            var builtTracks = source.streams.toTracks()
+            var builtTracks = source.toTracks()
             if (pending == null) tracks = builtTracks
 
             val videoCandidate =
@@ -3569,6 +3601,8 @@ internal class PlaybackCore(
         val discarded = pendingSelections.values.toList()
         pendingSelections.clear()
         discarded.forEach { it.reply.complete(TrackChange.Discarded(reason)) }
+        pendingVariant?.reply?.completeExceptionally(IllegalStateException("selectVariant did not apply: $reason"))
+        pendingVariant = null
     }
 
     /**
@@ -3888,14 +3922,14 @@ internal class PlaybackCore(
         // A renderer failure has already torn the old graph down. The recovery reopen folds these
         // choices into its one replacement graph so nothing is lost and no second open happens.
         if (pendingVideoRecovery != null) return
-        if (pendingSelections.isEmpty()) return
+        if (pendingSelections.isEmpty() && pendingVariant == null) return
         // Owner report 2026-08-26: a subtitle-only change must not ride the full
         // reopen below, which was built for video and audio switches and visibly interrupts
         // playback. Container subtitle tracks get the same in-place treatment external subtitles
         // always had. A refusal (demux would not park, stale id, external target) discards the
         // pending entry instead: the rebuild below runs for the kinds this branch does not take,
         // which is video, and for an audio or subtitle change it never reached.
-        if (TrackKind.Video !in pendingSelections) {
+        if (TrackKind.Video !in pendingSelections && pendingVariant == null) {
             val active = session
             if (active != null) {
                 if (TrackKind.Subtitle in pendingSelections) inPlaceContainerSubtitleChange(active)
@@ -3907,28 +3941,41 @@ internal class PlaybackCore(
         // arriving during it belongs to the next one.
         val requested = pendingSelections.values.toList()
         pendingSelections.clear()
+        // A variant change reopens the item on the chosen variant, through the same rebuild.
+        val variantRequest = pendingVariant
+        pendingVariant = null
         val current = session
-        val item = media
+        val item = media?.let { open ->
+            if (variantRequest == null) open else open.copy(demux = open.demux.copy(variant = variantRequest.index))
+        }
         if (current == null || item == null) {
             requested.forEach {
                 it.reply.complete(
                     TrackChange.Discarded("no media is open, so the selection had nothing to apply to"),
                 )
             }
+            variantRequest?.reply?.completeExceptionally(IllegalStateException("no media is open"))
             return
         }
+        media = item
         val at = currentPosition()
         val wasPlaying = playRequested
         val secondaryBefore = tracks.selectedSecondarySubtitle
-        val video = choiceFor(requested, TrackKind.Video, current.videoStream?.index)
-        val audio = choiceFor(requested, TrackKind.Audio, current.audioStream?.index)
+        // Another variant numbers its streams its own way, so what was not asked for is chosen again.
+        fun keptOrChosen(kind: TrackKind, index: Int?): StreamChoice = when {
+            variantRequest == null || requested.any { it.kind == kind } -> choiceFor(requested, kind, index)
+            index == null -> StreamChoice.None
+            else -> StreamChoice.Auto
+        }
+        val video = keptOrChosen(TrackKind.Video, current.videoStream?.index)
+        val audio = keptOrChosen(TrackKind.Audio, current.audioStream?.index)
         // An external subtitle target means NO container stream: the rebuild deselects
         // whatever container track was timing cues, and the external table applies afterwards.
         val subtitleRequest = requested.firstOrNull { it.kind == TrackKind.Subtitle }
         val subtitle = if (subtitleRequest != null && isExternalSubtitle(subtitleRequest.track)) {
             StreamChoice.None
         } else {
-            choiceFor(requested, TrackKind.Subtitle, current.subtitleStream?.index)
+            keptOrChosen(TrackKind.Subtitle, current.subtitleStream?.index)
         }
         try {
             teardownSession()
@@ -3984,7 +4031,11 @@ internal class PlaybackCore(
             // stays Paused, so a caller on another thread read the old selection on return.
             publishSnapshot()
             requested.forEach { it.reply.complete(TrackChange.Applied(it.kind, it.track)) }
+            variantRequest?.reply?.complete(Unit)
         } catch (cancellation: CancellationException) {
+            variantRequest?.reply?.completeExceptionally(
+                if (closedNow.value) IllegalStateException("the player was closed before selectVariant could finish") else cancellation,
+            )
             requested.forEach {
                 it.reply.completeExceptionally(
                     if (closedNow.value) {
@@ -3998,11 +4049,13 @@ internal class PlaybackCore(
         } catch (preempted: OpenPreempted) {
             teardownSession()
             requested.forEach { it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION)) }
+            variantRequest?.reply?.completeExceptionally(IllegalStateException(PREEMPTED_SELECTION))
         } catch (failure: Throwable) {
             val error = classify(failure, item)
             teardownSession()
             fail(error)
             requested.forEach { it.reply.completeExceptionally(PlaybackException(error)) }
+            variantRequest?.reply?.completeExceptionally(PlaybackException(error))
         }
     }
 
@@ -10029,6 +10082,11 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         val reply: CompletableDeferred<TrackChange>,
     ) : CoreCommand("selectTrack", reply)
 
+    class SelectVariant(
+        val index: Int?,
+        val reply: CompletableDeferred<Unit>,
+    ) : CoreCommand("selectVariant", reply)
+
     class AttachRenderer(
         val renderer: VideoRenderer,
         val reply: CompletableDeferred<Unit>,
@@ -10076,7 +10134,7 @@ private fun readInspection(session: BackendSession): MediaInspection {
         val source = session.source
         return MediaInspection(
             duration = source.duration?.let { it.micros.microseconds },
-            tracks = source.streams.toTracks(),
+            tracks = source.toTracks(),
             metadata = source.metadata,
             chapters = source.chapters,
             seekable = source.seekable,
@@ -10086,6 +10144,10 @@ private fun readInspection(session: BackendSession): MediaInspection {
         session.close()
     }
 }
+
+/** The track table of this source, with its variants. */
+private fun io.github.yuroyami.kiteplayer.spi.PlayerMediaSource.toTracks(): Tracks =
+    streams.toTracks().copy(variants = variants, selectedVariant = selectedVariant)
 
 private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
     all = map { stream ->

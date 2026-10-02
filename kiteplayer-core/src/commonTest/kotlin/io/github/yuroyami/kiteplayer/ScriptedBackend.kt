@@ -183,6 +183,8 @@ internal class MediaScript(
     val recordable: Boolean = false,
     /** The first audio stream's own tags. */
     val audioMetadata: Map<String, String> = emptyMap(),
+    /** The variants the source offers, as an HLS master playlist would. The item's choice picks one. */
+    val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
 ) {
     val videoIndex: Int = 0
     val audioIndex: Int = if (hasVideo) 1 else 0
@@ -613,7 +615,9 @@ internal class ScriptedBackend(
         val io = media.io?.open()
         repeat(readsDuringOpen) { io?.read(openScratch, 0, openScratch.size) }
         val itemScript = scriptFor?.invoke(media) ?: script
-        return ScriptedSession(itemScript, ledger, faults, trace, videoDecoderStatus, io, clock)
+        // The variant the item asks for, or the first, as a backend's own choice would be.
+        val variant = if (itemScript.variants.isEmpty()) null else media.demux.variant?.takeIf { it in itemScript.variants.indices } ?: 0
+        return ScriptedSession(itemScript, ledger, faults, trace, videoDecoderStatus, io, clock, variant)
             .also { sessions += it }
     }
 }
@@ -627,9 +631,10 @@ internal class ScriptedSession(
     /** The engine's byte reader, when the item carried one. Drained a little per packet. */
     private val io: io.github.yuroyami.kiteplayer.MediaIo? = null,
     clock: MonotonicClock? = null,
+    selectedVariant: Int? = null,
 ) : BackendSession {
 
-    val scriptedSource: ScriptedSource = ScriptedSource(script, ledger, faults, trace, io, clock)
+    val scriptedSource: ScriptedSource = ScriptedSource(script, ledger, faults, trace, io, clock, selectedVariant)
 
     /** The same source with the recording capability, when the script asks for it. */
     val recordingSource: ScriptedRecordingSource? =
@@ -713,7 +718,10 @@ internal class ScriptedSource(
     private val io: io.github.yuroyami.kiteplayer.MediaIo? = null,
     /** Reads when a wedge began into [wedgedAtNanos]. */
     private val clock: MonotonicClock? = null,
+    override val selectedVariant: Int? = null,
 ) : PlayerMediaSource {
+
+    override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
 
     override val streams: List<PlayerStreamInfo> = buildList {
         if (script.hasVideo) {

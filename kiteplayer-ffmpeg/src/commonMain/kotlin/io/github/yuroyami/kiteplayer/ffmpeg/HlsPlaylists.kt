@@ -62,6 +62,12 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
     /** The picture height in pixels, or null when the variant does not state its size. */
     val height: Int? = attributes["RESOLUTION"]?.substringAfter('x', "")?.trim()?.toIntOrNull()
 
+    /** The picture width in pixels, or null when the variant does not state its size. */
+    val width: Int? = attributes["RESOLUTION"]?.substringBefore('x', "")?.trim()?.toIntOrNull()
+
+    /** The highest frame rate, or null when the variant does not state it. */
+    val frameRate: Double? = attributes["FRAME-RATE"]?.toDoubleOrNull()?.takeIf { it > 0.0 && it.isFinite() }
+
     private val codecs: List<String> = attributes["CODECS"]?.split(',')?.map { it.trim().lowercase() }.orEmpty()
 
     /** True when the variant names its codecs and none of them is a video codec. */
@@ -107,7 +113,15 @@ internal fun chooseHlsVariant(variants: List<HlsVariant>, maxBitrate: Long?, max
 }
 
 /**
- * [text] with only the chosen variant left, or null when [text] is not a master playlist.
+ * A master playlist with one variant kept: the playlist FFmpeg reads, every variant it offered in
+ * playlist order, and the place of the kept one in that list.
+ */
+internal class HlsMaster(val playlist: String, val variants: List<HlsVariant>, val chosen: Int)
+
+/**
+ * [text] with only the chosen variant left, or null when [text] is not a master playlist. The
+ * variant at [wanted] in playlist order is kept when there is one; otherwise [chooseHlsVariant]
+ * chooses by [maxBitrate] and [maxVideoHeight].
  *
  * FFmpeg's HLS demuxer opens every variant of a master playlist and keeps reading each one while
  * any of its streams is in use, so a master playlist handed over whole downloads several copies of
@@ -116,7 +130,7 @@ internal fun chooseHlsVariant(variants: List<HlsVariant>, maxBitrate: Long?, max
  * variants, every `EXT-X-I-FRAME-STREAM-INF` tag, and the renditions of other groups. Relative
  * addresses stay as they are, so the playlist must be read against its own address.
  */
-internal fun keepOneHlsVariant(text: String, maxBitrate: Long?, maxVideoHeight: Int?): String? {
+internal fun keepOneHlsVariant(text: String, maxBitrate: Long?, maxVideoHeight: Int?, wanted: Int? = null): HlsMaster? {
     val lines = text.removePrefix("﻿").split('\n').map { it.removeSuffix("\r") }
     val variants = mutableListOf<HlsVariant>()
     var index = 0
@@ -135,7 +149,7 @@ internal fun keepOneHlsVariant(text: String, maxBitrate: Long?, maxVideoHeight: 
         index++
     }
     if (variants.isEmpty()) return null
-    val chosen = chooseHlsVariant(variants, maxBitrate, maxVideoHeight)
+    val chosen = wanted?.let(variants::getOrNull) ?: chooseHlsVariant(variants, maxBitrate, maxVideoHeight)
     // The rendition group of each type that the chosen variant names, if any.
     val groups = listOf("AUDIO", "VIDEO", "SUBTITLES", "CLOSED-CAPTIONS").associateWith { chosen.attributes[it] }
     val dropped = HashSet<Int>()
@@ -155,7 +169,7 @@ internal fun keepOneHlsVariant(text: String, maxBitrate: Long?, maxVideoHeight: 
             }
         }
     }
-    return lines.filterIndexed { at, _ -> at !in dropped }.joinToString("\n")
+    return HlsMaster(lines.filterIndexed { at, _ -> at !in dropped }.joinToString("\n"), variants, variants.indexOf(chosen))
 }
 
 /**

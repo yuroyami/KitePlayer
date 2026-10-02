@@ -680,8 +680,12 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/
         open fun <get-attachments>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/MediaAttachment> // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.attachments.<get-attachments>|<get-attachments>(){}[0]
     open val containerBitrateBps // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.containerBitrateBps|{}containerBitrateBps[0]
         open fun <get-containerBitrateBps>(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.containerBitrateBps.<get-containerBitrateBps>|<get-containerBitrateBps>(){}[0]
+    open val selectedVariant // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectedVariant|{}selectedVariant[0]
+        open fun <get-selectedVariant>(): kotlin/Int? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectedVariant.<get-selectedVariant>|<get-selectedVariant>(){}[0]
     open val streamDivergences // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.streamDivergences|{}streamDivergences[0]
         open fun <get-streamDivergences>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/StreamDivergence> // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.streamDivergences.<get-streamDivergences>|<get-streamDivergences>(){}[0]
+    open val variants // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.variants|{}variants[0]
+        open fun <get-variants>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/StreamVariant> // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.variants.<get-variants>|<get-variants>(){}[0]
 
     abstract fun selectStreams(kotlin.collections/Set<kotlin/Int>) // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectStreams|selectStreams(kotlin.collections.Set<kotlin.Int>){}[0]
     abstract suspend fun readPacket(): io.github.yuroyami.kiteplayer.spi/PlayerPacket? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.readPacket|readPacket(){}[0]
@@ -2320,7 +2324,7 @@ final class io.github.yuroyami.kiteplayer/Chapter { // io.github.yuroyami.kitepl
 }
 
 final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.kiteplayer/DemuxPolicy|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/DemuxPolicy.<init>|<init>(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ..., kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/DemuxPolicy.<init>|<init>(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?;kotlin.Int?){}[0]
 
     final val corruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.corruptPackets|{}corruptPackets[0]
         final fun <get-corruptPackets>(): io.github.yuroyami.kiteplayer/CorruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.corruptPackets.<get-corruptPackets>|<get-corruptPackets>(){}[0]
@@ -2336,6 +2340,8 @@ final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.ki
         final fun <get-probe>(): io.github.yuroyami.kiteplayer/ProbeDepth // io.github.yuroyami.kiteplayer/DemuxPolicy.probe.<get-probe>|<get-probe>(){}[0]
     final val skipInitialBytes // io.github.yuroyami.kiteplayer/DemuxPolicy.skipInitialBytes|{}skipInitialBytes[0]
         final fun <get-skipInitialBytes>(): kotlin/Long // io.github.yuroyami.kiteplayer/DemuxPolicy.skipInitialBytes.<get-skipInitialBytes>|<get-skipInitialBytes>(){}[0]
+    final val variant // io.github.yuroyami.kiteplayer/DemuxPolicy.variant|{}variant[0]
+        final fun <get-variant>(): kotlin/Int? // io.github.yuroyami.kiteplayer/DemuxPolicy.variant.<get-variant>|<get-variant>(){}[0]
 
     final fun component1(): io.github.yuroyami.kiteplayer/ProbeDepth // io.github.yuroyami.kiteplayer/DemuxPolicy.component1|component1(){}[0]
     final fun component2(): io.github.yuroyami.kiteplayer/CorruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.component2|component2(){}[0]
@@ -2344,7 +2350,8 @@ final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.ki
     final fun component5(): kotlin/Long // io.github.yuroyami.kiteplayer/DemuxPolicy.component5|component5(){}[0]
     final fun component6(): kotlin/Long? // io.github.yuroyami.kiteplayer/DemuxPolicy.component6|component6(){}[0]
     final fun component7(): kotlin/Int? // io.github.yuroyami.kiteplayer/DemuxPolicy.component7|component7(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ...): io.github.yuroyami.kiteplayer/DemuxPolicy // io.github.yuroyami.kiteplayer/DemuxPolicy.copy|copy(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?){}[0]
+    final fun component8(): kotlin/Int? // io.github.yuroyami.kiteplayer/DemuxPolicy.component8|component8(){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ..., kotlin/Int? = ...): io.github.yuroyami.kiteplayer/DemuxPolicy // io.github.yuroyami.kiteplayer/DemuxPolicy.copy|copy(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?;kotlin.Int?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/DemuxPolicy.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/DemuxPolicy.toString|toString(){}[0]
@@ -2503,6 +2510,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final suspend fun seekToChapter(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayer.seekToChapter|seekToChapter(kotlin.Int){}[0]
     final suspend fun selectSecondarySubtitle(io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayer.selectSecondarySubtitle|selectSecondarySubtitle(io.github.yuroyami.kiteplayer.TrackId?){}[0]
     final suspend fun selectTrack(io.github.yuroyami.kiteplayer/TrackKind, io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayer.selectTrack|selectTrack(io.github.yuroyami.kiteplayer.TrackKind;io.github.yuroyami.kiteplayer.TrackId?){}[0]
+    final suspend fun selectVariant(kotlin/Int?) // io.github.yuroyami.kiteplayer/KitePlayer.selectVariant|selectVariant(kotlin.Int?){}[0]
     final suspend fun startRecording(kotlin/String) // io.github.yuroyami.kiteplayer/KitePlayer.startRecording|startRecording(kotlin.String){}[0]
     final suspend fun stepFrame(io.github.yuroyami.kiteplayer/StepDirection = ...) // io.github.yuroyami.kiteplayer/KitePlayer.stepFrame|stepFrame(io.github.yuroyami.kiteplayer.StepDirection){}[0]
     final suspend fun stop() // io.github.yuroyami.kiteplayer/KitePlayer.stop|stop(){}[0]
@@ -3159,6 +3167,34 @@ final class io.github.yuroyami.kiteplayer/RenderQuality { // io.github.yuroyami.
     }
 }
 
+final class io.github.yuroyami.kiteplayer/StreamVariant { // io.github.yuroyami.kiteplayer/StreamVariant|null[0]
+    constructor <init>(kotlin/Int, kotlin/Long, kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Double? = ..., kotlin/String? = ...) // io.github.yuroyami.kiteplayer/StreamVariant.<init>|<init>(kotlin.Int;kotlin.Long;kotlin.Int?;kotlin.Int?;kotlin.Double?;kotlin.String?){}[0]
+
+    final val bitrate // io.github.yuroyami.kiteplayer/StreamVariant.bitrate|{}bitrate[0]
+        final fun <get-bitrate>(): kotlin/Long // io.github.yuroyami.kiteplayer/StreamVariant.bitrate.<get-bitrate>|<get-bitrate>(){}[0]
+    final val codecs // io.github.yuroyami.kiteplayer/StreamVariant.codecs|{}codecs[0]
+        final fun <get-codecs>(): kotlin/String? // io.github.yuroyami.kiteplayer/StreamVariant.codecs.<get-codecs>|<get-codecs>(){}[0]
+    final val frameRate // io.github.yuroyami.kiteplayer/StreamVariant.frameRate|{}frameRate[0]
+        final fun <get-frameRate>(): kotlin/Double? // io.github.yuroyami.kiteplayer/StreamVariant.frameRate.<get-frameRate>|<get-frameRate>(){}[0]
+    final val height // io.github.yuroyami.kiteplayer/StreamVariant.height|{}height[0]
+        final fun <get-height>(): kotlin/Int? // io.github.yuroyami.kiteplayer/StreamVariant.height.<get-height>|<get-height>(){}[0]
+    final val index // io.github.yuroyami.kiteplayer/StreamVariant.index|{}index[0]
+        final fun <get-index>(): kotlin/Int // io.github.yuroyami.kiteplayer/StreamVariant.index.<get-index>|<get-index>(){}[0]
+    final val width // io.github.yuroyami.kiteplayer/StreamVariant.width|{}width[0]
+        final fun <get-width>(): kotlin/Int? // io.github.yuroyami.kiteplayer/StreamVariant.width.<get-width>|<get-width>(){}[0]
+
+    final fun component1(): kotlin/Int // io.github.yuroyami.kiteplayer/StreamVariant.component1|component1(){}[0]
+    final fun component2(): kotlin/Long // io.github.yuroyami.kiteplayer/StreamVariant.component2|component2(){}[0]
+    final fun component3(): kotlin/Int? // io.github.yuroyami.kiteplayer/StreamVariant.component3|component3(){}[0]
+    final fun component4(): kotlin/Int? // io.github.yuroyami.kiteplayer/StreamVariant.component4|component4(){}[0]
+    final fun component5(): kotlin/Double? // io.github.yuroyami.kiteplayer/StreamVariant.component5|component5(){}[0]
+    final fun component6(): kotlin/String? // io.github.yuroyami.kiteplayer/StreamVariant.component6|component6(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/Long = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Double? = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/StreamVariant // io.github.yuroyami.kiteplayer/StreamVariant.copy|copy(kotlin.Int;kotlin.Long;kotlin.Int?;kotlin.Int?;kotlin.Double?;kotlin.String?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/StreamVariant.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/StreamVariant.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/StreamVariant.toString|toString(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami.kiteplayer/SubtitleConfig|null[0]
     constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ...) // io.github.yuroyami.kiteplayer/SubtitleConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>){}[0]
 
@@ -3292,7 +3328,7 @@ final class io.github.yuroyami.kiteplayer/TrackInfo { // io.github.yuroyami.kite
 }
 
 final class io.github.yuroyami.kiteplayer/Tracks { // io.github.yuroyami.kiteplayer/Tracks|null[0]
-    constructor <init>(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ...) // io.github.yuroyami.kiteplayer/Tracks.<init>|<init>(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?){}[0]
+    constructor <init>(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/StreamVariant> = ..., kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/Tracks.<init>|<init>(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;kotlin.collections.List<io.github.yuroyami.kiteplayer.StreamVariant>;kotlin.Int?){}[0]
 
     final val all // io.github.yuroyami.kiteplayer/Tracks.all|{}all[0]
         final fun <get-all>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> // io.github.yuroyami.kiteplayer/Tracks.all.<get-all>|<get-all>(){}[0]
@@ -3304,10 +3340,14 @@ final class io.github.yuroyami.kiteplayer/Tracks { // io.github.yuroyami.kitepla
         final fun <get-selectedSecondarySubtitle>(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.selectedSecondarySubtitle.<get-selectedSecondarySubtitle>|<get-selectedSecondarySubtitle>(){}[0]
     final val selectedSubtitle // io.github.yuroyami.kiteplayer/Tracks.selectedSubtitle|{}selectedSubtitle[0]
         final fun <get-selectedSubtitle>(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.selectedSubtitle.<get-selectedSubtitle>|<get-selectedSubtitle>(){}[0]
+    final val selectedVariant // io.github.yuroyami.kiteplayer/Tracks.selectedVariant|{}selectedVariant[0]
+        final fun <get-selectedVariant>(): kotlin/Int? // io.github.yuroyami.kiteplayer/Tracks.selectedVariant.<get-selectedVariant>|<get-selectedVariant>(){}[0]
     final val selectedVideo // io.github.yuroyami.kiteplayer/Tracks.selectedVideo|{}selectedVideo[0]
         final fun <get-selectedVideo>(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.selectedVideo.<get-selectedVideo>|<get-selectedVideo>(){}[0]
     final val subtitles // io.github.yuroyami.kiteplayer/Tracks.subtitles|{}subtitles[0]
         final fun <get-subtitles>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> // io.github.yuroyami.kiteplayer/Tracks.subtitles.<get-subtitles>|<get-subtitles>(){}[0]
+    final val variants // io.github.yuroyami.kiteplayer/Tracks.variants|{}variants[0]
+        final fun <get-variants>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/StreamVariant> // io.github.yuroyami.kiteplayer/Tracks.variants.<get-variants>|<get-variants>(){}[0]
     final val video // io.github.yuroyami.kiteplayer/Tracks.video|{}video[0]
         final fun <get-video>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> // io.github.yuroyami.kiteplayer/Tracks.video.<get-video>|<get-video>(){}[0]
 
@@ -3316,7 +3356,9 @@ final class io.github.yuroyami.kiteplayer/Tracks { // io.github.yuroyami.kitepla
     final fun component3(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.component3|component3(){}[0]
     final fun component4(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.component4|component4(){}[0]
     final fun component5(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.component5|component5(){}[0]
-    final fun copy(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ...): io.github.yuroyami.kiteplayer/Tracks // io.github.yuroyami.kiteplayer/Tracks.copy|copy(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?){}[0]
+    final fun component6(): kotlin.collections/List<io.github.yuroyami.kiteplayer/StreamVariant> // io.github.yuroyami.kiteplayer/Tracks.component6|component6(){}[0]
+    final fun component7(): kotlin/Int? // io.github.yuroyami.kiteplayer/Tracks.component7|component7(){}[0]
+    final fun copy(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/StreamVariant> = ..., kotlin/Int? = ...): io.github.yuroyami.kiteplayer/Tracks // io.github.yuroyami.kiteplayer/Tracks.copy|copy(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;kotlin.collections.List<io.github.yuroyami.kiteplayer.StreamVariant>;kotlin.Int?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/Tracks.equals|equals(kotlin.Any?){}[0]
     final fun find(io.github.yuroyami.kiteplayer/TrackId): io.github.yuroyami.kiteplayer/TrackInfo? // io.github.yuroyami.kiteplayer/Tracks.find|find(io.github.yuroyami.kiteplayer.TrackId){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/Tracks.hashCode|hashCode(){}[0]

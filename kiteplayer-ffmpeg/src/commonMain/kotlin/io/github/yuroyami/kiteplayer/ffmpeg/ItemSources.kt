@@ -16,7 +16,14 @@ import kotlin.time.Duration.Companion.seconds
  * cannot end a read that waits inside the reader. [hls] is set for an HLS stream read through the
  * item's reader.
  */
-internal class OpenedItem(val source: MediaSource, val bridge: BlockingMediaIo?, val hls: HlsLedger? = null)
+internal class OpenedItem(
+    val source: MediaSource,
+    val bridge: BlockingMediaIo?,
+    val hls: HlsLedger? = null,
+    /** The variants of an HLS master playlist and the index of the one kept, for the track table. */
+    val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
+    val selectedVariant: Int? = null,
+)
 
 /**
  * Opens a KiteFFmpeg source for [item]. Playback, thumbnails, waveforms and loudness all open
@@ -73,7 +80,7 @@ internal suspend fun openItem(item: MediaItem): OpenedItem {
                     )
                 }
             }
-            OpenedItem(source, bridge, hls?.ledger)
+            OpenedItem(source, bridge, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant)
         }
         // No protocol reads the descriptor now, so no protocol is left to consume its key.
         descriptor != null ->

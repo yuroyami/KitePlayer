@@ -65,10 +65,17 @@ public data class DemuxPolicy(
      * limit. It works with [maxBitrate], and a variant that does not state its size passes.
      */
     val maxVideoHeight: Int? = null,
+    /**
+     * The [StreamVariant.index] of the variant to play, or null to choose one by [maxBitrate] and
+     * [maxVideoHeight]. An index that the master playlist does not have is ignored, and the choice
+     * is made as for null. [KitePlayer.selectVariant] sets it on the item that plays.
+     */
+    val variant: Int? = null,
 ) {
     init {
         require(skipInitialBytes >= 0) { "skipInitialBytes must not be negative, was $skipInitialBytes" }
         require(maxBitrate == null || maxBitrate > 0) { "maxBitrate must be positive, was $maxBitrate" }
         require(maxVideoHeight == null || maxVideoHeight > 0) { "maxVideoHeight must be positive, was $maxVideoHeight" }
+        require(variant == null || variant >= 0) { "variant must not be negative, was $variant" }
     }
 }

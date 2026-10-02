@@ -281,6 +281,7 @@ private fun MutableMap<String, String>.putDemux(prefix: String, demux: DemuxPoli
     if (demux.skipInitialBytes != 0L) put("${prefix}skipInitialBytes", demux.skipInitialBytes.toString())
     demux.maxBitrate?.let { put("${prefix}maxBitrate", it.toString()) }
     demux.maxVideoHeight?.let { put("${prefix}maxVideoHeight", it.toString()) }
+    demux.variant?.let { put("${prefix}variant", it.toString()) }
 }
 
 /** Reads what [putDemux] wrote. A missing key is the default for its field. */
@@ -301,5 +302,6 @@ private fun demuxFrom(properties: Map<String, String>, prefix: String): DemuxPol
         skipInitialBytes = properties["${prefix}skipInitialBytes"]?.toLong() ?: 0,
         maxBitrate = properties["${prefix}maxBitrate"]?.toLong(),
         maxVideoHeight = properties["${prefix}maxVideoHeight"]?.toInt(),
+        variant = properties["${prefix}variant"]?.toInt(),
     )
 }

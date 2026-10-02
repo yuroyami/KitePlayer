@@ -124,6 +124,15 @@ public interface PlayerMediaSource : AutoCloseable {
      *         the engine then discovers it from the first decoded frame.
      */
     public suspend fun seekToKeyframe(target: Pts): Pts?
+
+    /**
+     * The versions of this media at other qualities, such as the variants of an HLS master
+     * playlist, or empty for media with one version. The engine lists them in [io.github.yuroyami.kiteplayer.Tracks.variants].
+     */
+    public val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = emptyList()
+
+    /** The [io.github.yuroyami.kiteplayer.StreamVariant.index] of the variant this source reads, or null. */
+    public val selectedVariant: Int? get() = null
 }
 
 /** What the container declares about one stream. */

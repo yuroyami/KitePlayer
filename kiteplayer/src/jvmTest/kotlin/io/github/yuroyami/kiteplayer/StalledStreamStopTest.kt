@@ -12,7 +12,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.sound.sampled.AudioSystem
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -63,7 +62,7 @@ class StalledStreamStopTest {
         val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
         if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
         val stream = StallingStream(file.readBytes().copyOf(PREFIX_BYTES))
-        val player = assertNotNull(KitePlayerPlatform.createOrNull(), "no default desktop player")
+        val player = KitePlayer()
         try {
             player.open(MediaItem.from(MediaIo.ofStream { stream }, "stalled.mkv"))
             player.play()

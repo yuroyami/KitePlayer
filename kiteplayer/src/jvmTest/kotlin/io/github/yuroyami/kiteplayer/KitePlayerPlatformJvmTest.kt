@@ -1,6 +1,9 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.mobile.mobileBackends
+import io.github.yuroyami.kiteplayer.spi.AudioSink
+import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
+import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.view.KitePlayerAwtView
 import io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture
 import java.awt.GraphicsEnvironment
@@ -19,10 +22,7 @@ class KitePlayerPlatformJvmTest {
 
     @Test
     fun theDesktopStackIsRealAndComplete() {
-        assertTrue(
-            KitePlayerPlatform.isAvailable,
-            "desktop availability refused: ${KitePlayerPlatform.availability}",
-        )
+        assertTrue(KitePlayer.isAvailable, "desktop availability refused: ${KitePlayer.availability}")
 
         val backends = assertNotNull(KitePlayerPlatform.backendsOrNull(), "no default desktop backends")
         assertNotNull(backends.backend, "no media backend")
@@ -30,6 +30,33 @@ class KitePlayerPlatformJvmTest {
         assertNotNull(output.audioSink, "the desktop output has no audio sink factory")
         assertNotNull(output.subtitleRasterizer, "the desktop output has no subtitle rasterizer")
         assertNotNull(mobileBackends().backend, "mobileBackends() found no desktop backend")
+    }
+
+    @Test
+    fun kitePlayerBuildsTheDefaultStack() {
+        KitePlayer().use { player ->
+            val dump = player.diagnosticsDump()
+            assertTrue(dumpLine(dump, "backend").contains("KiteFFmpeg"), dump)
+            assertTrue(dumpLine(dump, "output").contains("DesktopOutputBackend"), dump)
+        }
+    }
+
+    /** A backend the config names is kept, and only the missing one comes from the defaults. */
+    @Test
+    fun aNamedBackendIsKeptAndAMissingOneIsFilled() {
+        KitePlayer(PlayerConfig(backends = Backends(output = NamedOutputBackend))).use { player ->
+            val dump = player.diagnosticsDump()
+            assertTrue(dumpLine(dump, "output").contains("NamedOutputBackend"), dump)
+            assertTrue(dumpLine(dump, "backend").contains("KiteFFmpeg"), dump)
+        }
+    }
+
+    /** The old door answers as it did, for apps that have not moved yet. */
+    @Suppress("DEPRECATION")
+    @Test
+    fun theDeprecatedDoorStillAnswers() {
+        assertEquals(KitePlayer.availability, KitePlayerPlatform.availability)
+        assertNotNull(KitePlayerPlatform.createOrNull()).close()
     }
 
     /**
@@ -40,9 +67,21 @@ class KitePlayerPlatformJvmTest {
     @Test
     fun desktopPictureInPictureFollowsTheFloatingWindow() {
         val environment = !GraphicsEnvironment.isHeadless() && Toolkit.getDefaultToolkit().isAlwaysOnTopSupported
-        assertEquals(environment, KitePlayerPlatform.supportsPictureInPicture, "the answer must follow the screen")
+        assertEquals(environment, KitePlayer.supportsPictureInPicture, "the answer must follow the screen")
         KitePlayerPictureInPicture.createOrNull(KitePlayerAwtView()).use { floating ->
-            assertEquals(floating != null, KitePlayerPlatform.supportsPictureInPicture, "the answer must match createOrNull")
+            assertEquals(floating != null, KitePlayer.supportsPictureInPicture, "the answer must match createOrNull")
         }
+    }
+
+    private fun dumpLine(dump: String, key: String): String =
+        dump.lineSequence().firstOrNull { it.trimStart().startsWith("$key ") } ?: "no $key line"
+}
+
+/** Never asked for sound: these tests only build and close players. */
+private object NamedOutputBackend : OutputBackend {
+    override val clock: MonotonicClock = MonotonicClock.System
+    override val audioSink: AudioSinkFactory = object : AudioSinkFactory {
+        override val name: String = "named"
+        override suspend fun create(): AudioSink = error("no audio in this test")
     }
 }

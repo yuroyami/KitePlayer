@@ -254,8 +254,8 @@ public class KitePlayerPictureInPicture private constructor(
 
 /**
  * Whether this JVM can show an always-on-top window. Headless is asked first: a headless JVM has
- * no screen, and its toolkit is not the one that would draw the window. `KitePlayerPlatform` in the
- * `kiteplayer` module asks the same two questions for `supportsPictureInPicture`.
+ * no screen, and its toolkit is not the one that would draw the window. The `kiteplayer` module
+ * asks the same two questions for `KitePlayer.supportsPictureInPicture`.
  */
 internal fun floatingWindowsSupported(): Boolean =
     !GraphicsEnvironment.isHeadless() &&

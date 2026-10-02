@@ -2,7 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.AudioTap
 import io.github.yuroyami.kiteplayer.Generation
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackId
@@ -41,7 +41,7 @@ class ScanAlignmentTest {
         assumeTrue("no $name in the test media folder", found != null)
         assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
         val file = checkNotNull(found)
-        val player = assertNotNull(KitePlayerPlatform.createOrNull(), "no default desktop player")
+        val player = KitePlayer()
         val heard = ConcurrentLinkedQueue<Block>()
         val tap = object : AudioTap {
             override fun onAudio(pts: Pts, interleaved: FloatArray, frames: Int, format: AudioFormat) {}
@@ -75,7 +75,7 @@ class ScanAlignmentTest {
             player.detachAudioTap(tap)
             player.closeAndAwait()
         }
-        val scanner = assertNotNull(KitePlayerPlatform.createOrNull())
+        val scanner = KitePlayer()
         val scanned = HashMap<Long, Block>()
         try {
             val result = scanner.scanAudio(media, track) { pts, interleaved, frames, format ->

@@ -4,6 +4,7 @@ import kotlin.experimental.ExperimentalNativeApi
 import kotlin.native.OsFamily
 import kotlin.native.Platform
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -11,7 +12,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * What `KitePlayerPlatform` answers on each Kotlin/Native target.
+ * What `KitePlayer()` and the default stack answer on each Kotlin/Native target.
  *
  * Apple has the FFmpeg backend and an audio output, so it builds a player. Linux and Windows have
  * the FFmpeg backend and no audio output, so they refuse and say what to pass instead.
@@ -23,17 +24,18 @@ class NativePlatformDefaultsTest {
     fun appleBuildsTheWholeStackAndTheOthersSayWhatIsMissing() {
         when (Platform.osFamily) {
             OsFamily.MACOSX, OsFamily.IOS -> {
-                assertTrue(KitePlayerPlatform.isAvailable, "refused: ${KitePlayerPlatform.availability}")
+                assertTrue(KitePlayer.isAvailable, "refused: ${KitePlayer.availability}")
                 val backends = assertNotNull(KitePlayerPlatform.backendsOrNull(), "no default backends")
                 assertNotNull(backends.backend, "no media backend")
                 val output = assertNotNull(backends.output, "no output backend")
                 assertNotNull(output.subtitleRasterizer, "the Apple output has no subtitle rasterizer")
             }
             OsFamily.LINUX, OsFamily.WINDOWS -> {
-                val unavailable = assertIs<KitePlayerAvailability.Unavailable>(KitePlayerPlatform.availability)
+                val unavailable = assertIs<KitePlayerAvailability.Unavailable>(KitePlayer.availability)
                 assertTrue("OutputBackend" in unavailable.reason, "the reason does not say what to pass: ${unavailable.reason}")
                 assertNull(KitePlayerPlatform.backendsOrNull())
-                assertNull(KitePlayerPlatform.createOrNull())
+                val refusal = assertFailsWith<PlaybackException> { KitePlayer() }
+                assertTrue(unavailable.reason in refusal.message.orEmpty(), "the refusal does not carry the reason: ${refusal.message}")
             }
             else -> println("SKIP: no default stack is declared for ${Platform.osFamily}")
         }
@@ -42,7 +44,7 @@ class NativePlatformDefaultsTest {
     @Test
     fun linuxAndWindowsClaimNoPictureInPicture() {
         when (Platform.osFamily) {
-            OsFamily.LINUX, OsFamily.WINDOWS -> assertFalse(KitePlayerPlatform.supportsPictureInPicture)
+            OsFamily.LINUX, OsFamily.WINDOWS -> assertFalse(KitePlayer.supportsPictureInPicture)
             // Apple answers the system's own static; ApplePlatformDefaultsTest checks that answer.
             else -> println("SKIP: ${Platform.osFamily} answers picture in picture from the system")
         }

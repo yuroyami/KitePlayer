@@ -25,7 +25,7 @@ import kotlin.time.Duration.Companion.seconds
  * The end-to-end desktop proof: one dependency line, a real file, real audio out, real progress.
  *
  * Everything else in this phase tests a layer. This tests the assembly the way a consumer meets it:
- * `KitePlayerPlatform.createOrNull()`, `open`, `play`, and the clock moving. It opens a real device,
+ * `KitePlayer()`, `open`, `play`, and the clock moving. It opens a real device,
  * so it skips itself when the machine has no audio mixer rather than failing for the wrong reason.
  */
 class DesktopPlaybackTest {
@@ -67,7 +67,7 @@ class DesktopPlaybackTest {
     private suspend fun playsAndTheClockMoves(item: MediaItem) {
         if (AudioSystem.getMixerInfo().isEmpty()) return println("SKIP: no audio mixer")
 
-        val player = assertNotNull(KitePlayerPlatform.createOrNull(), "no default desktop player")
+        val player = KitePlayer()
         try {
             player.open(item)
             player.play()

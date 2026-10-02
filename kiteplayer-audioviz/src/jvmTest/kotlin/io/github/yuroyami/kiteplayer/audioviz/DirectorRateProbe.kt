@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.isAvailable
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDirector
@@ -33,7 +34,7 @@ class DirectorRateProbe {
     fun report() = runBlocking {
         val files = songs()
         assumeTrue("no songs in the sample media folder", files.isNotEmpty())
-        val created = KitePlayerPlatform.createOrNull()
+        val created = if (KitePlayer.isAvailable) KitePlayer() else null
         assumeTrue("no desktop player on this host", created != null)
         val player = checkNotNull(created)
         val out = StringBuilder()

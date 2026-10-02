@@ -19,7 +19,7 @@ class KitePlayerPlatformWebTest {
     private fun answerWith(documentWindow: Boolean, videoElement: Boolean): Boolean {
         val saved = setFeatures(documentWindow, videoElement)
         try {
-            return KitePlayerPlatform.supportsPictureInPicture
+            return KitePlayer.supportsPictureInPicture
         } finally {
             restoreFeatures(saved)
         }

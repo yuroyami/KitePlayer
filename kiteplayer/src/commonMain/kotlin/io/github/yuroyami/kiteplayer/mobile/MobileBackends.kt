@@ -8,8 +8,8 @@ import io.github.yuroyami.kiteplayer.KitePlayerPlatform
  *
  * This is convenience, not policy. A consumer that wants a different pairing builds [Backends]
  * by hand exactly as before; nothing in this module requires coming through here. On an
- * unavailable placeholder target this returns an empty [Backends]. Prefer
- * [KitePlayerPlatform.createOrNull] when the target may not be playable; passing this empty value
- * to `KitePlayer.create` deliberately produces its typed configuration error.
+ * unavailable placeholder target this returns an empty [Backends]. Prefer `KitePlayer()`, which
+ * builds a player on these backends and says why when the target cannot play; passing this empty
+ * value to `KitePlayer.create` deliberately produces its typed configuration error.
  */
 public fun mobileBackends(): Backends = KitePlayerPlatform.backendsOrNull() ?: Backends()

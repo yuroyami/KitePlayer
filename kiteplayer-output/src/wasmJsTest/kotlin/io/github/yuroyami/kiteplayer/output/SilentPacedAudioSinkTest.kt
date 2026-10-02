@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  * The regression this file exists for.
  *
  * The first version of this sink stored the render callback and never called it. It compiled, it
- * satisfied the interface, and `KitePlayerPlatform.createOrNull()` returned a player, so every
+ * satisfied the interface, and `KitePlayer()` returned a player, so every
  * proof run that day passed. Playback would have hung at position zero, because the engine's clock
  * anchors only when the callback consumes the audio ring. These tests assert the calling, which is
  * the only part that was ever missing.

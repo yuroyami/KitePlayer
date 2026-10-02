@@ -2,7 +2,7 @@ package io.github.yuroyami.kiteplayer
 
 /** Whether KitePlayer's default backend and output stack can run in this process. */
 public sealed interface KitePlayerAvailability {
-    /** True only when [KitePlayerPlatform.createOrNull] can build the default player. */
+    /** True only when [KitePlayer] can build the default player. */
     public val isAvailable: Boolean
 
     /** The platform has a real, usable default stack. */
@@ -23,6 +23,10 @@ public sealed interface KitePlayerAvailability {
 /**
  * The default KitePlayer stack for the current target.
  *
+ * Deprecated in favour of names a reader finds under `KitePlayer`: `KitePlayer()` builds the
+ * default player, and `KitePlayer.availability`, `KitePlayer.isAvailable` and
+ * `KitePlayer.supportsPictureInPicture` answer the same questions as the members here.
+ *
  * Android, iOS, macOS native and the desktop JVM provide real backends. Wasm becomes available
  * after its codec module is loaded. JavaScript retains an explicit unavailable facade. Linux and
  * Windows native have the FFmpeg backend but no audio output, so they answer unavailable, and a
@@ -34,12 +38,20 @@ public sealed interface KitePlayerAvailability {
  */
 public object KitePlayerPlatform {
     /** A non-throwing explanation of whether the default stack can be constructed. */
+    @Deprecated(
+        "Use KitePlayer.availability.",
+        ReplaceWith("KitePlayer.availability", "io.github.yuroyami.kiteplayer.availability"),
+    )
     public val availability: KitePlayerAvailability
         get() = platformKitePlayerDefaults.availability
 
     /** Convenience form of [availability] for engine registries and feature pickers. */
+    @Deprecated(
+        "Use KitePlayer.isAvailable.",
+        ReplaceWith("KitePlayer.isAvailable", "io.github.yuroyami.kiteplayer.isAvailable"),
+    )
     public val isAvailable: Boolean
-        get() = availability.isAvailable
+        get() = platformKitePlayerDefaults.availability.isAvailable
 
     /**
      * Whether this platform can put a player in a picture-in-picture window at all.
@@ -52,6 +64,10 @@ public object KitePlayerPlatform {
      * The host application still owns its Activity, its manifest and the viewer's per-app
      * permission, on both platforms.
      */
+    @Deprecated(
+        "Use KitePlayer.supportsPictureInPicture.",
+        ReplaceWith("KitePlayer.supportsPictureInPicture", "io.github.yuroyami.kiteplayer.supportsPictureInPicture"),
+    )
     public val supportsPictureInPicture: Boolean
         get() = platformKitePlayerDefaults.supportsPictureInPicture
 
@@ -61,6 +77,12 @@ public object KitePlayerPlatform {
      * [PlayerConfig.backends] is replaced with the platform defaults. Call [KitePlayer.create]
      * directly when supplying custom backends.
      */
+    @Deprecated(
+        "Use KitePlayer(config). It throws PlaybackException where this returns null, and it keeps " +
+            "a backend that config.backends names. Check KitePlayer.isAvailable first where the " +
+            "platform may have no default stack.",
+        ReplaceWith("KitePlayer(config)", "io.github.yuroyami.kiteplayer.KitePlayer"),
+    )
     public fun createOrNull(config: PlayerConfig = PlayerConfig()): KitePlayer? {
         val backends = platformKitePlayerDefaults.backendsOrNull() ?: return null
         return KitePlayer.create(config.copy(backends = backends))

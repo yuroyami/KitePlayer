@@ -5,7 +5,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import javax.sound.sampled.AudioSystem
 import kotlin.test.Test
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -28,8 +27,8 @@ class TwoPlayersTest {
         val second = media("truevfr720.mp4") ?: return@runBlocking println("SKIP: no truevfr720.mp4")
         if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
 
-        val a = assertNotNull(KitePlayerPlatform.createOrNull(), "no default desktop player")
-        val b = assertNotNull(KitePlayerPlatform.createOrNull(), "no second desktop player")
+        val a = KitePlayer()
+        val b = KitePlayer()
         try {
             a.open(MediaItem(first.absolutePath))
             b.open(MediaItem(second.absolutePath))

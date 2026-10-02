@@ -18,7 +18,7 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * The macOS native proof, the way a consumer meets it: one dependency on `kiteplayer`,
- * `KitePlayerPlatform.createOrNull()`, a real file, real audio out and the clock moving.
+ * `KitePlayer()`, a real file, real audio out and the clock moving.
  */
 class MacosPlaybackTest {
 
@@ -29,7 +29,7 @@ class MacosPlaybackTest {
     @Test
     fun theDefaultMacosStackPlaysARealFileAndTheClockMoves() = runBlocking<Unit> {
         val path = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
-        val player = assertNotNull(KitePlayerPlatform.createOrNull(), "no default macOS player: ${KitePlayerPlatform.availability}")
+        val player = KitePlayer()
         try {
             player.open(MediaItem(path))
             player.play()

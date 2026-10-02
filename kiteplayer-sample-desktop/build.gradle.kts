@@ -8,7 +8,7 @@ plugins {
 
 /*
  * The Compose Desktop proof for the upload measurement. One window, one player built by
- * KitePlayerPlatform.createOrNull(), and KiteVideo drawing its frames as ordinary Compose
+ * KitePlayer(), and KiteVideo drawing its frames as ordinary Compose
  * content. The modifier toggle is the point of that screen: clip, alpha, rotation and scale apply
  * to the video pixels, which a platform-view player cannot do.
  *

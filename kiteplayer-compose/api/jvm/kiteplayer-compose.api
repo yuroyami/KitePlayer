@@ -1,0 +1,4 @@
+public final class io/github/yuroyami/kiteplayer/compose/RememberKitePlayerKt {
+	public static final fun rememberKitePlayer (Lio/github/yuroyami/kiteplayer/PlayerConfig;Landroidx/compose/runtime/Composer;II)Lio/github/yuroyami/kiteplayer/KitePlayer;
+}
+

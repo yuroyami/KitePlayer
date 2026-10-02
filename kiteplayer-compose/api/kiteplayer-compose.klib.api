@@ -6,3 +6,4 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-compose>
+final fun io.github.yuroyami.kiteplayer.compose/rememberKitePlayer(io.github.yuroyami.kiteplayer/PlayerConfig?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int): io.github.yuroyami.kiteplayer/KitePlayer // io.github.yuroyami.kiteplayer.compose/rememberKitePlayer|rememberKitePlayer(io.github.yuroyami.kiteplayer.PlayerConfig?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]

@@ -156,8 +156,16 @@ final object io.github.yuroyami.kiteplayer/KitePlayerPlatform { // io.github.yur
     final fun createOrNull(io.github.yuroyami.kiteplayer/PlayerConfig = ...): io.github.yuroyami.kiteplayer/KitePlayer? // io.github.yuroyami.kiteplayer/KitePlayerPlatform.createOrNull|createOrNull(io.github.yuroyami.kiteplayer.PlayerConfig){}[0]
 }
 
+final val io.github.yuroyami.kiteplayer/availability // io.github.yuroyami.kiteplayer/availability|@io.github.yuroyami.kiteplayer.KitePlayer.Companion{}availability[0]
+    final fun (io.github.yuroyami.kiteplayer/KitePlayer.Companion).<get-availability>(): io.github.yuroyami.kiteplayer/KitePlayerAvailability // io.github.yuroyami.kiteplayer/availability.<get-availability>|<get-availability>@io.github.yuroyami.kiteplayer.KitePlayer.Companion(){}[0]
+final val io.github.yuroyami.kiteplayer/isAvailable // io.github.yuroyami.kiteplayer/isAvailable|@io.github.yuroyami.kiteplayer.KitePlayer.Companion{}isAvailable[0]
+    final fun (io.github.yuroyami.kiteplayer/KitePlayer.Companion).<get-isAvailable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/isAvailable.<get-isAvailable>|<get-isAvailable>@io.github.yuroyami.kiteplayer.KitePlayer.Companion(){}[0]
+final val io.github.yuroyami.kiteplayer/supportsPictureInPicture // io.github.yuroyami.kiteplayer/supportsPictureInPicture|@io.github.yuroyami.kiteplayer.KitePlayer.Companion{}supportsPictureInPicture[0]
+    final fun (io.github.yuroyami.kiteplayer/KitePlayer.Companion).<get-supportsPictureInPicture>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/supportsPictureInPicture.<get-supportsPictureInPicture>|<get-supportsPictureInPicture>@io.github.yuroyami.kiteplayer.KitePlayer.Companion(){}[0]
+
 final fun (io.github.yuroyami.kiteplayer/PlayerSnapshot).io.github.yuroyami.kiteplayer.session/toMediaSessionState(io.github.yuroyami.kiteplayer/Progress): io.github.yuroyami.kiteplayer.session/MediaSessionState // io.github.yuroyami.kiteplayer.session/toMediaSessionState|toMediaSessionState@io.github.yuroyami.kiteplayer.PlayerSnapshot(io.github.yuroyami.kiteplayer.Progress){}[0]
 final fun io.github.yuroyami.kiteplayer.mobile/mobileBackends(): io.github.yuroyami.kiteplayer/Backends // io.github.yuroyami.kiteplayer.mobile/mobileBackends|mobileBackends(){}[0]
+final fun io.github.yuroyami.kiteplayer/KitePlayer(io.github.yuroyami.kiteplayer/PlayerConfig = ...): io.github.yuroyami.kiteplayer/KitePlayer // io.github.yuroyami.kiteplayer/KitePlayer|KitePlayer(io.github.yuroyami.kiteplayer.PlayerConfig){}[0]
 
 // Targets: [ios, wasmJs]
 final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession|null[0]

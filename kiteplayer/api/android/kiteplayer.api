@@ -32,7 +32,16 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerPlatform {
 }
 
 public final class io/github/yuroyami/kiteplayer/KitePlayerPlatformAndroidKt {
+	public static final fun supportsPictureInPicture (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;Landroid/content/Context;)Z
 	public static final fun supportsPictureInPicture (Lio/github/yuroyami/kiteplayer/KitePlayerPlatform;Landroid/content/Context;)Z
+}
+
+public final class io/github/yuroyami/kiteplayer/KitePlayers {
+	public static final fun KitePlayer (Lio/github/yuroyami/kiteplayer/PlayerConfig;)Lio/github/yuroyami/kiteplayer/KitePlayer;
+	public static synthetic fun KitePlayer$default (Lio/github/yuroyami/kiteplayer/PlayerConfig;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/KitePlayer;
+	public static final fun getAvailability (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;)Lio/github/yuroyami/kiteplayer/KitePlayerAvailability;
+	public static final fun getSupportsPictureInPicture (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;)Z
+	public static final fun isAvailable (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;)Z
 }
 
 public final class io/github/yuroyami/kiteplayer/mobile/MobileBackendsKt {

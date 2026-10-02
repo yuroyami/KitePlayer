@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.isAvailable
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackId
@@ -41,7 +42,7 @@ class ScanCostProbe {
     fun report() = runBlocking {
         val found = song()
         assumeTrue("no song in the sample media folder", found != null)
-        val created = KitePlayerPlatform.createOrNull()
+        val created = if (KitePlayer.isAvailable) KitePlayer() else null
         assumeTrue("no desktop player on this host", created != null)
         val file = checkNotNull(found)
         val player = checkNotNull(created)

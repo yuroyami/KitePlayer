@@ -12,6 +12,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Upgrading from 0.2.0
 
+- `KitePlayer()` builds a player on the default stack (#383). It replaces
+  `KitePlayerPlatform.createOrNull()`, which is deprecated with the other members of
+  `KitePlayerPlatform`. `KitePlayer()` throws `PlaybackException` with `ConfigurationInvalid` where
+  `createOrNull` returned null, so check `KitePlayer.isAvailable` first where that can happen. It
+  also keeps a backend that `PlayerConfig.backends` names, which `createOrNull` replaced.
+  `KitePlayer.availability`, `KitePlayer.isAvailable` and `KitePlayer.supportsPictureInPicture`
+  replace the members of the same names. `rememberKitePlayer()` in `kiteplayer-compose` builds a
+  player that closes when its composition leaves.
 - HLS plays through the default stack (#209). An address that ends in `.m3u8`, an HLS content
   type, or `formatHint = "hls"` marks a playlist. A master playlist plays one variant, the one with
   the highest bitrate within the new `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.

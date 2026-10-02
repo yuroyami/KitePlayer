@@ -1,6 +1,6 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -10,7 +10,6 @@ import java.io.File
 import javax.sound.sampled.AudioSystem
 import kotlin.math.abs
 import kotlin.test.Test
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -37,7 +36,7 @@ class ClockProbeTest {
         assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
         val file = checkNotNull(media)
 
-        val player = assertNotNull(KitePlayerPlatform.createOrNull(), "no default desktop player")
+        val player = KitePlayer()
         val feed = AudioVizFeed()
         try {
             player.attachAudioTap(feed)

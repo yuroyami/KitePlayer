@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.session
 
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.isAvailable
 import io.github.yuroyami.kiteplayer.MediaIoFactory
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PipedMediaIo
@@ -32,7 +33,8 @@ class BufferingInterruptionTest {
     fun aNoisyRoutePausesABufferingPlayer() = runBlocking {
         val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
         if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
-        val player = KitePlayerPlatform.createOrNull() ?: return@runBlocking println("SKIP: no desktop player")
+        if (!KitePlayer.isAvailable) return@runBlocking println("SKIP: no desktop player")
+        val player = KitePlayer()
         try {
             val bytes = file.readBytes()
             val pipe = PipedMediaIo()

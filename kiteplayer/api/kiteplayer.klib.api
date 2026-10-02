@@ -190,6 +190,9 @@ final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotli
 }
 
 // Targets: [ios]
+final fun (io.github.yuroyami.kiteplayer/KitePlayer).io.github.yuroyami.kiteplayer.session/attachMediaSession(io.github.yuroyami.kiteplayer.session/BackgroundPolicy? = ..., io.github.yuroyami.kiteplayer.session/InterruptionPolicy? = ..., io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture? = ..., kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession // io.github.yuroyami.kiteplayer.session/attachMediaSession|attachMediaSession@io.github.yuroyami.kiteplayer.KitePlayer(io.github.yuroyami.kiteplayer.session.BackgroundPolicy?;io.github.yuroyami.kiteplayer.session.InterruptionPolicy?;io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture?;kotlin.time.Duration){}[0]
+
+// Targets: [ios]
 final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.kiteplayer.session/attachBackgroundHandling(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.session/BackgroundPolicy = ...): kotlin/AutoCloseable // io.github.yuroyami.kiteplayer.session/attachBackgroundHandling|attachBackgroundHandling@io.github.yuroyami.kiteplayer.KitePlayerPlatform(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.session.BackgroundPolicy){}[0]
 
 // Targets: [ios]
@@ -207,3 +210,6 @@ final class io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory : io.g
 
     final suspend fun create(): io.github.yuroyami.kiteplayer.spi/VideoRenderer // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.create|create(){}[0]
 }
+
+// Targets: [wasmJs]
+final fun (io.github.yuroyami.kiteplayer/KitePlayer).io.github.yuroyami.kiteplayer.session/attachMediaSession(kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession // io.github.yuroyami.kiteplayer.session/attachMediaSession|attachMediaSession@io.github.yuroyami.kiteplayer.KitePlayer(kotlin.time.Duration){}[0]

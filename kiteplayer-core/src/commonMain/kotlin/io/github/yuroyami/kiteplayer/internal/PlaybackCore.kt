@@ -740,6 +740,9 @@ internal class PlaybackCore(
     /** One parentless terminal result shared by every close caller. */
     private val terminalCloseResult = CompletableDeferred<Unit>(parent = null)
 
+    /** Completed the moment a close is first asked for, for helpers that go away with the player. */
+    private val closeAsked = CompletableDeferred<Unit>(parent = null)
+
     /** The actor's final handoff to the independent dispatcher finalizer. */
     private val terminalCloseOutcome = atomic<TerminalCloseOutcome?>(null)
 
@@ -1326,8 +1329,14 @@ internal class PlaybackCore(
         reportedFailure?.let { throw it }
     }
 
+    /** Returns once a close has been asked for, at once when it already was. Never closes anything. */
+    suspend fun awaitCloseRequest() {
+        closeAsked.await()
+    }
+
     private fun requestClose() {
         if (!closedNow.compareAndSet(expect = false, update = true)) return
+        closeAsked.complete(Unit)
         if (!commands.trySend(CoreCommand.Close(terminalCloseResult)).isSuccess) {
             terminalCloseOutcome.compareAndSet(
                 expect = null,

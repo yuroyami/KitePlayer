@@ -2492,6 +2492,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final suspend fun addToQueue(io.github.yuroyami.kiteplayer/MediaItem, kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/KitePlayer.addToQueue|addToQueue(io.github.yuroyami.kiteplayer.MediaItem;kotlin.Int?){}[0]
     final suspend fun addToQueue(kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem>, kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/KitePlayer.addToQueue|addToQueue(kotlin.collections.List<io.github.yuroyami.kiteplayer.MediaItem>;kotlin.Int?){}[0]
     final suspend fun attachRendererAndAwait(io.github.yuroyami.kiteplayer.spi/VideoRenderer) // io.github.yuroyami.kiteplayer/KitePlayer.attachRendererAndAwait|attachRendererAndAwait(io.github.yuroyami.kiteplayer.spi.VideoRenderer){}[0]
+    final suspend fun awaitClose() // io.github.yuroyami.kiteplayer/KitePlayer.awaitClose|awaitClose(){}[0]
     final suspend fun captureFrame(kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/CapturedFrame // io.github.yuroyami.kiteplayer/KitePlayer.captureFrame|captureFrame(kotlin.Boolean){}[0]
     final suspend fun clearQueue() // io.github.yuroyami.kiteplayer/KitePlayer.clearQueue|clearQueue(){}[0]
     final suspend fun closeAndAwait() // io.github.yuroyami.kiteplayer/KitePlayer.closeAndAwait|closeAndAwait(){}[0]

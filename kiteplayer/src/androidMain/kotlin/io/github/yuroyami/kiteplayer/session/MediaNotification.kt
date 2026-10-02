@@ -143,7 +143,15 @@ public data class MediaNotificationAction(
  * @throws IllegalStateException when the application's manifest does not declare
  *         [KitePlayerMediaService].
  */
+@Deprecated("Use KitePlayer.attachMediaSession with notification options, which owns the notification and closes with the player.")
 public fun KitePlayerPlatform.attachMediaNotification(
+    session: KitePlayerMediaSession,
+    context: Context,
+    options: MediaNotificationOptions,
+): AutoCloseable = mediaNotification(session, context, options)
+
+/** The media notification, as `KitePlayer.attachMediaSession` owns it. See `attachMediaNotification`. */
+internal fun mediaNotification(
     session: KitePlayerMediaSession,
     context: Context,
     options: MediaNotificationOptions,

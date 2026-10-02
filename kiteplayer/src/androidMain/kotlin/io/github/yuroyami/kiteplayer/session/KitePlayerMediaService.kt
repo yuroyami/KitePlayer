@@ -11,7 +11,7 @@ import android.os.IBinder
 /**
  * Keeps the process alive while the player plays, and holds the media notification.
  *
- * `KitePlayerPlatform.attachMediaNotification` starts and stops it. The application only declares
+ * The media notification of `KitePlayer.attachMediaSession` starts and stops it. The application only declares
  * it, in its own `AndroidManifest.xml`:
  *
  * ```xml

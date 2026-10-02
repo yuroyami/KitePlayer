@@ -84,6 +84,11 @@ public final class io/github/yuroyami/kiteplayer/session/InterruptionPolicy {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/session/JvmMediaSessionKt {
+	public static final fun attachMediaSession-HG0u8IE (Lio/github/yuroyami/kiteplayer/KitePlayer;J)Lio/github/yuroyami/kiteplayer/session/KitePlayerMediaSession;
+	public static synthetic fun attachMediaSession-HG0u8IE$default (Lio/github/yuroyami/kiteplayer/KitePlayer;JILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/session/KitePlayerMediaSession;
+}
+
 public final class io/github/yuroyami/kiteplayer/session/KitePlayerMediaSession : java/lang/AutoCloseable {
 	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/KitePlayer;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/KitePlayer;JLkotlin/jvm/internal/DefaultConstructorMarker;)V

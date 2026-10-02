@@ -27,10 +27,15 @@ import platform.darwin.NSObjectProtocol
  *
  * Close the handle with the player.
  */
+@Deprecated("Use KitePlayer.attachMediaSession, which owns this part and closes with the player.")
 public fun KitePlayerPlatform.attachInterruptionHandling(
     player: KitePlayer,
     policy: InterruptionPolicy = InterruptionPolicy(),
-): AutoCloseable = AppleInterruptionHandle(player, policy)
+): AutoCloseable = interruptionHandling(player, policy)
+
+/** The interruption and headphone handle, as `KitePlayer.attachMediaSession` owns it. */
+internal fun interruptionHandling(player: KitePlayer, policy: InterruptionPolicy): AutoCloseable =
+    AppleInterruptionHandle(player, policy)
 
 private class AppleInterruptionHandle(
     player: KitePlayer,

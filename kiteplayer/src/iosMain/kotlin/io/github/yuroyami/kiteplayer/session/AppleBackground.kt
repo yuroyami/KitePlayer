@@ -23,10 +23,11 @@ import platform.darwin.NSObjectProtocol
  *
  * Close the handle with the player.
  */
+@Deprecated("Use KitePlayer.attachMediaSession, which owns this part and closes with the player.")
 public fun KitePlayerPlatform.attachBackgroundHandling(
     player: KitePlayer,
     policy: BackgroundPolicy = BackgroundPolicy.ContinueAudio,
-): AutoCloseable = AppleBackgroundHandle(player, policy, pictureInPicture = null)
+): AutoCloseable = backgroundHandling(player, policy, pictureInPicture = null)
 
 /**
  * Stops [player] decoding video for a screen nobody is looking at, and keeps it on while the small
@@ -38,9 +39,17 @@ public fun KitePlayerPlatform.attachBackgroundHandling(
  *
  * Null behaves exactly as the overload without it. Close the handle with the player.
  */
+@Deprecated("Use KitePlayer.attachMediaSession, which owns this part and closes with the player.")
 public fun KitePlayerPlatform.attachBackgroundHandling(
     player: KitePlayer,
     policy: BackgroundPolicy = BackgroundPolicy.ContinueAudio,
+    pictureInPicture: KitePlayerPictureInPicture?,
+): AutoCloseable = backgroundHandling(player, policy, pictureInPicture)
+
+/** The background handle, as `KitePlayer.attachMediaSession` owns it. */
+internal fun backgroundHandling(
+    player: KitePlayer,
+    policy: BackgroundPolicy,
     pictureInPicture: KitePlayerPictureInPicture?,
 ): AutoCloseable = AppleBackgroundHandle(player, policy, pictureInPicture)
 

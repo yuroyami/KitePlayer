@@ -17,15 +17,19 @@ import io.github.yuroyami.kiteplayer.KitePlayerPlatform
  * works too: the process importance at attach time says whether one was already on screen.
  *
  * With [BackgroundPolicy.ContinueAudio], this handle only parks the picture, so sound in the
- * background also needs `KitePlayerPlatform.attachMediaNotification` to keep the process alive.
+ * background also needs the media notification to keep the process alive.
  *
  * @throws IllegalArgumentException when [context] does not belong to an [Application].
  */
+@Deprecated("Use KitePlayer.attachMediaSession, which owns this part and closes with the player.")
 public fun KitePlayerPlatform.attachBackgroundHandling(
     player: KitePlayer,
     context: Context,
     policy: BackgroundPolicy = BackgroundPolicy.ContinueAudio,
-): AutoCloseable {
+): AutoCloseable = backgroundHandling(player, context, policy)
+
+/** The background handle, as `KitePlayer.attachMediaSession` owns it. */
+internal fun backgroundHandling(player: KitePlayer, context: Context, policy: BackgroundPolicy): AutoCloseable {
     val application = context.applicationContext as? Application
         ?: throw IllegalArgumentException("background handling needs a context whose application is reachable")
     return AndroidBackgroundHandle(player, application, policy)

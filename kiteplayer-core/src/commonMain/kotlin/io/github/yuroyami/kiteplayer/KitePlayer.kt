@@ -1275,6 +1275,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Suspends until this player is asked to close, through [close] or [closeAndAwait] from
+     * anywhere, and returns at once when that already happened.
+     *
+     * It never closes the player, and it does not wait for the teardown; [closeAndAwait] does. A
+     * helper that must go away with the player waits here, as the media session does.
+     */
+    public suspend fun awaitClose() {
+        core.awaitCloseRequest()
+    }
+
+    /**
      * Everything a bug report needs, in one string: the resolved configuration, the
      * backends by name, tracks and selections, the three published snapshots, the KD artifacts
      * attached to the session, and the bounded warning history. Safe from any thread at any

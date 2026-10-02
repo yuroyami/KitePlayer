@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.session
 
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,9 @@ import kotlin.time.DurationUnit
  * The audio session category the card needs is already the one the player's own output sets, so
  * nothing has to change there. The application still declares the background audio capability
  * itself if it wants the card to survive locking the screen.
+ *
+ * Most apps get one from [KitePlayer.attachMediaSession], which also adds background handling and
+ * interruption handling, and closes it all with the player.
  *
  * @param skipInterval how far the skip back and skip forward buttons move, on the lock screen, the
  *        control centre, CarPlay and a headset. Positive.
@@ -189,12 +193,59 @@ public class KitePlayerMediaSession(
         }
     }
 
+    /** The handlers that [KitePlayer.attachMediaSession] gave this session. */
+    internal val parts: SessionParts = SessionParts()
+
+    private var closed = false
+
+    /** Closes what this session owns, newest first, then the card. Only the first call does anything. */
     override fun close() {
-        scope.cancel()
-        handlers.forEach { (command, target) -> command.removeTarget(target) }
-        handlers.clear()
-        info.clear()
-        infoCenter.nowPlayingInfo = null
+        if (closed) return
+        closed = true
+        try {
+            parts.closeAll()
+        } finally {
+            scope.cancel()
+            handlers.forEach { (command, target) -> command.removeTarget(target) }
+            handlers.clear()
+            info.clear()
+            infoCenter.nowPlayingInfo = null
+        }
     }
 
+    /** Closes this session once [player] is asked to close, on the main thread like every other call here. */
+    internal fun closeWithPlayer() {
+        scope.closeWithPlayer(player, ::close)
+    }
+
+}
+
+/**
+ * Creates the media session for this player, with what an app needs for the lock screen and for
+ * background playback, and returns it.
+ *
+ * - The now playing card and its buttons follow the player.
+ * - [background] says what happens when the app leaves the screen, and [pictureInPicture] keeps
+ *   the picture decoding while its small window shows. Null leaves that alone.
+ * - [interruptions] pauses for a call and when the headphones come out. Null turns that off.
+ *
+ * The session owns all of it and closes it with the player, so most apps never close it by hand.
+ * Call this on the main thread.
+ */
+public fun KitePlayer.attachMediaSession(
+    background: BackgroundPolicy? = BackgroundPolicy.ContinueAudio,
+    interruptions: InterruptionPolicy? = InterruptionPolicy(),
+    pictureInPicture: KitePlayerPictureInPicture? = null,
+    skipInterval: Duration = 15.seconds,
+): KitePlayerMediaSession {
+    val session = KitePlayerMediaSession(this, skipInterval)
+    try {
+        interruptions?.let { session.parts.add(interruptionHandling(this, it)) }
+        background?.let { session.parts.add(backgroundHandling(this, it, pictureInPicture)) }
+    } catch (failure: Throwable) {
+        session.close()
+        throw failure
+    }
+    session.closeWithPlayer()
+    return session
 }

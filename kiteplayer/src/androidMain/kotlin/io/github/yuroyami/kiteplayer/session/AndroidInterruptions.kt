@@ -30,11 +30,16 @@ import kotlinx.coroutines.launch
  *
  * The application still declares nothing: no permission and no manifest entry is involved.
  */
+@Deprecated("Use KitePlayer.attachMediaSession, which owns this part and closes with the player.")
 public fun KitePlayerPlatform.attachInterruptionHandling(
     player: KitePlayer,
     context: Context,
     policy: InterruptionPolicy = InterruptionPolicy(),
-): AutoCloseable = AndroidInterruptionHandle(player, context.applicationContext, policy)
+): AutoCloseable = interruptionHandling(player, context, policy)
+
+/** The audio focus and headphone handle, as `KitePlayer.attachMediaSession` owns it. */
+internal fun interruptionHandling(player: KitePlayer, context: Context, policy: InterruptionPolicy): AutoCloseable =
+    AndroidInterruptionHandle(player, context.applicationContext, policy)
 
 private class AndroidInterruptionHandle(
     player: KitePlayer,

@@ -88,4 +88,15 @@ public class KitePlayerMediaSession(
         bridge?.clear()
     }
 
+    /** Closes this session once [player] is asked to close. */
+    internal fun closeWithPlayer() {
+        scope.closeWithPlayer(player, ::close)
+    }
 }
+
+/**
+ * Creates the media session for this player and returns it. It closes itself when the player
+ * closes. See [KitePlayerMediaSession] for what a browser shows.
+ */
+public fun KitePlayer.attachMediaSession(skipInterval: Duration = 15.seconds): KitePlayerMediaSession =
+    KitePlayerMediaSession(this, skipInterval = skipInterval).also { it.closeWithPlayer() }

@@ -1,9 +1,11 @@
 package io.github.yuroyami.kiteplayer
 
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
@@ -52,6 +54,34 @@ class KitePlayerTest {
             outputError.detail.contains("AppleOutputBackend"),
             "which also names what to pass: ${outputError.detail}",
         )
+    }
+
+    @Test
+    fun `awaitClose returns when a close is asked for and not before`() = runTest {
+        val harness = CoreHarness(this)
+        val player = player(harness)
+        val waiter = async { player.awaitClose() }
+        harness.run(200.milliseconds)
+        assertFalse(waiter.isCompleted, "nothing has asked for a close yet")
+
+        player.close()
+        harness.run(200.milliseconds)
+        assertTrue(waiter.isCompleted, "close() released the waiter")
+        // A player that is already closing answers at once.
+        player.awaitClose()
+        harness.close()
+    }
+
+    @Test
+    fun `awaitClose follows closeAndAwait too`() = runTest {
+        val harness = CoreHarness(this)
+        val player = player(harness)
+        val waiter = async { player.awaitClose() }
+        harness.run(100.milliseconds)
+        player.closeAndAwait()
+        harness.run(100.milliseconds)
+        assertTrue(waiter.isCompleted)
+        harness.close()
     }
 
     // ---------------------------------------------------------------------------------------------

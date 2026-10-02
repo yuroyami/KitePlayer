@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.session
 
-import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.isAvailable
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -11,7 +12,8 @@ class JvmMediaSessionTest {
 
     @Test
     fun `the desktop session says it is unavailable and holds no token`() = runBlocking {
-        val player = KitePlayerPlatform.createOrNull() ?: return@runBlocking println("SKIP: no desktop player")
+        if (!KitePlayer.isAvailable) return@runBlocking println("SKIP: no desktop player")
+        val player = KitePlayer()
         try {
             KitePlayerMediaSession(player).use { session ->
                 assertFalse(session.isAvailable)

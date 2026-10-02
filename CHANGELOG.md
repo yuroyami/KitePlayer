@@ -30,6 +30,15 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   video path at the current position. Before, it kept the backend path, which copies every frame,
   for the whole item. A rebuild while paused now shows the picture at the current position also at
   the very start, where it used to show nothing until play.
+- `player.attachMediaSession(...)` creates the media session and owns the rest of the system
+  integration (#385). On Android it takes a `Context` and adds background handling and audio focus
+  by default, and the media notification when `MediaNotificationOptions` are given. On iOS it adds
+  background and interruption handling. Closing the session closes its parts in the right order,
+  and the session closes itself when the player closes. `KitePlayerPlatform.attachMediaNotification`,
+  `attachBackgroundHandling` and `attachInterruptionHandling` are deprecated. A session built with
+  the `KitePlayerMediaSession` constructor behaves as before.
+- `KitePlayer.awaitClose()` suspends until the player is asked to close, for helpers that go away
+  with it (#385).
 - HLS plays through the default stack (#209). An address that ends in `.m3u8`, an HLS content
   type, or `formatHint = "hls"` marks a playlist. A master playlist plays one variant, the one with
   the highest bitrate within the new `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.

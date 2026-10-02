@@ -32,10 +32,11 @@ import kotlin.time.Duration.Companion.seconds
  * That session is what the lock screen, the headset buttons, the car and the media area of the
  * quick settings panel all read. Building one is what every application was writing by hand.
  *
- * For the media notification, and for playback that goes on after the app leaves the screen, pass
- * this session to `KitePlayerPlatform.attachMediaNotification`.
+ * Most apps get one from [KitePlayer.attachMediaSession], which also adds the media notification,
+ * background handling and audio focus, and closes it all with the player. Built with this
+ * constructor, the session is only the session, and the app closes it with the player.
  *
- * Close it with the player. A button press that arrives after the player closed does nothing.
+ * A button press that arrives after the player closed does nothing.
  *
  * @param skipInterval how far the skip back and skip forward buttons move, on the lock screen, the
  *        notification, a headset and a car. Positive.
@@ -134,7 +135,7 @@ public class KitePlayerMediaSession(
 
     /**
      * The activity to open from the system media controls, usually the player screen.
-     * `KitePlayerPlatform.attachMediaNotification` sets its content intent here too.
+     * The media notification sets its content intent here too.
      */
     public fun setSessionActivity(intent: PendingIntent?) {
         sessionActivity = intent
@@ -207,10 +208,26 @@ public class KitePlayerMediaSession(
         session.setPlaybackState(builder.build())
     }
 
+    /** The notification and handlers that [KitePlayer.attachMediaSession] gave this session. */
+    internal val parts: SessionParts = SessionParts()
+
+    private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Closes what this session owns, newest first, then the session itself. Only the first call does anything. */
     override fun close() {
-        scope.cancel()
-        session.isActive = false
-        session.release()
+        if (!closed.compareAndSet(false, true)) return
+        try {
+            parts.closeAll()
+        } finally {
+            scope.cancel()
+            session.isActive = false
+            session.release()
+        }
+    }
+
+    /** Closes this session once [player] is asked to close. */
+    internal fun closeWithPlayer() {
+        scope.closeWithPlayer(player, ::close)
     }
 
     private inner class Callback : MediaSession.Callback() {
@@ -305,4 +322,46 @@ internal fun platformStateFor(phase: MediaSessionPhase): Int = when (phase) {
     MediaSessionPhase.Paused -> PlaybackState.STATE_PAUSED
     MediaSessionPhase.Buffering -> PlaybackState.STATE_BUFFERING
     MediaSessionPhase.Stopped -> PlaybackState.STATE_STOPPED
+}
+
+/**
+ * Creates the media session for this player, with what an app needs for the lock screen and for
+ * background playback, and returns it.
+ *
+ * - The lock screen, headset buttons, car and quick settings controls follow the player.
+ * - [notification] adds the media notification, which keeps the app in the foreground while it
+ *   plays. It needs the manifest entries that [KitePlayerMediaService] lists. Null adds none.
+ * - [background] says what happens when the app leaves the screen. Null leaves that alone.
+ * - [interruptions] takes audio focus, so a call or another app pauses or ducks the player, and it
+ *   pauses when the headphones come out. Null turns that off.
+ *
+ * The session owns all of it and closes it in the right order. It also closes itself when the
+ * player closes, so most apps never close it by hand.
+ *
+ * ```kotlin
+ * val player = KitePlayer()
+ * player.attachMediaSession(context, MediaNotificationOptions(smallIcon = R.drawable.ic_notification))
+ * ```
+ *
+ * @throws IllegalStateException when [notification] is given and the manifest does not declare
+ *         [KitePlayerMediaService].
+ */
+public fun KitePlayer.attachMediaSession(
+    context: Context,
+    notification: MediaNotificationOptions? = null,
+    background: BackgroundPolicy? = BackgroundPolicy.ContinueAudio,
+    interruptions: InterruptionPolicy? = InterruptionPolicy(),
+    skipInterval: Duration = 15.seconds,
+): KitePlayerMediaSession {
+    val session = KitePlayerMediaSession(this, context, skipInterval = skipInterval)
+    try {
+        interruptions?.let { session.parts.add(interruptionHandling(this, context, it)) }
+        background?.let { session.parts.add(backgroundHandling(this, context, it)) }
+        notification?.let { session.parts.add(mediaNotification(session, context, it)) }
+    } catch (failure: Throwable) {
+        session.close()
+        throw failure
+    }
+    session.closeWithPlayer()
+    return session
 }

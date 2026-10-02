@@ -31,3 +31,10 @@ public class KitePlayerMediaSession(
 
     override fun close() {}
 }
+
+/**
+ * Creates the media session for this player. On the desktop JVM it mirrors nothing, as
+ * [KitePlayerMediaSession] says, so shared code keeps one call per platform.
+ */
+public fun KitePlayer.attachMediaSession(skipInterval: Duration = 15.seconds): KitePlayerMediaSession =
+    KitePlayerMediaSession(this, skipInterval)

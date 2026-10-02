@@ -58,6 +58,11 @@ public final class io/github/yuroyami/kiteplayer/session/AndroidInterruptionsKt 
 	public static synthetic fun attachInterruptionHandling$default (Lio/github/yuroyami/kiteplayer/KitePlayerPlatform;Lio/github/yuroyami/kiteplayer/KitePlayer;Landroid/content/Context;Lio/github/yuroyami/kiteplayer/session/InterruptionPolicy;ILjava/lang/Object;)Ljava/lang/AutoCloseable;
 }
 
+public final class io/github/yuroyami/kiteplayer/session/AndroidMediaSessionKt {
+	public static final fun attachMediaSession-17CK4j0 (Lio/github/yuroyami/kiteplayer/KitePlayer;Landroid/content/Context;Lio/github/yuroyami/kiteplayer/session/MediaNotificationOptions;Lio/github/yuroyami/kiteplayer/session/BackgroundPolicy;Lio/github/yuroyami/kiteplayer/session/InterruptionPolicy;J)Lio/github/yuroyami/kiteplayer/session/KitePlayerMediaSession;
+	public static synthetic fun attachMediaSession-17CK4j0$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Landroid/content/Context;Lio/github/yuroyami/kiteplayer/session/MediaNotificationOptions;Lio/github/yuroyami/kiteplayer/session/BackgroundPolicy;Lio/github/yuroyami/kiteplayer/session/InterruptionPolicy;JILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/session/KitePlayerMediaSession;
+}
+
 public final class io/github/yuroyami/kiteplayer/session/BackgroundPolicy : java/lang/Enum {
 	public static final field ContinueAudio Lio/github/yuroyami/kiteplayer/session/BackgroundPolicy;
 	public static final field Ignore Lio/github/yuroyami/kiteplayer/session/BackgroundPolicy;

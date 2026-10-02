@@ -21,13 +21,17 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * The Metal picture turns the way the display matrix says, with real Metal on the host: a quarter
- * turn is clockwise (#379). Each quadrant of the stored picture has its own grey, so where a grey
- * lands says which way the picture went.
+ * The Metal picture turns and mirrors the way the display matrix says, with real Metal on the
+ * host: a quarter turn is clockwise (#379), and a mirrored stream is mirrored left to right before
+ * it turns (#233). Each quadrant of the stored picture has its own grey, so where a grey lands says
+ * which way the picture went.
  */
 class MetalTurnTest {
 
-    private class TurnFrame(override val rotationDegrees: Int) : VideoFrame {
+    private class TurnFrame(
+        override val rotationDegrees: Int,
+        override val mirrored: Boolean = false,
+    ) : VideoFrame {
         override val pts: Pts = Pts.Zero
         override val duration: Pts? = null
         override val size: VideoSize = VideoSize(SIZE, SIZE, 1, 1)
@@ -82,13 +86,17 @@ class MetalTurnTest {
         }
     }
 
-    /** Where the stored quadrant ([x], [y]) lands, each 0 or 1 with y from the top, turned clockwise. */
-    private fun landing(x: Int, y: Int, rotation: Int): Int {
+    /**
+     * Where the stored quadrant ([x], [y]) lands, each 0 or 1 with y from the top: mirrored left to
+     * right first when [mirrored], then turned clockwise by [rotation].
+     */
+    private fun landing(x: Int, y: Int, rotation: Int, mirrored: Boolean = false): Int {
+        val mx = if (mirrored) 1 - x else x
         val (tx, ty) = when (rotation) {
-            90 -> (1 - y) to x
-            180 -> (1 - x) to (1 - y)
-            270 -> y to (1 - x)
-            else -> x to y
+            90 -> (1 - y) to mx
+            180 -> (1 - mx) to (1 - y)
+            270 -> y to (1 - mx)
+            else -> mx to y
         }
         return ty * 2 + tx
     }
@@ -101,6 +109,18 @@ class MetalTurnTest {
             val expected = MutableList(4) { 0 }
             for (quadrant in 0 until 4) expected[landing(quadrant % 2, quadrant / 2, rotation)] = upright[quadrant]
             assertEquals(expected, drawn(TurnFrame(rotation)), "turned $rotation degrees")
+        }
+    }
+
+    @Test
+    fun aMirrorComesBeforeTheTurn() {
+        val upright = drawn(TurnFrame(0))
+        for (rotation in listOf(0, 90, 180, 270)) {
+            val expected = MutableList(4) { 0 }
+            for (quadrant in 0 until 4) {
+                expected[landing(quadrant % 2, quadrant / 2, rotation, mirrored = true)] = upright[quadrant]
+            }
+            assertEquals(expected, drawn(TurnFrame(rotation, mirrored = true)), "mirrored and turned $rotation degrees")
         }
     }
 

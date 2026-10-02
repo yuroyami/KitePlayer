@@ -27,6 +27,9 @@ import kotlin.math.roundToInt
  *
  * The drawing rectangle is in fractions of a pixel because the exchange halves an odd side, and a
  * rounded half pixel is a visible seam of stale black down one edge of the picture.
+ *
+ * When [mirrored] is set, the bitmap is mirrored left to right inside the drawing rectangle before
+ * the turn, about the same centre. The mirror changes no rectangle.
  */
 internal data class FrameLayout(
     val left: Int,
@@ -34,6 +37,7 @@ internal data class FrameLayout(
     val right: Int,
     val bottom: Int,
     val rotationDegrees: Int,
+    val mirrored: Boolean = false,
 ) {
     val width: Int get() = right - left
     val height: Int get() = bottom - top
@@ -72,6 +76,7 @@ internal fun frameLayout(
     rotationDegrees: Int,
     mode: VideoScale = VideoScale.Fit,
     transform: VideoTransform = VideoTransform.Identity,
+    mirrored: Boolean = false,
 ): FrameLayout? {
     if (canvasWidth <= 0 || canvasHeight <= 0) return null
     if (size.width <= 0 || size.height <= 0) return null
@@ -133,6 +138,7 @@ internal fun frameLayout(
         right = left + destinationWidth,
         bottom = top + destinationHeight,
         rotationDegrees = turn,
+        mirrored = mirrored,
     )
 }
 

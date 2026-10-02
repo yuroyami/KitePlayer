@@ -569,6 +569,8 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInf
         // video stream is ever muxed with one, and a value on any other kind reaches no renderer, so
         // no stream kind has to be excluded here.
         rotationDegrees = rotationDegrees,
+        // The rest of the same matrix: a mirror that the renderer applies before the turn.
+        mirrored = mirrored,
         frameRate = video?.frameRate?.let { if (it.den == 0) null else it.num.toDouble() / it.den },
         colorSpace = video?.let { it.color.toPlayerColorSpace(it.pixelFormat) },
         // A stream with exactly one frame of cover art must never carry the timeline or drive
@@ -770,7 +772,9 @@ private class KiteFFmpegVideoDecoder(
         )
         // The rotation is the stream's, taken from the container's display matrix once at open. Every
         // frame of the stream carries it, because the renderer sees frames and nothing else.
-        val wrapped = KiteFFmpegVideoFrame(frame, pts, duration, generation, stream.rotationDegrees, stream.hdr)
+        val wrapped = KiteFFmpegVideoFrame(
+            frame, pts, duration, generation, stream.rotationDegrees, stream.mirrored, stream.hdr,
+        )
         try {
             warnIfColorIsApproximated(wrapped.colorSpace)
         } catch (failure: Throwable) {
@@ -1123,6 +1127,8 @@ public class KiteFFmpegVideoFrame internal constructor(
      * site drop the rotation silently, which is the exact bug this phase exists to remove.
      */
     override val rotationDegrees: Int,
+    /** Whether the stream's display matrix also mirrors the picture. No default, for the same reason. */
+    override val mirrored: Boolean,
     /** The stream's static HDR metadata, which a frame that carries none of its own reports. */
     private val streamHdr: HdrStaticMetadata? = null,
 ) : VideoFrame, SoftwareReadableFrame {

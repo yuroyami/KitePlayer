@@ -258,6 +258,29 @@ class AwtCanvasVideoRendererTest {
     }
 
     @Test
+    fun `a mirrored picture is mirrored left to right before it turns`() {
+        // The picture of the test above, mirrored first: green and red along the top, white and blue
+        // along the bottom, then turned. A half turn after a mirror is an upside-down picture.
+        val expected = mapOf(
+            0 to listOf(Color.RED to (150 to 75), Color.GREEN to (50 to 75), Color.BLUE to (150 to 125), Color.WHITE to (50 to 125)),
+            90 to listOf(Color.GREEN to (125 to 50), Color.RED to (125 to 150), Color.WHITE to (75 to 50), Color.BLUE to (75 to 150)),
+            180 to listOf(Color.BLUE to (50 to 75), Color.WHITE to (150 to 75), Color.RED to (50 to 125), Color.GREEN to (150 to 125)),
+            270 to listOf(Color.GREEN to (75 to 150), Color.RED to (75 to 50), Color.WHITE to (125 to 150), Color.BLUE to (125 to 50)),
+        )
+        for ((turn, corners) in expected) {
+            val target = BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB)
+            val layout = frameLayout(200, 200, VideoSize(4, 2), turn, mirrored = true)!!
+            val g = target.createGraphics()
+            AwtCanvasPresenter.compose(g, 200, 200, quadrants(), layout, overlay = null)
+            g.dispose()
+            for ((color, at) in corners) {
+                val (x, y) = at
+                assertTrue(close(color, target.getRGB(x, y)), "mirrored at $turn degrees ($x, $y) is ${Color(target.getRGB(x, y))}, not $color")
+            }
+        }
+    }
+
+    @Test
     fun `a quarter turn on an odd canvas with wide pixels leaves no seam`() {
         // Pixels twice as wide as tall make the 4 by 2 picture 4:1, turned it is 1:4, and the odd
         // canvas halves a side, which is where a rounded draw rectangle would leave a black seam.

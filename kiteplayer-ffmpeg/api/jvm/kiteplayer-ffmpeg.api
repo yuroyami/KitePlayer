@@ -64,7 +64,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoDecoderFa
 }
 
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame, io/github/yuroyami/kiteplayer/spi/VideoFrame {
-	public synthetic fun <init> (Lio/github/yuroyami/kiteffmpeg/Frame;JLio/github/yuroyami/kiteplayer/Pts;JILio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteffmpeg/Frame;JLio/github/yuroyami/kiteplayer/Pts;JIZLio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
 	public fun copyPlane (I[BI)V
 	public fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
@@ -73,6 +73,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : i
 	public fun getHardwareSurface ()Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
 	public final fun getHasPts ()Z
 	public fun getHdr ()Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;
+	public fun getMirrored ()Z
 	public fun getPixelFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
 	public fun getPlaneCount ()I
 	public fun getPlaneFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;

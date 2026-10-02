@@ -90,6 +90,15 @@ internal fun directSurfaceOutputContract(
     )
 }
 
+/**
+ * Why a direct Surface cannot show [stream] the right way round, or null when it can. MediaCodec
+ * turns what it writes to a Surface but has no way to mirror it, so a mirrored stream decodes in
+ * software there. A target that turns the picture itself, with [applyCodecRotation] false, mirrors
+ * it too.
+ */
+internal fun directSurfaceGeometryRefusal(stream: PlayerStreamInfo, applyCodecRotation: Boolean): String? =
+    if (applyCodecRotation && stream.mirrored) "the direct Surface cannot mirror a mirrored stream" else null
+
 /** A hardware decoder paired with the Surface target owned by one Android video renderer. */
 internal class MediaCodecVideoDecoderFactory(
     private val target: MediaCodecSurfaceTarget,
@@ -103,6 +112,7 @@ internal class MediaCodecVideoDecoderFactory(
             return refuseMediaCodec(hwdec, "direct MediaCodec output requires Android 10 or newer")
         }
         if (stream.kind != TrackKind.Video || !hwdec.allowsMediaCodec()) return null
+        directSurfaceGeometryRefusal(stream, applyCodecRotation)?.let { return refuseMediaCodec(hwdec, it) }
         val size = stream.videoSize
             ?: return refuseMediaCodec(hwdec, "the stream has no coded video size")
         if (size.width <= 0 || size.height <= 0) {
@@ -170,6 +180,7 @@ internal class MediaCodecVideoDecoderFactory(
                     } else {
                         normalizedQuarterTurn(stream.rotationDegrees)
                     },
+                    frameMirrored = !applyCodecRotation && stream.mirrored,
                     outputContract = outputContract,
                 )
                 return try {
@@ -478,6 +489,7 @@ private class MediaCodecVideoDecoder(
     private val stream: PlayerStreamInfo,
     private val target: MediaCodecSurfaceTarget,
     private val frameRotationDegrees: Int,
+    private val frameMirrored: Boolean,
     private val outputContract: MediaCodecOutputContract,
 ) : VideoDecoder, MediaCodecFrameOwner, MediaCodecSurfaceTarget.Switcher {
     override val hardware: HwdecStatus = HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec)
@@ -724,6 +736,7 @@ private class MediaCodecVideoDecoder(
                             size = outputSize,
                             colorSpace = outputColor,
                             rotationDegrees = frameRotationDegrees,
+                            mirrored = frameMirrored,
                             toneMappedFrom = toneMappedFrom,
                         ),
                     )

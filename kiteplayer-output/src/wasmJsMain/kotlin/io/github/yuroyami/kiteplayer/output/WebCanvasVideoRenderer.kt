@@ -84,6 +84,7 @@ public class WebCanvasVideoRenderer(
     /** Size and turn of the picture the stage holds, or null while it holds none. */
     private var retainedSize: VideoSize? = null
     private var retainedRotation: Int = 0
+    private var retainedMirrored: Boolean = false
 
     /** Diagnostics, in the same three counts the Android renderer keeps. */
     public var presentedFrames: Long = 0
@@ -147,6 +148,7 @@ public class WebCanvasVideoRenderer(
                 rotationDegrees = frame.rotationDegrees,
                 mode = scaleMode,
                 transform = transform,
+                mirrored = frame.mirrored,
             )
             if (layout == null) {
                 failedFrames++
@@ -155,6 +157,7 @@ public class WebCanvasVideoRenderer(
             webCommitStage(s)
             retainedSize = size
             retainedRotation = frame.rotationDegrees
+            retainedMirrored = frame.mirrored
             drawStage(s, layout)
             drawOverlay(s)
             presentedFrames++
@@ -172,6 +175,7 @@ public class WebCanvasVideoRenderer(
             centerX = layout.centerX,
             centerY = layout.centerY,
             rotation = layout.rotationDegrees,
+            mirrored = layout.mirrored,
         )
     }
 
@@ -191,6 +195,7 @@ public class WebCanvasVideoRenderer(
             rotationDegrees = retainedRotation,
             mode = scaleMode,
             transform = transform,
+            mirrored = retainedMirrored,
         ) ?: return
         drawStage(s, layout)
         drawOverlay(s)
@@ -353,14 +358,16 @@ private external fun webCommitStage(state: JsAny)
  *
  * The turn is applied about the layout's centre and the picture drawn into the pre-turn rectangle,
  * which is exactly what the Android renderer does with the same [FrameLayout], so the two cannot
- * disagree about where a rotated frame lands.
+ * disagree about where a rotated frame lands. A mirror is set after the turn, so it applies to the
+ * picture first.
  */
 @JsFun(
-    """(s, dl, dt, dw, dh, cx, cy, rot) => {
+    """(s, dl, dt, dw, dh, cx, cy, rot, mirror) => {
       const g = s.ctx, c = s.canvas;
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.clearRect(0, 0, c.width, c.height);
       if (rot !== 0) { g.translate(cx, cy); g.rotate(rot * Math.PI / 180); g.translate(-cx, -cy); }
+      if (mirror) { g.translate(cx, cy); g.scale(-1, 1); g.translate(-cx, -cy); }
       g.drawImage(s.stage, dl, dt, dw, dh);
       g.setTransform(1, 0, 0, 1, 0, 0);
     }""",
@@ -374,6 +381,7 @@ private external fun webDrawStage(
     centerX: Float,
     centerY: Float,
     rotation: Int,
+    mirrored: Boolean,
 )
 
 @JsFun("(s, w, h) => { if (s.canvas.width !== w) s.canvas.width = w; if (s.canvas.height !== h) s.canvas.height = h; }")

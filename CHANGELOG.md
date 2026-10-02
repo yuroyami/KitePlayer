@@ -52,6 +52,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - The Metal renderer turns a quarter-turned picture clockwise, as the display matrix says. Before,
   it turned 90 and 270 degrees the other way, so a portrait phone recording played upside down on
   macOS and iOS (#379).
+- A mirrored video plays mirrored (#233). Before, a left-right mirror played upside down and an
+  upside-down mirror played unflipped. `VideoFrame.mirrored` and `PlayerStreamInfo.mirrored` are
+  new, and every renderer mirrors the picture left to right before it turns it. A renderer of your
+  own that reads `rotationDegrees` should read `mirrored` too. MediaCodec cannot mirror what it
+  writes to a Surface, so on the direct Surface a mirrored stream decodes in software.
+  `AndroidGpuImageFrame` gains `mirrored`, which the Compose video applies.
 
 ## [0.2.0] - 2026-09-29
 

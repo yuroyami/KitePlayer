@@ -28,8 +28,8 @@ import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.runBlocking
 
 /**
- * The frame published for [KiteVideo] to draw: an image plus the two presentation facts the
- * bitmap itself cannot carry, the aspect-corrected display width and the quarter turn.
+ * The frame published for [KiteVideo] to draw: an image plus the presentation facts the bitmap
+ * itself cannot carry, the aspect-corrected display width, the quarter turn and the mirror.
  */
 internal class KiteVideoFrame(
     val image: ImageBitmap,
@@ -37,6 +37,8 @@ internal class KiteVideoFrame(
     val rotationDegrees: Int,
     val requiresCommitFence: Boolean = false,
     private val release: () -> Unit = {},
+    /** Mirrored left to right before the turn. */
+    val mirrored: Boolean = false,
 ) : AutoCloseable {
     private val closed = atomic(false)
 
@@ -259,6 +261,7 @@ internal class KiteVideoRenderer(
         val frame = pending.getAndSet(null) ?: return
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
+        val mirrored = frame.mirrored
         // The cost clock starts before the conversion and stops after the image build, because
         // that pair is exactly the CPU work this software path pays per published frame.
         val started = kotlin.time.TimeSource.Monotonic.markNow()
@@ -318,6 +321,7 @@ internal class KiteVideoRenderer(
                 rotationDegrees = rotation,
                 requiresCommitFence = image.requiresCommitFence,
                 release = image.release,
+                mirrored = mirrored,
             ),
         )
         presented.incrementAndGet()

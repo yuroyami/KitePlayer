@@ -148,6 +148,7 @@ private class TestFrame(
     parNum: Int = 1,
     parDen: Int = 1,
     val onClose: (TestFrame) -> Unit = {},
+    override val mirrored: Boolean = false,
 ) : VideoFrame {
     override val pts: Pts = Pts(0)
     override val duration: Pts? = null
@@ -310,6 +311,22 @@ class AndroidSurfaceVideoRendererTest {
          * else was superseded. The ledger is exact either way. */
         assertEquals(100, (r.presentedFrames + r.supersededFrames + r.failedFrames).toInt())
         assertTrue(r.supersededFrames >= 98, "the queue never builds; newest wins")
+    }
+
+    @Test
+    fun `a mirrored frame reaches the canvas as a mirrored layout and a plain one does not`() = runBlocking {
+        val target = FakeTarget()
+        val r = AndroidSurfaceVideoRenderer(convert = exactConverter(), target = target)
+        try {
+            assertTrue(r.present(TestFrame(rotationDegrees = 90, mirrored = true), 0))
+            awaitPresented(r, 1)
+            assertTrue(r.present(TestFrame(), 0))
+            awaitPresented(r, 2)
+        } finally {
+            r.close()
+        }
+        val layouts = synchronized(target.canvases) { target.canvases.flatMap { it.drawnLayouts } }
+        assertEquals(listOf(90 to true, 0 to false), layouts.map { it.rotationDegrees to it.mirrored })
     }
 
     @Test

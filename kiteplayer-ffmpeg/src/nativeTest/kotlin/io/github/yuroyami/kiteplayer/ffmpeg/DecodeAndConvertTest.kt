@@ -324,7 +324,7 @@ class DecodeAndConvertTest {
                 // A frame handed to this callback is valid only for the call, so what is kept is a
                 // copy, which takes a reference rather than copying pixels.
                 if (lifted == null) {
-                    lifted = KiteFFmpegVideoFrame(filtered.copy(), pts, duration, generation, rotationDegrees)
+                    lifted = KiteFFmpegVideoFrame(filtered.copy(), pts, duration, generation, rotationDegrees, mirrored)
                 }
             }
         } finally {

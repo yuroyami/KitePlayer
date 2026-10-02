@@ -1101,7 +1101,9 @@ internal fun quadUniformsFor(
         270 -> floatArrayOf(0f, -1f, 1f, 0f)
         else -> floatArrayOf(1f, 0f, 0f, 1f)
     }
-    return floatArrayOf(ndcX, ndcY, basis[0], basis[1], basis[2], basis[3], offsetX, offsetY)
+    // A mirror comes before the turn, so it negates the stored x the turned point reads (#233).
+    val mirror = if (frame.mirrored) -1f else 1f
+    return floatArrayOf(ndcX, ndcY, mirror * basis[0], mirror * basis[1], basis[2], basis[3], offsetX, offsetY)
 }
 
 /**

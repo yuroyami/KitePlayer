@@ -185,7 +185,7 @@ public class AndroidGpuImageVideoRenderer(
         val accepted = direct.renderAt(
             targetNanos = targetNanos,
             beforeRender = { timestamp ->
-                bridge.prepareFrame(timestamp, direct.size, direct.rotationDegrees, direct.colorSpace)
+                bridge.prepareFrame(timestamp, direct.size, direct.rotationDegrees, direct.colorSpace, direct.mirrored)
             },
             onRenderFailed = bridge::cancelFrame,
             onReleased = releaseCompletion,
@@ -388,6 +388,8 @@ public class AndroidGpuImageFrame internal constructor(
     public val size: VideoSize,
     public val rotationDegrees: Int,
     private val release: () -> Unit,
+    /** True when the picture is to be mirrored left to right before it is turned. */
+    public val mirrored: Boolean = false,
 ) : AutoCloseable {
     private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
 
@@ -489,6 +491,7 @@ private class OesRgbaBridge(
         size: VideoSize,
         rotationDegrees: Int,
         colorSpace: ColorSpaceInfo,
+        mirrored: Boolean = false,
     ) {
         if (closed) return
         check(size.width > 0 && size.height > 0) {
@@ -501,6 +504,7 @@ private class OesRgbaBridge(
                     size,
                     normalizedGpuQuarterTurn(rotationDegrees),
                     androidRgbColorSpace(colorSpace),
+                    mirrored,
                 ),
             ),
         ) { "Android GPU image renderer stopped accepting frame configurations" }
@@ -634,6 +638,7 @@ internal class GlState private constructor(
     private var configuredSourceSize: VideoSize? = null
     private var configuredOutputSize: VideoSize? = null
     private var configuredRotation = 0
+    private var configuredMirrored = false
     private var configuredColorSpace: AndroidRgbColorSpace = AndroidRgbColorSpace.Srgb
     private var currentSurface: EGLSurface = pbuffer
     private var hasLatchedFrame = false
@@ -646,6 +651,7 @@ internal class GlState private constructor(
         size: VideoSize,
         rotationDegrees: Int,
         colorSpace: AndroidRgbColorSpace,
+        mirrored: Boolean,
     ) {
         if (closed || size.width <= 0 || size.height <= 0) return
         val rotation = normalizedGpuQuarterTurn(rotationDegrees)
@@ -653,7 +659,8 @@ internal class GlState private constructor(
             fittedGpuOutputSize(size, rotation, requestedViewport.get(), bicubic.get())
         val sourceChanged = size != configuredSourceSize
         val metadataChanged =
-            sourceChanged || rotation != configuredRotation || colorSpace != configuredColorSpace
+            sourceChanged || rotation != configuredRotation || colorSpace != configuredColorSpace ||
+                mirrored != configuredMirrored
         val outputChanged = outputSize != configuredOutputSize
         val queuePresenceChanged = (outputSize == null) != (outputQueue == null)
         if (
@@ -664,6 +671,7 @@ internal class GlState private constructor(
         configuredSourceSize = size
         configuredOutputSize = outputSize
         configuredRotation = rotation
+        configuredMirrored = mirrored
         configuredColorSpace = colorSpace
         if (sourceChanged) surfaceTexture.setDefaultBufferSize(size.width, size.height)
         if (outputSize == null) {
@@ -676,7 +684,7 @@ internal class GlState private constructor(
     fun viewportChanged() {
         if (closed) return
         val sourceSize = configuredSourceSize ?: return
-        configure(sourceSize, configuredRotation, configuredColorSpace)
+        configure(sourceSize, configuredRotation, configuredColorSpace, configuredMirrored)
     }
 
     private fun drawNewestFrame() {
@@ -706,6 +714,7 @@ internal class GlState private constructor(
             frameConfiguration.size,
             frameConfiguration.rotationDegrees,
             frameConfiguration.androidColorSpace,
+            frameConfiguration.mirrored,
         )
         val outputSize = configuredOutputSize
         val sourceSize = configuredSourceSize ?: frameConfiguration.size
@@ -817,6 +826,7 @@ internal class GlState private constructor(
                 reader = reader,
                 frameSize = sourceSize,
                 rotationDegrees = configuredRotation,
+                mirrored = configuredMirrored,
                 colorSpace = configuredColorSpace,
                 reportFailure = reportFailure,
                 recordSuperseded = recordSuperseded,
@@ -870,6 +880,7 @@ internal class GlState private constructor(
                     queue.frameSize,
                     queue.rotationDegrees,
                     lease::close,
+                    queue.mirrored,
                 ),
             )
         } catch (failure: Throwable) {
@@ -1445,6 +1456,7 @@ private class OutputQueue(
     val reader: ImageReader,
     val frameSize: VideoSize,
     val rotationDegrees: Int,
+    val mirrored: Boolean,
     val colorSpace: AndroidRgbColorSpace,
     private val reportFailure: (Throwable) -> Unit,
     private val recordSuperseded: (Long) -> Unit,
@@ -1660,6 +1672,7 @@ internal data class FrameConfiguration(
     val size: VideoSize,
     val rotationDegrees: Int,
     val androidColorSpace: AndroidRgbColorSpace = AndroidRgbColorSpace.Srgb,
+    val mirrored: Boolean = false,
 )
 
 internal data class GpuViewport(

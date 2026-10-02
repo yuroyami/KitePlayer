@@ -282,6 +282,13 @@ echo "Rotated clip, for the renderer's quarter turn"
 # stored frames stay 320x240 and only the metadata says otherwise.
 ffmpeg -v error -y -display_rotation:v 90 -i colors-bt709.mp4 -c copy rotated90ccw.mp4
 
+echo "Mirrored clips, for the renderer's mirror"
+# The same remux with a mirror in the matrix. A left-right mirror reads as a mirror and no turn. An
+# upside-down mirror reads as a mirror and a half turn, because the renderer mirrors first and turns
+# after.
+ffmpeg -v error -y -display_hflip -i colors-bt709.mp4 -c copy mirrored.mp4
+ffmpeg -v error -y -display_vflip -i colors-bt709.mp4 -c copy mirrored-vflip.mp4
+
 echo "5.1 clips plus their stereo reference PCM"
 # Six channels, one tone each, so a downmix that routes a channel to the wrong speaker is audible in
 # the numbers rather than only in a listening test. aevalsrc is used instead of the sine source

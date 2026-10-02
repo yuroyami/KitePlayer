@@ -428,6 +428,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         val framePts = frame.pts
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
+        val mirrored = frame.mirrored
         geometryConsumer?.invoke(size, rotation)
         if (toneMapped(frame)) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
         val converted = try {
@@ -440,7 +441,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             frame.close()
         }
         val picture = converted?.let { swizzle(it, size) } ?: return
-        draw(picture, size, rotation, framePts)
+        draw(picture, size, rotation, mirrored, framePts)
     }
 
     /**
@@ -516,7 +517,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      * once as a transition, and then the worker carries on: the next lock that succeeds says so and
      * drawing resumes. Nothing here calls the player.
      */
-    private fun draw(picture: IntArray, size: VideoSize, rotationDegrees: Int, framePts: Pts) {
+    private fun draw(picture: IntArray, size: VideoSize, rotationDegrees: Int, mirrored: Boolean, framePts: Pts) {
         if (!targetIsValid()) {
             failWithLostSurface("the Surface went away before a canvas could be locked")
             return
@@ -543,7 +544,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             target.setVideoColorMatrix(videoColorMatrix.value)
             val layout = frameLayout(
                 canvas.width, canvas.height, size, rotationDegrees, scaleMode.value,
-                videoTransform.value,
+                videoTransform.value, mirrored,
             )
             if (layout == null) {
                 drawFailure = IllegalStateException(
@@ -979,7 +980,8 @@ internal interface TargetCanvas {
 
     /**
      * Draws [argb] ([sourceWidth] by [sourceHeight] pixels, row major) where [layout] says, turned by
-     * [FrameLayout.rotationDegrees] about the destination centre.
+     * [FrameLayout.rotationDegrees] about the destination centre, and mirrored first when
+     * [FrameLayout.mirrored] says so.
      */
     fun drawFrame(argb: IntArray, sourceWidth: Int, sourceHeight: Int, layout: FrameLayout)
 
@@ -1124,6 +1126,8 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
                 if (layout.rotationDegrees != 0) {
                     canvas.rotate(layout.rotationDegrees.toFloat(), layout.centerX, layout.centerY)
                 }
+                // Set after the turn, so it applies to the bitmap before the turn does.
+                if (layout.mirrored) canvas.scale(-1f, 1f, layout.centerX, layout.centerY)
                 canvas.drawBitmap(picture, null, destination, videoPaint)
             } finally {
                 canvas.restoreToCount(saved)

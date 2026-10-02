@@ -314,6 +314,64 @@ class AppKitVideoRendererTest {
     }
 
     @Test
+    fun `a mirrored frame is mirrored left to right before it turns`() = runBlocking {
+        val storedWidth = 4
+        val storedHeight = 2
+        // Red carries the column and green the row, as in the turn test above.
+        val source = ByteArray(storedWidth * storedHeight * 4)
+        for (y in 0 until storedHeight) {
+            for (x in 0 until storedWidth) {
+                val at = (y * storedWidth + x) * 4
+                source[at] = (10 + x * 40).toByte()
+                source[at + 1] = (10 + y * 40).toByte()
+                source[at + 3] = -1
+            }
+        }
+        // The stored pixel (x, y) mirrored to (storedWidth - 1 - x, y) first, then turned as above.
+        val landings: List<Pair<Int, (Int, Int) -> Pair<Int, Int>>> = listOf(
+            0 to { x, y -> (storedWidth - 1 - x) to y },
+            90 to { x, y -> (storedHeight - 1 - y) to (storedWidth - 1 - x) },
+            180 to { x, y -> x to (storedHeight - 1 - y) },
+            270 to { x, y -> y to x },
+        )
+        for ((rotation, landing) in landings) {
+            val ledger = LeakLedger()
+            val drawn = atomic<NSImage?>(null)
+            val renderer = AppKitVideoRenderer(
+                convert = { source },
+                enqueueOnMain = { block -> block() },
+                showImage = { image -> drawn.value = image },
+            )
+            try {
+                val frame = FakeVideoFrame(
+                    pts = Pts(0),
+                    size = VideoSize(storedWidth, storedHeight),
+                    rotationDegrees = rotation,
+                    ledger = ledger,
+                    mirrored = true,
+                )
+                assertTrue(renderer.present(frame, targetNanos = 0L), "an open renderer accepts every frame")
+                awaitTrue("the mirrored frame at $rotation degrees to be drawn") { drawn.value != null }
+                val pixels = readBack(assertNotNull(drawn.value))
+                for (y in 0 until storedHeight) {
+                    for (x in 0 until storedWidth) {
+                        val (toX, toY) = landing(x, y)
+                        val at = (y * storedWidth + x) * 4
+                        assertEquals(
+                            (source[at].toInt() and 0xFF) to (source[at + 1].toInt() and 0xFF),
+                            pixels.redAndGreenAt(toX, toY),
+                            "mirrored at $rotation degrees the pixel at ($x $y) has to land at ($toX $toY)",
+                        )
+                    }
+                }
+            } finally {
+                renderer.close()
+            }
+            assertEquals(1, ledger.closeCount, "a mirrored frame is still closed exactly once")
+        }
+    }
+
+    @Test
     fun `the rotated fixtures own geometry draws with its dimensions swapped`() = runBlocking {
         // The numbers of `rotated90ccw.mp4`, measured by `RotationTest` in kiteplayer-ffmpeg on the real
         // file: 320x240 stored, and a display matrix that arrives as 270 clockwise degrees. That test
@@ -965,6 +1023,7 @@ class AppKitVideoRendererTest {
         override val hardwareSurface: Nothing? = null,
         override val rotationDegrees: Int = 0,
         private val ledger: LeakLedger,
+        override val mirrored: Boolean = false,
     ) : VideoFrame {
         private val isClosed = atomic(false)
 

@@ -140,6 +140,7 @@ public class AwtCanvasVideoRenderer(
     private var lastImage: BufferedImage? = null
     private var lastSize: VideoSize? = null
     private var lastRotation: Int = 0
+    private var lastMirrored: Boolean = false
     private var overlay: SubtitleOverlay? = null
     private var scaleMode: VideoScale = VideoScale.Fit
     private var transform: VideoTransform = VideoTransform.Identity
@@ -238,6 +239,7 @@ public class AwtCanvasVideoRenderer(
         }
         val size = frame.size
         val rotation = frame.rotationDegrees
+        val mirrored = frame.mirrored
         val pts = frame.pts
         if (painted) announceToneMap(frame)
         frame.close()
@@ -253,6 +255,7 @@ public class AwtCanvasVideoRenderer(
             lastImage = image
             lastSize = size
             lastRotation = rotation
+            lastMirrored = mirrored
         }
         onVideoGeometry(size, rotation)
         // Counted and reported only once the strategy showed it. A canvas with no peer or no size
@@ -304,6 +307,7 @@ public class AwtCanvasVideoRenderer(
         val image: BufferedImage
         val size: VideoSize
         val rotation: Int
+        val mirrored: Boolean
         val mode: VideoScale
         val currentTransform: VideoTransform
         synchronized(lock) {
@@ -312,6 +316,7 @@ public class AwtCanvasVideoRenderer(
             image = lastImage ?: return false
             size = lastSize ?: return false
             rotation = lastRotation
+            mirrored = lastMirrored
             mode = scaleMode
             currentTransform = transform
         }
@@ -323,6 +328,7 @@ public class AwtCanvasVideoRenderer(
             rotationDegrees = rotation,
             mode = mode,
             transform = currentTransform,
+            mirrored = mirrored,
         ) ?: return false
         return presenter.present(target, image, layout, overlaySnapshot())
     }

@@ -54,11 +54,19 @@ public interface VideoFrame : AutoCloseable {
      *
      * Real media produces 0, 90, 180 and 270. A renderer draws any other value unrotated rather than
      * refusing the frame, because a picture the right way up matters more than an exact affine
-     * transform. A mirrored display matrix is not modelled yet: the FFmpeg backend's current media
-     * library reports a left-right mirror as 180 and an upside-down mirror as 0, so such a video
-     * plays turned rather than mirrored (#233). Skewed matrices are not modelled at all.
+     * transform. A display matrix that also mirrors the picture sets [mirrored] as well. Skewed
+     * matrices are not modelled.
      */
     public val rotationDegrees: Int get() = 0
+
+    /**
+     * True when the display matrix also mirrors the picture, as a front camera can record it.
+     *
+     * A renderer mirrors the stored picture left to right first, and then turns it clockwise by
+     * [rotationDegrees]. So an upside-down mirror arrives as a mirror and a half turn. Like the turn,
+     * the mirror is a presentation instruction: the pixels and [size] stay as stored.
+     */
+    public val mirrored: Boolean get() = false
 
     /** Set when the frame lives in GPU or hardware memory and needs a matching renderer. */
     public val hardwareSurface: HwSurfaceKind?

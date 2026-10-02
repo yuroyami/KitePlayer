@@ -26,12 +26,13 @@ class CapturedFrameGeometryTest {
         override val planeCount: Int = strides.size,
         override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p,
         override val planeFormat: PlayerPixelFormat = pixelFormat,
+        override val rotationDegrees: Int = 0,
+        override val mirrored: Boolean = false,
     ) : SoftwareReadableFrame {
         override val pts: Pts = Pts.Zero
         override val duration: Pts? = null
         override val size: VideoSize = VideoSize(16, 16)
         override val colorSpace: ColorSpaceInfo = ColorSpaceInfo()
-        override val rotationDegrees: Int = 0
         override val hardwareSurface: HwSurfaceKind? = null
         override val generation: Generation = Generation(0)
         override fun planeStride(index: Int): Int = strides[index]
@@ -68,6 +69,16 @@ class CapturedFrameGeometryTest {
             "10000000000" in refusal.message.orEmpty(),
             "the refusal must name the true 64-bit size: ${refusal.message}",
         )
+    }
+
+    @Test
+    fun `a capture keeps the turn and the mirror with or without its overlay`() {
+        val captured = CapturedFrame.of(
+            FakeReadable(strides = intArrayOf(16), heights = intArrayOf(16), rotationDegrees = 90, mirrored = true),
+        )
+        assertEquals(90 to true, captured.rotationDegrees to captured.mirrored)
+        val withText = captured.withOverlay(null)
+        assertEquals(90 to true, withText.rotationDegrees to withText.mirrored)
     }
 
     @Test

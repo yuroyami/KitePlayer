@@ -86,6 +86,48 @@ class RotationTest {
     }
 
     @Test
+    fun `a mirror in the display matrix reaches the stream and its frames apart from the turn`() = runBlocking {
+        // mirrored.mp4 is the same remux with -display_hflip, and mirrored-vflip.mp4 with -display_vflip.
+        // A renderer mirrors first and turns after, so an upside-down mirror is a mirror and a half turn.
+        for ((clip, expected) in listOf("mirrored.mp4" to (0 to true), "mirrored-vflip.mp4" to (180 to true))) {
+            val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/$clip")) as KiteFFmpegSource
+            try {
+                val video = assertNotNull(source.firstVideo, "$clip has a video stream")
+                assertEquals(expected, video.rotationDegrees to video.mirrored, "$clip as a turn and a mirror")
+                source.selectStreams(setOf(video.index))
+                val decoder = assertNotNull(source.videoDecoderFactories().first().create(video, HwdecPolicy.Auto))
+                var seen: Pair<Int, Boolean>? = null
+                fun take(frame: VideoFrame) = frame.use { if (seen == null) seen = it.rotationDegrees to it.mirrored }
+                try {
+                    while (seen == null) {
+                        val packet = source.readPacket()
+                        if (packet == null) {
+                            decoder.send(null)
+                            while (true) take(decoder.receive() ?: break)
+                            break
+                        }
+                        while (!decoder.send(packet)) take(decoder.receive() ?: break)
+                        packet.close()
+                        while (true) take(decoder.receive() ?: break)
+                    }
+                } finally {
+                    decoder.close()
+                }
+                assertEquals(expected, seen, "$clip's first frame as a turn and a mirror")
+            } finally {
+                source.close()
+            }
+        }
+        // The unmirrored control: a turn alone is no mirror.
+        val turned = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/rotated90ccw.mp4")) as KiteFFmpegSource
+        try {
+            assertEquals(false, assertNotNull(turned.firstVideo).mirrored, "a turn alone is no mirror")
+        } finally {
+            turned.close()
+        }
+    }
+
+    @Test
     fun `every decoded frame carries the rotation and none of them is turned before the renderer`() = runBlocking {
         val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/rotated90ccw.mp4")) as KiteFFmpegSource
         val stream = assertNotNull(source.firstVideo)

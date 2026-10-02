@@ -105,7 +105,7 @@ internal class AwtCanvasPresenter : CanvasPresenter {
             RenderingHints.VALUE_INTERPOLATION_BILINEAR,
         )
         val turn = layout.rotationDegrees
-        if (turn == 0) {
+        if (turn == 0 && !layout.mirrored) {
             g.drawImage(image, layout.left, layout.top, layout.width, layout.height, null)
         } else {
             // Scaled into the rectangle before the turn and turned about the centre of where the
@@ -116,6 +116,12 @@ internal class AwtCanvasPresenter : CanvasPresenter {
                 layout.centerX.toDouble(),
                 layout.centerY.toDouble(),
             )
+            if (layout.mirrored) {
+                // Concatenated after the turn, so it mirrors the picture before the turn does.
+                place.translate(layout.centerX.toDouble(), layout.centerY.toDouble())
+                place.scale(-1.0, 1.0)
+                place.translate(-layout.centerX.toDouble(), -layout.centerY.toDouble())
+            }
             place.translate(layout.drawLeft.toDouble(), layout.drawTop.toDouble())
             place.scale(layout.drawWidth.toDouble() / image.width, layout.drawHeight.toDouble() / image.height)
             g.drawImage(image, place, null)

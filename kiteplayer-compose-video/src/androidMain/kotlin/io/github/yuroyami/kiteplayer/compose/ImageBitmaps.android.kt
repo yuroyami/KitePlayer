@@ -103,6 +103,7 @@ private class AndroidKiteVideoHardwareRenderer(
                 rotationDegrees = frame.rotationDegrees,
                 requiresCommitFence = true,
                 release = frame::close,
+                mirrored = frame.mirrored,
             ),
         )
     }

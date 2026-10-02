@@ -193,6 +193,57 @@ class UIKitVideoRendererTest {
         }
     }
 
+    @Test
+    fun `a mirrored frame is mirrored left to right before it turns`() = runBlocking {
+        val width = 4
+        val height = 2
+        val source = ByteArray(width * height * 4)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val at = (y * width + x) * 4
+                source[at] = (10 + x * 40).toByte()
+                source[at + 1] = (10 + y * 40).toByte()
+                source[at + 3] = -1
+            }
+        }
+        // The stored pixel (x, y) mirrored to (width - 1 - x, y) first, then turned as above.
+        val landings: List<Pair<Int, (Int, Int) -> Pair<Int, Int>>> = listOf(
+            0 to { x, y -> (width - 1 - x) to y },
+            90 to { x, y -> (height - 1 - y) to (width - 1 - x) },
+            180 to { x, y -> x to (height - 1 - y) },
+            270 to { x, y -> y to x },
+        )
+        for ((rotation, landing) in landings) {
+            val ledger = LeakLedger()
+            val drawn = atomic<DrawnPixels?>(null)
+            val renderer = UIKitVideoRenderer(
+                convert = { source },
+                enqueueOnMain = { block -> block() },
+                deliverImage = { image -> drawn.value = image?.let(::readBack) },
+            )
+            try {
+                val frame = FakeVideoFrame(Pts(0), VideoSize(width, height), rotation, ledger, mirrored = true)
+                assertTrue(renderer.present(frame, 0L))
+                awaitTrue("the mirrored $rotation degree image") { drawn.value != null }
+                val pixels = assertNotNull(drawn.value)
+                for (y in 0 until height) {
+                    for (x in 0 until width) {
+                        val (toX, toY) = landing(x, y)
+                        val at = (y * width + x) * 4
+                        assertEquals(
+                            (source[at].toInt() and 0xFF) to (source[at + 1].toInt() and 0xFF),
+                            pixels.redAndGreenAt(toX, toY),
+                            "mirrored at $rotation degrees: ($x, $y) must land at ($toX, $toY)",
+                        )
+                    }
+                }
+            } finally {
+                renderer.close()
+            }
+            assertEquals(1, ledger.closeCount)
+        }
+    }
+
     /**
      * The simulator proof for subtitles: a white cue composites ABOVE the red
      * picture in the delivered image, in display space, and the picture survives beside it.
@@ -505,6 +556,7 @@ class UIKitVideoRendererTest {
         override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p,
         override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(size.height),
         override val hardwareSurface: Nothing? = null,
+        override val mirrored: Boolean = false,
     ) : VideoFrame {
         private val isClosed = atomic(false)
 

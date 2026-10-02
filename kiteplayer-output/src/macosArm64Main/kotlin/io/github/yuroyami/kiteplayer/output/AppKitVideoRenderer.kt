@@ -275,6 +275,7 @@ public class AppKitVideoRenderer internal constructor(
         val height = frame.size.height
         val displayWidth = frame.size.displayWidth
         val rotation = quarterTurn(frame.rotationDegrees)
+        val mirrored = frame.mirrored
         val image = try {
             if (width <= 0 || height <= 0) {
                 null
@@ -287,8 +288,9 @@ public class AppKitVideoRenderer internal constructor(
                 retainedHeight = height
                 retainedDisplayWidth = displayWidth
                 retainedRotation = rotation
-        retainedPtsUs = ptsUs
-                makeImage(rgba, width, height, displayWidth, rotation)
+                retainedMirrored = mirrored
+                retainedPtsUs = ptsUs
+                makeImage(rgba, width, height, displayWidth, rotation, mirrored)
             }
         } catch (failure: Throwable) {
             eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "conversion failed"))
@@ -364,7 +366,8 @@ public class AppKitVideoRenderer internal constructor(
     }
 
     /**
-     * Builds an image from RGBA bytes, turned by [rotationDegrees] if the container asked for it.
+     * Builds an image from RGBA bytes, turned by [rotationDegrees] if the container asked for it, and
+     * mirrored first when [mirrored] says so.
      *
      * A bitmap context is used rather than a data provider so that Core Graphics copies the pixels
      * immediately. The alternative keeps a reference to the caller's buffer and requires it to outlive
@@ -378,6 +381,7 @@ public class AppKitVideoRenderer internal constructor(
         height: Int,
         displayWidth: Int,
         rotationDegrees: Int,
+        mirrored: Boolean,
     ): NSImage? {
         // The engine's one colour-matrix law, applied to bytes here instead of in
         // a shader. Identity hands back the same array, so an untouched picture copies nothing.
@@ -416,10 +420,13 @@ public class AppKitVideoRenderer internal constructor(
                         // The unrotated fast path is only a fast path while there is nothing to
                         // composite; an active overlay routes through the drawing pass at every
                         // rotation, and so does zoom or pan.
-                        if (rotationDegrees == 0 && overlaySlot.value == null && !transform.needsDrawingPass()) {
+                        if (
+                            rotationDegrees == 0 && !mirrored && overlaySlot.value == null &&
+                            !transform.needsDrawingPass()
+                        ) {
                             NSImage(cGImage = stored, size = size)
                         } else {
-                            val turned = turn(stored, width, height, rotationDegrees, transform, colorSpace)
+                            val turned = turn(stored, width, height, rotationDegrees, mirrored, transform, colorSpace)
                                 ?: return@usePinned null
                             try {
                                 NSImage(cGImage = turned, size = size)
@@ -440,7 +447,8 @@ public class AppKitVideoRenderer internal constructor(
     }
 
     /**
-     * Redraws [image] turned clockwise by [rotationDegrees], into a bitmap of its own.
+     * Redraws [image] turned clockwise by [rotationDegrees], into a bitmap of its own, and mirrored left
+     * to right before the turn when [mirrored] says so.
      *
      * Core Graphics rotates about the origin and its bitmap contexts have their origin at the bottom
      * left with y increasing upward, so each turn needs a translation that brings the turned rectangle
@@ -457,6 +465,7 @@ public class AppKitVideoRenderer internal constructor(
         width: Int,
         height: Int,
         rotationDegrees: Int,
+        mirrored: Boolean,
         transform: io.github.yuroyami.kiteplayer.VideoTransform,
         colorSpace: CGColorSpaceRef,
     ): CGImageRef? {
@@ -496,6 +505,11 @@ public class AppKitVideoRenderer internal constructor(
                     CGContextTranslateCTM(context, height.toDouble(), 0.0)
                     CGContextRotateCTM(context, PI / 2)
                 }
+            }
+            if (mirrored) {
+                // Concatenated last, so it mirrors the stored picture before the turn does.
+                CGContextTranslateCTM(context, width.toDouble(), 0.0)
+                CGContextScaleCTM(context, -1.0, 1.0)
             }
             CGContextDrawImage(context, CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()), image)
             CGContextRestoreGState(context)
@@ -604,6 +618,7 @@ public class AppKitVideoRenderer internal constructor(
     private var retainedHeight: Int = 0
     private var retainedDisplayWidth: Int = 0
     private var retainedRotation: Int = 0
+    private var retainedMirrored: Boolean = false
     private val redrawWanted = kotlinx.atomicfu.atomic(false)
 
     /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
@@ -612,7 +627,7 @@ public class AppKitVideoRenderer internal constructor(
         if (closed.value) return
         val rgba = retainedRgba ?: return
         val image = try {
-            makeImage(rgba, retainedWidth, retainedHeight, retainedDisplayWidth, retainedRotation)
+            makeImage(rgba, retainedWidth, retainedHeight, retainedDisplayWidth, retainedRotation, retainedMirrored)
         } catch (_: Throwable) {
             null
         } ?: return

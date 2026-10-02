@@ -1,6 +1,7 @@
 public final class io/github/yuroyami/kiteplayer/output/AndroidGpuImageFrame : java/lang/AutoCloseable {
 	public fun close ()V
 	public final fun getBitmap ()Landroid/graphics/Bitmap;
+	public final fun getMirrored ()Z
 	public final fun getRotationDegrees ()I
 	public final fun getSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
 }

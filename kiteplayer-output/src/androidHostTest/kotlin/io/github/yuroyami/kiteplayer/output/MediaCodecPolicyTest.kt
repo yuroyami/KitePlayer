@@ -31,3 +31,20 @@ class MediaCodecPolicyTest {
         )
     }
 }
+
+class DirectSurfaceGeometryTest {
+    private val stream = io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo(
+        index = 0,
+        kind = io.github.yuroyami.kiteplayer.TrackKind.Video,
+        codec = "h264",
+        rotationDegrees = 90,
+    )
+
+    @Test
+    fun `a mirrored stream is refused where the codec turns the picture and kept where the renderer does`() {
+        val mirrored = stream.copy(mirrored = true)
+        assertTrue(directSurfaceGeometryRefusal(mirrored, applyCodecRotation = true).orEmpty().contains("mirror"))
+        kotlin.test.assertNull(directSurfaceGeometryRefusal(mirrored, applyCodecRotation = false))
+        kotlin.test.assertNull(directSurfaceGeometryRefusal(stream, applyCodecRotation = true))
+    }
+}

@@ -107,6 +107,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame : io.githu
         final fun <get-hasPts>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.hasPts.<get-hasPts>|<get-hasPts>(){}[0]
     final val hdr // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.hdr|{}hdr[0]
         final fun <get-hdr>(): io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.hdr.<get-hdr>|<get-hdr>(){}[0]
+    final val mirrored // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.mirrored|{}mirrored[0]
+        final fun <get-mirrored>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.mirrored.<get-mirrored>|<get-mirrored>(){}[0]
     final val pixelFormat // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.pixelFormat|{}pixelFormat[0]
         final fun <get-pixelFormat>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.pixelFormat.<get-pixelFormat>|<get-pixelFormat>(){}[0]
     final val planeCount // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.planeCount|{}planeCount[0]

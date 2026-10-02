@@ -176,6 +176,11 @@ public data class PlayerStreamInfo(
     val fieldOrder: FieldOrder = FieldOrder.Unknown,
     /** The stream's static HDR metadata, or null when the container and the codec say none. */
     val hdr: HdrStaticMetadata? = null,
+    /**
+     * True when the container's display matrix also mirrors the picture. See
+     * [VideoFrame.mirrored] for the order in which a renderer mirrors and turns it.
+     */
+    val mirrored: Boolean = false,
 ) {
     /**
      * By CONTENT, including [codecExtradata].
@@ -210,6 +215,7 @@ public data class PlayerStreamInfo(
             metadata == other.metadata &&
             fieldOrder == other.fieldOrder &&
             hdr == other.hdr &&
+            mirrored == other.mirrored &&
             (codecExtradata?.contentEquals(other.codecExtradata) ?: (other.codecExtradata == null))
     }
 
@@ -236,6 +242,7 @@ public data class PlayerStreamInfo(
         result = 31 * result + metadata.hashCode()
         result = 31 * result + fieldOrder.hashCode()
         result = 31 * result + (hdr?.hashCode() ?: 0)
+        result = 31 * result + mirrored.hashCode()
         result = 31 * result + (codecExtradata?.contentHashCode() ?: 0)
         return result
     }

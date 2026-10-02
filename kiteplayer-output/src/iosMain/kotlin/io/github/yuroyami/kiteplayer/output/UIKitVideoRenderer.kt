@@ -208,6 +208,7 @@ public class UIKitVideoRenderer internal constructor(
         val frame = pendingFrame.getAndSet(null) ?: return
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
+        val mirrored = frame.mirrored
         val image = try {
             if (toneMapped(frame)) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
             val rgba = convert(frame)
@@ -217,7 +218,8 @@ public class UIKitVideoRenderer internal constructor(
             retainedRgba = rgba
             retainedSize = size
             retainedRotation = rotation
-            makeImage(rgba, size, rotation)
+            retainedMirrored = mirrored
+            makeImage(rgba, size, rotation, mirrored)
         } catch (_: Throwable) {
             null
         } finally {
@@ -234,6 +236,7 @@ public class UIKitVideoRenderer internal constructor(
     private var retainedRgba: ByteArray? = null
     private var retainedSize: VideoSize? = null
     private var retainedRotation: Int = 0
+    private var retainedMirrored: Boolean = false
     private val redrawWanted = kotlinx.atomicfu.atomic(false)
 
     /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
@@ -243,7 +246,7 @@ public class UIKitVideoRenderer internal constructor(
         val rgba = retainedRgba ?: return
         val size = retainedSize ?: return
         val image = try {
-            makeImage(rgba, size, retainedRotation)
+            makeImage(rgba, size, retainedRotation, retainedMirrored)
         } catch (_: Throwable) {
             null
         } ?: return
@@ -311,7 +314,7 @@ public class UIKitVideoRenderer internal constructor(
         }
     }
 
-    private fun makeImage(rgba: ByteArray, size: VideoSize, rotationDegrees: Int): CGImageRef? {
+    private fun makeImage(rgba: ByteArray, size: VideoSize, rotationDegrees: Int, mirrored: Boolean): CGImageRef? {
         val width = size.width
         val height = size.height
         val displayWidth = displayWidth(size)
@@ -347,6 +350,7 @@ public class UIKitVideoRenderer internal constructor(
                 // IS the finished picture, so the second bitmap pass was pure waste.
                 if (
                     rotationDegrees == 0 &&
+                    !mirrored &&
                     displayWidth == width &&
                     overlaySlot.value == null &&
                     videoTransform.isIdentity
@@ -355,7 +359,7 @@ public class UIKitVideoRenderer internal constructor(
                 }
                 try {
                     return transform(
-                        stored, displayWidth, height, rotationDegrees, videoTransform, colorSpace,
+                        stored, displayWidth, height, rotationDegrees, mirrored, videoTransform, colorSpace,
                     )
                 } finally {
                     CGImageRelease(stored)
@@ -373,6 +377,7 @@ public class UIKitVideoRenderer internal constructor(
         displayWidth: Int,
         height: Int,
         rotationDegrees: Int,
+        mirrored: Boolean,
         videoTransform: io.github.yuroyami.kiteplayer.VideoTransform,
         colorSpace: CGColorSpaceRef,
     ): CGImageRef? {
@@ -425,6 +430,11 @@ public class UIKitVideoRenderer internal constructor(
                     CGContextTranslateCTM(context, height.toDouble(), 0.0)
                     CGContextRotateCTM(context, PI / 2)
                 }
+            }
+            if (mirrored) {
+                // Concatenated last, so it mirrors the stored picture before the turn does.
+                CGContextTranslateCTM(context, displayWidth.toDouble(), 0.0)
+                CGContextScaleCTM(context, -1.0, 1.0)
             }
             CGContextDrawImage(
                 context,

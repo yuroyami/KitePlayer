@@ -6,9 +6,14 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -75,24 +80,10 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                     ) ?: return@drawBehind
                     // Fill overhangs the component by design; the clip keeps the crop inside it.
                     // Fit and Stretch never overhang, so they keep the unclipped fast path.
-                    val draw: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit = {
-                        rotate(
-                            degrees = layout.rotationDegrees.toFloat(),
-                            pivot = androidx.compose.ui.geometry.Offset(layout.centerX, layout.centerY),
-                        ) {
-                            drawImage(
-                                image = frame.image,
-                                dstOffset = IntOffset(layout.drawLeft.roundToInt(), layout.drawTop.roundToInt()),
-                                dstSize = IntSize(
-                                    layout.drawWidth.roundToInt().coerceAtLeast(1),
-                                    layout.drawHeight.roundToInt().coerceAtLeast(1),
-                                ),
-                                filterQuality = sampling,
-                                // The picture controls, on the VIDEO image only: subtitles below
-                                // composite unfiltered, exactly like every platform renderer.
-                                colorFilter = videoFilter,
-                            )
-                        }
+                    val draw: DrawScope.() -> Unit = {
+                        // The picture controls, on the VIDEO image only: subtitles below
+                        // composite unfiltered, exactly like every platform renderer.
+                        drawVideoPicture(frame.image, layout, frame.mirrored, sampling, videoFilter)
                     }
                     // Fill overhangs by design; zoom and pan can overhang under ANY mode. Both
                     // clip; the unzoomed Fit and Stretch keep the unclipped fast path.
@@ -135,5 +126,35 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOverlayItems(st
             ),
             filterQuality = FilterQuality.Low,
         )
+    }
+}
+
+/**
+ * Draws [image] where [layout] says: mirrored left to right first when [mirrored], then turned
+ * about the footprint's centre. A function of its own so a test can draw it into a bitmap.
+ */
+internal fun DrawScope.drawVideoPicture(
+    image: ImageBitmap,
+    layout: VideoLayout,
+    mirrored: Boolean,
+    filterQuality: FilterQuality,
+    colorFilter: ColorFilter?,
+) {
+    val pivot = Offset(layout.centerX, layout.centerY)
+    val paint: DrawScope.() -> Unit = {
+        drawImage(
+            image = image,
+            dstOffset = IntOffset(layout.drawLeft.roundToInt(), layout.drawTop.roundToInt()),
+            dstSize = IntSize(
+                layout.drawWidth.roundToInt().coerceAtLeast(1),
+                layout.drawHeight.roundToInt().coerceAtLeast(1),
+            ),
+            filterQuality = filterQuality,
+            colorFilter = colorFilter,
+        )
+    }
+    rotate(degrees = layout.rotationDegrees.toFloat(), pivot = pivot) {
+        // Inside the turn, so the mirror applies to the stored picture before the turn does.
+        if (mirrored) scale(scaleX = -1f, scaleY = 1f, pivot = pivot) { paint() } else paint()
     }
 }

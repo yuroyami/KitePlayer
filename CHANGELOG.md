@@ -48,6 +48,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third
   module, the worker binary, whose `main` calls `runKitePlayerWorker()`. `kiteplayer-output` gains
   `WebWorkletAudio` and `workerOutputBackend`, the two halves of its sound.
+- A Java app on Android or the desktop can use the player without writing Kotlin (#394).
+  `KitePlayerJava` in `kiteplayer` adds listeners called on an `Executor`, a `CompletableFuture`
+  version of every suspending call, and millisecond versions of the calls that take a `Duration`.
+  `MediaItemBuilder` builds an item, whose constructor Java cannot call. In `kiteplayer-core`,
+  `KitePlayer.create` is static on the JVM, the config builders have public constructors and a
+  public `build()`, and `Progress`, `PlayerSnapshot`, `PlayerEvent.SeekCompleted` and `Tracks`
+  gain Java-readable `positionMillis`, `bufferedAheadMillis`, `durationMillis`, `landedAtMillis`
+  and `selectedTrack(kind)`.
 - `KitePlayer.awaitClose()` suspends until the player is asked to close, for helpers that go away
   with it (#385).
 - `KitePlayer.requestSeek` replaces `seekLater`, which is deprecated (#386). It asks for a seek and

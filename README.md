@@ -347,6 +347,43 @@ On macOS, a click goes to the topmost native view, so Compose controls drawn ove
 video are painted but never pressed. Use the canvas path there, or keep the controls beside the
 video.
 
+<details>
+<summary><b>From Java</b>: listeners, futures and milliseconds</summary>
+<br>
+
+The player speaks in coroutines and flows, which Java cannot call. On Android and the desktop JVM,
+`KitePlayerJava` adds what Java lacks: listeners called on an executor you name, a
+`CompletableFuture` version of every call that suspends, and milliseconds wherever the Kotlin call
+takes a `Duration`. `MediaItemBuilder` makes the item, and `PlayerConfigBuilder` the settings.
+
+```java
+KitePlayerJava player = KitePlayerJava.create();
+player.addListener(new KitePlayerListener() {
+    @Override
+    public void onState(PlayerSnapshot state) {
+        statusView.setText(state.getStatus().name());
+    }
+
+    @Override
+    public void onProgress(Progress progress) {
+        seekBar.setProgress((int) progress.getPositionMillis());
+    }
+}, ContextCompat.getMainExecutor(context));
+
+player.openAsync(new MediaItemBuilder("https://example.com/movie.mkv").build())
+        .thenRun(() -> player.getPlayer().play());
+player.seekAsync(90_000);
+
+// When the screen goes away:
+player.close();
+```
+
+Cancelling a future cancels its call, as cancelling the coroutine does in Kotlin. Every other call,
+such as `play()`, `pause()` and `setVolume(float)`, is on `getPlayer()`. A listener hears each event
+that happens after it is added, and none from before: the player replays no event.
+
+</details>
+
 ## Media that is not a URL
 
 A file path or a URL needs nothing more. `MediaItem("/sdcard/movie.mkv")` goes straight to

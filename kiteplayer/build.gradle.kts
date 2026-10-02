@@ -24,6 +24,11 @@ tasks.withType<Test>().configureEach {
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
     environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
 }
+// The JVM tests include one written in Java (#394), which compiles beside the Kotlin tests and
+// must target the same Java 11 bytecode they do.
+tasks.matching { it.name == "compileJvmTestJava" }.configureEach {
+    (this as JavaCompile).options.release.set(11)
+}
 
 kotlin {
     explicitApi()
@@ -85,6 +90,11 @@ kotlin {
         listOf("androidMain", "appleMain", "jvmMain", "jsMain", "wasmJsMain").forEach {
             getByName(it).dependsOn(networkMain)
         }
+        // The Java layer (#394): listeners on an Executor and CompletableFuture versions of the
+        // suspending calls. The JVM and Android share all three, so one source set serves both.
+        val jvmAndAndroidMain = create("jvmAndAndroidMain") { dependsOn(commonMain.get()) }
+        getByName("jvmMain").dependsOn(jvmAndAndroidMain)
+        getByName("androidMain").dependsOn(jvmAndAndroidMain)
         androidMain.dependencies {
             api(project(":kiteplayer-ffmpeg"))
             api(project(":kiteplayer-output"))

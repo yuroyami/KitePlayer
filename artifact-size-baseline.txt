@@ -38,8 +38,8 @@ kiteplayer-view iosArm64 67707
 kiteplayer-view-bindings jvm 8459
 kiteplayer-view-bindings android 7464
 kiteplayer-view-bindings iosArm64 13750
-kiteplayer jvm 82893
-kiteplayer android 186600
+kiteplayer jvm 157765
+kiteplayer android 253673
 kiteplayer macosArm64 75854
 kiteplayer iosArm64 101323
 kiteplayer-compose-interop jvm 14999

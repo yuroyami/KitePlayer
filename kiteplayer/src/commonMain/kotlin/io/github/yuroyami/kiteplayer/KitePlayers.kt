@@ -23,7 +23,7 @@ import kotlin.jvm.JvmName
  *
  * Android, iOS, macOS and the desktop JVM always have the default stack in a correctly packaged
  * app. The web has it once its codec module is loaded. Where that can be false, check
- * [KitePlayer.isAvailable] first, for example to fall back to another engine.
+ * `KitePlayer.isAvailable` first, for example to fall back to another engine.
  *
  * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] when a backend is missing
  *         and this platform has no default for it. The detail says why.

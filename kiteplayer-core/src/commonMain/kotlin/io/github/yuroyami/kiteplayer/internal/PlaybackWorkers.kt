@@ -283,6 +283,8 @@ internal class AttachableRenderer : VideoRenderer {
 
     override fun supports(format: PlayerPixelFormat): Boolean = delegate?.supports(format) ?: true
 
+    override fun accepts(shape: io.github.yuroyami.kiteplayer.spi.FrameShape): Boolean = delegate?.accepts(shape) ?: true
+
     override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
         val target = delegate
         if (target == null) {

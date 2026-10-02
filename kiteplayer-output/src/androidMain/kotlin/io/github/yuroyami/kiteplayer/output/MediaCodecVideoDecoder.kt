@@ -21,7 +21,10 @@ import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer
+import io.github.yuroyami.kiteplayer.spi.FrameShape
+import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
+import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
@@ -493,6 +496,9 @@ private class MediaCodecVideoDecoder(
     private val outputContract: MediaCodecOutputContract,
 ) : VideoDecoder, MediaCodecFrameOwner, MediaCodecSurfaceTarget.Switcher {
     override val hardware: HwdecStatus = HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec)
+
+    /** Every frame is a codec buffer for a Surface, with no copy in main memory. */
+    override val output: FrameShape = FrameShape.Surface(HwSurfaceKind.MediaCodecBuffer, PlayerPixelFormat.Opaque)
 
     private val configuredSize: VideoSize = requireNotNull(stream.videoSize)
     private val resources = createMediaCodecResources(codecName, configuredSize)

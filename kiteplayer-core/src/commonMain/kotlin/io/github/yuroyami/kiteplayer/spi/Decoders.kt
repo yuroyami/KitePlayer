@@ -44,6 +44,13 @@ public interface VideoDecoder : AutoCloseable {
     public val hardware: HwdecStatus
 
     /**
+     * What this decoder's frames will be, or null when it cannot say before they exist. The engine
+     * checks it against the attached renderer, and a null skips the check: the renderer's refusal
+     * of the first frame is then the only answer, as before.
+     */
+    public val output: FrameShape? get() = null
+
+    /**
      * Offers a packet. A null packet starts the drain that flushes the decoder's internal delay.
      *
      * @return false when the decoder did not accept the packet and the caller must [receive] before

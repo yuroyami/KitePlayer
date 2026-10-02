@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.redactUri
 import io.github.yuroyami.kiteplayer.internal.redactUrisIn
+import io.github.yuroyami.kiteplayer.spi.FrameShape
 
 /**
  * A failure that stopped playback.
@@ -102,6 +103,14 @@ public sealed class PlaybackError {
      */
     public data class AudioDeviceUnavailable(val device: String, val detail: String) : PlaybackError() {
         override val message: String get() = "the audio output device $device cannot be opened: $detail"
+    }
+
+    /**
+     * The renderer cannot show the frames the running video decoder makes, so the attach was refused
+     * and the renderer attached before stays. [renderer] names the refused one.
+     */
+    public data class RendererIncompatible(val renderer: String, val frames: FrameShape) : PlaybackError() {
+        override val message: String get() = "the renderer $renderer cannot show $frames frames"
     }
 
     /** The engine hit a state it does not know how to leave. This is always a bug here. */

@@ -342,6 +342,7 @@ private class BridgeGuardedVideoDecoder(
     private val failureOrNull: () -> Throwable?,
 ) : VideoDecoder {
     override val hardware get() = delegate.hardware
+    override val output get() = delegate.output
     override val isDrained: Boolean get() = delegate.isDrained
 
     override suspend fun send(packet: PlayerPacket?): Boolean {

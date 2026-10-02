@@ -1771,7 +1771,12 @@ internal class PlaybackCore(
             }
             is CoreCommand.AttachRenderer -> {
                 val previous = pendingRenderer
-                if (setRenderer(command.renderer)) {
+                val refusal = attachRefusal(command.renderer)
+                if (refusal != null) {
+                    // The working renderer stays. Warned as well as thrown, for the same reason as below.
+                    warn(PlaybackWarning.CommandRefused("attachRenderer", refusal.message))
+                    command.reply.completeExceptionally(PlaybackException(refusal))
+                } else if (setRenderer(command.renderer)) {
                     command.reply.complete(Unit)
                     rendererSwapFollowUp(previous, command.renderer)
                 } else {
@@ -2811,7 +2816,7 @@ internal class PlaybackCore(
         if (rendererEligible) {
             for (factory in pendingRenderer?.videoDecoderFactories().orEmpty()) {
                 val decoder = tryCreateVideoDecoder(factory, stream, policy, failures)
-                if (decoder != null) {
+                if (decoder != null && !passOverUnshowable(factory, decoder, failures)) {
                     return SelectedVideoDecoder(decoder, VideoDecoderOrigin.Renderer)
                 }
                 warnAboutRefusedHardwareCandidate(factory, stream, policy, report)
@@ -2823,6 +2828,7 @@ internal class PlaybackCore(
                 warnAboutRefusedHardwareCandidate(factory, stream, policy, report)
                 continue
             }
+            if (passOverUnshowable(factory, decoder, failures)) continue
             if (selection == VideoDecoderSelection.BackendSoftwareOnly && decoder.hardware != HwdecStatus.Software) {
                 val reported = decoder.hardware
                 try {
@@ -2840,6 +2846,45 @@ internal class PlaybackCore(
             return SelectedVideoDecoder(decoder, VideoDecoderOrigin.Backend)
         }
         return null
+    }
+
+    /**
+     * Closes [decoder] and answers true when it declares frames the attached renderer cannot show,
+     * so the next candidate is tried before anything plays (#102). With no renderer attached, or a
+     * decoder that cannot say, nothing is checked and the first frame stays the backstop.
+     */
+    private suspend fun passOverUnshowable(
+        factory: VideoDecoderFactory,
+        decoder: VideoDecoder,
+        failures: MutableList<String>,
+    ): Boolean {
+        val renderer = pendingRenderer ?: return false
+        val shape = decoder.output ?: return false
+        if (renderer.accepts(shape)) return false
+        try {
+            // Owned but not yet in the build's rollback ledger, as for an ignored Off above.
+            withContext(NonCancellable + dispatchers.videoDecode) { decoder.close() }
+        } catch (failure: Throwable) {
+            failures += "${factory.name}: makes $shape frames, and closing it failed: " +
+                (failure.message ?: failure::class.simpleName)
+            return true
+        }
+        failures += "${factory.name}: makes $shape frames, which the attached renderer cannot show"
+        return true
+    }
+
+    /**
+     * Why [renderer] cannot replace the attached one, or null when it can. Only a running decoder
+     * that declares its frames is checked. A decoder coupled to the renderer being replaced is
+     * left to the rebuild that follows the swap, because its frames change with the renderer.
+     */
+    private fun attachRefusal(renderer: VideoRenderer): PlaybackError.RendererIncompatible? {
+        val active = session ?: return null
+        val decoder = active.videoDecoder ?: return null
+        if (active.videoDecoderOrigin == VideoDecoderOrigin.Renderer && active.coupledRenderer !== renderer) return null
+        val shape = decoder.output ?: return null
+        if (renderer.accepts(shape)) return null
+        return PlaybackError.RendererIncompatible(renderer::class.simpleName ?: "renderer", shape)
     }
 
     private suspend fun tryCreateVideoDecoder(

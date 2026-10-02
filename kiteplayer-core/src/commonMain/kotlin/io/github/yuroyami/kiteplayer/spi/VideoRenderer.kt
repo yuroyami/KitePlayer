@@ -47,6 +47,21 @@ public interface VideoRenderer : AutoCloseable {
     public fun supports(format: PlayerPixelFormat): Boolean
 
     /**
+     * True when this renderer can show frames of [shape], asked before they exist: at open, to pass
+     * over a decoder whose frames it cannot show, and at attach, to refuse a renderer that cannot
+     * show the running decoder's frames.
+     *
+     * The answer is about the renderer, not its present state, so it must not depend on a surface
+     * or a window being ready. A renderer that accepts a shape may still refuse a frame later, for
+     * example after it lost its surface. The default answers from [supports] and
+     * [supportedHardwareSurfaces].
+     */
+    public fun accepts(shape: FrameShape): Boolean = when (shape) {
+        is FrameShape.Memory -> supports(shape.pixelFormat)
+        is FrameShape.Surface -> shape.kind in supportedHardwareSurfaces()
+    }
+
+    /**
      * Presents [frame], aiming for [targetNanos] on the engine's monotonic clock.
      *
      * @return false when the frame was not presented, for example because the surface is gone. The

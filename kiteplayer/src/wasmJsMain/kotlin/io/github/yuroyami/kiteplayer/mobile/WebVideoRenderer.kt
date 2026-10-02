@@ -105,6 +105,7 @@ private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
 
     override fun supportedHardwareSurfaces() = delegate.supportedHardwareSurfaces()
     override fun supports(format: PlayerPixelFormat) = delegate.supports(format)
+    override fun accepts(shape: io.github.yuroyami.kiteplayer.spi.FrameShape) = delegate.accepts(shape)
     override suspend fun present(frame: VideoFrame, targetNanos: Long) = delegate.present(frame, targetNanos)
     override fun vsyncIntervalNanos() = delegate.vsyncIntervalNanos()
     override fun setViewport(width: Int, height: Int, scale: Float) = delegate.setViewport(width, height, scale)

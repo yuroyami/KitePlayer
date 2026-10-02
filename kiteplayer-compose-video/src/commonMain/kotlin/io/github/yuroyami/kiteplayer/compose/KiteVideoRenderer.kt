@@ -230,6 +230,11 @@ internal class KiteVideoRenderer(
     override fun supports(format: PlayerPixelFormat): Boolean =
         format != PlayerPixelFormat.Opaque || hardwareRenderer?.supports(format) == true
 
+    override fun accepts(shape: io.github.yuroyami.kiteplayer.spi.FrameShape): Boolean = when (shape) {
+        is io.github.yuroyami.kiteplayer.spi.FrameShape.Memory -> shape.pixelFormat != PlayerPixelFormat.Opaque
+        is io.github.yuroyami.kiteplayer.spi.FrameShape.Surface -> hardwareRenderer?.accepts(shape) == true
+    }
+
     override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
         if (closed.value) {
             frame.close()

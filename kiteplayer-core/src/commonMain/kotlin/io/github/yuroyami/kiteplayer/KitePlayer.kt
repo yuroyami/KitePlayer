@@ -1171,6 +1171,20 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.AttachRenderer(renderer, CompletableDeferred()))
     }
 
+    /**
+     * [attachRenderer], returning once the engine has attached [renderer] or refused it.
+     *
+     * The engine refuses a renderer that cannot show the frames of the running video decoder, when
+     * that decoder declares them (`VideoDecoder.output` and `VideoRenderer.accepts`). The renderer
+     * attached before then stays, and `PlaybackWarning.CommandRefused` says so as well.
+     *
+     * @throws PlaybackException with [PlaybackError.RendererIncompatible] for that refusal.
+     */
+    @Throws(Exception::class)
+    public suspend fun attachRendererAndAwait(renderer: VideoRenderer) {
+        core.attachRenderer(renderer)
+    }
+
     /** Detaches the current renderer. Playback continues without a picture. See [attachRenderer]. */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun detachRenderer() {

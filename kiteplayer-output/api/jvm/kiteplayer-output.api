@@ -9,6 +9,7 @@ public final class io/github/yuroyami/kiteplayer/output/AnnexB {
 public final class io/github/yuroyami/kiteplayer/output/AwtCanvasVideoRenderer : io/github/yuroyami/kiteplayer/spi/VideoRenderer {
 	public fun <init> (Lio/github/yuroyami/kiteplayer/output/AwtFramePainter;Lkotlin/jvm/functions/Function2;)V
 	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/output/AwtFramePainter;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun accepts (Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public fun close ()V
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getFailedFrames ()J

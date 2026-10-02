@@ -780,6 +780,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoDecoder : kotlin/AutoC
         abstract fun <get-hardware>(): io.github.yuroyami.kiteplayer/HwdecStatus // io.github.yuroyami.kiteplayer.spi/VideoDecoder.hardware.<get-hardware>|<get-hardware>(){}[0]
     abstract val isDrained // io.github.yuroyami.kiteplayer.spi/VideoDecoder.isDrained|{}isDrained[0]
         abstract fun <get-isDrained>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/VideoDecoder.isDrained.<get-isDrained>|<get-isDrained>(){}[0]
+    open val output // io.github.yuroyami.kiteplayer.spi/VideoDecoder.output|{}output[0]
+        open fun <get-output>(): io.github.yuroyami.kiteplayer.spi/FrameShape? // io.github.yuroyami.kiteplayer.spi/VideoDecoder.output.<get-output>|<get-output>(){}[0]
 
     abstract suspend fun flush(io.github.yuroyami.kiteplayer/Generation) // io.github.yuroyami.kiteplayer.spi/VideoDecoder.flush|flush(io.github.yuroyami.kiteplayer.Generation){}[0]
     abstract suspend fun receive(): io.github.yuroyami.kiteplayer.spi/VideoFrame? // io.github.yuroyami.kiteplayer.spi/VideoDecoder.receive|receive(){}[0]
@@ -829,6 +831,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoRenderer : kotlin/Auto
     abstract fun vsyncIntervalNanos(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/VideoRenderer.vsyncIntervalNanos|vsyncIntervalNanos(){}[0]
     abstract suspend fun present(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Long): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/VideoRenderer.present|present(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.Long){}[0]
     abstract suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
+    open fun accepts(io.github.yuroyami.kiteplayer.spi/FrameShape): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/VideoRenderer.accepts|accepts(io.github.yuroyami.kiteplayer.spi.FrameShape){}[0]
     open fun setAdjustments(io.github.yuroyami.kiteplayer/VideoAdjustments) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setAdjustments|setAdjustments(io.github.yuroyami.kiteplayer.VideoAdjustments){}[0]
     open fun setHdrPolicy(io.github.yuroyami.kiteplayer/HdrPolicy) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setHdrPolicy|setHdrPolicy(io.github.yuroyami.kiteplayer.HdrPolicy){}[0]
     open fun setRenderQuality(io.github.yuroyami.kiteplayer/RenderQuality) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setRenderQuality|setRenderQuality(io.github.yuroyami.kiteplayer.RenderQuality){}[0]
@@ -943,6 +946,40 @@ sealed interface io.github.yuroyami.kiteplayer.spi/AudioSinkEvent { // io.github
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Underrun.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Underrun.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.Underrun.toString|toString(){}[0]
+    }
+}
+
+sealed interface io.github.yuroyami.kiteplayer.spi/FrameShape { // io.github.yuroyami.kiteplayer.spi/FrameShape|null[0]
+    abstract val pixelFormat // io.github.yuroyami.kiteplayer.spi/FrameShape.pixelFormat|{}pixelFormat[0]
+        abstract fun <get-pixelFormat>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.spi/FrameShape.pixelFormat.<get-pixelFormat>|<get-pixelFormat>(){}[0]
+
+    final class Memory : io.github.yuroyami.kiteplayer.spi/FrameShape { // io.github.yuroyami.kiteplayer.spi/FrameShape.Memory|null[0]
+        constructor <init>(io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat) // io.github.yuroyami.kiteplayer.spi/FrameShape.Memory.<init>|<init>(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
+
+        final val pixelFormat // io.github.yuroyami.kiteplayer.spi/FrameShape.Memory.pixelFormat|{}pixelFormat[0]
+            final fun <get-pixelFormat>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.spi/FrameShape.Memory.pixelFormat.<get-pixelFormat>|<get-pixelFormat>(){}[0]
+
+        final fun component1(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.spi/FrameShape.Memory.component1|component1(){}[0]
+        final fun copy(io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat = ...): io.github.yuroyami.kiteplayer.spi/FrameShape.Memory // io.github.yuroyami.kiteplayer.spi/FrameShape.Memory.copy|copy(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/FrameShape.Memory.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/FrameShape.Memory.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/FrameShape.Memory.toString|toString(){}[0]
+    }
+
+    final class Surface : io.github.yuroyami.kiteplayer.spi/FrameShape { // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface|null[0]
+        constructor <init>(io.github.yuroyami.kiteplayer.spi/HwSurfaceKind, io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat) // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.<init>|<init>(io.github.yuroyami.kiteplayer.spi.HwSurfaceKind;io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
+
+        final val kind // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.kind|{}kind[0]
+            final fun <get-kind>(): io.github.yuroyami.kiteplayer.spi/HwSurfaceKind // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.kind.<get-kind>|<get-kind>(){}[0]
+        final val pixelFormat // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.pixelFormat|{}pixelFormat[0]
+            final fun <get-pixelFormat>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.pixelFormat.<get-pixelFormat>|<get-pixelFormat>(){}[0]
+
+        final fun component1(): io.github.yuroyami.kiteplayer.spi/HwSurfaceKind // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.component1|component1(){}[0]
+        final fun component2(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.component2|component2(){}[0]
+        final fun copy(io.github.yuroyami.kiteplayer.spi/HwSurfaceKind = ..., io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat = ...): io.github.yuroyami.kiteplayer.spi/FrameShape.Surface // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.copy|copy(io.github.yuroyami.kiteplayer.spi.HwSurfaceKind;io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/FrameShape.Surface.toString|toString(){}[0]
     }
 }
 
@@ -2429,6 +2466,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final suspend fun addExternalSubtitle(io.github.yuroyami.kiteplayer/SubtitleSource): io.github.yuroyami.kiteplayer/TrackId // io.github.yuroyami.kiteplayer/KitePlayer.addExternalSubtitle|addExternalSubtitle(io.github.yuroyami.kiteplayer.SubtitleSource){}[0]
     final suspend fun addToQueue(io.github.yuroyami.kiteplayer/MediaItem, kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/KitePlayer.addToQueue|addToQueue(io.github.yuroyami.kiteplayer.MediaItem;kotlin.Int?){}[0]
     final suspend fun addToQueue(kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem>, kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/KitePlayer.addToQueue|addToQueue(kotlin.collections.List<io.github.yuroyami.kiteplayer.MediaItem>;kotlin.Int?){}[0]
+    final suspend fun attachRendererAndAwait(io.github.yuroyami.kiteplayer.spi/VideoRenderer) // io.github.yuroyami.kiteplayer/KitePlayer.attachRendererAndAwait|attachRendererAndAwait(io.github.yuroyami.kiteplayer.spi.VideoRenderer){}[0]
     final suspend fun captureFrame(kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/CapturedFrame // io.github.yuroyami.kiteplayer/KitePlayer.captureFrame|captureFrame(kotlin.Boolean){}[0]
     final suspend fun clearQueue() // io.github.yuroyami.kiteplayer/KitePlayer.clearQueue|clearQueue(){}[0]
     final suspend fun closeAndAwait() // io.github.yuroyami.kiteplayer/KitePlayer.closeAndAwait|closeAndAwait(){}[0]
@@ -3620,6 +3658,23 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/PlaybackError.NotMedia // io.github.yuroyami.kiteplayer/PlaybackError.NotMedia.copy|copy(kotlin.String;kotlin.String?){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.NotMedia.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.NotMedia.hashCode|hashCode(){}[0]
+    }
+
+    final class RendererIncompatible : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible|null[0]
+        constructor <init>(kotlin/String, io.github.yuroyami.kiteplayer.spi/FrameShape) // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.<init>|<init>(kotlin.String;io.github.yuroyami.kiteplayer.spi.FrameShape){}[0]
+
+        final val frames // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.frames|{}frames[0]
+            final fun <get-frames>(): io.github.yuroyami.kiteplayer.spi/FrameShape // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.frames.<get-frames>|<get-frames>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.message.<get-message>|<get-message>(){}[0]
+        final val renderer // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.renderer|{}renderer[0]
+            final fun <get-renderer>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.renderer.<get-renderer>|<get-renderer>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.component1|component1(){}[0]
+        final fun component2(): io.github.yuroyami.kiteplayer.spi/FrameShape // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., io.github.yuroyami.kiteplayer.spi/FrameShape = ...): io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.copy|copy(kotlin.String;io.github.yuroyami.kiteplayer.spi.FrameShape){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.RendererIncompatible.hashCode|hashCode(){}[0]
     }
 
     final class RuntimeCompromised : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised|null[0]

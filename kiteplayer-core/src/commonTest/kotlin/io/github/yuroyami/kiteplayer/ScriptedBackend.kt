@@ -353,6 +353,9 @@ internal class FaultPlan(
     /** Set makes every subtitle decoder factory throw it, as a build without that decoder does. */
     var subtitleDecodersThrow: Throwable? = null
 
+    /** What every scripted video decoder declares as its frames. Null declares nothing. */
+    var videoDecoderOutput: io.github.yuroyami.kiteplayer.spi.FrameShape? = null
+
     /** True makes [ScriptedSource.selectStreams] throw, which is buildSession's reachable thrower
      * AFTER the audio path has gone live. */
     var failSelectStreams: Boolean = false
@@ -1055,6 +1058,8 @@ internal class ScriptedVideoDecoder(
 ) : VideoDecoder {
 
     override val hardware: HwdecStatus get() = hardwareStatus.value
+
+    override val output: io.github.yuroyami.kiteplayer.spi.FrameShape? get() = faults.videoDecoderOutput
 
     private val pending = ArrayDeque<VideoFrame>()
     private var generation: Generation = Generation.Initial

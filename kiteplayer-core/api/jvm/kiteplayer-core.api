@@ -460,6 +460,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public static synthetic fun addToQueue$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Ljava/util/List;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun attachAudioTap (Lio/github/yuroyami/kiteplayer/AudioTap;)V
 	public final fun attachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
+	public final fun attachRendererAndAwait (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun audioClock ()Lio/github/yuroyami/kiteplayer/AudioClockSnapshot;
 	public final fun captureFrame (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun captureFrame$default (Lio/github/yuroyami/kiteplayer/KitePlayer;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
@@ -859,6 +860,19 @@ public final class io/github/yuroyami/kiteplayer/PlaybackError$NotMedia : io/git
 	public final fun getDetail ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getUri ()Ljava/lang/String;
+	public fun hashCode ()I
+}
+
+public final class io/github/yuroyami/kiteplayer/PlaybackError$RendererIncompatible : io/github/yuroyami/kiteplayer/PlaybackError {
+	public fun <init> (Ljava/lang/String;Lio/github/yuroyami/kiteplayer/spi/FrameShape;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lio/github/yuroyami/kiteplayer/spi/FrameShape;
+	public final fun copy (Ljava/lang/String;Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Lio/github/yuroyami/kiteplayer/PlaybackError$RendererIncompatible;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackError$RendererIncompatible;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/spi/FrameShape;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackError$RendererIncompatible;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFrames ()Lio/github/yuroyami/kiteplayer/spi/FrameShape;
+	public fun getMessage ()Ljava/lang/String;
+	public final fun getRenderer ()Ljava/lang/String;
 	public fun hashCode ()I
 }
 
@@ -2650,6 +2664,34 @@ public final class io/github/yuroyami/kiteplayer/spi/FieldOrder : java/lang/Enum
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/spi/FieldOrder;
 }
 
+public abstract interface class io/github/yuroyami/kiteplayer/spi/FrameShape {
+	public abstract fun getPixelFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/FrameShape$Memory : io/github/yuroyami/kiteplayer/spi/FrameShape {
+	public fun <init> (Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;)V
+	public final fun component1 ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
+	public final fun copy (Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;)Lio/github/yuroyami/kiteplayer/spi/FrameShape$Memory;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/spi/FrameShape$Memory;Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/spi/FrameShape$Memory;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getPixelFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/FrameShape$Surface : io/github/yuroyami/kiteplayer/spi/FrameShape {
+	public fun <init> (Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;)V
+	public final fun component1 ()Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
+	public final fun component2 ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
+	public final fun copy (Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;)Lio/github/yuroyami/kiteplayer/spi/FrameShape$Surface;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/spi/FrameShape$Surface;Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/spi/FrameShape$Surface;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getKind ()Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
+	public fun getPixelFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/spi/HdrStaticMetadata {
 	public fun <init> ()V
 	public fun <init> (Lio/github/yuroyami/kiteplayer/spi/DisplayPrimaries;Ljava/lang/Float;Ljava/lang/Float;Ljava/lang/Integer;Ljava/lang/Integer;)V
@@ -3129,9 +3171,14 @@ public final class io/github/yuroyami/kiteplayer/spi/TypesetFrame {
 public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoDecoder : java/lang/AutoCloseable {
 	public abstract fun flush-zBfWXis (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getHardware ()Lio/github/yuroyami/kiteplayer/HwdecStatus;
+	public fun getOutput ()Lio/github/yuroyami/kiteplayer/spi/FrameShape;
 	public abstract fun isDrained ()Z
 	public abstract fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun send (Lio/github/yuroyami/kiteplayer/spi/PlayerPacket;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/VideoDecoder$DefaultImpls {
+	public static fun getOutput (Lio/github/yuroyami/kiteplayer/spi/VideoDecoder;)Lio/github/yuroyami/kiteplayer/spi/FrameShape;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoDecoderFactory {
@@ -3164,6 +3211,7 @@ public final class io/github/yuroyami/kiteplayer/spi/VideoFrame$DefaultImpls {
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoRenderer : java/lang/AutoCloseable {
+	public fun accepts (Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public abstract fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
 	public abstract fun present (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -3181,6 +3229,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoRenderer 
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/VideoRenderer$DefaultImpls {
+	public static fun accepts (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public static fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/HdrPolicy;)V

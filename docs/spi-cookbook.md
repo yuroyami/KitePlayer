@@ -78,6 +78,19 @@ The factory list is ordered best first. Return null from `create` to refuse a st
 tries the next factory and deselects the stream when every candidate refused, with a
 `TrackDeselected` warning naming why.
 
+A decoder can say what its frames will be before the first one exists, through `output`, a
+`FrameShape`. The engine checks it against the attached renderer's `accepts`:
+
+- At open, a decoder whose frames the renderer cannot show is closed, and the next candidate is
+  tried.
+- At attach, a renderer that cannot show the running decoder's frames is refused, and the renderer
+  attached before stays. `KitePlayer.attachRendererAndAwait` throws `PlaybackError.RendererIncompatible`.
+
+Declare `FrameShape.Surface` only for frames with no copy in main memory, such as a MediaCodec
+buffer for a Surface. Leave `output` null when the frames can change, for example after a fallback
+to software. Null keeps the old behaviour, where the renderer's refusal of the first frame is the
+only answer.
+
 ## What the engine guarantees back
 
 - One thread per role: your source is only ever touched from the demux worker, each decoder from

@@ -165,6 +165,10 @@ private class AndroidKiteVideoHardwareRenderer(
     override fun supports(format: PlayerPixelFormat): Boolean =
         consumer.active && delegate.supports(format)
 
+    // Static on purpose, unlike supports: the window that makes the consumer active can arrive
+    // after the open asks.
+    override fun accepts(shape: io.github.yuroyami.kiteplayer.spi.FrameShape): Boolean = delegate.accepts(shape)
+
     override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
         if (!consumer.active) {
             frame.close()
@@ -288,6 +292,7 @@ private class ConsumerGuardedDecoder(
     private val session: AndroidVideoConsumerGate.Session,
 ) : VideoDecoder {
     override val hardware get() = delegate.hardware
+    override val output get() = delegate.output
     override val isDrained: Boolean get() = delegate.isDrained
 
     override suspend fun send(packet: PlayerPacket?): Boolean {

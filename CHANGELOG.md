@@ -73,6 +73,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   did not open at all (#381).
 - On macOS, when the last output device goes away, the `AudioDeviceChanged` warning says that no
   output is left. Before, it said that playback follows "device 0".
+- A video decoder can declare its frames with `VideoDecoder.output`, a new `FrameShape`, and a
+  renderer answers `VideoRenderer.accepts` (#102). At open the engine passes over a decoder whose
+  frames the attached renderer cannot show. At attach it refuses a renderer that cannot show the
+  running decoder's frames, keeps the renderer attached before, and warns `CommandRefused`.
+  `KitePlayer.attachRendererAndAwait` returns once the attach is done and throws the new
+  `PlaybackError.RendererIncompatible`, so a `when` that lists every error needs the new branch.
+  Both new members have defaults, so existing decoders and renderers keep compiling and behave as
+  before. The MediaCodec decoders of `kiteplayer-output` declare their frames.
 
 ## [0.2.0] - 2026-09-29
 

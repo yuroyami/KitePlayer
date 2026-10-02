@@ -319,6 +319,10 @@ internal class AttachableRenderer : VideoRenderer {
         delegate?.setTransform(transform)
     }
 
+    override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
+        delegate?.setRenderQuality(quality)
+    }
+
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         delegate?.setOverlay(overlay)
     }

@@ -186,6 +186,14 @@ internal class RecordingRenderer(
         this.transform = transform
     }
 
+    /** The last render quality the engine told this renderer, or null when it never did. */
+    var renderQuality: RenderQuality? = null
+        private set
+
+    override fun setRenderQuality(quality: RenderQuality) {
+        renderQuality = quality
+    }
+
     val presentations: List<Presentation> get() = received
     val count: Int get() = received.size
     val timestamps: List<Pts> get() = received.map { it.pts }

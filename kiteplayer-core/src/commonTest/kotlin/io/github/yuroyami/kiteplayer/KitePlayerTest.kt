@@ -388,6 +388,23 @@ class KitePlayerTest {
     }
 
     @Test
+    fun `the render quality reaches the attached renderer while media plays`() = runTest {
+        val harness = CoreHarness(this)
+        val player = player(harness)
+        harness.attachRenderer()
+        player.open(MediaItem("scripted://quality"))
+        harness.run(100.milliseconds)
+        assertEquals(RenderQuality.Off, harness.renderer?.renderQuality, "told on attach, before any change")
+
+        val dithered = RenderQuality(dither = true)
+        player.setRenderQuality(dithered)
+        harness.run(100.milliseconds)
+        assertEquals(dithered, player.state.value.renderQuality)
+        assertEquals(dithered, harness.renderer?.renderQuality, "the live renderer is told immediately")
+        harness.close()
+    }
+
+    @Test
     fun `the runtime subtitle and audio adjustments are published`() = runTest {
         val harness = CoreHarness(this)
         val player = player(harness)

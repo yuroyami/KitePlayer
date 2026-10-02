@@ -184,18 +184,21 @@ public class KitePlayerWorker private constructor(
 
     /**
      * The worker died, or its script could not load. Every command waiting on it fails, and the
-     * player reports [PlaybackStatus.Failed], rather than a player that stops answering.
+     * player reports [PlaybackStatus.Failed], rather than a player that stops answering. A close
+     * that was waiting is done instead: the player it asked to close is gone.
      */
     private fun died(detail: String) {
         if (dead != null) return
         val error = PlaybackError.Internal("the player's worker stopped: $detail")
         dead = error
         started?.completeExceptionally(PlaybackException(error))
+        val closing = closeId?.let { pending.remove(it) }
         val waiting = pending.values.toList()
         pending.clear()
         waiting.forEach { it.completeExceptionally(PlaybackException(error)) }
         if (closed) {
             finish()
+            closing?.complete(Unit)
             return
         }
         stateFlow.update { it.copy(status = PlaybackStatus.Failed) }

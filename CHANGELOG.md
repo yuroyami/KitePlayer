@@ -152,6 +152,16 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   their licences. The catalogue has 21 drawings. A name saved for one of them falls back to the first
   drawing (#390).
 
+### Changed
+
+- Alchemy is rebuilt as a memory field world: the waveform and the bands are written into a small
+  grid that a changing flow carries, drawn sharp with iso-lines. Its drawer and flow change at a pace
+  set by the music's activity (the new `Evolution` pacer), and it publishes its form through
+  `Visualization.forms` (#391).
+- Every shader can read a history of the waveform (`scopeHistory`) and the last hits with a place
+  (`impulseA`, `impulseB`). A shader drawing that keeps a memory field also gets `fieldAt`,
+  `fieldSlope` and `isoLine` (#389).
+
 ## [0.2.0] - 2026-09-29
 
 ### Upgrading from 0.0.27

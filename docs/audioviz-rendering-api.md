@@ -199,6 +199,37 @@ stops the vortices while the lace keeps growing, and a drop lands one large gold
 kick that pushes the old ink outward, the growth of the lace, the breakdown and the gold drop.
 `PausedPictureTest` covers the pause.
 
+## Alchemy, a memory field
+
+`Alchemy` keeps a memory field: a grid of 108 rows and as many columns as the screen's shape asks
+for, each cell holding ink and the ink's age. Every frame a drawer writes the signal into it, a flow
+carries it, and it fades with a half life of 1.4 seconds. The shader reads the grid with a cubic
+B-spline and draws it as banded ink lit from the upper left, with an iso-line at every band, so the
+small grid is crisp at the screen's own resolution. The live drawer is stroked on top at native
+resolution.
+
+- Drawers: Ring, Radar, Dots, Polygon, Twin, Edge and Fan. Ring and Polygon draw the waveform and
+  the bands, Dots and Edge draw the bands, and the rest draw the waveform.
+- Flows: Swirl, Kaleido, Tunnel, Burst, Blocks, Shimmer, Julia and Drift. Their speeds follow the
+  music's pace, so a ballad swirls slowly and nothing moves in a silence or a pause.
+- The form is the pair of drawer and flow, published through `forms`. A morph of the evolution
+  pacer (`Evolution`, which paces form changes by how much is happening in the music) changes the
+  flow's parameters and may change the drawer. A birth changes the flow with a cross fade over one
+  cycle and picks a new drawer. A drop brings Burst. A breakdown brings Dots plus Drift, the Gas
+  form, which also draws thin gas filaments over the ink.
+- A kick pushes the whole field outward for a moment and sends a ring from the core. A snare flips
+  the spin and strikes a lightning arc, at most two a second. A hat throws sparks and specks of ink
+  past the ring, which the flow carries away. A drop turns the ink gold from the core out over one
+  beat, and the gold cools back from the rim over two cycles.
+- The ink takes the cool end of the palette's ramp. Its colour is walked by the ink's age and by
+  `Genes.walk`, and leans towards the song's key when the key is known. Gold is the one fixed
+  accent.
+
+`AlchemyTest` covers the forms on a drum loop, the ink in music and in silence, the push of a kick,
+the gold of a drop and the arc limit. `WorldsCatalogueTest` checks that a low and a high tone draw
+different pictures, that the loud picture covers at least a fifth of the frame, that a calm pad is
+at least 40 percent dimmer than a drum loop, and that two palettes draw different pictures.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative

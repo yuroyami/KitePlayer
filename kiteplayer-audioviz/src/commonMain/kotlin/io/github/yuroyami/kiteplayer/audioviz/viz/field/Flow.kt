@@ -11,8 +11,8 @@ import kotlin.math.sqrt
  * Where the ink of a memory field goes each second, at a point.
  *
  * Points are in the drawings' centred units: 0,0 is the middle, one unit is half the screen height,
- * and x runs to plus or minus [aspect]. y points down the screen, as `centred()` in the shader
- * header does: -1 is the top edge. The answer goes into [out] as dx, dy per second.
+ * and x runs to plus or minus `aspect`. y points down the screen, as `centred()` in the shader
+ * header does: -1 is the top edge. The answer goes into `out` as dx, dy per second.
  * These are Battery's "CurrentShift" displacements, written as closed forms, so a cell costs one call.
  */
 internal fun interface Flow {

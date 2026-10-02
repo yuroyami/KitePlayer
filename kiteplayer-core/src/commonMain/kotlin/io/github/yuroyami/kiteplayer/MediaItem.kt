@@ -63,14 +63,13 @@ public data class MediaItem(
      */
     val io: MediaIoFactory? = null,
     /**
-     * The name of the only demuxer the open may use, for example "mpegts". Almost never needed.
-     * Probing is reliable.
+     * The demuxer to open the item with, by FFmpeg name, for example "mpegts" or "s16le". Almost
+     * never needed: probing is reliable.
      *
-     * Respelled by the FFmpeg backend as a `format_whitelist` of exactly this name. FFmpeg checks
-     * that list after it probes, so the hint refuses the open when the probe finds another format,
-     * but it does not choose one: input with nothing to probe, such as raw PCM or raw video, still
-     * does not open. Forcing a demuxer needs a media library release that can pass one (#234). A
-     * `format_whitelist` key in [openOptions] as well refuses the open.
+     * The FFmpeg backend forces this demuxer, as the command line's `-f` does, so the open does
+     * not probe. That opens input with nothing to probe, such as raw PCM, whose parameters go in
+     * [openOptions] (`sample_rate`, `ch_layout`). Bytes that are not that format fail the open, and
+     * a name the build does not carry fails it too.
      */
     val formatHint: String? = null,
     /**
@@ -86,8 +85,8 @@ public data class MediaItem(
      * when it holds a regular file, so no open moves the file offset of the caller. You still own
      * the descriptor and close it. A pipe is read as a stream.
      *
-     * A key that a typed field also sets, such as `format_whitelist` next to [formatHint], refuses
-     * the open with [PlaybackError.ConfigurationInvalid] naming both. Neither side wins quietly.
+     * A key that a typed field also sets, such as `headers` next to [headers], refuses the open
+     * with [PlaybackError.ConfigurationInvalid] naming both. Neither side wins quietly.
      */
     @property:KitePlayerLowLevelApi
     val openOptions: Map<String, String> = emptyMap(),

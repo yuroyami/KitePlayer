@@ -16,6 +16,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.SubtitleDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
+import io.github.yuroyami.kiteffmpeg.dsl.DemuxOptions
 
 /**
  * The FFmpeg backend, as one session-shaped object.
@@ -125,8 +126,8 @@ private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) 
 /**
  * The item's typed fields respelled as the pre-open options they are, followed by the raw
  * [MediaItem.openOptions]. `headers` is the http protocol's own option, one CRLF-joined block
- * exactly as the protocol documents it. `formatHint` is a format whitelist of one, which is what
- * forcing a demuxer means to libavformat. [MediaItem.demux] becomes the keys that
+ * exactly as the protocol documents it. `formatHint` is KiteFFmpeg's forced input format, so the
+ * open uses that demuxer without probing. [MediaItem.demux] becomes the keys that
  * [toFFmpegOptions] lists. On media an option cannot apply to (headers on a local file), the open
  * path's unused-option warning says so, typed.
  *
@@ -144,7 +145,10 @@ internal fun preOpenOptions(media: MediaItem): Map<String, String> {
         val block = media.headers.entries.joinToString(separator = "") { (key, value) -> "$key: $value\r\n" }
         typed["headers"] = block to "headers"
     }
-    media.formatHint?.let { hint -> typed["format_whitelist"] = hint to "formatHint" }
+    // KiteFFmpeg spells a forced demuxer as one option pair of its own; the open does not probe.
+    media.formatHint?.let { hint ->
+        for ((key, value) in DemuxOptions(format = hint).compile()) typed[key] = value to "formatHint"
+    }
     for ((key, value) in media.demux.toFFmpegOptions()) typed[key] = value to "demux"
 
     for (key in media.openOptions.keys) {

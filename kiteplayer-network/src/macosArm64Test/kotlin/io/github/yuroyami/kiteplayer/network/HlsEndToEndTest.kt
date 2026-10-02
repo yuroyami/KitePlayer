@@ -135,8 +135,17 @@ class HlsEndToEndTest {
         }
     }
 
+    private fun mediaDir(): String = getenv("KITEPLAYER_TESTMEDIA")?.toKString() ?: "testmedia"
+
+    /** The BANDWIDTH of each variant in a master playlist of the fixtures, in order. */
+    private fun playlistBandwidths(name: String): List<Long> {
+        val text = checkNotNull(readFile("${mediaDir()}/$name")) { "${mediaDir()}/$name is missing" }.decodeToString()
+        // A comma or a colon before the name, so AVERAGE-BANDWIDTH does not count.
+        return Regex("[:,]BANDWIDTH=(\\d+)").findAll(text).map { it.groupValues[1].toLong() }.toList()
+    }
+
     private fun withServer(test: suspend (port: Int) -> Unit) = runBlocking {
-        val media = getenv("KITEPLAYER_TESTMEDIA")?.toKString() ?: "testmedia"
+        val media = mediaDir()
         checkNotNull(readFile("$media/hls/ts.m3u8")) { "testmedia/hls is missing; run scripts/testmedia.sh" }
         test(serve("$media/hls"))
     }
@@ -160,7 +169,9 @@ class HlsEndToEndTest {
             val source = KiteFFmpegSourceFactory().open(item) as KiteFFmpegSource
             try {
                 assertEquals(listOf(320 to 180, 640 to 360), source.variants.map { it.width to it.height })
-                assertEquals(listOf(488_048L, 1_368_640L), source.variants.map { it.bitrate })
+                // The encoder sets each BANDWIDTH, so its numbers change with the FFmpeg that made the
+                // fixtures. The variants must carry what the served playlist says.
+                assertEquals(playlistBandwidths("hls/ts.m3u8"), source.variants.map { it.bitrate })
                 assertEquals(0, source.selectedVariant, "the variant the item asks for plays")
                 source.selectStreams(source.streams.map { it.index }.toSet())
                 while (true) source.readPacket()?.close() ?: break

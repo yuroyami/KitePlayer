@@ -116,8 +116,11 @@ internal object WebAudioSinkFactory : AudioSinkFactory {
  *
  * It counts frames dropped by a flush as consumed, which is what lets the Kotlin side compute its
  * queue depth as sent minus consumed and have that return to zero after a seek.
+ *
+ * A `port` command hands it a `MessagePort` that it then listens and reports on instead of its own:
+ * that is how a player in a Web Worker writes to the page's worklet directly (#100).
  */
-private const val PROCESSOR_SOURCE = """
+internal const val PROCESSOR_SOURCE = """
 class KiteSinkProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
@@ -130,7 +133,8 @@ class KiteSinkProcessor extends AudioWorkletProcessor {
     this.consumedFrames = 0;
     this.silenceFrames = 0;
     this.ticks = 0;
-    this.port.onmessage = (e) => {
+    this.out = this.port;
+    const handle = (e) => {
       const d = e.data;
       if (d.cmd === 'push') {
         this.queue.push(d.samples);
@@ -141,11 +145,16 @@ class KiteSinkProcessor extends AudioWorkletProcessor {
         this.queue.length = 0;
         this.head = 0;
         this.report();
+      } else if (d.cmd === 'port') {
+        this.out = d.port;
+        this.out.onmessage = handle;
+        this.report();
       }
     };
+    this.port.onmessage = handle;
   }
   report() {
-    this.port.postMessage({ consumed: this.consumedFrames, silence: this.silenceFrames });
+    this.out.postMessage({ consumed: this.consumedFrames, silence: this.silenceFrames });
   }
   process(inputs, outputs) {
     const out = outputs[0];
@@ -231,10 +240,10 @@ private external fun webAudioChannels(state: JsAny): Int
 
 /** Sent minus consumed, and never negative: a stale report must not read as a drained queue. */
 @JsFun("(s) => Math.max(0, s.sent - s.consumed)")
-private external fun webAudioQueued(state: JsAny): Int
+internal external fun webAudioQueued(state: JsAny): Int
 
 @JsFun("(s) => s.silence")
-private external fun webAudioSilence(state: JsAny): Int
+internal external fun webAudioSilence(state: JsAny): Int
 
 /** `outputLatency` where the engine measures it, `baseLatency` where it does not, -1 for neither. */
 @JsFun(
@@ -275,7 +284,7 @@ private external fun webAudioClose(state: JsAny)
  * gesture, which is a state this sink already handles by playing nothing, so there is nothing here
  * that a thrown exception would tell a caller that null does not.
  */
-private suspend fun awaitJs(promise: Promise<JsAny?>): JsAny? =
+internal suspend fun awaitJs(promise: Promise<JsAny?>): JsAny? =
     suspendCoroutine { continuation ->
         promise.then(
             onFulfilled = { value -> continuation.resumeWith(Result.success(value)); value },

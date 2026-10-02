@@ -306,6 +306,26 @@ final class io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory :
 }
 
 // Targets: [wasmJs]
+final class io.github.yuroyami.kiteplayer.output/WebWorkletAudio { // io.github.yuroyami.kiteplayer.output/WebWorkletAudio|null[0]
+    final val channels // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.channels|{}channels[0]
+        final fun <get-channels>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.channels.<get-channels>|<get-channels>(){}[0]
+    final val outputLatencySeconds // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.outputLatencySeconds|{}outputLatencySeconds[0]
+        final fun <get-outputLatencySeconds>(): kotlin/Double? // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.outputLatencySeconds.<get-outputLatencySeconds>|<get-outputLatencySeconds>(){}[0]
+    final val sampleRate // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.sampleRate|{}sampleRate[0]
+        final fun <get-sampleRate>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.sampleRate.<get-sampleRate>|<get-sampleRate>(){}[0]
+    final val workerPort // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.workerPort|{}workerPort[0]
+        final fun <get-workerPort>(): kotlin.js/JsAny // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.workerPort.<get-workerPort>|<get-workerPort>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.close|close(){}[0]
+    final fun resume() // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.resume|resume(){}[0]
+    final fun suspend() // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.suspend|suspend(){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.Companion|null[0]
+        final suspend fun createOrNull(kotlin/Int = ...): io.github.yuroyami.kiteplayer.output/WebWorkletAudio? // io.github.yuroyami.kiteplayer.output/WebWorkletAudio.Companion.createOrNull|createOrNull(kotlin.Int){}[0]
+    }
+}
+
+// Targets: [wasmJs]
 final object io.github.yuroyami.kiteplayer.output/WebMonotonicClock : io.github.yuroyami.kiteplayer/MonotonicClock { // io.github.yuroyami.kiteplayer.output/WebMonotonicClock|null[0]
     final fun nanos(): kotlin/Long // io.github.yuroyami.kiteplayer.output/WebMonotonicClock.nanos|nanos(){}[0]
 }
@@ -319,3 +339,6 @@ final object io.github.yuroyami.kiteplayer.output/WebOutputBackend : io.github.y
     final val subtitleRasterizer // io.github.yuroyami.kiteplayer.output/WebOutputBackend.subtitleRasterizer|{}subtitleRasterizer[0]
         final fun <get-subtitleRasterizer>(): io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer? // io.github.yuroyami.kiteplayer.output/WebOutputBackend.subtitleRasterizer.<get-subtitleRasterizer>|<get-subtitleRasterizer>(){}[0]
 }
+
+// Targets: [wasmJs]
+final fun io.github.yuroyami.kiteplayer.output/workerOutputBackend(kotlin.js/JsAny, kotlin/Int, kotlin/Int, kotlin/Double?, kotlin/Function1<kotlin/Boolean, kotlin/Unit>): io.github.yuroyami.kiteplayer.spi/OutputBackend // io.github.yuroyami.kiteplayer.output/workerOutputBackend|workerOutputBackend(kotlin.js.JsAny;kotlin.Int;kotlin.Int;kotlin.Double?;kotlin.Function1<kotlin.Boolean,kotlin.Unit>){}[0]

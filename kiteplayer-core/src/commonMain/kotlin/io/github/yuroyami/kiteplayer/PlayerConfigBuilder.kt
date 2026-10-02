@@ -1,0 +1,310 @@
+package io.github.yuroyami.kiteplayer
+
+import io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory
+import io.github.yuroyami.kiteplayer.subtitle.SubtitleFont
+import io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride
+import kotlin.time.Duration
+
+/** Keeps a block of one config builder from setting the fields of the builder around it. */
+@DslMarker
+public annotation class PlayerConfigDsl
+
+/**
+ * Builds a [PlayerConfig] in a block, so a nested setting does not need its type named.
+ *
+ * ```kotlin
+ * val config = PlayerConfig {
+ *     hdrPolicy = HdrPolicy.ToneMap
+ *     subtitles { preferredLanguages = listOf("ja") }
+ *     audio { replayGain = ReplayGainMode.Track }
+ * }
+ * ```
+ *
+ * Every field starts at the default of [PlayerConfig], and the data classes check their values
+ * when the block ends, exactly as their constructors do.
+ */
+public fun PlayerConfig(build: PlayerConfigBuilder.() -> Unit): PlayerConfig =
+    PlayerConfigBuilder(PlayerConfig()).apply(build).build()
+
+/** The fields of a [PlayerConfig], set in a `PlayerConfig { }` block. Each one is the field of that name. */
+@PlayerConfigDsl
+public class PlayerConfigBuilder internal constructor(from: PlayerConfig) {
+    /** See [PlayerConfig.renderQuality]. */
+    public var renderQuality: RenderQuality = from.renderQuality
+
+    /** See [PlayerConfig.syncMode]. */
+    public var syncMode: SyncMode = from.syncMode
+
+    /** See [PlayerConfig.hardwareDecode]. */
+    public var hardwareDecode: HwdecPolicy = from.hardwareDecode
+
+    /** See [PlayerConfig.frameDrop]. */
+    public var frameDrop: FrameDropPolicy = from.frameDrop
+
+    /** See [PlayerConfig.buffer], and [buffer] for the block form. */
+    public var buffer: BufferPolicy = from.buffer
+
+    /** See [PlayerConfig.audio], and [audio] for the block form. */
+    public var audio: AudioConfig = from.audio
+
+    /** See [PlayerConfig.subtitles], and [subtitles] for the block form. */
+    public var subtitles: SubtitleConfig = from.subtitles
+
+    /** See [PlayerConfig.progressInterval]. */
+    public var progressInterval: Duration = from.progressInterval
+
+    /** See [PlayerConfig.statsInterval]. */
+    public var statsInterval: Duration = from.statsInterval
+
+    /** See [PlayerConfig.frameEvents]. */
+    public var frameEvents: Boolean = from.frameEvents
+
+    /** See [PlayerConfig.backends]. */
+    public var backends: Backends = from.backends
+
+    /** See [PlayerConfig.network], and [network] for the block form. */
+    public var network: NetworkConfig = from.network
+
+    /** See [PlayerConfig.videoEnabled]. */
+    public var videoEnabled: Boolean = from.videoEnabled
+
+    /** See [PlayerConfig.deinterlace]. */
+    public var deinterlace: DeinterlacePolicy = from.deinterlace
+
+    /** See [PlayerConfig.queue], and [queue] for the block form. */
+    public var queue: QueueConfig = from.queue
+
+    /** See [PlayerConfig.hdrPolicy]. */
+    public var hdrPolicy: HdrPolicy = from.hdrPolicy
+
+    /** See [PlayerConfig.externalClock]. */
+    public var externalClock: ExternalClockPolicy = from.externalClock
+
+    /** Changes [audio] field by field. */
+    public fun audio(build: AudioConfigBuilder.() -> Unit) {
+        audio = AudioConfigBuilder(audio).apply(build).build()
+    }
+
+    /** Changes [subtitles] field by field. */
+    public fun subtitles(build: SubtitleConfigBuilder.() -> Unit) {
+        subtitles = SubtitleConfigBuilder(subtitles).apply(build).build()
+    }
+
+    /** Changes [network] field by field. */
+    public fun network(build: NetworkConfigBuilder.() -> Unit) {
+        network = NetworkConfigBuilder(network).apply(build).build()
+    }
+
+    /** Changes [buffer] field by field. */
+    public fun buffer(build: BufferPolicyBuilder.() -> Unit) {
+        buffer = BufferPolicyBuilder(buffer).apply(build).build()
+    }
+
+    /** Changes [queue] field by field. */
+    public fun queue(build: QueueConfigBuilder.() -> Unit) {
+        queue = QueueConfigBuilder(queue).apply(build).build()
+    }
+
+    internal fun build(): PlayerConfig = PlayerConfig(
+        renderQuality = renderQuality,
+        syncMode = syncMode,
+        hardwareDecode = hardwareDecode,
+        frameDrop = frameDrop,
+        buffer = buffer,
+        audio = audio,
+        subtitles = subtitles,
+        progressInterval = progressInterval,
+        statsInterval = statsInterval,
+        frameEvents = frameEvents,
+        backends = backends,
+        network = network,
+        videoEnabled = videoEnabled,
+        deinterlace = deinterlace,
+        queue = queue,
+        hdrPolicy = hdrPolicy,
+        externalClock = externalClock,
+    )
+}
+
+/** The fields of an [AudioConfig], set in an `audio { }` block. Each one is the field of that name. */
+@PlayerConfigDsl
+public class AudioConfigBuilder internal constructor(from: AudioConfig) {
+    /** See [AudioConfig.preferredLanguages]. */
+    public var preferredLanguages: List<String> = from.preferredLanguages
+
+    /** See [AudioConfig.preservePitch]. */
+    public var preservePitch: Boolean = from.preservePitch
+
+    /** See [AudioConfig.downmix]. */
+    public var downmix: DownmixConfig = from.downmix
+
+    /** See [AudioConfig.volumeCeiling]. */
+    public var volumeCeiling: Float = from.volumeCeiling
+
+    /** See [AudioConfig.equalizer]. */
+    public var equalizer: EqualizerSettings = from.equalizer
+
+    /** See [AudioConfig.replayGain]. */
+    public var replayGain: ReplayGainMode = from.replayGain
+
+    /** See [AudioConfig.replayGainPreampDb]. */
+    public var replayGainPreampDb: Float = from.replayGainPreampDb
+
+    /** See [AudioConfig.replayGainFallbackDb]. */
+    public var replayGainFallbackDb: Float = from.replayGainFallbackDb
+
+    /** See [AudioConfig.resampler]. */
+    public var resampler: AudioResamplerFactory? = from.resampler
+
+    /** See [AudioConfig.upmix]. */
+    public var upmix: UpmixMode = from.upmix
+
+    internal fun build(): AudioConfig = AudioConfig(
+        preferredLanguages = preferredLanguages,
+        preservePitch = preservePitch,
+        downmix = downmix,
+        volumeCeiling = volumeCeiling,
+        equalizer = equalizer,
+        replayGain = replayGain,
+        replayGainPreampDb = replayGainPreampDb,
+        replayGainFallbackDb = replayGainFallbackDb,
+        resampler = resampler,
+        upmix = upmix,
+    )
+}
+
+/** The fields of a [SubtitleConfig], set in a `subtitles { }` block. Each one is the field of that name. */
+@PlayerConfigDsl
+public class SubtitleConfigBuilder internal constructor(from: SubtitleConfig) {
+    /** See [SubtitleConfig.preferredLanguages]. */
+    public var preferredLanguages: List<String> = from.preferredLanguages
+
+    /** See [SubtitleConfig.autoSelectForced]. */
+    public var autoSelectForced: Boolean = from.autoSelectForced
+
+    /** See [SubtitleConfig.autoSelect]. */
+    public var autoSelect: Boolean = from.autoSelect
+
+    /** See [SubtitleConfig.delay]. */
+    public var delay: Duration = from.delay
+
+    /** See [SubtitleConfig.fontScale]. */
+    public var fontScale: Float = from.fontScale
+
+    /** See [SubtitleConfig.style]. */
+    public var style: SubtitleStyleOverride? = from.style
+
+    /** See [SubtitleConfig.typesetting]. */
+    public var typesetting: Boolean = from.typesetting
+
+    /** See [SubtitleConfig.fonts]. */
+    public var fonts: List<SubtitleFont> = from.fonts
+
+    internal fun build(): SubtitleConfig = SubtitleConfig(
+        preferredLanguages = preferredLanguages,
+        autoSelectForced = autoSelectForced,
+        autoSelect = autoSelect,
+        delay = delay,
+        fontScale = fontScale,
+        style = style,
+        typesetting = typesetting,
+        fonts = fonts,
+    )
+}
+
+/** The fields of a [NetworkConfig], set in a `network { }` block. Each one is the field of that name. */
+@PlayerConfigDsl
+public class NetworkConfigBuilder internal constructor(from: NetworkConfig) {
+    /** See [NetworkConfig.ioResolver]. */
+    public var ioResolver: MediaIoResolver? = from.ioResolver
+
+    /** See [NetworkConfig.ioCache], and [ioCache] for the block form. */
+    public var ioCache: IoCachePolicy = from.ioCache
+
+    /** See [NetworkConfig.autoResolve]. */
+    public var autoResolve: Boolean = from.autoResolve
+
+    /** Changes [ioCache] field by field. */
+    public fun ioCache(build: IoCachePolicyBuilder.() -> Unit) {
+        ioCache = IoCachePolicyBuilder(ioCache).apply(build).build()
+    }
+
+    internal fun build(): NetworkConfig = NetworkConfig(
+        ioResolver = ioResolver,
+        ioCache = ioCache,
+        autoResolve = autoResolve,
+    )
+}
+
+/** The fields of an [IoCachePolicy], set in an `ioCache { }` block. Each one is the field of that name. */
+@PlayerConfigDsl
+public class IoCachePolicyBuilder internal constructor(from: IoCachePolicy) {
+    /** See [IoCachePolicy.enabled]. */
+    public var enabled: Boolean = from.enabled
+
+    /** See [IoCachePolicy.readChunkBytes]. */
+    public var readChunkBytes: Int = from.readChunkBytes
+
+    /** See [IoCachePolicy.backWindowBytes]. */
+    public var backWindowBytes: Long = from.backWindowBytes
+
+    /** See [IoCachePolicy.forwardWindowBytes]. */
+    public var forwardWindowBytes: Long = from.forwardWindowBytes
+
+    internal fun build(): IoCachePolicy = IoCachePolicy(
+        enabled = enabled,
+        readChunkBytes = readChunkBytes,
+        backWindowBytes = backWindowBytes,
+        forwardWindowBytes = forwardWindowBytes,
+    )
+}
+
+/** The fields of a [BufferPolicy], set in a `buffer { }` block. Each one is the field of that name. */
+@PlayerConfigDsl
+public class BufferPolicyBuilder internal constructor(from: BufferPolicy) {
+    /** See [BufferPolicy.readyDuration]. */
+    public var readyDuration: Duration = from.readyDuration
+
+    /** See [BufferPolicy.readyPackets]. */
+    public var readyPackets: Int = from.readyPackets
+
+    /** See [BufferPolicy.softTarget]. */
+    public var softTarget: Duration = from.softTarget
+
+    /** See [BufferPolicy.totalBytes]. */
+    public var totalBytes: Long = from.totalBytes
+
+    /** See [BufferPolicy.totalDuration]. */
+    public var totalDuration: Duration = from.totalDuration
+
+    /** See [BufferPolicy.videoFrameQueue]. */
+    public var videoFrameQueue: Int = from.videoFrameQueue
+
+    /** See [BufferPolicy.stallTimeout]. */
+    public var stallTimeout: Duration = from.stallTimeout
+
+    internal fun build(): BufferPolicy = BufferPolicy(
+        readyDuration = readyDuration,
+        readyPackets = readyPackets,
+        softTarget = softTarget,
+        totalBytes = totalBytes,
+        totalDuration = totalDuration,
+        videoFrameQueue = videoFrameQueue,
+        stallTimeout = stallTimeout,
+    )
+}
+
+/** The fields of a [QueueConfig], set in a `queue { }` block. Each one is the field of that name. */
+@PlayerConfigDsl
+public class QueueConfigBuilder internal constructor(from: QueueConfig) {
+    /** See [QueueConfig.preloadNext]. */
+    public var preloadNext: Duration = from.preloadNext
+
+    /** See [QueueConfig.gapless]. */
+    public var gapless: Boolean = from.gapless
+
+    internal fun build(): QueueConfig = QueueConfig(
+        preloadNext = preloadNext,
+        gapless = gapless,
+    )
+}

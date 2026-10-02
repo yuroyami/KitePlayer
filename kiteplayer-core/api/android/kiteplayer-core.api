@@ -38,6 +38,29 @@ public final class io/github/yuroyami/kiteplayer/AudioConfig {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/AudioConfigBuilder {
+	public final fun getDownmix ()Lio/github/yuroyami/kiteplayer/DownmixConfig;
+	public final fun getEqualizer ()Lio/github/yuroyami/kiteplayer/EqualizerSettings;
+	public final fun getPreferredLanguages ()Ljava/util/List;
+	public final fun getPreservePitch ()Z
+	public final fun getReplayGain ()Lio/github/yuroyami/kiteplayer/ReplayGainMode;
+	public final fun getReplayGainFallbackDb ()F
+	public final fun getReplayGainPreampDb ()F
+	public final fun getResampler ()Lio/github/yuroyami/kiteplayer/spi/AudioResamplerFactory;
+	public final fun getUpmix ()Lio/github/yuroyami/kiteplayer/UpmixMode;
+	public final fun getVolumeCeiling ()F
+	public final fun setDownmix (Lio/github/yuroyami/kiteplayer/DownmixConfig;)V
+	public final fun setEqualizer (Lio/github/yuroyami/kiteplayer/EqualizerSettings;)V
+	public final fun setPreferredLanguages (Ljava/util/List;)V
+	public final fun setPreservePitch (Z)V
+	public final fun setReplayGain (Lio/github/yuroyami/kiteplayer/ReplayGainMode;)V
+	public final fun setReplayGainFallbackDb (F)V
+	public final fun setReplayGainPreampDb (F)V
+	public final fun setResampler (Lio/github/yuroyami/kiteplayer/spi/AudioResamplerFactory;)V
+	public final fun setUpmix (Lio/github/yuroyami/kiteplayer/UpmixMode;)V
+	public final fun setVolumeCeiling (F)V
+}
+
 public final class io/github/yuroyami/kiteplayer/AudioOutputDevice {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Z)V
 	public final fun component1 ()Ljava/lang/String;
@@ -168,6 +191,23 @@ public final class io/github/yuroyami/kiteplayer/BufferPolicy {
 	public final fun getVideoFrameQueue ()I
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/BufferPolicyBuilder {
+	public final fun getReadyDuration-UwyO8pc ()J
+	public final fun getReadyPackets ()I
+	public final fun getSoftTarget-UwyO8pc ()J
+	public final fun getStallTimeout-UwyO8pc ()J
+	public final fun getTotalBytes ()J
+	public final fun getTotalDuration-UwyO8pc ()J
+	public final fun getVideoFrameQueue ()I
+	public final fun setReadyDuration-LRDsOJo (J)V
+	public final fun setReadyPackets (I)V
+	public final fun setSoftTarget-LRDsOJo (J)V
+	public final fun setStallTimeout-LRDsOJo (J)V
+	public final fun setTotalBytes (J)V
+	public final fun setTotalDuration-LRDsOJo (J)V
+	public final fun setVideoFrameQueue (I)V
 }
 
 public final class io/github/yuroyami/kiteplayer/CapturedFrame : io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame {
@@ -448,6 +488,17 @@ public final class io/github/yuroyami/kiteplayer/IoCachePolicy {
 	public final fun getReadChunkBytes ()I
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/IoCachePolicyBuilder {
+	public final fun getBackWindowBytes ()J
+	public final fun getEnabled ()Z
+	public final fun getForwardWindowBytes ()J
+	public final fun getReadChunkBytes ()I
+	public final fun setBackWindowBytes (J)V
+	public final fun setEnabled (Z)V
+	public final fun setForwardWindowBytes (J)V
+	public final fun setReadChunkBytes (I)V
 }
 
 public final class io/github/yuroyami/kiteplayer/KiteLog {
@@ -781,6 +832,16 @@ public final class io/github/yuroyami/kiteplayer/NetworkConfig {
 	public final fun getIoResolver ()Lio/github/yuroyami/kiteplayer/MediaIoResolver;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/NetworkConfigBuilder {
+	public final fun getAutoResolve ()Z
+	public final fun getIoCache ()Lio/github/yuroyami/kiteplayer/IoCachePolicy;
+	public final fun getIoResolver ()Lio/github/yuroyami/kiteplayer/MediaIoResolver;
+	public final fun ioCache (Lkotlin/jvm/functions/Function1;)V
+	public final fun setAutoResolve (Z)V
+	public final fun setIoCache (Lio/github/yuroyami/kiteplayer/IoCachePolicy;)V
+	public final fun setIoResolver (Lio/github/yuroyami/kiteplayer/MediaIoResolver;)V
 }
 
 public final class io/github/yuroyami/kiteplayer/PipedMediaIo : io/github/yuroyami/kiteplayer/MediaIo {
@@ -1541,6 +1602,55 @@ public final class io/github/yuroyami/kiteplayer/PlayerConfig {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/PlayerConfigBuilder {
+	public final fun audio (Lkotlin/jvm/functions/Function1;)V
+	public final fun buffer (Lkotlin/jvm/functions/Function1;)V
+	public final fun getAudio ()Lio/github/yuroyami/kiteplayer/AudioConfig;
+	public final fun getBackends ()Lio/github/yuroyami/kiteplayer/Backends;
+	public final fun getBuffer ()Lio/github/yuroyami/kiteplayer/BufferPolicy;
+	public final fun getDeinterlace ()Lio/github/yuroyami/kiteplayer/DeinterlacePolicy;
+	public final fun getExternalClock ()Lio/github/yuroyami/kiteplayer/ExternalClockPolicy;
+	public final fun getFrameDrop ()Lio/github/yuroyami/kiteplayer/FrameDropPolicy;
+	public final fun getFrameEvents ()Z
+	public final fun getHardwareDecode ()Lio/github/yuroyami/kiteplayer/HwdecPolicy;
+	public final fun getHdrPolicy ()Lio/github/yuroyami/kiteplayer/HdrPolicy;
+	public final fun getNetwork ()Lio/github/yuroyami/kiteplayer/NetworkConfig;
+	public final fun getProgressInterval-UwyO8pc ()J
+	public final fun getQueue ()Lio/github/yuroyami/kiteplayer/QueueConfig;
+	public final fun getRenderQuality ()Lio/github/yuroyami/kiteplayer/RenderQuality;
+	public final fun getStatsInterval-UwyO8pc ()J
+	public final fun getSubtitles ()Lio/github/yuroyami/kiteplayer/SubtitleConfig;
+	public final fun getSyncMode ()Lio/github/yuroyami/kiteplayer/SyncMode;
+	public final fun getVideoEnabled ()Z
+	public final fun network (Lkotlin/jvm/functions/Function1;)V
+	public final fun queue (Lkotlin/jvm/functions/Function1;)V
+	public final fun setAudio (Lio/github/yuroyami/kiteplayer/AudioConfig;)V
+	public final fun setBackends (Lio/github/yuroyami/kiteplayer/Backends;)V
+	public final fun setBuffer (Lio/github/yuroyami/kiteplayer/BufferPolicy;)V
+	public final fun setDeinterlace (Lio/github/yuroyami/kiteplayer/DeinterlacePolicy;)V
+	public final fun setExternalClock (Lio/github/yuroyami/kiteplayer/ExternalClockPolicy;)V
+	public final fun setFrameDrop (Lio/github/yuroyami/kiteplayer/FrameDropPolicy;)V
+	public final fun setFrameEvents (Z)V
+	public final fun setHardwareDecode (Lio/github/yuroyami/kiteplayer/HwdecPolicy;)V
+	public final fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
+	public final fun setNetwork (Lio/github/yuroyami/kiteplayer/NetworkConfig;)V
+	public final fun setProgressInterval-LRDsOJo (J)V
+	public final fun setQueue (Lio/github/yuroyami/kiteplayer/QueueConfig;)V
+	public final fun setRenderQuality (Lio/github/yuroyami/kiteplayer/RenderQuality;)V
+	public final fun setStatsInterval-LRDsOJo (J)V
+	public final fun setSubtitles (Lio/github/yuroyami/kiteplayer/SubtitleConfig;)V
+	public final fun setSyncMode (Lio/github/yuroyami/kiteplayer/SyncMode;)V
+	public final fun setVideoEnabled (Z)V
+	public final fun subtitles (Lkotlin/jvm/functions/Function1;)V
+}
+
+public final class io/github/yuroyami/kiteplayer/PlayerConfigBuilderKt {
+	public static final fun PlayerConfig (Lkotlin/jvm/functions/Function1;)Lio/github/yuroyami/kiteplayer/PlayerConfig;
+}
+
+public abstract interface annotation class io/github/yuroyami/kiteplayer/PlayerConfigDsl : java/lang/annotation/Annotation {
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/PlayerEvent {
 }
 
@@ -1936,6 +2046,13 @@ public final class io/github/yuroyami/kiteplayer/QueueConfig {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/QueueConfigBuilder {
+	public final fun getGapless ()Z
+	public final fun getPreloadNext-UwyO8pc ()J
+	public final fun setGapless (Z)V
+	public final fun setPreloadNext-LRDsOJo (J)V
+}
+
 public final class io/github/yuroyami/kiteplayer/RenderQuality {
 	public static final field Companion Lio/github/yuroyami/kiteplayer/RenderQuality$Companion;
 	public fun <init> ()V
@@ -2077,6 +2194,25 @@ public final class io/github/yuroyami/kiteplayer/SubtitleConfig {
 	public final fun getTypesetting ()Z
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/SubtitleConfigBuilder {
+	public final fun getAutoSelect ()Z
+	public final fun getAutoSelectForced ()Z
+	public final fun getDelay-UwyO8pc ()J
+	public final fun getFontScale ()F
+	public final fun getFonts ()Ljava/util/List;
+	public final fun getPreferredLanguages ()Ljava/util/List;
+	public final fun getStyle ()Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;
+	public final fun getTypesetting ()Z
+	public final fun setAutoSelect (Z)V
+	public final fun setAutoSelectForced (Z)V
+	public final fun setDelay-LRDsOJo (J)V
+	public final fun setFontScale (F)V
+	public final fun setFonts (Ljava/util/List;)V
+	public final fun setPreferredLanguages (Ljava/util/List;)V
+	public final fun setStyle (Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;)V
+	public final fun setTypesetting (Z)V
 }
 
 public final class io/github/yuroyami/kiteplayer/SubtitleSource {

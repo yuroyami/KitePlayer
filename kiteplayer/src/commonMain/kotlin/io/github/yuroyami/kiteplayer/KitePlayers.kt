@@ -47,6 +47,18 @@ public fun KitePlayer(config: PlayerConfig = PlayerConfig()): KitePlayer {
     return player
 }
 
+/**
+ * [KitePlayer] with its config built in a block, so a nested setting does not need its type named:
+ *
+ * ```kotlin
+ * val player = KitePlayer { subtitles { preferredLanguages = listOf("ja") } }
+ * ```
+ *
+ * @throws PlaybackException as `KitePlayer(config)` does.
+ */
+@Throws(PlaybackException::class)
+public fun KitePlayer(build: PlayerConfigBuilder.() -> Unit): KitePlayer = KitePlayer(PlayerConfig(build))
+
 /** Whether [KitePlayer] can build a player with this platform's default stack, and why not when it cannot. */
 public val KitePlayer.Companion.availability: KitePlayerAvailability
     get() = platformKitePlayerDefaults.availability

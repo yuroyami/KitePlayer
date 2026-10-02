@@ -166,6 +166,7 @@ final val io.github.yuroyami.kiteplayer/supportsPictureInPicture // io.github.yu
 final fun (io.github.yuroyami.kiteplayer/PlayerSnapshot).io.github.yuroyami.kiteplayer.session/toMediaSessionState(io.github.yuroyami.kiteplayer/Progress): io.github.yuroyami.kiteplayer.session/MediaSessionState // io.github.yuroyami.kiteplayer.session/toMediaSessionState|toMediaSessionState@io.github.yuroyami.kiteplayer.PlayerSnapshot(io.github.yuroyami.kiteplayer.Progress){}[0]
 final fun io.github.yuroyami.kiteplayer.mobile/mobileBackends(): io.github.yuroyami.kiteplayer/Backends // io.github.yuroyami.kiteplayer.mobile/mobileBackends|mobileBackends(){}[0]
 final fun io.github.yuroyami.kiteplayer/KitePlayer(io.github.yuroyami.kiteplayer/PlayerConfig = ...): io.github.yuroyami.kiteplayer/KitePlayer // io.github.yuroyami.kiteplayer/KitePlayer|KitePlayer(io.github.yuroyami.kiteplayer.PlayerConfig){}[0]
+final fun io.github.yuroyami.kiteplayer/KitePlayer(kotlin/Function1<io.github.yuroyami.kiteplayer/PlayerConfigBuilder, kotlin/Unit>): io.github.yuroyami.kiteplayer/KitePlayer // io.github.yuroyami.kiteplayer/KitePlayer|KitePlayer(kotlin.Function1<io.github.yuroyami.kiteplayer.PlayerConfigBuilder,kotlin.Unit>){}[0]
 
 // Targets: [ios, wasmJs]
 final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession|null[0]

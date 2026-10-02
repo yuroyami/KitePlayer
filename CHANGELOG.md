@@ -47,6 +47,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `kiteplayer-compose-interop` or `kiteplayer-compose-video` to its dependencies.
 - The deprecated `kiteplayer-phone` module is no longer built or published (#387). Its released
   versions stay on Maven Central. Depend on `kiteplayer` or `kiteplayer-compose` instead.
+- `PlayerConfig { }` builds a config in a block, with nested `audio { }`, `subtitles { }`,
+  `network { }`, `buffer { }` and `queue { }` blocks, so a nested setting does not need its type
+  named (#388). `KitePlayer { }` builds a player from the same block. The data classes and their
+  constructors stay as they were.
 - HLS plays through the default stack (#209). An address that ends in `.m3u8`, an HLS content
   type, or `formatHint = "hls"` marks a playlist. A master playlist plays one variant, the one with
   the highest bitrate within the new `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.

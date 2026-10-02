@@ -5,8 +5,9 @@
 <h1 align="center">KitePlayer</h1>
 
 <p align="center">
-  A media player for Kotlin Multiplatform. One Kotlin engine plays video, audio and subtitles on
-  Android, iOS, macOS, the desktop JVM and the web, with FFmpeg already inside the artifacts.
+  A media player library for Kotlin Multiplatform apps. Its own Kotlin engine plays video, audio
+  and subtitles on Android, iOS, macOS, the desktop JVM and the web, with FFmpeg already inside the
+  artifacts.
 </p>
 
 <p align="center">
@@ -23,12 +24,21 @@
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
-## What you get
+## What it is
 
-The engine does the seeking, the audio and video sync, the subtitle timing and the playback state
-in Kotlin, so every platform behaves the same way. FFmpeg decodes through
-[KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg), and each platform supplies only an audio
-output and a video surface.
+- **A library, not an app.** You add KitePlayer to your app with one Gradle line. Your code gets a
+  player object, and your screen shows the video in a native view or a Compose composable. The
+  sample apps in this repository only show how to use the library.
+- **Its own engine, not a wrapper.** KitePlayer does not put a common API over ExoPlayer, AVPlayer,
+  mpv or VLC. The seeking, the audio and video sync, the subtitle timing and the playback state are
+  KitePlayer's own Kotlin code, so every platform behaves the same way.
+- **FFmpeg inside.** FFmpeg reads and decodes the media, through
+  [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg). Its libraries come inside the artifacts
+  that Gradle downloads.
+- **Little from the platform.** Each platform supplies an audio output, a video surface and, where
+  the device has one, a hardware video decoder.
+
+## What you get
 
 <table>
 <tr>
@@ -95,8 +105,8 @@ fun main() = runBlocking {
 ```
 
 > [!NOTE]
-> KitePlayer is 0.0.x. It plays real media on Android, iOS, macOS and the desktop JVM, and it runs
-> inside a shipping app, but the API can still change between versions. Read [Limits](#limits)
+> KitePlayer has not reached 1.0. It plays real media on Android, iOS, macOS and the desktop JVM,
+> and it runs inside a shipping app, but the API can still change between versions. Read [Limits](#limits)
 > before you plan around it.
 
 ## Install
@@ -633,7 +643,7 @@ summary.
 | Desktop JVM sound | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | AV1 on the web | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |
 | Android devices | The emulator runs the device tests on a software GPU. What needs a real phone, such as frame pacing and GPU cost, is checked by hand. |
-| API stability | Any 0.0.x release can change the API. Committed ABI dumps make each change visible in review, but they are not a promise. |
+| API stability | Any release before 1.0 can change the API. Committed ABI dumps make each change visible in review, but they are not a promise. |
 
 Everything else that is open lives in [GitHub Issues](https://github.com/yuroyami/KitePlayer/issues).
 

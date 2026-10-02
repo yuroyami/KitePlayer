@@ -9,6 +9,7 @@ import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer
+import io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
@@ -33,7 +34,12 @@ import kotlin.test.assertTrue
  */
 class MetalExtendedRangeTest {
 
-    private class TestFrame(width: Int, height: Int, override val colorSpace: ColorSpaceInfo) : VideoFrame {
+    private class TestFrame(
+        width: Int,
+        height: Int,
+        override val colorSpace: ColorSpaceInfo,
+        override val hdr: HdrStaticMetadata? = null,
+    ) : VideoFrame {
         override val pts: Pts = Pts.Zero
         override val duration: Pts? = null
         override val size: VideoSize = VideoSize(width, height, 1, 1)
@@ -70,10 +76,16 @@ class MetalExtendedRangeTest {
     }
 
     /** The light at the centre of an extended-range render, one value per channel. */
-    private fun renderLight(y: Int, headroom: Float, overlay: SubtitleOverlay? = null, colorSpace: ColorSpaceInfo = pq): FloatArray {
+    private fun renderLight(
+        y: Int,
+        headroom: Float,
+        overlay: SubtitleOverlay? = null,
+        colorSpace: ColorSpaceInfo = pq,
+        hdr: HdrStaticMetadata? = null,
+    ): FloatArray {
         val target = device.makeTargetTexture(SIZE, SIZE, MTLPixelFormatRGBA16Float)
         extended.encode(
-            target, TestFrame(SIZE, SIZE, colorSpace), grey(y), overlay, SIZE, SIZE,
+            target, TestFrame(SIZE, SIZE, colorSpace, hdr), grey(y), overlay, SIZE, SIZE,
             toneMapped = true,
             extendedRangeHeadroom = headroom,
         ).waitUntilCompleted()
@@ -142,6 +154,18 @@ class MetalExtendedRangeTest {
             val high = ((byte + 1).coerceAtMost(255) / 255.0).pow(2.2)
             assertTrue(light in low.toFloat()..high.toFloat(), "luma $y: extended $light, standard byte $byte")
         }
+    }
+
+    @Test
+    fun aBrighterMasterKeepsHighlightsApartThatAThousandNitAssumptionFlattens() {
+        // Full-range PQ greys at about 1000 and 2000 nits.
+        val thousand = 192
+        val twoThousand = 212
+        val assumed = renderLight(thousand, headroom = 2f)[1] to renderLight(twoThousand, headroom = 2f)[1]
+        assertTrue(abs(assumed.first - assumed.second) < 0.02f, "a 1000 nit assumption should flatten both, got $assumed")
+        val master = HdrStaticMetadata(masteringMaxNits = 4000f, maxContentLightNits = 4000)
+        val graded = renderLight(thousand, headroom = 2f, hdr = master)[1] to renderLight(twoThousand, headroom = 2f, hdr = master)[1]
+        assertTrue(graded.second - graded.first > 0.05f, "a 4000 nit master kept them only $graded apart")
     }
 
     @Test

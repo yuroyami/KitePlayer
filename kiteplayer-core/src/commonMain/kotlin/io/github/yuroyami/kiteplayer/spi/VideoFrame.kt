@@ -37,6 +37,12 @@ public interface VideoFrame : AutoCloseable {
     public val colorSpace: ColorSpaceInfo
 
     /**
+     * The static HDR metadata of this frame, or of its stream when the frame carries none, or null.
+     * A renderer that tone maps reads the content's peak from it.
+     */
+    public val hdr: HdrStaticMetadata? get() = null
+
+    /**
      * Clockwise rotation a renderer applies before the picture is shown, in degrees.
      *
      * Phones write this into every recording they make in portrait, and a player that ignores it shows

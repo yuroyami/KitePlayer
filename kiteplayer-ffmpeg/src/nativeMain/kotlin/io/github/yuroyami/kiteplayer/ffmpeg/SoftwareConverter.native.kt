@@ -89,7 +89,7 @@ public object SoftwareConverter {
         // path runs: this converter used to skip it, so the same public API
         // returned washed-out pixels here and tone-mapped ones on the JVM. SDR frames answer
         // null and stay bit-exact.
-        HdrToneMap.forColorSpaceOrNull(frame.colorSpace)?.mapInPlace(out)
+        HdrToneMap.forColorSpaceOrNull(frame.colorSpace, frame.hdr?.peakNits)?.mapInPlace(out)
         return out
     }
 

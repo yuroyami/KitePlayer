@@ -531,6 +531,14 @@ else
     -map 0:v -map 1 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:s ass typeset.mkv
 fi
 
+echo "HEVC Main10 PQ, 1s, with HDR10 static metadata: a 4000 nit master and MaxCLL 4000, MaxFALL 400"
+# The mastering display is in x265's units: primaries in 0.00002, luminance in 0.0001 nits.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=1" \
+  -vf "format=yuv420p10le" -c:v libx265 -preset ultrafast -tag:v hvc1 \
+  -x265-params "log-level=error:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:range=limited:hdr10=1:master-display=G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(40000000,50):max-cll=4000,400" \
+  hdr10-meta.mp4
+
 echo "HLS streams in hls/: two variants, a separate audio rendition, AES-128, and fMP4 byte ranges"
 # Read by the HLS tests through a reader that maps addresses to these files, so every playlist
 # names its segments relatively, as a server's would. Two second segments with a keyframe at each.

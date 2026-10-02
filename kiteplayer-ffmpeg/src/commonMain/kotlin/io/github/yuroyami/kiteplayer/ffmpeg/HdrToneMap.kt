@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer
+import kotlinx.atomicfu.atomic
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -12,13 +13,14 @@ import kotlin.math.sqrt
  * per channel, BT.2020 primaries fold to BT.709, luminance rolls off through the BT.2390 EETF
  * anchored at 203 nits (BT.2408 reference white), and the result encodes as gamma 2.2.
  *
- * Honest limits, shared with the GPU path: srcPeak is fixed at 1000 nits because mastering
- * metadata is not plumbed yet, and the CPU pass costs one extra sweep over the RGBA buffer,
- * which is acceptable only because this tier is already the declared last resort.
+ * The source peak is the content's own, from its static HDR metadata, and 1000 nits when it
+ * declares none; HLG keeps its nominal 1000 nits. The CPU pass costs one extra sweep over the RGBA
+ * buffer, which is acceptable only because this tier is already the declared last resort.
  */
 internal class HdrToneMap private constructor(
-    transfer: ColorTransfer,
+    private val transfer: ColorTransfer,
     private val gamut2020: Boolean,
+    private val srcPeak: Double,
 ) {
     private val isHlg = transfer == ColorTransfer.Hlg
 
@@ -40,10 +42,10 @@ internal class HdrToneMap private constructor(
     }
 
     /** sqrt-warped display luminance 0..lumaMax nits -> the EETF's output/input ratio. */
-    private val lumaMax = if (isHlg) 1000.0 else SRC_PEAK
+    private val lumaMax = if (isHlg) 1000.0 else srcPeak
     private val eetfRatio = DoubleArray(1024) { i ->
         val nits = (i / 1023.0).let { it * it } * lumaMax
-        if (nits <= 1e-4) 1.0 else eetfNits(nits) / nits
+        if (nits <= 1e-4) 1.0 else eetfNits(nits, lumaMax) / nits
     }
 
     /** sqrt-warped SDR linear 0..1 -> gamma 2.2 byte. */
@@ -118,9 +120,9 @@ internal class HdrToneMap private constructor(
             return ((p - PQ_C1).coerceAtLeast(0.0) / (PQ_C2 - PQ_C3 * p)).pow(1.0 / PQ_M1)
         }
 
-        /** BT.2390 EETF from [0, SRC_PEAK] into [0, 203] nits, in normalized PQ space. */
-        internal fun eetfNits(nits: Double): Double {
-            val srcPq = pqEncode(SRC_PEAK / 10000.0)
+        /** BT.2390 EETF from [0, srcPeak] into [0, 203] nits, in normalized PQ space. */
+        internal fun eetfNits(nits: Double, srcPeak: Double = SRC_PEAK): Double {
+            val srcPq = pqEncode(srcPeak / 10000.0)
             val dstPq = pqEncode(203.0 / 10000.0)
             val e1 = (pqEncode(nits / 10000.0) / srcPq).coerceIn(0.0, 1.0)
             val maxLum = dstPq / srcPq
@@ -134,13 +136,21 @@ internal class HdrToneMap private constructor(
             return pqDecode(e2 * srcPq) * 10000.0
         }
 
-        /** Null when the frame is SDR, which is what keeps the SDR path bit-exact. */
-        internal fun forColorSpaceOrNull(colorSpace: ColorSpaceInfo): HdrToneMap? {
+        /** The tables last built, reused while the colour and the peak stay the same, as they do for a whole stream. */
+        private val last = atomic<HdrToneMap?>(null)
+
+        /**
+         * Null when the frame is SDR, which is what keeps the SDR path bit-exact. [peakNits] is the
+         * content's peak from its HDR metadata, and null means the 1000 nits a PQ master is assumed
+         * to have.
+         */
+        internal fun forColorSpaceOrNull(colorSpace: ColorSpaceInfo, peakNits: Float? = null): HdrToneMap? {
             if (!colorSpace.isHdr) return null
-            return HdrToneMap(
-                transfer = colorSpace.transfer,
-                gamut2020 = colorSpace.primaries == ColorPrimaries.Bt2020,
-            )
+            val gamut2020 = colorSpace.primaries == ColorPrimaries.Bt2020
+            val srcPeak = peakNits?.toDouble() ?: SRC_PEAK
+            last.value?.takeIf { it.transfer == colorSpace.transfer && it.gamut2020 == gamut2020 && it.srcPeak == srcPeak }
+                ?.let { return it }
+            return HdrToneMap(colorSpace.transfer, gamut2020, srcPeak).also { last.value = it }
         }
     }
 }

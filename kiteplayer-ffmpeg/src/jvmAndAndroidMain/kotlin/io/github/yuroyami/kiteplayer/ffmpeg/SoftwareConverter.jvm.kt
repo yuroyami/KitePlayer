@@ -62,6 +62,7 @@ public object SoftwareConverter {
             pixelFormat = info.pixelFormat.toPlayerFormat(),
             colorSpace = info.color.toPlayerColorSpace(info.pixelFormat),
             into = into,
+            hdrPeakNits = frame.hdr?.peakNits,
         )
     }
 

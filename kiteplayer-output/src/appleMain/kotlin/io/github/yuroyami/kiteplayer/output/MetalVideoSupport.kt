@@ -648,7 +648,12 @@ internal fun ColorSpaceInfo.willToneMap(): Boolean =
     transfer == io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq ||
         transfer == io.github.yuroyami.kiteplayer.spi.ColorTransfer.Hlg
 
-internal fun packToneUniforms(colorSpace: ColorSpaceInfo, dstPeakNits: Float = SDR_WHITE_NITS): FloatArray {
+internal fun packToneUniforms(
+    colorSpace: ColorSpaceInfo,
+    dstPeakNits: Float = SDR_WHITE_NITS,
+    /** The content's peak from its HDR metadata; null assumes the 1000 nits of a common PQ master. */
+    srcPeakNits: Float? = null,
+): FloatArray {
     val mode = when (colorSpace.transfer) {
         io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq -> 1
         io.github.yuroyami.kiteplayer.spi.ColorTransfer.Hlg -> 2
@@ -657,7 +662,8 @@ internal fun packToneUniforms(colorSpace: ColorSpaceInfo, dstPeakNits: Float = S
     val gamut = if (colorSpace.primaries == io.github.yuroyami.kiteplayer.spi.ColorPrimaries.Bt2020) 1 else 0
     return floatArrayOf(
         Float.fromBits(mode),
-        1000f,
+        // HLG keeps its nominal 1000 nits: its system gamma, not a grade, decides its light.
+        if (mode == 1) srcPeakNits ?: 1000f else 1000f,
         Float.fromBits(gamut),
         dstPeakNits,
     )

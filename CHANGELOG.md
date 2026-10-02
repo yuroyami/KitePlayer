@@ -43,6 +43,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   display can show.
 - A `setRenderQuality` call while media plays now reaches the renderer. Before, only the value in
   force when the renderer was attached arrived (#377).
+- HDR tone mapping rolls off from the content's own peak: its MaxCLL, or its mastering display's
+  peak, from the new `HdrStaticMetadata` on `PlayerStreamInfo.hdr` and `VideoFrame.hdr`. Before,
+  every PQ picture was assumed to be mastered at 1000 nits, which flattened the highlights of a
+  brighter master. On Android the stream's metadata also reaches MediaCodec as
+  `KEY_HDR_STATIC_INFO` (#378). `PlayerStreamInfo` changes its generated data-class methods, so
+  recompile.
 
 ## [0.2.0] - 2026-09-29
 

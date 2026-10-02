@@ -27,6 +27,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.roundToLong
@@ -219,6 +220,8 @@ private fun mediaCodecFormat(
         setInteger(MediaFormat.KEY_BIT_RATE, it.toInt())
     }
     applyColorHints(codec.colorSpace)
+    // From the container too: a decoder reads this from the bitstream only when the encoder put it there.
+    hdrStaticInfo(stream)?.let { setByteBuffer(MediaFormat.KEY_HDR_STATIC_INFO, it) }
     if (includeOutputRequest) {
         outputContract.requestedColorTransfer?.let { requested ->
             setInteger(MediaFormat.KEY_COLOR_TRANSFER_REQUEST, requested)
@@ -985,6 +988,34 @@ internal fun mediaCodecColorHints(color: ColorSpaceInfo): MediaCodecColorHints =
 )
 
 /** A declared value must either have an exact Android key or stay on the software decoder. */
+/**
+ * The stream's static HDR metadata as `MediaFormat.KEY_HDR_STATIC_INFO` takes it: the CTA-861.3
+ * Static Metadata Descriptor, type 1, in 25 little-endian bytes. Byte 0 is the type, then the red,
+ * green and blue primaries and the white point as x and y in units of 0.00002, the mastering peak in
+ * nits, the mastering black in units of 0.0001 nits, MaxCLL and MaxFALL, each an unsigned 16-bit
+ * value. A field the stream does not state is 0, which the descriptor reads as unknown. Null for a
+ * stream that is not PQ or states nothing.
+ */
+internal fun hdrStaticInfo(stream: PlayerStreamInfo): ByteBuffer? {
+    val hdr = stream.hdr ?: return null
+    if (stream.colorSpace?.transfer != ColorTransfer.Pq) return null
+    fun unsigned16(value: Float): Short = (value + 0.5f).toInt().coerceIn(0, 0xFFFF).toShort()
+    val primaries = hdr.masteringPrimaries
+    val chromaticities = listOf(
+        primaries?.redX, primaries?.redY, primaries?.greenX, primaries?.greenY,
+        primaries?.blueX, primaries?.blueY, primaries?.whiteX, primaries?.whiteY,
+    )
+    val buffer = ByteBuffer.allocate(25).order(ByteOrder.LITTLE_ENDIAN)
+    buffer.put(0)
+    chromaticities.forEach { buffer.putShort(unsigned16((it ?: 0f) * 50_000f)) }
+    buffer.putShort(unsigned16(hdr.masteringMaxNits ?: 0f))
+    buffer.putShort(unsigned16((hdr.masteringMinNits ?: 0f) * 10_000f))
+    buffer.putShort(unsigned16((hdr.maxContentLightNits ?: 0).toFloat()))
+    buffer.putShort(unsigned16((hdr.maxFrameAverageNits ?: 0).toFloat()))
+    buffer.rewind()
+    return buffer
+}
+
 internal fun canRepresentMediaCodecColorExactly(color: ColorSpaceInfo?): Boolean {
     color ?: return true
     val hints = mediaCodecColorHints(color)

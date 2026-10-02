@@ -174,6 +174,8 @@ public data class PlayerStreamInfo(
      * most files, because most containers do not say, and never a synonym for progressive.
      */
     val fieldOrder: FieldOrder = FieldOrder.Unknown,
+    /** The stream's static HDR metadata, or null when the container and the codec say none. */
+    val hdr: HdrStaticMetadata? = null,
 ) {
     /**
      * By CONTENT, including [codecExtradata].
@@ -207,6 +209,7 @@ public data class PlayerStreamInfo(
             vp9 == other.vp9 &&
             metadata == other.metadata &&
             fieldOrder == other.fieldOrder &&
+            hdr == other.hdr &&
             (codecExtradata?.contentEquals(other.codecExtradata) ?: (other.codecExtradata == null))
     }
 
@@ -232,6 +235,7 @@ public data class PlayerStreamInfo(
         result = 31 * result + (vp9?.hashCode() ?: 0)
         result = 31 * result + metadata.hashCode()
         result = 31 * result + fieldOrder.hashCode()
+        result = 31 * result + (hdr?.hashCode() ?: 0)
         result = 31 * result + (codecExtradata?.contentHashCode() ?: 0)
         return result
     }

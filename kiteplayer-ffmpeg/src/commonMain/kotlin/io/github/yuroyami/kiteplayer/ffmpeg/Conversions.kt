@@ -198,6 +198,8 @@ internal fun tightlyPackedToRgba(
     pixelFormat: PlayerPixelFormat,
     colorSpace: ColorSpaceInfo,
     into: ByteArray? = null,
+    /** The content's peak from its HDR metadata, for the tone map; null assumes 1000 nits. */
+    hdrPeakNits: Float? = null,
 ): ByteArray {
     require(width > 0 && height > 0) { "frame has no dimensions: ${width}x$height" }
     val out = into?.takeIf { it.size == width * height * 4 } ?: ByteArray(width * height * 4)
@@ -238,7 +240,7 @@ internal fun tightlyPackedToRgba(
     }
     // The software half of the HDR-to-SDR law. SDR frames return null here, which
     // keeps every existing SDR pixel bit-exact.
-    HdrToneMap.forColorSpaceOrNull(colorSpace)?.mapInPlace(out)
+    HdrToneMap.forColorSpaceOrNull(colorSpace, hdrPeakNits)?.mapInPlace(out)
     return out
 }
 

@@ -365,6 +365,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - Render passes have a characteristic failure: a pass that compiles, costs every tap, and does
   nothing. Three of four findings in that area were exactly that. A test that only asks whether the
   code ran cannot catch it; golden-image deltas can.
+- An Apple display reports its current HDR headroom as 1.0 until some layer asks for extended range,
+  and only then rises, to 2.0 on a MacBook Air M2 and 8.0 on an iPhone 16. Decide on extended range
+  with the potential headroom and tone map to the current one, or nothing ever switches (#68). Another
+  process can read the current value while a clip plays, which is the cheapest proof that it did.
 - A developer Mac with an older Apple chip has no AV1 silicon, so it can only ever prove the AV1
   hardware refusal path. Positive proof needs newer silicon.
 - Feel-testing on iPhone is release-build only: a debug shared framework collapses the software

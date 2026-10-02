@@ -22,6 +22,8 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.ChannelLayout
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
+import io.github.yuroyami.kiteplayer.spi.DisplayPrimaries
+import io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata
 import io.github.yuroyami.kiteplayer.spi.MediaSourceFactory
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
@@ -511,6 +513,27 @@ internal class VideoDecoderContinuity {
     }
 }
 
+/** The media library's HDR metadata in the player's type, or null when it holds nothing usable. */
+internal fun io.github.yuroyami.kiteffmpeg.HdrMetadata.toPlayerHdr(): HdrStaticMetadata? {
+    fun io.github.yuroyami.kiteffmpeg.Rational.finite(): Float? = if (den == 0) null else asFloat.takeIf { it.isFinite() }
+    val luminance = masteringDisplay?.luminance
+    val metadata = HdrStaticMetadata(
+        masteringPrimaries = masteringDisplay?.primaries?.let { p ->
+            val values = listOf(p.redX, p.redY, p.greenX, p.greenY, p.blueX, p.blueY, p.whiteX, p.whiteY).map { it.finite() }
+            if (values.any { it == null }) {
+                null
+            } else {
+                DisplayPrimaries(values[0]!!, values[1]!!, values[2]!!, values[3]!!, values[4]!!, values[5]!!, values[6]!!, values[7]!!)
+            }
+        },
+        masteringMinNits = luminance?.min?.finite(),
+        masteringMaxNits = luminance?.max?.finite()?.takeIf { it > 0f },
+        maxContentLightNits = contentLight?.maxCll?.takeIf { it > 0 },
+        maxFrameAverageNits = contentLight?.maxFall?.takeIf { it > 0 },
+    )
+    return metadata.takeUnless { it == HdrStaticMetadata() }
+}
+
 internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInfo? {
     val kind = when (type) {
         MediaType.Video -> TrackKind.Video
@@ -554,6 +577,7 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInf
         isCoverArt = disposition.attachedPicture,
         sampleRate = audio?.sampleRate,
         channels = audio?.channels,
+        hdr = video?.hdr?.toPlayerHdr(),
         fieldOrder = when (video?.fieldOrder) {
             io.github.yuroyami.kiteffmpeg.FieldOrder.Progressive -> io.github.yuroyami.kiteplayer.spi.FieldOrder.Progressive
             io.github.yuroyami.kiteffmpeg.FieldOrder.TopFirst -> io.github.yuroyami.kiteplayer.spi.FieldOrder.TopFirst
@@ -746,7 +770,7 @@ private class KiteFFmpegVideoDecoder(
         )
         // The rotation is the stream's, taken from the container's display matrix once at open. Every
         // frame of the stream carries it, because the renderer sees frames and nothing else.
-        val wrapped = KiteFFmpegVideoFrame(frame, pts, duration, generation, stream.rotationDegrees)
+        val wrapped = KiteFFmpegVideoFrame(frame, pts, duration, generation, stream.rotationDegrees, stream.hdr)
         try {
             warnIfColorIsApproximated(wrapped.colorSpace)
         } catch (failure: Throwable) {
@@ -1099,9 +1123,14 @@ public class KiteFFmpegVideoFrame internal constructor(
      * site drop the rotation silently, which is the exact bug this phase exists to remove.
      */
     override val rotationDegrees: Int,
+    /** The stream's static HDR metadata, which a frame that carries none of its own reports. */
+    private val streamHdr: HdrStaticMetadata? = null,
 ) : VideoFrame, SoftwareReadableFrame {
 
     private val info = frame.info
+
+    /** The decoder's own reading first, because a raw HEVC or MPEG-TS stream says it only in the bitstream. */
+    override val hdr: HdrStaticMetadata? = info.hdr?.toPlayerHdr() ?: streamHdr
 
     override val size: VideoSize = VideoSize(
         width = info.width,

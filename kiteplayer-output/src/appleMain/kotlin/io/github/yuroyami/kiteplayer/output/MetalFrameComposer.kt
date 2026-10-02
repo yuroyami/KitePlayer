@@ -136,7 +136,11 @@ internal class MetalFrameComposer(
     ): MTLCommandBufferProtocol {
         pictureColor = frame.colorSpace
         val dstPeak = SDR_WHITE_NITS * (extendedRangeHeadroom?.coerceAtLeast(1f) ?: 1f)
-        val toneUniforms = if (toneMapped) packToneUniforms(frame.colorSpace, dstPeak) else DISABLED_TONE_UNIFORMS
+        val toneUniforms = if (toneMapped) {
+            packToneUniforms(frame.colorSpace, dstPeak, frame.hdr?.peakNits)
+        } else {
+            DISABLED_TONE_UNIFORMS
+        }
         val qualityUniforms = if (extendedRangeHeadroom == null) {
             qualityUniforms
         } else {

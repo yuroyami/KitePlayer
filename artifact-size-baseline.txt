@@ -60,8 +60,8 @@ kiteplayer-libass macosArm64 36448
 kiteplayer-libass iosArm64 36434
 kiteplayer-libass macosArm64-cinterop-libass 1781369
 kiteplayer-libass iosArm64-cinterop-libass 1734628
-kiteplayer-network jvm 180791
-kiteplayer-network android 168215
+kiteplayer-network jvm 273005
+kiteplayer-network android 254188
 kiteplayer-network macosArm64 146130
 kiteplayer-network iosArm64 146116
 kiteplayer-audioviz jvm 1480508

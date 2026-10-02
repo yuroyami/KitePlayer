@@ -89,7 +89,9 @@
   Apple.
 - HLS: master playlists, a choice of variant, automatic steps down and up with the network rate,
   MPEG-TS and fMP4 segments, AES-128, separate audio and subtitle renditions, and live playlists.
-- DASH: one representation of an on-demand manifest.
+- DASH through the HLS path, for fMP4 and MPEG-TS segments: separate video, audio and WebVTT
+  sets, seeking, a variant for each video representation, segment indexes of single files, and
+  live manifests.
 - Files, memory, bytes that your code pushes, streams, and Android content URIs and assets.
 - Recording of what plays into a Matroska file, with no re-encode.
 
@@ -677,7 +679,7 @@ summary.
 
 | Topic | What to expect |
 | --- | --- |
-| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere but the browser. HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment. `Dash.mediaItemFor` plays one representation of an on-demand DASH manifest, with no bitrate switching. Live DASH and a persistent cache do not work yet. |
+| Adaptive streaming | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere but the browser. HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment. `Dash.mediaItemFor` plays a DASH manifest of fMP4 or MPEG-TS segments through the HLS path, live ones included, with a variant for each video representation. A manifest of WebM segments plays one representation, cannot seek, and is refused when it is live or keeps its audio in a set of its own (#392). A manifest with more than one Period, TTML subtitles and a persistent cache do not work yet. |
 | Native Linux and Windows | No audio output and no HTTPS. Use the desktop JVM target, or pass your own `OutputBackend`. |
 | Desktop JVM sound | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | AV1 on the web | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |

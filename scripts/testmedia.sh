@@ -585,6 +585,39 @@ ffmpeg -v error -y \
   "${hls_video[@]}" -b:v 300k -c:a aac -b:a 96k \
   "${hls_vod[@]}" -hls_segment_type fmp4 -hls_flags single_file hls/fmp4.m3u8
 
+echo "DASH presentations in dash/: separate video and audio sets, one numbered set, and indexed single files"
+# Read by the DASH tests, which play them through the HLS path (#295). Seventy seconds each, so a
+# seek to 60 s lands well inside, in two second fMP4 segments with a keyframe at each.
+mkdir -p dash
+dash_video=(-c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -keyint_min 60 -sc_threshold 0)
+# Two video representations and the sound, in sets of their own, addressed by timelines.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=30:duration=70" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=70" \
+  -filter_complex "[0:v]split=2[hi][lo0];[lo0]scale=320:180[lo]" \
+  -map "[lo]" -map "[hi]" -map 1:a \
+  "${dash_video[@]}" -b:v:0 300k -b:v:1 900k -c:a aac -b:a 96k \
+  -f dash -seg_duration 2 -use_template 1 -use_timeline 1 -adaptation_sets "id=0,streams=v id=1,streams=a" \
+  -init_seg_name 'separate-$RepresentationID$-init.m4s' \
+  -media_seg_name 'separate-$RepresentationID$-$Number%05d$.m4s' dash/separate.mpd
+# One set whose segments are numbered at a fixed length, which the live test also serves as live.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=70" \
+  "${dash_video[@]}" -b:v 300k \
+  -f dash -seg_duration 2 -use_template 1 -use_timeline 0 \
+  -init_seg_name 'single-$RepresentationID$-init.m4s' \
+  -media_seg_name 'single-$RepresentationID$-$Number$.m4s' dash/single.mpd
+# One file per set whose segment index (sidx) names its fragments, as an on-demand packager writes
+# them. The test writes the manifest, with a SegmentBase for each.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=70" \
+  "${dash_video[@]}" -b:v 300k -an \
+  -movflags +frag_keyframe+empty_moov+default_base_moof+global_sidx -f mp4 dash/ondemand-video.mp4
+ffmpeg -v error -y \
+  -f lavfi -i "sine=frequency=660:sample_rate=48000:duration=70" \
+  -c:a aac -b:a 96k -frag_duration 2000000 \
+  -movflags +empty_moov+default_base_moof+global_sidx -f mp4 dash/ondemand-audio.mp4
+
 # ---------------------------------------------------------------------------------------------
 # Provenance.
 #

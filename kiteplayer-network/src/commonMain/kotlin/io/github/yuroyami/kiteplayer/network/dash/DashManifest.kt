@@ -544,6 +544,221 @@ public object DashManifestParser {
     }
 
     /**
+     * Every segment of [representation] with its place in time, for the HLS route (#295), or null
+     * for a [DashSegmentBase] representation, whose segments only its own index names.
+     *
+     * A static presentation gives all its segments. A dynamic one gives those available at
+     * [nowMicros], microseconds since 1970 UTC: a segment is available once its end has passed
+     * the presentation's availability start plus the Period's start, and it stays so for the
+     * time-shift buffer, or for [DEFAULT_LIVE_WINDOW_MICROS] when the manifest names none. A
+     * representation with no segment addressing is one segment, the whole of its BaseURL, which
+     * needs a duration to say how long it is.
+     *
+     * The ceilings, URL checks and refusals are those of [segmentPlan].
+     */
+    internal fun timedPlan(
+        manifest: DashManifest,
+        period: DashPeriod,
+        representation: DashRepresentation,
+        policy: DashUrlPolicy,
+        nowMicros: Long?,
+        urlLimits: UrlLimits = UrlLimits(),
+    ): DashTimedPlan? {
+        val totalMicros = (period.durationMicros ?: manifest.durationMicros)?.also {
+            require(it >= 0) { "a duration of $it microseconds is negative" }
+        }
+        val window = liveWindow(manifest, period, nowMicros)
+        val list = representation.segmentList
+        val template = representation.segmentTemplate
+        return when {
+            list != null && list.segments.isNotEmpty() -> listPlan(list, totalMicros, window)
+            template != null -> templatePlan(template, representation, totalMicros, window, policy, urlLimits)
+            representation.segmentBase != null -> null
+            else -> {
+                require(window == null) { "a live representation needs segment addressing" }
+                val whole = requireNotNull(totalMicros) { "a single-file representation needs a duration" }
+                DashTimedPlan(null, null, listOf(DashTimedSegment(representation.baseUrl, null, 1, 0, whole)))
+            }
+        }
+    }
+
+    /** The default time-shift buffer of a live presentation that names none: two minutes. */
+    internal const val DEFAULT_LIVE_WINDOW_MICROS: Long = 120_000_000L
+
+    /** The span of Period time, in microseconds, whose segments a live presentation has available. */
+    private class LiveWindow(val fromMicros: Long, val edgeMicros: Long)
+
+    private fun liveWindow(manifest: DashManifest, period: DashPeriod, nowMicros: Long?): LiveWindow? {
+        if (!manifest.isDynamic) return null
+        val start = requireNotNull(manifest.availabilityStartTimeMicros) {
+            "a live manifest needs an availabilityStartTime"
+        }
+        val now = requireNotNull(nowMicros) { "a live manifest needs the time of day" }
+        val edge = now - start - (period.startMicros ?: 0L)
+        return LiveWindow(edge - (manifest.timeShiftBufferDepthMicros ?: DEFAULT_LIVE_WINDOW_MICROS), edge)
+    }
+
+    /** Whether a segment that ends at [endMicros] of Period time is in this window, or anywhere when there is none. */
+    private fun LiveWindow?.holds(endMicros: Long): Boolean =
+        this == null || (endMicros <= edgeMicros && endMicros > fromMicros)
+
+    private fun listPlan(list: DashSegmentList, totalMicros: Long?, window: LiveWindow?): DashTimedPlan {
+        val count = list.segments.size
+        val timeline = expandTimeline(list.timeline, list.timescale, totalMicros, window, count.toLong())
+        val segments = ArrayList<DashTimedSegment>(count)
+        for ((index, entry) in list.segments.withIndex()) {
+            val (startMicros, durationMicros) = when {
+                timeline.isNotEmpty() -> timeline.getOrNull(index)?.let { it.startMicros to it.durationMicros } ?: break
+                list.duration != null -> {
+                    val each = rescale(list.duration, 1_000_000L, list.timescale, "the segment duration")
+                    require(each > 0) { "degenerate segment duration" }
+                    times(index.toLong(), each, "a segment start") to each
+                }
+                else -> {
+                    val total = requireNotNull(totalMicros) { "a SegmentList without durations needs a total duration" }
+                    val each = total / count
+                    require(each > 0) { "degenerate segment duration" }
+                    index * each to each
+                }
+            }
+            if (window.holds(startMicros + durationMicros)) {
+                segments += DashTimedSegment(entry.url, entry.range, list.startNumber + index, startMicros, durationMicros)
+            }
+        }
+        return DashTimedPlan(list.initializationUrl, list.initializationRange, segments)
+    }
+
+    private fun templatePlan(
+        template: DashSegmentTemplate,
+        representation: DashRepresentation,
+        totalMicros: Long?,
+        window: LiveWindow?,
+        policy: DashUrlPolicy,
+        urlLimits: UrlLimits,
+    ): DashTimedPlan {
+        val media = template.media
+            ?: throw IllegalArgumentException("SegmentTemplate without media for ${representation.id}")
+        require(template.timescale > 0) { "SegmentTemplate timescale must be positive, not ${template.timescale}" }
+        val budget = UrlBudget(urlLimits.planUrls, urlLimits.planChars, "the segment plan")
+        val base = UrlBase(representation.baseUrl)
+        val initialization = template.initialization?.let {
+            budget.resolve(base, substitute(it, representation, number = null, time = null), policy)
+        }
+        val mediaTemplate = compileTemplate(media, representation, numberKnown = true, timeKnown = true)
+        val segments = mutableListOf<DashTimedSegment>()
+        fun add(number: Long, time: Long, startMicros: Long, durationMicros: Long) {
+            segments += DashTimedSegment(
+                budget.resolve(base, renderTemplate(mediaTemplate, number, time), policy),
+                null,
+                number,
+                startMicros,
+                durationMicros,
+            )
+        }
+        if (template.timeline.isNotEmpty()) {
+            for (entry in expandTimeline(template.timeline, template.timescale, totalMicros, window, null, template.presentationTimeOffset)) {
+                budget.reserve(1)
+                add(plus(template.startNumber, entry.index, "a segment number"), entry.time, entry.startMicros, entry.durationMicros)
+            }
+        } else {
+            val segmentDuration = template.duration
+                ?: throw IllegalArgumentException("SegmentTemplate needs duration or a timeline")
+            val segmentMicros = rescale(segmentDuration, 1_000_000L, template.timescale, "the segment duration")
+            require(segmentMicros > 0) { "degenerate segment duration" }
+            val first: Long
+            val end: Long
+            if (window == null) {
+                val total = totalMicros ?: throw IllegalArgumentException("cannot count segments without a duration")
+                first = 0
+                end = total / segmentMicros + if (total % segmentMicros != 0L) 1 else 0
+            } else {
+                // Segment k ends at (k + 1) segment lengths, and is available once that has passed.
+                end = if (window.edgeMicros < segmentMicros) 0 else window.edgeMicros / segmentMicros
+                first = if (window.fromMicros < 0) 0 else window.fromMicros / segmentMicros
+            }
+            budget.reserve((end - first).coerceAtLeast(0))
+            for (k in first until end) {
+                val startMicros = times(k, segmentMicros, "a segment start")
+                // The last segment of a finished presentation ends with it, not a whole length later.
+                val durationMicros = if (window == null && totalMicros != null) {
+                    minOf(segmentMicros, totalMicros - startMicros)
+                } else {
+                    segmentMicros
+                }
+                add(
+                    plus(template.startNumber, k, "a segment number"),
+                    times(k, segmentDuration, "a segment time"),
+                    startMicros,
+                    durationMicros,
+                )
+            }
+        }
+        return DashTimedPlan(initialization, null, segments)
+    }
+
+    /** One timeline segment: its place in the timeline, its time in timescale units, and its span in microseconds. */
+    private class TimelineSegment(val index: Long, val time: Long, val startMicros: Long, val durationMicros: Long)
+
+    /**
+     * [timeline] laid out segment by segment, at most [limit] of them, keeping those in [window].
+     * An `r` of -1 repeats until the next entry's start, the Period's end, or for a live
+     * presentation the live edge. Times count from [presentationTimeOffset].
+     */
+    private fun expandTimeline(
+        timeline: List<DashTimelineEntry>,
+        timescale: Long,
+        totalMicros: Long?,
+        window: LiveWindow?,
+        limit: Long?,
+        presentationTimeOffset: Long = 0,
+    ): List<TimelineSegment> {
+        val out = mutableListOf<TimelineSegment>()
+        var time = 0L
+        var index = 0L
+        fun micros(units: Long) = rescale(units, 1_000_000L, timescale, "a segment time")
+        fun timescaleUnits(micros: Long) = rescale(micros, timescale, 1_000_000L, "the period in timescale units")
+        for ((at, entry) in timeline.withIndex()) {
+            require(entry.d > 0) { "degenerate segment duration" }
+            entry.t?.let { time = it }
+            val repeats: Long = if (entry.r >= 0) entry.r else {
+                val untilTime = timeline.getOrNull(at + 1)?.t
+                    ?: totalMicros?.let { plus(timescaleUnits(it), presentationTimeOffset, "the period end") }
+                    ?: window?.let { plus(timescaleUnits(it.edgeMicros.coerceAtLeast(0)), presentationTimeOffset, "the live edge") }
+                    ?: throw IllegalArgumentException("SegmentTimeline r=-1 needs the next entry's t or a duration to stop at")
+                val span = minus(untilTime, time, "the time until the next entry")
+                if (span <= 0) 0 else (span - 1) / entry.d
+            }
+            val durationMicros = micros(entry.d)
+            var repeat = 0L
+            while (repeat <= repeats) {
+                if (limit != null && index >= limit) return out
+                val startMicros = micros(minus(time, presentationTimeOffset, "a segment start"))
+                if (window != null) {
+                    // Nothing that starts at the live edge has ended, and the timeline is in order.
+                    if (startMicros >= window.edgeMicros) return out
+                    // A live timeline can repeat one entry for days: step over what left the window.
+                    val behind = window.fromMicros - (startMicros + durationMicros)
+                    val skip = if (behind > 0 && durationMicros > 0) minOf(behind / durationMicros, repeats - repeat) else 0
+                    if (skip > 0) {
+                        time = plus(time, times(skip, entry.d, "a segment time"), "a segment time")
+                        index = plus(index, skip, "a segment number")
+                        repeat += skip
+                        continue
+                    }
+                }
+                if (window.holds(startMicros + durationMicros)) {
+                    require(out.size < MAX_PLAN_URLS) { "the segment plan needs more than $MAX_PLAN_URLS URLs" }
+                    out += TimelineSegment(index, time, startMicros, durationMicros)
+                }
+                time = plus(time, entry.d, "a segment time")
+                index = plus(index, 1, "a segment number")
+                repeat++
+            }
+        }
+        return out
+    }
+
+    /**
      * [value] times [multiplier], divided by [divisor], which is positive. The division comes
      * first, so the product passes the range of a Long only when the result nearly does.
      */
@@ -892,6 +1107,13 @@ public object DashManifestParser {
         }
         return resolved
     }
+
+    /**
+     * [url], which a playlist written from the manifest at [manifestUrl] names, checked against
+     * the whole of [policy] as if the manifest had named it.
+     */
+    internal fun requireAllowed(manifestUrl: String, url: String, policy: DashUrlPolicy): String =
+        checkAgainst(UrlBase(manifestUrl), url, policy)
 
     /** The manifest URL itself goes through the scheme half of the policy before it is fetched. */
     internal fun requireAllowedScheme(url: String, policy: DashUrlPolicy) {

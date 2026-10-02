@@ -339,7 +339,10 @@ public class KtorMediaIo private constructor(
             policy: HttpReaderPolicy = HttpReaderPolicy(),
         ): KtorMediaIo = open(uri, client, headers, policy, redirects = null)
 
-        /** [open], with every redirect of every request this reader makes checked by [redirects]. */
+        /**
+         * [open], with every redirect of every request this reader makes checked by [redirects]. A
+         * [meter] shared by several readers measures the network rate of all of them together.
+         */
         internal suspend fun open(
             uri: String,
             client: HttpClient?,
@@ -347,10 +350,11 @@ public class KtorMediaIo private constructor(
             policy: HttpReaderPolicy,
             redirects: RedirectRule?,
             defaultHeaders: Map<String, String> = emptyMap(),
+            meter: DownloadMeter = DownloadMeter(),
         ): KtorMediaIo {
             val related = RelatedRequests(uri, defaultHeaders, headers)
             return open(
-                uri, client ?: HttpClient(), ownsClient = client == null, headers, related, policy, redirects, DownloadMeter(),
+                uri, client ?: HttpClient(), ownsClient = client == null, headers, related, policy, redirects, meter,
             )
         }
 

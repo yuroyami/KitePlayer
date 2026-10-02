@@ -92,20 +92,21 @@ class DashRefusalTest {
         }
     }
 
-    // The usual layout: video and audio in sets of their own. This tier plays one set, so the
-    // video used to play silent.
+    // The usual layout: video and audio in sets of their own. HLS carries it in fragmented MP4
+    // (DashHlsTest), and WebM is left to the one-stream door, which plays one set, so the video
+    // used to play silent.
     @Test
     fun aSeparateAudioSetIsRefusedTypedNotPlayedSilent() = runBlocking {
         val port = serveMpd(
             """
             <MPD type="static" mediaPresentationDuration="PT4S">
                 <Period>
-                    <AdaptationSet contentType="video" mimeType="video/mp4">
-                        <SegmentTemplate media="v-${'$'}Number${'$'}.m4s" timescale="1" duration="2"/>
+                    <AdaptationSet contentType="video" mimeType="video/webm">
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.webm" timescale="1" duration="2"/>
                         <Representation id="v" bandwidth="2"/>
                     </AdaptationSet>
-                    <AdaptationSet contentType="audio" mimeType="audio/mp4">
-                        <SegmentTemplate media="a-${'$'}Number${'$'}.m4s" timescale="1" duration="2"/>
+                    <AdaptationSet contentType="audio" mimeType="audio/webm">
+                        <SegmentTemplate media="a-${'$'}Number${'$'}.webm" timescale="1" duration="2"/>
                         <Representation id="a" bandwidth="1"/>
                     </AdaptationSet>
                 </Period>
@@ -123,6 +124,8 @@ class DashRefusalTest {
         }
     }
 
+    // A live manifest of fragmented MP4 plays through HLS (DashHlsTest). One that HLS cannot
+    // carry is refused, because the one-stream door has no live window.
     @Test
     fun aLiveManifestIsRefusedTyped() = runBlocking {
         val port = serveMpd(
@@ -130,7 +133,7 @@ class DashRefusalTest {
             <MPD type="dynamic">
                 <Period>
                     <AdaptationSet contentType="video">
-                        <SegmentTemplate media="v-${'$'}Number${'$'}.m4s" timescale="1" duration="2"/>
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.webm" timescale="1" duration="2"/>
                         <Representation id="v" bandwidth="1"/>
                     </AdaptationSet>
                 </Period>
@@ -149,7 +152,8 @@ class DashRefusalTest {
     }
 
     // A single-file representation used to be fetched whole into memory and refused above the
-    // segment ceiling. It now streams with range requests, so a long file plays and seeks.
+    // segment ceiling. It now streams with range requests, so a long file plays and seeks. One
+    // with a SegmentBase plays through HLS instead (DashHlsTest), so this one names none.
     @Test
     fun aSingleFileRepresentationStreamsWithRangesAndSeeks() = runBlocking {
         val file = ByteArray(4096) { index -> (index * 7 + 3).toByte() }
@@ -160,7 +164,6 @@ class DashRefusalTest {
                     <AdaptationSet contentType="video" mimeType="video/mp4">
                         <Representation id="v" bandwidth="1">
                             <BaseURL>movie.mp4</BaseURL>
-                            <SegmentBase indexRange="0-99"/>
                         </Representation>
                     </AdaptationSet>
                 </Period>

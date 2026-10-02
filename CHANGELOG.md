@@ -37,6 +37,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   and the session closes itself when the player closes. `KitePlayerPlatform.attachMediaNotification`,
   `attachBackgroundHandling` and `attachInterruptionHandling` are deprecated. A session built with
   the `KitePlayerMediaSession` constructor behaves as before.
+- `Dash.mediaItemFor` plays a manifest of fMP4 or MPEG-TS segments through the HLS path (#295).
+  Separate video and audio sets now play together instead of being refused, the item seeks, and a
+  live manifest plays. The item's reader therefore serves an HLS master playlist, not the segment
+  bytes, so code that read `item.io` directly sees a playlist. A WebM manifest still plays through
+  the one-stream reader. The manifest model gains fields with defaults, so a constructor or `copy`
+  call compiled against 0.2.0 must be compiled again.
 - `KitePlayer.awaitClose()` suspends until the player is asked to close, for helpers that go away
   with it (#385).
 - `KitePlayer.requestSeek` replaces `seekLater`, which is deprecated (#386). It asks for a seek and

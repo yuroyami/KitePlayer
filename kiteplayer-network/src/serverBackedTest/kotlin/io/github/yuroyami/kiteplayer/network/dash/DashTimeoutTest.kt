@@ -38,11 +38,12 @@ class DashTimeoutTest {
 
     private val quick = HttpReaderPolicy(connectTimeout = 500.milliseconds, readTimeout = 500.milliseconds)
 
-    private val mpd = """
+    /** In MPEG-TS the item plays through the HLS stand-in; in WebM, through the one-stream door. */
+    private fun mpd(mimeType: String) = """
         <?xml version="1.0"?>
         <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT2S">
             <Period>
-                <AdaptationSet contentType="video" mimeType="video/mp2t">
+                <AdaptationSet contentType="video" mimeType="$mimeType">
                     <SegmentTemplate media="seg-${'$'}Number${'$'}.ts" startNumber="1" timescale="1" duration="1"/>
                     <Representation id="main" bandwidth="1"/>
                 </AdaptationSet>
@@ -51,12 +52,12 @@ class DashTimeoutTest {
     """.trimIndent()
 
     /** Built in a plain function: Ktor 3's embeddedServer captures a suspend caller's Job. */
-    private fun serve(silentManifest: Boolean): Int {
+    private fun serve(silentManifest: Boolean, mimeType: String = "video/mp2t"): Int {
         val server = embeddedServer(CIO, port = 0) {
             routing {
                 get("/movie.mpd") {
                     if (silentManifest) awaitCancellation()
-                    call.respondText(mpd, ContentType.Application.Xml)
+                    call.respondText(mpd(mimeType), ContentType.Application.Xml)
                 }
                 get("/seg-{n}.ts") {
                     call.respond(object : OutgoingContent.WriteChannelContent() {
@@ -93,8 +94,46 @@ class DashTimeoutTest {
     }
 
     @Test
-    fun aSegmentThatStopsSendingFailsTheReadAtTheReadTimeout() = runBlocking {
+    fun aSegmentThatStopsSendingFailsTheReadThroughTheHlsStandInAtTheReadTimeout() = runBlocking {
         val port = serve(silentManifest = false)
+        val client = HttpClient()
+        try {
+            val item = Dash.mediaItemFor("http://127.0.0.1:$port/movie.mpd", client, readerPolicy = quick)
+            val stand = checkNotNull(item.io).open()
+            try {
+                val master = readAll(stand).decodeToString()
+                val media = readAll(checkNotNull(stand.openRelated(master.lines().first { it.startsWith("https://") })))
+                val segment = media.decodeToString().lines().first { it.startsWith("http://") }
+                val reader = checkNotNull(stand.openRelated(segment))
+                try {
+                    val started = TimeSource.Monotonic.markNow()
+                    assertFailsWith<KtorMediaIoException> { readAll(reader) }
+                    val took = started.elapsedNow()
+                    assertTrue(took < 3.seconds, "the segment read must end near the read timeout, took $took")
+                } finally {
+                    reader.close()
+                }
+            } finally {
+                stand.close()
+            }
+        } finally {
+            client.close()
+        }
+    }
+
+    private suspend fun readAll(io: io.github.yuroyami.kiteplayer.MediaIo): ByteArray {
+        val out = ArrayList<Byte>()
+        val buffer = ByteArray(4096)
+        while (true) {
+            val count = io.read(buffer, 0, buffer.size)
+            if (count < 0) return out.toByteArray()
+            for (i in 0 until count) out += buffer[i]
+        }
+    }
+
+    @Test
+    fun aSegmentThatStopsSendingFailsTheReadAtTheReadTimeout() = runBlocking {
+        val port = serve(silentManifest = false, mimeType = "video/webm")
         val client = HttpClient()
         try {
             val item = Dash.mediaItemFor("http://127.0.0.1:$port/movie.mpd", client, readerPolicy = quick)

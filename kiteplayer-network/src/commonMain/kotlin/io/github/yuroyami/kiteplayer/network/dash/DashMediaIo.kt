@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.network.dash
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.network.DownloadMeter
 import io.github.yuroyami.kiteplayer.network.HttpReaderPolicy
 import io.github.yuroyami.kiteplayer.network.KtorMediaIo
 import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
@@ -28,7 +29,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.ExperimentalTime
 
 /**
  * One representation's segments read as a single forward stream (the adaptive
@@ -96,9 +99,9 @@ public class DashMediaIo(
 }
 
 /**
- * A manifest that this tier of the DASH door does not play: a live one, one with several Periods,
- * or one that carries its audio in an adaptation set of its own. It is refused rather than played
- * wrong, so an application can fall back to another route.
+ * A manifest that the DASH door does not play: one with several Periods, or one whose segments HLS
+ * cannot carry, such as WebM, when it is live or carries its audio in an adaptation set of its
+ * own. It is refused rather than played wrong, so an application can fall back to another route.
  */
 public class DashUnsupportedException(message: String) : IllegalArgumentException(message)
 
@@ -272,16 +275,31 @@ public object Dash {
      * A playable [MediaItem] for [mpdUrl], over [client]. The item's uri stays the manifest's, for
      * labels. [readerPolicy] limits the manifest fetch and every later fetch, as in [manifest].
      *
-     * The door plays one representation: the highest bandwidth one of the first video adaptation
-     * set, or of the first set when there is no video. Its segments play as one [DashMediaIo]
-     * stream. A representation with no segment addressing is one file, and it is read through
-     * [KtorMediaIo] with range requests, so it is seekable and never held in memory whole.
+     * When every picture and sound representation of the Period is fragmented MP4 or MPEG-TS, the
+     * item plays through the player's HLS path (#295). The door writes an HLS master playlist with
+     * a variant for each video representation, an audio rendition for each audio set and a
+     * subtitle rendition for each WebVTT set, and a media playlist for each, from the manifest's
+     * templates, timelines, lists or segment indexes. So separate audio and video sets play
+     * together, the item seeks, and its variants are listed and chosen as an HLS item's are. Its
+     * segment readers share one measure of the network rate, which the automatic variant steps
+     * read. A subtitle set in another format, such as
+     * TTML, is left out. A live (dynamic) manifest plays live: its playlists follow the time of
+     * day and the manifest is fetched again after each minimum update period.
      *
-     * [policy] judges every redirect of every request the item makes, as in [manifest]. A segment
-     * or file behind a refused redirect fails its read with [DashUrlRefusedException].
+     * Otherwise the door plays one representation, as one stream: the highest bandwidth one of
+     * the first video adaptation set, or of the first set when there is no video. Its segments
+     * play as one [DashMediaIo] stream, which cannot seek. A representation with no segment
+     * addressing is one file, and it is read through [KtorMediaIo] with range requests, so it is
+     * seekable and never held in memory whole. [maxSegmentBytes] limits the segments of that
+     * stream; the HLS path reads segments as streams and holds none whole.
      *
-     * Throws [DashUnsupportedException] for a live manifest, for more than one Period, and for
-     * audio in an adaptation set of its own, because this tier would play that video silent.
+     * [policy] judges every URL the item asks for and every redirect of every request, as in
+     * [manifest]. A segment or file behind a refused redirect fails its read with
+     * [DashUrlRefusedException].
+     *
+     * Throws [DashUnsupportedException] for more than one Period, and, when the HLS path cannot
+     * carry the segments, for a live manifest and for audio in an adaptation set of its own,
+     * because the one stream would play that video silent.
      */
     @Throws(Exception::class)
     public suspend fun mediaItemFor(
@@ -306,6 +324,9 @@ public object Dash {
         }
         val period = manifest.periods.firstOrNull()
             ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no Period")
+        if (DashHls.carries(period)) {
+            return hlsItem(mpdUrl, manifest, period, client, policy, maxManifestBytes, readerPolicy, redirects)
+        }
         val video = period.adaptationSets.firstOrNull { it.isVideo() }
         // Merging two elementary streams is not a byte concatenation, so separate audio would be
         // lost. Refused typed rather than played silent.
@@ -346,6 +367,53 @@ public object Dash {
                 }
             },
         )
+    }
+
+    /**
+     * The item of a manifest that HLS can carry: its reader stands in for an HLS master playlist,
+     * and each open of the item gets a reader of its own, whose segment readers share one measure
+     * of the network rate for the automatic variant steps.
+     */
+    private fun hlsItem(
+        mpdUrl: String,
+        manifest: DashManifest,
+        period: DashPeriod,
+        client: HttpClient,
+        policy: DashUrlPolicy,
+        maxManifestBytes: Long,
+        readerPolicy: HttpReaderPolicy,
+        redirects: DashRedirectRule,
+    ): MediaItem {
+        // Built here, so a manifest whose playlists cannot be written is refused before any open.
+        val presentation = DashHls.presentation(period, live = manifest.isDynamic)
+        val refetch: (suspend () -> DashManifest)? = if (manifest.isDynamic) {
+            { manifest(mpdUrl, client, policy, maxManifestBytes, readerPolicy) }
+        } else {
+            null
+        }
+        return MediaItem(
+            uri = mpdUrl,
+            io = {
+                val meter = DownloadMeter()
+                DashHlsMediaIo(
+                    presentation = presentation,
+                    manifest = manifest,
+                    manifestUrl = mpdUrl,
+                    policy = policy,
+                    openUrl = { url -> KtorMediaIo.open(url, client, emptyMap(), readerPolicy, redirects, meter = meter) },
+                    refetch = refetch,
+                    nowMicros = ::wallClockMicros,
+                    bitsPerSecond = meter::bitsPerSecond,
+                )
+            },
+        )
+    }
+
+    /** The time of day, in microseconds since 1970 UTC, which a live manifest's clock counts from. */
+    @OptIn(ExperimentalTime::class)
+    private fun wallClockMicros(): Long {
+        val now = Clock.System.now()
+        return now.epochSeconds * 1_000_000 + now.nanosecondsOfSecond / 1_000
     }
 
     private fun DashAdaptationSet.isVideo(): Boolean =

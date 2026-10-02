@@ -71,6 +71,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the file plays without it. Before, the whole open failed. The web build has no subtitle decoders
   of the media library, so on the web a file whose default track was picture subtitles or captions
   did not open at all (#381).
+- On macOS, when the last output device goes away, the `AudioDeviceChanged` warning says that no
+  output is left. Before, it said that playback follows "device 0".
 
 ## [0.2.0] - 2026-09-29
 

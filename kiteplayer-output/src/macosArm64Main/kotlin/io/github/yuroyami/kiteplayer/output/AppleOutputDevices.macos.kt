@@ -56,6 +56,17 @@ internal actual fun platformAppleOutputDevices(): AppleOutputDevices = MacOutput
  * by itself. So a change of default is a notice to the application, not a reason to rebuild the
  * sink. A sink bound to one device stays on it, so it watches that device for its removal instead.
  */
+/**
+ * What a change of the system default output means for an unbound sink. Device 0 is CoreAudio's
+ * unknown object, which the default becomes when no output is left, so nothing is followed then.
+ */
+internal fun defaultOutputChange(device: UInt, nameOf: (UInt) -> String?): String =
+    if (device == 0u) {
+        "the system has no default output now, so playback is silent until one appears"
+    } else {
+        "the default output changed to ${nameOf(device) ?: "device $device"}, and playback follows it"
+    }
+
 internal object MacOutputDevices : AppleOutputDevices {
 
     override fun watchDefaultOutput(onChange: (detail: String) -> Unit): AutoCloseable? =
@@ -63,9 +74,7 @@ internal object MacOutputDevices : AppleOutputDevices {
             objectId = kAudioObjectSystemObject.toUInt(),
             selector = kAudioHardwarePropertyDefaultOutputDevice,
         ) {
-            val device = defaultOutputDevice()
-            val name = deviceName(device) ?: "device $device"
-            onChange("the default output changed to $name, and playback follows it")
+            onChange(defaultOutputChange(defaultOutputDevice(), ::deviceName))
         }
 
     override fun watchDevice(device: UInt, onLost: (detail: String) -> Unit): AutoCloseable? {

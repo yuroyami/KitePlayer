@@ -600,4 +600,13 @@ public sealed class PlaybackWarning {
     public data class ExternalClockSilent(val detail: String) : PlaybackWarning() {
         override val message: String get() = "playback follows no external clock: $detail"
     }
+
+    /**
+     * The player stepped an HLS stream down from the variant at [from] to the one at [to], with a
+     * lower bitrate, because playback waited too long for data. [detail] says how long. The stream
+     * opens again on the lower variant at the current position.
+     */
+    public data class VariantLowered(val from: Int, val to: Int, val detail: String) : PlaybackWarning() {
+        override val message: String get() = "stepped down from variant $from to variant $to: $detail"
+    }
 }

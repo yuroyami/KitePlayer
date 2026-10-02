@@ -49,9 +49,14 @@ class WarningAuditTest {
         PlaybackWarning.GaplessFallback(1, "x"),
         PlaybackWarning.SegmentSkipped("https://cdn.example/seg-1.ts", "x"),
         PlaybackWarning.ExternalClockSilent("x"),
+        PlaybackWarning.VariantLowered(0, 1, "x"),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
+        is PlaybackWarning.VariantLowered -> listOf(
+            "PlaybackCore.stepDownWhenStarved, after playback waited 4 s for data while playing an HLS " +
+                "variant the player chose itself",
+        )
         is PlaybackWarning.ExternalClockSilent -> listOf(
             "PlaybackCore.handleExternalClock, after 2 s of playing with no moving answer from the " +
                 "external clock, or with none set under SyncMode.ExternalMaster",

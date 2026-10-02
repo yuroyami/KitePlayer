@@ -766,6 +766,12 @@ internal class PlaybackCore(
 
     private class VariantRequest(val index: Int?, val reply: CompletableDeferred<Unit>)
 
+    /** True when the item's variant is the player's own step down, which it may lower again. */
+    private var variantChosenByPlayer = false
+
+    /** When playback began to wait for data while playing, or [NO_POSITION]. */
+    private var starvedSinceNanos: Long = NO_POSITION
+
     /** One caller's track selection, waiting for the rebuild that will honour it. */
     private class SelectionRequest(
         val kind: TrackKind,
@@ -1786,6 +1792,8 @@ internal class PlaybackCore(
             is CoreCommand.Close -> runClose(command.reply)
             is CoreCommand.SelectSecondarySubtitle -> applySecondarySubtitle(command)
             is CoreCommand.SelectVariant -> {
+                // The caller's choice, so the player does not lower it by itself.
+                variantChosenByPlayer = false
                 val asked = media?.demux?.variant
                 if (command.index == asked && (command.index == null || command.index == tracks.selectedVariant)) {
                     command.reply.complete(Unit)
@@ -2319,6 +2327,8 @@ internal class PlaybackCore(
      */
     private fun resetForOpen(item: MediaItem, epoch: Generation) {
         media = item
+        variantChosenByPlayer = false
+        starvedSinceNanos = NO_POSITION
         lastChapterIndex = Int.MIN_VALUE
         markerCursorUs = NO_POSITION
         markerCursorEpoch = null
@@ -4602,6 +4612,7 @@ internal class PlaybackCore(
     private suspend fun handleBuffering() {
         val session = session ?: return
         if (endStalledSession(session)) return
+        stepDownWhenStarved(session)
         if (demuxerRanShort(session)) demuxUnderrunSeen = true else if (wellBuffered(session)) demuxUnderrunSeen = false
         if (!playRequested || status != PlaybackStatus.Playing) return
         if (endOfStream.demuxerEnded) return
@@ -4611,6 +4622,44 @@ internal class PlaybackCore(
         session.schedulerMode.value = SCHEDULER_IDLE
         session.audio?.pause()
         wakeIn(WORKER_POLL)
+    }
+
+    /**
+     * Steps an HLS stream down to the next variant with a lower bitrate when playback has waited for
+     * data for [VARIANT_STEP_DOWN_AFTER] while playing, long before the stall timeout would end it
+     * (#376). Only while the player chooses the variant itself: a variant the caller selected stays,
+     * and the player never steps up by itself.
+     */
+    private fun stepDownWhenStarved(session: OpenSession) {
+        val starving = playRequested && status == PlaybackStatus.Buffering && firstFrameSeen &&
+            pendingSeek == null && pendingVariant == null
+        if (!starving) {
+            starvedSinceNanos = NO_POSITION
+            return
+        }
+        val now = clock.nanos()
+        if (starvedSinceNanos == NO_POSITION) starvedSinceNanos = now
+        val waited = (now - starvedSinceNanos).nanoseconds
+        if (waited < VARIANT_STEP_DOWN_AFTER) {
+            wakeIn(VARIANT_STEP_DOWN_AFTER - waited)
+            return
+        }
+        starvedSinceNanos = NO_POSITION
+        val item = media ?: return
+        if (item.demux.variant != null && !variantChosenByPlayer) return
+        if (!session.source.seekable) return
+        val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
+        val lower = tracks.variants.filter { it.bitrate < current.bitrate }.maxByOrNull { it.bitrate } ?: return
+        variantChosenByPlayer = true
+        warn(
+            PlaybackWarning.VariantLowered(
+                current.index,
+                lower.index,
+                "playback waited ${waited.inWholeMilliseconds} ms for data at ${current.bitrate} bits per second",
+            ),
+        )
+        // Nobody waits on this reply: the variant change is the player's own.
+        pendingVariant = VariantRequest(lower.index, CompletableDeferred())
     }
 
     /**
@@ -9733,6 +9782,9 @@ internal class PlaybackCore(
 private fun Duration.atLeastOneTick(): Duration = if (this < DISPATCHER_TICK) DISPATCHER_TICK else this
 
 private val DISPATCHER_TICK: Duration = 1.milliseconds
+
+/** How long playback may wait for data before an HLS stream steps down a variant (#376). */
+private val VARIANT_STEP_DOWN_AFTER: Duration = 4.seconds
 
 // Following an external clock (#91). The thresholds are the starting values of the design.
 private const val EXTERNAL_ASK_INTERVAL_NANOS: Long = 50_000_000L

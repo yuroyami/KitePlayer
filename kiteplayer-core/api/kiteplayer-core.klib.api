@@ -4374,6 +4374,26 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.TypesetterUnavailable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.TypesetterUnavailable.hashCode|hashCode(){}[0]
     }
+
+    final class VariantLowered : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered|null[0]
+        constructor <init>(kotlin/Int, kotlin/Int, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.<init>|<init>(kotlin.Int;kotlin.Int;kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.detail.<get-detail>|<get-detail>(){}[0]
+        final val from // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.from|{}from[0]
+            final fun <get-from>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.from.<get-from>|<get-from>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.message.<get-message>|<get-message>(){}[0]
+        final val to // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.to|{}to[0]
+            final fun <get-to>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.to.<get-to>|<get-to>(){}[0]
+
+        final fun component1(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.component1|component1(){}[0]
+        final fun component2(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.component2|component2(){}[0]
+        final fun component3(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.component3|component3(){}[0]
+        final fun copy(kotlin/Int = ..., kotlin/Int = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.copy|copy(kotlin.Int;kotlin.Int;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.hashCode|hashCode(){}[0]
+    }
 }
 
 final object io.github.yuroyami.kiteplayer.spi/MediaIoProviders { // io.github.yuroyami.kiteplayer.spi/MediaIoProviders|null[0]

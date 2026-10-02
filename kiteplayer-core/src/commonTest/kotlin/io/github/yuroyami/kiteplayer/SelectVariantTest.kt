@@ -44,6 +44,41 @@ class SelectVariantTest {
     }
 
     @Test
+    fun aStreamTooSlowForItsVariantStepsDownByItselfAndKeepsPlaying() = runTest {
+        // The high variant reads far slower than real time, the low one keeps up.
+        val script = MediaScript(durationUs = 60_000_000, variants = variants, readDelayUsByVariant = mapOf(0 to 200_000L))
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(15.seconds)
+
+        val lowered = harness.core.warningHistory().map { it.warning }.filterIsInstance<PlaybackWarning.VariantLowered>()
+        assertEquals(listOf(0 to 1), lowered.map { it.from to it.to }, "one step down: $lowered")
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        val before = harness.core.position()
+        harness.run(2.seconds)
+        assertTrue(harness.core.position() - before >= 1500.milliseconds, "the lower variant keeps up")
+        harness.close()
+    }
+
+    @Test
+    fun aVariantTheCallerChoseIsNotLowered() = runTest {
+        val script = MediaScript(durationUs = 60_000_000, variants = variants, readDelayUsByVariant = mapOf(0 to 200_000L))
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.selectVariant(0)
+        harness.core.play()
+        harness.run(15.seconds)
+        assertTrue(
+            harness.core.warningHistory().none { it.warning is PlaybackWarning.VariantLowered },
+            "a chosen variant stays",
+        )
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant)
+        harness.close()
+    }
+
+    @Test
     fun aVariantTheMediaDoesNotHaveIsRefused() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 30_000_000, variants = variants))
         harness.openWithRenderer()

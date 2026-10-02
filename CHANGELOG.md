@@ -96,6 +96,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `DemuxPolicy.variant`, which a memento stores too. `PlayerMediaSource` gains `variants` and
   `selectedVariant`, both with defaults. `Tracks` and `DemuxPolicy` change their generated
   data-class methods, so recompile (#376).
+- An HLS stream that keeps playback waiting for data for 4 s steps down to the next variant with a
+  lower bitrate, long before the 30 s stall timeout ends it. The new `PlaybackWarning.VariantLowered`
+  says so, so a `when` that lists every warning needs the new branch. Only a variant that the
+  player chose itself steps down, and the player never steps up by itself (#376).
 
 ## [0.2.0] - 2026-09-29
 

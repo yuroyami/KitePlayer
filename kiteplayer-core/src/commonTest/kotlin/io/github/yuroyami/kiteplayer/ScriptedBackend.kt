@@ -185,6 +185,8 @@ internal class MediaScript(
     val audioMetadata: Map<String, String> = emptyMap(),
     /** The variants the source offers, as an HLS master playlist would. The item's choice picks one. */
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
+    /** A read delay for one variant, in place of [readDelayUs]: a link too slow for that variant. */
+    val readDelayUsByVariant: Map<Int, Long> = emptyMap(),
 ) {
     val videoIndex: Int = 0
     val audioIndex: Int = if (hasVideo) 1 else 0
@@ -929,7 +931,8 @@ internal class ScriptedSource(
             if (reads > limit && !wedgeReleased.isCompleted) wedge("read")
         }
         if (faults.failRead(reads)) error("the scripted source failed on read $reads")
-        if (script.readDelayUs > 0) delay(script.readDelayUs / 1_000)
+        val readDelayUs = selectedVariant?.let { script.readDelayUsByVariant[it] } ?: script.readDelayUs
+        if (readDelayUs > 0) delay(readDelayUs / 1_000)
 
         val video = script.videoIndex.takeIf {
             script.hasVideo && it in selected && videoCursorUs < script.durationUs

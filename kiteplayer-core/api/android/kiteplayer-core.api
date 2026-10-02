@@ -1478,6 +1478,21 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TypesetterUnava
 	public fun hashCode ()I
 }
 
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$VariantLowered : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (IILjava/lang/String;)V
+	public final fun component1 ()I
+	public final fun component2 ()I
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (IILjava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$VariantLowered;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$VariantLowered;IILjava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$VariantLowered;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public final fun getFrom ()I
+	public fun getMessage ()Ljava/lang/String;
+	public final fun getTo ()I
+	public fun hashCode ()I
+}
+
 public final class io/github/yuroyami/kiteplayer/PlayerConfig {
 	public fun <init> ()V
 	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/RenderQuality;Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lio/github/yuroyami/kiteplayer/FrameDropPolicy;Lio/github/yuroyami/kiteplayer/BufferPolicy;Lio/github/yuroyami/kiteplayer/AudioConfig;Lio/github/yuroyami/kiteplayer/SubtitleConfig;JJZLio/github/yuroyami/kiteplayer/Backends;Lio/github/yuroyami/kiteplayer/NetworkConfig;ZLio/github/yuroyami/kiteplayer/DeinterlacePolicy;Lio/github/yuroyami/kiteplayer/QueueConfig;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/ExternalClockPolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V

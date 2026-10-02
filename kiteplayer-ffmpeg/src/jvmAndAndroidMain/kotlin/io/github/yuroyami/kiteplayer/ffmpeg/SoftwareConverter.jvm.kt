@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
+import io.github.yuroyami.kiteffmpeg.Frame as KiteFrame
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 
 /**
@@ -28,14 +29,39 @@ public object SoftwareConverter {
      */
     public fun toRgba(frame: KiteFFmpegVideoFrame, reuse: ByteArray?): ByteArray {
         val readable = frame.readableFrame()
+        return convert(frame, readable, readable.copyPlanesToByteArray(), reuse)
+    }
+
+    /**
+     * [toRgba] with both of its arrays taken from [buffers]: the planes copied out of KiteFFmpeg,
+     * and the RGBA bytes. A renderer that keeps one [Buffers] allocates neither array again until
+     * the frame size changes. The returned array belongs to [buffers], and the next call with the
+     * same [buffers] overwrites it.
+     */
+    public fun toRgba(frame: KiteFFmpegVideoFrame, buffers: Buffers): ByteArray {
+        val readable = frame.readableFrame()
+        val count = readable.planesByteCount()
+        // Exactly the frame's size, so the kernel's short-frame check sees what it always saw.
+        if (buffers.planes.size != count) buffers.planes = ByteArray(count)
+        readable.copyPlanesInto(buffers.planes)
+        return convert(frame, readable, buffers.planes, buffers.rgba).also { buffers.rgba = it }
+    }
+
+    /** The two arrays one renderer reuses from frame to frame. Use one instance from one thread at a time. */
+    public class Buffers {
+        internal var planes: ByteArray = ByteArray(0)
+        internal var rgba: ByteArray? = null
+    }
+
+    private fun convert(frame: KiteFFmpegVideoFrame, readable: KiteFrame, planes: ByteArray, into: ByteArray?): ByteArray {
         val info = readable.info
         return tightlyPackedToRgba(
-            bytes = readable.copyPlanesToByteArray(),
+            bytes = planes,
             width = frame.size.width,
             height = frame.size.height,
             pixelFormat = info.pixelFormat.toPlayerFormat(),
             colorSpace = info.color.toPlayerColorSpace(info.pixelFormat),
-            into = reuse,
+            into = into,
         )
     }
 

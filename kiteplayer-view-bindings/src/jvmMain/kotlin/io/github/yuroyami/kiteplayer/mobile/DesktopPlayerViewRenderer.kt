@@ -26,8 +26,8 @@ public object DesktopAwtPlayerViewRendererFactory : AwtPlayerViewRendererFactory
         AwtCanvasVideoRenderer(
             painter = object : AwtFramePainter {
                 // The renderer paints from one caller at a time and is done with the bytes when
-                // packRgbInto returns, so one array serves every frame of this renderer.
-                private var rgba: ByteArray? = null
+                // packRgbInto returns, so one set of arrays serves every frame of this renderer.
+                private val buffers = SoftwareConverter.Buffers()
 
                 override fun paintArgb(
                     frame: VideoFrame,
@@ -35,8 +35,7 @@ public object DesktopAwtPlayerViewRendererFactory : AwtPlayerViewRendererFactory
                     width: Int,
                     height: Int,
                 ): Boolean {
-                    val converted = SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame, rgba)
-                    rgba = converted
+                    val converted = SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame, buffers)
                     return packRgbInto(converted, destination, width, height)
                 }
 

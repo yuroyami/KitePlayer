@@ -60,11 +60,11 @@ private class MobileAndroidPlayerViewRenderer(
 }
 
 /**
- * The converter one renderer uses, holding the array it returned last. The renderer converts on its
- * one worker and swizzles the bytes into its own buffer before the next frame, so the array is free
- * again by then.
+ * The converter one renderer uses, holding the arrays it converted the last frame with. The renderer
+ * converts on its one worker and swizzles the bytes into its own buffer before the next frame, so
+ * the arrays are free again by then.
  */
 private fun reusingConverter(): (io.github.yuroyami.kiteplayer.spi.VideoFrame) -> ByteArray {
-    var last: ByteArray? = null
-    return { frame -> SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame, last).also { last = it } }
+    val buffers = SoftwareConverter.Buffers()
+    return { frame -> SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame, buffers) }
 }

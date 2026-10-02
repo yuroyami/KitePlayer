@@ -44,8 +44,10 @@ private object GpuFrameReader {
         runCatching { io.github.yuroyami.kiteplayer.output.MetalPictureReader() }.getOrNull()
 }
 
-// The native converter and the Metal reader allocate their own array, so reuse is not used here.
-internal actual fun kiteCodecFrameToRgba(frame: VideoFrame, reuse: ByteArray?): ByteArray {
+// The native converter and the Metal reader allocate their own array, so nothing is kept here.
+internal actual fun kiteCodecRgbaConverter(): (VideoFrame) -> ByteArray = ::convertFrameToRgba
+
+private fun convertFrameToRgba(frame: VideoFrame): ByteArray {
     val decoded = frame.asKiteFFmpegFrame()
     // The Metal reader serves HARDWARE frames only, where a GPU readback is the only
     // route from a CVPixelBuffer to bytes. Software planes used to ride the same path, which

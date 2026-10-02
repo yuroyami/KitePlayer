@@ -44,14 +44,16 @@ internal class UnsupportedFrameType(
 )
 
 /**
- * Converts a frame from the aggregate's own FFmpeg backend to tightly packed RGBA. A frame from any
- * other backend is refused with [UnsupportedFrameType], which the renderer reports once and then
- * stops attempting, exactly like the platform views' converter seams.
+ * The converter one renderer uses. It turns a frame from the aggregate's own FFmpeg backend into
+ * tightly packed RGBA. A frame from any other backend is refused with [UnsupportedFrameType], which
+ * the renderer reports once and then stops attempting, exactly like the platform views' converter
+ * seams.
  *
- * [reuse] is the array the previous call returned. A target whose converter can write into it does,
- * so the RGBA bytes are allocated once per renderer rather than once per frame.
+ * The renderer calls the converter from its one worker and builds the image before the next call,
+ * and every image builder copies the bytes. A target whose converter can reuse its arrays keeps
+ * them in the converter, so it allocates them once per renderer rather than once per frame.
  */
-internal expect fun kiteCodecFrameToRgba(frame: VideoFrame, reuse: ByteArray?): ByteArray
+internal expect fun kiteCodecRgbaConverter(): (VideoFrame) -> ByteArray
 
 /**
  * Builds a PREMULTIPLIED-alpha image for a subtitle overlay. A separate builder from

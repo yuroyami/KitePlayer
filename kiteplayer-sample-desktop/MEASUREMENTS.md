@@ -155,6 +155,9 @@ roughly **340 MB/s of garbage** at 1080p30. That allocation rate, not the copy b
 the numbers blow up when the host is busy: the two contaminated phases in this dataset are also
 the ones with GC and load spikes.
 
+Each renderer now keeps both buffers from frame to frame (#246). `RgbaReuseTest` measures a 1080p
+conversion at about 2 KB allocated on its thread, down from 11.4 MB.
+
 ## What this changes
 
 1. **The claim that "desktop bandwidth makes this cheap" is wrong as stated, and the reason is the

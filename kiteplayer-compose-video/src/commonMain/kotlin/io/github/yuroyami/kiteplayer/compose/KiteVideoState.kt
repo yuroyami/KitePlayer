@@ -38,7 +38,7 @@ public class KiteVideoState internal constructor(
         pool: FrameImagePool,
         hardwareRendererFactory: ((publish: (KiteVideoFrame) -> Unit) -> KiteVideoHardwareRenderer?),
     ) : this(
-        convert = rgbaConverter(),
+        convert = kiteCodecRgbaConverter(),
         makeImage = { rgba, width, height -> pool.imageFor(rgba, width, height) },
         releaseImages = { pool.release() },
         hardwareRendererFactory = hardwareRendererFactory,
@@ -407,14 +407,4 @@ internal class KiteVideoViewportBook(
     private companion object {
         const val PHYSICAL_PIXEL_SCALE = 1f
     }
-}
-
-/**
- * The converter one renderer uses, holding the array it returned last. The renderer calls it from
- * its one worker and builds the image before the next call, and every image builder copies the
- * bytes, so the array is free again by then.
- */
-private fun rgbaConverter(): (VideoFrame) -> ByteArray {
-    var last: ByteArray? = null
-    return { frame -> kiteCodecFrameToRgba(frame, last).also { last = it } }
 }

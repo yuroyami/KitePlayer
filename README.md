@@ -5,9 +5,10 @@
 <h1 align="center">KitePlayer</h1>
 
 <p align="center">
-  A media player library for Kotlin Multiplatform apps. Its own Kotlin engine plays video, audio
-  and subtitles on Android, iOS, macOS, the desktop JVM and the web, with FFmpeg already inside the
-  artifacts.
+  A media playback library for Kotlin Multiplatform apps. Its engine is written in Kotlin and plays
+  video, audio and subtitles on Android, iOS, macOS, the desktop JVM and the web, with FFmpeg already
+  inside the artifacts through <a href="https://github.com/yuroyami/KiteFFmpeg">KiteFFmpeg</a>. It
+  takes mpv and VLC as its models, and aims for their performance and range of features.
 </p>
 
 <p align="center">

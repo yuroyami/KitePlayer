@@ -160,6 +160,38 @@ class KitePlayerAwtViewTest {
     }
 
     @Test
+    fun aViewWithNoFactoryOfItsOwnUsesTheDefault() {
+        val renderer = CanvasRecorder()
+        val before = PlayerViewDefaults.rendererFactory
+        PlayerViewDefaults.rendererFactory = AwtPlayerViewRendererFactory { renderer }
+        try {
+            val view = KitePlayerAwtView()
+            view.player = player()
+            view.canvasAvailable()
+            assertSame(renderer, view.binding.activeRenderer, "the default factory built the renderer")
+            assertSame(view, renderer.current, "the default renderer paints into the view")
+        } finally {
+            PlayerViewDefaults.rendererFactory = before
+        }
+    }
+
+    @Test
+    fun aViewsOwnFactoryWinsOverTheDefault() {
+        val own = CanvasRecorder()
+        val before = PlayerViewDefaults.rendererFactory
+        PlayerViewDefaults.rendererFactory = AwtPlayerViewRendererFactory { CanvasRecorder() }
+        try {
+            val view = KitePlayerAwtView()
+            view.rendererFactory = AwtPlayerViewRendererFactory { own }
+            view.player = player()
+            view.canvasAvailable()
+            assertSame(own, view.binding.activeRenderer)
+        } finally {
+            PlayerViewDefaults.rendererFactory = before
+        }
+    }
+
+    @Test
     fun `a fresh view reports no geometry`() {
         val view = KitePlayerAwtView()
         assertEquals(0f, view.videoDisplayAspect)

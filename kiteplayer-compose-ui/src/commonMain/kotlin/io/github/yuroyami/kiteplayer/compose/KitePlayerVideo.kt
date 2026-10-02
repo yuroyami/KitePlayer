@@ -34,9 +34,9 @@ import kotlin.time.Duration
  * [KitePlayerSurface].
  *
  * [onRendererAttached] fires once this composable's video output is attached to [player]: the
- * native view attaches as soon as the player is set (its renderer is headless-capable, so
- * decoder selection already sees it), the Compose canvas one frame after composition. A caller
- * that delays media open until output exists releases it here. It fires again after each path
+ * native view attaches as soon as the player is set, the Compose canvas one frame after
+ * composition. Media does not have to wait for it: a player that opened before its output existed
+ * moves to the renderer's own decoder when the renderer arrives. It fires again after each path
  * swap, so a one-shot caller must latch it.
  *
  * [keepDisplayAwake] keeps the display from dimming and locking while [player] plays video and

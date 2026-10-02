@@ -18,6 +18,9 @@ import kotlin.jvm.JvmName
  * the defaults. [KitePlayer.create] is the door that uses only what the config names, for a stack
  * of your own.
  *
+ * With the default media backend, this also gives the platform's player views their default
+ * renderer, so `view.player = player` is all a `KitePlayerView` needs.
+ *
  * Android, iOS, macOS and the desktop JVM always have the default stack in a correctly packaged
  * app. The web has it once its codec module is loaded. Where that can be false, check
  * [KitePlayer.isAvailable] first, for example to fall back to another engine.
@@ -31,7 +34,7 @@ public fun KitePlayer(config: PlayerConfig = PlayerConfig()): KitePlayer {
     if (supplied.backend != null && supplied.output != null) return KitePlayer.create(config)
     val defaults = platformKitePlayerDefaults.backendsOrNull()
         ?: throw PlaybackException(PlaybackError.ConfigurationInvalid(noDefaultStackDetail()))
-    return KitePlayer.create(
+    val player = KitePlayer.create(
         config.copy(
             backends = Backends(
                 backend = supplied.backend ?: defaults.backend,
@@ -39,6 +42,9 @@ public fun KitePlayer(config: PlayerConfig = PlayerConfig()): KitePlayer {
             ),
         ),
     )
+    // The default renderer shows the frames of the default media backend, so it comes with that.
+    if (supplied.backend == null) platformKitePlayerDefaults.installViewDefaults()
+    return player
 }
 
 /** Whether [KitePlayer] can build a player with this platform's default stack, and why not when it cannot. */

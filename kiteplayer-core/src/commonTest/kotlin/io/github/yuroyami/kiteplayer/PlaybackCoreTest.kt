@@ -1309,6 +1309,118 @@ class PlaybackCoreTest {
     }
 
     @Test
+    fun `a renderer attached after the open is asked for its own decoder`() = runTest {
+        val script = MediaScript()
+        val ledger = LeakLedger()
+        val harness = CoreHarness(scope = this, script = script, ledger = ledger, renderer = null)
+        harness.open()
+        harness.core.play()
+        harness.run(300.milliseconds)
+        assertEquals(1, harness.backend.openCalls)
+
+        val factory = coupledFactory(script, ledger)
+        val renderer = RecordingRenderer(decoderFactories = listOf(factory))
+        harness.core.attachRenderer(renderer)
+        harness.run(1500.milliseconds)
+
+        assertEquals(1, factory.createCount, "the late renderer was asked for its decoder")
+        assertEquals(2, harness.backend.openCalls, "the video path was rebuilt once, at the attach")
+        assertEquals(HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec), harness.core.stats.value.hardwareDecode)
+        assertTrue(renderer.count > 0, "the late renderer receives frames from its own decoder")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    @Test
+    fun `a paused player takes a late renderer's decoder and stays paused`() = runTest {
+        val script = MediaScript()
+        val ledger = LeakLedger()
+        val harness = CoreHarness(scope = this, script = script, ledger = ledger, renderer = null)
+        harness.open()
+        harness.run(300.milliseconds)
+
+        val factory = coupledFactory(script, ledger)
+        val renderer = RecordingRenderer(decoderFactories = listOf(factory))
+        harness.core.attachRenderer(renderer)
+        harness.run(1000.milliseconds)
+
+        assertEquals(1, factory.createCount, "the late renderer was asked for its decoder")
+        assertTrue(renderer.count > 0, "the paused player still hands the late renderer a picture")
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    @Test
+    fun `a session asks a late renderer once`() = runTest {
+        val script = MediaScript()
+        val ledger = LeakLedger()
+        val harness = CoreHarness(scope = this, script = script, ledger = ledger, renderer = null)
+        harness.open()
+        harness.core.play()
+        harness.run(300.milliseconds)
+
+        // This renderer offers a decoder that refuses the stream, so the backend keeps decoding.
+        val refusing = RecordingVideoDecoderFactory { _, _ -> null }
+        val first = RecordingRenderer(decoderFactories = listOf(refusing))
+        harness.core.attachRenderer(first)
+        harness.run(500.milliseconds)
+        assertEquals(1, refusing.createCount)
+        assertEquals(2, harness.backend.openCalls, "the first late renderer rebuilt the path once")
+
+        val accepting = coupledFactory(script, ledger)
+        val second = RecordingRenderer(decoderFactories = listOf(accepting))
+        harness.core.attachRenderer(second)
+        harness.run(500.milliseconds)
+
+        assertEquals(2, harness.backend.openCalls, "a session that asked a renderer is not rebuilt again")
+        assertEquals(0, accepting.createCount)
+        assertTrue(second.count > 0, "the second renderer still receives the backend's frames")
+        harness.close()
+    }
+
+    @Test
+    fun `a late renderer leaves the backend decoder alone when the policy says Off`() = runTest {
+        val script = MediaScript()
+        val ledger = LeakLedger()
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            ledger = ledger,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Off),
+            renderer = null,
+        )
+        harness.open()
+        harness.core.play()
+        harness.run(300.milliseconds)
+
+        val factory = coupledFactory(script, ledger)
+        harness.core.attachRenderer(RecordingRenderer(decoderFactories = listOf(factory)))
+        harness.run(500.milliseconds)
+
+        assertEquals(0, factory.createCount)
+        assertEquals(1, harness.backend.openCalls)
+        harness.close()
+    }
+
+    @Test
+    fun `a late renderer leaves a source that cannot seek alone`() = runTest {
+        val script = MediaScript(seekable = false)
+        val ledger = LeakLedger()
+        val harness = CoreHarness(scope = this, script = script, ledger = ledger, renderer = null)
+        harness.open()
+        harness.core.play()
+        harness.run(300.milliseconds)
+
+        val factory = coupledFactory(script, ledger)
+        harness.core.attachRenderer(RecordingRenderer(decoderFactories = listOf(factory)))
+        harness.run(500.milliseconds)
+
+        assertEquals(0, factory.createCount, "Auto does not use renderer decoders on a source that cannot seek")
+        assertEquals(1, harness.backend.openCalls)
+        harness.close()
+    }
+
+    @Test
     fun `a paused swap repaints one frame on the new renderer`() = runTest {
         val harness = CoreHarness(this, renderer = null)
         harness.open()

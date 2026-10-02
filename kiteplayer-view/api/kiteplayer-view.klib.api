@@ -100,6 +100,13 @@ final class io.github.yuroyami.kiteplayer.view/KitePlayerUIView : platform.UIKit
     final fun updateAccessibilityState() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.updateAccessibilityState|updateAccessibilityState(){}[0]
 }
 
+// Targets: [ios]
+final object io.github.yuroyami.kiteplayer.view/PlayerViewDefaults { // io.github.yuroyami.kiteplayer.view/PlayerViewDefaults|null[0]
+    final var rendererFactory // io.github.yuroyami.kiteplayer.view/PlayerViewDefaults.rendererFactory|{}rendererFactory[0]
+        final fun <get-rendererFactory>(): io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory? // io.github.yuroyami.kiteplayer.view/PlayerViewDefaults.rendererFactory.<get-rendererFactory>|<get-rendererFactory>(){}[0]
+        final fun <set-rendererFactory>(io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory?) // io.github.yuroyami.kiteplayer.view/PlayerViewDefaults.rendererFactory.<set-rendererFactory>|<set-rendererFactory>(io.github.yuroyami.kiteplayer.view.ApplePlayerViewRendererFactory?){}[0]
+}
+
 // Targets: [wasmJs]
 final enum class io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode : kotlin/Enum<io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode> { // io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode|null[0]
     enum entry DocumentWindow // io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode.DocumentWindow|null[0]

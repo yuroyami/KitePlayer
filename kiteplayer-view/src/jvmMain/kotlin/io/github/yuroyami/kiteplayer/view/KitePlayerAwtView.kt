@@ -20,10 +20,11 @@ import kotlin.time.Duration
  * the UI's own scene stops when that scene stops. On desktop that is the difference between a
  * heavy Compose window stuttering the picture and not.
  *
- * Install a [rendererFactory] from a rendering adapter before assigning [player]. The renderer is
- * attached as soon as both exist, before the canvas has a peer, so a renderer-coupled decoder can
- * take part in decoder selection; the canvas is then handed over and taken back as AWT creates and
- * destroys the peer. Unlike the Android view there is no separate subtitle component: a desktop
+ * A view with no [rendererFactory] of its own uses [PlayerViewDefaults.rendererFactory], which the
+ * `kiteplayer` module sets when it builds a player, so `view.player = player` is the whole setup.
+ * The renderer is attached as soon as the player and a factory exist, before the canvas has a peer,
+ * so a renderer-coupled decoder can take part in decoder selection; the canvas is then handed over
+ * and taken back as AWT creates and destroys the peer. Unlike the Android view there is no separate subtitle component: a desktop
  * renderer composites overlays into the same canvas, which is what the engine's overlay contract
  * already expects of it.
  *
@@ -47,7 +48,7 @@ public open class KitePlayerAwtView : Canvas() {
 
     internal val binding = PlayerViewBinding<KitePlayer, AwtPlayerViewRenderer>(
         createRenderer = {
-            rendererFactory?.let { factory ->
+            (rendererFactory ?: PlayerViewDefaults.rendererFactory)?.let { factory ->
                 val renderer = factory.create(
                     onVideoGeometry = { size, rotationDegrees ->
                         ledger.geometry(size.displayAspect, rotationDegrees)
@@ -94,11 +95,11 @@ public open class KitePlayerAwtView : Canvas() {
     )
 
     /**
-     * Creates the renderer attached to [player]. Null keeps this view deliberately headless.
+     * Creates the renderer attached to [player]. Null uses [PlayerViewDefaults.rendererFactory], and
+     * the view stays headless when that is null too.
      *
      * Replacing the factory closes and detaches the current renderer before creating its
-     * replacement. Install it before opening media when the renderer contributes a hardware
-     * decoder factory; adding one to an already-open session does not reselect the decoder.
+     * replacement.
      */
     public var rendererFactory: AwtPlayerViewRendererFactory? = null
         set(value) {

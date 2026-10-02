@@ -20,6 +20,16 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `KitePlayer.availability`, `KitePlayer.isAvailable` and `KitePlayer.supportsPictureInPicture`
   replace the members of the same names. `rememberKitePlayer()` in `kiteplayer-compose` builds a
   player that closes when its composition leaves.
+- A `KitePlayerView`, `KitePlayerUIView` or `KitePlayerAwtView` with no `rendererFactory` of its
+  own now uses `PlayerViewDefaults.rendererFactory`, which `KitePlayer()` sets (#384). So
+  `view.player = player` is the whole setup, and `installMobileRenderer()` or
+  `installDesktopRenderer()` is needed only for a player built with `KitePlayer.create`. A view that
+  relied on staying headless with no factory now shows the picture of a default player.
+- Media may open before the view or the Compose video exists (#384). A player that decoded without
+  a renderer moves to the renderer's own decoder when one arrives, once per item, by rebuilding the
+  video path at the current position. Before, it kept the backend path, which copies every frame,
+  for the whole item. A rebuild while paused now shows the picture at the current position also at
+  the very start, where it used to show nothing until play.
 - HLS plays through the default stack (#209). An address that ends in `.m3u8`, an HLS content
   type, or `formatHint = "hls"` marks a playlist. A master playlist plays one variant, the one with
   the highest bitrate within the new `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.

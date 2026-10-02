@@ -1,7 +1,9 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
+import io.github.yuroyami.kiteplayer.mobile.MobileApplePlayerViewRendererFactory
 import io.github.yuroyami.kiteplayer.output.AppleOutputBackend
+import io.github.yuroyami.kiteplayer.view.PlayerViewDefaults
 import platform.AVKit.AVPictureInPictureController
 
 internal actual val platformKitePlayerDefaults: KitePlayerPlatformDefaults =
@@ -19,6 +21,12 @@ private object IosKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
     override val supportsPictureInPicture: Boolean
         get() = AVPictureInPictureController.isPictureInPictureSupported()
 
+
+    override fun installViewDefaults() {
+        if (PlayerViewDefaults.rendererFactory == null) {
+            PlayerViewDefaults.rendererFactory = MobileApplePlayerViewRendererFactory
+        }
+    }
 
     override fun backendsOrNull(): Backends = Backends(
         backend = KiteFFmpegMediaBackend(),

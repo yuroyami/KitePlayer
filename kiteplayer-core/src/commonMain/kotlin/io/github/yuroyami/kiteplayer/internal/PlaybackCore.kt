@@ -2111,8 +2111,9 @@ internal class PlaybackCore(
      * What a successful renderer replacement still owes the picture. A decoder coupled to the
      * replaced renderer decodes into that renderer's dead surface, so the video path is rebuilt
      * against the new one through the ordinary track-change rebuild (same pass, position kept,
-     * play state kept). An uncoupled swap while not playing repaints once by precise seek,
-     * because a parked scheduler presents nothing on its own.
+     * play state kept). A renderer that offers decoders the running path never asked takes over
+     * through the same rebuild (#384). An uncoupled swap while not playing repaints once by
+     * precise seek, because a parked scheduler presents nothing on its own.
      */
     private fun rendererSwapFollowUp(previous: VideoRenderer?, attached: VideoRenderer) {
         val active = session ?: return
@@ -2138,9 +2139,33 @@ internal class PlaybackCore(
             queueSelection(TrackKind.Video, TrackId(stream.index), CompletableDeferred())
             return
         }
+        if (lateRendererCanDecode(active, stream, attached)) {
+            if (TrackKind.Video in pendingSelections) return
+            queueSelection(TrackKind.Video, TrackId(stream.index), CompletableDeferred())
+            return
+        }
         if (!playRequested && pendingSeek == null) {
             queueSeek(SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise), null)
         }
+    }
+
+    /**
+     * True when [attached] offers decoders that the running video path never asked, and the policy
+     * would try them. An open with no renderer, or with one that offered none, decodes on the
+     * backend, which on Android copies every frame where the renderer's MediaCodec would write
+     * straight to its surface. Only a rebuild lets a renderer that arrives later take over. A
+     * session asks once, so a later renderer, or a path swap, does not rebuild it again.
+     */
+    private fun lateRendererCanDecode(active: OpenSession, stream: PlayerStreamInfo, attached: VideoRenderer): Boolean {
+        if (active.videoDecoderOrigin != VideoDecoderOrigin.Backend || active.videoDecoderDeferred) return false
+        if (active.rendererDecodersAsked || stream.isCoverArt) return false
+        if (attached.videoDecoderFactories().isEmpty()) return false
+        val selection = if (forceBackendSoftwareForMedia) {
+            VideoDecoderSelection.BackendSoftwareOnly
+        } else {
+            VideoDecoderSelection.Configured
+        }
+        return rendererDecodes(selection, config.hardwareDecode, active.source.seekable)
     }
 
     /** A renderer attached before anything was open, kept for the session that follows. */
@@ -2838,6 +2863,7 @@ internal class PlaybackCore(
                 // What the device was opened for, which a gapless handoff compares the next item against.
                 built.deviceRequest = if (audioPlayback != null) audioDecoder?.outputFormat else null
                 built.videoDecoderDeferred = deferVideoDecoder && videoStream != null
+                built.rendererDecodersAsked = videoStream != null && selectedVideoDecoder?.rendererAsked == true
             }
         } catch (failure: Throwable) {
             // Newest-first, under NonCancellable: a cancelled open must still release everything
@@ -2858,6 +2884,8 @@ internal class PlaybackCore(
     private data class SelectedVideoDecoder(
         val decoder: VideoDecoder,
         val origin: VideoDecoderOrigin,
+        /** Whether an attached renderer's own factories were tried before this one was chosen. */
+        val rendererAsked: Boolean,
     )
 
     /**
@@ -2887,14 +2915,14 @@ internal class PlaybackCore(
         // surface, which the current item holds until the swap. buildSession refuses a preload
         // that would need one.
         val rendererEligible = pending == null && rendererDecodes(selection, policy, sourceSeekable)
-        if (rendererEligible) {
-            for (factory in pendingRenderer?.videoDecoderFactories().orEmpty()) {
-                val decoder = tryCreateVideoDecoder(factory, stream, policy, failures)
-                if (decoder != null && !passOverUnshowable(factory, decoder, failures)) {
-                    return SelectedVideoDecoder(decoder, VideoDecoderOrigin.Renderer)
-                }
-                warnAboutRefusedHardwareCandidate(factory, stream, policy, report)
+        val rendererFactories = if (rendererEligible) pendingRenderer?.videoDecoderFactories().orEmpty() else emptyList()
+        val rendererAsked = rendererFactories.isNotEmpty()
+        for (factory in rendererFactories) {
+            val decoder = tryCreateVideoDecoder(factory, stream, policy, failures)
+            if (decoder != null && !passOverUnshowable(factory, decoder, failures)) {
+                return SelectedVideoDecoder(decoder, VideoDecoderOrigin.Renderer, rendererAsked)
             }
+            warnAboutRefusedHardwareCandidate(factory, stream, policy, report)
         }
 
         for (factory in session.videoDecoders) {
@@ -2917,7 +2945,7 @@ internal class PlaybackCore(
                 failures += "${factory.name}: ignored Off and reported $reported"
                 continue
             }
-            return SelectedVideoDecoder(decoder, VideoDecoderOrigin.Backend)
+            return SelectedVideoDecoder(decoder, VideoDecoderOrigin.Backend, rendererAsked)
         }
         return null
     }
@@ -4027,7 +4055,9 @@ internal class PlaybackCore(
             }
             // A user seek that was already queued outranks the reposition. A successful decoder
             // recovery has already performed the internal precise reposition and must not queue it twice.
-            if (!recoveredAndPositioned && pendingSeek == null && at > Pts.Zero) {
+            // A paused player repositions at zero too: nothing else hands the rebuilt path a picture,
+            // so a renderer that arrived before the first play stayed black (#384).
+            if (!recoveredAndPositioned && pendingSeek == null && (at > Pts.Zero || !wasPlaying)) {
                 pendingSeek = SeekRequest(SeekTarget.Absolute(at), SeekMode.Precise)
             }
             playRequested = wasPlaying
@@ -6378,6 +6408,7 @@ internal class PlaybackCore(
         incoming.videoDecoder = selected.decoder
         incoming.videoDecoderOrigin = selected.origin
         incoming.coupledRenderer = if (selected.origin == VideoDecoderOrigin.Renderer) pendingRenderer else null
+        incoming.rendererDecodersAsked = selected.rendererAsked
         val worker = Worker(VIDEO_DECODE_WORKER)
         incoming.videoDecodeWorker = worker
         worker.release(requestedEpoch)
@@ -9331,6 +9362,13 @@ internal class PlaybackCore(
          * factory makes at the swap, once the item before it has freed the surface. Actor only.
          */
         var videoDecoderDeferred: Boolean = false
+
+        /**
+         * True when the video decoder of this session was chosen with an attached renderer's own
+         * factories in the running. A renderer that arrives later rebuilds the path only while this
+         * is false, so a session asks a renderer once (#384). Actor only.
+         */
+        var rendererDecodersAsked: Boolean = false
 
         /**
          * True while this session is the next queue item, open in the background. Its workers then

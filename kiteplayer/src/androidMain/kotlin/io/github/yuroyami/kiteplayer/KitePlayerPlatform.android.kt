@@ -2,7 +2,9 @@ package io.github.yuroyami.kiteplayer
 
 import dalvik.system.BaseDexClassLoader
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
+import io.github.yuroyami.kiteplayer.mobile.MobileAndroidPlayerViewRendererFactory
 import io.github.yuroyami.kiteplayer.output.AndroidOutputBackend
+import io.github.yuroyami.kiteplayer.view.PlayerViewDefaults
 
 internal actual val platformKitePlayerDefaults: KitePlayerPlatformDefaults =
     AndroidKitePlayerPlatformDefaults
@@ -25,6 +27,12 @@ private object AndroidKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
      */
     override val supportsPictureInPicture: Boolean
         get() = availability.isAvailable
+
+    override fun installViewDefaults() {
+        if (PlayerViewDefaults.rendererFactory == null) {
+            PlayerViewDefaults.rendererFactory = MobileAndroidPlayerViewRendererFactory
+        }
+    }
 
     override fun backendsOrNull(): Backends? = if (availability.isAvailable) {
         Backends(

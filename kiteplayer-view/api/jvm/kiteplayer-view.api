@@ -111,6 +111,12 @@ public final class io/github/yuroyami/kiteplayer/view/KitePlayerPictureInPicture
 	public static synthetic fun createOrNull$default (Lio/github/yuroyami/kiteplayer/view/KitePlayerPictureInPicture$Companion;Lio/github/yuroyami/kiteplayer/view/KitePlayerAwtView;Lio/github/yuroyami/kiteplayer/view/FloatingWindowOptions;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/view/KitePlayerPictureInPicture;
 }
 
+public final class io/github/yuroyami/kiteplayer/view/PlayerViewDefaults {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/view/PlayerViewDefaults;
+	public final fun getRendererFactory ()Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRendererFactory;
+	public final fun setRendererFactory (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRendererFactory;)V
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/view/PlayerViewRenderer : io/github/yuroyami/kiteplayer/spi/VideoRenderer {
 	public abstract fun getFailedFrames ()J
 	public abstract fun getPresentedFrames ()J

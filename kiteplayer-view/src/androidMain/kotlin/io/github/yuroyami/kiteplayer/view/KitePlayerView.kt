@@ -30,10 +30,12 @@ import kotlin.math.roundToInt
 /**
  * A reusable Android player view for layouts, programmatic UI, and Compose `AndroidView` interop.
  *
- * This artifact owns only Android view lifecycle and layout. Install a [rendererFactory] supplied by
- * a rendering adapter before assigning [player] or opening media. The renderer is attached as soon as
- * both the player and factory exist, even before the Surface does, so renderer-coupled hardware
- * decoders can participate in decoder selection. Surface creation and destruction are forwarded into
+ * This artifact owns only Android view lifecycle and layout. A view with no [rendererFactory] of its
+ * own uses [PlayerViewDefaults.rendererFactory], which the `kiteplayer` module sets when it builds a
+ * player, so `view.player = player` is the whole setup. The renderer is attached as soon as both the
+ * player and a factory exist, even before the Surface does, so renderer-coupled hardware decoders
+ * can take part in decoder selection. Media may open before or after that: a player that decoded
+ * without a renderer moves to the renderer's own decoder when the renderer arrives. Surface creation and destruction are forwarded into
  * that same renderer generation; temporary backgrounding does not reconstruct the player or decoder.
  *
  * Subtitles use a transparent view above the Surface, so cue changes can redraw while video is paused.
@@ -71,7 +73,7 @@ public open class KitePlayerView @JvmOverloads constructor(
 
     private val binding = PlayerViewBinding<KitePlayer, AndroidPlayerViewRenderer>(
         createRenderer = {
-            rendererFactory?.let { factory ->
+            (rendererFactory ?: PlayerViewDefaults.rendererFactory)?.let { factory ->
                 val generation = ++rendererGeneration
                 val renderer = factory.create(
                     onOverlay = { overlay ->
@@ -136,11 +138,11 @@ public open class KitePlayerView @JvmOverloads constructor(
     )
 
     /**
-     * Creates the renderer attached to [player]. Null keeps this view deliberately headless.
+     * Creates the renderer attached to [player]. Null uses [PlayerViewDefaults.rendererFactory], and
+     * the view stays headless when that is null too.
      *
      * Replacing the factory closes and detaches the current renderer before creating and attaching
-     * its replacement. Install it before opening media when the renderer contributes a hardware
-     * decoder factory; adding one to an already-open session does not reselect the decoder.
+     * its replacement.
      */
     public var rendererFactory: AndroidPlayerViewRendererFactory? = null
         set(value) {

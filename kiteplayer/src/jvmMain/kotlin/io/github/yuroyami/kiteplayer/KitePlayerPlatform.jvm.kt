@@ -1,7 +1,9 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
+import io.github.yuroyami.kiteplayer.mobile.DesktopAwtPlayerViewRendererFactory
 import io.github.yuroyami.kiteplayer.output.DesktopOutputBackend
+import io.github.yuroyami.kiteplayer.view.PlayerViewDefaults
 import io.github.yuroyami.kiteffmpeg.FFmpeg
 import java.awt.GraphicsEnvironment
 import java.awt.Toolkit
@@ -44,6 +46,12 @@ private object DesktopKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
     override val supportsPictureInPicture: Boolean
         get() = !GraphicsEnvironment.isHeadless() &&
             runCatching { Toolkit.getDefaultToolkit().isAlwaysOnTopSupported }.getOrDefault(false)
+
+    override fun installViewDefaults() {
+        if (PlayerViewDefaults.rendererFactory == null) {
+            PlayerViewDefaults.rendererFactory = DesktopAwtPlayerViewRendererFactory
+        }
+    }
 
     override fun backendsOrNull(): Backends? = if (availability.isAvailable) {
         Backends(backend = KiteFFmpegMediaBackend(), output = DesktopOutputBackend)

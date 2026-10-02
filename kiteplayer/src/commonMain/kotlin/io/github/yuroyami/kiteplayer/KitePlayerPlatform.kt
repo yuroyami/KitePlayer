@@ -85,7 +85,9 @@ public object KitePlayerPlatform {
     )
     public fun createOrNull(config: PlayerConfig = PlayerConfig()): KitePlayer? {
         val backends = platformKitePlayerDefaults.backendsOrNull() ?: return null
-        return KitePlayer.create(config.copy(backends = backends))
+        return KitePlayer.create(config.copy(backends = backends)).also {
+            platformKitePlayerDefaults.installViewDefaults()
+        }
     }
 
     internal fun backendsOrNull(): Backends? = platformKitePlayerDefaults.backendsOrNull()
@@ -95,6 +97,12 @@ internal interface KitePlayerPlatformDefaults {
     val availability: KitePlayerAvailability
     val supportsPictureInPicture: Boolean
     fun backendsOrNull(): Backends?
+
+    /**
+     * Gives the platform's player views the renderer that shows this stack's frames, unless an app
+     * set one already, so a view needs only its player (#384). Nothing to do where there is no view.
+     */
+    fun installViewDefaults() = Unit
 }
 
 internal class UnavailableKitePlayerPlatformDefaults(

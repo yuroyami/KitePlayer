@@ -61,6 +61,12 @@ public final class io/github/yuroyami/kiteplayer/view/PictureInPictureEntryKt {
 	public static synthetic fun keepPictureInPictureParamsCurrent$default (Lio/github/yuroyami/kiteplayer/view/KitePlayerView;Landroid/app/Activity;ZILjava/lang/Object;)Ljava/lang/AutoCloseable;
 }
 
+public final class io/github/yuroyami/kiteplayer/view/PlayerViewDefaults {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/view/PlayerViewDefaults;
+	public final fun getRendererFactory ()Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRendererFactory;
+	public final fun setRendererFactory (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRendererFactory;)V
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/view/PlayerViewRenderer : io/github/yuroyami/kiteplayer/spi/VideoRenderer {
 	public abstract fun getFailedFrames ()J
 	public abstract fun getPresentedFrames ()J

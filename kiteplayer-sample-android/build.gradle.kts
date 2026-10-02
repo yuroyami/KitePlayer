@@ -99,6 +99,9 @@ android {
 dependencies {
     // The complete entry point supplies the runtime, native views and both Compose paths.
     implementation(project(":kiteplayer-compose"))
+    // Two screens draw with each video path directly, to compare them.
+    implementation(project(":kiteplayer-compose-interop"))
+    implementation(project(":kiteplayer-compose-video"))
     implementation(project(":kiteplayer-sample-shared"))
     implementation(compose.runtime)
     implementation(compose.ui)

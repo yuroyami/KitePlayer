@@ -13,7 +13,6 @@
 #   :kiteplayer-core
 #   :kiteplayer-ffmpeg
 #   :kiteplayer-mobile
-#   :kiteplayer-phone
 #   :kiteplayer-sample
 #   :kiteplayer-sample-android
 #   :kiteplayer-subtitles

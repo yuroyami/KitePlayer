@@ -9,8 +9,8 @@ plugins {
 
 /*
  * Complete Compose entry point: the standard runtime and its network transport, plus both video
- * presentation paths through compose-ui. The legacy phone API remains re-exported for existing
- * consumers, while UI-only applications can choose compose-ui without this runtime.
+ * presentation paths behind compose-ui's KitePlayerVideo, and rememberKitePlayer. UI-only
+ * applications can choose compose-ui without this runtime.
  */
 kotlin {
     explicitApi()
@@ -33,8 +33,6 @@ kotlin {
         commonMain.dependencies {
             api(project(":kiteplayer"))
             api(project(":kiteplayer-compose-ui"))
-            // Preserve the old phoneBackends and view names without making UI modules own them.
-            api(project(":kiteplayer-phone"))
             // rememberKitePlayer is a composable.
             implementation(compose.runtime)
         }

@@ -25,6 +25,8 @@ kotlin {
         jvmMain.dependencies {
             // One dependency supplies the standard player and both presentation paths.
             implementation(project(":kiteplayer-compose"))
+            // The measurement screens draw with KiteVideo directly.
+            implementation(project(":kiteplayer-compose-video"))
             implementation(project(":kiteplayer-sample-shared"))
             implementation(compose.desktop.currentOs)
             implementation(compose.foundation)

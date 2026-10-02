@@ -252,10 +252,9 @@ kiteplayer-compose
 │   ├── kiteplayer-network           HTTP and HTTPS, not on Linux and Windows native
 │   ├── kiteplayer-libass            ASS and SSA typesetting
 │   └── kiteplayer-io                input doors for files and streams
-├── kiteplayer-compose-ui
-│   ├── kiteplayer-compose-interop   Compose hosting the native view
-│   └── kiteplayer-compose-video     Compose drawing the frames itself
-└── kiteplayer-phone                 deprecated
+└── kiteplayer-compose-ui           KitePlayerVideo
+    ├── kiteplayer-compose-interop   Compose hosting the native view, at runtime only
+    └── kiteplayer-compose-video     Compose drawing the frames itself, at runtime only
 
 kiteplayer-audioviz                  optional audio visualiser over Kite3D
 └── kiteplayer-core
@@ -653,7 +652,7 @@ native targets.
 | `kiteplayer-network` | yes | yes | yes | yes | no | no | yes | yes | no |
 | `kiteplayer-view` | yes | yes | yes | yes | no | no | yes | no | no |
 | `kiteplayer-compose-interop` | yes | yes | no | yes | no | no | yes | yes | no |
-| `kiteplayer-compose`, `-compose-ui`, `-compose-video`, `-view-bindings`, `-audioviz`, `-phone` | yes | yes | no | yes | no | no | no | no | no |
+| `kiteplayer-compose`, `-compose-ui`, `-compose-video`, `-view-bindings`, `-audioviz` | yes | yes | no | yes | no | no | no | no | no |
 
 `kiteplayer-compose-interop`'s js and wasmJs variants draw an empty surface, so that shared Compose
 code compiles for the web; they show no video. Every CI run of the format matrix writes a
@@ -683,8 +682,8 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | `kiteplayer` | The default playback stack for native views: engine, FFmpeg decoders, audio output, view adapters, HTTP and HTTPS, libass, input doors. |
 | `kiteplayer-audioviz` | Optional. An audio visualiser for files with no picture: presets, palettes, and a director that changes drawings with the music. |
 | `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo` and both video paths. No player factory, no network. |
-| `kiteplayer-compose-interop` | Compose hosting the platform's native video view. |
-| `kiteplayer-compose-video` | Video drawn by Compose itself. |
+| `kiteplayer-compose-interop` | Compose hosting the platform's native video view: `KitePlayerSurface`. `KitePlayerVideo` uses it at runtime; add it yourself only to call `KitePlayerSurface` directly. |
+| `kiteplayer-compose-video` | Video drawn by Compose itself: `KiteVideo`. `KitePlayerVideo` uses it at runtime; add it yourself only to draw with `KiteVideo` directly, for example in a second window. |
 | `kiteplayer-view` | The native views: `KitePlayerView` on Android, `KitePlayerUIView` on iOS, `KitePlayerAwtView` on the desktop JVM. |
 | `kiteplayer-view-bindings` | The FFmpeg adapters those views need. |
 | `kiteplayer-core` | The engine and its service interfaces. Depends on kotlinx.coroutines and atomicfu, and on `kiteplayer-rt` on native targets. |
@@ -695,7 +694,6 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | `kiteplayer-output` | Platform audio output, render support and the subtitle rasterisers. |
 | `kiteplayer-subtitles` | SubRip, WebVTT and ASS dialogue parsers, in Kotlin. |
 | `kiteplayer-rt` | The real-time audio ring, in C. Comes with `kiteplayer-core` on native targets; never add it yourself. |
-| `kiteplayer-phone` | Deprecated. `kiteplayer` plus `kiteplayer-view`. |
 
 To build your own stack, start from `kiteplayer-core` and supply backends through
 `KitePlayer.create(PlayerConfig(backends = Backends(backend, output)))`. The

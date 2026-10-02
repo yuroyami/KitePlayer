@@ -41,6 +41,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   with it (#385).
 - `KitePlayer.requestSeek` replaces `seekLater`, which is deprecated (#386). It asks for a seek and
   returns at once, as `seekLater` did. The `KitePlayer` documentation now states which calls wait.
+- `kiteplayer-compose-ui`, and so `kiteplayer-compose`, no longer puts `KitePlayerSurface`,
+  `KiteVideo`, `rememberKiteVideoState` and `KiteVideoState` on an app's compile classpath (#387).
+  `KitePlayerVideo` still uses both paths at runtime. An app that calls one of them directly adds
+  `kiteplayer-compose-interop` or `kiteplayer-compose-video` to its dependencies.
+- The deprecated `kiteplayer-phone` module is no longer built or published (#387). Its released
+  versions stay on Maven Central. Depend on `kiteplayer` or `kiteplayer-compose` instead.
 - HLS plays through the default stack (#209). An address that ends in `.m3u8`, an HLS content
   type, or `formatHint = "hls"` marks a playlist. A master playlist plays one variant, the one with
   the highest bitrate within the new `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.

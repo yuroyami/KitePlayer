@@ -9,8 +9,8 @@ found.
 | Module | Contract |
 |---|---|
 | `kiteplayer` | Default playback assembly: core, FFmpeg, output, native view bindings and HTTP/HTTPS transport. No Compose dependency. |
-| `kiteplayer-compose` | Complete playback plus both Compose video paths and the runtime path switcher. One dependency for a Compose app, including apps also using XML. |
-| `kiteplayer-compose-ui` | Both Compose presentation paths accepting an existing player. Does not depend on the playback assembly or automatically add networking. |
+| `kiteplayer-compose` | Complete playback, `KitePlayerVideo` with both Compose video paths and the runtime path switcher, and `rememberKitePlayer`. One dependency for a Compose app, including apps also using XML. |
+| `kiteplayer-compose-ui` | `KitePlayerVideo`, which accepts an existing player. Does not depend on the playback assembly or automatically add networking. It depends on the two path modules with `implementation`, so their composables are not on a consumer's compile classpath; an app that calls `KitePlayerSurface` or `KiteVideo` directly depends on that module itself. |
 | `kiteplayer-core` | Engine and service contracts. Does not depend on FFmpeg, Ktor or Compose. |
 
 The individual backend, network, view and Compose renderer modules remain available for custom
@@ -40,8 +40,9 @@ Otherwise it uses the picture in picture of a video element.
 On the desktop JVM, `kiteplayer` reaches `kiteplayer-view` through `kiteplayer-view-bindings`.
 There, `KitePlayerPictureInPicture` opens an always-on-top window for a `KitePlayerAwtView`.
 Compose Desktop has no hook for it, because `KitePlayerSurface` does not expose the view that it
-hosts. A Compose app that draws video with `KiteVideo` can open a second
-`Window(alwaysOnTop = true, undecorated = true)` that draws the same `KiteVideoState`.
+hosts. A Compose app that draws video with `KiteVideo`, from `kiteplayer-compose-video` which it
+adds itself, can open a second `Window(alwaysOnTop = true, undecorated = true)` that draws the same
+`KiteVideoState`.
 
 ## Automatic network transport
 
@@ -87,8 +88,8 @@ js variant resolves and installs nothing.
 
 The existing broad `kiteplayer-compose` coordinate becomes the recommended complete Compose
 entry point. A `kiteplayer-compose-ui` consumer that also needs default construction switches to
-`kiteplayer-compose`, or adds `kiteplayer` explicitly. The mobile and phone compatibility entry
-points continue to resolve without duplicating declarations from the moved assembly.
+`kiteplayer-compose`, or adds `kiteplayer` explicitly. The deprecated `kiteplayer-phone` module is
+no longer built; its published versions stay on Maven Central.
 
 ## Verification
 

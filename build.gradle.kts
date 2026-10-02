@@ -137,7 +137,6 @@ val moduleDescriptions: Map<String, String> = mapOf(
     ":kiteplayer-subtitles" to "SubRip, WebVTT and ASS dialogue parsers for KitePlayer, in Kotlin.",
     ":kiteplayer-rt" to "KitePlayer's real-time audio ring, in C. It comes with kiteplayer-core on native targets; " +
         "never add it yourself.",
-    ":kiteplayer-phone" to "Deprecated: kiteplayer plus kiteplayer-view. Depend on kiteplayer or kiteplayer-compose instead.",
 )
 
 /**
@@ -267,7 +266,6 @@ dependencies {
     dokka(project(":kiteplayer-compose-video"))
     dokka(project(":kiteplayer-compose-ui"))
     dokka(project(":kiteplayer-network"))
-    dokka(project(":kiteplayer-phone"))
     dokka(project(":kiteplayer-compose"))
     dokka(project(":kiteplayer-audioviz"))
     dokka(project(":kiteplayer-libass"))

@@ -32,10 +32,6 @@
 #     owner-gated, tracked in the hardware verification plan. The android-emulator job runs the
 #     device test sets on an x86_64 emulator, except the classes that need clips on the device;
 #     that job names them.
-#   - `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone`, which have test
-#     TASKS and no test SOURCES. They were named here on the first run and came back NO-SOURCE.
-#     Naming a task that cannot run is how a job looks broader than it is, so they are gone from
-#     the lists and the gap is an issue instead.
 #   - A PINNED fixture generator. The clips are made by whatever ffmpeg Homebrew ships that week,
 #     which is 8.1.2 today and 8.0 on the proving Mac. That gap is tracked as an issue.
 #   - `:kiteplayer-output`'s CoreAudio ANCHOR assertion, on macOS too. See the macos-host job: this
@@ -211,11 +207,8 @@ jobs:
       # Every module that HAS jvm tests. The four that need the clips (ffmpeg, kiteplayer,
       # compose-video, audioviz) are here rather than on Linux for the generator reason above.
       #
-      # `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone` were in this
-      # list for the first run and came back NO-SOURCE: they have a jvmTest TASK and no test
-      # SOURCES, so naming them made the job look broader than it is. Removed. That those three
-      # published modules have zero tests is a real gap and it belongs in an issue, not in a
-      # green tick here.
+      # A module with a jvmTest task and no test sources reports NO-SOURCE, which makes the job
+      # look broader than it is, so only modules with tests are named.
       - name: JVM tests, every module that has them
         run: |
           ./gradlew --stacktrace \
@@ -230,6 +223,8 @@ jobs:
             :kiteplayer:jvmTest \
             :kiteplayer-compose-video:jvmTest \
             :kiteplayer-compose-ui:jvmTest \
+            :kiteplayer-compose-interop:jvmTest \
+            :kiteplayer-compose:jvmTest \
             :kiteplayer-audioviz:jvmTest \
             :kiteplayer-sample-shared:jvmTest
 
@@ -550,7 +545,6 @@ jobs:
             :kiteplayer-view:testAndroidHostTest \
             :kiteplayer-network:testAndroidHostTest \
             :kiteplayer-audioviz:testAndroidHostTest \
-            :kiteplayer-phone:testAndroidHostTest \
             :kiteplayer-sample-shared:testAndroidHostTest \
             :kiteplayer-libass:testAndroidHostTest
 

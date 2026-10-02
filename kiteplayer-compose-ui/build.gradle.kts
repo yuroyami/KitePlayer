@@ -34,8 +34,14 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            api(project(":kiteplayer-compose-interop"))
-            api(project(":kiteplayer-compose-video"))
+            // What KitePlayerVideo's own signature names. The two paths it switches between are an
+            // implementation detail, so an app sees one video composable (#387). An app that draws
+            // with KitePlayerSurface or KiteVideo directly adds that module itself.
+            api(project(":kiteplayer-core"))
+            api(compose.runtime)
+            api(compose.ui)
+            implementation(project(":kiteplayer-compose-interop"))
+            implementation(project(":kiteplayer-compose-video"))
             // The screen reader wording, shared with the platform views.
             implementation(project(":kiteplayer-view"))
         }

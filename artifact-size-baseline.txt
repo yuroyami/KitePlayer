@@ -51,9 +51,6 @@ kiteplayer-compose-video iosArm64 93282
 kiteplayer-compose-ui jvm 24482
 kiteplayer-compose-ui android 28819
 kiteplayer-compose-ui iosArm64 30507
-kiteplayer-phone jvm 1895
-kiteplayer-phone android 2976
-kiteplayer-phone iosArm64 9904
 kiteplayer-compose jvm 1773
 kiteplayer-compose android 1626
 kiteplayer-compose iosArm64 5716

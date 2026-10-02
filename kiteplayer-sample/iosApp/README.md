@@ -14,8 +14,6 @@ into the bundle, as `sample-song` and then `sample-song-2` up to `sample-song-9`
 UIKit host instead, which presents through the `KitePlayerUIView` owned by `kiteplayer-view` with
 no Compose involved.
 `Info.plist` sets `CADisableMinimumFrameDurationOnPhone`, which Compose's view controller needs.
-`kiteplayer-phone` is only the deprecated 0.0.2 source-migration umbrella and is not part of this
-sample.
 
 Nothing here is an installation or distribution path. The app itself is not published. There is no
 CocoaPods or downloaded framework, and the framework is linked statically and is not embedded. A

@@ -1318,6 +1318,32 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/motion/Gestures {
 	public final fun update (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState;)V
 }
 
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/motion/Impulses {
+	public static final field $stable I
+	public static final field BODY I
+	public static final field Companion Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Impulses$Companion;
+	public static final field HIGH I
+	public static final field LOW I
+	public static final field MOST_AGE F
+	public fun <init> ()V
+	public fun <init> (I)V
+	public synthetic fun <init> (IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun add (IFFFF)V
+	public final fun advance (F)V
+	public final fun ageOf (I)F
+	public final fun bindTo (Lio/github/yuroyami/kiteplayer/audioviz/viz/shader/ShaderProgram;)V
+	public final fun getCount ()I
+	public final fun kindOf (I)I
+	public final fun reset ()V
+	public final fun seedOf (I)F
+	public final fun strengthOf (I)F
+	public final fun xOf (I)F
+	public final fun yOf (I)F
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/motion/Impulses$Companion {
+}
+
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/motion/MusicClock {
 	public static final field $stable I
 	public fun <init> ()V

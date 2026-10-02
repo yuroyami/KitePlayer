@@ -94,7 +94,8 @@ half4 main(float2 position) {
         + uBpm + uBeatPhase + uBarPhase + uPhrasePhase + uBeatIn
         + uCentroid + uFlatness + uWidth + uKeyHue + uSeed
         + uResolution.x + band(0.5) + scopeAt(0.5) + palette(0.5).r
-        + history(0.5, 0.5) + scopeHistory(0.5, 0.5) + view(float2(1.0)).y;
+        + history(0.5, 0.5) + scopeHistory(0.5, 0.5)
+        + impulseA(0).x + impulseB(0).y + uImpulseCount + view(float2(1.0)).y;
     return half4(half3(sum), 1.0);
 }
 """

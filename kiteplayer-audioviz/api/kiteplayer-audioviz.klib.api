@@ -522,6 +522,35 @@ final class io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures { // io.g
     final fun update(io.github.yuroyami.kiteplayer.audioviz.viz/VizRenderState) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.update|update(io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses { // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses|null[0]
+    constructor <init>(kotlin/Int = ...) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.<init>|<init>(kotlin.Int){}[0]
+
+    final var count // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.count|{}count[0]
+        final fun <get-count>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.count.<get-count>|<get-count>(){}[0]
+
+    final fun add(kotlin/Int, kotlin/Float, kotlin/Float, kotlin/Float, kotlin/Float) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.add|add(kotlin.Int;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float){}[0]
+    final fun advance(kotlin/Float) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.advance|advance(kotlin.Float){}[0]
+    final fun ageOf(kotlin/Int): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.ageOf|ageOf(kotlin.Int){}[0]
+    final fun bindTo(io.github.yuroyami.kiteplayer.audioviz.viz.shader/ShaderProgram) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.bindTo|bindTo(io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderProgram){}[0]
+    final fun kindOf(kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.kindOf|kindOf(kotlin.Int){}[0]
+    final fun reset() // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.reset|reset(){}[0]
+    final fun seedOf(kotlin/Int): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.seedOf|seedOf(kotlin.Int){}[0]
+    final fun strengthOf(kotlin/Int): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.strengthOf|strengthOf(kotlin.Int){}[0]
+    final fun xOf(kotlin/Int): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.xOf|xOf(kotlin.Int){}[0]
+    final fun yOf(kotlin/Int): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.yOf|yOf(kotlin.Int){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.Companion|null[0]
+        final const val BODY // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.Companion.BODY|{}BODY[0]
+            final fun <get-BODY>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.Companion.BODY.<get-BODY>|<get-BODY>(){}[0]
+        final const val HIGH // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.Companion.HIGH|{}HIGH[0]
+            final fun <get-HIGH>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.Companion.HIGH.<get-HIGH>|<get-HIGH>(){}[0]
+        final const val LOW // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.Companion.LOW|{}LOW[0]
+            final fun <get-LOW>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.Companion.LOW.<get-LOW>|<get-LOW>(){}[0]
+        final const val MOST_AGE // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.Companion.MOST_AGE|{}MOST_AGE[0]
+            final fun <get-MOST_AGE>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Impulses.Companion.MOST_AGE.<get-MOST_AGE>|<get-MOST_AGE>(){}[0]
+    }
+}
+
 final class io.github.yuroyami.kiteplayer.audioviz.viz.motion/MusicClock { // io.github.yuroyami.kiteplayer.audioviz.viz.motion/MusicClock|null[0]
     constructor <init>(kotlin/Float = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/MusicClock.<init>|<init>(kotlin.Float;kotlin.Float){}[0]
 
@@ -1844,6 +1873,7 @@ final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_k
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Impulses$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Impulses$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Impulses$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_MusicClock$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_MusicClock$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_MusicClock$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Noise1$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Noise1$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_Noise1$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_NumberGene$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_NumberGene$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_motion_NumberGene$stableprop[0]
@@ -1937,6 +1967,7 @@ final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_k
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gene$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Genes$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Gestures$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Impulses$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Impulses$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Impulses$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_MusicClock$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_MusicClock$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_MusicClock$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Noise1$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_Noise1$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_Noise1$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_NumberGene$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/io_github_yuroyami_kiteplayer_audioviz_viz_motion_NumberGene$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_motion_NumberGene$stableprop_getter(){}[0]

@@ -97,6 +97,7 @@ internal abstract class ShaderPreset(
         }
         inputs.update(state)
         inputs.publish(program, state, size.width, size.height)
+        kit.impulses.bindTo(program)
         program.uniform("uCam", camera.panX, camera.panY, camera.zoom, camera.angle)
         program.uniform("uWalk", genes.walk)
         shaderSize(size.width, size.height)

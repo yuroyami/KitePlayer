@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.MonotonicClock
+import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioRenderCallback
 import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
@@ -18,6 +19,7 @@ import org.junit.Rule
 import org.junit.rules.Timeout
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.Test
@@ -205,6 +207,59 @@ class DesktopAudioSinkTest {
     )
 
     private val driver: FakeSourceDataLine get() = synchronized(drivers) { drivers.first() }
+
+    /** A factory bound to one mixer, whose presence the test sets. Its lines block in write. */
+    private inner class BoundFactory(private val present: AtomicBoolean) : SourceDataLineDriverFactory {
+        override fun create(accepted: AudioFormat): SourceDataLineDriver =
+            FakeSourceDataLine(accepted).also { line ->
+                line.blockWrites = true
+                synchronized(drivers) { drivers += line }
+            }
+
+        override val boundDevice: String get() = "USB Audio"
+
+        override fun isBoundDevicePresent(): Boolean = present.get()
+    }
+
+    private fun watchThreadAlive(): Boolean =
+        Thread.getAllStackTraces().keys.any { it.name == "kiteplayer-output-device-watch" && it.isAlive }
+
+    // ── the bound mixer's watch ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a bound sink whose mixer goes away fails typed while its write blocks`() = runBlocking {
+        val present = AtomicBoolean(true)
+        val s = DesktopAudioSink(BoundFactory(present), FixedClock(), watchPollMillis = 20)
+        s.open(stereo48k, FullBlockCallback())
+        s.start()
+        assertTrue(driver.writeEntered.await(5, TimeUnit.SECONDS), "the writer never reached the line")
+        present.set(false)
+        val failed = withTimeout(5_000) { s.events.first { it is AudioSinkEvent.Failed } }
+        assertEquals(
+            PlaybackError.AudioDeviceUnavailable("USB Audio", "the output mixer is no longer listed"),
+            (failed as AudioSinkEvent.Failed).error,
+        )
+        // A collector that arrives after the failure still learns of it.
+        assertTrue(withTimeout(1_000) { s.events.first() } is AudioSinkEvent.Failed)
+        s.close()
+        assertTrue(driver.lineClosed, "close still releases the line after the failure")
+        assertFalse(watchThreadAlive(), "the watch ends with the sink")
+    }
+
+    @Test
+    fun `a bound sink whose mixer stays fails nothing and a default sink starts no watch`() = runBlocking {
+        val bound = DesktopAudioSink(BoundFactory(AtomicBoolean(true)), FixedClock(), watchPollMillis = 20)
+        bound.open(stereo48k, FullBlockCallback())
+        assertTrue(watchThreadAlive(), "a bound sink watches its mixer")
+        val event = withTimeoutOrNull(300) { bound.events.first { it is AudioSinkEvent.Failed } }
+        assertEquals(null, event, "a listed mixer must not fail the sink")
+        bound.close()
+        assertFalse(watchThreadAlive(), "close ends the watch")
+        val unbound = sink()
+        unbound.open(stereo48k, FullBlockCallback())
+        assertFalse(watchThreadAlive(), "a sink on the system default has no mixer to watch")
+        unbound.close()
+    }
 
     // ── open ────────────────────────────────────────────────────────────────────────────────
 

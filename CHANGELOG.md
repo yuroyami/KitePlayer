@@ -62,6 +62,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the turned shape. Before, `SampleBufferVideoRenderer` showed every picture as it is stored, so a
   portrait phone recording lay on its side in the small window. A turned or mirrored picture now
   takes one GPU pass for each frame, as text on screen already did (#380).
+- On the desktop JVM, a player bound to one output mixer with `withAudioOutputDevice(id)` fails
+  with `PlaybackError.AudioDeviceUnavailable` when that mixer disappears during playback, as on
+  macOS. Before, it stayed Playing with no sound. The sink checks once a second that the mixer is
+  still listed, so the failure comes within about a second. A player on the system default is
+  unchanged (#308).
 
 ## [0.2.0] - 2026-09-29
 

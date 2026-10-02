@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.MonotonicClock
+import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioRenderCallback
 import io.github.yuroyami.kiteplayer.spi.AudioSink
@@ -14,6 +15,8 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.onSubscription
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToInt
 
 /**
@@ -33,6 +36,11 @@ import kotlin.math.roundToInt
  * The one thing it does do is the packing the SPI explicitly allows, F32 to 16-bit signed
  * little-endian, because the JDK's own mixers refuse float lines (see [WIRE_BYTES_PER_SAMPLE]).
  *
+ * A sink bound to one output mixer checks about once a second that the mixer is still listed,
+ * from open to close. When it is gone, the sink sends [AudioSinkEvent.Failed] with
+ * [PlaybackError.AudioDeviceUnavailable], because a line on a vanished mixer may block in `write`
+ * and report nothing. A sink on the system default checks nothing.
+ *
  * The internal constructor takes the driver factory and the clock so the host suite drives every
  * lifecycle and arithmetic arm with a fake; the public constructor hard-wires
  * [DesktopMonotonicClock], so production cannot pair the deadlines with another time base.
@@ -40,6 +48,7 @@ import kotlin.math.roundToInt
 public class DesktopAudioSink internal constructor(
     private val driverFactory: SourceDataLineDriverFactory,
     private val clock: MonotonicClock,
+    private val watchPollMillis: Long = DEVICE_WATCH_MILLIS,
 ) : AudioSink {
 
     public constructor() : this(
@@ -100,7 +109,17 @@ public class DesktopAudioSink internal constructor(
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
-    override val events: Flow<AudioSinkEvent> get() = eventFlow
+    /** Why this sink cannot play again, or null. Kept as well as sent, so a late collector cannot miss it. */
+    private val failedWith = AtomicReference<PlaybackError?>(null)
+
+    // Subscribed before the kept failure is read, so every collector sees a failure at least once.
+    override val events: Flow<AudioSinkEvent> = eventFlow.onSubscription {
+        failedWith.get()?.let { emit(AudioSinkEvent.Failed(it)) }
+    }
+
+    /* The bound mixer's watch, from open to close. Null for a sink on the system default. */
+    private var watch: Thread? = null
+    @Volatile private var watching = false
 
     override val deviceBufferFrames: Int
         get() {
@@ -177,6 +196,7 @@ public class DesktopAudioSink internal constructor(
             clearHeldBlock()
             submittedFrames = 0L
             rebasePosition(opened)
+            startWatchLocked()
             return format
         }
     }
@@ -310,6 +330,7 @@ public class DesktopAudioSink internal constructor(
     }
 
     override fun close() {
+        stopWatch()
         val d = synchronized(lifecycle) {
             if (closed) return
             closed = true
@@ -471,6 +492,45 @@ public class DesktopAudioSink internal constructor(
         }
     }
 
+    /* ── The bound mixer's watch ────────────────────────────────────────────────────────────── */
+
+    private fun startWatchLocked() {
+        val device = driverFactory.boundDevice ?: return
+        watching = true
+        watch = Thread({ watchLoop(device) }, "kiteplayer-output-device-watch").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    /** Fails the sink once when [device] is no longer listed, then ends. Only [close] ends it sooner. */
+    private fun watchLoop(device: String) {
+        while (watching) {
+            try {
+                Thread.sleep(watchPollMillis)
+            } catch (_: InterruptedException) {
+                return
+            }
+            if (!watching) return
+            if (!driverFactory.isBoundDevicePresent()) {
+                val error = PlaybackError.AudioDeviceUnavailable(device, "the output mixer is no longer listed")
+                failedWith.set(error)
+                eventFlow.tryEmit(AudioSinkEvent.Failed(error))
+                return
+            }
+        }
+    }
+
+    /** Ends the watch and joins it, outside [lifecycle] like every join here. */
+    private fun stopWatch() {
+        val thread = synchronized(lifecycle) {
+            watching = false
+            watch.also { watch = null }
+        }
+        thread?.interrupt()
+        thread?.join()
+    }
+
     /* ── Deadline and position arithmetic ───────────────────────────────────────────────────── */
 
     /**
@@ -509,6 +569,9 @@ public class DesktopAudioSink internal constructor(
 
         /** How often a drain checks that the writer ended. */
         private const val WRITER_EXIT_POLL_MILLIS = 5L
+
+        /** How often a bound sink checks that its mixer is still listed. */
+        private const val DEVICE_WATCH_MILLIS = 1_000L
     }
 
     /** The preallocated [AudioSinkBuffer] over the block array. */

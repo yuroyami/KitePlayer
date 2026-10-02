@@ -78,6 +78,15 @@ internal fun interface SourceDataLineDriverFactory {
      * here lists. A factory that can genuinely answer overrides this.
      */
     fun supports(format: AudioFormat): Boolean = format.channels <= 2
+
+    /** The output mixer every line of this factory comes from, or null for the system default. */
+    val boundDevice: String? get() = null
+
+    /**
+     * Whether [boundDevice] is still listed. The sink asks about once a second while it is open,
+     * because a line on a mixer that went away may block in `write` and never report a thing.
+     */
+    fun isBoundDevicePresent(): Boolean = true
 }
 
 /**
@@ -127,6 +136,13 @@ internal object PlatformSourceDataLineDriverFactory : SourceDataLineDriverFactor
  * up for every line, so a device that went away after it was listed fails typed when a line opens.
  */
 internal class MixerSourceDataLineDriverFactory(private val name: String) : SourceDataLineDriverFactory {
+    override val boundDevice: String get() = name
+
+    // Each listing builds new mixer providers, and the JDK's direct audio provider rebuilds its
+    // device list when the device count changes, so an unplugged mixer drops out of it. A listing
+    // that throws keeps the device, because a false loss would stop a working player.
+    override fun isBoundDevicePresent(): Boolean = runCatching { outputMixerNamed(name) != null }.getOrDefault(true)
+
     override fun create(accepted: AudioFormat): SourceDataLineDriver {
         val mixer = outputMixerNamed(name) ?: throw PlaybackException(
             PlaybackError.AudioDeviceUnavailable(name, "no output mixer has this name now"),

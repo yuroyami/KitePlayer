@@ -33,6 +33,16 @@ internal class ShaderData {
     private val palette = PixelImage(PALETTE_STEPS, 1)
     private val history = PixelImage(ShaderLibrary.BANDS, ShaderLibrary.HISTORY)
     private var historyRow = 0
+    private val scopeHistory = PixelImage(ShaderLibrary.SCOPE, ShaderLibrary.SCOPE_HISTORY)
+
+    /** The row the next waveform goes into. */
+    internal var scopeHistoryRow = 0
+        private set
+
+    /** How many waveform history rows were written since the last clear, for tests. */
+    internal var scopeHistoryRowsWritten = 0L
+        private set
+    private var scopeHistoryFresh = true
 
     /** How many history rows were written since the last clear, for tests. */
     internal var historyRowsWritten = 0L
@@ -86,10 +96,41 @@ internal class ShaderData {
         if (rows > 0) history.upload()
     }
 
+    /** Writes the filtered waveform as the newest [rows] rows of the waveform history, and uploads once. */
+    fun writeScopeHistory(values: FloatArray, gain: Float = 1f, rows: Int = 1) {
+        if (rows <= 0) return
+        scopeSampler.resample(values, scopeSamples)
+        repeat(rows) {
+            val row = scopeHistoryRow * ShaderLibrary.SCOPE
+            for (pixel in 0 until ShaderLibrary.SCOPE) {
+                scopeHistory.pixels[row + pixel] = red(scopeSamples[pixel] * gain * 0.5f + 0.5f)
+            }
+            // The first waveform fills every row, as the spectrum history does, so the past starts as the present.
+            if (scopeHistoryFresh) {
+                for (other in 0 until ShaderLibrary.SCOPE_HISTORY) {
+                    if (other == scopeHistoryRow) continue
+                    scopeHistory.pixels.copyInto(scopeHistory.pixels, other * ShaderLibrary.SCOPE, row, row + ShaderLibrary.SCOPE)
+                }
+            }
+            scopeHistoryFresh = false
+            scopeHistoryRow = (scopeHistoryRow + 1) % ShaderLibrary.SCOPE_HISTORY
+            scopeHistoryRowsWritten++
+        }
+        scopeHistory.upload()
+    }
+
+    /** The red byte of one waveform history pixel, for tests. */
+    internal fun scopeHistoryRed(index: Int): Int = scopeHistory.pixels[index] shr 16 and 0xFF
+
     /** Forgets the history, so a drawing shown again does not start from last time's music. */
     fun clearHistory() {
         history.pixels.fill(0xFF000000.toInt())
         history.upload()
+        scopeHistory.pixels.fill(0xFF808080.toInt())
+        scopeHistory.upload()
+        scopeHistoryRow = 0
+        scopeHistoryRowsWritten = 0L
+        scopeHistoryFresh = true
         historyRow = 0
         historyRowsWritten = 0L
         historyFresh = true
@@ -102,6 +143,8 @@ internal class ShaderData {
         program.child("uPaletteTex", palette.image)
         program.child("uHistoryTex", history.image)
         program.uniform("uHistoryRow", historyRow.toFloat())
+        program.child("uScopeHistoryTex", scopeHistory.image)
+        program.uniform("uScopeHistoryRow", scopeHistoryRow.toFloat())
     }
 
     private inline fun writeStrip(into: PixelImage, width: Int, colourAt: (Float) -> Int) {

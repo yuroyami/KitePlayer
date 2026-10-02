@@ -26,6 +26,9 @@ internal object ShaderLibrary {
     /** How many past spectra the history picture keeps. About four seconds, at sixty rows for each heard second. */
     const val HISTORY = 256
 
+    /** How many past waveforms the waveform history keeps, at sixty rows for each heard second. */
+    const val SCOPE_HISTORY = 256
+
     val HEADER: String = """
 uniform float2 uResolution;
 uniform float uTime;
@@ -78,6 +81,8 @@ uniform shader uScopeTex;
 uniform shader uPaletteTex;
 uniform shader uHistoryTex;
 uniform float uHistoryRow;
+uniform shader uScopeHistoryTex;
+uniform float uScopeHistoryRow;
 
 // Screen position mapped so that 0,0 is the middle and one unit is half the screen height.
 // Working in these keeps a drawing the same shape on any window.
@@ -171,6 +176,17 @@ float history(float where, float age) {
     float older = uHistoryTex.eval(float2(x, mod(lower, float($HISTORY)) + 0.5)).r;
     float newer = uHistoryTex.eval(float2(x, mod(lower + 1.0, float($HISTORY)) + 0.5)).r;
     return mix(older, newer, row - lower);
+}
+
+// The waveform as it was a moment ago, back in the range it started in. An age of 0 is now and 1
+// is about four seconds back. Rows are written round and round like the spectrum history.
+float scopeHistory(float where, float age) {
+    float row = uScopeHistoryRow - 1.0 - clamp(age, 0.0, 1.0) * float($SCOPE_HISTORY - 2);
+    float lower = floor(row);
+    float x = 0.5 + clamp(where, 0.0, 1.0) * float($SCOPE - 1);
+    float older = uScopeHistoryTex.eval(float2(x, mod(lower, float($SCOPE_HISTORY)) + 0.5)).r;
+    float newer = uScopeHistoryTex.eval(float2(x, mod(lower + 1.0, float($SCOPE_HISTORY)) + 0.5)).r;
+    return mix(older, newer, row - lower) * 2.0 - 1.0;
 }
 
 // The palette read as a ramp from 0 to 1.

@@ -26,7 +26,9 @@ internal class ShaderInputs(private val seed: Float = 1f) {
         data.writeBands(frame.bandsRel)
         data.writeScope(frame.scope, frame.waveformGain)
         data.writePalette(state.palette)
-        data.writeHistory(frame.bandsRel, clock.rows(state.stepSeconds))
+        val rows = clock.rows(state.stepSeconds)
+        data.writeHistory(frame.bandsRel, rows)
+        data.writeScopeHistory(frame.scope, frame.waveformGain, rows)
     }
 
     /** Sets the shared uniform block and the strips on [program]. */

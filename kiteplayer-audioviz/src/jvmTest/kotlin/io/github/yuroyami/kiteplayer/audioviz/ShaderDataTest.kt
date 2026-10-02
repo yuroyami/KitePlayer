@@ -151,4 +151,20 @@ class ShaderDataTest {
         repeat(300) { step -> inputs.update(VizRenderState(paused.withPulseHeld(), (61 + step) / 60f, 1f / 60f, VizPalette.Prism)) }
         assertEquals(before, inputs.historyRowsWritten, "rows were written under a pause")
     }
+
+    @Test
+    fun theWaveformHistoryKeepsRowsByHeardTime() {
+        val data = ShaderData()
+        val up = FloatArray(256) { 0.5f }
+        val down = FloatArray(256) { -0.5f }
+        data.writeScopeHistory(up, gain = 1f, rows = 3)
+        data.writeScopeHistory(down, gain = 1f, rows = 1)
+        assertEquals(4L, data.scopeHistoryRowsWritten)
+        // The newest row holds the down trace at a quarter brightness, the row before it the up trace.
+        val width = ShaderLibrary.SCOPE
+        val newest = (data.scopeHistoryRow - 1 + ShaderLibrary.SCOPE_HISTORY) % ShaderLibrary.SCOPE_HISTORY
+        val older = (newest - 1 + ShaderLibrary.SCOPE_HISTORY) % ShaderLibrary.SCOPE_HISTORY
+        assertEquals(64, data.scopeHistoryRed(newest * width + 10), "the newest row is the down trace")
+        assertEquals(191, data.scopeHistoryRed(older * width + 10), "the row before is the up trace")
+    }
 }

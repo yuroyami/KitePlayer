@@ -8,6 +8,8 @@ import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlin.jvm.JvmOverloads
+import kotlin.jvm.JvmStatic
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -1380,6 +1382,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
          *         output backend was supplied.
          */
         @Throws(PlaybackException::class)
+        @JvmStatic
+        @JvmOverloads
         public fun create(config: PlayerConfig = PlayerConfig()): KitePlayer {
             val backend = config.backends.backend ?: throw PlaybackException(
                 PlaybackError.ConfigurationInvalid(

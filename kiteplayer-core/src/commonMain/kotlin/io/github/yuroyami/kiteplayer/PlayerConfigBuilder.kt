@@ -26,9 +26,20 @@ public annotation class PlayerConfigDsl
 public fun PlayerConfig(build: PlayerConfigBuilder.() -> Unit): PlayerConfig =
     PlayerConfigBuilder(PlayerConfig()).apply(build).build()
 
-/** The fields of a [PlayerConfig], set in a `PlayerConfig { }` block. Each one is the field of that name. */
+/**
+ * The fields of a [PlayerConfig], set in a `PlayerConfig { }` block. Each one is the field of that name.
+ *
+ * Java, which has no such block, makes one directly and calls [build] (#394). Every builder here
+ * works the same way, starting from the defaults or from the config it is given:
+ *
+ * ```java
+ * PlayerConfigBuilder builder = new PlayerConfigBuilder();
+ * builder.setVideoEnabled(false);
+ * PlayerConfig config = builder.build();
+ * ```
+ */
 @PlayerConfigDsl
-public class PlayerConfigBuilder internal constructor(from: PlayerConfig) {
+public class PlayerConfigBuilder(from: PlayerConfig = PlayerConfig()) {
     /** See [PlayerConfig.renderQuality]. */
     public var renderQuality: RenderQuality = from.renderQuality
 
@@ -105,7 +116,8 @@ public class PlayerConfigBuilder internal constructor(from: PlayerConfig) {
         queue = QueueConfigBuilder(queue).apply(build).build()
     }
 
-    internal fun build(): PlayerConfig = PlayerConfig(
+    /** The [PlayerConfig] these fields describe, checked as its constructor checks it. */
+    public fun build(): PlayerConfig = PlayerConfig(
         renderQuality = renderQuality,
         syncMode = syncMode,
         hardwareDecode = hardwareDecode,
@@ -128,7 +140,7 @@ public class PlayerConfigBuilder internal constructor(from: PlayerConfig) {
 
 /** The fields of an [AudioConfig], set in an `audio { }` block. Each one is the field of that name. */
 @PlayerConfigDsl
-public class AudioConfigBuilder internal constructor(from: AudioConfig) {
+public class AudioConfigBuilder(from: AudioConfig = AudioConfig()) {
     /** See [AudioConfig.preferredLanguages]. */
     public var preferredLanguages: List<String> = from.preferredLanguages
 
@@ -159,7 +171,8 @@ public class AudioConfigBuilder internal constructor(from: AudioConfig) {
     /** See [AudioConfig.upmix]. */
     public var upmix: UpmixMode = from.upmix
 
-    internal fun build(): AudioConfig = AudioConfig(
+    /** The [AudioConfig] these fields describe, checked as its constructor checks it. */
+    public fun build(): AudioConfig = AudioConfig(
         preferredLanguages = preferredLanguages,
         preservePitch = preservePitch,
         downmix = downmix,
@@ -175,7 +188,7 @@ public class AudioConfigBuilder internal constructor(from: AudioConfig) {
 
 /** The fields of a [SubtitleConfig], set in a `subtitles { }` block. Each one is the field of that name. */
 @PlayerConfigDsl
-public class SubtitleConfigBuilder internal constructor(from: SubtitleConfig) {
+public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
     /** See [SubtitleConfig.preferredLanguages]. */
     public var preferredLanguages: List<String> = from.preferredLanguages
 
@@ -200,7 +213,8 @@ public class SubtitleConfigBuilder internal constructor(from: SubtitleConfig) {
     /** See [SubtitleConfig.fonts]. */
     public var fonts: List<SubtitleFont> = from.fonts
 
-    internal fun build(): SubtitleConfig = SubtitleConfig(
+    /** The [SubtitleConfig] these fields describe, checked as its constructor checks it. */
+    public fun build(): SubtitleConfig = SubtitleConfig(
         preferredLanguages = preferredLanguages,
         autoSelectForced = autoSelectForced,
         autoSelect = autoSelect,
@@ -214,7 +228,7 @@ public class SubtitleConfigBuilder internal constructor(from: SubtitleConfig) {
 
 /** The fields of a [NetworkConfig], set in a `network { }` block. Each one is the field of that name. */
 @PlayerConfigDsl
-public class NetworkConfigBuilder internal constructor(from: NetworkConfig) {
+public class NetworkConfigBuilder(from: NetworkConfig = NetworkConfig()) {
     /** See [NetworkConfig.ioResolver]. */
     public var ioResolver: MediaIoResolver? = from.ioResolver
 
@@ -229,7 +243,8 @@ public class NetworkConfigBuilder internal constructor(from: NetworkConfig) {
         ioCache = IoCachePolicyBuilder(ioCache).apply(build).build()
     }
 
-    internal fun build(): NetworkConfig = NetworkConfig(
+    /** The [NetworkConfig] these fields describe, checked as its constructor checks it. */
+    public fun build(): NetworkConfig = NetworkConfig(
         ioResolver = ioResolver,
         ioCache = ioCache,
         autoResolve = autoResolve,
@@ -238,7 +253,7 @@ public class NetworkConfigBuilder internal constructor(from: NetworkConfig) {
 
 /** The fields of an [IoCachePolicy], set in an `ioCache { }` block. Each one is the field of that name. */
 @PlayerConfigDsl
-public class IoCachePolicyBuilder internal constructor(from: IoCachePolicy) {
+public class IoCachePolicyBuilder(from: IoCachePolicy = IoCachePolicy()) {
     /** See [IoCachePolicy.enabled]. */
     public var enabled: Boolean = from.enabled
 
@@ -251,7 +266,8 @@ public class IoCachePolicyBuilder internal constructor(from: IoCachePolicy) {
     /** See [IoCachePolicy.forwardWindowBytes]. */
     public var forwardWindowBytes: Long = from.forwardWindowBytes
 
-    internal fun build(): IoCachePolicy = IoCachePolicy(
+    /** The [IoCachePolicy] these fields describe, checked as its constructor checks it. */
+    public fun build(): IoCachePolicy = IoCachePolicy(
         enabled = enabled,
         readChunkBytes = readChunkBytes,
         backWindowBytes = backWindowBytes,
@@ -261,7 +277,7 @@ public class IoCachePolicyBuilder internal constructor(from: IoCachePolicy) {
 
 /** The fields of a [BufferPolicy], set in a `buffer { }` block. Each one is the field of that name. */
 @PlayerConfigDsl
-public class BufferPolicyBuilder internal constructor(from: BufferPolicy) {
+public class BufferPolicyBuilder(from: BufferPolicy = BufferPolicy()) {
     /** See [BufferPolicy.readyDuration]. */
     public var readyDuration: Duration = from.readyDuration
 
@@ -283,7 +299,8 @@ public class BufferPolicyBuilder internal constructor(from: BufferPolicy) {
     /** See [BufferPolicy.stallTimeout]. */
     public var stallTimeout: Duration = from.stallTimeout
 
-    internal fun build(): BufferPolicy = BufferPolicy(
+    /** The [BufferPolicy] these fields describe, checked as its constructor checks it. */
+    public fun build(): BufferPolicy = BufferPolicy(
         readyDuration = readyDuration,
         readyPackets = readyPackets,
         softTarget = softTarget,
@@ -296,14 +313,15 @@ public class BufferPolicyBuilder internal constructor(from: BufferPolicy) {
 
 /** The fields of a [QueueConfig], set in a `queue { }` block. Each one is the field of that name. */
 @PlayerConfigDsl
-public class QueueConfigBuilder internal constructor(from: QueueConfig) {
+public class QueueConfigBuilder(from: QueueConfig = QueueConfig()) {
     /** See [QueueConfig.preloadNext]. */
     public var preloadNext: Duration = from.preloadNext
 
     /** See [QueueConfig.gapless]. */
     public var gapless: Boolean = from.gapless
 
-    internal fun build(): QueueConfig = QueueConfig(
+    /** The [QueueConfig] these fields describe, checked as its constructor checks it. */
+    public fun build(): QueueConfig = QueueConfig(
         preloadNext = preloadNext,
         gapless = gapless,
     )

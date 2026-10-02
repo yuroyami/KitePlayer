@@ -58,6 +58,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   own that reads `rotationDegrees` should read `mirrored` too. MediaCodec cannot mirror what it
   writes to a Surface, so on the direct Surface a mirrored stream decodes in software.
   `AndroidGpuImageFrame` gains `mirrored`, which the Compose video applies.
+- Picture in picture on Apple shows a turned or mirrored video the right way round, in a window of
+  the turned shape. Before, `SampleBufferVideoRenderer` showed every picture as it is stored, so a
+  portrait phone recording lay on its side in the small window. A turned or mirrored picture now
+  takes one GPU pass for each frame, as text on screen already did (#380).
 
 ## [0.2.0] - 2026-09-29
 

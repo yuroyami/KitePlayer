@@ -89,8 +89,10 @@ import platform.posix.memcpy
  * Subtitles are drawn into the picture. The layer shows sample buffers and nothing else, and the
  * small window shows only the layer. So while an overlay has text, the picture and the text are
  * composed on the GPU into a new pixel buffer, and that buffer is shown instead. A subtitle change
- * redraws the picture on screen, so a paused picture gains or loses its text at once. Without a
- * Metal device the text is left out and the picture still shows.
+ * redraws the picture on screen, so a paused picture gains or loses its text at once. A picture
+ * that its frame turns or mirrors is composed the same way, text or not, because the layer shows
+ * a buffer as it is stored. Without a Metal device the text is left out, and the picture shows as
+ * it is stored.
  *
  * On macOS 14, iOS 17 and later, the layer's own video renderer takes the samples on the calling
  * thread. Before that, the layer takes them itself, on the main queue. Apple asks for one of the two
@@ -204,19 +206,19 @@ public class SampleBufferVideoRenderer internal constructor(
      */
     private fun show(picture: PlainPicture): Boolean {
         val text = overlay?.takeIf { it.hasText() }
-        val burned = text?.let { burn(picture, it) }
+        val burned = if (text != null || picture.facts.needsTurn) burn(picture, text) else null
         val sample = sampleBufferFor(burned ?: picture.buffer, picture.targetNanos)
         // The sample holds its own reference to the image, so the burned buffer's can go now.
         burned?.let { CVPixelBufferRelease(it) }
         if (sample == null) return false
         markDisplayImmediately(sample)
         sink.enqueue(sample)
-        showingText = burned != null
+        showingText = burned != null && text != null
         return true
     }
 
-    /** The composed picture, or null to show it without text. Called under [lock]. */
-    private fun burn(picture: PlainPicture, text: SubtitleOverlay): CVPixelBufferRef? {
+    /** The composed picture, or null to show it as stored. Called under [lock]. */
+    private fun burn(picture: PlainPicture, text: SubtitleOverlay?): CVPixelBufferRef? {
         if (!burnerTried) {
             burnerTried = true
             burner = makeBurner()

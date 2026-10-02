@@ -41,6 +41,53 @@ class SampleBufferSubtitleTest {
         }
     }
 
+    /** NV12, full range, dark in the left half and bright in the right half. */
+    private fun darkLeftBrightRight(width: Int, height: Int) = MetalPicture.SoftwarePlanes(
+        width = width,
+        height = height,
+        format = io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat.Nv12,
+        planes = listOf(
+            MetalPicture.SoftwarePlanes.Plane(ByteArray(width * height) { at -> if (at % width < width / 2) 40 else 200.toByte() }, width, height),
+            MetalPicture.SoftwarePlanes.Plane(ByteArray(width * height / 2) { 128.toByte() }, width, height / 2),
+        ),
+    )
+
+    private val fullRange709 = limited709.copy(fullRange = true)
+
+    @Test
+    fun aTurnedPictureReachesTheLayerTurnedClockwise() = runBlocking {
+        val sink = RecordingSampleSink()
+        val renderer = SampleBufferVideoRenderer(resolve = { darkLeftBrightRight(64, 32) }, sink = sink)
+        try {
+            assertTrue(renderer.present(SampleTestFrame(64, 32, fullRange709, rotationDegrees = 90), targetNanos = 0L))
+            val image = imageOf(sink.samples.single())
+            assertEquals(32uL, CVPixelBufferGetWidth(image), "a quarter turn exchanges the sides")
+            assertEquals(64uL, CVPixelBufferGetHeight(image))
+            // Turned clockwise, the stored left half is on top.
+            assertTrue(bgraAt(image, 16, 8)[1] < 80, "the top must be the dark half, got ${bgraAt(image, 16, 8).toList()}")
+            assertTrue(bgraAt(image, 16, 56)[1] > 160, "the bottom must be the bright half, got ${bgraAt(image, 16, 56).toList()}")
+        } finally {
+            renderer.close()
+            sink.release()
+        }
+    }
+
+    @Test
+    fun aMirroredPictureReachesTheLayerMirrored() = runBlocking {
+        val sink = RecordingSampleSink()
+        val renderer = SampleBufferVideoRenderer(resolve = { darkLeftBrightRight(64, 32) }, sink = sink)
+        try {
+            assertTrue(renderer.present(SampleTestFrame(64, 32, fullRange709, mirrored = true), targetNanos = 0L))
+            val image = imageOf(sink.samples.single())
+            assertEquals(64uL, CVPixelBufferGetWidth(image))
+            assertTrue(bgraAt(image, 8, 16)[1] > 160, "the left must be the bright half, got ${bgraAt(image, 8, 16).toList()}")
+            assertTrue(bgraAt(image, 56, 16)[1] < 80, "the right must be the dark half, got ${bgraAt(image, 56, 16).toList()}")
+        } finally {
+            renderer.close()
+            sink.release()
+        }
+    }
+
     @Test
     fun aSubtitleChangeRedrawsThePausedPicture() = runBlocking {
         val sink = RecordingSampleSink()

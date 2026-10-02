@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.Pts
+import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
@@ -57,12 +58,14 @@ import platform.Metal.MTLTextureUsageShaderRead
 
 /**
  * Draws a picture and its subtitles into one new pixel buffer, for a layer that shows nothing but
- * pixel buffers.
+ * pixel buffers. It also draws a turned or mirrored picture the way it is meant to be seen, because
+ * the layer shows a buffer as it is stored.
  *
  * The buffer is BGRA and IOSurface backed, so a display layer can show it. It comes from a pool
  * sized to the picture, so text that stays up for a whole scene does not allocate a buffer per
- * frame. The picture fills the buffer the way the layer shows it without text: in its stored
- * orientation, and stretched only to its pixel aspect. The text lands where the engine laid it out.
+ * frame. The picture fills the buffer mirrored and turned as its frame says, and stretched only to
+ * its pixel aspect, so a quarter turn gives a buffer with its sides exchanged. The text lands where
+ * the engine laid it out.
  *
  * Not thread safe. The renderer calls it under its own lock.
  */
@@ -75,15 +78,19 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
     private var poolHeight = 0
 
     /**
-     * A new buffer showing [pixels] with [overlay] above it. The caller owns one reference to it.
+     * A new buffer showing [pixels] as [facts] say, with [overlay] above it when there is one. The
+     * caller owns one reference to it.
      *
-     * Null when any step refuses, and the caller then shows the picture without text.
+     * Null when any step refuses, and the caller then shows the picture as it is stored.
      */
-    fun burn(pixels: CVPixelBufferRef, facts: PictureFacts, overlay: SubtitleOverlay): CVPixelBufferRef? {
+    fun burn(pixels: CVPixelBufferRef, facts: PictureFacts, overlay: SubtitleOverlay?): CVPixelBufferRef? {
         val picture = MetalPicture.CorePixelBuffer(pixels)
         if (!composer.canEncode(picture)) return null
-        val width = facts.size.displayWidth.coerceAtLeast(1)
-        val height = facts.size.height.coerceAtLeast(1)
+        val storedWidth = facts.size.displayWidth.coerceAtLeast(1)
+        val storedHeight = facts.size.height.coerceAtLeast(1)
+        val quarterTurned = normalizedQuarterTurn(facts.rotationDegrees).let { it == 90 || it == 270 }
+        val width = if (quarterTurned) storedHeight else storedWidth
+        val height = if (quarterTurned) storedWidth else storedHeight
         val target = pooledBuffer(width, height) ?: return null
         val drawn = runCatching { draw(target, facts, picture, overlay, width, height) }.getOrDefault(false)
         if (!drawn) {
@@ -106,7 +113,7 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
         target: CVPixelBufferRef,
         facts: PictureFacts,
         picture: MetalPicture,
-        overlay: SubtitleOverlay,
+        overlay: SubtitleOverlay?,
         width: Int,
         height: Int,
     ): Boolean = memScoped {
@@ -137,7 +144,8 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
                 overlay = overlay,
                 viewportWidth = width,
                 viewportHeight = height,
-                quadOverride = FILL_QUAD,
+                // Stretch fills the buffer edge to edge, and the buffer already has the turned shape.
+                scaleMode = VideoScale.Stretch,
                 toneMapped = true,
             ).waitUntilCompleted()
             true
@@ -161,9 +169,6 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
     }
 
     companion object {
-        /** The whole target, unturned: the picture fills the buffer edge to edge. */
-        private val FILL_QUAD = floatArrayOf(1f, 1f, 1f, 0f, 0f, 1f, 0f, 0f)
-
         /** Null on a machine with no Metal device, where subtitles are left out of the picture. */
         fun createOrNull(): SubtitleBurner? {
             val device = MTLCreateSystemDefaultDevice() ?: return null
@@ -175,12 +180,18 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
 /**
  * The facts about a frame that the composer reads, kept after the frame is closed.
  *
- * The pixels live in a pixel buffer the renderer holds. These say how to read them.
+ * The pixels live in a pixel buffer the renderer holds. These say how to read them and which way
+ * round to show them.
  */
 internal class PictureFacts(
     override val size: VideoSize,
     override val colorSpace: ColorSpaceInfo,
+    override val rotationDegrees: Int = 0,
+    override val mirrored: Boolean = false,
 ) : VideoFrame {
+    /** True when the stored picture is not the way it is meant to be seen. */
+    val needsTurn: Boolean get() = mirrored || normalizedQuarterTurn(rotationDegrees) != 0
+
     override val pts: Pts = Pts.Zero
     override val duration: Pts? = null
     override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Opaque
@@ -189,7 +200,8 @@ internal class PictureFacts(
     override fun close() = Unit
 
     companion object {
-        fun of(frame: VideoFrame): PictureFacts = PictureFacts(frame.size, frame.colorSpace)
+        fun of(frame: VideoFrame): PictureFacts =
+            PictureFacts(frame.size, frame.colorSpace, frame.rotationDegrees, frame.mirrored)
     }
 }
 

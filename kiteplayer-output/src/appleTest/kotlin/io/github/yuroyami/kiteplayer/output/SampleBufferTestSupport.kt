@@ -119,6 +119,8 @@ internal class SampleTestFrame(
     width: Int = 4,
     height: Int = 4,
     override val colorSpace: ColorSpaceInfo = ColorSpaceInfo(fullRange = true),
+    override val rotationDegrees: Int = 0,
+    override val mirrored: Boolean = false,
 ) : VideoFrame {
     var closed: Boolean = false
         private set

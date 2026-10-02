@@ -28,3 +28,6 @@ audioviz-revamp/
 # An owner-supplied sample song whose tags name no artist and no licence. It stays on the
 # working machine until its licence is known.
 kiteplayer-sample-shared/media/SynthyBattle.mp3
+
+# Offline issue-remediation plans and tracker snapshots.
+/SOLISTIC_PLANS/

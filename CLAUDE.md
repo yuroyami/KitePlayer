@@ -231,6 +231,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - The tempo stage reports the ideal line the speed asks for, not where each block came from. Blocks
   lead or lag that line by up to 20 ms, and by about 60 ms at most while a splice waits for an attack
   to pass. Dating the clock from block positions would make it jump at every splice (#373).
+- A parked video lane is not a selected queue. Its packets are thrown away as they arrive, so its
+  queue is always empty; counted, it made the open wait 10 s for a picture and the interleaving
+  relief cut the audio until the end of the file (#374).
 - All session mutation happens on the actor, in a command execution or a pass handler. Never mutate
   session fields from another coroutine.
 - A decoder belongs to its worker's dispatcher. Park the worker, mutate, release. A refusal to park

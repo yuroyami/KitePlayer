@@ -3140,6 +3140,8 @@ internal class PlaybackCore(
         budget: Duration = OPEN_FILL_DEADLINE,
     ): FirstFrame {
         val video = session.video ?: return FirstFrame.NoVideo
+        // A parked lane decodes nothing, so no frame can come; the picture returns with the lane.
+        if (session.videoParked.value) return FirstFrame.NoVideo
         // Against a baseline and not against zero. A seek ends with this too, and by then frames have
         // already gone out for the position the viewer left, so counting from zero would report the old
         // picture as the new one and present nothing at all.
@@ -7982,6 +7984,7 @@ internal class PlaybackCore(
         // into an underrun or a blank first frame. A stream that already ended is
         // exempt, because no more output can ever arrive for it.
         val videoReady = session.video == null ||
+            session.videoParked.value ||
             session.video.queuedFrames > 0 ||
             session.videoQueue?.isEndOfStream == true
         val audio = session.audio
@@ -8159,7 +8162,9 @@ internal class PlaybackCore(
                     // Woken by whichever consumer takes something, rather than by a timer, so read-ahead
                     // resumes the moment there is room. Nothing is taken here, so the bounded wait can lose
                     // at most a wake-up.
-                    worker.napUntil(WORKER_POLL) { session.selectedQueues().first().awaitDrain() }
+                    // No queue at all is a parked video-only item; the poll is the only wake-up then.
+                    val drained = session.selectedQueues().firstOrNull()
+                    worker.napUntil(WORKER_POLL) { drained?.awaitDrain() ?: kotlinx.coroutines.awaitCancellation() }
                 }
                 continue
             }
@@ -9187,8 +9192,18 @@ internal class PlaybackCore(
         val workers: List<Worker>
             get() = listOfNotNull(demuxWorker, videoDecodeWorker, audioDecodeWorker, audioFeedWorker, videoScheduler)
 
-        /** One atomic snapshot: video plus only the audio lane that currently carries playback. */
-        fun selectedQueues(): List<PacketQueue> = audioRouting.value.selectedQueues
+        /**
+         * One atomic snapshot: video plus only the audio lane that currently carries playback.
+         *
+         * A parked video lane is left out. Its packets are thrown away as they arrive, so its queue
+         * is always empty, and counting it made the open wait 10 s for a picture and the
+         * interleaving relief cut the audio as if video were starved (#374).
+         */
+        fun selectedQueues(): List<PacketQueue> {
+            val queues = audioRouting.value.selectedQueues
+            val parked = videoQueue?.takeIf { videoParked.value } ?: return queues
+            return queues.filter { it !== parked }
+        }
 
         fun decodersDrained(): Boolean =
             (videoDecoder?.isDrained ?: true) && (audioDecoder?.isDrained ?: true)

@@ -104,15 +104,19 @@ class DashTimeoutTest {
                 val master = readAll(stand).decodeToString()
                 val media = readAll(checkNotNull(stand.openRelated(master.lines().first { it.startsWith("https://") })))
                 val segment = media.decodeToString().lines().first { it.startsWith("http://") }
-                val reader = checkNotNull(stand.openRelated(segment))
-                try {
-                    val started = TimeSource.Monotonic.markNow()
-                    assertFailsWith<KtorMediaIoException> { readAll(reader) }
-                    val took = started.elapsedNow()
-                    assertTrue(took < 3.seconds, "the segment read must end near the read timeout, took $took")
-                } finally {
-                    reader.close()
+                // The open is inside the bound too. On the JVM the open returns with the headers and
+                // the read times out; on the iOS simulator the open itself times out.
+                val started = TimeSource.Monotonic.markNow()
+                assertFailsWith<KtorMediaIoException> {
+                    val reader = checkNotNull(stand.openRelated(segment))
+                    try {
+                        readAll(reader)
+                    } finally {
+                        reader.close()
+                    }
                 }
+                val took = started.elapsedNow()
+                assertTrue(took < 3.seconds, "the segment read must end near the read timeout, took $took")
             } finally {
                 stand.close()
             }

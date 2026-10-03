@@ -72,6 +72,51 @@ internal object DashPeriods {
         return chosen.index to representations.indices.minBy { abs(ln(representations[it].bandwidth + 1.0) - wanted) }
     }
 
+    /**
+     * The adaptation set and representation of [period], a fetch of the Period [track] was taken
+     * from, that are [track]'s own, or null when that fetch no longer has them (#406). A live
+     * manifest's refresh may add, remove or reorder sets and representations, and only their `id`
+     * stays put across the refreshes (ISO/IEC 23009-1, 5.4, and DASH-IF IOP 4.4.3.3), so a track
+     * is bound by its set's `id` and its representation's `id`, and by place only where the one at
+     * its place is still the same. Without an `id`, a set or representation is found by what it is:
+     * its kind and language, or its bandwidth and codec, when exactly one agrees. A match whose kind
+     * or codec changed is no match. Unlike [match], which finds the like of a track in another
+     * Period, this never gives a track another set's or another representation's segments.
+     */
+    fun bind(track: DashHlsTrack, period: DashPeriod): Pair<Int, Int>? {
+        val sets = period.adaptationSets
+        val setIndex = when {
+            sets.getOrNull(track.setIndex)?.let { sameSet(it, track) } == true -> track.setIndex
+            track.set.id != null -> sets.indexOfFirst { it.id == track.set.id && sameSet(it, track) }
+            else -> sets.indices.singleOrNull { sameSet(sets[it], track) } ?: -1
+        }
+        if (setIndex < 0) return null
+        val representations = sets[setIndex].representations
+        val wanted = track.representation
+        val representationIndex = when {
+            representations.getOrNull(track.representationIndex)?.let { sameRepresentation(it, wanted) } == true -> track.representationIndex
+            wanted.id != null -> representations.indexOfFirst { it.id == wanted.id && sameRepresentation(it, wanted) }
+            else -> representations.indices.singleOrNull {
+                representations[it].bandwidth == wanted.bandwidth && sameRepresentation(representations[it], wanted)
+            } ?: -1
+        }
+        if (representationIndex < 0) return null
+        return setIndex to representationIndex
+    }
+
+    /** True when [set] is [track]'s set by its `id`, and still the same kind of content, in the same language. */
+    private fun sameSet(set: DashAdaptationSet, track: DashHlsTrack): Boolean =
+        set.id == track.set.id && !set.isProtected && DashHls.roleOf(set) == track.role &&
+            set.lang == track.set.lang && agree(set.mimeType, track.set.mimeType)
+
+    /** True when [representation] is [wanted] by its `id`, in the same codec and type. */
+    private fun sameRepresentation(representation: DashRepresentation, wanted: DashRepresentation): Boolean =
+        representation.id == wanted.id && agree(representation.codecs, wanted.codecs) &&
+            agree(representation.mimeType, wanted.mimeType)
+
+    /** Two attributes agree unless both are stated and differ. */
+    private fun agree(one: String?, other: String?): Boolean = one == null || other == null || one.equals(other, ignoreCase = true)
+
     /** The container of [representation] in [set], by its type, or by its segments' extension when it states none. */
     fun containerOf(set: DashAdaptationSet, representation: DashRepresentation): DashContainer {
         val mime = (representation.mimeType ?: set.mimeType)?.lowercase()

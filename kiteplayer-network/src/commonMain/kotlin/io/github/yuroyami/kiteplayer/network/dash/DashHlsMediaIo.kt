@@ -87,6 +87,9 @@ internal class DashHlsMediaIo(
      */
     private val listed = HashMap<String, Listed>()
 
+    /** The tracks whose set or representation a live refresh dropped, each reported once (#406). */
+    private val goneReported = HashSet<String>()
+
     /** The MP4 track each HLS track's stream began with: the first initialization served for it. */
     private val baseTracks = HashMap<String, Fmp4.Track>()
 
@@ -217,7 +220,15 @@ internal class DashHlsMediaIo(
         val segments = ArrayList<DashTimedSegment>()
         val root = "https://${DashHls.HOST}/${track.setIndex}-${track.representationIndex}"
         for ((index, timing) in timings.withIndex()) {
-            val (setIndex, representationIndex) = DashPeriods.match(track, reference, timing.period) ?: continue
+            // The Period the track came from, fetched again, keeps the track's own set (#406); another
+            // Period gives its like.
+            val refreshed = timing.startMicros == referenceStartMicros && timing.period.id == reference.id
+            val bound = if (refreshed) {
+                DashPeriods.bind(track, timing.period).also { if (it == null) reportGone(track) }
+            } else {
+                DashPeriods.match(track, reference, timing.period)
+            }
+            val (setIndex, representationIndex) = bound ?: continue
             val set = timing.period.adaptationSets[setIndex]
             val representation = set.representations[representationIndex]
             val periodPlan = DashManifestParser.timedPlan(
@@ -466,8 +477,10 @@ internal class DashHlsMediaIo(
 
     private suspend fun plan(track: DashHlsTrack, from: DashManifest, now: Long?): DashTimedPlan {
         val period = from.periods.single()
-        val set = period.adaptationSets.getOrNull(track.setIndex) ?: track.set
-        val representation = set.representations.getOrNull(track.representationIndex) ?: track.representation
+        // A refresh may have moved the track's set or representation, or dropped it (#406).
+        val (setIndex, representationIndex) = DashPeriods.bind(track, period) ?: throw gone(track)
+        val set = period.adaptationSets[setIndex]
+        val representation = set.representations[representationIndex]
         DashManifestParser.timedPlan(from, period, representation, policy, now)?.let { return it }
         val base = checkNotNull(representation.segmentBase) { "a representation without segments" }
         return indexed.getOrPut(track.address) {
@@ -478,6 +491,28 @@ internal class DashHlsMediaIo(
             }
         }
     }
+
+    /**
+     * The failure that a track's playlist meets when the live manifest no longer has its set or its
+     * representation (#406). Serving the set now at its old place would give it another set's
+     * segments, so the playlist is refused instead, and [reportGone] says so once.
+     */
+    private fun gone(track: DashHlsTrack): DashTrackGoneException {
+        reportGone(track)
+        return DashTrackGoneException(goneDetail(track))
+    }
+
+    /** Says once, through the warning sink, that [track] is gone from the live manifest. */
+    private fun reportGone(track: DashHlsTrack) {
+        if (!goneReported.add(track.address)) return
+        val detail = goneDetail(track)
+        KiteLog.log("KiteDash", detail)
+        warningSink(PlaybackWarning.SegmentSkipped(track.address, detail))
+    }
+
+    private fun goneDetail(track: DashHlsTrack): String =
+        "the live manifest no longer has the adaptation set ${track.set.id ?: "at ${track.setIndex}"} " +
+            "with the representation ${track.representation.id ?: "at ${track.representationIndex}"}"
 
     /** The manifest fetched again when it is live and its minimum update period has passed. */
     private suspend fun refreshIfDue(now: Long) {
@@ -714,3 +749,6 @@ internal class DashHlsMediaIo(
         private const val EBML_HEADER_BYTES = 12L
     }
 }
+
+/** A live track's playlist was asked for after a refresh of the manifest dropped its set or its representation (#406). */
+internal class DashTrackGoneException(message: String) : IllegalStateException(message)

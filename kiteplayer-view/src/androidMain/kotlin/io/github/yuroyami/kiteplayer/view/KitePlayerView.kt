@@ -182,11 +182,18 @@ public open class KitePlayerView @JvmOverloads constructor(
      */
     private var stateWatch: Job? = null
 
+    /**
+     * Whether this view is attached, by its own two callbacks. isAttachedToWindow cannot say it:
+     * Android clears what it reads only after onDetachedFromWindow returns, so the detach used to
+     * find the view still attached and start the watch again on a view leaving the screen (#477).
+     */
+    private var attached = false
+
     private fun watchPlayer() {
         stateWatch?.cancel()
         stateWatch = null
         val watched = player
-        if (watched == null || !isAttachedToWindow) {
+        if (watched == null || !attached) {
             displayAwake.playing = false
             return
         }
@@ -208,11 +215,13 @@ public open class KitePlayerView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        attached = true
         displayAwake.onScreen = true
         watchPlayer()
     }
 
     override fun onDetachedFromWindow() {
+        attached = false
         displayAwake.onScreen = false
         watchPlayer()
         super.onDetachedFromWindow()

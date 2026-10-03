@@ -2,11 +2,15 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteffmpeg.MediaSource
 import io.github.yuroyami.kiteffmpeg.OpenInterrupt
+import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.PlaybackError
+import io.github.yuroyami.kiteplayer.PlaybackException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -25,7 +29,12 @@ internal class OpenedItem(
     val selectedVariant: Int? = null,
     /** True when the URL fallback opened a scheme whose sender pushes media at the pace it plays. */
     val realTimeScheme: Boolean = false,
-)
+    /** The title a list of streams gave the stream it opened, for an item that named the list (#450). */
+    val listedTitle: String? = null,
+) {
+    fun withListedTitle(title: String?): OpenedItem =
+        OpenedItem(source, bridge, hls, variants, selectedVariant, realTimeScheme, title ?: listedTitle)
+}
 
 /**
  * Opens a KiteFFmpeg source for [item]. Playback, thumbnails, waveforms and loudness all open
@@ -43,14 +52,16 @@ internal class OpenedItem(
  * An HLS playlist read through the item's reader opens through [openHls]: the playlist is read
  * here, a master playlist keeps one variant, and the reader opens the addresses the playlist names.
  */
-internal suspend fun openItem(item: MediaItem): OpenedItem {
+internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
     FFmpegLogForwarding.install()
     val options = preOpenOptions(item)
     // Called once per open: the reader it makes belongs to this source and is closed with it.
     val opened = item.io?.open()
     // A playlist that nothing marks is recognised by its first bytes (#400). The reader keeps them.
     val io = opened?.let { reader ->
-        val marked = looksLikeHls(item.formatHint, reader.contentType, reader.location ?: item.uri)
+        val address = reader.location ?: item.uri
+        val marked = looksLikeHls(item.formatHint, reader.contentType, address) ||
+            looksLikePls(item.formatHint, reader.contentType, address)
         if (marked || item.formatHint != null || !mayBeAPlaylist(reader.contentType)) {
             reader
         } else {
@@ -66,16 +77,43 @@ internal suspend fun openItem(item: MediaItem): OpenedItem {
     val descriptor = if (io == null && item.uri == "fd:") options["fd"]?.toIntOrNull()?.let(::descriptorByteSource) else null
     // It stays with the source the open returns, as MediaSource.interrupt() does.
     val cancel = OpenInterrupt()
+    // A list of stream addresses is not media: the streams it names are (#450). A PLS file, and an
+    // M3U list with no HLS tags, play their first entry that opens.
+    var playlistText: String? = null
+    if (io != null) {
+        val address = io.location ?: item.uri
+        val pls = looksLikePls(item.formatHint, io.contentType, address) || (io is SniffedMediaIo && startsLikePls(io.head))
+        val m3u = !pls && (looksLikeHls(item.formatHint, io.contentType, address) || (io is SniffedMediaIo && startsLikeHls(io.head)))
+        if (pls || m3u) {
+            val bytes = try {
+                readPlaylist(io, item.uri)
+            } catch (failure: Throwable) {
+                io.close()
+                throw failure
+            }
+            val text = bytes.decodeToString()
+            // The text decides over its label: a PLS file sent as M3U is still a PLS file.
+            val entries = when {
+                startsLikePls(bytes) -> parsePls(text, address)
+                startsLikeHls(bytes) || !pls -> plainStreamList(text, address)
+                else -> parsePls(text, address)
+            }
+            if (entries != null) return openStreamList(item, io, entries, listDepth)
+            // An HLS playlist after all: its text is read, and the HLS path takes it as it is.
+            playlistText = text
+        }
+    }
     return when {
         // The custom AVIO bridge: the reader carries the media, with no path and no FFmpeg protocol.
         io != null -> {
             // Every bridge of this source lives on it, the bridges of an HLS stream's segments too.
             val lifetime = Job()
-            val playlist = looksLikeHls(item.formatHint, io.contentType, io.location ?: item.uri) ||
+            val playlist = playlistText != null ||
+                looksLikeHls(item.formatHint, io.contentType, io.location ?: item.uri) ||
                 (io is SniffedMediaIo && startsLikeHls(io.head))
             val hls = if (playlist) {
                 try {
-                    openHls(item, io, lifetime)
+                    openHls(item, io, lifetime, playlistText)
                 } catch (failure: Throwable) {
                     io.close()
                     throw failure
@@ -145,6 +183,52 @@ private suspend inline fun <T> interruptedWhenCancelled(noinline interrupt: () -
         link.complete()
     }
 }
+
+/**
+ * Opens the first of [entries] that opens, each as an item of its own through [list]'s related
+ * reader, which a list's later entries usually need, since they are backups of the same station
+ * (#450). The stream that opens keeps [list] open and carries its entry's title. When none opens,
+ * the last failure is thrown. A list that names a list is followed, a few levels deep at most.
+ */
+private suspend fun openStreamList(item: MediaItem, list: MediaIo, entries: List<StreamEntry>, depth: Int): OpenedItem {
+    if (entries.isEmpty() || depth >= MAX_STREAM_LIST_DEPTH) {
+        list.close()
+        val why = if (entries.isEmpty()) "the playlist names no stream" else "the playlist names playlists $MAX_STREAM_LIST_DEPTH levels deep"
+        throw PlaybackException(PlaybackError.NotMedia(item.label, why))
+    }
+    var last: Throwable? = null
+    for (entry in entries) {
+        val stream = try {
+            list.openRelated(entry.address)
+        } catch (failure: Throwable) {
+            if (failure is CancellationException) {
+                list.close()
+                throw failure
+            }
+            last = failure
+            null
+        } ?: continue
+        val reader = ListedStreamIo(stream)
+        try {
+            val opened = openItem(item.copy(uri = entry.address, io = { reader }, formatHint = null), depth + 1)
+            reader.list = list
+            return opened.withListedTitle(entry.title)
+        } catch (failure: Throwable) {
+            runCatching { reader.close() }
+            if (failure is CancellationException) {
+                list.close()
+                throw failure
+            }
+            last = failure
+        }
+    }
+    list.close()
+    throw last ?: PlaybackException(
+        PlaybackError.NotMedia(item.label, "no stream the playlist names could be opened"),
+    )
+}
+
+private const val MAX_STREAM_LIST_DEPTH = 3
 
 /** [openItem] for the callers that need only the source: thumbnails, waveforms and loudness. */
 internal suspend fun openSource(item: MediaItem): MediaSource = openItem(item).source

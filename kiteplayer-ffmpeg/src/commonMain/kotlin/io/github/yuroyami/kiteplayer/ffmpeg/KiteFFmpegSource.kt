@@ -76,7 +76,9 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         // openOptions, formatHint and videoFilter and skipped the FFmpeg identity mapping, so the
         // documented SPI door behaved differently from the backend door for the same MediaItem.
         val source = mappingFFmpegRuntimeRejection {
-            openItem(media).let { KiteFFmpegSource(it.source, it.bridge, it.hls, it.variants, it.selectedVariant, it.realTimeScheme) }
+            openItem(media).let {
+                KiteFFmpegSource(it.source, it.bridge, it.hls, it.variants, it.selectedVariant, it.realTimeScheme, it.listedTitle)
+            }
         }
         source.attachItemFilters(media)
         return source
@@ -112,6 +114,8 @@ public class KiteFFmpegSource internal constructor(
     override val selectedVariant: Int? = null,
     /** True when the URL fallback opened a scheme whose sender pushes media at the pace it plays. */
     realTimeScheme: Boolean = false,
+    /** The title the list of streams the item named gave this stream (#450). */
+    listedTitle: String? = null,
 ) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null
@@ -188,7 +192,13 @@ public class KiteFFmpegSource internal constructor(
      */
     override val seekable: Boolean = if (source.formatName == "hls") duration != null else source.isSeekable
 
-    override val metadata: Map<String, String> = source.metadata
+    // The stream's own title wins; a list's title names a stream that names itself nothing.
+    override val metadata: Map<String, String> =
+        if (listedTitle == null || source.metadata.keys.any { it.equals("title", ignoreCase = true) }) {
+            source.metadata
+        } else {
+            source.metadata + ("title" to listedTitle)
+        }
 
     /** The container's own claim, read once at open. Null when it declares none. */
     override val containerBitrateBps: Long? = source.bitrateBps

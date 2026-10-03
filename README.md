@@ -159,6 +159,7 @@ video decoder.
   files, live manifests, and manifests of several Periods, joined into one presentation. TTML and
   MP4 subtitle sets play as WebVTT. A DASH or HLS address plays as it is, recognised by its content
   type, its extension or its first bytes.
+- Lists of streams, as radio stations hand them out: a PLS file, or an M3U list that is not HLS.
 - Files, memory, bytes that your code pushes, streams, and Android content URIs and assets.
 - Recording of what plays into a Matroska file, with no re-encode.
 
@@ -660,6 +661,21 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
   playlist can name segments on any server.
 - Your own `MediaIo` can serve HLS too: report the address it read in `location`, and open the
   addresses the playlist names in `openRelated`.
+
+### Lists of streams
+
+A radio station's link is often a list that names its stream rather than the stream itself, and
+it plays as it is ([#450](https://github.com/yuroyami/KitePlayer/issues/450)). A PLS file is
+recognised by its `[playlist]` first line, an `audio/x-scpls` type or a `.pls` address, and an M3U
+list by the same marks as an HLS playlist, but with no `#EXT-X-` tag in it.
+
+- The first stream on the list that opens plays, so the backups a station lists after its main
+  stream take over when that one is down. When none opens, the last failure is reported.
+- The stream's title is the one the list gives it, `TitleN` in a PLS file and the `#EXTINF` text
+  in an M3U list, unless the stream names itself.
+- The streams open through the list's reader, on its client, so a `MediaIo` of your
+  own serves them through `openRelated`, as for HLS. A list that names another list is followed,
+  three levels deep at most.
 
 ### DASH
 

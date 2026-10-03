@@ -55,9 +55,9 @@ internal const val MAX_PLAYLIST_BYTES: Int = 16 * 1024 * 1024
  * Reads [io]'s playlist and prepares the open. [lifetime] is the lifetime of every bridge of the
  * source. The caller closes [io] when this throws.
  */
-internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job): HlsOpen {
+internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: String? = null): HlsOpen {
     val base = io.location ?: item.uri
-    val text = readPlaylist(io, item.uri).decodeToString()
+    val text = read ?: readPlaylist(io, item.uri).decodeToString()
     val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant)
     val playlist = master?.playlist ?: text
     val ledger = HlsLedger(item.uri)

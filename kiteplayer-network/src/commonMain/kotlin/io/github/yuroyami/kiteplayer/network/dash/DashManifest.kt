@@ -12,8 +12,8 @@ import io.github.yuroyami.kiteplayer.network.xml.XmlMini
  *
  * Honest scope, stated where it is true: static (VOD) presentations resolve fully. A dynamic
  * (live) manifest parses with its clock, and [Dash.mediaItemFor] plays it when HLS can carry its
- * segments; [DashManifestParser.segmentPlan] still refuses it. Multi-period joins, xlink and
- * encryption descriptors are out of this tier.
+ * segments; [DashManifestParser.segmentPlan] still refuses it. Several Periods play joined when
+ * HLS can carry every one of them (#403). Xlink and encryption descriptors are out of this tier.
  */
 public data class DashManifest(
     val isDynamic: Boolean,
@@ -328,9 +328,11 @@ public object DashManifestParser {
                             )
                         },
                         lang = set.attr("lang"),
+                        id = set.attr("id"),
                     )
                 },
                 startMicros = period.attr("start")?.let(::parseIsoDurationMicros),
+                id = period.attr("id"),
             )
         }
         return DashManifest(
@@ -392,6 +394,7 @@ public object DashManifestParser {
                         ?: repBase.url.takeIf { initialization?.attr("range") != null },
                     initializationRange = initialization?.attr("range")?.let(::parseByteRange),
                     segments = listed.map { (url, range) -> DashSegmentUrl(url ?: repBase.url, range) },
+                    presentationTimeOffset = list.attr("presentationTimeOffset")?.toLongOrNull() ?: 0L,
                 )
             },
             segmentBase = (rep.child("SegmentBase") ?: setSegmentBase)?.let { base ->
@@ -401,6 +404,7 @@ public object DashManifestParser {
                     indexRange = base.attr("indexRange")?.let(::parseByteRange),
                     initializationUrl = baseInitialization?.attr("sourceURL")?.let(::take) ?: repBase.url,
                     initializationRange = baseInitialization?.attr("range")?.let(::parseByteRange),
+                    presentationTimeOffset = base.attr("presentationTimeOffset")?.toLongOrNull() ?: 0L,
                 )
             },
         )
@@ -607,11 +611,13 @@ public object DashManifestParser {
         policy: DashUrlPolicy,
         nowMicros: Long?,
         urlLimits: UrlLimits = UrlLimits(),
+        periodStartMicros: Long = period.startMicros ?: 0L,
+        periodDurationMicros: Long? = period.durationMicros ?: manifest.durationMicros,
     ): DashTimedPlan? {
-        val totalMicros = (period.durationMicros ?: manifest.durationMicros)?.also {
+        val totalMicros = periodDurationMicros?.also {
             require(it >= 0) { "a duration of $it microseconds is negative" }
         }
-        val window = liveWindow(manifest, period, nowMicros)
+        val window = liveWindow(manifest, periodStartMicros, nowMicros)
         val list = representation.segmentList
         val template = representation.segmentTemplate
         return when {
@@ -632,13 +638,13 @@ public object DashManifestParser {
     /** The span of Period time, in microseconds, whose segments a live presentation has available. */
     private class LiveWindow(val fromMicros: Long, val edgeMicros: Long)
 
-    private fun liveWindow(manifest: DashManifest, period: DashPeriod, nowMicros: Long?): LiveWindow? {
+    private fun liveWindow(manifest: DashManifest, periodStartMicros: Long, nowMicros: Long?): LiveWindow? {
         if (!manifest.isDynamic) return null
         val start = requireNotNull(manifest.availabilityStartTimeMicros) {
             "a live manifest needs an availabilityStartTime"
         }
         val now = requireNotNull(nowMicros) { "a live manifest needs the time of day" }
-        val edge = now - start - (period.startMicros ?: 0L)
+        val edge = now - start - periodStartMicros
         return LiveWindow(edge - (manifest.timeShiftBufferDepthMicros ?: DEFAULT_LIVE_WINDOW_MICROS), edge)
     }
 
@@ -648,7 +654,7 @@ public object DashManifestParser {
 
     private fun listPlan(list: DashSegmentList, totalMicros: Long?, window: LiveWindow?): DashTimedPlan {
         val count = list.segments.size
-        val timeline = expandTimeline(list.timeline, list.timescale, totalMicros, window, count.toLong())
+        val timeline = expandTimeline(list.timeline, list.timescale, totalMicros, window, count.toLong(), list.presentationTimeOffset)
         val segments = ArrayList<DashTimedSegment>(count)
         for ((index, entry) in list.segments.withIndex()) {
             val (startMicros, durationMicros) = when {

@@ -56,37 +56,51 @@ class DashRefusalTest {
         return runBlocking { server.engine.resolvedConnectors().first().port }
     }
 
-    // a two-period presentation used to play period one and stop, silently.
+    /** Two Periods of four one-second segments in [mimeType], named by [extension]. */
+    private fun twoPeriods(mimeType: String, extension: String) = """
+        <?xml version="1.0"?>
+        <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT8S">
+            <Period duration="PT4S">
+                <AdaptationSet contentType="video" mimeType="$mimeType">
+                    <SegmentTemplate media="ad-${'$'}Number${'$'}.$extension" startNumber="1" timescale="1" duration="1"/>
+                    <Representation id="ad" bandwidth="1"/>
+                </AdaptationSet>
+            </Period>
+            <Period duration="PT4S">
+                <AdaptationSet contentType="video" mimeType="$mimeType">
+                    <SegmentTemplate media="main-${'$'}Number${'$'}.$extension" startNumber="1" timescale="1" duration="1"/>
+                    <Representation id="main" bandwidth="1"/>
+                </AdaptationSet>
+            </Period>
+        </MPD>
+    """.trimIndent()
+
+    // A two-period presentation used to play period one and stop, silently. Periods the HLS path
+    // carries now play joined (#403); the one-stream door still plays exactly one, so it refuses.
     @Test
-    fun aMultiPeriodManifestIsRefusedTypedNotTruncated() = runBlocking {
-        val port = serveMpd(
-            """
-            <?xml version="1.0"?>
-            <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT8S">
-                <Period duration="PT4S">
-                    <AdaptationSet contentType="video" mimeType="video/mp2t">
-                        <SegmentTemplate media="ad-${'$'}Number${'$'}.ts" startNumber="1" timescale="1" duration="1"/>
-                        <Representation id="ad" bandwidth="1"/>
-                    </AdaptationSet>
-                </Period>
-                <Period duration="PT4S">
-                    <AdaptationSet contentType="video" mimeType="video/mp2t">
-                        <SegmentTemplate media="main-${'$'}Number${'$'}.ts" startNumber="1" timescale="1" duration="1"/>
-                        <Representation id="main" bandwidth="1"/>
-                    </AdaptationSet>
-                </Period>
-            </MPD>
-            """.trimIndent(),
-        )
+    fun aMultiPeriodManifestTheOneStreamDoorWouldTruncateIsRefusedTyped() = runBlocking {
+        val port = serveMpd(twoPeriods("video/x-flv", "flv"))
         val client = HttpClient()
         try {
-            val failure = assertFailsWith<IllegalArgumentException> {
+            val failure = assertFailsWith<DashUnsupportedException> {
                 Dash.mediaItemFor("http://127.0.0.1:$port/movie.mpd", client)
             }
             assertTrue(
                 "2 Periods" in failure.message.orEmpty(),
                 "the refusal names the count: ${failure.message}",
             )
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
+    fun aMultiPeriodManifestTheHlsPathCarriesIsNotRefused() = runBlocking {
+        val port = serveMpd(twoPeriods("video/mp2t", "ts"))
+        val client = HttpClient()
+        try {
+            Dash.mediaItemFor("http://127.0.0.1:$port/movie.mpd", client)
+            Unit
         } finally {
             client.close()
         }

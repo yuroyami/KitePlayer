@@ -23,6 +23,15 @@ import kotlinx.coroutines.sync.withLock
  * A [DashSegmentBase] representation names its segments only in its file's segment index, which
  * this reads through [openUrl] the first time the representation's playlist is asked for: the
  * `sidx` of an MP4 file, or the `Cues` of a WebM one (#401).
+ *
+ * A manifest of several Periods plays as one presentation (#403). Each track's playlist joins the
+ * matching representation of every Period, and names its segments and initializations under this
+ * reader's own host, where each segment is served moved onto the presentation's timeline: the
+ * timeline of the first Period's picture, which a single-Period manifest keeps untouched. An MP4
+ * segment is written against the initialization its track's stream began with, which FFmpeg's MP4
+ * reader keeps for the whole stream, and loses the samples from its Period's end on. A WebM or
+ * MPEG-TS segment keeps them, so media that runs past its Period's end overlaps the next Period;
+ * packagers end a Period's last segment at its end, as the fixtures do.
  */
 internal class DashHlsMediaIo(
     private val presentation: DashHlsPresentation,
@@ -50,8 +59,23 @@ internal class DashHlsMediaIo(
     /** The subtitle segments served as WebVTT, by the address their playlist names them under, oldest first. */
     private val conversions = LinkedHashMap<String, Conversion>()
 
-    /** The initialization segments of MP4 subtitle tracks, read once each. */
-    private val subtitleInits = HashMap<String, ByteArray>()
+    /** The initialization segments read so far, by address and range, read once each. */
+    private val inits = HashMap<String, ByteArray>()
+
+    /** The segments and initializations of joined Periods, by the address their playlist names them under, oldest first. */
+    private val pieces = LinkedHashMap<String, Piece>()
+
+    /** The MP4 track each HLS track's stream began with: the first initialization served for it. */
+    private val baseTracks = HashMap<String, Fmp4.Track>()
+
+    /** The Period the presentation's tracks were taken from, the first of the manifest at the open. */
+    private val reference: DashPeriod = manifest.periods.first()
+    private val referenceStartMicros: Long = manifest.periodTimings().first().startMicros
+
+    /** The presentation time offset of the reference Period's picture, or else its sound, whose timeline the presentation keeps. */
+    private val referenceOffsetMicros: Long =
+        (presentation.tracks.firstOrNull { it.role == DashHlsRole.Video } ?: presentation.tracks.firstOrNull { it.role == DashHlsRole.Audio })
+            ?.representation?.offsetMicros() ?: 0L
     private var fetchedAtMicros = nowMicros()
 
     override val size: Long get() = master.size.toLong()
@@ -87,6 +111,16 @@ internal class DashHlsMediaIo(
         lock.withLock { conversions[uri] }?.let { conversion ->
             return MemoryMediaIo(convert(conversion).encodeToByteArray(), uri, WEBVTT_MEDIA_TYPE)
         }
+        lock.withLock { pieces[uri] }?.let { piece ->
+            val bytes = try {
+                serve(piece)
+            } catch (refused: DashUnsupportedException) {
+                // FFmpeg skips a segment it cannot open, so a Period it cannot read plays as a gap.
+                KiteLog.log("KiteDash", "a segment of a joined Period is skipped: ${refused.message}")
+                throw refused
+            }
+            return MemoryMediaIo(bytes, uri, null)
+        }
         // Every other address came from a playlist written here, so from the manifest; it is
         // checked again all the same, because FFmpeg is free to ask for anything.
         if (uri.substringAfter("://").substringBefore('/').equals(DashHls.HOST, ignoreCase = true)) return null
@@ -104,14 +138,159 @@ internal class DashHlsMediaIo(
     private suspend fun playlist(track: DashHlsTrack): String = lock.withLock {
         if (!manifest.isDynamic) {
             return@withLock written.getOrPut(track.address) {
-                DashHls.mediaPlaylist(served(track, plan(track, manifest, null)), live = false)
+                DashHls.mediaPlaylist(servedPlan(track, manifest, null), live = false)
             }
         }
         val now = nowMicros()
         refreshIfDue(now)
-        val plan = plan(track, manifest, now)
+        val plan = servedPlan(track, manifest, now)
         val sequence = sequences.getOrPut(track.address) { LiveSequence() }.first(plan)
-        DashHls.mediaPlaylist(served(track, plan), live = true, sequence = sequence)
+        DashHls.mediaPlaylist(plan, live = true, sequence = sequence)
+    }
+
+    /** [track]'s plan as FFmpeg is to read it: one Period's, or every Period's joined when [from] has more or another. */
+    private suspend fun servedPlan(track: DashHlsTrack, from: DashManifest, now: Long?): DashTimedPlan {
+        val single = from.periods.size == 1 && from.periodTimings().first().startMicros == referenceStartMicros
+        return if (single) served(track, plan(track, from, now)) else joinedPlan(track, from, now)
+    }
+
+    /**
+     * [track]'s segments in every Period of [from], in order, on the presentation's timeline
+     * (#403). Each Period gives the representation that [DashPeriods.match] finds; a Period with
+     * none gives nothing. A segment that begins after its Period ends is left out, and one that runs
+     * past it is listed only until it, because the next Period's time begins there. Every segment
+     * and initialization is named under this reader's own host, with what serving it takes.
+     */
+    private suspend fun joinedPlan(track: DashHlsTrack, from: DashManifest, now: Long?): DashTimedPlan {
+        val timings = from.periodTimings()
+        val segments = ArrayList<DashTimedSegment>()
+        val root = "https://${DashHls.HOST}/${track.setIndex}-${track.representationIndex}"
+        for ((index, timing) in timings.withIndex()) {
+            val (setIndex, representationIndex) = DashPeriods.match(track, reference, timing.period) ?: continue
+            val set = timing.period.adaptationSets[setIndex]
+            val representation = set.representations[representationIndex]
+            val periodPlan = DashManifestParser.timedPlan(
+                from, timing.period, representation, policy, now,
+                periodStartMicros = timing.startMicros, periodDurationMicros = timing.durationMicros,
+            ) ?: run {
+                val base = checkNotNull(representation.segmentBase) { "a representation without segments" }
+                indexed.getOrPut("${representation.baseUrl}#${base.indexRange}") {
+                    if (DashHls.isWebm(set, representation)) {
+                        webmPlan(representation, base, timing.durationMicros)
+                    } else {
+                        indexedPlan(representation, base)
+                    }
+                }
+            }
+            // The Period's media time, less its offset, is Period time; the presentation keeps the
+            // reference Period's picture where its own media time put it.
+            val shift = (timing.startMicros - referenceStartMicros) + referenceOffsetMicros - representation.offsetMicros()
+            val end = timing.endMicros?.let { it - referenceStartMicros + referenceOffsetMicros }
+            val container = DashPeriods.containerOf(set, representation)
+            val format = track.subtitleFormat
+            val initAddress = periodPlan.initializationUrl?.takeIf { format == null }?.let { url ->
+                "$root/${timing.key}/init".also { pieces[it] = Piece.Init(track, url, periodPlan.initializationRange, container) }
+            }
+            var first = index > 0
+            for (segment in periodPlan.segments) {
+                val start = timing.startMicros + segment.startMicros
+                val periodEnd = timing.endMicros
+                if (periodEnd != null && start >= periodEnd) break
+                val duration = if (periodEnd != null) minOf(segment.durationMicros, periodEnd - start) else segment.durationMicros
+                val address: String
+                if (format != null) {
+                    address = "$root/${timing.key}/${segment.number}.vtt"
+                    conversions.remove(address)
+                    conversions[address] = Conversion(
+                        track, format, segment,
+                        segment.initializationUrl ?: periodPlan.initializationUrl,
+                        segment.initializationRange ?: periodPlan.initializationRange,
+                        offsetMicros = shift,
+                    )
+                } else {
+                    address = "$root/${timing.key}/${segment.number}"
+                    pieces.remove(address)
+                    pieces[address] = Piece.Media(
+                        track, segment.url, segment.range, container, shift,
+                        endMicros = end.takeIf { container == DashContainer.Mp4 },
+                        initializationUrl = periodPlan.initializationUrl,
+                        initializationRange = periodPlan.initializationRange,
+                    )
+                }
+                segments += DashTimedSegment(
+                    address, null, segment.number, start, duration.coerceAtLeast(1),
+                    initializationUrl = initAddress, discontinuity = first,
+                )
+                first = false
+            }
+        }
+        // A live presentation names new segments for ever; the oldest go once FFmpeg is long past them.
+        while (pieces.size > MAX_PIECES) pieces.remove(pieces.keys.first())
+        while (conversions.size > MAX_CONVERSIONS) conversions.remove(conversions.keys.first())
+        return DashTimedPlan(null, null, segments)
+    }
+
+    /**
+     * The bytes of [piece] as FFmpeg is to read them. An initialization is served as it is, and
+     * the first of an MP4 track's is kept as the one its stream began with. A segment is moved
+     * onto the presentation's timeline: an MP4 one written against that first initialization,
+     * a WebM one by its clusters' timestamps, an MPEG-TS one by its PTS, DTS and PCR.
+     */
+    private suspend fun serve(piece: Piece): ByteArray = when (piece) {
+        is Piece.Init -> cachedInit(piece.url, piece.range).also { init ->
+            if (piece.container == DashContainer.Mp4) {
+                Fmp4.tracks(init).firstOrNull()?.let { track -> lock.withLock { baseTracks.getOrPut(piece.track.address) { track } } }
+            }
+        }
+        is Piece.Media -> {
+            val bytes = fetch(piece.url, piece.range, MAX_SEGMENT_BYTES)
+            val init = piece.initializationUrl?.let { cachedInit(it, piece.initializationRange) }
+            when (piece.container) {
+                DashContainer.Mp4 -> {
+                    val source = init?.let { Fmp4.tracks(it).firstOrNull() }
+                    if (source == null) {
+                        bytes
+                    } else {
+                        val target = lock.withLock { baseTracks.getOrPut(piece.track.address) { source } }
+                        Fmp4Rewrite.rewrite(bytes, Fmp4Rewrite.Plan(source, target, piece.shiftMicros, piece.endMicros))
+                    }
+                }
+                DashContainer.Webm -> {
+                    val scale = init?.let { WebmIndex.layout(it).timestampScaleNanos } ?: 1_000_000L
+                    WebmRewrite.shiftClusters(bytes, piece.shiftMicros * 1000 / scale)
+                }
+                DashContainer.Ts -> TsRewrite.shift(bytes, rounded(piece.shiftMicros * 9, 100))
+                DashContainer.Other -> bytes
+            }
+        }
+    }
+
+    /** [value] divided by [divisor], to the nearest whole number, halves away from zero. */
+    private fun rounded(value: Long, divisor: Long): Long = if (value >= 0) (value + divisor / 2) / divisor else (value - divisor / 2) / divisor
+
+    /** The initialization at [url], or its [range] of it, read once and kept. */
+    private suspend fun cachedInit(url: String, range: LongRange?): ByteArray {
+        val key = "$url#$range"
+        lock.withLock { inits[key] }?.let { return it }
+        val bytes = fetch(url, range, MAX_SUBTITLE_BYTES)
+        lock.withLock { inits[key] = bytes }
+        return bytes
+    }
+
+    /** A segment or initialization of a joined Period, served from this reader's own address. */
+    private sealed interface Piece {
+        class Init(val track: DashHlsTrack, val url: String, val range: LongRange?, val container: DashContainer) : Piece
+
+        class Media(
+            val track: DashHlsTrack,
+            val url: String,
+            val range: LongRange?,
+            val container: DashContainer,
+            val shiftMicros: Long,
+            val endMicros: Long?,
+            val initializationUrl: String?,
+            val initializationRange: LongRange?,
+        ) : Piece
     }
 
     /**
@@ -124,7 +303,7 @@ internal class DashHlsMediaIo(
         val segments = plan.segments.map { segment ->
             val address = "https://${DashHls.HOST}/${track.setIndex}-${track.representationIndex}/${segment.number}.vtt"
             conversions.remove(address)
-            conversions[address] = Conversion(track, format, segment, plan.initializationUrl, plan.initializationRange)
+            conversions[address] = Conversion(track, format, segment, plan.initializationUrl, plan.initializationRange, timelineOffset(track))
             DashTimedSegment(address, null, segment.number, segment.startMicros, segment.durationMicros)
         }
         // A live track names new segments for ever; the oldest go once FFmpeg is long past them.
@@ -135,20 +314,18 @@ internal class DashHlsMediaIo(
     /** The WebVTT that [conversion]'s segment holds, on the picture's timeline. */
     private suspend fun convert(conversion: Conversion): String {
         val segment = conversion.segment
-        val bytes = fetch(segment.url, segment.range)
+        val bytes = fetch(segment.url, segment.range, MAX_SUBTITLE_BYTES)
         val cues = when (conversion.format) {
             DashSubtitleFormat.Mp4 -> {
                 val initUrl = conversion.initializationUrl
                     ?: throw DashUnsupportedException("the MP4 subtitles of ${conversion.track.representation.id} have no initialization")
-                val key = "$initUrl#${conversion.initializationRange}"
-                val init = lock.withLock { subtitleInits[key] } ?: fetch(initUrl, conversion.initializationRange).also { read ->
-                    lock.withLock { subtitleInits[key] = read }
-                }
-                DashSubtitles.mp4Cues(init, bytes)
+                DashSubtitles.mp4Cues(cachedInit(initUrl, conversion.initializationRange), bytes)
             }
-            else -> Ttml.cues(bytes.decodeToString())
+            DashSubtitleFormat.Ttml -> Ttml.cues(bytes.decodeToString())
+            // WebVTT is converted only to move it, when Periods are joined.
+            DashSubtitleFormat.WebVtt -> return DashSubtitles.shiftWebVtt(bytes.decodeToString(), conversion.offsetMicros)
         }
-        return webVtt(DashSubtitles.shift(cues, timelineOffset(conversion.track)))
+        return webVtt(DashSubtitles.shift(cues, conversion.offsetMicros))
     }
 
     /**
@@ -160,33 +337,31 @@ internal class DashHlsMediaIo(
     private fun timelineOffset(track: DashHlsTrack): Long {
         val main = presentation.tracks.firstOrNull { it.role == DashHlsRole.Video }
             ?: presentation.tracks.firstOrNull { it.role == DashHlsRole.Audio }
-        return (main?.representation?.let(::offsetMicros) ?: 0L) - offsetMicros(track.representation)
+        return (main?.representation?.offsetMicros() ?: 0L) - track.representation.offsetMicros()
     }
 
-    private fun offsetMicros(representation: DashRepresentation): Long {
-        val template = representation.segmentTemplate ?: return 0L
-        val offset = template.presentationTimeOffset
-        return offset / template.timescale * 1_000_000 + offset % template.timescale * 1_000_000 / template.timescale
-    }
-
-    /** The bytes of [url], or of its [range] of it, after [policy] accepts it. */
-    private suspend fun fetch(url: String, range: LongRange?): ByteArray {
-        if (range != null) return readRange(url, range)
+    /** The bytes of [url], or of its [range] of it, after [policy] accepts it, at most [limit] of them. */
+    private suspend fun fetch(url: String, range: LongRange?, limit: Long): ByteArray {
+        if (range != null) {
+            require(range.last - range.first < limit) { "${shownUri(url)} asks for more than $limit bytes" }
+            return readRange(url, range)
+        }
         val io = openUrl(DashManifestParser.requireAllowed(manifestUrl, url, policy))
         try {
-            return readAllBounded(io, MAX_SUBTITLE_BYTES, "the subtitles at ${shownUri(url)}")
+            return readAllBounded(io, limit, "the segment at ${shownUri(url)}")
         } finally {
             io.close()
         }
     }
 
-    /** A subtitle segment that this reader serves as WebVTT. */
+    /** A subtitle segment that this reader serves as WebVTT, its cues moved by [offsetMicros]. */
     private class Conversion(
         val track: DashHlsTrack,
         val format: DashSubtitleFormat,
         val segment: DashTimedSegment,
         val initializationUrl: String?,
         val initializationRange: LongRange?,
+        val offsetMicros: Long,
     )
 
     private suspend fun plan(track: DashHlsTrack, from: DashManifest, now: Long?): DashTimedPlan {
@@ -204,7 +379,7 @@ internal class DashHlsMediaIo(
         }
     }
 
-    /** The manifest fetched again when it is live, its minimum update period has passed, and it still has one Period. */
+    /** The manifest fetched again when it is live and its minimum update period has passed. */
     private suspend fun refreshIfDue(now: Long) {
         val fetch = refetch ?: return
         val period = manifest.minimumUpdatePeriodMicros ?: return
@@ -219,7 +394,7 @@ internal class DashHlsMediaIo(
             KiteLog.log("KiteDash", "the live manifest could not be fetched again: ${failure.message}")
             return
         }
-        if (fresh.isDynamic && fresh.periods.size == 1) manifest = fresh
+        if (fresh.isDynamic && fresh.periods.isNotEmpty()) manifest = fresh
     }
 
     /** The segments that [base]'s segment index names, read from its file. */
@@ -368,11 +543,11 @@ internal class DashHlsMediaIo(
         }
     }
 
-    /** A playlist or a subtitle segment written in memory, read under its own address. */
+    /** A playlist, a subtitle segment or a moved segment written in memory, read under its own address. */
     private class MemoryMediaIo(
         private val bytes: ByteArray,
         override val location: String,
-        override val contentType: String = HLS_MEDIA_TYPE,
+        override val contentType: String? = HLS_MEDIA_TYPE,
     ) : MediaIo {
         private var position = 0
         override val size: Long get() = bytes.size.toLong()
@@ -411,6 +586,9 @@ internal class DashHlsMediaIo(
 
         /** How many converted subtitle segments a live reader remembers. */
         private const val MAX_CONVERSIONS = 4096
+
+        /** How many segments and initializations of joined Periods a live reader remembers. */
+        private const val MAX_PIECES = 8192
 
         /** How much of a WebM file is read to find its layout when the manifest gives no initialization range. */
         private const val WEBM_HEAD_BYTES = 64L * 1024

@@ -55,6 +55,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - A DASH subtitle set of TTML, or of TTML or WebVTT in MP4 segments (`stpp`, `wvtt`), plays as a
   subtitle rendition (#402). Such sets used to be left out. The DASH reader serves them to FFmpeg as
   WebVTT, with their text, line breaks, italic, bold and underline, on the picture's timeline.
+- A DASH manifest of several Periods plays as one presentation, as ad insertion and chapters
+  stitch them (#403). It used to be refused with `DashUnsupportedException`, which now happens only
+  when its segments are in a container the HLS path does not take. Time runs on across each
+  boundary although each Period's media time starts again, an fMP4 Period of another picture size
+  decodes at its own, and a live manifest that a refresh gives a new Period plays on into it.
 - An HLS playlist that nothing marks is recognised by its first bytes (#400). A reader whose bytes
   start with `#EXTM3U` plays through the HLS path when no format hint, HLS content type or `.m3u8`
   address says so, which an address with no extension sent as text or bytes never did. A format

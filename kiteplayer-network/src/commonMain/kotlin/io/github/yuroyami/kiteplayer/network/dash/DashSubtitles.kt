@@ -38,6 +38,31 @@ internal object DashSubtitles {
     fun shift(cues: List<TimedCue>, offsetMicros: Long): List<TimedCue> =
         if (offsetMicros == 0L) cues else cues.map { TimedCue(it.startMicros + offsetMicros, it.endMicros + offsetMicros, it.text) }
 
+    /**
+     * A WebVTT document with every cue's start and end moved by [offsetMicros], which a WebVTT set
+     * of a later Period needs to land on the presentation's timeline (#403). The rest of the text
+     * stays as it is.
+     */
+    fun shiftWebVtt(text: String, offsetMicros: Long): String {
+        if (offsetMicros == 0L) return text
+        return text.lines().joinToString("\n") { line ->
+            if ("-->" !in line) line else VTT_TIME.replace(line) { match ->
+                val g = match.groupValues
+                val micros = ((g[1].toLongOrNull() ?: 0L) * 3600 + g[2].toLong() * 60 + g[3].toLong()) * 1_000_000 + g[4].toLong() * 1000
+                vttTimestamp(micros + offsetMicros)
+            }
+        }
+    }
+
+    /** Microseconds as a WebVTT timestamp, `hh:mm:ss.ttt`, never negative. */
+    private fun vttTimestamp(micros: Long): String {
+        val millis = micros.coerceAtLeast(0) / 1000
+        return "${(millis / 3_600_000).toString().padStart(2, '0')}:${(millis / 60_000 % 60).toString().padStart(2, '0')}:" +
+            "${(millis / 1000 % 60).toString().padStart(2, '0')}.${(millis % 1000).toString().padStart(3, '0')}"
+    }
+
+    private val VTT_TIME = Regex("""(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})""")
+
     /** The TTML document of one `stpp` sample, from [start] to [end] of the track. */
     private fun ttmlCues(data: ByteArray, start: Long, end: Long): List<TimedCue> {
         // A sample may carry images after the document as subsamples; the document ends with </tt>.

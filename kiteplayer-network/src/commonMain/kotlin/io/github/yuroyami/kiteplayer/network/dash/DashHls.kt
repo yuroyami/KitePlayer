@@ -1,6 +1,9 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
-/** One media segment with its place in time: [startMicros] and [durationMicros] are Period time. */
+/**
+ * One media segment with its place in time: [startMicros] and [durationMicros] are Period time,
+ * or presentation time in a plan that joins Periods (#403).
+ */
 internal class DashTimedSegment(
     val url: String,
     /** The bytes of [url] that hold the segment, or null for all of it. */
@@ -9,6 +12,11 @@ internal class DashTimedSegment(
     val number: Long,
     val startMicros: Long,
     val durationMicros: Long,
+    /** The segment's own initialization, in a plan that joins Periods, whose initializations differ. */
+    val initializationUrl: String? = null,
+    val initializationRange: LongRange? = null,
+    /** Whether a new Period begins with this segment. */
+    val discontinuity: Boolean = false,
 )
 
 /** A representation's segments in order, after its initialization, if it has one. */
@@ -79,6 +87,9 @@ internal object DashHls {
         if (media.isEmpty()) return false
         return media.all { set -> set.representations.isNotEmpty() && set.representations.all { carriable(set, it) } }
     }
+
+    /** Whether HLS can carry every Period of [manifest], which then play joined (#403). */
+    fun carries(manifest: DashManifest): Boolean = manifest.periods.isNotEmpty() && manifest.periods.all(::carries)
 
     /**
      * The stand-in for [period]. Video sets give variants, in ascending bandwidth. With no video, the
@@ -162,12 +173,22 @@ internal object DashHls {
             append("#EXT-X-TARGETDURATION:").append((longest + 999_999) / 1_000_000).append('\n')
             append("#EXT-X-MEDIA-SEQUENCE:").append(sequence).append('\n')
             if (!live) append("#EXT-X-PLAYLIST-TYPE:VOD\n")
-            plan.initializationUrl?.let { init ->
-                append("#EXT-X-MAP:URI=\"").append(init).append('"')
-                plan.initializationRange?.let { append(",BYTERANGE=\"").append(byteRange(it)).append('"') }
+            fun map(url: String, range: LongRange?) {
+                append("#EXT-X-MAP:URI=\"").append(url).append('"')
+                range?.let { append(",BYTERANGE=\"").append(byteRange(it)).append('"') }
                 append('\n')
             }
+            // A plan that joins Periods names each segment's initialization, and a new one where it changes.
+            val ownInitializations = plan.segments.any { it.initializationUrl != null }
+            if (!ownInitializations) plan.initializationUrl?.let { map(it, plan.initializationRange) }
+            var current: String? = null
             for (segment in plan.segments) {
+                if (segment.discontinuity) append("#EXT-X-DISCONTINUITY\n")
+                val init = segment.initializationUrl
+                if (ownInitializations && init != null && "$init#${segment.initializationRange}" != current) {
+                    map(init, segment.initializationRange)
+                    current = "$init#${segment.initializationRange}"
+                }
                 append("#EXTINF:").append(seconds(segment.durationMicros)).append(",\n")
                 segment.range?.let { append("#EXT-X-BYTERANGE:").append(byteRange(it)).append('\n') }
                 append(segment.url).append('\n')

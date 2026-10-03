@@ -1,11 +1,16 @@
 package io.github.yuroyami.kiteplayer
 
 import com.sun.net.httpserver.HttpServer
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegSource
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegSourceFactory
 import io.github.yuroyami.kiteplayer.network.KtorMediaIoResolver
 import io.github.yuroyami.kiteplayer.network.dash.Dash
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
+import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.math.abs
@@ -26,7 +31,8 @@ import kotlin.test.assertTrue
  * fixtures from a local HTTP server that answers range requests: separate video and audio sets,
  * one numbered set, single files whose segment index names their fragments, and a live manifest
  * written over the numbered set's segments, and the same layouts in WebM (#401). The automatic
- * transport plays the manifests from addresses with no extension and no type (#400).
+ * transport plays the manifests from addresses with no extension and no type (#400). Several
+ * Periods play as one presentation, in fMP4, WebM and MPEG-TS (#403).
  */
 class DashThroughHlsTest {
 
@@ -40,6 +46,7 @@ class DashThroughHlsTest {
     /** Every path the server was asked for, in order. */
     private val asked: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private var liveManifest: String? = null
+    private var livePeriods: List<String> = emptyList()
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { exchange ->
             val path = exchange.requestURI.path.removePrefix("/")
@@ -57,6 +64,11 @@ class DashThroughHlsTest {
                 path == "subs.ttml" -> TTML.encodeToByteArray()
                 path == "stpp.mpd" -> File(media, "separate.mpd").readText()
                     .replace("</Period>", "$STPP_SET</Period>").encodeToByteArray()
+                // The first fetch names one Period; every refresh after it adds the next (#403).
+                path == "live-periods.mpd" -> livePeriods.getOrNull(minOf(asked.count { it == path }, livePeriods.size) - 1)?.encodeToByteArray()
+                path == "periods.mpd" -> periodsManifest(listOf("a", "b", "c"), PeriodLayout.Mp4).encodeToByteArray()
+                path == "webm-periods.mpd" -> periodsManifest(listOf("a", "b"), PeriodLayout.Webm).encodeToByteArray()
+                path == "ts-periods.mpd" -> periodsManifest(listOf("a", "b"), PeriodLayout.Ts).encodeToByteArray()
                 else -> File(media, path).takeIf { it.isFile && it.parentFile == media }?.readBytes()
             }
             if (body == null) {
@@ -228,6 +240,173 @@ class DashThroughHlsTest {
     }
 
     @Test
+    fun threeMp4PeriodsPlayAsOnePresentationWithoutAGapOrAStepBack() = withSource("periods.mpd") { source ->
+        assertEquals(60.0, assertNotNull(source.duration).micros / 1e6, 0.5, "the presentation lasts as long as its three Periods")
+        val timeline = source.readTimeline()
+        assertContinuous(timeline.video, from = 0.0, to = 60.0, "picture")
+        assertContinuous(timeline.audio, from = 0.0, to = 60.0, "sound")
+        for (name in listOf("a", "b", "c")) {
+            assertTrue(asked.any { it.startsWith("period-$name-0-") }, "no picture of Period $name was read: $asked")
+        }
+        assertTrue("period-a-1-11.m4s" !in asked, "a segment that begins where its Period ends was read")
+    }
+
+    @Test
+    fun aPeriodOfAnotherSizeDecodesAtItsOwnSizeAndTheOnesAroundItAtTheirs() = withSource("periods.mpd") { source ->
+        val video = source.streams.first { it.kind == TrackKind.Video }
+        // One decoder across every seek, as the engine keeps one, so it carries each Period's
+        // parameter sets into the next one it is asked to decode.
+        val decoder = checkNotNull((source as KiteFFmpegSource).videoDecoderFactories().firstNotNullOfOrNull { it.create(video, HwdecPolicy.Off) })
+        try {
+            val across = source.picturesBetween(decoder, from = 16.0, until = 22.0)
+            val before = across.filter { it.first < 19.99 }
+            val after = across.filter { it.first >= 19.99 }
+            assertTrue(before.size > 60 && after.size > 30, "only ${before.size} pictures before 20 s and ${after.size} after")
+            assertEquals(setOf(VideoSize(320, 180)), before.map { it.second }.toSet(), "the first Period decodes at its size")
+            assertEquals(setOf(VideoSize(640, 360)), after.map { it.second }.toSet(), "the second Period decodes at its size")
+            assertEquals(20.0, after.first().first, 0.04, "the second Period's first picture is where the Period begins")
+            val third = source.picturesBetween(decoder, from = 50.0, until = 52.0, generation = 2)
+            assertEquals(setOf(VideoSize(320, 180)), third.map { it.second }.toSet(), "the third Period decodes at its size")
+            source.picturesBetween(decoder, from = 30.0, until = 31.0, generation = 3)
+            val first = source.picturesBetween(decoder, from = 4.0, until = 5.0, generation = 4)
+            assertEquals(setOf(VideoSize(320, 180)), first.map { it.second }.toSet(), "the first Period decodes at its size again")
+        } finally {
+            decoder.close()
+        }
+    }
+
+    @Test
+    fun twoWebmPeriodsPlayAsOnePresentation() = withSource("webm-periods.mpd") { source ->
+        assertEquals(40.0, assertNotNull(source.duration).micros / 1e6, 0.5)
+        // The seek comes first: once FFmpeg's HLS reader has read WebM to its end, it seeks nowhere.
+        source.seekToKeyframe(Pts(30_000_000))
+        val after = source.readFor(seconds = 1.0)
+        assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 30 s is at ${after.firstVideo} s")
+        // VP9 states its size in every keyframe, so the second Period's header need not reach the decoder.
+        val video = source.streams.first { it.kind == TrackKind.Video }
+        val decoder = checkNotNull((source as KiteFFmpegSource).videoDecoderFactories().firstNotNullOfOrNull { it.create(video, HwdecPolicy.Off) })
+        try {
+            val across = source.picturesBetween(decoder, from = 16.0, until = 22.0, generation = 2)
+            assertEquals(setOf(VideoSize(320, 180)), across.filter { it.first < 19.99 }.map { it.second }.toSet())
+            assertEquals(setOf(VideoSize(640, 360)), across.filter { it.first >= 19.99 }.map { it.second }.toSet())
+        } finally {
+            decoder.close()
+        }
+        source.seekToKeyframe(Pts(0))
+        val timeline = source.readTimeline()
+        assertContinuous(timeline.video, from = 0.0, to = 40.0, "picture")
+        assertContinuous(timeline.audio, from = 0.0, to = 40.0, "sound")
+    }
+
+    @Test
+    fun twoMpegTsPeriodsPlayAsOnePresentation() = withSource("ts-periods.mpd") { source ->
+        assertEquals(40.0, assertNotNull(source.duration).micros / 1e6, 0.5)
+        val timeline = source.readTimeline()
+        assertContinuous(timeline.video, from = 0.0, to = 40.0, "picture")
+        assertContinuous(timeline.audio, from = 0.0, to = 40.0, "sound")
+        source.seekToKeyframe(Pts(30_000_000))
+        val after = source.readFor(seconds = 1.0)
+        assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 30 s is at ${after.firstVideo} s")
+    }
+
+
+    @Test
+    fun aLivePresentationPlaysOnIntoAPeriodThatARefreshAdds() = runBlocking {
+        // Sixteen seconds in: the first Period, which ends at twenty, has had eight segments, and
+        // the manifest names no second Period until it is fetched again.
+        val start = Instant.now().minusSeconds(16)
+        livePeriods = listOf(
+            periodsManifest(listOf("a"), PeriodLayout.Mp4, availabilityStart = start),
+            periodsManifest(listOf("a", "b"), PeriodLayout.Mp4, availabilityStart = start),
+        )
+        val source = KiteFFmpegSourceFactory().open(Dash.mediaItemFor("$root/live-periods.mpd", client))
+        try {
+            source.selectStreams(source.streams.map { it.index }.toSet())
+            val kinds = source.streams.associate { it.index to it.kind }
+            val video = ArrayList<Double>()
+            // A live stream that stops growing waits inside the read for ever, so the deadline interrupts it.
+            var timedOut = false
+            val watchdog = launch(Dispatchers.Default) {
+                delay(30_000)
+                timedOut = true
+                source.interrupt()
+            }
+            try {
+                while (video.size < 2 || video.last() - video.first() < 12.0) {
+                    val packet = try {
+                        source.readPacket()
+                    } catch (interrupted: Exception) {
+                        if (timedOut) null else throw interrupted
+                    } ?: break
+                    packet.use { if (kinds[it.streamIndex] == TrackKind.Video) it.pts?.let { pts -> video += pts.micros / 1e6 } }
+                }
+            } finally {
+                watchdog.cancel()
+            }
+            assertTrue(video.size > 2 && video.last() - video.first() >= 12.0, "the stream stopped after ${video.lastOrNull()?.minus(video.first())} s: $asked")
+            assertTrue("period-b-0-2.m4s" in asked, "the Period the refresh added was not played: $asked")
+            assertContinuous(video, from = video.first(), to = video.last(), "picture")
+        } finally {
+            source.close()
+        }
+    }
+
+    /** [times] run from about [from] to about [to] seconds, never step back, and never leave a hole. */
+    private fun assertContinuous(times: List<Double>, from: Double, to: Double, what: String) {
+        assertTrue(times.isNotEmpty(), "no $what at all")
+        assertEquals(from, times.first(), 0.1, "the first $what")
+        assertEquals(to, times.last(), 0.2, "the last $what")
+        // The sound of each Period starts with its encoder's priming, a frame or so before its media time 0.
+        val steps = times.zipWithNext()
+        steps.firstOrNull { (a, b) -> b < a - 0.03 }?.let { (a, b) -> error("the $what steps back from $a s to $b s") }
+        steps.firstOrNull { (a, b) -> b - a > 0.1 }?.let { (a, b) -> error("the $what has a hole from $a s to $b s") }
+    }
+
+    private class Timeline(val video: List<Double>, val audio: List<Double>)
+
+    /** Every packet's time to the end, picture and sound apart. */
+    private suspend fun PlayerMediaSource.readTimeline(): Timeline {
+        val kinds = streams.associate { it.index to it.kind }
+        val video = ArrayList<Double>()
+        val audio = ArrayList<Double>()
+        while (true) {
+            val packet = readPacket() ?: break
+            packet.use {
+                val at = (it.pts?.micros ?: return@use) / 1e6
+                when (kinds[it.streamIndex]) {
+                    TrackKind.Video -> video += at
+                    TrackKind.Audio -> audio += at
+                    else -> {}
+                }
+            }
+        }
+        return Timeline(video, audio)
+    }
+
+    /**
+     * Each picture [decoder] gives from the keyframe before [from] seconds to [until], with its time
+     * and size. A [generation] above the first flushes it first, as the engine does at a seek.
+     */
+    private suspend fun PlayerMediaSource.picturesBetween(decoder: VideoDecoder, from: Double, until: Double, generation: Long = 1): List<Pair<Double, VideoSize>> {
+        val video = streams.first { it.kind == TrackKind.Video }
+        val out = ArrayList<Pair<Double, VideoSize>>()
+        if (generation > 1) decoder.flush(Generation(generation))
+        seekToKeyframe(Pts((from * 1e6).toLong()))
+        suspend fun drain() {
+            while (true) decoder.receive()?.use { out += it.pts.micros / 1e6 to it.size } ?: break
+        }
+        while (out.lastOrNull()?.first?.let { it < until } != false) {
+            val packet = readPacket() ?: break
+            packet.use {
+                if (it.streamIndex != video.index) return@use
+                while (!decoder.send(it)) drain()
+            }
+            drain()
+        }
+        return out
+    }
+
+    @Test
     fun aManifestWithNoExtensionAndNoTypePlaysThroughTheAutomaticTransport() = withAutomaticSource("watch?session=7") { source ->
         assertEquals(listOf(180, 360), source.variants.map { it.height }, "each video representation is a variant")
         val read = source.readFor(seconds = 4.0)
@@ -313,6 +492,63 @@ class DashThroughHlsTest {
             </Period>
         </MPD>
     """.trimIndent()
+
+    private enum class PeriodLayout { Mp4, Webm, Ts }
+
+    /**
+     * The Period fixtures [names] one after another, twenty seconds each, as an ad-stitched
+     * presentation is: each Period's media time starts from zero again, and each second Period's
+     * picture is another size, so an MP4 one's parameter sets differ (#403). Live from
+     * [availabilityStart] when it is given.
+     */
+    private fun periodsManifest(names: List<String>, layout: PeriodLayout, availabilityStart: Instant? = null): String = buildString {
+        val id = "\$RepresentationID\$"
+        val number = "\$Number\$"
+        fun template(media: String, init: String?) =
+            """<SegmentTemplate timescale="1000000" duration="2000000" startNumber="1" media="$media"""" +
+                (init?.let { """ initialization="$it"""" } ?: "") + "/>"
+        if (availabilityStart == null) {
+            append("""<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT${names.size * 20}S">""")
+        } else {
+            append("""<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="dynamic" availabilityStartTime="$availabilityStart" """)
+            append("""minimumUpdatePeriod="PT2S" timeShiftBufferDepth="PT20S">""")
+        }
+        for ((index, name) in names.withIndex()) {
+            append("""<Period id="$name" start="PT${index * 20}S" duration="PT20S">""")
+            when (layout) {
+                PeriodLayout.Mp4 -> {
+                    val (width, height) = if (name == "b") 640 to 360 else 320 to 180
+                    append("""<AdaptationSet id="0" contentType="video" mimeType="video/mp4">""")
+                    append("""<Representation id="0" codecs="avc1.42c01e" bandwidth="300000" width="$width" height="$height">""")
+                    append(template("period-$name-$id-$number.m4s", "period-$name-$id-init.m4s"))
+                    append("</Representation></AdaptationSet>")
+                    append("""<AdaptationSet id="1" contentType="audio" mimeType="audio/mp4" lang="en">""")
+                    append("""<Representation id="1" codecs="mp4a.40.2" bandwidth="96000">""")
+                    append(template("period-$name-$id-$number.m4s", "period-$name-$id-init.m4s"))
+                    append("</Representation></AdaptationSet>")
+                }
+                PeriodLayout.Webm -> {
+                    val (width, height) = if (name == "b") 640 to 360 else 320 to 180
+                    append("""<AdaptationSet id="0" contentType="video" mimeType="video/webm">""")
+                    append("""<Representation id="0" codecs="vp09.00.11.08" bandwidth="300000" width="$width" height="$height">""")
+                    append(template("webm-period-$name-$id-$number.webm", "webm-period-$name-$id-init.webm"))
+                    append("</Representation></AdaptationSet>")
+                    append("""<AdaptationSet id="1" contentType="audio" mimeType="audio/webm">""")
+                    append("""<Representation id="1" codecs="opus" bandwidth="64000">""")
+                    append(template("webm-period-$name-$id-$number.webm", "webm-period-$name-$id-init.webm"))
+                    append("</Representation></AdaptationSet>")
+                }
+                PeriodLayout.Ts -> {
+                    append("""<AdaptationSet id="0" contentType="video" mimeType="video/mp2t">""")
+                    append("""<Representation id="0" codecs="avc1.42c00d,mp4a.40.2" bandwidth="400000" width="320" height="180">""")
+                    append(template("ts-period-$name-$number.ts", null))
+                    append("</Representation></AdaptationSet>")
+                }
+            }
+            append("</Period>")
+        }
+        append("</MPD>")
+    }
 
     /** The single files as an on-demand manifest: the video's index found by its boxes, the sound's named by range. */
     private fun onDemandManifest(): String {

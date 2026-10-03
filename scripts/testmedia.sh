@@ -639,6 +639,35 @@ ffmpeg -v error -y \
   -f webm_dash_manifest -i dash/ondemand-video.webm -f webm_dash_manifest -i dash/ondemand-audio.webm \
   -c copy -map 0 -map 1 -f webm_dash_manifest -adaptation_sets "id=0,streams=0 id=1,streams=1" \
   dash/webm-ondemand.mpd
+# Periods for the multi-period tests (#403), each twenty seconds of picture and sound in two second
+# segments, whose manifests the tests write, and each with its own media time starting from zero,
+# as ad insertion stitches them: ffmpeg's DASH muxer starts every media timeline at zero whatever
+# offset it is given. In fMP4: a 320x180 Period, a 640x360 one, so its parameter sets differ, and a
+# 320x180 one again. In WebM: a 320x180 Period and a 640x360 one. In MPEG-TS: two Periods.
+for spec in "a|testsrc2=size=320x180|440" "b|smptebars=size=640x360|880" "c|testsrc=size=320x180|660"; do
+  IFS='|' read -r name picture tone <<< "$spec"
+  ffmpeg -v error -y \
+    -f lavfi -i "$picture:rate=30:duration=20" -f lavfi -i "sine=frequency=$tone:sample_rate=48000:duration=20" \
+    "${dash_video[@]}" -b:v 300k -c:a aac -b:a 96k \
+    -f dash -seg_duration 2 -use_template 1 -use_timeline 0 -adaptation_sets "id=0,streams=v id=1,streams=a" \
+    -init_seg_name "period-$name-\$RepresentationID\$-init.m4s" \
+    -media_seg_name "period-$name-\$RepresentationID\$-\$Number\$.m4s" "dash/period-$name.mpd"
+done
+for spec in "a|testsrc2=size=320x180" "b|smptebars=size=640x360"; do
+  IFS='|' read -r name picture <<< "$spec"
+  ffmpeg -v error -y \
+    -f lavfi -i "$picture:rate=30:duration=20" -f lavfi -i "sine=frequency=550:sample_rate=48000:duration=20" \
+    -map 0:v -map 1:a "${dash_vp9[@]}" -b:v 300k -c:a libopus -b:a 64k \
+    -f dash -dash_segment_type webm -seg_duration 2 -use_template 1 -use_timeline 0 \
+    -adaptation_sets "id=0,streams=v id=1,streams=a" \
+    -init_seg_name "webm-period-$name-\$RepresentationID\$-init.webm" \
+    -media_seg_name "webm-period-$name-\$RepresentationID\$-\$Number\$.webm" "dash/webm-period-$name.mpd"
+  ffmpeg -v error -y \
+    -f lavfi -i "testsrc2=size=320x180:rate=30:duration=20" -f lavfi -i "sine=frequency=550:sample_rate=48000:duration=20" \
+    "${dash_video[@]}" -b:v 300k -c:a aac -b:a 96k -muxdelay 0 -muxpreload 0 \
+    -f segment -segment_time 2 -segment_format mpegts -segment_start_number 1 -reset_timestamps 0 \
+    "dash/ts-period-$name-%d.ts"
+done
 # TTML in MP4 (stpp), one file whose segment index names it, which the DASH reader serves as WebVTT
 # (#402): a cue every two seconds across the seventy, each shown for 900 ms.
 for cue in $(seq 0 34); do

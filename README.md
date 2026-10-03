@@ -154,8 +154,9 @@ video decoder.
   MPEG-TS and fMP4 segments, AES-128, separate audio and subtitle renditions, and live playlists.
 - DASH through the HLS path, for fMP4, MPEG-TS and WebM segments: separate video, audio and
   subtitle sets, seeking, a variant for each video representation, segment indexes of single
-  files, and live manifests. TTML and MP4 subtitle sets play as WebVTT. A DASH or HLS address plays as it is, recognised by its content type, its
-  extension or its first bytes.
+  files, live manifests, and manifests of several Periods, joined into one presentation. TTML and
+  MP4 subtitle sets play as WebVTT. A DASH or HLS address plays as it is, recognised by its content
+  type, its extension or its first bytes.
 - Files, memory, bytes that your code pushes, streams, and Android content URIs and assets.
 - Recording of what plays into a Matroska file, with no re-encode.
 
@@ -676,6 +677,13 @@ sends it as text, XML or bytes, by its root element
   (`stpp`, `wvtt`), are served to the player as WebVTT, with their text, line breaks, italic,
   bold and underline, but not their placement
   ([#402](https://github.com/yuroyami/KitePlayer/issues/402)).
+- A manifest of several Periods, as ad insertion and chapters stitch them, plays as one
+  presentation ([#403](https://github.com/yuroyami/KitePlayer/issues/403)). Each later Period
+  gives each track the set with the same `id`, at the same place or in the same language, and the
+  representation nearest its bandwidth. Time runs on across each boundary although each Period's
+  media time starts again, an fMP4 Period of another picture size decodes at its own, because its
+  H.264 or HEVC parameter sets travel with its keyframes, and a live manifest that a refresh gives
+  a new Period plays on into it. An fMP4 Period in another codec than the first is skipped.
 - `MediaItem.headers` go to the manifest and to the segments of its own scheme, host and port, as
   for HLS.
 - `Dash.mediaItemFor` builds the item yourself, for a client of your own, a `DashUrlPolicy` other
@@ -839,7 +847,7 @@ summary.
 
 | Topic | What to expect |
 | --- | --- |
-| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment.<br><br>A DASH manifest of fMP4, MPEG-TS or WebM segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`. A manifest with more than one Period and a persistent cache do not work yet. |
+| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment.<br><br>A DASH manifest of fMP4, MPEG-TS or WebM segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`, and a manifest of several Periods plays as one presentation. A persistent cache does not work yet. |
 | **Native Linux and Windows** | No audio output and no HTTPS. Use the desktop JVM target, or pass your own `OutputBackend`. |
 | **Desktop JVM sound** | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | **AV1 on the web** | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |

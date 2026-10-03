@@ -101,10 +101,10 @@ public class DashMediaIo(
 }
 
 /**
- * A manifest that the DASH door does not play: one with several Periods, or one whose segments the
- * HLS path cannot carry, in a container other than fragmented MP4, MPEG-TS or WebM, when it is live
- * or carries its audio in an adaptation set of its own. It is refused rather than played wrong, so
- * an application can fall back to another route.
+ * A manifest that the DASH door does not play: one whose segments the HLS path cannot carry, in a
+ * container other than fragmented MP4, MPEG-TS or WebM, when it has several Periods, is live or
+ * carries its audio in an adaptation set of its own. It is refused rather than played wrong, so an
+ * application can fall back to another route.
  */
 public class DashUnsupportedException(message: String) : IllegalArgumentException(message)
 
@@ -365,6 +365,16 @@ public object Dash {
      * its playlists follow the time of day and the manifest is fetched again after each minimum
      * update period.
      *
+     * A manifest of several Periods plays as one presentation (#403), as ad insertion and chapters
+     * stitch them: the tracks are the first Period's, each later Period gives each track the set
+     * with the same `id`, or at the same place, or in the same language, and the representation
+     * nearest its bandwidth. Every segment is moved onto one timeline, so time runs on across each
+     * boundary, and a live manifest that a refresh gives another Period plays on into it. Fragmented
+     * MP4 is written again for the initialization its stream began with, and H.264 and HEVC carry
+     * their own Period's parameter sets in band, so a Period of another picture size decodes at its
+     * own. An MP4 Period in another codec than the stream began with is skipped, and a Period
+     * without a set for a track leaves that track a gap there.
+     *
      * Otherwise the door plays one representation, as one stream: the highest bandwidth one of
      * the first video adaptation set, or of the first set when there is no video. Its segments
      * play as one [DashMediaIo] stream, which cannot seek. A representation with no segment
@@ -376,9 +386,9 @@ public object Dash {
      * [manifest]. A segment or file behind a refused redirect fails its read with
      * [DashUrlRefusedException].
      *
-     * Throws [DashUnsupportedException] for more than one Period, and, when the HLS path cannot
-     * carry the segments, for a live manifest and for audio in an adaptation set of its own,
-     * because the one stream would play that video silent.
+     * Throws [DashUnsupportedException] when the HLS path cannot carry the segments, for more than
+     * one Period, because the one stream would stop after the first, for a live manifest, and for
+     * audio in an adaptation set of its own, because the one stream would play that video silent.
      *
      * The player's automatic transport plays a manifest it recognises the same way, with no call
      * to this (#400). This door is for a caller with a client of its own, or a policy other than
@@ -466,25 +476,26 @@ public object Dash {
     }
 
     /**
-     * How [manifest] plays: through the HLS path when HLS can carry its Period, otherwise as one
+     * How [manifest] plays: through the HLS path when HLS can carry its Periods, otherwise as one
      * stream. Every refusal happens here, before any reader exists.
      */
     private fun route(mpdUrl: String, manifest: DashManifest, policy: DashUrlPolicy, maxSegmentBytes: Long): DashRoute {
-        // Refused, not truncated: this tier byte-concatenates ONE period's
-        // segments, and silently playing period one of an ad-stitched presentation looked like
-        // a player that stops after the pre-roll. Period joining is the adaptive engine's next
-        // tier; until it exists the refusal is typed.
-        if (manifest.periods.size > 1) {
-            throw DashUnsupportedException(
-                "${shownUri(mpdUrl)} has ${manifest.periods.size} Periods, and this tier plays exactly one; " +
-                    "multi-period joining is not implemented yet",
-            )
-        }
         val period = manifest.periods.firstOrNull()
             ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no Period")
-        if (DashHls.carries(period)) {
+        if (DashHls.carries(manifest)) {
             // Built here, so a manifest whose playlists cannot be written is refused before any open.
+            // Every Period plays, joined onto the first one's tracks (#403).
+            manifest.periodTimings()
             return DashRoute.Hls(mpdUrl, manifest, DashHls.presentation(period, live = manifest.isDynamic), policy)
+        }
+        // Refused, not truncated: the one-stream reader byte-concatenates ONE Period's segments,
+        // and silently playing period one of an ad-stitched presentation looked like a player that
+        // stops after the pre-roll.
+        if (manifest.periods.size > 1) {
+            throw DashUnsupportedException(
+                "${shownUri(mpdUrl)} has ${manifest.periods.size} Periods in a container the HLS path does not take, " +
+                    "and the one-stream reader plays exactly one",
+            )
         }
         val video = period.adaptationSets.firstOrNull { it.isVideo() }
         // Merging two elementary streams is not a byte concatenation, so separate audio would be

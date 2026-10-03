@@ -135,7 +135,7 @@ class DashThroughHlsTest {
         assertNotNull(subtitle, "the WebVTT set is not a stream: ${source.streams.map { it.kind to it.codec }}")
         assertEquals("de", subtitle.language)
         val read = source.readFor(seconds = 6.0)
-        assertTrue(read.subtitleTimes.size >= 2, "only ${read.subtitleTimes} cues arrived in the first 6 s")
+        assertOnTheTwoSecondGrid(read.subtitleTimes)
         assertTrue("subs.vtt" in asked, "the WebVTT file was not read: $asked")
     }
 
@@ -145,7 +145,6 @@ class DashThroughHlsTest {
         assertNotNull(subtitle, "the TTML set is not a stream: ${source.streams.map { it.kind to it.codec }}")
         assertEquals("es", subtitle.language)
         val read = source.readFor(seconds = 6.0)
-        assertTrue(read.subtitleTimes.size >= 2, "only ${read.subtitleTimes} cues arrived in the first 6 s")
         assertOnTheTwoSecondGrid(read.subtitleTimes)
         assertTrue("subs.ttml" in asked, "the TTML file was not read: $asked")
     }
@@ -156,21 +155,20 @@ class DashThroughHlsTest {
         assertNotNull(subtitle, "the stpp set is not a stream: ${source.streams.map { it.kind to it.codec }}")
         assertEquals("fr", subtitle.language)
         val read = source.readFor(seconds = 6.0)
-        assertTrue(read.subtitleTimes.size >= 2, "only ${read.subtitleTimes} cues arrived in the first 6 s")
         assertOnTheTwoSecondGrid(read.subtitleTimes)
         assertTrue("subs-stpp.mp4" in asked, "the stpp file was not read: $asked")
     }
 
     /**
-     * The cues arrive at the times the document names, one every two seconds from zero, and no
-     * later than the first segment. FFmpeg's HLS reader starts a subtitle playlist at the point the
-     * reading has reached when the stream is selected, after it read ahead to find the streams, and
-     * drops the cues that begin before it, so the cue at zero may be missing; the WebVTT set loses
-     * it the same way.
+     * The cues arrive at the times the document names, one every two seconds from zero, the first
+     * one included. FFmpeg's HLS reader starts a subtitle playlist at the point the reading has
+     * reached when the stream is selected, after it read ahead to find the streams, and catches it
+     * up by dropping what came before; the cue at zero is still on screen there, so it survives
+     * (KiteFFmpeg#126).
      */
     private fun assertOnTheTwoSecondGrid(times: List<Double>) {
-        assertTrue(times.size >= 2, "only $times cues arrived in the first 6 s")
-        assertTrue(times.first() < 2.5, "the first cue came at ${times.first()} s, past the first two")
+        assertTrue(times.size >= 3, "only $times cues arrived in the first 6 s")
+        assertTrue(times.first() < 0.1, "the first cue came at ${times.first()} s: the one at zero was dropped")
         // FFmpeg's HLS reader moves every playlist by the same small offset, which the picture has too.
         assertTrue(times.all { abs(it - 2 * kotlin.math.round(it / 2)) < 0.1 }, "the cues are not at the times the document names: $times")
     }

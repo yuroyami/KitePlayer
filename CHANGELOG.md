@@ -77,6 +77,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - A WebM DASH presentation that has been read to its end seeks again. FFmpeg's Matroska reader
   used to answer end of file for ever after, so a seek returned and no packet followed, with one
   Period or several. KiteFFmpeg 0.5.0 carries the FFmpeg fix.
+- The first cue of a DASH or HLS subtitle set arrives. FFmpeg starts a subtitle rendition where
+  the reading has got to and used to drop every cue that began before that moment, so the cue at
+  zero was lost even while it was still on screen. KiteFFmpeg 0.5.0 carries the FFmpeg fix, which
+  keeps a cue that is still showing.
 - An HLS track with no title of its own takes its rendition's `NAME` as its title, unless the name
   only repeats its language (#404). FFmpeg files that name under the stream's `comment`, where
   `PlayerStreamInfo.metadata` still shows it.

@@ -8,6 +8,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import kotlin.math.abs
 import java.net.InetSocketAddress
 import java.time.Instant
 import java.util.Collections
@@ -51,6 +52,11 @@ class DashThroughHlsTest {
                 path == "subtitled.mpd" -> File(media, "separate.mpd").readText()
                     .replace("</Period>", "$SUBTITLE_SET</Period>").encodeToByteArray()
                 path == "subs.vtt" -> SUBTITLES.encodeToByteArray()
+                path == "ttml.mpd" -> File(media, "separate.mpd").readText()
+                    .replace("</Period>", "$TTML_SET</Period>").encodeToByteArray()
+                path == "subs.ttml" -> TTML.encodeToByteArray()
+                path == "stpp.mpd" -> File(media, "separate.mpd").readText()
+                    .replace("</Period>", "$STPP_SET</Period>").encodeToByteArray()
                 else -> File(media, path).takeIf { it.isFile && it.parentFile == media }?.readBytes()
             }
             if (body == null) {
@@ -106,8 +112,44 @@ class DashThroughHlsTest {
         assertNotNull(subtitle, "the WebVTT set is not a stream: ${source.streams.map { it.kind to it.codec }}")
         assertEquals("de", subtitle.language)
         val read = source.readFor(seconds = 6.0)
-        assertTrue(read.subtitles >= 2, "only ${read.subtitles} cues arrived in the first 6 s")
+        assertTrue(read.subtitleTimes.size >= 2, "only ${read.subtitleTimes} cues arrived in the first 6 s")
         assertTrue("subs.vtt" in asked, "the WebVTT file was not read: $asked")
+    }
+
+    @Test
+    fun aTtmlSetPlaysAsASubtitleRenditionAtItsOwnTimes() = withSource("ttml.mpd") { source ->
+        val subtitle = source.streams.singleOrNull { it.kind == TrackKind.Subtitle }
+        assertNotNull(subtitle, "the TTML set is not a stream: ${source.streams.map { it.kind to it.codec }}")
+        assertEquals("es", subtitle.language)
+        val read = source.readFor(seconds = 6.0)
+        assertTrue(read.subtitleTimes.size >= 2, "only ${read.subtitleTimes} cues arrived in the first 6 s")
+        assertOnTheTwoSecondGrid(read.subtitleTimes)
+        assertTrue("subs.ttml" in asked, "the TTML file was not read: $asked")
+    }
+
+    @Test
+    fun anStppFilePlaysAsASubtitleRenditionAtItsOwnTimes() = withSource("stpp.mpd") { source ->
+        val subtitle = source.streams.singleOrNull { it.kind == TrackKind.Subtitle }
+        assertNotNull(subtitle, "the stpp set is not a stream: ${source.streams.map { it.kind to it.codec }}")
+        assertEquals("fr", subtitle.language)
+        val read = source.readFor(seconds = 6.0)
+        assertTrue(read.subtitleTimes.size >= 2, "only ${read.subtitleTimes} cues arrived in the first 6 s")
+        assertOnTheTwoSecondGrid(read.subtitleTimes)
+        assertTrue("subs-stpp.mp4" in asked, "the stpp file was not read: $asked")
+    }
+
+    /**
+     * The cues arrive at the times the document names, one every two seconds from zero, and no
+     * later than the first segment. FFmpeg's HLS reader starts a subtitle playlist at the point the
+     * reading has reached when the stream is selected, after it read ahead to find the streams, and
+     * drops the cues that begin before it, so the cue at zero may be missing; the WebVTT set loses
+     * it the same way.
+     */
+    private fun assertOnTheTwoSecondGrid(times: List<Double>) {
+        assertTrue(times.size >= 2, "only $times cues arrived in the first 6 s")
+        assertTrue(times.first() < 2.5, "the first cue came at ${times.first()} s, past the first two")
+        // FFmpeg's HLS reader moves every playlist by the same small offset, which the picture has too.
+        assertTrue(times.all { abs(it - 2 * kotlin.math.round(it / 2)) < 0.1 }, "the cues are not at the times the document names: $times")
     }
 
     @Test
@@ -225,6 +267,26 @@ class DashThroughHlsTest {
             <Representation id="de" bandwidth="1000"><BaseURL>subs.vtt</BaseURL></Representation>
         </AdaptationSet>"""
 
+        /** A sidecar TTML set, as broadcast packagers write subtitles (#402). */
+        const val TTML_SET = """<AdaptationSet contentType="text" mimeType="application/ttml+xml" lang="es">
+            <Representation id="es" bandwidth="1000"><BaseURL>subs.ttml</BaseURL></Representation>
+        </AdaptationSet>"""
+
+        /** TTML in MP4, one file found through its segment index (#402). */
+        const val STPP_SET = """<AdaptationSet contentType="text" mimeType="application/mp4" codecs="stpp" lang="fr">
+            <Representation id="fr" bandwidth="1000"><BaseURL>subs-stpp.mp4</BaseURL><SegmentBase/></Representation>
+        </AdaptationSet>"""
+
+        /** The same cues as [SUBTITLES], in TTML. */
+        val TTML: String = buildString {
+            fun clock(seconds: Int, millis: Int) = "00:%02d:%02d.%03d".format(seconds / 60, seconds % 60, millis)
+            append("""<?xml version="1.0" encoding="utf-8"?><tt xmlns="http://www.w3.org/ns/ttml"><body><div>""")
+            for (cue in 0 until 35) {
+                append("""<p begin="${clock(cue * 2, 0)}" end="${clock(cue * 2, 900)}">Línea ${cue + 1}</p>""")
+            }
+            append("</div></body></tt>")
+        }
+
         /** A cue every two seconds across the seventy. */
         val SUBTITLES: String = buildString {
             fun clock(seconds: Int, millis: Int) = "00:%02d:%02d.%03d".format(seconds / 60, seconds % 60, millis)
@@ -312,7 +374,7 @@ class DashThroughHlsTest {
     private class Read(
         val video: Int,
         val audio: Int,
-        val subtitles: Int,
+        val subtitleTimes: List<Double>,
         val firstVideo: Double,
         val firstAudio: Double,
         val lastVideo: Double,
@@ -323,7 +385,7 @@ class DashThroughHlsTest {
         val kinds = streams.associate { it.index to it.kind }
         var video = 0
         var audio = 0
-        var subtitles = 0
+        val subtitles = mutableListOf<Double>()
         var firstVideo = Double.NaN
         var firstAudio = Double.NaN
         var lastVideo = Double.NaN
@@ -341,7 +403,7 @@ class DashThroughHlsTest {
                         audio++
                         if (firstAudio.isNaN()) firstAudio = at
                     }
-                    TrackKind.Subtitle -> subtitles++
+                    TrackKind.Subtitle -> subtitles += at
                     null -> {}
                 }
             }

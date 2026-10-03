@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
+import io.github.yuroyami.kiteplayer.network.shownUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -45,6 +46,12 @@ internal class DashHlsMediaIo(
     private val written = HashMap<String, String>()
     private val indexed = HashMap<String, DashTimedPlan>()
     private val sequences = HashMap<String, LiveSequence>()
+
+    /** The subtitle segments served as WebVTT, by the address their playlist names them under, oldest first. */
+    private val conversions = LinkedHashMap<String, Conversion>()
+
+    /** The initialization segments of MP4 subtitle tracks, read once each. */
+    private val subtitleInits = HashMap<String, ByteArray>()
     private var fetchedAtMicros = nowMicros()
 
     override val size: Long get() = master.size.toLong()
@@ -77,6 +84,9 @@ internal class DashHlsMediaIo(
         if (closed) throw KtorMediaIoException("openRelated after close")
         if (uri == presentation.masterAddress) return MemoryMediaIo(master, uri)
         presentation.track(uri)?.let { track -> return MemoryMediaIo(playlist(track).encodeToByteArray(), uri) }
+        lock.withLock { conversions[uri] }?.let { conversion ->
+            return MemoryMediaIo(convert(conversion).encodeToByteArray(), uri, WEBVTT_MEDIA_TYPE)
+        }
         // Every other address came from a playlist written here, so from the manifest; it is
         // checked again all the same, because FFmpeg is free to ask for anything.
         if (uri.substringAfter("://").substringBefore('/').equals(DashHls.HOST, ignoreCase = true)) return null
@@ -93,14 +103,91 @@ internal class DashHlsMediaIo(
     /** The media playlist of [track] as it stands now. */
     private suspend fun playlist(track: DashHlsTrack): String = lock.withLock {
         if (!manifest.isDynamic) {
-            return@withLock written.getOrPut(track.address) { DashHls.mediaPlaylist(plan(track, manifest, null), live = false) }
+            return@withLock written.getOrPut(track.address) {
+                DashHls.mediaPlaylist(served(track, plan(track, manifest, null)), live = false)
+            }
         }
         val now = nowMicros()
         refreshIfDue(now)
         val plan = plan(track, manifest, now)
         val sequence = sequences.getOrPut(track.address) { LiveSequence() }.first(plan)
-        DashHls.mediaPlaylist(plan, live = true, sequence = sequence)
+        DashHls.mediaPlaylist(served(track, plan), live = true, sequence = sequence)
     }
+
+    /**
+     * [plan] as FFmpeg is to read it. A TTML or MP4 subtitle track's segments are named under this
+     * reader's own host, where each is served as WebVTT (#402); every other plan is left as it is.
+     */
+    private fun served(track: DashHlsTrack, plan: DashTimedPlan): DashTimedPlan {
+        val format = track.subtitleFormat
+        if (format == null || format == DashSubtitleFormat.WebVtt) return plan
+        val segments = plan.segments.map { segment ->
+            val address = "https://${DashHls.HOST}/${track.setIndex}-${track.representationIndex}/${segment.number}.vtt"
+            conversions.remove(address)
+            conversions[address] = Conversion(track, format, segment, plan.initializationUrl, plan.initializationRange)
+            DashTimedSegment(address, null, segment.number, segment.startMicros, segment.durationMicros)
+        }
+        // A live track names new segments for ever; the oldest go once FFmpeg is long past them.
+        while (conversions.size > MAX_CONVERSIONS) conversions.remove(conversions.keys.first())
+        return DashTimedPlan(null, null, segments)
+    }
+
+    /** The WebVTT that [conversion]'s segment holds, on the picture's timeline. */
+    private suspend fun convert(conversion: Conversion): String {
+        val segment = conversion.segment
+        val bytes = fetch(segment.url, segment.range)
+        val cues = when (conversion.format) {
+            DashSubtitleFormat.Mp4 -> {
+                val initUrl = conversion.initializationUrl
+                    ?: throw DashUnsupportedException("the MP4 subtitles of ${conversion.track.representation.id} have no initialization")
+                val key = "$initUrl#${conversion.initializationRange}"
+                val init = lock.withLock { subtitleInits[key] } ?: fetch(initUrl, conversion.initializationRange).also { read ->
+                    lock.withLock { subtitleInits[key] = read }
+                }
+                DashSubtitles.mp4Cues(init, bytes)
+            }
+            else -> Ttml.cues(bytes.decodeToString())
+        }
+        return webVtt(DashSubtitles.shift(cues, timelineOffset(conversion.track)))
+    }
+
+    /**
+     * How far a subtitle track's own time sits from the time of the picture FFmpeg reads. Each
+     * representation's time less its presentation time offset is the presentation's time, and
+     * FFmpeg reads the picture's samples at their own time, so a cue moves by the picture's offset
+     * less its own.
+     */
+    private fun timelineOffset(track: DashHlsTrack): Long {
+        val main = presentation.tracks.firstOrNull { it.role == DashHlsRole.Video }
+            ?: presentation.tracks.firstOrNull { it.role == DashHlsRole.Audio }
+        return (main?.representation?.let(::offsetMicros) ?: 0L) - offsetMicros(track.representation)
+    }
+
+    private fun offsetMicros(representation: DashRepresentation): Long {
+        val template = representation.segmentTemplate ?: return 0L
+        val offset = template.presentationTimeOffset
+        return offset / template.timescale * 1_000_000 + offset % template.timescale * 1_000_000 / template.timescale
+    }
+
+    /** The bytes of [url], or of its [range] of it, after [policy] accepts it. */
+    private suspend fun fetch(url: String, range: LongRange?): ByteArray {
+        if (range != null) return readRange(url, range)
+        val io = openUrl(DashManifestParser.requireAllowed(manifestUrl, url, policy))
+        try {
+            return readAllBounded(io, MAX_SUBTITLE_BYTES, "the subtitles at ${shownUri(url)}")
+        } finally {
+            io.close()
+        }
+    }
+
+    /** A subtitle segment that this reader serves as WebVTT. */
+    private class Conversion(
+        val track: DashHlsTrack,
+        val format: DashSubtitleFormat,
+        val segment: DashTimedSegment,
+        val initializationUrl: String?,
+        val initializationRange: LongRange?,
+    )
 
     private suspend fun plan(track: DashHlsTrack, from: DashManifest, now: Long?): DashTimedPlan {
         val period = from.periods.single()
@@ -281,12 +368,15 @@ internal class DashHlsMediaIo(
         }
     }
 
-    /** A playlist written in memory, read under its own address. */
-    private class MemoryMediaIo(private val bytes: ByteArray, override val location: String) : MediaIo {
+    /** A playlist or a subtitle segment written in memory, read under its own address. */
+    private class MemoryMediaIo(
+        private val bytes: ByteArray,
+        override val location: String,
+        override val contentType: String = HLS_MEDIA_TYPE,
+    ) : MediaIo {
         private var position = 0
         override val size: Long get() = bytes.size.toLong()
         override val seekable: Boolean get() = true
-        override val contentType: String get() = HLS_MEDIA_TYPE
 
         override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
             if (length == 0) return 0
@@ -313,6 +403,14 @@ internal class DashHlsMediaIo(
 
         private const val MAX_BOXES_BEFORE_INDEX = 16
         private const val BOX_HEADER_BYTES = 16L
+
+        const val WEBVTT_MEDIA_TYPE: String = "text/vtt"
+
+        /** The largest subtitle segment or file read. A whole film of TTML is a few megabytes. */
+        const val MAX_SUBTITLE_BYTES: Long = 16L shl 20
+
+        /** How many converted subtitle segments a live reader remembers. */
+        private const val MAX_CONVERSIONS = 4096
 
         /** How much of a WebM file is read to find its layout when the manifest gives no initialization range. */
         private const val WEBM_HEAD_BYTES = 64L * 1024

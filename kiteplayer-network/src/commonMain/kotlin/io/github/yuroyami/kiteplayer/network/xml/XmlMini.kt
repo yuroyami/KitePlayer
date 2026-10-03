@@ -15,10 +15,24 @@ internal class XmlElement(
     val attributes: Map<String, String>,
     val children: List<XmlElement>,
     val text: String,
-) {
+    /**
+     * The text and the elements inside this one, in document order, with text untrimmed. Empty
+     * unless the parse asked for it with [XmlMini.Limits.keepContent]: TTML needs it, because a
+     * span sits between two pieces of its paragraph's text, and a manifest never does.
+     */
+    val content: List<XmlNode> = emptyList(),
+) : XmlNode {
     fun children(name: String): List<XmlElement> = children.filter { it.name == name }
     fun child(name: String): XmlElement? = children.firstOrNull { it.name == name }
     fun attr(name: String): String? = attributes[name]
+}
+
+/** A piece of an element's content: a run of text, or an element. */
+internal sealed interface XmlNode
+
+/** A run of text inside an element, its entities decoded and its whitespace kept. */
+internal class XmlText(val value: String) : XmlNode {
+    override fun toString(): String = "XmlText($value)"
 }
 
 /**
@@ -60,6 +74,8 @@ internal object XmlMini {
         val maxElementAttributes: Int = MAX_ELEMENT_ATTRIBUTES,
         val maxAttributes: Int = MAX_ATTRIBUTES,
         val maxElements: Int = MAX_ELEMENTS,
+        /** Whether each element keeps its [XmlElement.content], which costs a list per element. */
+        val keepContent: Boolean = false,
     )
 
     /**
@@ -155,6 +171,8 @@ internal object XmlMini {
             }
             val children = mutableListOf<XmlElement>()
             val textParts = StringBuilder()
+            // Only a parse that asks for the order of text and elements pays for a list of it.
+            val content = if (limits.keepContent) mutableListOf<XmlNode>() else null
             while (true) {
                 when {
                     at >= s.length -> throw XmlException("unclosed element <$name>", at)
@@ -163,7 +181,7 @@ internal object XmlMini {
                         val closing = readName()
                         if (closing != name) throw XmlException("</$closing> closes <$name>", at)
                         skipWhitespace(); expect('>')
-                        return XmlElement(name, attributes, children, textParts.toString().trim())
+                        return XmlElement(name, attributes, children, textParts.toString().trim(), content ?: emptyList())
                     }
                     lookingAt("<!--") -> skipUntil("-->")
                     lookingAt("<![CDATA[") -> {
@@ -171,14 +189,21 @@ internal object XmlMini {
                         val end = s.indexOf("]]>", at)
                         if (end < 0) throw XmlException("unterminated CDATA", at)
                         textParts.append(s, at, end)
+                        content?.add(XmlText(s.substring(at, end)))
                         at = end + 3
                     }
                     lookingAt("<?") -> skipUntil("?>")
-                    peek() == '<' -> children += parseElement()
+                    peek() == '<' -> {
+                        val child = parseElement()
+                        children += child
+                        content?.add(child)
+                    }
                     else -> {
                         val next = s.indexOf('<', at)
                         val end = if (next < 0) s.length else next
-                        textParts.append(decodeEntities(at, end))
+                        val text = decodeEntities(at, end)
+                        textParts.append(text)
+                        content?.add(XmlText(text))
                         at = end
                     }
                 }

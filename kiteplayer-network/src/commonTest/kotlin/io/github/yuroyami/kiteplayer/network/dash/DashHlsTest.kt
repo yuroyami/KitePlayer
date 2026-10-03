@@ -57,13 +57,14 @@ class DashHlsTest {
         assertTrue(variants[1].contains("BANDWIDTH=996000"), variants[1])
         assertTrue(variants.all { "AUDIO=\"audio\"" in it && "SUBTITLES=\"subtitles\"" in it })
         val renditions = lines.filter { it.startsWith("#EXT-X-MEDIA:") }
-        assertEquals(2, renditions.size, "one sound and the WebVTT set; the TTML set is left out: ${presentation.master}")
+        assertEquals(3, renditions.size, "one sound, the TTML set and the WebVTT set (#402): ${presentation.master}")
         assertTrue(renditions[0].contains("TYPE=AUDIO") && renditions[0].contains("LANGUAGE=\"en\"") && renditions[0].contains("DEFAULT=YES"))
-        assertTrue(renditions[1].contains("TYPE=SUBTITLES") && renditions[1].contains("LANGUAGE=\"de\""))
+        assertTrue(renditions[1].contains("TYPE=SUBTITLES") && renditions[1].contains("LANGUAGE=\"en\""))
+        assertTrue(renditions[2].contains("TYPE=SUBTITLES") && renditions[2].contains("LANGUAGE=\"de\""))
         // Every address the master names is one the presentation answers.
         val named = lines.filter { it.startsWith("https://") } +
             renditions.map { it.substringAfter("URI=\"").substringBefore('"') }
-        assertEquals(4, named.size)
+        assertEquals(5, named.size)
         named.forEach { assertNotNull(presentation.track(it), "$it is not answered") }
         assertTrue(named.all { it.startsWith("https://${DashHls.HOST}/") })
     }
@@ -189,6 +190,92 @@ class DashHlsTest {
             )
             assertEquals(listOf("#EXTINF:2.000000,", "#EXTINF:2.000000,", "#EXTINF:1.000000,"), playlist.lines().filter { it.startsWith("#EXTINF") })
         }
+    }
+
+    /** A video set beside a sidecar TTML set and a segmented stpp set; the video's own time starts at [videoOffsetSeconds]. */
+    private fun subtitled(videoOffsetSeconds: Int = 0) = parse(
+        """
+        <MPD type="static" mediaPresentationDuration="PT4S">
+            <Period>
+                <AdaptationSet contentType="video" mimeType="video/mp4">
+                    <SegmentTemplate media="v-${'$'}Number${'$'}.m4s" initialization="v-init.mp4" timescale="1000" duration="2000"
+                                     presentationTimeOffset="${videoOffsetSeconds * 1000}"/>
+                    <Representation id="v" bandwidth="500000"/>
+                </AdaptationSet>
+                <AdaptationSet contentType="text" mimeType="application/ttml+xml" lang="de">
+                    <Representation id="de" bandwidth="1000"><BaseURL>subs.ttml</BaseURL></Representation>
+                </AdaptationSet>
+                <AdaptationSet contentType="text" mimeType="application/mp4" codecs="stpp" lang="fr">
+                    <SegmentTemplate media="fr-${'$'}Number${'$'}.m4s" initialization="fr-init.mp4" timescale="1000" duration="2000"/>
+                    <Representation id="fr" bandwidth="1000"/>
+                </AdaptationSet>
+            </Period>
+        </MPD>
+        """.trimIndent(),
+    )
+
+    private val ttmlFile = """<tt xmlns="http://www.w3.org/ns/ttml"><body><div>
+        <p begin="00:00:00.500" end="00:00:01.500">Erste <span tts:fontStyle="italic" xmlns:tts="http://www.w3.org/ns/ttml#styling">Zeile</span></p>
+        <p begin="00:00:02.500" end="00:00:03.000">Zweite</p></div></body></tt>"""
+
+    @Test
+    fun ttmlAndMp4SubtitleSetsBecomeRenditions() {
+        val period = subtitled().periods.single()
+        assertEquals(DashHlsRole.Subtitles, DashHls.roleOf(period.adaptationSets[1]))
+        assertEquals(DashHlsRole.Subtitles, DashHls.roleOf(period.adaptationSets[2]))
+        val presentation = DashHls.presentation(period)
+        val master = presentation.master
+        assertEquals(2, master.lines().count { it.startsWith("#EXT-X-MEDIA:TYPE=SUBTITLES") }, master)
+        assertTrue("LANGUAGE=\"de\"" in master && "LANGUAGE=\"fr\"" in master, master)
+    }
+
+    @Test
+    fun aTtmlFileIsServedAsWebVttOnThePicturesTimeline() = runTest {
+        for (offset in listOf(0, 10)) {
+            val manifest = subtitled(videoOffsetSeconds = offset)
+            val presentation = DashHls.presentation(manifest.periods.single())
+            val io = DashHlsMediaIo(presentation, manifest, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default, { url ->
+                assertEquals("https://cdn.test/vod/subs.ttml", url)
+                BytesMediaIo(ttmlFile.encodeToByteArray())
+            }, null, { 0L })
+            val track = presentation.tracks.first { it.role == DashHlsRole.Subtitles && it.set.lang == "de" }
+            val playlist = io.openRelated(track.address)!!.readAll().decodeToString()
+            assertFalse("#EXT-X-MAP" in playlist, "a WebVTT segment has no initialization: $playlist")
+            val segment = playlist.lines().single { it.isNotBlank() && !it.startsWith("#") }
+            assertTrue(segment.startsWith("https://${DashHls.HOST}/"), "the converted segment is the reader's own: $segment")
+            val vtt = io.openRelated(segment)!!.readAll().decodeToString()
+            assertEquals(
+                "WEBVTT\n\n00:00:${(offset).toString().padStart(2, '0')}.500 --> 00:00:${(offset + 1).toString().padStart(2, '0')}.500\n" +
+                    "Erste <i>Zeile</i>\n\n00:00:${(offset + 2).toString().padStart(2, '0')}.500 --> 00:00:${(offset + 3).toString().padStart(2, '0')}.000\nZweite\n\n",
+                vtt,
+                "the cues are not on the picture's timeline, whose own time starts at $offset s",
+            )
+        }
+    }
+
+    @Test
+    fun stppSegmentsAreServedAsWebVtt() = runTest {
+        val manifest = subtitled()
+        val presentation = DashHls.presentation(manifest.periods.single())
+        val init = Mp4Bytes.init(trackId = 1, timescale = 1000, handler = "subt", sampleEntry = "stpp")
+        fun doc(text: String, at: Int) = """<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="00:00:0$at.250" end="00:00:0$at.750">$text</p></div></body></tt>"""
+        val segments = mapOf(
+            "fr-init.mp4" to init,
+            "fr-1.m4s" to Mp4Bytes.segment(1, 0, listOf(Mp4Bytes.Sample(2000, doc("un", 0).encodeToByteArray()))),
+            "fr-2.m4s" to Mp4Bytes.segment(1, 2000, listOf(Mp4Bytes.Sample(2000, doc("deux", 2).encodeToByteArray()))),
+        )
+        val asked = mutableListOf<String>()
+        val io = DashHlsMediaIo(presentation, manifest, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default, { url ->
+            asked += url.substringAfterLast('/')
+            BytesMediaIo(checkNotNull(segments[url.substringAfterLast('/')]) { "no $url" })
+        }, null, { 0L })
+        val track = presentation.tracks.first { it.role == DashHlsRole.Subtitles && it.set.lang == "fr" }
+        val addresses = io.openRelated(track.address)!!.readAll().decodeToString().lines().filter { it.isNotBlank() && !it.startsWith("#") }
+        assertEquals(2, addresses.size, "each segment stays a segment")
+        val second = io.openRelated(addresses[1])!!.readAll().decodeToString()
+        assertEquals("WEBVTT\n\n00:00:02.250 --> 00:00:02.750\ndeux\n\n", second)
+        io.openRelated(addresses[0])!!.readAll()
+        assertEquals(1, asked.count { it == "fr-init.mp4" }, "the initialization is read once: $asked")
     }
 
     private val live = """

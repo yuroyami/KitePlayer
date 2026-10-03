@@ -353,16 +353,17 @@ public object Dash {
      * labels. [readerPolicy] limits the manifest fetch and every later fetch, as in [manifest].
      *
      * When every picture and sound representation of the Period is fragmented MP4, MPEG-TS or WebM,
-     * the item plays through the player's HLS path (#295, #401). The door writes an HLS master playlist with
-     * a variant for each video representation, an audio rendition for each audio set and a
-     * subtitle rendition for each WebVTT set, and a media playlist for each, from the manifest's
-     * templates, timelines, lists or segment indexes, an MP4 file's `sidx` or a WebM file's `Cues`.
-     * So separate audio and video sets play
-     * together, the item seeks, and its variants are listed and chosen as an HLS item's are. Its
-     * segment readers share one measure of the network rate, which the automatic variant steps
-     * read. A subtitle set in another format, such as
-     * TTML, is left out. A live (dynamic) manifest plays live: its playlists follow the time of
-     * day and the manifest is fetched again after each minimum update period.
+     * the item plays through the player's HLS path (#295, #401). The door writes an HLS master
+     * playlist with a variant for each video representation, an audio rendition for each audio set
+     * and a subtitle rendition for each subtitle set, and a media playlist for each, from the
+     * manifest's templates, timelines, lists or segment indexes: an MP4 file's `sidx` or a WebM
+     * file's `Cues`. So separate audio and video sets play together, the item seeks, and its
+     * variants are listed and chosen as an HLS item's are. Its segment readers share one measure of
+     * the network rate, which the automatic variant steps read. A subtitle set of WebVTT plays as it
+     * is, and one of TTML, or of TTML or WebVTT in MP4 segments (`stpp`, `wvtt`), is served as
+     * WebVTT, the only form FFmpeg's HLS reader takes (#402). A live (dynamic) manifest plays live:
+     * its playlists follow the time of day and the manifest is fetched again after each minimum
+     * update period.
      *
      * Otherwise the door plays one representation, as one stream: the highest bandwidth one of
      * the first video adaptation set, or of the first set when there is no video. Its segments

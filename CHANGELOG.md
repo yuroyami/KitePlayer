@@ -52,6 +52,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   AV1 and Opus or Vorbis sets now play together instead of being refused, the item seeks, a live
   WebM manifest plays, and a single WebM file plays as segments that its `Cues` name, read by byte
   range. The one-stream reader is left for containers other than fragmented MP4, MPEG-TS and WebM.
+- A DASH subtitle set of TTML, or of TTML or WebVTT in MP4 segments (`stpp`, `wvtt`), plays as a
+  subtitle rendition (#402). Such sets used to be left out. The DASH reader serves them to FFmpeg as
+  WebVTT, with their text, line breaks, italic, bold and underline, on the picture's timeline.
 - An HLS playlist that nothing marks is recognised by its first bytes (#400). A reader whose bytes
   start with `#EXTM3U` plays through the HLS path when no format hint, HLS content type or `.m3u8`
   address says so, which an address with no extension sent as text or bytes never did. A format

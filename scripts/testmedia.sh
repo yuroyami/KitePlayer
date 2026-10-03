@@ -639,6 +639,14 @@ ffmpeg -v error -y \
   -f webm_dash_manifest -i dash/ondemand-video.webm -f webm_dash_manifest -i dash/ondemand-audio.webm \
   -c copy -map 0 -map 1 -f webm_dash_manifest -adaptation_sets "id=0,streams=0 id=1,streams=1" \
   dash/webm-ondemand.mpd
+# TTML in MP4 (stpp), one file whose segment index names it, which the DASH reader serves as WebVTT
+# (#402): a cue every two seconds across the seventy, each shown for 900 ms.
+for cue in $(seq 0 34); do
+  printf '%d\n00:%02d:%02d,000 --> 00:%02d:%02d,900\nLigne %d\n\n' \
+    $((cue + 1)) $((cue * 2 / 60)) $((cue * 2 % 60)) $((cue * 2 / 60)) $((cue * 2 % 60)) $((cue + 1))
+done > dash/subs.srt
+ffmpeg -v error -y -i dash/subs.srt -c:s ttml -frag_duration 2000000 \
+  -movflags +empty_moov+default_base_moof+global_sidx -f mp4 dash/subs-stpp.mp4
 
 # ---------------------------------------------------------------------------------------------
 # Provenance.

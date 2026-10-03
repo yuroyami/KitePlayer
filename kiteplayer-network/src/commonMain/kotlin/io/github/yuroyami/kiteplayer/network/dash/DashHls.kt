@@ -18,8 +18,14 @@ internal class DashTimedPlan(
     val segments: List<DashTimedSegment>,
 )
 
-/** What a representation is to HLS: a variant with a picture, a sound rendition, or a WebVTT rendition. */
+/** What a representation is to HLS: a variant with a picture, a sound rendition, or a subtitle rendition. */
 internal enum class DashHlsRole { Video, Audio, Subtitles }
+
+/**
+ * How a subtitle set reaches FFmpeg, whose HLS reader takes subtitles only as WebVTT text: as it
+ * is, or converted to WebVTT by the reader, from TTML or from MP4 samples (#402).
+ */
+internal enum class DashSubtitleFormat { WebVtt, Ttml, Mp4 }
 
 /**
  * One representation that the HLS stand-in names, and the address of its media playlist. The two
@@ -32,6 +38,8 @@ internal class DashHlsTrack(
     val representationIndex: Int,
     val set: DashAdaptationSet,
     val representation: DashRepresentation,
+    /** For a subtitle rendition, the form its segments arrive in. */
+    val subtitleFormat: DashSubtitleFormat? = null,
 )
 
 /**
@@ -47,8 +55,10 @@ internal class DashHlsPresentation(val masterAddress: String, val master: String
 /**
  * Writes the HLS playlists that stand in for a DASH presentation (#295): each video
  * representation becomes a variant, each audio set an `EXT-X-MEDIA` rendition of one group, each
- * WebVTT set a subtitle rendition, and FFmpeg's HLS demuxer plays them through the player's own
- * HLS path, which already selects, switches and steps variants. No byte of the media changes.
+ * subtitle set a subtitle rendition, and FFmpeg's HLS demuxer plays them through the player's own
+ * HLS path, which already selects, switches and steps variants. No byte of the media changes. A
+ * TTML or MP4 subtitle set is the exception: its segments are served as WebVTT, which is the only
+ * form FFmpeg's HLS reader takes subtitles in (#402).
  *
  * The playlists name each other under a host that cannot resolve, `kite-dash.invalid` (RFC 2606),
  * and the reader that serves them answers those addresses itself. Every other address is a
@@ -61,8 +71,8 @@ internal object DashHls {
 
     /**
      * Whether HLS can carry [period]: a set with a picture or sound, every such representation
-     * in fragmented MP4, MPEG-TS or WebM with segment addressing of some kind. A subtitle set that is
-     * not WebVTT does not decide it; it is left out of the stand-in.
+     * in fragmented MP4, MPEG-TS or WebM with segment addressing of some kind. A subtitle set does
+     * not decide it; one in a form the reader cannot convert is left out of the stand-in.
      */
     fun carries(period: DashPeriod): Boolean {
         val media = period.adaptationSets.filter { roleOf(it) == DashHlsRole.Video || roleOf(it) == DashHlsRole.Audio }
@@ -81,8 +91,8 @@ internal object DashHls {
         require(carries(period)) { "HLS cannot carry this Period" }
         val root = "https://$HOST"
         val tracks = mutableListOf<DashHlsTrack>()
-        fun track(role: DashHlsRole, setIndex: Int, set: DashAdaptationSet, index: Int) =
-            DashHlsTrack("$root/$setIndex-$index.m3u8", role, setIndex, index, set, set.representations[index])
+        fun track(role: DashHlsRole, setIndex: Int, set: DashAdaptationSet, index: Int, format: DashSubtitleFormat? = null) =
+            DashHlsTrack("$root/$setIndex-$index.m3u8", role, setIndex, index, set, set.representations[index], format)
 
         val sets = period.adaptationSets.withIndex()
         val videoSets = sets.filter { roleOf(it.value) == DashHlsRole.Video }
@@ -106,8 +116,10 @@ internal object DashHls {
         }
         val subtitles = textSets.mapNotNull { (setIndex, set) ->
             val rep = set.representations.firstOrNull() ?: return@mapNotNull null
-            val segmented = rep.segmentTemplate != null || rep.segmentList?.segments?.isNotEmpty() == true
-            if (live && !segmented) null else track(DashHlsRole.Subtitles, setIndex, set, 0)
+            val format = subtitleFormat(set) ?: return@mapNotNull null
+            val segmented = rep.segmentTemplate != null || rep.segmentList?.segments?.isNotEmpty() == true ||
+                (format == DashSubtitleFormat.Mp4 && rep.segmentBase != null)
+            if (live && !segmented) null else track(DashHlsRole.Subtitles, setIndex, set, 0, format)
         }
         tracks += variants
         tracks += audio
@@ -163,14 +175,31 @@ internal object DashHls {
             if (!live) append("#EXT-X-ENDLIST\n")
         }
 
-    /** Which part [set] plays, or null for a set HLS does not carry, such as thumbnails or TTML subtitles. */
+    /** Which part [set] plays, or null for a set the stand-in does not carry, such as thumbnails. */
     fun roleOf(set: DashAdaptationSet): DashHlsRole? {
         val types = listOfNotNull(set.contentType) +
             listOfNotNull(set.mimeType) + set.representations.mapNotNull { it.mimeType }
         return when {
             types.any { it == "video" || it.startsWith("video/") } -> DashHlsRole.Video
             types.any { it == "audio" || it.startsWith("audio/") } -> DashHlsRole.Audio
-            types.any { it == "text/vtt" } -> DashHlsRole.Subtitles
+            subtitleFormat(set) != null -> DashHlsRole.Subtitles
+            else -> null
+        }
+    }
+
+    /**
+     * The form [set]'s subtitles arrive in: WebVTT files or segments, TTML documents
+     * (`application/ttml+xml`), or MP4 segments of TTML (`stpp`) or WebVTT (`wvtt`) samples. Null
+     * for a set that is not subtitles, or whose form the reader cannot convert.
+     */
+    fun subtitleFormat(set: DashAdaptationSet): DashSubtitleFormat? {
+        val types = (listOfNotNull(set.mimeType) + set.representations.mapNotNull { it.mimeType }).map { it.lowercase() }
+        val codecs = set.representations.mapNotNull { it.codecs?.lowercase() }
+        return when {
+            types.any { it == "text/vtt" } -> DashSubtitleFormat.WebVtt
+            types.any { it == "application/ttml+xml" } -> DashSubtitleFormat.Ttml
+            (types.any { it == "application/mp4" } || set.contentType == "text") &&
+                codecs.any { it.startsWith("stpp") || it.startsWith("wvtt") } -> DashSubtitleFormat.Mp4
             else -> null
         }
     }

@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.spi
 
 import io.github.yuroyami.kiteplayer.Chapter
+import io.github.yuroyami.kiteplayer.DolbyVisionInfo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
@@ -204,6 +205,12 @@ public data class PlayerStreamInfo(
      * [VideoFrame.mirrored] for the order in which a renderer mirrors and turns it.
      */
     val mirrored: Boolean = false,
+    /**
+     * The Dolby Vision configuration the container declares, or null when the stream is not Dolby
+     * Vision. When [DolbyVisionInfo.baseLayerPlaysAlone] is false, a frame means nothing until it is
+     * composed with its RPU, so a decoder whose frames do not carry the RPU cannot play the stream.
+     */
+    val dolbyVision: DolbyVisionInfo? = null,
 ) {
     /**
      * By CONTENT, including [codecExtradata].
@@ -239,6 +246,7 @@ public data class PlayerStreamInfo(
             fieldOrder == other.fieldOrder &&
             hdr == other.hdr &&
             mirrored == other.mirrored &&
+            dolbyVision == other.dolbyVision &&
             (codecExtradata?.contentEquals(other.codecExtradata) ?: (other.codecExtradata == null))
     }
 
@@ -266,6 +274,7 @@ public data class PlayerStreamInfo(
         result = 31 * result + fieldOrder.hashCode()
         result = 31 * result + (hdr?.hashCode() ?: 0)
         result = 31 * result + mirrored.hashCode()
+        result = 31 * result + (dolbyVision?.hashCode() ?: 0)
         result = 31 * result + (codecExtradata?.contentHashCode() ?: 0)
         return result
     }

@@ -43,6 +43,16 @@ public interface VideoFrame : AutoCloseable {
     public val hdr: HdrStaticMetadata? get() = null
 
     /**
+     * The brightest level of this frame's scene in nits, from dynamic HDR metadata that travels
+     * with the frame, such as Dolby Vision's level 1, or null when the frame carries none.
+     *
+     * [hdr] describes the whole title, so a tone mapper that knows only it compresses every scene
+     * for the title's brightest highlight. A dark scene then loses brightness it never needed to
+     * give up. [toneMapPeakNits] is the peak a tone mapper rolls off from, with this taken first.
+     */
+    public val sceneMaxNits: Float? get() = null
+
+    /**
      * Clockwise rotation a renderer applies before the picture is shown, in degrees.
      *
      * Phones write this into every recording they make in portrait, and a player that ignores it shows
@@ -322,3 +332,15 @@ public enum class HwSurfaceKind {
     /** A browser `VideoFrame`, drawn straight to a canvas. */
     WebVideoFrame,
 }
+
+/**
+ * The content peak a tone mapper rolls this frame off from, in nits: the scene's brightest level
+ * when the frame carries one between 100 and 10000 nits, held at most at the title's own peak, else
+ * the title's peak from [VideoFrame.hdr], else null for the 1000 nits a PQ master is assumed to have.
+ */
+public val VideoFrame.toneMapPeakNits: Float?
+    get() {
+        val title = hdr?.peakNits
+        val scene = sceneMaxNits?.takeIf { it in 100f..10_000f } ?: return title
+        return if (title != null) minOf(scene, title) else scene
+    }

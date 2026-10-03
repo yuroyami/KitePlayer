@@ -55,6 +55,11 @@ public data class TrackInfo(
      * the container carried none, which is common.
      */
     val metadata: Map<String, String> = emptyMap(),
+    /**
+     * What this video track is in Dolby Vision terms, or null when it is not Dolby Vision. See
+     * [DolbyVisionInfo.baseLayerPlaysAlone] for what playing it costs.
+     */
+    val dolbyVision: DolbyVisionInfo? = null,
 ) {
     /** A label suitable for a track menu, built from whatever the container actually provided. */
     public val label: String

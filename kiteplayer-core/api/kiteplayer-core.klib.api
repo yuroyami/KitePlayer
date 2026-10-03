@@ -843,6 +843,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoFrame : kotlin/AutoClo
         open fun <get-mirrored>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/VideoFrame.mirrored.<get-mirrored>|<get-mirrored>(){}[0]
     open val rotationDegrees // io.github.yuroyami.kiteplayer.spi/VideoFrame.rotationDegrees|{}rotationDegrees[0]
         open fun <get-rotationDegrees>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/VideoFrame.rotationDegrees.<get-rotationDegrees>|<get-rotationDegrees>(){}[0]
+    open val sceneMaxNits // io.github.yuroyami.kiteplayer.spi/VideoFrame.sceneMaxNits|{}sceneMaxNits[0]
+        open fun <get-sceneMaxNits>(): kotlin/Float? // io.github.yuroyami.kiteplayer.spi/VideoFrame.sceneMaxNits.<get-sceneMaxNits>|<get-sceneMaxNits>(){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/VideoRenderer : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/VideoRenderer|null[0]
@@ -1659,7 +1661,7 @@ final class io.github.yuroyami.kiteplayer.spi/OverlayImage { // io.github.yuroya
 }
 
 final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo|null[0]
-    constructor <init>(kotlin/Int, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.spi/FieldOrder = ..., io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.<init>|<init>(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.spi.FieldOrder;io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata?;kotlin.Boolean){}[0]
+    constructor <init>(kotlin/Int, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.spi/FieldOrder = ..., io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DolbyVisionInfo? = ...) // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.<init>|<init>(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.spi.FieldOrder;io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata?;kotlin.Boolean;io.github.yuroyami.kiteplayer.DolbyVisionInfo?){}[0]
 
     final val bitrate // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.bitrate|{}bitrate[0]
         final fun <get-bitrate>(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.bitrate.<get-bitrate>|<get-bitrate>(){}[0]
@@ -1671,6 +1673,8 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
         final fun <get-codecExtradata>(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.codecExtradata.<get-codecExtradata>|<get-codecExtradata>(){}[0]
     final val colorSpace // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.colorSpace|{}colorSpace[0]
         final fun <get-colorSpace>(): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.colorSpace.<get-colorSpace>|<get-colorSpace>(){}[0]
+    final val dolbyVision // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.dolbyVision|{}dolbyVision[0]
+        final fun <get-dolbyVision>(): io.github.yuroyami.kiteplayer/DolbyVisionInfo? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.dolbyVision.<get-dolbyVision>|<get-dolbyVision>(){}[0]
     final val fieldOrder // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.fieldOrder|{}fieldOrder[0]
         final fun <get-fieldOrder>(): io.github.yuroyami.kiteplayer.spi/FieldOrder // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.fieldOrder.<get-fieldOrder>|<get-fieldOrder>(){}[0]
     final val frameRate // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.frameRate|{}frameRate[0]
@@ -1727,6 +1731,7 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
     final fun component22(): io.github.yuroyami.kiteplayer.spi/FieldOrder // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component22|component22(){}[0]
     final fun component23(): io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component23|component23(){}[0]
     final fun component24(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component24|component24(){}[0]
+    final fun component25(): io.github.yuroyami.kiteplayer/DolbyVisionInfo? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component25|component25(){}[0]
     final fun component3(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component3|component3(){}[0]
     final fun component4(): kotlin/String? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component4|component4(){}[0]
     final fun component5(): kotlin/String? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component5|component5(){}[0]
@@ -1734,7 +1739,7 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
     final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component7|component7(){}[0]
     final fun component8(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component8|component8(){}[0]
     final fun component9(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component9|component9(){}[0]
-    final fun copy(kotlin/Int = ..., io.github.yuroyami.kiteplayer/TrackKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.spi/FieldOrder = ..., io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.copy|copy(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.spi.FieldOrder;io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata?;kotlin.Boolean){}[0]
+    final fun copy(kotlin/Int = ..., io.github.yuroyami.kiteplayer/TrackKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.spi/FieldOrder = ..., io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DolbyVisionInfo? = ...): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.copy|copy(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.spi.FieldOrder;io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata?;kotlin.Boolean;io.github.yuroyami.kiteplayer.DolbyVisionInfo?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.toString|toString(){}[0]
@@ -2441,6 +2446,32 @@ final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.ki
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/DemuxPolicy.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/DemuxPolicy.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer/DolbyVisionInfo { // io.github.yuroyami.kiteplayer/DolbyVisionInfo|null[0]
+    constructor <init>(kotlin/Int, kotlin/Int, kotlin/Int, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/DolbyVisionInfo.<init>|<init>(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Boolean){}[0]
+
+    final val baseLayerCompatibility // io.github.yuroyami.kiteplayer/DolbyVisionInfo.baseLayerCompatibility|{}baseLayerCompatibility[0]
+        final fun <get-baseLayerCompatibility>(): kotlin/Int // io.github.yuroyami.kiteplayer/DolbyVisionInfo.baseLayerCompatibility.<get-baseLayerCompatibility>|<get-baseLayerCompatibility>(){}[0]
+    final val baseLayerPlaysAlone // io.github.yuroyami.kiteplayer/DolbyVisionInfo.baseLayerPlaysAlone|{}baseLayerPlaysAlone[0]
+        final fun <get-baseLayerPlaysAlone>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DolbyVisionInfo.baseLayerPlaysAlone.<get-baseLayerPlaysAlone>|<get-baseLayerPlaysAlone>(){}[0]
+    final val hasEnhancementLayer // io.github.yuroyami.kiteplayer/DolbyVisionInfo.hasEnhancementLayer|{}hasEnhancementLayer[0]
+        final fun <get-hasEnhancementLayer>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DolbyVisionInfo.hasEnhancementLayer.<get-hasEnhancementLayer>|<get-hasEnhancementLayer>(){}[0]
+    final val level // io.github.yuroyami.kiteplayer/DolbyVisionInfo.level|{}level[0]
+        final fun <get-level>(): kotlin/Int // io.github.yuroyami.kiteplayer/DolbyVisionInfo.level.<get-level>|<get-level>(){}[0]
+    final val profile // io.github.yuroyami.kiteplayer/DolbyVisionInfo.profile|{}profile[0]
+        final fun <get-profile>(): kotlin/Int // io.github.yuroyami.kiteplayer/DolbyVisionInfo.profile.<get-profile>|<get-profile>(){}[0]
+    final val profileName // io.github.yuroyami.kiteplayer/DolbyVisionInfo.profileName|{}profileName[0]
+        final fun <get-profileName>(): kotlin/String // io.github.yuroyami.kiteplayer/DolbyVisionInfo.profileName.<get-profileName>|<get-profileName>(){}[0]
+
+    final fun component1(): kotlin/Int // io.github.yuroyami.kiteplayer/DolbyVisionInfo.component1|component1(){}[0]
+    final fun component2(): kotlin/Int // io.github.yuroyami.kiteplayer/DolbyVisionInfo.component2|component2(){}[0]
+    final fun component3(): kotlin/Int // io.github.yuroyami.kiteplayer/DolbyVisionInfo.component3|component3(){}[0]
+    final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DolbyVisionInfo.component4|component4(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/DolbyVisionInfo // io.github.yuroyami.kiteplayer/DolbyVisionInfo.copy|copy(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/DolbyVisionInfo.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/DolbyVisionInfo.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/DolbyVisionInfo.toString|toString(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer/DownmixConfig { // io.github.yuroyami.kiteplayer/DownmixConfig|null[0]
@@ -3518,7 +3549,7 @@ final class io.github.yuroyami.kiteplayer/TimedWarning { // io.github.yuroyami.k
 }
 
 final class io.github.yuroyami.kiteplayer/TrackInfo { // io.github.yuroyami.kiteplayer/TrackInfo|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer/TrackId, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Double? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Boolean = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // io.github.yuroyami.kiteplayer/TrackInfo.<init>|<init>(io.github.yuroyami.kiteplayer.TrackId;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Double?;kotlin.Int?;kotlin.Int?;kotlin.Boolean;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/TrackId, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Double? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Boolean = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer/DolbyVisionInfo? = ...) // io.github.yuroyami.kiteplayer/TrackInfo.<init>|<init>(io.github.yuroyami.kiteplayer.TrackId;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Double?;kotlin.Int?;kotlin.Int?;kotlin.Boolean;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.DolbyVisionInfo?){}[0]
 
     final val bitrate // io.github.yuroyami.kiteplayer/TrackInfo.bitrate|{}bitrate[0]
         final fun <get-bitrate>(): kotlin/Long? // io.github.yuroyami.kiteplayer/TrackInfo.bitrate.<get-bitrate>|<get-bitrate>(){}[0]
@@ -3526,6 +3557,8 @@ final class io.github.yuroyami.kiteplayer/TrackInfo { // io.github.yuroyami.kite
         final fun <get-channels>(): kotlin/Int? // io.github.yuroyami.kiteplayer/TrackInfo.channels.<get-channels>|<get-channels>(){}[0]
     final val codec // io.github.yuroyami.kiteplayer/TrackInfo.codec|{}codec[0]
         final fun <get-codec>(): kotlin/String // io.github.yuroyami.kiteplayer/TrackInfo.codec.<get-codec>|<get-codec>(){}[0]
+    final val dolbyVision // io.github.yuroyami.kiteplayer/TrackInfo.dolbyVision|{}dolbyVision[0]
+        final fun <get-dolbyVision>(): io.github.yuroyami.kiteplayer/DolbyVisionInfo? // io.github.yuroyami.kiteplayer/TrackInfo.dolbyVision.<get-dolbyVision>|<get-dolbyVision>(){}[0]
     final val frameRate // io.github.yuroyami.kiteplayer/TrackInfo.frameRate|{}frameRate[0]
         final fun <get-frameRate>(): kotlin/Double? // io.github.yuroyami.kiteplayer/TrackInfo.frameRate.<get-frameRate>|<get-frameRate>(){}[0]
     final val id // io.github.yuroyami.kiteplayer/TrackInfo.id|{}id[0]
@@ -3560,6 +3593,7 @@ final class io.github.yuroyami.kiteplayer/TrackInfo { // io.github.yuroyami.kite
     final fun component13(): kotlin/Int? // io.github.yuroyami.kiteplayer/TrackInfo.component13|component13(){}[0]
     final fun component14(): kotlin/Boolean // io.github.yuroyami.kiteplayer/TrackInfo.component14|component14(){}[0]
     final fun component15(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/TrackInfo.component15|component15(){}[0]
+    final fun component16(): io.github.yuroyami.kiteplayer/DolbyVisionInfo? // io.github.yuroyami.kiteplayer/TrackInfo.component16|component16(){}[0]
     final fun component2(): io.github.yuroyami.kiteplayer/TrackKind // io.github.yuroyami.kiteplayer/TrackInfo.component2|component2(){}[0]
     final fun component3(): kotlin/String // io.github.yuroyami.kiteplayer/TrackInfo.component3|component3(){}[0]
     final fun component4(): kotlin/String? // io.github.yuroyami.kiteplayer/TrackInfo.component4|component4(){}[0]
@@ -3568,7 +3602,7 @@ final class io.github.yuroyami.kiteplayer/TrackInfo { // io.github.yuroyami.kite
     final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer/TrackInfo.component7|component7(){}[0]
     final fun component8(): kotlin/Boolean // io.github.yuroyami.kiteplayer/TrackInfo.component8|component8(){}[0]
     final fun component9(): kotlin/Long? // io.github.yuroyami.kiteplayer/TrackInfo.component9|component9(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer/TrackId = ..., io.github.yuroyami.kiteplayer/TrackKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Double? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Boolean = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): io.github.yuroyami.kiteplayer/TrackInfo // io.github.yuroyami.kiteplayer/TrackInfo.copy|copy(io.github.yuroyami.kiteplayer.TrackId;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Double?;kotlin.Int?;kotlin.Int?;kotlin.Boolean;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer/TrackId = ..., io.github.yuroyami.kiteplayer/TrackKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Double? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Boolean = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer/DolbyVisionInfo? = ...): io.github.yuroyami.kiteplayer/TrackInfo // io.github.yuroyami.kiteplayer/TrackInfo.copy|copy(io.github.yuroyami.kiteplayer.TrackId;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Double?;kotlin.Int?;kotlin.Int?;kotlin.Boolean;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.DolbyVisionInfo?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/TrackInfo.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/TrackInfo.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/TrackInfo.toString|toString(){}[0]
@@ -4712,6 +4746,9 @@ final object io.github.yuroyami.kiteplayer/KiteTrace { // io.github.yuroyami.kit
         abstract fun span(kotlin/String, kotlin/String, kotlin/Long, kotlin/Long, kotlin.collections/Map<kotlin/String, kotlin/String>) // io.github.yuroyami.kiteplayer/KiteTrace.Sink.span|span(kotlin.String;kotlin.String;kotlin.Long;kotlin.Long;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
     }
 }
+
+final val io.github.yuroyami.kiteplayer.spi/toneMapPeakNits // io.github.yuroyami.kiteplayer.spi/toneMapPeakNits|@io.github.yuroyami.kiteplayer.spi.VideoFrame{}toneMapPeakNits[0]
+    final fun (io.github.yuroyami.kiteplayer.spi/VideoFrame).<get-toneMapPeakNits>(): kotlin/Float? // io.github.yuroyami.kiteplayer.spi/toneMapPeakNits.<get-toneMapPeakNits>|<get-toneMapPeakNits>@io.github.yuroyami.kiteplayer.spi.VideoFrame(){}[0]
 
 final fun (io.github.yuroyami.kiteplayer.spi/SubtitleOverlay).io.github.yuroyami.kiteplayer/drawOver(kotlin/ByteArray, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer/drawOver|drawOver@io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
 final fun (io.github.yuroyami.kiteplayer/MediaIo.Companion).io.github.yuroyami.kiteplayer/ofBytes(kotlin/ByteArray): io.github.yuroyami.kiteplayer/MediaIoFactory // io.github.yuroyami.kiteplayer/ofBytes|ofBytes@io.github.yuroyami.kiteplayer.MediaIo.Companion(kotlin.ByteArray){}[0]

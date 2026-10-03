@@ -136,11 +136,16 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - A Java app on Android or the desktop can use the player without writing Kotlin (#394).
   `KitePlayerJava` in `kiteplayer` adds listeners called on an `Executor`, a `CompletableFuture`
   version of every suspending call, and millisecond versions of the calls that take a `Duration`.
-  `MediaItemBuilder` builds an item, whose constructor Java cannot call. In `kiteplayer-core`,
-  `KitePlayer.create` is static on the JVM, the config builders have public constructors and a
-  public `build()`, and `Progress`, `PlayerSnapshot`, `PlayerEvent.SeekCompleted` and `Tracks`
-  gain Java-readable `positionMillis`, `bufferedAheadMillis`, `durationMillis`, `landedAtMillis`
-  and `selectedTrack(kind)`.
+  In `kiteplayer-core`, `KitePlayer.create` is static on the JVM, the config builders have public
+  constructors and a public `build()`, and `Progress`, `PlayerSnapshot`, `PlayerEvent.SeekCompleted`
+  and `Tracks` gain Java-readable `positionMillis`, `bufferedAheadMillis`, `durationMillis`,
+  `landedAtMillis` and `selectedTrack(kind)`. `MediaItemBuilder`, the builder behind
+  `mediaItem(uri) { }`, builds the item whose constructor Java cannot call: it has a public
+  constructor and a public `build()`, each of its calls returns the builder so that Java can chain
+  them, and it gains `headers(Map)`, `externalSubtitles(List)`, `startPositionMillis(Long)` and
+  `demux(DemuxPolicy)`, while `title`, `artist`, `album` and `formatHint` take null. A
+  `mediaItem { }` block compiles unchanged, but code compiled against 0.2.0 that calls the builder
+  must be compiled again, because its calls returned nothing there (#420).
 - The worker player's binary ships as `kiteplayer-wasm-js-<version>-web.zip` beside the wasmJs
   artifact, for a page to unpack beside `index.html` (#58). `KiteWebModules.codecModuleUrl` picks a
   multi-threaded codec module only on a cross-origin isolated page, before it is imported.

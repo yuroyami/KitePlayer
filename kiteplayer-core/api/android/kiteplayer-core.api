@@ -801,23 +801,29 @@ public final class io/github/yuroyami/kiteplayer/MediaItem$Companion {
 }
 
 public final class io/github/yuroyami/kiteplayer/MediaItemBuilder {
-	public final fun album (Ljava/lang/String;)V
-	public final fun artist (Ljava/lang/String;)V
-	public final fun audioFilter (Ljava/lang/String;)V
-	public final fun corruptPackets (Lio/github/yuroyami/kiteplayer/CorruptPackets;)V
-	public final fun externalSubtitle (Lio/github/yuroyami/kiteplayer/SubtitleSource;)V
-	public final fun formatHint (Ljava/lang/String;)V
-	public final fun generateTimestamps ()V
-	public final fun header (Ljava/lang/String;Ljava/lang/String;)V
-	public final fun headers ([Lkotlin/Pair;)V
-	public final fun io (Lio/github/yuroyami/kiteplayer/MediaIoFactory;)V
-	public final fun lowLatency ()V
-	public final fun openOption (Ljava/lang/String;Ljava/lang/String;)V
-	public final fun probe (Lio/github/yuroyami/kiteplayer/ProbeDepth;)V
-	public final fun skipInitialBytes (J)V
-	public final fun startPosition-LRDsOJo (J)V
-	public final fun title (Ljava/lang/String;)V
-	public final fun videoFilter (Ljava/lang/String;)V
+	public fun <init> (Ljava/lang/String;)V
+	public final fun album (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun artist (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun audioFilter (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun build ()Lio/github/yuroyami/kiteplayer/MediaItem;
+	public final fun corruptPackets (Lio/github/yuroyami/kiteplayer/CorruptPackets;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun demux (Lio/github/yuroyami/kiteplayer/DemuxPolicy;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun externalSubtitle (Lio/github/yuroyami/kiteplayer/SubtitleSource;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun externalSubtitles (Ljava/util/List;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun formatHint (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun generateTimestamps ()Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun header (Ljava/lang/String;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun headers (Ljava/util/Map;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun headers ([Lkotlin/Pair;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun io (Lio/github/yuroyami/kiteplayer/MediaIoFactory;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun lowLatency ()Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun openOption (Ljava/lang/String;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun probe (Lio/github/yuroyami/kiteplayer/ProbeDepth;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun skipInitialBytes (J)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun startPosition-LRDsOJo (J)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun startPositionMillis (J)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun title (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun videoFilter (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 }
 
 public final class io/github/yuroyami/kiteplayer/MediaItemBuilderKt {

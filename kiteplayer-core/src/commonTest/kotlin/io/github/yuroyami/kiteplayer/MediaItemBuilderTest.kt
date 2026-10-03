@@ -62,6 +62,37 @@ class MediaItemBuilderTest {
         assertTrue("audioFilter=volume=0.5" in built.toString(), "a printed item names its audio filter: $built")
     }
 
+    /** Java has no block, so it chains the same calls on a builder it makes (#420). */
+    @Test
+    fun chainedCallsBuildTheItemABlockBuilds() {
+        val english = SubtitleSource("/sdcard/en.srt", language = "en")
+        val french = SubtitleSource("/sdcard/fr.srt", title = "French")
+        val chained = MediaItemBuilder("movie.mkv")
+            .header("Authorization", "Bearer token")
+            .headers(mapOf("X-Session" to "42"))
+            .externalSubtitles(listOf(english, french))
+            .startPositionMillis(90_000)
+            .formatHint("matroska")
+            .demux(DemuxPolicy(lowLatency = true))
+            .probe(ProbeDepth.Thorough)
+            .title("Movie")
+            .artist(null)
+            .build()
+        val block = mediaItem("movie.mkv") {
+            header("Authorization", "Bearer token")
+            header("X-Session", "42")
+            externalSubtitle(english)
+            externalSubtitle(french)
+            startPosition(90.seconds)
+            formatHint("matroska")
+            lowLatency()
+            probe(ProbeDepth.Thorough)
+            title("Movie")
+        }
+        assertEquals(block, chained)
+        assertEquals(MediaItem("movie.mkv"), MediaItemBuilder("movie.mkv").build())
+    }
+
     @Test
     fun invalidSettingsAreRefusedWhereTheyAreMade() {
         assertFailsWith<IllegalArgumentException> { ProbeDepth.Custom(bytes = 0, duration = 1.seconds) }

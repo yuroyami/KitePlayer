@@ -548,6 +548,12 @@ jobs:
             :kiteplayer-sample-shared:testAndroidHostTest \
             :kiteplayer-libass:testAndroidHostTest
 
+      # Two published modules that compile a class of one name break every Android app that
+      # packages both, at dex merging, and the ABI check reads one module at a time (#420). This
+      # step names the class and the two modules before the sample's packaging fails on them.
+      - name: No class compiled by two published modules
+        run: ./gradlew --stacktrace checkDuplicateClasses
+
       # The sample app packages every Android ABI, 32-bit ARM included, so it can be sideloaded
       # onto a streaming stick. A KiteFFmpeg release or a libass build that lacks one ABI's
       # library would otherwise give an app that cannot start on that ABI, and nothing would fail.

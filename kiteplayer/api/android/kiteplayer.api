@@ -144,19 +144,6 @@ public final class io/github/yuroyami/kiteplayer/KitePlayers {
 	public static final fun isAvailable (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;)Z
 }
 
-public final class io/github/yuroyami/kiteplayer/MediaItemBuilder {
-	public fun <init> (Ljava/lang/String;)V
-	public final fun album (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
-	public final fun artist (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
-	public final fun build ()Lio/github/yuroyami/kiteplayer/MediaItem;
-	public final fun demux (Lio/github/yuroyami/kiteplayer/DemuxPolicy;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
-	public final fun externalSubtitles (Ljava/util/List;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
-	public final fun formatHint (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
-	public final fun headers (Ljava/util/Map;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
-	public final fun startPositionMillis (Ljava/lang/Long;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
-	public final fun title (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
-}
-
 public final class io/github/yuroyami/kiteplayer/mobile/MobileBackendsKt {
 	public static final fun mobileBackends ()Lio/github/yuroyami/kiteplayer/Backends;
 }

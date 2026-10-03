@@ -49,12 +49,15 @@ internal object Fmp4Rewrite {
         if (sourceCodec != targetCodec) {
             throw DashUnsupportedException("a Period in $sourceCodec cannot play in a stream that began in $targetCodec")
         }
+        val inject = inBandParameterSets(plan.source, plan.target)
+        val unchanged = plan.shiftMicros == 0L && inject == null && sameLayout(plan.source, plan.target)
+        // Nothing to move, inject or trim, so the samples need not be read at all.
+        if (unchanged && plan.endMicros == null) return segment
         val fragments = Fmp4.fragments(segment, plan.source)
         val trims = plan.endMicros != null && fragments.any { fragment ->
             fragment.samples.any { micros(it.decodeTime, plan.source.timescale) + plan.shiftMicros >= plan.endMicros }
         }
-        val inject = inBandParameterSets(plan.source, plan.target)
-        if (plan.shiftMicros == 0L && !trims && inject == null && sameLayout(plan.source, plan.target)) return segment
+        if (unchanged && !trims) return segment
         val out = Bytes(segment.size + 1024)
         Fmp4.boxes(segment, 0, segment.size).firstOrNull()?.takeIf { it.type == "styp" }?.let { styp ->
             out.bytes(segment, styp.start, styp.end)

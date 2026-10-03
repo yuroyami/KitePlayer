@@ -27,6 +27,17 @@ class Fmp4RewriteTest {
     }
 
     @Test
+    fun aSegmentThatNeedsNothingIsNotReadAtAll() {
+        // A run that asks for four billion samples is refused only when the samples must be read (#474).
+        val init = track(Mp4Bytes.init(1, 1000, "soun", "mp4a"))
+        val segment = Mp4Bytes.defaultRuns(1, listOf(0xFFFF_FFFFL))
+        assertSame(segment, Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(init, init, shiftMicros = 0, endMicros = null)))
+        assertFailsWith<DashUnsupportedException> {
+            Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(init, init, shiftMicros = 1_000, endMicros = null))
+        }
+    }
+
+    @Test
     fun anH264PeriodCarriesItsParameterSetsEvenWhenTheyAreTheStreamsOwn() {
         // A decoder that played another Period holds that one's parameter sets, so a Period whose
         // configuration is the stream's own must restate it.

@@ -6,7 +6,23 @@ import kotlin.time.Duration
 /** What to play. */
 public data class MediaItem(
     /**
-     * Where the media is. A file path, or a URL with any scheme the linked FFmpeg supports.
+     * Where the media is: a file path, or an address.
+     *
+     * With no [io] and no resolver answer, the FFmpeg backend opens the address through FFmpeg's
+     * own protocols. On Android, Apple platforms, the JVM and native desktop those are `file`,
+     * `fd`, `pipe`, `data`, `http`, `tcp`, `udp`, `rtp`, `rtsp` and `rtmp`, and a path with no
+     * scheme is a file. An `https` address plays through `kiteplayer-network`. Any other scheme,
+     * among them `srt`, `rtmps` and `rtsps`, fails the open with [PlaybackError.SchemeUnsupported]
+     * before anything goes over the network. A web page has no sockets, so there an address plays
+     * only through [io] or `kiteplayer-network`, and the open of any other fails the same way.
+     *
+     * A live sender is read as it sends. RTSP tries UDP and falls back to TCP when nothing arrives;
+     * `rtsp_transport` in [openOptions], set to `tcp` or `udp`, chooses one. A `udp` or `rtp`
+     * address may name a multicast group, which plays where the host is allowed to join it, and a
+     * file ending in `.sdp` plays the RTP session it describes. A sender that goes silent fails
+     * the open after ten seconds, and the playback after ten over UDP and twenty over a TCP
+     * connection, on which FFmpeg waits twice. The user name and password in an address never
+     * reach a log or an error.
      *
      * When [io] is set, the bytes come from that reader and this is a label. The FFmpeg backend
      * still reads its extension to recognise an HLS playlist, and resolves the playlist's relative

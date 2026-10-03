@@ -54,6 +54,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
         final fun <get-firstVideo>(): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.firstVideo.<get-firstVideo>|<get-firstVideo>(){}[0]
     final val metadata // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.metadata|{}metadata[0]
         final fun <get-metadata>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.metadata.<get-metadata>|<get-metadata>(){}[0]
+    final val realTime // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.realTime|{}realTime[0]
+        final fun <get-realTime>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.realTime.<get-realTime>|<get-realTime>(){}[0]
     final val recordingPath // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.recordingPath|{}recordingPath[0]
         final fun <get-recordingPath>(): kotlin/String? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.recordingPath.<get-recordingPath>|<get-recordingPath>(){}[0]
     final val seekable // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.seekable|{}seekable[0]

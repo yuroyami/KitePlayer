@@ -73,7 +73,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         // openOptions, formatHint and videoFilter and skipped the FFmpeg identity mapping, so the
         // documented SPI door behaved differently from the backend door for the same MediaItem.
         val source = mappingFFmpegRuntimeRejection {
-            openItem(media).let { KiteFFmpegSource(it.source, it.bridge, it.hls, it.variants, it.selectedVariant) }
+            openItem(media).let { KiteFFmpegSource(it.source, it.bridge, it.hls, it.variants, it.selectedVariant, it.realTimeScheme) }
         }
         source.attachItemFilters(media)
         return source
@@ -107,6 +107,8 @@ public class KiteFFmpegSource internal constructor(
     private val hls: HlsLedger? = null,
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
     override val selectedVariant: Int? = null,
+    /** True when the URL fallback opened a scheme whose sender pushes media at the pace it plays. */
+    realTimeScheme: Boolean = false,
 ) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null
@@ -223,6 +225,13 @@ public class KiteFFmpegSource internal constructor(
      */
     override val timestampsMayJump: Boolean =
         source.formatName.let { it.contains("mpegts") || it.contains("rtsp") || it.contains("rtp") || it == "hls" }
+
+    /**
+     * True for a stream with no duration that came over udp, rtp, rtsp or rtmp, or from an SDP
+     * file: a sender pushes it at the pace it plays. An RTMP server's recording has a duration and
+     * is not one, and neither is anything read through the item's own reader.
+     */
+    override val realTime: Boolean = realTimeScheme && duration == null
 
     override fun selectStreams(indices: Set<Int>) {
         check(reader == null) { "streams must be selected before the first read" }

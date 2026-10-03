@@ -169,6 +169,14 @@ Each line is something that bit someone. Delete a line when it stops being true.
   go above 1, and the surface calls `allowance`. The old guard answered a light above the one asked
   for when it held a fall, so a test that read `limit` passed while the surface let the flash
   through. Test the guard through `allowance` (#357).
+- An RTSP client lines up its streams only from the RTCP sender reports or the RTP-Info of PLAY;
+  until one arrives each stream's timestamps start at zero on their own. The `ffmpeg` command
+  line's RTP muxer sends a report only every 5 seconds, so a test relay must hand a joining player
+  each stream's latest report at PLAY, as a camera does. Without that, RTSP over UDP played 300 ms
+  out of sync, which reads like an engine bug (#395).
+- The `ffmpeg` 6.1 command line's `-sdp_file` holds only the first stream of an RTP output with
+  two. It prints a description to standard output as each stream starts, and only the last one
+  names both, so a test takes that one (#395).
 
 ### Language and toolchain
 
@@ -326,6 +334,16 @@ Each line is something that bit someone. Delete a line when it stops being true.
   presentation carries its own Period's parameter sets in band, even a Period whose
   initialization is the stream's own: without them a third Period decoded with the second's
   picture size (#403).
+- Each live protocol in FFmpeg takes its read timeout under its own name, and without one it
+  waits for a silent sender for ever: http, tcp and rtmp take `rw_timeout`, udp takes its own
+  `timeout`, and rtsp takes the demuxer's `timeout`. The rtp reader waits for its first packet
+  through a protocol it opens from the address alone, so no option reaches it and the timeout goes
+  in the address as `?timeout=`, in microseconds. Over a TCP connection a silent sender takes two
+  timeouts to fail a read once playing, because FFmpeg waits again after the first; the command
+  line does the same (#395).
+- FFmpeg lets an input opened through `file` reach only `file`, `crypto` and `data`, so an SDP file
+  on disk opens and then fails to reach the RTP session it describes, until the open names `udp`
+  and `rtp` in `protocol_whitelist` (#395).
 
 ### The web target
 

@@ -23,6 +23,8 @@ internal class OpenedItem(
     /** The variants of an HLS master playlist and the index of the one kept, for the track table. */
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
     val selectedVariant: Int? = null,
+    /** True when the URL fallback opened a scheme whose sender pushes media at the pace it plays. */
+    val realTimeScheme: Boolean = false,
 )
 
 /**
@@ -101,7 +103,12 @@ internal suspend fun openItem(item: MediaItem): OpenedItem {
         // No protocol reads the descriptor now, so no protocol is left to consume its key.
         descriptor != null ->
             OpenedItem(openCancellably(cancel::interrupt) { MediaSource.open(descriptor, options - "fd", cancel) }, null)
-        else -> OpenedItem(openCancellably(cancel::interrupt) { openUrlFallback(item.uri, options, cancel) }, null)
+        else -> {
+            // Refused before anything is opened, so a scheme with no protocol sends nothing anywhere.
+            requireFallbackScheme(item.uri)
+            val source = openCancellably(cancel::interrupt) { openUrlFallback(item.uri, item.formatHint, options, cancel) }
+            OpenedItem(source, null, realTimeScheme = fallbackScheme(item.uri) in realTimeSchemes || source.formatName == "sdp")
+        }
     }
 }
 
@@ -144,26 +151,43 @@ internal suspend fun openSource(item: MediaItem): MediaSource = openItem(item).s
 
 /**
  * The URL fallback: FFmpeg's own protocols read the URI, for an item with no reader and no
- * resolver answer. The build's protocols are file, fd, pipe, data, http and tcp, so https needs the
- * network module. Every http and tcp read waits at most [URL_FALLBACK_READ_TIMEOUT]; FFmpeg limits
+ * resolver answer. The build's protocols are those [fallbackSchemes] names, so https needs the
+ * network module. Every network read waits at most [URL_FALLBACK_READ_TIMEOUT], and FFmpeg limits
  * the connection itself to 5 seconds. The fallback does not reconnect. [cancel] stops the open
  * while it waits on the network.
  */
-private fun openUrlFallback(uri: String, options: Map<String, String>, cancel: OpenInterrupt): MediaSource =
+private fun openUrlFallback(uri: String, formatHint: String?, options: Map<String, String>, cancel: OpenInterrupt): MediaSource =
     // Keys the demuxer did not consume come back from KiteFFmpeg instead of being dropped.
-    MediaSource.open(uri, urlFallbackOptions(uri, options), cancel)
+    MediaSource.open(fallbackAddress(uri), urlFallbackOptions(uri, options, formatHint), cancel)
 
 /**
- * The options the URL fallback opens [uri] with: [options], plus FFmpeg's `rw_timeout` for an http
- * or tcp URI whose item does not set it. `rw_timeout` is in microseconds and limits each read, and
- * FFmpeg copies it from the http context to the tcp context under it. An item that sets its own
- * `rw_timeout` in `MediaItem.openOptions` keeps it.
+ * The options the URL fallback opens [uri] with: [options], plus what bounds a read on its scheme
+ * and what an SDP file needs, each only where the item does not set it in `MediaItem.openOptions`.
+ * Every timeout is in microseconds.
+ *
+ * - http, tcp and rtmp take `rw_timeout`, which limits each read and which FFmpeg copies to the tcp
+ *   connection under them.
+ * - udp takes its own `timeout`, which FFmpeg's udp protocol puts in place of `rw_timeout`.
+ * - rtsp takes the demuxer's `timeout`, without which it waits for a camera for ever.
+ * - An rtp address carries its timeout in the address instead, as [fallbackAddress] writes it, and
+ *   an SDP file's session gives up after FFmpeg's own 10 seconds.
+ * - An SDP file read from disk, by its `.sdp` name or [formatHint], may reach `udp` and `rtp`,
+ *   because FFmpeg lets an input opened through `file` reach only `file`, `crypto` and `data`.
  */
-internal fun urlFallbackOptions(uri: String, options: Map<String, String>): Map<String, String> {
-    val network = uri.startsWith("http://", ignoreCase = true) || uri.startsWith("tcp://", ignoreCase = true)
-    if (!network || "rw_timeout" in options) return options
-    return options + ("rw_timeout" to URL_FALLBACK_READ_TIMEOUT.inWholeMicroseconds.toString())
+internal fun urlFallbackOptions(uri: String, options: Map<String, String>, formatHint: String? = null): Map<String, String> {
+    val timeout = URL_FALLBACK_READ_TIMEOUT.inWholeMicroseconds.toString()
+    var result = options
+    when (fallbackScheme(uri)) {
+        "http", "tcp", "rtmp" -> if ("rw_timeout" !in options) result = result + ("rw_timeout" to timeout)
+        "udp", "rtsp" -> if ("timeout" !in options) result = result + ("timeout" to timeout)
+        "file" -> {
+            val sdp = formatHint.equals("sdp", ignoreCase = true) ||
+                uri.substringBefore('?').endsWith(".sdp", ignoreCase = true)
+            if (sdp && "protocol_whitelist" !in options) result = result + ("protocol_whitelist" to "file,udp,rtp")
+        }
+    }
+    return result
 }
 
-/** How long one read of the URL fallback waits for bytes over http or tcp. */
+/** How long one read of the URL fallback waits for bytes over the network. */
 internal val URL_FALLBACK_READ_TIMEOUT: Duration = 10.seconds

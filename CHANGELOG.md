@@ -85,6 +85,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   open, so a `when` that lists every error needs the new branch (#395). `PlayerMediaSource` gains
   `realTime`, which is false unless a source says otherwise, so a source of your own keeps
   compiling.
+- An address plays live over `rtsp`, `rtmp`, `udp` and `rtp`, a `udp` or `rtp` multicast group
+  included, and a `.sdp` file plays the RTP session it describes, on every platform but the web
+  (#395). RTSP tries UDP and falls back to TCP, and `rtsp_transport` in `openOptions` chooses one.
+  A sender that goes silent fails the open within ten seconds, and the playback within ten over UDP
+  or twenty over a TCP connection, on which FFmpeg waits twice, instead of holding either for ever.
+  An address whose scheme FFmpeg here has no protocol for, such as `srt`, `rtmps` or `rtsps`, and
+  on the web every address with no reader, fails with `SchemeUnsupported` before anything goes
+  over the network, where it used to fail inside FFmpeg.
 - An HLS track with no title of its own takes its rendition's `NAME` as its title, unless the name
   only repeats its language (#404). FFmpeg files that name under the stream's `comment`, where
   `PlayerStreamInfo.metadata` still shows it.

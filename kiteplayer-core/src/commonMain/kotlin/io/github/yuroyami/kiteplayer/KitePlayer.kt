@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.internal.SeekResult
 import io.github.yuroyami.kiteplayer.internal.platformPlaybackDispatchers
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.jvm.JvmOverloads
@@ -91,8 +92,25 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public val subtitleCues: StateFlow<List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
         core.subtitleCues
 
-    /** Warnings, failures and the occurrences worth naming. Replays nothing to a late collector. */
+    /**
+     * Warnings, failures and the occurrences worth naming. Replays nothing to a late collector.
+     *
+     * One buffer of 64 events serves every collector, so when any one of them falls that far behind,
+     * the next event reaches none of them, and [PlaybackStats.droppedEvents] counts it. A collector
+     * that must see every event collects [losslessEvents] instead.
+     */
     public val events: SharedFlow<PlayerEvent> = core.events
+
+    /**
+     * The same events as [events], with none ever dropped (#414).
+     *
+     * Each collector has a queue of its own with no limit, so it gets every event that happens while
+     * it collects, in order, however slow it or any collector of [events] is. The price is that
+     * queue: a collector that stops taking events holds every one it has not taken. Collection
+     * subscribes before its first suspension, so a collector started undispatched misses nothing
+     * from that moment on. Like [events], it replays nothing.
+     */
+    public val losslessEvents: Flow<PlayerEvent> = core.losslessEvents
 
     /**
      * The position now, without waiting for the next [progress] sample.

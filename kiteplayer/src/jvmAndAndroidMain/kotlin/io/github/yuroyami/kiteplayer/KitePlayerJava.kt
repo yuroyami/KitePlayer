@@ -77,11 +77,13 @@ public class KitePlayerJava(
             return
         }
         registration.invokeOnCompletion { registrations.remove(listener, registration) }
-        // Subscribed before this returns, so no event after it can be missed. The engine drops an
-        // event that a slow subscriber has no room for, so this side only ever queues.
+        // Subscribed before this returns, so no event after it can be missed. The lossless feed, and
+        // not `events`, whose shared buffer drops an event for every collector once any one of them
+        // falls behind, so a slow Kotlin collector elsewhere in the app cannot cost this listener
+        // one (#414). This side only ever queues.
         val events = Channel<PlayerEvent>(Channel.UNLIMITED)
         CoroutineScope(registration + Dispatchers.Default).launch(start = CoroutineStart.UNDISPATCHED) {
-            player.events.collect { events.trySend(it) }
+            player.losslessEvents.collect { events.trySend(it) }
         }
         val deliver = CoroutineScope(registration + executor.asCoroutineDispatcher())
         deliver.launch { player.state.collect { listener.onState(it) } }

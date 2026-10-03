@@ -588,6 +588,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun detachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
 	public final fun diagnosticsDump ()Ljava/lang/String;
 	public final fun getEvents ()Lkotlinx/coroutines/flow/SharedFlow;
+	public final fun getLosslessEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getProgress ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getStats ()Lkotlinx/coroutines/flow/StateFlow;

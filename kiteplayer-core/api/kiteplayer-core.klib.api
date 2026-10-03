@@ -2572,6 +2572,8 @@ final class io.github.yuroyami.kiteplayer/IoCachePolicyBuilder { // io.github.yu
 final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/KitePlayer|null[0]
     final val events // io.github.yuroyami.kiteplayer/KitePlayer.events|{}events[0]
         final fun <get-events>(): kotlinx.coroutines.flow/SharedFlow<io.github.yuroyami.kiteplayer/PlayerEvent> // io.github.yuroyami.kiteplayer/KitePlayer.events.<get-events>|<get-events>(){}[0]
+    final val losslessEvents // io.github.yuroyami.kiteplayer/KitePlayer.losslessEvents|{}losslessEvents[0]
+        final fun <get-losslessEvents>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer/PlayerEvent> // io.github.yuroyami.kiteplayer/KitePlayer.losslessEvents.<get-losslessEvents>|<get-losslessEvents>(){}[0]
     final val progress // io.github.yuroyami.kiteplayer/KitePlayer.progress|{}progress[0]
         final fun <get-progress>(): kotlinx.coroutines.flow/StateFlow<io.github.yuroyami.kiteplayer/Progress> // io.github.yuroyami.kiteplayer/KitePlayer.progress.<get-progress>|<get-progress>(){}[0]
     final val state // io.github.yuroyami.kiteplayer/KitePlayer.state|{}state[0]

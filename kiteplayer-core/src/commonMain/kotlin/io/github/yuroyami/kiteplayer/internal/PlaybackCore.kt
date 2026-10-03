@@ -92,6 +92,9 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -227,6 +230,26 @@ internal class PlaybackCore(
     val progress: StateFlow<Progress> get() = progressState.asStateFlow()
     val stats: StateFlow<PlaybackStats> get() = statsState.asStateFlow()
     val events: SharedFlow<PlayerEvent> get() = eventSink.asSharedFlow()
+
+    /** The queues of the lossless collectors, replaced whole so [emitEvent] reads them without a lock. */
+    private val eventTaps = atomic(emptyList<SendChannel<PlayerEvent>>())
+
+    /**
+     * Every event, with none dropped: each collector gets a queue of its own with no limit, fed
+     * beside [events] rather than from it, so a collector of [events] that falls behind cannot cost
+     * this one an event (#414). The queue is registered before the first suspension, so a collector
+     * started undispatched has every event from then on.
+     */
+    val losslessEvents: Flow<PlayerEvent> = flow {
+        val tap = Channel<PlayerEvent>(Channel.UNLIMITED)
+        eventTaps.update { it + tap }
+        try {
+            for (event in tap) emit(event)
+        } finally {
+            eventTaps.update { taps -> taps.filterNot { it === tap } }
+            tap.cancel()
+        }
+    }
 
     // Actor-confined state until the actor returns. The close finalizer then owns status, lastError and
     // the one terminal snapshot exclusively; every other field is immutable to it.
@@ -8578,6 +8601,8 @@ internal class PlaybackCore(
      * it is why every warning is ALSO written to the bounded history, which a late reader can read.
      */
     private fun emitEvent(event: PlayerEvent) {
+        // An unlimited queue refuses only once its collector has gone, and then it is being removed.
+        for (tap in eventTaps.value) tap.trySend(event)
         if (!eventSink.tryEmit(event)) droppedEvents.incrementAndGet()
     }
 

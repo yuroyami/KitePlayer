@@ -34,7 +34,7 @@ internal class KiteFFmpegCaptionDecoderFactory(
  * One caption track. FFmpeg's decoder answers with ASS events, `{\an7}HELLO` and the like, each
  * with a start and a duration, so every event goes through the same ASS event parser as an
  * embedded ASS track. The caption decoder emits a caption when the screen next changes, which is
- * when its end is known.
+ * when its end is known, so the last one comes out of the drain at the end of the stream.
  */
 internal class KiteFFmpegCaptionDecoder(
     private val decoder: io.github.yuroyami.kiteffmpeg.SubtitleDecoder,
@@ -48,14 +48,14 @@ internal class KiteFFmpegCaptionDecoder(
 
     override suspend fun send(packet: PlayerPacket?): Boolean {
         check(!closed) { "the caption decoder is closed" }
-        if (packet == null) return true
-        // A damaged packet costs its own caption and nothing more.
+        // A damaged packet costs its own caption and nothing more. The null packet at the end of
+        // the stream drains the caption still on screen, which no packet completes (#480).
         val subtitle = try {
-            decoder.decode((packet as KiteFFmpegPacket).native)
+            if (packet == null) decoder.drain() else decoder.decode((packet as KiteFFmpegPacket).native)
         } catch (damaged: io.github.yuroyami.kiteffmpeg.FFmpegException) {
             null
         } ?: return true
-        val start = mapper.mapTimestamp(subtitle.startMicros)?.micros ?: packet.pts?.micros ?: return true
+        val start = mapper.mapTimestamp(subtitle.startMicros)?.micros ?: packet?.pts?.micros ?: return true
         val end = mapper.mapTimestamp(subtitle.endMicros)?.micros?.takeIf { it > start } ?: SubtitleCue.OPEN_END
         subtitle.texts.forEach { event -> track.parseEvent(event, start, end)?.let(pending::addLast) }
         return true

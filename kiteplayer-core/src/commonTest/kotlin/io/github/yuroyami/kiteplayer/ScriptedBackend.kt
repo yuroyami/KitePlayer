@@ -93,6 +93,13 @@ internal data class ScriptedSubtitleTrack(
     val decoderAccepted: Boolean = true,
     /** True makes this track's decoder refuse every packet, as a decoder that is full does. */
     val refusesPackets: Boolean = false,
+    /**
+     * True makes this track's decoder hold its last cue until the null packet that ends the
+     * stream, as FFmpeg's caption decoder holds the caption on screen.
+     */
+    val holdsLastCue: Boolean = false,
+    /** True makes this track's decoder refuse that null packet every time it is offered. */
+    val refusesDrain: Boolean = false,
 ) {
     val cuesByStart: Map<Long, List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
         cues.groupBy { it.startMicros }
@@ -176,6 +183,10 @@ internal class MediaScript(
     val attachments: List<io.github.yuroyami.kiteplayer.spi.MediaAttachment> = emptyList(),
     /** Counts the scripted decoder's work without putting timing assumptions into a virtual-time test. */
     val subtitleProbe: ScriptedSubtitleProbe = ScriptedSubtitleProbe(),
+    /** The scripted subtitle track's decoder holds its last cue until the end-of-stream drain. */
+    val subtitleHoldsLastCue: Boolean = false,
+    /** The scripted subtitle track's decoder refuses the end-of-stream drain every time. */
+    val subtitleRefusesDrain: Boolean = false,
     /** Extra container audio tracks. Explicit indices make identity assertions unambiguous. */
     val additionalAudioTracks: List<ScriptedAudioTrack> = emptyList(),
     /** Fields the container declares one way and the decoder answers another. */
@@ -241,6 +252,8 @@ internal class MediaScript(
                     language = subtitleLanguage,
                     title = "scripted subtitle A",
                     isDefault = true,
+                    holdsLastCue = subtitleHoldsLastCue,
+                    refusesDrain = subtitleRefusesDrain,
                 ),
             )
         }
@@ -330,6 +343,8 @@ internal class ScriptedSubtitlePacket(
  * drain, reproducing a command that arrives concurrently on a device without thread races.
  */
 internal class ScriptedSubtitleProbe {
+    /** How many end-of-stream drains the scripted subtitle decoders took. */
+    var drains: Int = 0
     var packetsSent: Int = 0
         private set
     var cueLookups: Int = 0
@@ -502,15 +517,23 @@ internal class ScriptedSubtitleDecoder(
     private val probe: ScriptedSubtitleProbe,
 ) : SubtitleDecoder {
     private val pending = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
+    private val held = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
+    private val lastStart = track.cues.maxOfOrNull { it.startMicros }
     var closed: Boolean = false
         private set
 
     override suspend fun send(packet: PlayerPacket?): Boolean {
-        if (packet == null) return true
+        if (packet == null) {
+            if (track.refusesDrain) return false
+            probe.drains++
+            pending.addAll(held)
+            held.clear()
+            return true
+        }
         if (track.refusesPackets) return false
         val pts = packet.pts?.micros ?: return true
         val cues = track.cuesByStart[pts].orEmpty()
-        pending.addAll(cues)
+        if (track.holdsLastCue && pts == lastStart) held.addAll(cues) else pending.addAll(cues)
         probe.recordLookup(cues.size)
         return true
     }
@@ -524,6 +547,7 @@ internal class ScriptedSubtitleDecoder(
 
     override suspend fun flush(newGeneration: Generation) {
         pending.clear()
+        held.clear()
     }
 
     override fun close() {

@@ -325,6 +325,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   a close past the deadline reports `RuntimeCompromised` while the release goes on. A release step
   that refuses, such as a renderer that cannot take the subtitles down, is a `ResourcesNotReleased`
   warning and the rest of the session is still released (#472).
+- The last closed caption of a file is shown (#480). FFmpeg's caption decoder gives a caption only
+  when the screen next changes, so the caption on screen at the end of a stream stayed inside it.
+  The engine now sends every subtitle decoder the null packet the SPI defines once its track has
+  run out at the end of the stream, waits for what it gives before it ends the media, and offers it
+  again after a seek; the FFmpeg backend's caption and image decoders pass it to KiteFFmpeg's new
+  `SubtitleDecoder.drain` (yuroyami/KiteFFmpeg#149). A decoder that refuses it eight times running
+  counts as drained, so it cannot hold the end of the media.
 
 ### Removed
 

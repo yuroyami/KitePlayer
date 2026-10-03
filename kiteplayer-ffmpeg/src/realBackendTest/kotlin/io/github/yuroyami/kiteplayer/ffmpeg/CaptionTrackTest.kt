@@ -10,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * A caption track of its own decodes to text cues. The MOV's only track is EIA-608 (c608), made
@@ -50,7 +51,48 @@ class CaptionTrackTest {
         }
     }
 
+    @Test
+    fun theLastCaptionComesOutOfTheDrainAtTheEndOfTheTrack() = runBlocking {
+        // HELLO pops up at one second and nothing erases it. FFmpeg's caption decoder gives a
+        // caption when the screen next changes, so no packet completes this one and only the
+        // null packet the engine sends at the end of the stream does (#480).
+        val item = MediaItem.from(MediaIo.ofBytes(HELD_CAPTION.encodeToByteArray()), label = "held.scc")
+        val source = KiteFFmpegSourceFactory().open(item) as KiteFFmpegSource
+        try {
+            val stream = assertNotNull(source.streams.firstOrNull { it.kind == TrackKind.Subtitle }, "no caption stream")
+            assertEquals("eia_608", stream.codec)
+            source.selectStreams(setOf(stream.index))
+            val decoder = assertNotNull(KiteFFmpegCaptionDecoderFactory(source).create(stream))
+            try {
+                val decoded = ArrayList<SubtitleCue>()
+                while (true) {
+                    val packet = source.readPacket() ?: break
+                    try {
+                        decoder.send(packet)
+                    } finally {
+                        packet.close()
+                    }
+                    decoded += decoder.receive()
+                }
+                assertEquals(emptyList(), decoded, "a packet completed the caption nothing erases")
+                assertTrue(decoder.send(null))
+                val caption = decoder.receive().single() as SubtitleCue.Text
+                assertEquals("HELLO", caption.plainText)
+                assertTrue(caption.endMicros > caption.startMicros, "the drained caption has no length")
+                assertEquals(emptyList(), decoder.receive())
+            } finally {
+                decoder.close()
+            }
+        } finally {
+            source.close()
+        }
+    }
+
     private companion object {
+        /** One pop-on caption, HELLO at one second, that nothing erases, as Scenarist SCC text. */
+        const val HELD_CAPTION =
+            "Scenarist_SCC V1.0\n\n00:00:01:00\t9420 9420 94ae 94ae 9440 9440 c845 4c4c 4f80 942f 942f\n\n"
+
         val CAPTION_TRACK: ByteArray = (
             "00000014667479707174202000000200717420200000000877696465000000466d64617400000026636461749420" +
             "942094ae94ae9452945297a197a1c8454c4c4f80942c942c942f942f0000000c63646174942c942c0000000c6364" +

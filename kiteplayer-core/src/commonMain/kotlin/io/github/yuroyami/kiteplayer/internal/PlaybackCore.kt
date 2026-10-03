@@ -3586,6 +3586,8 @@ internal class PlaybackCore(
         session.pendingSubtitlePacket?.close()
         session.pendingSubtitlePacket = null
         session.subtitleDecoderMayHaveOutput = false
+        session.subtitleDrained = false
+        session.subtitleDrainRefusals = 0
         session.lastSubtitlePruneCutoffUs = Long.MIN_VALUE
         withdrawSubtitleOverlay(session)
 
@@ -3682,6 +3684,8 @@ internal class PlaybackCore(
         session.pendingSubtitle2Packet?.close()
         session.pendingSubtitle2Packet = null
         session.subtitle2DecoderMayHaveOutput = false
+        session.subtitle2Drained = false
+        session.subtitle2DrainRefusals = 0
         session.lastSubtitle2PruneCutoffUs = Long.MIN_VALUE
         val retired = session.subtitle2Decoder
         session.subtitle2Stream = targetStream
@@ -5022,6 +5026,19 @@ internal class PlaybackCore(
             }
         }
 
+        // The queue has run dry at the end of the stream, so the decoder is told with the null
+        // packet the SPI defines: a decoder may hold its last cue until then, and an empty queue
+        // cannot say it holds none (#480).
+        if (!interrupted && !session.subtitleDrained && !session.subtitleDecoderMayHaveOutput &&
+            session.pendingSubtitlePacket == null && queue.ranDry()
+        ) {
+            val accepted = decoder.send(null)
+            session.subtitleDecoderMayHaveOutput = true
+            if (accepted || ++session.subtitleDrainRefusals >= SUBTITLE_DRAIN_REFUSALS) session.subtitleDrained = true
+            drainDecoderOutput()
+            if (!session.subtitleDrained) wakeIn(if (session.subtitleDecoderMayHaveOutput) Duration.ZERO else WORKER_POLL)
+        }
+
         subtitleMaxPacketAttemptsPerPass = maxOf(subtitleMaxPacketAttemptsPerPass, packetAttempts)
 
         // Cover arrivals between the last decoder boundary and the bookkeeping below.
@@ -5103,6 +5120,16 @@ internal class PlaybackCore(
                 break
             }
         }
+        // The secondary lane's end-of-stream drain, as the primary's (#480).
+        if (!interrupted && !session.subtitle2Drained && !session.subtitle2DecoderMayHaveOutput &&
+            session.pendingSubtitle2Packet == null && queue.ranDry()
+        ) {
+            val accepted = decoder.send(null)
+            session.subtitle2DecoderMayHaveOutput = true
+            if (accepted || ++session.subtitle2DrainRefusals >= SUBTITLE_DRAIN_REFUSALS) session.subtitle2Drained = true
+            drainDecoderOutput()
+            if (!session.subtitle2Drained) wakeIn(if (session.subtitle2DecoderMayHaveOutput) Duration.ZERO else WORKER_POLL)
+        }
         if (!interrupted && actorWorkWaiting()) interrupted = true
         if (cuesInserted && !interrupted) pruneSecondaryCueHistory(session)
         val backlog = session.subtitle2DecoderMayHaveOutput ||
@@ -5145,6 +5172,18 @@ internal class PlaybackCore(
         val remainingUs = latestEnd - positionUs
         return if (remainingUs <= 0) Duration.ZERO else remainingUs.microseconds
     }
+
+    /** Whether a selected subtitle lane is at the end of its stream with its drain not yet taken or given (#480). */
+    private fun subtitleDrainOwed(session: OpenSession): Boolean {
+        val primary = session.subtitleDecoder != null && session.subtitleQueue?.ranDry() == true &&
+            (!session.subtitleDrained || session.subtitleDecoderMayHaveOutput)
+        val secondary = session.subtitle2Decoder != null && session.subtitle2Queue?.ranDry() == true &&
+            (!session.subtitle2Drained || session.subtitle2DecoderMayHaveOutput)
+        return primary || secondary
+    }
+
+    /** Whether this queue has nothing left and never will: its stream ended and it is empty. */
+    private fun PacketQueue.ranDry(): Boolean = count == 0 && isEndOfStream
 
     /** The timing half of handleSubtitles, shared by container and external cue tables. */
     private suspend fun timeAndPublishCues(session: OpenSession) {
@@ -5793,6 +5832,12 @@ internal class PlaybackCore(
         // closing line outlives the picture it belongs to. Ending here is how the last line of
         // dialogue in a film used to vanish a moment early.
         if (!endOfStream.subtitleTailDone) {
+            // A lane whose decoder is still owed its drain, or still has output to give, may hold
+            // the last cue, which the tail below has to count (#480).
+            if (endOfStream.subtitleTailUntilNanos == 0L && subtitleDrainOwed(session)) {
+                wakeIn(Duration.ZERO)
+                return
+            }
             if (endOfStream.subtitleTailUntilNanos == 0L) {
                 val overrun = subtitleTailOverrun(session)
                 endOfStream.subtitleTailUntilNanos = if (overrun <= Duration.ZERO) {
@@ -7539,6 +7584,8 @@ internal class PlaybackCore(
         session.pendingSubtitlePacket?.close()
         session.pendingSubtitlePacket = null
         session.subtitleDecoderMayHaveOutput = false
+        session.subtitleDrained = false
+        session.subtitleDrainRefusals = 0
         session.lastSubtitlePruneCutoffUs = Long.MIN_VALUE
         // The pure selector makes seek reconstruction trivial: clear, re-decode from the landing
         // point, and the next pass's activeAt IS the rebuilt state, in either direction.
@@ -7563,6 +7610,8 @@ internal class PlaybackCore(
         session.pendingSubtitle2Packet?.close()
         session.pendingSubtitle2Packet = null
         session.subtitle2DecoderMayHaveOutput = false
+        session.subtitle2Drained = false
+        session.subtitle2DrainRefusals = 0
         session.lastSubtitle2PruneCutoffUs = Long.MIN_VALUE
         session.subtitle2Cues = when {
             session.subtitle2Stream != null ->
@@ -9893,6 +9942,8 @@ internal class PlaybackCore(
         var subtitle2Queue: PacketQueue? = null
         var pendingSubtitle2Packet: io.github.yuroyami.kiteplayer.spi.PlayerPacket? = null
         var subtitle2DecoderMayHaveOutput: Boolean = false
+        var subtitle2Drained: Boolean = false
+        var subtitle2DrainRefusals: Int = 0
         var subtitle2Cues: MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> = mutableListOf()
         var lastSubtitle2PruneCutoffUs: Long = Long.MIN_VALUE
         val cue2Index: io.github.yuroyami.kiteplayer.subtitle.CueIndex =
@@ -9913,6 +9964,15 @@ internal class PlaybackCore(
 
         /** What the last published overlay showed, so an unchanged set publishes nothing. */
         var publishedCueKey: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>? = null
+
+        /**
+         * Whether the primary lane's decoder has taken the null packet that tells it the stream has
+         * ended, and how often it refused it (#480). A decoder may hold its last cue until then.
+         * Reset by every flush and every decoder change, because a drained decoder takes packets
+         * again only after a flush. The secondary lane keeps its own pair.
+         */
+        var subtitleDrained: Boolean = false
+        var subtitleDrainRefusals: Int = 0
 
         /**
          * Why a recording this session's source still makes ends when the session is released,
@@ -10009,6 +10069,12 @@ internal class PlaybackCore(
         /** Inline subtitle work yields the actor at these hard operation ceilings. */
         const val SUBTITLE_PACKETS_PER_PASS = 32
         const val SUBTITLE_RECEIVE_BATCHES_PER_PASS = 32
+
+        /**
+         * How often a subtitle decoder may refuse the end-of-stream drain before it counts as
+         * drained, so a decoder that refuses it for ever cannot hold the end of the media (#480).
+         */
+        const val SUBTITLE_DRAIN_REFUSALS = 8
 
         /** Pruning is a memory bound, not a cue-edge operation; one scan per media second suffices. */
         const val CUE_PRUNE_STEP_MICROS = 1_000_000L

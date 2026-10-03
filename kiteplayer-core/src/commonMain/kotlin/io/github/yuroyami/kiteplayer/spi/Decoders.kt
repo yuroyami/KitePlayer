@@ -134,6 +134,12 @@ public interface SubtitleDecoderFactory {
 /**
  * Turns subtitle packets into cues. The engine drains it on the actor between packets and flushes
  * it on every seek; see [SubtitleDecoderFactory].
+ *
+ * Once a track's packets have run out at the end of its stream, the engine sends null, once, and
+ * receives what that gives: a decoder that holds its last cue until the next packet, as a closed
+ * caption decoder holds the caption on screen, gives it then. A decoder that refuses the null
+ * packet is offered it again after its output is received, a few times at most. The next packet
+ * after a drain comes only after a [flush].
  */
 public interface SubtitleDecoder : AutoCloseable {
     /** Offers a packet, or null to start the drain. False means receive before offering again, as for [VideoDecoder.send]. */

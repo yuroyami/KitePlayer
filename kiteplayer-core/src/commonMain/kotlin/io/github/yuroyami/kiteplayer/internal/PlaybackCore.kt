@@ -222,8 +222,18 @@ internal class PlaybackCore(
     /** Told once per open: the same disagreement does not become a warning per seek. */
     private var divergencesReported: Boolean = false
 
-    /** The queue: the items and the cursor. Empty and -1 outside queue playback. */
+    /**
+     * The queue: the items and the cursor. Empty and -1 outside queue playback.
+     *
+     * The items are the actor's own and published in every snapshot, so they sit in a list nobody
+     * can change, this actor included: every edit builds a new one. The list a caller passed used
+     * to be kept as it was, and an edit to it, or through a snapshot from Java, changed the queue
+     * under the session (#409).
+     */
     private var queueItems: List<MediaItem> = emptyList()
+        set(value) {
+            field = if (value is ReadOnlyList) value else ReadOnlyList(value.toList())
+        }
     private var queueIndex: Int = -1
 
     /**
@@ -986,6 +996,7 @@ internal class PlaybackCore(
 
     suspend fun openQueue(items: List<MediaItem>, startIndex: Int) {
         val reply = CompletableDeferred<Unit>()
+        // The command copies the list as it is made, before anything can suspend (#409).
         send(CoreCommand.OpenQueue(items, startIndex, reply))
         awaitReply(reply, stopOnCancellation = true)
     }
@@ -1073,7 +1084,7 @@ internal class PlaybackCore(
      */
     suspend fun addToQueue(items: List<MediaItem>, index: Int? = null) {
         val reply = CompletableDeferred<Unit>()
-        send(CoreCommand.EditQueue(QueueEdit.Add(items, index), reply))
+        send(CoreCommand.EditQueue(QueueEdit.Add(items.toList(), index), reply))
         awaitReply(reply)
     }
 
@@ -1296,13 +1307,13 @@ internal class PlaybackCore(
     /** Turns shuffle on with [order] as the play order, as a memento saved it. */
     suspend fun restoreQueueOrder(order: List<Int>) {
         val reply = CompletableDeferred<Unit>()
-        send(CoreCommand.RestoreQueueOrder(order, reply))
+        send(CoreCommand.RestoreQueueOrder(order.toList(), reply))
         awaitReply(reply)
     }
 
     suspend fun setMarkers(markers: List<Marker>) {
         val reply = CompletableDeferred<Unit>()
-        send(CoreCommand.SetMarkers(markers, reply))
+        send(CoreCommand.SetMarkers(markers.toList(), reply))
         awaitReply(reply)
     }
 
@@ -10323,10 +10334,13 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class Open(val media: MediaItem, val reply: CompletableDeferred<Unit>) : CoreCommand("open", reply)
 
     class OpenQueue(
-        val items: List<MediaItem>,
+        items: List<MediaItem>,
         val startIndex: Int,
         val reply: CompletableDeferred<Unit>,
-    ) : CoreCommand("openQueue", reply)
+    ) : CoreCommand("openQueue", reply) {
+        /** A copy taken as the command is made, so the caller's list is its own again at once (#409). */
+        val items: List<MediaItem> = items.toList()
+    }
 
     class QueueNext(val reply: CompletableDeferred<Unit>) : CoreCommand("queueNext", reply)
     class QueuePrevious(val reply: CompletableDeferred<Unit>) : CoreCommand("queuePrevious", reply)
@@ -10561,4 +10575,14 @@ internal sealed interface QueueEdit {
     data object Clear : QueueEdit {
         override val name: String get() = "clearQueue"
     }
+}
+
+/**
+ * A list that refuses every edit, also through the `java.util.List` a JVM caller sees, where a
+ * plain read-only Kotlin list still has a working `remove`.
+ */
+private class ReadOnlyList<T>(private val items: List<T>) : AbstractList<T>() {
+    override val size: Int get() = items.size
+
+    override fun get(index: Int): T = items[index]
 }

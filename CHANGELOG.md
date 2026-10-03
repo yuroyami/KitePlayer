@@ -261,6 +261,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   was followed nine levels deep for every element that used it, so a style naming itself ten times
   took six seconds for one cue, in 155 bytes of input. A loop of style names is now cut at its first
   repeat, as TTML2 counts it an error, and one document follows at most 100,000 style names.
+- `openQueue` and `addToQueue` take a copy of the list they are given (#409). The player kept the
+  caller's own list, so an edit to it afterwards changed the queue and every snapshot already
+  published, and `next()` then read past the end of the shorter list and failed the session.
+  `KitePlayerJava.openQueueAsync` and `addToQueueAsync` copy on the caller's thread, before the
+  call runs on another one. A snapshot's `queue` now refuses an edit, also through the
+  `java.util.List` a Java caller sees.
 
 ### Removed
 

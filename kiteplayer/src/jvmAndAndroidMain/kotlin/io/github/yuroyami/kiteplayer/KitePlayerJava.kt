@@ -140,8 +140,12 @@ public class KitePlayerJava(
 
     /** `KitePlayer.openQueue`. */
     @JvmOverloads
-    public fun openQueueAsync(items: List<MediaItem>, startIndex: Int = 0): CompletableFuture<Void?> =
-        launchCall { player.openQueue(items, startIndex) }
+    public fun openQueueAsync(items: List<MediaItem>, startIndex: Int = 0): CompletableFuture<Void?> {
+        // Copied on the caller's thread before the call runs on another one, so a caller that
+        // reuses its list as soon as this returns changes nothing in the queue (#409).
+        val owned = items.toList()
+        return launchCall { player.openQueue(owned, startIndex) }
+    }
 
     /** `KitePlayer.next`. */
     public fun nextAsync(): CompletableFuture<Void?> = launchCall { player.next() }
@@ -151,8 +155,11 @@ public class KitePlayerJava(
 
     /** `KitePlayer.addToQueue` with [items], at [index] or at the end for null. */
     @JvmOverloads
-    public fun addToQueueAsync(items: List<MediaItem>, index: Int? = null): CompletableFuture<Void?> =
-        launchCall { player.addToQueue(items, index) }
+    public fun addToQueueAsync(items: List<MediaItem>, index: Int? = null): CompletableFuture<Void?> {
+        // Copied here for the reason openQueueAsync gives (#409).
+        val owned = items.toList()
+        return launchCall { player.addToQueue(owned, index) }
+    }
 
     /** `KitePlayer.addToQueue` with [item], at [index] or at the end for null. */
     @JvmOverloads

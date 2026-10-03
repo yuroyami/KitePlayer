@@ -81,6 +81,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the reading has got to and used to drop every cue that began before that moment, so the cue at
   zero was lost even while it was still on screen. KiteFFmpeg 0.5.0 carries the FFmpeg fix, which
   keeps a cue that is still showing.
+- A length FFmpeg guessed from the bit rate, for an ADTS AAC file or an MP3 without its Xing
+  header, no longer cuts seeks, start positions or the external clock, and once playback passes it
+  or the item ends, the snapshot's length is what really played (#422). `PlayerSnapshot` gains
+  `durationIsEstimate`, so a constructor or `copy` call compiled against 0.2.0 must be compiled
+  again, and `PlayerMediaSource` gains `durationIsEstimate`, false unless a source says otherwise,
+  so a source of your own keeps compiling. It needs KiteFFmpeg 0.5.0, which reads where the length
+  came from.
 - `PlaybackError` gains `SchemeUnsupported`, for an address whose scheme the build has no way to
   open, so a `when` that lists every error needs the new branch (#395). `PlayerMediaSource` gains
   `realTime`, which is false unless a source says otherwise, so a source of your own keeps

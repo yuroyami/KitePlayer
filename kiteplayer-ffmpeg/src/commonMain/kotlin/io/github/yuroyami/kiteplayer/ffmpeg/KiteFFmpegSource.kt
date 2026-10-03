@@ -175,6 +175,9 @@ public class KiteFFmpegSource internal constructor(
     /** The length of the content, which is an interval and so carries no origin. */
     override val duration: Pts? = mapper.mapDuration(source.durationMicros)
 
+    // FFmpeg's guess from the bit rate, for an input that states no length, can be minutes out (#422).
+    override val durationIsEstimate: Boolean = source.durationOrigin == io.github.yuroyami.kiteffmpeg.DurationOrigin.Bitrate
+
     /**
      * Read from the input, never assumed. False for a pipe or a capture device, and a player that
      * offers a seek bar for one of those offers a control that fails on every use.

@@ -14,7 +14,10 @@ import kotlin.time.Duration.Companion.ZERO
 public data class PlayerSnapshot(
     val status: PlaybackStatus = PlaybackStatus.Idle,
     val media: MediaItem? = null,
-    /** Null when the duration is genuinely unknown, for example a live stream. */
+    /**
+     * Null when the duration is genuinely unknown, for example a live stream. Possibly only an
+     * estimate, which [durationIsEstimate] says.
+     */
     val duration: Duration? = null,
     val seekable: Boolean = false,
     val videoSize: VideoSize? = null,
@@ -147,6 +150,14 @@ public data class PlayerSnapshot(
      * [VideoDynamicRange.Standard] at every open.
      */
     val videoDynamicRange: VideoDynamicRange = VideoDynamicRange.Standard,
+    /**
+     * True while [duration] is only an estimate, such as FFmpeg's guess from the bit rate of an
+     * ADTS AAC file or of an MP3 without its Xing header, which for variable bit rate audio can be
+     * minutes out (#422). A seek bar can draw it as approximate. Seeks are not cut at it, and once
+     * playback passes it [duration] follows what has played; once the item ends it is the real
+     * length and this goes false.
+     */
+    val durationIsEstimate: Boolean = false,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

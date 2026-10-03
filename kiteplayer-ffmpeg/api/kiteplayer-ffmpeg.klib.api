@@ -48,6 +48,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
         final fun <get-containerBitrateBps>(): kotlin/Long? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.containerBitrateBps.<get-containerBitrateBps>|<get-containerBitrateBps>(){}[0]
     final val duration // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.duration|{}duration[0]
         final fun <get-duration>(): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.duration.<get-duration>|<get-duration>(){}[0]
+    final val durationIsEstimate // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.durationIsEstimate|{}durationIsEstimate[0]
+        final fun <get-durationIsEstimate>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.durationIsEstimate.<get-durationIsEstimate>|<get-durationIsEstimate>(){}[0]
     final val firstAudio // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.firstAudio|{}firstAudio[0]
         final fun <get-firstAudio>(): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.firstAudio.<get-firstAudio>|<get-firstAudio>(){}[0]
     final val firstVideo // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.firstVideo|{}firstVideo[0]

@@ -1400,6 +1400,8 @@ internal class PlaybackCore(
      * (owner report 2026-08-23, a shared playlist seeking a short file to a long file's position).
      */
     private fun maskFor(to: Pts): Long {
+        // An estimated length is no end to cut at (#422).
+        if (snapshotState.value.durationIsEstimate) return to.micros
         val durationUs = snapshotState.value.duration?.inWholeMicroseconds ?: return to.micros
         return to.micros.coerceAtMost(durationUs)
     }
@@ -2601,7 +2603,7 @@ internal class PlaybackCore(
             warn(PlaybackWarning.StartPositionIgnored(requested, "this source is not seekable"))
             return null
         }
-        val durationUs = built.source.duration?.micros
+        val durationUs = built.source.seekCeiling?.micros
         if (durationUs != null && requested.inWholeMicroseconds >= durationUs) {
             warn(PlaybackWarning.StartPositionIgnored(requested, "past the end of the media"))
             return null
@@ -4467,7 +4469,7 @@ internal class PlaybackCore(
             audio = active.audioStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None,
             subtitle = active.subtitleStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None,
             position = position,
-            duration = active.source.duration,
+            duration = active.source.seekCeiling,
             codec = stream.codec,
             subtitleSelectionAvailable = active.backendSession.subtitleDecoders.isNotEmpty(),
             failure = decoderFailure,
@@ -6033,6 +6035,7 @@ internal class PlaybackCore(
         // late callback cannot re-anchor a clock that is already frozen.
         session.audio?.anchorClock()
         session.audio?.pause()
+        session.furthestPositionUs = maxOf(session.furthestPositionUs, currentPosition().micros)
         emitEvent(PlayerEvent.Ended)
         setStatus(PlaybackStatus.Ended)
     }
@@ -6049,7 +6052,8 @@ internal class PlaybackCore(
         // end and restart every pass for ever, so such an A is treated as unarmed rather than
         // spun on; an unseekable source cannot make the jump at all.
         val loopA = abLoopA
-        val durationUs = session?.source?.duration?.micros
+        // The item just ended, so how far it played is its real length, whatever it declared.
+        val durationUs = session?.let { endedLengthUs(it) }
         if (loopA != null && session?.source?.seekable == true &&
             durationUs != null && loopA.inWholeMicroseconds < durationUs
         ) {
@@ -6156,7 +6160,7 @@ internal class PlaybackCore(
         val errorUs = answerUs - currentPosition().micros
         val maxTrim = config.externalClock.maxTrim
         when {
-            abs(errorUs) >= EXTERNAL_SEEK_US && active.source.seekable && active.source.duration?.let { answerUs <= it.micros } != false -> {
+            abs(errorUs) >= EXTERNAL_SEEK_US && active.source.seekable && active.source.seekCeiling?.let { answerUs <= it.micros } != false -> {
                 val askedRecently = externalSeekAtNanos != NO_POSITION && now - externalSeekAtNanos < EXTERNAL_SEEK_COOLDOWN_NANOS
                 if (askedRecently) {
                     // A second jump this soon is likely the last seek's own delay: lean on the trim.
@@ -6488,8 +6492,18 @@ internal class PlaybackCore(
         if (!active.source.seekable || active.isStillImage) return
         // Too late: the current item's sound is all in the ring, and the old path is closer.
         if (currentAudioFinished(active)) return
-        val leftUs = durationUs - publishedPositionMicros.value
         val leadUs = policy.preloadNext.inWholeMicroseconds
+        val leftUs = if (active.source.durationIsEstimate) {
+            // An estimated length cannot time the lead, so the demuxer reaching the end of the input
+            // does: what is left is then the queues and the ring, a few seconds at most (#422).
+            if (!demuxReachedEnd(active)) {
+                if (status == PlaybackStatus.Playing) wakeIn(WORKER_POLL)
+                return
+            }
+            0L
+        } else {
+            durationUs - publishedPositionMicros.value
+        }
         if (leftUs > leadUs) {
             // Woken when the lead begins rather than a whole pass later. Media distance over rate
             // is wall distance.
@@ -6630,6 +6644,50 @@ internal class PlaybackCore(
     }
 
     /** True once every decoded sample of the current item is in the ring. */
+    /**
+     * Moves [active]'s furthest position on, and republishes the snapshot when its length is an
+     * estimate that playback has now passed by a second or more, so the seek bar and the lock screen
+     * follow what really plays without a new snapshot every tick (#422).
+     */
+    private fun noteFurthestPosition(active: OpenSession) {
+        if (seekPhase.isRunning || pendingSeek != null) return
+        val here = currentPosition().micros
+        if (here <= active.furthestPositionUs) return
+        active.furthestPositionUs = here
+        if (!active.source.durationIsEstimate) return
+        val shownUs = snapshotState.value.duration?.inWholeMicroseconds ?: return
+        if (here - shownUs >= DURATION_FOLLOW_STEP_US) publishSnapshot()
+    }
+
+    /** True once the demuxer has read to the end of the input for every selected stream it feeds. */
+    private fun demuxReachedEnd(active: OpenSession): Boolean {
+        val queues = listOfNotNull(active.audioQueue, active.videoQueue)
+        return queues.isNotEmpty() && queues.all { it.isEndOfStream }
+    }
+
+    /**
+     * The length a snapshot reports for [active] (#422). A stated length as it is. An estimate until
+     * playback passes it, then the furthest position played, and once the item ends, the position it
+     * ended at, which is the real length however wrong the estimate was.
+     */
+    private fun publishedDuration(active: OpenSession): Duration? {
+        val stated = active.source.duration ?: return null
+        if (!active.source.durationIsEstimate) return stated.asDuration
+        if (status == PlaybackStatus.Ended) return active.furthestPositionUs.coerceAtLeast(0L).microseconds
+        return maxOf(stated.micros, active.furthestPositionUs).microseconds
+    }
+
+    /** Whether [publishedDuration] is still FFmpeg's guess rather than the length really played. */
+    private fun durationStillEstimated(active: OpenSession): Boolean {
+        if (!active.source.durationIsEstimate || active.source.duration == null) return false
+        if (status == PlaybackStatus.Ended) return false
+        return active.furthestPositionUs <= (active.source.duration?.micros ?: 0L)
+    }
+
+    /** How long [active] really is once it has ended: its stated length, or how far it played (#422). */
+    private fun endedLengthUs(active: OpenSession): Long? =
+        if (active.source.durationIsEstimate) active.furthestPositionUs.takeIf { it > 0L } else active.source.duration?.micros
+
     private fun currentAudioFinished(active: OpenSession): Boolean {
         val queue = active.audioQueue ?: return false
         return (active.audioDecoder?.isDrained ?: true) && queue.isEndOfStream && queue.count == 0 &&
@@ -7353,7 +7411,7 @@ internal class PlaybackCore(
         pendingSeek = null
         val activeBeforeSeek = session
         val requestedTarget = activeBeforeSeek?.let {
-            request.resolve(currentPosition(), it.source.duration)
+            request.resolve(currentPosition(), it.source.duration, it.source.seekCeiling)
         }
         try {
             runSeek(request)
@@ -7436,7 +7494,7 @@ internal class PlaybackCore(
             val basis = maskedSeekTargetMicros.value.takeIf { it != NO_SEEK_MASK }
                 ?: publishedPositionMicros.value
             maskedSeekTargetMicros.value =
-                accepted.resolve(Pts(basis), active.source.duration).micros
+                accepted.resolve(Pts(basis), active.source.duration, active.source.seekCeiling).micros
         }
     }
 
@@ -7472,7 +7530,7 @@ internal class PlaybackCore(
         val session = session ?: return
         val tracing = KiteTrace.enabled
         var phaseBegin = if (tracing) clock.nanos() else 0L
-        val target = request.resolve(currentPosition(), session.source.duration)
+        val target = request.resolve(currentPosition(), session.source.duration, session.source.seekCeiling)
         val landsBefore = request.landing == SeekLanding.Before
         session.pictureHoldsPosition = false
 
@@ -8546,7 +8604,8 @@ internal class PlaybackCore(
         snapshotState.value = PlayerSnapshot(
             status = status,
             media = media,
-            duration = session?.source?.duration?.asDuration,
+            duration = session?.let { publishedDuration(it) },
+            durationIsEstimate = session?.let { durationStillEstimated(it) } ?: false,
             seekable = session?.source?.seekable ?: false,
             videoSize = session?.videoStream?.videoSize,
             tracks = tracks,
@@ -8630,6 +8689,7 @@ internal class PlaybackCore(
         publishAudioClock(session, now)
         if (force || (now - lastProgressAtNanos).nanoseconds >= config.progressInterval) {
             lastProgressAtNanos = now
+            if (session != null) noteFurthestPosition(session)
             progressState.value = Progress(
                 // The masked read, deliberately: the progress flow feeds the same seek bars that
                 // poll position(), and the two must never disagree about which timeline is current.
@@ -10101,6 +10161,12 @@ internal class PlaybackCore(
         var warnedAboutInterleaving: Boolean = false
         var warnedAboutDeviceUnderrun: Boolean = false
 
+        /**
+         * The furthest position this session has played or landed at, which is how long the media
+         * has proved to be. Read when its length is only an estimate (#422). Actor-confined.
+         */
+        var furthestPositionUs: Long = 0L
+
         /** Per-container-track cue history. Only the actor mutates these start-sorted tables. */
         val subtitleCueCaches: MutableMap<Int, MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
             subtitleQueues.keys.associateWith { mutableListOf<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>() }
@@ -10368,6 +10434,9 @@ internal class PlaybackCore(
 
         /** The least of the current item the ring must hold while the handoff waits for the next one. */
         val HANDOFF_MARGIN: Duration = 40.milliseconds
+
+        /** How far playback runs past an estimated length before the snapshot's length follows it (#422). */
+        const val DURATION_FOLLOW_STEP_US: Long = 1_000_000L
 
         /** Late drops in one stats interval that make dropping worth SAYING, not just counting. */
         const val FRAME_DROP_WARN_PER_INTERVAL: Long = 5L
@@ -10994,6 +11063,9 @@ internal fun pickSubtitleStream(
     }
     return null
 }
+
+/** Where a seek on this source is cut: its length, unless that length is only an estimate (#422). */
+internal val PlayerMediaSource.seekCeiling: Pts? get() = if (durationIsEstimate) null else duration
 
 /**
  * One edit to the open queue.

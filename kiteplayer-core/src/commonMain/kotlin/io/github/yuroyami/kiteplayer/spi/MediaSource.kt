@@ -27,6 +27,14 @@ public interface PlayerMediaSource : AutoCloseable {
     /** Null when unknown, for example a live stream. */
     public val duration: Pts?
 
+    /**
+     * True when [duration] is an estimate rather than a length the media states, such as FFmpeg's
+     * guess from the bit rate of an ADTS AAC file or of an MP3 without its Xing header, which for
+     * variable bit rate audio is minutes out (#422). The engine then cuts no seek, start position
+     * or clock at it, and once playback passes it, or ends before it, reports the length played.
+     */
+    public val durationIsEstimate: Boolean get() = false
+
     /** False when the source can only read forward, such as a live stream. The engine then refuses seeks. */
     public val seekable: Boolean
 

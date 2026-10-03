@@ -40,8 +40,12 @@ internal data class SeekRequest(
         return SeekRequest(mergedTarget, strictest(mode, next.mode), next.landing)
     }
 
-    /** Resolves this request against the current position and duration. */
-    fun resolve(position: Pts, duration: Pts?): Pts {
+    /**
+     * Resolves this request against the current position and duration. A fraction is taken of
+     * [duration]; the target is cut at [ceiling], which is the duration unless the duration is only
+     * an estimate, which cuts nothing (#422).
+     */
+    fun resolve(position: Pts, duration: Pts?, ceiling: Pts? = duration): Pts {
         val raw = when (target) {
             is SeekTarget.Absolute -> target.position
             is SeekTarget.Relative -> Pts(position.micros + target.offset.inWholeMicroseconds)
@@ -51,7 +55,7 @@ internal data class SeekRequest(
             }
         }
         val clampedLow = if (raw.micros < 0) Pts.Zero else raw
-        val total = duration ?: return clampedLow
+        val total = ceiling ?: return clampedLow
         return if (clampedLow > total) total else clampedLow
     }
 

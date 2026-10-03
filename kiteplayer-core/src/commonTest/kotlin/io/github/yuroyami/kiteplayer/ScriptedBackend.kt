@@ -121,6 +121,12 @@ internal data class ScriptedSubtitleTrack(
 
 internal class MediaScript(
     val durationUs: Long = 4_000_000,
+    /**
+     * The length the scripted container declares, when it is not [durationUs], the length it
+     * really plays. With [durationIsEstimate] it models FFmpeg's guess from the bit rate (#422).
+     */
+    val declaredDurationUs: Long? = null,
+    val durationIsEstimate: Boolean = false,
     val hasVideo: Boolean = true,
     val hasAudio: Boolean = true,
     /** The chapter table the scripted container declares. */
@@ -864,7 +870,8 @@ internal class ScriptedSource(
         }
     }
 
-    override val duration: Pts? = if (script.live) null else Pts(script.durationUs)
+    override val duration: Pts? = if (script.live) null else Pts(script.declaredDurationUs ?: script.durationUs)
+    override val durationIsEstimate: Boolean get() = script.durationIsEstimate
     override val seekable: Boolean = script.seekable
     override val realTime: Boolean = script.live
     override val metadata: Map<String, String> =

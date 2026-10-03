@@ -30,9 +30,10 @@ kotlin {
     }
 }
 
-// The browser test drives a real worker, so the page needs the worker binary and the codec module
-// served beside it. karma.config.d/worker.js serves the development binary from the directory this
-// sync fills, and the codec module from the kiteffmpeg web zip, which this module unpacks itself.
+// The browser test drives a real worker, so the page needs the worker binary, the codec module and
+// the libass module served beside it. karma.config.d/worker.js serves the development binary from
+// the directory this sync fills, and the codec module from the kiteffmpeg web zip, which this
+// module unpacks itself.
 val kiteffmpegWebZip = configurations.create("kiteffmpegWebZip") {
     isCanBeConsumed = false
     isTransitive = false
@@ -45,6 +46,8 @@ val unpackKiteFFmpegWebModule =
         archives.from(kiteffmpegWebZip)
         outputDir.set(layout.buildDirectory.dir("kiteffmpeg-web"))
     }
+// The libass module comes from :kiteplayer-libass's build directory, where processing its wasmJs
+// resources links it with emscripten. Without emcc that task links nothing and the libass test fails.
 tasks.named { it == "wasmJsBrowserTest" }.configureEach {
-    dependsOn(unpackKiteFFmpegWebModule, "wasmJsDevelopmentExecutableCompileSync")
+    dependsOn(unpackKiteFFmpegWebModule, "wasmJsDevelopmentExecutableCompileSync", ":kiteplayer-libass:wasmJsProcessResources")
 }

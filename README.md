@@ -318,7 +318,9 @@ unpack `kiteplayer-wasm-js-<version>-web.zip` beside `index.html` too, for
 download, and CI holds it to 1.25 MiB. The worker player has the calls and flows of `KitePlayer`
 with the same names, except those its KDoc lists, such as `captureFrame` and recording. A setter
 it refuses arrives on `events` as `CommandRefused` rather than throwing at the call. An item, or an
-external subtitle, with a reader of its own cannot cross to the worker; give it an address.
+external subtitle, with a reader of its own cannot cross to the worker; give it an address. The
+worker loads `kiteass.mjs` from beside the page too, so the libass web zip from step 2 serves
+both players; pass another `libassUrl` to `KitePlayerWorker.start` if the files live elsewhere.
 
 A multi-threaded codec module would need the page served with
 `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, and

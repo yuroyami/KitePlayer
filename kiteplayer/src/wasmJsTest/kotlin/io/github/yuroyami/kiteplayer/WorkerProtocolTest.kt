@@ -302,7 +302,7 @@ class WorkerProtocolTest {
     @Test
     fun theOtherPageMessagesComeBackAsTheyWent() {
         val messages = listOf(
-            PageMessage.Init("https://example.com/kite.mjs", 48_000, 2, 0.02),
+            PageMessage.Init("https://example.com/kite.mjs", 48_000, 2, 0.02, "https://example.com/kiteass.mjs"),
             PageMessage.Init("./kite.mjs", 0, 0, null),
             PageMessage.Close(5),
         )

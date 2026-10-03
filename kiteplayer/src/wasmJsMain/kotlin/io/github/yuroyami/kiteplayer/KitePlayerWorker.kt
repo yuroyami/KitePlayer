@@ -26,10 +26,10 @@ import kotlin.time.Duration
  * button.onclick = { player.play() }
  * ```
  *
- * The worker holds the engine, the codec module and the readers. The page keeps only what a worker
- * cannot have: the audio device, whose sound goes from the worker to the device without passing
- * through the page, and the canvas, whose drawing is handed to the worker. Frames and sound never
- * cross between the two threads; commands and state do.
+ * The worker holds the engine, the codec module, the libass module and the readers. The page keeps
+ * only what a worker cannot have: the audio device, whose sound goes from the worker to the device
+ * without passing through the page, and the canvas, whose drawing is handed to the worker. Frames,
+ * sound and subtitles never cross between the two threads; commands and state do.
  *
  * An `http`, `https` or `blob` item plays here, read with range requests that only a worker may
  * make. The page's own `KitePlayer` cannot open one. A relative address, of an item or of one of its
@@ -463,8 +463,13 @@ public class KitePlayerWorker private constructor(
          * @param canvas the `HTMLCanvasElement` to draw on, or null for sound only. Its drawing
          *        passes to the worker for good, so the page cannot draw on it afterwards.
          * @param workerUrl the worker binary, `kiteplayer-web-worker.mjs`, as the page serves it.
-         * @param codecUrl the codec module, `kite.mjs`, as the worker should load it. A relative
-         *        address is read against the worker's address, not the page's.
+         * @param codecUrl the codec module, `kite.mjs`. A relative address is read against the
+         *        page's, as [workerUrl] is.
+         * @param libassUrl the libass module, `kiteass.mjs`, which draws ASS subtitles as their
+         *        authors styled them. A relative address is read against the page's. The worker
+         *        starts loading it at once and does not wait for it: an ASS track that opens first is
+         *        kept until it lands. Without the module, ASS draws with the built-in styling. Null
+         *        loads nothing now, and the first ASS track then looks beside the worker binary.
          * @throws PlaybackException with [PlaybackError.Internal] when the worker cannot load, or
          *         cannot load the codec module.
          */
@@ -472,6 +477,7 @@ public class KitePlayerWorker private constructor(
             canvas: JsAny?,
             workerUrl: String = "./kiteplayer-web-worker.mjs",
             codecUrl: String = "./kite.mjs",
+            libassUrl: String? = "./kiteass.mjs",
         ): KitePlayerWorker {
             val audio = WebWorkletAudio.createOrNull()
             val offscreen = canvas?.let(::canvasTransfer)
@@ -504,11 +510,14 @@ public class KitePlayerWorker private constructor(
                 val ready = CompletableDeferred<Unit>()
                 created.started = ready
                 player = created
+                // Whole here, where a relative address means what the page meant: the worker would
+                // read it against its own address.
                 val init = PageMessage.Init(
-                    codecUrl = codecUrl,
+                    codecUrl = pageAddress(codecUrl),
                     sampleRate = audio?.sampleRate ?: 0,
                     channels = audio?.channels ?: 0,
                     latencySeconds = audio?.outputLatencySeconds,
+                    libassUrl = libassUrl?.let(::pageAddress),
                 ).encode()
                 workerPostInit(worker, init, offscreen, audio?.workerPort)
                 ready.await()

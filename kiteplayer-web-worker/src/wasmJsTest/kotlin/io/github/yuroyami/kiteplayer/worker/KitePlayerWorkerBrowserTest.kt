@@ -29,6 +29,7 @@ import kotlin.js.JsAny
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -179,6 +180,53 @@ class KitePlayerWorkerBrowserTest {
         }
     }
 
+    /**
+     * libass draws an ASS track in the worker. The worker loads `kiteass.mjs` from the address
+     * the page gives, and the ASS track of `subbed.mkv` is typeset by it through both of the clip's
+     * cues, at 0.5 to 3 s and 3.5 to 6 s.
+     *
+     * The typesetter is named in the state as soon as the track has one, before the module has
+     * landed, and named no more when the module fails to load, with
+     * [PlaybackWarning.TypesetterUnavailable]. So the check is that it still names libass after
+     * the cues, with no such warning. Served without `kiteass.mjs`, this fails on that warning.
+     */
+    @Test
+    fun anAssTrackIsTypesetByLibassInTheWorker() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val libassUrl = setup[4]
+        withContext(Dispatchers.Default) {
+            val player = KitePlayerWorker.start(pageCanvas(640, 360), workerUrl, codecUrl, libassUrl)
+            val events = Channel<PlayerEvent>(Channel.UNLIMITED)
+            val subscribed = CompletableDeferred<Unit>()
+            val collector = launch {
+                player.events.onSubscription { subscribed.complete(Unit) }.collect { events.send(it) }
+            }
+            try {
+                subscribed.await()
+                player.setViewport(640, 360, 1f)
+                player.open(MediaItem("$media/subbed.mkv"))
+                assertEquals(TrackChange.Applied(TrackKind.Subtitle, TrackId(2)), player.selectTrack(TrackKind.Subtitle, TrackId(2)))
+                val typesetter = withTimeout(30.seconds) { player.state.first { it.subtitleTypesetter != null } }.subtitleTypesetter
+                player.play()
+                withTimeout(60.seconds) { player.progress.first { it.position >= 6.5.seconds } }
+                val unavailable = generateSequence { events.tryReceive().getOrNull() }
+                    .mapNotNull { (it as? PlayerEvent.Warning)?.warning as? PlaybackWarning.TypesetterUnavailable }
+                    .firstOrNull()
+                assertNull(unavailable, "libass did not typeset the track in the worker")
+                assertEquals(typesetter, player.state.value.subtitleTypesetter, "the track left libass part way")
+                println("WORKER typesetter: $typesetter")
+            } finally {
+                collector.cancel()
+                player.closeAndAwait()
+            }
+        }
+    }
+
     @Test
     fun aWorkerThatCannotLoadFailsTheStart() = runTest(timeout = 1.minutes) {
         val setup = karmaWorkerConfig()?.split("\n") ?: return@runTest
@@ -199,8 +247,9 @@ class KitePlayerWorkerBrowserTest {
 }
 
 /**
- * The worker, codec and clip addresses that karma.config.d/worker.js hands the page, then the clips'
- * path as the config gives it, relative to the page. Null outside karma.
+ * The worker, codec and clip addresses that karma.config.d/worker.js hands the page, the clips'
+ * path as the config gives it, relative to the page, and the libass module's address. Null outside
+ * karma.
  */
 @JsFun(
     """() => {
@@ -208,7 +257,7 @@ class KitePlayerWorkerBrowserTest {
         const worker = karma && karma.config ? karma.config.kiteWorker : undefined;
         if (!worker || typeof document === 'undefined') return null;
         const absolute = (p) => new URL(p, document.baseURI).href;
-        return absolute(worker.worker) + "\n" + absolute(worker.codec) + "\n" + absolute(worker.media) + "\n" + worker.media;
+        return [absolute(worker.worker), absolute(worker.codec), absolute(worker.media), worker.media, absolute(worker.libass)].join("\n");
     }""",
 )
 private external fun karmaWorkerConfig(): String?

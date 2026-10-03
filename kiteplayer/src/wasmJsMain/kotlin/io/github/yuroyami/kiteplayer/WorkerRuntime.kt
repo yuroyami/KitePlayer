@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteffmpeg.KiteFFmpegWeb
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
+import io.github.yuroyami.kiteplayer.libass.KiteLibassWeb
 import io.github.yuroyami.kiteplayer.mobile.WebCanvasRendererFactory
 import io.github.yuroyami.kiteplayer.output.WebOutputBackend
 import io.github.yuroyami.kiteplayer.output.workerOutputBackend
@@ -55,6 +56,10 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
 
     private suspend fun start(init: PageMessage.Init, canvas: JsAny?, port: JsAny?) {
         check(player == null) { "this worker already has a player" }
+        // Beside the codec module and without holding back Ready: an ASS track that opens before
+        // libass lands is kept until it does, and drawn with the built-in styling if it never
+        // does, after ten seconds or 64 MB of waiting data.
+        init.libassUrl?.let { url -> scope.launch { runCatching { KiteLibassWeb.load(url) } } }
         KiteFFmpegWeb.load(init.codecUrl)
         // With no port the page has no Web Audio, and the web output's own fallback is a silent
         // clock that keeps the picture moving.

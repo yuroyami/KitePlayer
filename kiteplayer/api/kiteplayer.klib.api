@@ -278,7 +278,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final suspend fun warningHistory(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TimedWarning> // io.github.yuroyami.kiteplayer/KitePlayerWorker.warningHistory|warningHistory(){}[0]
 
     final object Companion { // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion|null[0]
-        final suspend fun start(kotlin.js/JsAny?, kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/KitePlayerWorker // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion.start|start(kotlin.js.JsAny?;kotlin.String;kotlin.String){}[0]
+        final suspend fun start(kotlin.js/JsAny?, kotlin/String = ..., kotlin/String = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/KitePlayerWorker // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion.start|start(kotlin.js.JsAny?;kotlin.String;kotlin.String;kotlin.String?){}[0]
     }
 }
 

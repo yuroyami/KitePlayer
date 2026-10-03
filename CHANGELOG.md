@@ -56,6 +56,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   call. An item crosses whole, filters, demux policy and external subtitles included, unless it or
   one of its subtitles has a reader of its own. `state.media` and `state.queue` hold the caller's
   own items.
+- The worker player draws ASS subtitles with libass (#100). `KitePlayerWorker.start` gains
+  `libassUrl`, `./kiteass.mjs` by default, which the worker starts loading at once without waiting
+  for it, so the libass web zip a page unpacks beside `index.html` serves both players. A relative
+  `codecUrl` is now read against the page's address, as `workerUrl` and `libassUrl` are, where it
+  was read against the worker's. In `kiteplayer-libass`, a background load that lands after
+  `KiteLibassWeb.load` has attached its module is set aside, where it used to send the tracks
+  waiting for the module to the built-in styling.
 - A Java app on Android or the desktop can use the player without writing Kotlin (#394).
   `KitePlayerJava` in `kiteplayer` adds listeners called on an `Executor`, a `CompletableFuture`
   version of every suspending call, and millisecond versions of the calls that take a `Duration`.

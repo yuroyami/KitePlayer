@@ -34,12 +34,17 @@ import kotlin.time.Duration.Companion.microseconds
 
 /** What the page sends the worker. */
 internal sealed interface PageMessage {
-    /** The first message. The canvas and the audio port travel beside it, as transferables. */
+    /**
+     * The first message. The canvas and the audio port travel beside it, as transferables. Both
+     * addresses are whole, made so on the page; a null [libassUrl] leaves libass to load on the
+     * first ASS track, from beside the worker binary.
+     */
     data class Init(
         val codecUrl: String,
         val sampleRate: Int,
         val channels: Int,
         val latencySeconds: Double?,
+        val libassUrl: String? = null,
     ) : PageMessage
 
     /** Runs [command] and gets exactly one [WorkerMessage.Reply] with the same [id]. */
@@ -224,6 +229,7 @@ internal fun PageMessage.encode(): JsAny = record {
             put("sampleRate", message.sampleRate)
             put("channels", message.channels)
             put("latency", message.latencySeconds)
+            put("libassUrl", message.libassUrl)
         }
         is PageMessage.Call -> {
             kind("call")
@@ -1003,6 +1009,7 @@ internal fun decodePageMessage(data: JsAny?): PageMessage? = runCatching {
             sampleRate = o.int("sampleRate") ?: missing("sampleRate"),
             channels = o.int("channels") ?: missing("channels"),
             latencySeconds = o.num("latency"),
+            libassUrl = o.str("libassUrl"),
         )
         "call" -> PageMessage.Call(
             o.int("id") ?: missing("id"),

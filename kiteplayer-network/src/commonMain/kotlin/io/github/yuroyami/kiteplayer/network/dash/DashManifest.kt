@@ -30,7 +30,24 @@ public data class DashManifest(
     val timeShiftBufferDepthMicros: Long? = null,
     /** suggestedPresentationDelay, microseconds: how far behind the live edge the manifest asks a player to play. */
     val suggestedPresentationDelayMicros: Long? = null,
+    /**
+     * The `Location` element, resolved: where a live manifest is to be fetched from from now on,
+     * or null when it names none.
+     */
+    val location: String? = null,
+    /**
+     * The `UTCTiming` elements, in the manifest's order of preference: where a player reads the
+     * time of day that a live manifest's clock counts against, rather than trusting the device's.
+     */
+    val utcTimings: List<DashUtcTiming> = emptyList(),
 )
+
+/**
+ * One `UTCTiming` element (ISO/IEC 23009-1, 5.8.4.11): a [schemeIdUri] that says how to read the
+ * time, such as `urn:mpeg:dash:utc:http-xsdate:2014` or `urn:mpeg:dash:utc:direct:2014`, and its
+ * [value], an address to fetch or the time itself.
+ */
+public data class DashUtcTiming(val schemeIdUri: String, val value: String)
 
 /** One `Period` of a manifest, with its BaseURL already resolved. */
 public data class DashPeriod(
@@ -39,6 +56,8 @@ public data class DashPeriod(
     val adaptationSets: List<DashAdaptationSet>,
     /** start, microseconds from the presentation's time 0, or null when the Period does not state it. */
     val startMicros: Long? = null,
+    /** id, which names the same Period across the fetches of a live manifest, or null. */
+    val id: String? = null,
 )
 
 /** One `AdaptationSet`: the interchangeable representations of one kind of content. */
@@ -49,6 +68,20 @@ public data class DashAdaptationSet(
     val representations: List<DashRepresentation>,
     /** lang, the RFC 5646 language of the set, or null. */
     val lang: String? = null,
+    /** id, which names the same content across Periods (ISO/IEC 23009-1, 5.3.3.1), or null. */
+    val id: String? = null,
+    /** The text of the set's first `Label` element, a name to show for it, or null. */
+    val label: String? = null,
+    /**
+     * The values of the set's `Role` elements in the DASH role scheme (`urn:mpeg:dash:role:2011`),
+     * such as `main`, `alternate`, `commentary`, `subtitle`, `caption` or `forced-subtitle`.
+     */
+    val roles: List<String> = emptyList(),
+    /**
+     * The `schemeIdUri` of every `ContentProtection` element of the set and of its
+     * representations: empty for content that is not encrypted.
+     */
+    val contentProtectionSchemes: List<String> = emptyList(),
 )
 
 /** One `Representation`: one encoding of the content, with its segments addressed by a template or a list. */
@@ -71,6 +104,11 @@ public data class DashRepresentation(
     val segmentList: DashSegmentList? = null,
     /** The SegmentBase in force, for one file whose segment index names its segments, or null without one. */
     val segmentBase: DashSegmentBase? = null,
+    /**
+     * The number of audio channels its `AudioChannelConfiguration` states, of the representation
+     * or else its set, in the schemes that state a count, or null.
+     */
+    val audioChannels: Int? = null,
 )
 
 /** A `SegmentTemplate`, merged from every level that declares one, the lowest level winning each attribute. */
@@ -84,6 +122,8 @@ public data class DashSegmentTemplate(
     val timeline: List<DashTimelineEntry>,
     /** presentationTimeOffset, in [timescale] units: the media time at which the Period starts. */
     val presentationTimeOffset: Long = 0,
+    /** endNumber, the number of the last segment, or null when the template states none. */
+    val endNumber: Long? = null,
 )
 
 /**
@@ -100,6 +140,8 @@ public data class DashSegmentList(
     /** The bytes of [initializationUrl] that hold the initialization, or null for all of it. */
     val initializationRange: LongRange?,
     val segments: List<DashSegmentUrl>,
+    /** presentationTimeOffset, in [timescale] units: the media time at which the Period starts. */
+    val presentationTimeOffset: Long = 0,
 )
 
 /** One `SegmentURL`: a URL, and the bytes of it that hold the segment, or null for all of it. */
@@ -116,6 +158,8 @@ public data class DashSegmentBase(
     /** Where the initialization is, base-resolved; the representation's BaseURL when no `sourceURL` names another. */
     val initializationUrl: String?,
     val initializationRange: LongRange?,
+    /** presentationTimeOffset, in [timescale] units: the media time at which the Period starts. */
+    val presentationTimeOffset: Long = 0,
 )
 
 /** One `S` element: an explicit start [t] (timescale units), duration [d], and [r] repeats. */

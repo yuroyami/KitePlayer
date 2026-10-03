@@ -585,6 +585,98 @@ ffmpeg -v error -y \
   "${hls_video[@]}" -b:v 300k -c:a aac -b:a 96k \
   "${hls_vod[@]}" -hls_segment_type fmp4 -hls_flags single_file hls/fmp4.m3u8
 
+echo "DASH presentations in dash/: separate video and audio sets, one numbered set, and indexed single files"
+# Read by the DASH tests, which play them through the HLS path (#295). Seventy seconds each, so a
+# seek to 60 s lands well inside, in two second fMP4 segments with a keyframe at each.
+mkdir -p dash
+dash_video=(-c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 60 -keyint_min 60 -sc_threshold 0)
+# Two video representations and the sound, in sets of their own, addressed by timelines.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=30:duration=70" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=70" \
+  -filter_complex "[0:v]split=2[hi][lo0];[lo0]scale=320:180[lo]" \
+  -map "[lo]" -map "[hi]" -map 1:a \
+  "${dash_video[@]}" -b:v:0 300k -b:v:1 900k -c:a aac -b:a 96k \
+  -f dash -seg_duration 2 -use_template 1 -use_timeline 1 -adaptation_sets "id=0,streams=v id=1,streams=a" \
+  -init_seg_name 'separate-$RepresentationID$-init.m4s' \
+  -media_seg_name 'separate-$RepresentationID$-$Number%05d$.m4s' dash/separate.mpd
+# One set whose segments are numbered at a fixed length, which the live test also serves as live.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=70" \
+  "${dash_video[@]}" -b:v 300k \
+  -f dash -seg_duration 2 -use_template 1 -use_timeline 0 \
+  -init_seg_name 'single-$RepresentationID$-init.m4s' \
+  -media_seg_name 'single-$RepresentationID$-$Number$.m4s' dash/single.mpd
+# One file per set whose segment index (sidx) names its fragments, as an on-demand packager writes
+# them. The test writes the manifest, with a SegmentBase for each.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=70" \
+  "${dash_video[@]}" -b:v 300k -an \
+  -movflags +frag_keyframe+empty_moov+default_base_moof+global_sidx -f mp4 dash/ondemand-video.mp4
+ffmpeg -v error -y \
+  -f lavfi -i "sine=frequency=660:sample_rate=48000:duration=70" \
+  -c:a aac -b:a 96k -frag_duration 2000000 \
+  -movflags +empty_moov+default_base_moof+global_sidx -f mp4 dash/ondemand-audio.mp4
+# WebM, which the DASH tests also play through the HLS path (#401): VP9 and Opus in sets of their
+# own in numbered two second segments, as a live packager writes them, and one file per set whose
+# Cues name its clusters, with the manifest ffmpeg writes for those files.
+dash_vp9=(-c:v libvpx-vp9 -deadline realtime -cpu-used 8 -row-mt 1 -pix_fmt yuv420p -g 60 -keyint_min 60)
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=70" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=70" \
+  -map 0:v -map 1:a "${dash_vp9[@]}" -b:v 300k -c:a libopus -b:a 64k \
+  -f dash -dash_segment_type webm -seg_duration 2 -use_template 1 -use_timeline 1 \
+  -adaptation_sets "id=0,streams=v id=1,streams=a" \
+  -init_seg_name 'webm-$RepresentationID$-init.webm' \
+  -media_seg_name 'webm-$RepresentationID$-$Number%05d$.webm' dash/webm.mpd
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=70" \
+  "${dash_vp9[@]}" -b:v 300k -an -f webm -dash 1 dash/ondemand-video.webm
+ffmpeg -v error -y \
+  -f lavfi -i "sine=frequency=660:sample_rate=48000:duration=70" \
+  -c:a libopus -b:a 64k -vn -f webm -dash 1 -cluster_time_limit 2000 dash/ondemand-audio.webm
+ffmpeg -v error -y \
+  -f webm_dash_manifest -i dash/ondemand-video.webm -f webm_dash_manifest -i dash/ondemand-audio.webm \
+  -c copy -map 0 -map 1 -f webm_dash_manifest -adaptation_sets "id=0,streams=0 id=1,streams=1" \
+  dash/webm-ondemand.mpd
+# Periods for the multi-period tests (#403), each twenty seconds of picture and sound in two second
+# segments, whose manifests the tests write, and each with its own media time starting from zero,
+# as ad insertion stitches them: ffmpeg's DASH muxer starts every media timeline at zero whatever
+# offset it is given. In fMP4: a 320x180 Period, a 640x360 one, so its parameter sets differ, and a
+# 320x180 one again. In WebM: a 320x180 Period and a 640x360 one. In MPEG-TS: two Periods.
+for spec in "a|testsrc2=size=320x180|440" "b|smptebars=size=640x360|880" "c|testsrc=size=320x180|660"; do
+  IFS='|' read -r name picture tone <<< "$spec"
+  ffmpeg -v error -y \
+    -f lavfi -i "$picture:rate=30:duration=20" -f lavfi -i "sine=frequency=$tone:sample_rate=48000:duration=20" \
+    "${dash_video[@]}" -b:v 300k -c:a aac -b:a 96k \
+    -f dash -seg_duration 2 -use_template 1 -use_timeline 0 -adaptation_sets "id=0,streams=v id=1,streams=a" \
+    -init_seg_name "period-$name-\$RepresentationID\$-init.m4s" \
+    -media_seg_name "period-$name-\$RepresentationID\$-\$Number\$.m4s" "dash/period-$name.mpd"
+done
+for spec in "a|testsrc2=size=320x180" "b|smptebars=size=640x360"; do
+  IFS='|' read -r name picture <<< "$spec"
+  ffmpeg -v error -y \
+    -f lavfi -i "$picture:rate=30:duration=20" -f lavfi -i "sine=frequency=550:sample_rate=48000:duration=20" \
+    -map 0:v -map 1:a "${dash_vp9[@]}" -b:v 300k -c:a libopus -b:a 64k \
+    -f dash -dash_segment_type webm -seg_duration 2 -use_template 1 -use_timeline 0 \
+    -adaptation_sets "id=0,streams=v id=1,streams=a" \
+    -init_seg_name "webm-period-$name-\$RepresentationID\$-init.webm" \
+    -media_seg_name "webm-period-$name-\$RepresentationID\$-\$Number\$.webm" "dash/webm-period-$name.mpd"
+  ffmpeg -v error -y \
+    -f lavfi -i "testsrc2=size=320x180:rate=30:duration=20" -f lavfi -i "sine=frequency=550:sample_rate=48000:duration=20" \
+    "${dash_video[@]}" -b:v 300k -c:a aac -b:a 96k -muxdelay 0 -muxpreload 0 \
+    -f segment -segment_time 2 -segment_format mpegts -segment_start_number 1 -reset_timestamps 0 \
+    "dash/ts-period-$name-%d.ts"
+done
+# TTML in MP4 (stpp), one file whose segment index names it, which the DASH reader serves as WebVTT
+# (#402): a cue every two seconds across the seventy, each shown for 900 ms.
+for cue in $(seq 0 34); do
+  printf '%d\n00:%02d:%02d,000 --> 00:%02d:%02d,900\nLigne %d\n\n' \
+    $((cue + 1)) $((cue * 2 / 60)) $((cue * 2 % 60)) $((cue * 2 / 60)) $((cue * 2 % 60)) $((cue + 1))
+done > dash/subs.srt
+ffmpeg -v error -y -i dash/subs.srt -c:s ttml -frag_duration 2000000 \
+  -movflags +empty_moov+default_base_moof+global_sidx -f mp4 dash/subs-stpp.mp4
+
 # ---------------------------------------------------------------------------------------------
 # Provenance.
 #

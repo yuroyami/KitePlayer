@@ -97,16 +97,23 @@ private fun openRelatedBridge(io: MediaIo, address: String, lifetime: Job, ledge
             return@blockingIn null
         }
         val redirected = related.location?.takeIf { it != address }
-        val readable = if (redirected != null && looksLikeHls(null, related.contentType, address)) {
+        val readable = if (redirected == null) {
+            related
+        } else {
             try {
-                val text = readPlaylist(related, address).decodeToString()
-                PlaylistMediaIo(absoluteHlsAddresses(text, redirected).encodeToByteArray(), owner = related)
+                // A playlist that nothing marks is recognised by its first bytes, as the item's own is (#400).
+                val marked = looksLikeHls(null, related.contentType, address)
+                val reader = if (marked || !mayBeAPlaylist(related.contentType)) related else SniffedMediaIo.sniff(related, HLS_SNIFF_BYTES)
+                if (marked || (reader is SniffedMediaIo && startsLikeHls(reader.head))) {
+                    val text = readPlaylist(reader, address).decodeToString()
+                    PlaylistMediaIo(absoluteHlsAddresses(text, redirected).encodeToByteArray(), owner = reader)
+                } else {
+                    reader
+                }
             } catch (failure: Throwable) {
                 related.close()
                 throw failure
             }
-        } else {
-            related
         }
         BlockingMediaIo(LedgeredMediaIo(readable, address, ledger), lifetime)
     }

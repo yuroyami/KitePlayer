@@ -25,6 +25,36 @@ internal fun looksLikeHls(formatHint: String?, contentType: String?, address: St
     return path.endsWith(".m3u8") || path.endsWith(".m3u")
 }
 
+/** The most bytes read from the start of a reader to recognise a playlist by [startsLikeHls]. */
+internal const val HLS_SNIFF_BYTES: Int = 64
+
+/**
+ * True when the first [length] bytes of [head] start an HLS playlist: the `#EXTM3U` tag, which RFC
+ * 8216, section 4.3.1.1, puts on the first line, after an optional UTF-8 byte order mark and
+ * whitespace. This is what recognises a playlist that nothing else marks, behind an address with
+ * no extension that a server sends as plain text or as bytes.
+ */
+internal fun startsLikeHls(head: ByteArray, length: Int = head.size): Boolean {
+    var at = 0
+    if (length >= 3 && head[0] == 0xEF.toByte() && head[1] == 0xBB.toByte() && head[2] == 0xBF.toByte()) at = 3
+    while (at < length && head[at].toInt().toChar() in " \t\r\n") at++
+    if (length - at < HLS_TAG.size) return false
+    for (i in HLS_TAG.indices) if (head[at + i] != HLS_TAG[i]) return false
+    return true
+}
+
+private val HLS_TAG = "#EXTM3U".encodeToByteArray()
+
+/**
+ * True when nothing about [contentType] rules out a playlist, so the bytes are worth a look: no
+ * type, or one that is not audio, video or an image. A server that sends an HLS playlist sends it
+ * as one of the HLS types, as text, or as bytes.
+ */
+internal fun mayBeAPlaylist(contentType: String?): Boolean {
+    val type = contentType?.substringBefore(';')?.trim()?.lowercase() ?: return true
+    return !(type.startsWith("video/") || type.startsWith("audio/") || type.startsWith("image/"))
+}
+
 /**
  * The attributes of an HLS tag, as RFC 8216, section 4.2, defines an attribute list: `NAME=value`
  * pairs separated by commas, where a quoted value may hold commas. Quotes are removed.

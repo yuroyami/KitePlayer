@@ -147,7 +147,13 @@ public data class PlayerSnapshot(
      * [VideoDynamicRange.Standard] at every open.
      */
     val videoDynamicRange: VideoDynamicRange = VideoDynamicRange.Standard,
-)
+) {
+    /**
+     * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a
+     * [Duration] (#394).
+     */
+    public val durationMillis: Long? get() = duration?.inWholeMilliseconds
+}
 
 /**
  * When to stop playing on its own.
@@ -205,7 +211,13 @@ public data class Progress(
      * from other addresses. [bufferedAhead] still says how far ahead the demuxer has read.
      */
     val bufferedRanges: List<ClosedRange<Duration>> = emptyList(),
-)
+) {
+    /** [position] in milliseconds. For Java, which cannot read a [Duration] (#394). */
+    public val positionMillis: Long get() = position.inWholeMilliseconds
+
+    /** [bufferedAhead] in milliseconds. For Java, which cannot read a [Duration] (#394). */
+    public val bufferedAheadMillis: Long get() = bufferedAhead.inWholeMilliseconds
+}
 
 /**
  * Diagnostics, for an overlay or a bug report.

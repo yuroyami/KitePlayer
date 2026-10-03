@@ -432,20 +432,6 @@ internal class KiteVideoDeviceTest {
                     "$PERFORMANCE_PROFILE_ARGUMENT must be emulator or physical, was $requested",
                 )
             }
-
-            private fun isProbablyEmulator(): Boolean {
-                val fingerprint = Build.FINGERPRINT.lowercase(Locale.US)
-                val model = Build.MODEL.lowercase(Locale.US)
-                val hardware = Build.HARDWARE.lowercase(Locale.US)
-                val product = Build.PRODUCT.lowercase(Locale.US)
-                return fingerprint.startsWith("generic") ||
-                    "emulator" in fingerprint ||
-                    "sdk_gphone" in model ||
-                    "emulator" in model ||
-                    "ranchu" in hardware ||
-                    "goldfish" in hardware ||
-                    "emulator" in product
-            }
         }
     }
 

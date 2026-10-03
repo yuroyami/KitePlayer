@@ -105,6 +105,12 @@ public data class Tracks(
 
     public fun find(id: TrackId): TrackInfo? = all.firstOrNull { it.id == id }
 
+    /**
+     * The track of [kind] that plays, or null when none does. The same answer as [selected], as
+     * the track itself, which Java can read where it cannot read a [TrackId] (#394).
+     */
+    public fun selectedTrack(kind: TrackKind): TrackInfo? = selected(kind)?.let(::find)
+
     internal fun withSelection(kind: TrackKind, id: TrackId?): Tracks = when (kind) {
         TrackKind.Video -> copy(selectedVideo = id)
         TrackKind.Audio -> copy(selectedAudio = id)

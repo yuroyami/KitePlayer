@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -727,6 +728,58 @@ class PlaybackCoreTest {
         )
         assertEquals(0, harness.ledger.liveCount, "and nothing it allocated is still live")
         harness.close()
+    }
+
+    /**
+     * A reader whose factory never returns, as the network reader does while a server takes the
+     * connection and stays silent. [cancelled] says the call was cancelled rather than left running.
+     */
+    private class SilentReader : MediaIoFactory {
+        var cancelled = false
+
+        override suspend fun open(): MediaIo {
+            try {
+                kotlinx.coroutines.awaitCancellation()
+            } finally {
+                cancelled = true
+            }
+        }
+    }
+
+    @Test
+    fun `a cancelled open stops waiting for its reader and leaves the player idle at once`() = runTest {
+        val harness = CoreHarness(this)
+        val reader = SilentReader()
+
+        val caller = launch { harness.core.open(MediaItem("https://example.com/silent.mp4", io = reader)) }
+        harness.run(100.milliseconds)
+        assertEquals(PlaybackStatus.Opening, harness.core.snapshots.value.status)
+
+        caller.cancel()
+        harness.run(500.milliseconds)
+
+        assertEquals(
+            PlaybackStatus.Idle,
+            harness.core.snapshots.value.status,
+            "a cancelled open must not wait for its reader to give up (#398)",
+        )
+        assertTrue(reader.cancelled, "the reader's open was cancelled, not left running")
+        harness.close()
+    }
+
+    @Test
+    fun `a close during an open that waits for its reader completes`() = runTest {
+        val harness = CoreHarness(this)
+        val reader = SilentReader()
+
+        val caller = launch { runCatching { harness.core.open(MediaItem("https://example.com/silent.mp4", io = reader)) } }
+        harness.run(100.milliseconds)
+
+        val closed = withTimeoutOrNull(500.milliseconds) { harness.core.closeAndAwait() }
+        assertNotNull(closed, "a close must not wait for the reader to give up (#398)")
+        assertTrue(reader.cancelled, "the reader's open was cancelled, not left running")
+        caller.join()
+        harness.stopDevice()
     }
 
     // ---------------------------------------------------------------------------------------------

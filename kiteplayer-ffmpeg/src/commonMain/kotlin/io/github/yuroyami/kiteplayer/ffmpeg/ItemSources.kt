@@ -45,7 +45,21 @@ internal suspend fun openItem(item: MediaItem): OpenedItem {
     FFmpegLogForwarding.install()
     val options = preOpenOptions(item)
     // Called once per open: the reader it makes belongs to this source and is closed with it.
-    val io = item.io?.open()
+    val opened = item.io?.open()
+    // A playlist that nothing marks is recognised by its first bytes (#400). The reader keeps them.
+    val io = opened?.let { reader ->
+        val marked = looksLikeHls(item.formatHint, reader.contentType, reader.location ?: item.uri)
+        if (marked || item.formatHint != null || !mayBeAPlaylist(reader.contentType)) {
+            reader
+        } else {
+            try {
+                SniffedMediaIo.sniff(reader, HLS_SNIFF_BYTES)
+            } catch (failure: Throwable) {
+                reader.close()
+                throw failure
+            }
+        }
+    }
     // FFmpeg's fd protocol takes the "fd" key only with this exact URI.
     val descriptor = if (io == null && item.uri == "fd:") options["fd"]?.toIntOrNull()?.let(::descriptorByteSource) else null
     // It stays with the source the open returns, as MediaSource.interrupt() does.
@@ -55,7 +69,9 @@ internal suspend fun openItem(item: MediaItem): OpenedItem {
         io != null -> {
             // Every bridge of this source lives on it, the bridges of an HLS stream's segments too.
             val lifetime = Job()
-            val hls = if (looksLikeHls(item.formatHint, io.contentType, io.location ?: item.uri)) {
+            val playlist = looksLikeHls(item.formatHint, io.contentType, io.location ?: item.uri) ||
+                (io is SniffedMediaIo && startsLikeHls(io.head))
+            val hls = if (playlist) {
                 try {
                     openHls(item, io, lifetime)
                 } catch (failure: Throwable) {

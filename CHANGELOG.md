@@ -37,6 +37,82 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   and the session closes itself when the player closes. `KitePlayerPlatform.attachMediaNotification`,
   `attachBackgroundHandling` and `attachInterruptionHandling` are deprecated. A session built with
   the `KitePlayerMediaSession` constructor behaves as before.
+- `Dash.mediaItemFor` plays a manifest of fMP4 or MPEG-TS segments through the HLS path (#295).
+  Separate video and audio sets now play together instead of being refused, the item seeks, and a
+  live manifest plays. The item's reader therefore serves an HLS master playlist, not the segment
+  bytes, so code that read `item.io` directly sees a playlist. The manifest model gains fields with
+  defaults, so a constructor or `copy` call compiled against 0.2.0 must be compiled again.
+- A DASH address plays through the default stack with no call to `Dash.mediaItemFor` (#400). The
+  automatic transport, and `KtorMediaIoResolver`, recognise a manifest by its `application/dash+xml`
+  type, by a path that ends in `.mpd`, or by its root element when the server sends it as text or
+  bytes, and play it as `Dash.mediaItemFor` plays it, with `DashUrlPolicy.Default`. The item's
+  headers reach the manifest and the segments of its origin. The reader these resolvers return for
+  such an address serves an HLS master playlist, not the manifest.
+- A WebM DASH manifest plays through the HLS path, as fragmented MP4 does (#401). Separate VP9 or
+  AV1 and Opus or Vorbis sets now play together instead of being refused, the item seeks, a live
+  WebM manifest plays, and a single WebM file plays as segments that its `Cues` name, read by byte
+  range. The one-stream reader is left for containers other than fragmented MP4, MPEG-TS and WebM.
+- A DASH subtitle set of TTML, or of TTML or WebVTT in MP4 segments (`stpp`, `wvtt`), plays as a
+  subtitle rendition (#402). Such sets used to be left out. The DASH reader serves them to FFmpeg as
+  WebVTT, with their text, line breaks, italic, bold and underline, on the picture's timeline.
+- A DASH manifest of several Periods plays as one presentation, as ad insertion and chapters
+  stitch them (#403). It used to be refused with `DashUnsupportedException`, which now happens only
+  when its segments are in a container the HLS path does not take. Time runs on across each
+  boundary although each Period's media time starts again, an fMP4 Period of another picture size
+  decodes at its own, and a live manifest that a refresh gives a new Period plays on into it.
+- A live DASH manifest counts its window on the time of day that its `UTCTiming` names, by
+  `direct`, `http-xsdate`, `http-iso` or `http-head`, instead of the device's clock, which could be
+  seconds off and ask for segments that did not exist yet (#404). With none that answers, the
+  device's clock stands and the log says so. A refresh fetches the manifest from its `Location`,
+  and a segment template stops at its `endNumber`.
+- DASH audio and subtitle tracks carry their set's `Label` as their title, and their roles reach
+  the player: `main` sound is the default, `forced-subtitle` is forced, and `caption` and
+  `description` are marked as accessibility tracks (#404). An encrypted manifest is refused with
+  `DashUnsupportedException` instead of decoding to noise, and an encrypted set beside clear ones
+  is left out.
+- An HLS track with no title of its own takes its rendition's `NAME` as its title, unless the name
+  only repeats its language (#404). FFmpeg files that name under the stream's `comment`, where
+  `PlayerStreamInfo.metadata` still shows it.
+- An HLS playlist that nothing marks is recognised by its first bytes (#400). A reader whose bytes
+  start with `#EXTM3U` plays through the HLS path when no format hint, HLS content type or `.m3u8`
+  address says so, which an address with no extension sent as text or bytes never did. A format
+  hint still wins.
+- `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
+  page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
+  cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third
+  module, the worker binary, whose `main` calls `runKitePlayerWorker()`. `kiteplayer-output` gains
+  `WebWorkletAudio` and `workerOutputBackend`, the two halves of its sound.
+- `KitePlayerWorker` has the rest of the player's calls now: the queue, frame steps, chapters,
+  tracks, variants, external subtitles, every setter, `stats`, and the diagnostics dump, support
+  bundle and warning history, which suspend there (#100). Each has the name and defaults of the
+  `KitePlayer` member and throws what it throws. A setter is checked once, by the player in the
+  worker, so a value it refuses arrives on `events` as `CommandRefused` instead of throwing at the
+  call. An item crosses whole, filters, demux policy and external subtitles included, unless it or
+  one of its subtitles has a reader of its own. `state.media` and `state.queue` hold the caller's
+  own items.
+- The worker player draws ASS subtitles with libass (#100). `KitePlayerWorker.start` gains
+  `libassUrl`, `./kiteass.mjs` by default, which the worker starts loading at once without waiting
+  for it, so the libass web zip a page unpacks beside `index.html` serves both players. A relative
+  `codecUrl` is now read against the page's address, as `workerUrl` and `libassUrl` are, where it
+  was read against the worker's. In `kiteplayer-libass`, a background load that lands after
+  `KiteLibassWeb.load` has attached its module is set aside, where it used to send the tracks
+  waiting for the module to the built-in styling.
+- `KitePlayerWorker.pictureInPictureOrNull()` puts the canvas the worker draws on in a picture in
+  picture window, with the two browser features `KitePlayerPictureInPicture` uses for the page's
+  own player: the canvas moves into a document window, or a video element's window plays a live
+  capture of it (#100). `KitePlayerPictureInPicture.createOrNull` gains an overload that takes the
+  canvas with functions for its size, play and pause instead of a renderer and a player.
+- A Java app on Android or the desktop can use the player without writing Kotlin (#394).
+  `KitePlayerJava` in `kiteplayer` adds listeners called on an `Executor`, a `CompletableFuture`
+  version of every suspending call, and millisecond versions of the calls that take a `Duration`.
+  `MediaItemBuilder` builds an item, whose constructor Java cannot call. In `kiteplayer-core`,
+  `KitePlayer.create` is static on the JVM, the config builders have public constructors and a
+  public `build()`, and `Progress`, `PlayerSnapshot`, `PlayerEvent.SeekCompleted` and `Tracks`
+  gain Java-readable `positionMillis`, `bufferedAheadMillis`, `durationMillis`, `landedAtMillis`
+  and `selectedTrack(kind)`.
+- The worker player's binary ships as `kiteplayer-wasm-js-<version>-web.zip` beside the wasmJs
+  artifact, for a page to unpack beside `index.html` (#58). `KiteWebModules.codecModuleUrl` picks a
+  multi-threaded codec module only on a cross-origin isolated page, before it is imported.
 - `KitePlayer.awaitClose()` suspends until the player is asked to close, for helpers that go away
   with it (#385).
 - `KitePlayer.requestSeek` replaces `seekLater`, which is deprecated (#386). It asks for a seek and

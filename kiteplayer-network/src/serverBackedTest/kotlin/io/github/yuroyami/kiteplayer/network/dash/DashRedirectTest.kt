@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
 import io.github.yuroyami.kiteplayer.MediaIo
+import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
@@ -49,11 +50,15 @@ class DashRedirectTest {
 
     private val file = ByteArray(4096) { index -> (index * 7 + 3).toByte() }
 
-    /** A manifest whose one representation is the single segment at [segment]. */
-    private fun segmentList(segment: String) = """
+    /**
+     * A manifest whose one representation is the single segment at [segment]. In [mimeType]
+     * video/mp4 it plays through the HLS stand-in, and in video/x-flv, which that path does not take,
+     * through the one-stream door.
+     */
+    private fun segmentList(segment: String, mimeType: String = "video/mp4") = """
         <MPD type="static" mediaPresentationDuration="PT2S">
             <Period>
-                <AdaptationSet contentType="video" mimeType="video/mp4">
+                <AdaptationSet contentType="video" mimeType="$mimeType">
                     <Representation id="v" bandwidth="1">
                         <SegmentList><SegmentURL media="$segment"/></SegmentList>
                     </Representation>
@@ -110,6 +115,7 @@ class DashRedirectTest {
                     trustedRequests.update { it + uri }
                     when {
                         uri == "/list.mpd" -> call.respondText(segmentList(checkNotNull(call.request.queryParameters["seg"])))
+                        uri == "/flv.mpd" -> call.respondText(segmentList(checkNotNull(call.request.queryParameters["seg"]), "video/x-flv"))
                         uri == "/file.mpd" -> call.respondText(singleFile(checkNotNull(call.request.queryParameters["file"])))
                         uri == "/to-other.m4s" -> call.redirectTo("$elsewhere/collect")
                         uri == "/to-other.mpd" -> call.redirectTo("$elsewhere/movie.mpd")
@@ -155,10 +161,28 @@ class DashRedirectTest {
         }
     }
 
+    /**
+     * The segments of the item for [mpdUrl], read as the player reads them. Through the HLS
+     * stand-in that is the master playlist, then the media playlist it names, then each segment
+     * that one names, every one of them opened through the stand-in as FFmpeg opens them.
+     */
     private suspend fun readSegments(mpdUrl: String, policy: DashUrlPolicy): ByteArray {
         val io = checkNotNull(Dash.mediaItemFor(mpdUrl, client, policy).io).open()
         try {
-            return readAll(io)
+            if (io.contentType != DashHlsMediaIo.HLS_MEDIA_TYPE) return readAll(io)
+            val master = readAll(io).decodeToString()
+            val playlist = master.lines().first { it.startsWith("https://") }
+            val media = readAll(checkNotNull(io.openRelated(playlist))).decodeToString()
+            val out = ArrayList<Byte>()
+            for (segment in media.lines().filter { it.isNotBlank() && !it.startsWith("#") }) {
+                val reader = checkNotNull(io.openRelated(segment))
+                try {
+                    out += readAll(reader).toList()
+                } finally {
+                    reader.close()
+                }
+            }
+            return out.toByteArray()
         } finally {
             io.close()
         }
@@ -168,6 +192,15 @@ class DashRedirectTest {
     fun sameOriginRefusesASegmentRedirectToAnotherOriginBeforeItIsRequested() = runBlocking {
         val refusal = assertFailsWith<DashUrlRefusedException> {
             readSegments("$trusted/list.mpd?seg=/to-other.m4s", DashUrlPolicy.SameOrigin)
+        }
+        assertTrue("sameOriginOnly" in refusal.message.orEmpty(), refusal.message)
+        assertEquals(emptyList(), otherRequests.value, "the other origin got a request")
+    }
+
+    @Test
+    fun theOneStreamDoorRefusesTheSameRedirect() = runBlocking {
+        val refusal = assertFailsWith<DashUrlRefusedException> {
+            readSegments("$trusted/flv.mpd?seg=/to-other.m4s", DashUrlPolicy.SameOrigin)
         }
         assertTrue("sameOriginOnly" in refusal.message.orEmpty(), refusal.message)
         assertEquals(emptyList(), otherRequests.value, "the other origin got a request")
@@ -217,7 +250,12 @@ class DashRedirectTest {
 
     @Test
     fun aRedirectWithNoAddressFailsTheSegment() = runBlocking {
-        assertFailsWith<IllegalArgumentException> { readSegments("$trusted/list.mpd?seg=/nowhere.m4s", DashUrlPolicy.SameOrigin) }
+        // Through the HLS stand-in the segment is the HTTP reader's, which names the answer.
+        val failure = assertFailsWith<KtorMediaIoException> {
+            readSegments("$trusted/list.mpd?seg=/nowhere.m4s", DashUrlPolicy.SameOrigin)
+        }
+        assertTrue("302" in failure.message.orEmpty(), failure.message)
+        assertFailsWith<IllegalArgumentException> { readSegments("$trusted/flv.mpd?seg=/nowhere.m4s", DashUrlPolicy.SameOrigin) }
         assertEquals(emptyList(), otherRequests.value)
     }
 

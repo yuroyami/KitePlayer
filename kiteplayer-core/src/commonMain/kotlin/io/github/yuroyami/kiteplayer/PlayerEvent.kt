@@ -29,7 +29,10 @@ public sealed interface PlayerEvent {
      * A seek finished and the target frame is ready. [generation] identifies which seek, so a
      * consumer that issued several can tell which one completed.
      */
-    public data class SeekCompleted(val generation: Generation, val landedAt: Duration) : PlayerEvent
+    public data class SeekCompleted(val generation: Generation, val landedAt: Duration) : PlayerEvent {
+        /** [landedAt] in milliseconds. For Java, which cannot read a [Duration] (#394). */
+        public val landedAtMillis: Long get() = landedAt.inWholeMilliseconds
+    }
 
     /** The video's size or pixel aspect changed, at the start or mid-stream. */
     public data class VideoSizeChanged(val size: VideoSize) : PlayerEvent

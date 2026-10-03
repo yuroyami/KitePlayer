@@ -56,31 +56,33 @@ class DashRefusalTest {
         return runBlocking { server.engine.resolvedConnectors().first().port }
     }
 
-    // a two-period presentation used to play period one and stop, silently.
+    /** Two Periods of four one-second segments in [mimeType], named by [extension]. */
+    private fun twoPeriods(mimeType: String, extension: String) = """
+        <?xml version="1.0"?>
+        <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT8S">
+            <Period duration="PT4S">
+                <AdaptationSet contentType="video" mimeType="$mimeType">
+                    <SegmentTemplate media="ad-${'$'}Number${'$'}.$extension" startNumber="1" timescale="1" duration="1"/>
+                    <Representation id="ad" bandwidth="1"/>
+                </AdaptationSet>
+            </Period>
+            <Period duration="PT4S">
+                <AdaptationSet contentType="video" mimeType="$mimeType">
+                    <SegmentTemplate media="main-${'$'}Number${'$'}.$extension" startNumber="1" timescale="1" duration="1"/>
+                    <Representation id="main" bandwidth="1"/>
+                </AdaptationSet>
+            </Period>
+        </MPD>
+    """.trimIndent()
+
+    // A two-period presentation used to play period one and stop, silently. Periods the HLS path
+    // carries now play joined (#403); the one-stream door still plays exactly one, so it refuses.
     @Test
-    fun aMultiPeriodManifestIsRefusedTypedNotTruncated() = runBlocking {
-        val port = serveMpd(
-            """
-            <?xml version="1.0"?>
-            <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT8S">
-                <Period duration="PT4S">
-                    <AdaptationSet contentType="video" mimeType="video/mp2t">
-                        <SegmentTemplate media="ad-${'$'}Number${'$'}.ts" startNumber="1" timescale="1" duration="1"/>
-                        <Representation id="ad" bandwidth="1"/>
-                    </AdaptationSet>
-                </Period>
-                <Period duration="PT4S">
-                    <AdaptationSet contentType="video" mimeType="video/mp2t">
-                        <SegmentTemplate media="main-${'$'}Number${'$'}.ts" startNumber="1" timescale="1" duration="1"/>
-                        <Representation id="main" bandwidth="1"/>
-                    </AdaptationSet>
-                </Period>
-            </MPD>
-            """.trimIndent(),
-        )
+    fun aMultiPeriodManifestTheOneStreamDoorWouldTruncateIsRefusedTyped() = runBlocking {
+        val port = serveMpd(twoPeriods("video/x-flv", "flv"))
         val client = HttpClient()
         try {
-            val failure = assertFailsWith<IllegalArgumentException> {
+            val failure = assertFailsWith<DashUnsupportedException> {
                 Dash.mediaItemFor("http://127.0.0.1:$port/movie.mpd", client)
             }
             assertTrue(
@@ -92,20 +94,63 @@ class DashRefusalTest {
         }
     }
 
-    // The usual layout: video and audio in sets of their own. This tier plays one set, so the
-    // video used to play silent.
+    @Test
+    fun aMultiPeriodManifestTheHlsPathCarriesIsNotRefused() = runBlocking {
+        val port = serveMpd(twoPeriods("video/mp2t", "ts"))
+        val client = HttpClient()
+        try {
+            Dash.mediaItemFor("http://127.0.0.1:$port/movie.mpd", client)
+            Unit
+        } finally {
+            client.close()
+        }
+    }
+
+    // Digital rights management is out of scope by decision (#404): an encrypted presentation
+    // used to be played as if it were clear, which decodes to noise.
+    @Test
+    fun anEncryptedManifestIsRefusedTyped() = runBlocking {
+        val port = serveMpd(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet contentType="video" mimeType="video/mp4">
+                        <ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection:2011" value="cenc"/>
+                        <ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/>
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.m4s" timescale="1" duration="2"/>
+                        <Representation id="v" bandwidth="2"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        )
+        val client = HttpClient()
+        try {
+            val failure = assertFailsWith<DashUnsupportedException> {
+                Dash.mediaItemFor("http://127.0.0.1:$port/movie.mpd", client)
+            }
+            assertTrue("encrypted" in failure.message.orEmpty(), "the refusal says why: ${failure.message}")
+            assertTrue("edef8ba9" in failure.message.orEmpty(), "the refusal names the system: ${failure.message}")
+        } finally {
+            client.close()
+        }
+    }
+
+    // Video and audio in sets of their own, in a container the HLS path does not take. The
+    // one-stream door plays one set, so the video used to play silent. Fragmented MP4, MPEG-TS
+    // and WebM play through HLS instead (DashHlsTest).
     @Test
     fun aSeparateAudioSetIsRefusedTypedNotPlayedSilent() = runBlocking {
         val port = serveMpd(
             """
             <MPD type="static" mediaPresentationDuration="PT4S">
                 <Period>
-                    <AdaptationSet contentType="video" mimeType="video/mp4">
-                        <SegmentTemplate media="v-${'$'}Number${'$'}.m4s" timescale="1" duration="2"/>
+                    <AdaptationSet contentType="video" mimeType="video/x-flv">
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.flv" timescale="1" duration="2"/>
                         <Representation id="v" bandwidth="2"/>
                     </AdaptationSet>
-                    <AdaptationSet contentType="audio" mimeType="audio/mp4">
-                        <SegmentTemplate media="a-${'$'}Number${'$'}.m4s" timescale="1" duration="2"/>
+                    <AdaptationSet contentType="audio" mimeType="audio/x-flv">
+                        <SegmentTemplate media="a-${'$'}Number${'$'}.flv" timescale="1" duration="2"/>
                         <Representation id="a" bandwidth="1"/>
                     </AdaptationSet>
                 </Period>
@@ -123,6 +168,8 @@ class DashRefusalTest {
         }
     }
 
+    // A live manifest of fragmented MP4 plays through HLS (DashHlsTest). One that HLS cannot
+    // carry is refused, because the one-stream door has no live window.
     @Test
     fun aLiveManifestIsRefusedTyped() = runBlocking {
         val port = serveMpd(
@@ -130,7 +177,7 @@ class DashRefusalTest {
             <MPD type="dynamic">
                 <Period>
                     <AdaptationSet contentType="video">
-                        <SegmentTemplate media="v-${'$'}Number${'$'}.m4s" timescale="1" duration="2"/>
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.flv" timescale="1" duration="2"/>
                         <Representation id="v" bandwidth="1"/>
                     </AdaptationSet>
                 </Period>
@@ -149,7 +196,8 @@ class DashRefusalTest {
     }
 
     // A single-file representation used to be fetched whole into memory and refused above the
-    // segment ceiling. It now streams with range requests, so a long file plays and seeks.
+    // segment ceiling. It now streams with range requests, so a long file plays and seeks. One
+    // with a SegmentBase plays through HLS instead (DashHlsTest), so this one names none.
     @Test
     fun aSingleFileRepresentationStreamsWithRangesAndSeeks() = runBlocking {
         val file = ByteArray(4096) { index -> (index * 7 + 3).toByte() }
@@ -160,7 +208,6 @@ class DashRefusalTest {
                     <AdaptationSet contentType="video" mimeType="video/mp4">
                         <Representation id="v" bandwidth="1">
                             <BaseURL>movie.mp4</BaseURL>
-                            <SegmentBase indexRange="0-99"/>
                         </Representation>
                     </AdaptationSet>
                 </Period>

@@ -84,19 +84,25 @@ public object KiteLibassWeb {
         loading = true
         loadStarted = TimeSource.Monotonic.markNow()
         val generation = loadGeneration
+        // A [load] may be running beside this one, as the worker player's is (#100), and whichever
+        // lands first serves every engine. The other one's outcome is set aside rather than
+        // recorded: the second attach refuses a different module, and a failure kept here would
+        // send the engines still waiting to the built-in styling with a module already in place.
         importModule(url).then(
             { loaded ->
                 if (generation == loadGeneration) {
                     loading = false
                     // A module that outlived the deadline still lands, for the next player.
-                    runCatching { attach(loaded) }.exceptionOrNull()?.let { loadFailure = it }
+                    if (module == null) runCatching { attach(loaded) }.exceptionOrNull()?.let { loadFailure = it }
                 }
                 null
             },
             { error ->
                 if (generation == loadGeneration) {
                     loading = false
-                    loadFailure = IllegalStateException("kiteass.mjs could not be loaded from $url: ${webErrorMessage(error)}")
+                    if (module == null) {
+                        loadFailure = IllegalStateException("kiteass.mjs could not be loaded from $url: ${webErrorMessage(error)}")
+                    }
                 }
                 null
             },

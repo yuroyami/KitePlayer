@@ -3,6 +3,8 @@
 package io.github.yuroyami.kiteplayer.libass
 
 import io.github.yuroyami.kiteplayer.spi.TypesetFrame
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.await
 import kotlinx.coroutines.test.runTest
 import kotlin.js.JsAny
@@ -14,6 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration
 
 /**
@@ -71,6 +74,54 @@ class LibassWebPendingTest {
         typesetter.close()
     }
 
+    /**
+     * The worker player loads the module from the page's address while a track that opened early
+     * starts the background load from its own (#100). The first to land serves the waiting engine,
+     * and the second, refused by attach, must not send that engine to the built-in styling.
+     */
+    @Test
+    fun aSecondLoadThatLandsAfterTheFirstIsSetAside() = runTest {
+        val explicit = deferredPromise()
+        val background = deferredPromise()
+        val loads = mutableListOf(explicit, background)
+        KiteLibassWeb.importModule = { promiseOf(loads.removeFirst()) }
+        val loading = async(start = CoroutineStart.UNDISPATCHED) { KiteLibassWeb.load("https://example.com/kiteass.mjs") }
+        val typesetter = LibassTypesetter(assertNotNull(LibassEngine.open()))
+        assertTrue(loads.isEmpty(), "the track must have started a load of its own beside the explicit one")
+        typesetter.openTrack(ByteArray(10))
+
+        val first = fakeLibassModule()
+        resolvePromise(explicit, first)
+        loading.await()
+        resolvePromise(background, fakeLibassModule())
+        promiseOf(background).await<JsAny>()
+
+        assertNull(typesetter.render(0, frame(1280)), "the waiting engine must take the first module, not fall back")
+        assertEquals(listOf("open_track:10"), callsOf(first).split(',').filter { it.startsWith("open_track") })
+        assertNotNull(LibassEngine.open(), "the next player must find the module too").close()
+        typesetter.close()
+    }
+
+    /** The same race the other way round: a failed background load beside a successful one. */
+    @Test
+    fun aSecondLoadThatFailsAfterTheFirstLandedIsSetAside() = runTest {
+        val explicit = deferredPromise()
+        val background = deferredPromise()
+        val loads = mutableListOf(explicit, background)
+        KiteLibassWeb.importModule = { promiseOf(loads.removeFirst()) }
+        val loading = async(start = CoroutineStart.UNDISPATCHED) { KiteLibassWeb.load("https://example.com/kiteass.mjs") }
+        val typesetter = LibassTypesetter(assertNotNull(LibassEngine.open()))
+        typesetter.openTrack(ByteArray(10))
+
+        resolvePromise(explicit, fakeLibassModule())
+        loading.await()
+        rejectPromise(background, "404")
+        runCatching { promiseOf(background).await<JsAny>() }
+
+        assertNull(typesetter.render(0, frame(1280)), "a failure beside a landed module must not reach the fallback")
+        typesetter.close()
+    }
+
     @Test
     fun aModuleThatNeverLandsFallsBackAtTheDeadline() = runTest {
         KiteLibassWeb.importModule = { neverResolvingPromise() }
@@ -101,7 +152,7 @@ class LibassWebPendingTest {
 @JsFun("() => new Promise(() => {})")
 private external fun neverResolvingPromise(): Promise<JsAny>
 
-@JsFun("() => { const d = {}; d.promise = new Promise(r => { d.resolve = r; }); return d; }")
+@JsFun("() => { const d = {}; d.promise = new Promise((resolve, reject) => { d.resolve = resolve; d.reject = reject; }); return d; }")
 private external fun deferredPromise(): JsAny
 
 @JsFun("(d) => d.promise")
@@ -109,6 +160,9 @@ private external fun promiseOf(deferred: JsAny): Promise<JsAny>
 
 @JsFun("(d, v) => { d.resolve(v); }")
 private external fun resolvePromise(deferred: JsAny, value: JsAny)
+
+@JsFun("(d, m) => { d.reject(new Error(m)); }")
+private external fun rejectPromise(deferred: JsAny, message: String)
 
 @JsFun("(m) => m.calls.join(',')")
 private external fun callsOf(module: JsAny): String

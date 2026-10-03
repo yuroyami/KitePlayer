@@ -18,6 +18,10 @@ what reading the code or running the gate would not teach you.
 - Work on `main`. Never create a branch without asking. Commit locally, never push. The owner
   pushes, publishes and cuts every release.
 - Commit subject is one imperative sentence about the outcome. Short prose body. No trailers.
+- Every commit is authored and committed as `yuroyami <youcefsidena@gmail.com>`, whatever git
+  identity the machine came with. A cloud container can arrive set to Claude, so check
+  `git config user.name` before the first commit. Never name Claude in a commit: not as author,
+  not as committer, and no `Co-Authored-By` or session line.
 - Every change starts with an issue, and the commit that closes one says `Fixes #n` in its body.
 - Talk to the owner in plain words. No internal codes, no jargon walls. Say what a thing means,
   not what it is. A question must be answerable by someone who has read nothing.
@@ -140,6 +144,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
   releases more audio than the ring has room for, and runTest then reports a test that never
   finished. After a change from 2x to 0.5x the tempo stage releases about 120 ms at once, the
   lookahead it gathered for 2x, so `AudioPlaybackSpeedTest` uses a 500 ms ring.
+- A live stream that stops growing blocks `readPacket` for ever rather than failing, so a live test
+  whose fix is broken hangs instead of going red. Give it a watchdog that calls the source's
+  `interrupt()` at its deadline, as the multi-Period live test does.
 - A state flow's `first { }` samples the current element before it waits, so a test that seeks and
   then waits for "the position advanced" can match the reading from before the seek and return
   instantly, proving nothing. Wait for a reading that reflects the new position first.
@@ -314,6 +321,15 @@ Each line is something that bit someone. Delete a line when it stops being true.
   keyframe seek lands up to one segment early and a precise seek decodes forward from there. It
   reads a run of byte-range fragments of one file through one reader, so playing from the start
   asks for that file from byte 0 only, and a range request appears only after a seek (#209).
+- FFmpeg's HLS reader cannot seek a WebM stream once it has read it to the end: the seek returns
+  and no packet follows, with one Period or several. MP4 and MPEG-TS seek fine. The Matroska
+  reader's end flag survives the HLS reader's byte-level reset, so this is upstream; a WebM test
+  seeks before it reads to the end (#403).
+- FFmpeg's MP4 reader keeps the first `moov` it sees and skips every later one, and a decoder keeps
+  the last H.264 or HEVC parameter sets it was given. So every fMP4 segment of a joined DASH
+  presentation carries its own Period's parameter sets in band, even a Period whose
+  initialization is the stream's own: without them a third Period decoded with the second's
+  picture size (#403).
 
 ### The web target
 

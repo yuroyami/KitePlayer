@@ -7,12 +7,14 @@ import io.github.yuroyami.kiteplayer.network.xml.XmlMini
  * A DASH MPD parsed in pure commonMain Kotlin, because libxml2 was refused as a dependency.
  * The model keeps what segment resolution needs and nothing else:
  * periods, adaptation sets, representations, the three segment addressing forms (template
- * with number or timeline, and an explicit list), and BaseURL chains.
+ * with number or timeline, an explicit list, and one file with a segment index), BaseURL
+ * chains, and the clock of a live presentation.
  *
- * Honest scope, stated where it is true: static (VOD) presentations resolve fully; dynamic
- * (live) manifests parse but segment resolution refuses them, because a live window without
- * clock arithmetic is a lie. Multi-period joins, xlink and encryption descriptors are out of
- * this tier.
+ * Honest scope, stated where it is true: static (VOD) presentations resolve fully. A dynamic
+ * (live) manifest parses with its clock, and [Dash.mediaItemFor] plays it when HLS can carry its
+ * segments; [DashManifestParser.segmentPlan] still refuses it. Several Periods play joined when
+ * HLS can carry every one of them (#403). Xlink is out of this tier, and an encrypted set is
+ * parsed for its `ContentProtection` schemes only, so the door can refuse it (#404).
  */
 public data class DashManifest(
     val isDynamic: Boolean,
@@ -21,13 +23,42 @@ public data class DashManifest(
     val periods: List<DashPeriod>,
     /** The manifest-level BaseURL chain already applied onto the fetch URL. */
     val baseUrl: String,
+    /** availabilityStartTime, in microseconds since 1970 UTC: the moment a live presentation's time 0 became available. */
+    val availabilityStartTimeMicros: Long? = null,
+    /** minimumUpdatePeriod, microseconds: how long a live manifest stays current before it is fetched again. */
+    val minimumUpdatePeriodMicros: Long? = null,
+    /** timeShiftBufferDepth, microseconds: how far behind the live edge a live presentation's segments stay available. */
+    val timeShiftBufferDepthMicros: Long? = null,
+    /** suggestedPresentationDelay, microseconds: how far behind the live edge the manifest asks a player to play. */
+    val suggestedPresentationDelayMicros: Long? = null,
+    /**
+     * The `Location` element, resolved: where a live manifest is to be fetched from from now on,
+     * or null when it names none or one the policy refuses.
+     */
+    val location: String? = null,
+    /**
+     * The `UTCTiming` elements, in the manifest's order of preference: where a player reads the
+     * time of day that a live manifest's clock counts against, rather than trusting the device's.
+     */
+    val utcTimings: List<DashUtcTiming> = emptyList(),
 )
+
+/**
+ * One `UTCTiming` element (ISO/IEC 23009-1, 5.8.4.11): a [schemeIdUri] that says how to read the
+ * time, such as `urn:mpeg:dash:utc:http-xsdate:2014` or `urn:mpeg:dash:utc:direct:2014`, and its
+ * [value], an address to fetch or the time itself.
+ */
+public data class DashUtcTiming(val schemeIdUri: String, val value: String)
 
 /** One `Period` of a manifest, with its BaseURL already resolved. */
 public data class DashPeriod(
     val baseUrl: String,
     val durationMicros: Long?,
     val adaptationSets: List<DashAdaptationSet>,
+    /** start, microseconds from the presentation's time 0, or null when the Period does not state it. */
+    val startMicros: Long? = null,
+    /** id, which names the same Period across the fetches of a live manifest, or null. */
+    val id: String? = null,
 )
 
 /** One `AdaptationSet`: the interchangeable representations of one kind of content. */
@@ -36,6 +67,22 @@ public data class DashAdaptationSet(
     val mimeType: String?,
     val segmentTemplate: DashSegmentTemplate?,
     val representations: List<DashRepresentation>,
+    /** lang, the RFC 5646 language of the set, or null. */
+    val lang: String? = null,
+    /** id, which names the same content across Periods (ISO/IEC 23009-1, 5.3.3.1), or null. */
+    val id: String? = null,
+    /** The text of the set's first `Label` element, a name to show for it, or null. */
+    val label: String? = null,
+    /**
+     * The values of the set's `Role` elements in the DASH role scheme (`urn:mpeg:dash:role:2011`),
+     * such as `main`, `alternate`, `commentary`, `subtitle`, `caption` or `forced-subtitle`.
+     */
+    val roles: List<String> = emptyList(),
+    /**
+     * The `schemeIdUri` of every `ContentProtection` element of the set and of its
+     * representations: empty for content that is not encrypted.
+     */
+    val contentProtectionSchemes: List<String> = emptyList(),
 )
 
 /** One `Representation`: one encoding of the content, with its segments addressed by a template or a list. */
@@ -52,6 +99,17 @@ public data class DashRepresentation(
     val segmentUrls: List<String>,
     /** SegmentList initialization URL, base-resolved. */
     val initializationUrl: String?,
+    /** frameRate, of the representation or else its set, in frames per second, or null. */
+    val frameRate: Double? = null,
+    /** The SegmentList in force, with its byte ranges and its timing, or null without one. */
+    val segmentList: DashSegmentList? = null,
+    /** The SegmentBase in force, for one file whose segment index names its segments, or null without one. */
+    val segmentBase: DashSegmentBase? = null,
+    /**
+     * The number of audio channels its `AudioChannelConfiguration` states, of the representation
+     * or else its set, in the schemes that state a count, or null.
+     */
+    val audioChannels: Int? = null,
 )
 
 /** A `SegmentTemplate`, merged from every level that declares one, the lowest level winning each attribute. */
@@ -63,6 +121,46 @@ public data class DashSegmentTemplate(
     /** Per-segment duration in [timescale] units; null when a timeline speaks instead. */
     val duration: Long?,
     val timeline: List<DashTimelineEntry>,
+    /** presentationTimeOffset, in [timescale] units: the media time at which the Period starts. */
+    val presentationTimeOffset: Long = 0,
+    /** endNumber, the number of the last segment, or null when the template states none. */
+    val endNumber: Long? = null,
+)
+
+/**
+ * A `SegmentList`, with every URL base-resolved. A `SegmentURL` without `media` names a byte range
+ * of the representation's own BaseURL.
+ */
+public data class DashSegmentList(
+    val timescale: Long,
+    /** Per-segment duration in [timescale] units; null when a timeline speaks instead, or nothing does. */
+    val duration: Long?,
+    val startNumber: Long,
+    val timeline: List<DashTimelineEntry>,
+    val initializationUrl: String?,
+    /** The bytes of [initializationUrl] that hold the initialization, or null for all of it. */
+    val initializationRange: LongRange?,
+    val segments: List<DashSegmentUrl>,
+    /** presentationTimeOffset, in [timescale] units: the media time at which the Period starts. */
+    val presentationTimeOffset: Long = 0,
+)
+
+/** One `SegmentURL`: a URL, and the bytes of it that hold the segment, or null for all of it. */
+public data class DashSegmentUrl(val url: String, val range: LongRange?)
+
+/**
+ * A `SegmentBase`: one file at the representation's BaseURL, whose own segment index (`sidx`)
+ * names its segments. [indexRange] says where the index is; without it the index is looked for at
+ * the start of the file.
+ */
+public data class DashSegmentBase(
+    val timescale: Long,
+    val indexRange: LongRange?,
+    /** Where the initialization is, base-resolved; the representation's BaseURL when no `sourceURL` names another. */
+    val initializationUrl: String?,
+    val initializationRange: LongRange?,
+    /** presentationTimeOffset, in [timescale] units: the media time at which the Period starts. */
+    val presentationTimeOffset: Long = 0,
 )
 
 /** One `S` element: an explicit start [t] (timescale units), duration [d], and [r] repeats. */
@@ -208,6 +306,7 @@ public object DashManifestParser {
         val periods = root.children("Period").map { period ->
             val periodBase = resolveBaseUrl(mpdBase, period, policy, budget)
             val periodTemplate = TemplateLevel.under(null, period)
+            val periodSegmentBase = period.child("SegmentBase")
             DashPeriod(
                 baseUrl = periodBase.url,
                 durationMicros = period.attr("duration")?.let(::parseIsoDurationMicros),
@@ -219,18 +318,49 @@ public object DashManifestParser {
                     // representations, and each lookup walks the set's children.
                     val setTemplate = TemplateLevel.under(periodTemplate, set)
                     val setSegmentList = set.child("SegmentList")
+                    val setSegmentBase = set.child("SegmentBase") ?: periodSegmentBase
                     DashAdaptationSet(
                         contentType = set.attr("contentType"),
                         mimeType = set.attr("mimeType"),
                         segmentTemplate = setTemplate?.template,
                         representations = set.children("Representation").map { rep ->
-                            parseRepresentation(rep, setBase, set, setSegmentList, setTemplate, policy, budget, urlLimits)
+                            parseRepresentation(
+                                rep, setBase, set, setSegmentList, setSegmentBase, setTemplate, policy, budget, urlLimits,
+                            )
                         },
+                        lang = set.attr("lang"),
+                        id = set.attr("id"),
+                        label = set.child("Label")?.text?.trim()?.takeIf { it.isNotEmpty() },
+                        roles = set.children("Role")
+                            .filter { it.attr("schemeIdUri").equals(ROLE_SCHEME, ignoreCase = true) }
+                            .mapNotNull { it.attr("value")?.trim() },
+                        // A representation of its own may be the one that says it is encrypted.
+                        contentProtectionSchemes = (set.children("ContentProtection") +
+                            set.children("Representation").flatMap { it.children("ContentProtection") })
+                            .mapNotNull { it.attr("schemeIdUri") }.distinct(),
                     )
                 },
+                startMicros = period.attr("start")?.let(::parseIsoDurationMicros),
+                id = period.attr("id"),
             )
         }
-        return DashManifest(isDynamic, duration, periods, mpdBase.url)
+        return DashManifest(
+            isDynamic = isDynamic,
+            durationMicros = duration,
+            periods = periods,
+            baseUrl = mpdBase.url,
+            availabilityStartTimeMicros = root.attr("availabilityStartTime")?.let(::parseDateTimeMicros),
+            minimumUpdatePeriodMicros = root.attr("minimumUpdatePeriod")?.let(::parseIsoDurationMicros),
+            timeShiftBufferDepthMicros = root.attr("timeShiftBufferDepth")?.let(::parseIsoDurationMicros),
+            suggestedPresentationDelayMicros = root.attr("suggestedPresentationDelay")?.let(::parseIsoDurationMicros),
+            // A Location the policy refuses is no reason to refuse the manifest that names it.
+            location = root.child("Location")?.text?.trim()?.takeIf { it.isNotEmpty() }?.let { reference ->
+                runCatching { resolveUrl(UrlBase(manifestUrl), reference, policy) }.getOrNull()
+            },
+            utcTimings = root.children("UTCTiming").mapNotNull { timing ->
+                timing.attr("schemeIdUri")?.let { DashUtcTiming(it.trim(), timing.attr("value")?.trim().orEmpty()) }
+            },
+        )
     }
 
     private fun parseRepresentation(
@@ -238,6 +368,7 @@ public object DashManifestParser {
         setBase: UrlBase,
         set: XmlElement,
         setSegmentList: XmlElement?,
+        setSegmentBase: XmlElement?,
         setTemplate: TemplateLevel?,
         policy: DashUrlPolicy,
         budget: UrlBudget,
@@ -249,8 +380,14 @@ public object DashManifestParser {
         // and it also counts against the manifest's.
         val listBudget = UrlBudget(urlLimits.planUrls, urlLimits.planChars, "a representation's SegmentList", budget)
         fun take(reference: String): String = listBudget.resolve(repBase, reference, policy)
-        val media = segmentList?.children("SegmentURL")?.mapNotNull { it.attr("media") }.orEmpty()
-        listBudget.reserve(media.size.toLong())
+        val entries = segmentList?.children("SegmentURL").orEmpty()
+        listBudget.reserve(entries.count { it.attr("media") != null }.toLong())
+        // Each URL is resolved once. A SegmentURL without media names a range of the BaseURL.
+        val listed = entries.map { entry ->
+            entry.attr("media")?.let(::take) to entry.attr("mediaRange")?.let(::parseByteRange)
+        }
+        val initialization = segmentList?.child("Initialization")
+        val initializationUrl = initialization?.attr("sourceURL")?.let(::take)
         return DashRepresentation(
             id = rep.attr("id"),
             bandwidth = rep.attr("bandwidth")?.toLongOrNull() ?: 0L,
@@ -260,9 +397,97 @@ public object DashManifestParser {
             height = rep.attr("height")?.toIntOrNull(),
             baseUrl = repBase.url,
             segmentTemplate = TemplateLevel.under(setTemplate, rep)?.template,
-            segmentUrls = media.map(::take),
-            initializationUrl = segmentList?.child("Initialization")?.attr("sourceURL")?.let(::take),
+            segmentUrls = listed.mapNotNull { it.first },
+            initializationUrl = initializationUrl,
+            frameRate = (rep.attr("frameRate") ?: set.attr("frameRate"))?.let(::parseFrameRate),
+            audioChannels = (rep.child("AudioChannelConfiguration") ?: set.child("AudioChannelConfiguration"))?.let(::channelCount),
+            segmentList = segmentList?.let { list ->
+                DashSegmentList(
+                    timescale = positiveTimescale(list.attr("timescale")),
+                    duration = list.attr("duration")?.toLongOrNull(),
+                    startNumber = list.attr("startNumber")?.toLongOrNull() ?: 1L,
+                    timeline = list.child("SegmentTimeline")?.let(::parseTimeline).orEmpty(),
+                    initializationUrl = initializationUrl
+                        ?: repBase.url.takeIf { initialization?.attr("range") != null },
+                    initializationRange = initialization?.attr("range")?.let(::parseByteRange),
+                    segments = listed.map { (url, range) -> DashSegmentUrl(url ?: repBase.url, range) },
+                    presentationTimeOffset = list.attr("presentationTimeOffset")?.toLongOrNull() ?: 0L,
+                )
+            },
+            segmentBase = (rep.child("SegmentBase") ?: setSegmentBase)?.let { base ->
+                val baseInitialization = base.child("Initialization")
+                DashSegmentBase(
+                    timescale = positiveTimescale(base.attr("timescale")),
+                    indexRange = base.attr("indexRange")?.let(::parseByteRange),
+                    initializationUrl = baseInitialization?.attr("sourceURL")?.let(::take) ?: repBase.url,
+                    initializationRange = baseInitialization?.attr("range")?.let(::parseByteRange),
+                    presentationTimeOffset = base.attr("presentationTimeOffset")?.toLongOrNull() ?: 0L,
+                )
+            },
         )
+    }
+
+    /**
+     * The channels an `AudioChannelConfiguration` states, in the schemes that state a count: a
+     * plain number (ISO/IEC 23003-3), a CICP channel layout index (ISO/IEC 23091-3), or Dolby's
+     * sixteen bit speaker mask, in which some bits stand for a pair. Null for another scheme or a
+     * value it does not know.
+     */
+    internal fun channelCount(configuration: XmlElement): Int? {
+        val value = configuration.attr("value")?.trim() ?: return null
+        return when (configuration.attr("schemeIdUri")?.trim()?.lowercase()) {
+            "urn:mpeg:dash:23003:3:audio_channel_configuration:2011" -> value.toIntOrNull()?.takeIf { it > 0 }
+            "urn:mpeg:mpegb:cicp:channelconfiguration" -> value.toIntOrNull()?.let { CICP_CHANNELS[it] }
+            "tag:dolby.com,2014:dash:audio_channel_configuration:2011", "urn:dolby:dash:audio_channel_configuration:2011" ->
+                value.toIntOrNull(16)?.takeIf { value.length <= 4 }?.let { mask ->
+                    DOLBY_MASK_CHANNELS.indices.sumOf { bit -> if (mask and (0x8000 ushr bit) != 0) DOLBY_MASK_CHANNELS[bit] else 0 }
+                }?.takeIf { it > 0 }
+            else -> null
+        }
+    }
+
+    /** The DASH role scheme, whose values name what an adaptation set is for. */
+    internal const val ROLE_SCHEME: String = "urn:mpeg:dash:role:2011"
+
+    /** The channels of each CICP channel layout index that names a fixed layout. */
+    private val CICP_CHANNELS = mapOf(
+        1 to 1, 2 to 2, 3 to 3, 4 to 4, 5 to 5, 6 to 6, 7 to 8, 9 to 3, 10 to 4, 11 to 7, 12 to 8,
+        13 to 24, 14 to 8, 15 to 12, 16 to 10, 17 to 12, 18 to 14, 19 to 12, 20 to 14,
+    )
+
+    /**
+     * The speakers of each bit of Dolby's mask, from the highest: L, C, R, Ls, Rs, Lc and Rc, Lrs
+     * and Rrs, Cs, Ts, Lsd and Rsd, Lw and Rw, Vhl and Vhr, Vhc, Lts and Rts, LFE2, LFE.
+     */
+    private val DOLBY_MASK_CHANNELS = intArrayOf(1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2, 2, 1, 2, 1, 1)
+
+    /** A timescale attribute, 1 when absent, refused when it is not positive. */
+    private fun positiveTimescale(raw: String?): Long =
+        (raw?.toLongOrNull() ?: 1L).also { require(it > 0) { "a timescale must be positive, not $it" } }
+
+    /** The `S` elements of a SegmentTimeline. */
+    private fun parseTimeline(timeline: XmlElement): List<DashTimelineEntry> =
+        timeline.children("S").map { s ->
+            DashTimelineEntry(
+                t = s.attr("t")?.toLongOrNull(),
+                d = s.attr("d")?.toLongOrNull() ?: 0L,
+                r = s.attr("r")?.toLongOrNull() ?: 0L,
+            )
+        }
+
+    /** A byte range written `first-last`, both inclusive, as the MPD writes them. */
+    internal fun parseByteRange(raw: String): LongRange {
+        val first = raw.substringBefore('-').trim().toLongOrNull()
+        val last = raw.substringAfter('-', "").trim().toLongOrNull()
+        require(first != null && last != null && first >= 0 && last >= first) { "not a byte range: $raw" }
+        return first..last
+    }
+
+    /** A frame rate written as a number or as `numerator/denominator`, or null when it is neither. */
+    internal fun parseFrameRate(raw: String): Double? {
+        val numerator = raw.substringBefore('/').trim().toDoubleOrNull() ?: return null
+        val denominator = if ('/' in raw) raw.substringAfter('/').trim().toDoubleOrNull() ?: return null else 1.0
+        return (numerator / denominator).takeIf { it.isFinite() && it > 0 }
     }
 
     /**
@@ -279,7 +504,9 @@ public object DashManifestParser {
         private val startNumber: String?,
         private val timescale: String?,
         private val duration: String?,
+        private val presentationTimeOffset: String?,
         private val timeline: List<DashTimelineEntry>?,
+        private val endNumber: String?,
     ) {
         /** Built on first use, so a level that only passes attributes down is never checked alone. */
         val template: DashSegmentTemplate by lazy {
@@ -294,6 +521,8 @@ public object DashManifestParser {
                 },
                 duration = duration?.toLongOrNull(),
                 timeline = timeline ?: emptyList(),
+                presentationTimeOffset = presentationTimeOffset?.toLongOrNull() ?: 0L,
+                endNumber = endNumber?.toLongOrNull(),
             )
         }
 
@@ -307,13 +536,9 @@ public object DashManifestParser {
                     startNumber = own.attr("startNumber") ?: parent?.startNumber,
                     timescale = own.attr("timescale") ?: parent?.timescale,
                     duration = own.attr("duration") ?: parent?.duration,
-                    timeline = own.child("SegmentTimeline")?.children("S")?.map { s ->
-                        DashTimelineEntry(
-                            t = s.attr("t")?.toLongOrNull(),
-                            d = s.attr("d")?.toLongOrNull() ?: 0L,
-                            r = s.attr("r")?.toLongOrNull() ?: 0L,
-                        )
-                    } ?: parent?.timeline,
+                    presentationTimeOffset = own.attr("presentationTimeOffset") ?: parent?.presentationTimeOffset,
+                    timeline = own.child("SegmentTimeline")?.let(::parseTimeline) ?: parent?.timeline,
+                    endNumber = own.attr("endNumber") ?: parent?.endNumber,
                 )
             }
         }
@@ -397,6 +622,7 @@ public object DashManifestParser {
                 }
                 budget.reserve(if (repeats < Long.MAX_VALUE) repeats + 1 else repeats)
                 for (repeat in 0..repeats) {
+                    if (template.endNumber != null && number > template.endNumber) break
                     add(number, time)
                     time = plus(time, entry.d, "a segment time")
                     number = plus(number, 1, "a segment number")
@@ -405,11 +631,13 @@ public object DashManifestParser {
         } else {
             val segmentDuration = template.duration
                 ?: throw IllegalArgumentException("SegmentTemplate needs duration or a timeline")
-            val totalMicros = durationMicros
-                ?: throw IllegalArgumentException("cannot count segments without a duration")
             val segmentMicros = rescale(segmentDuration, 1_000_000L, template.timescale, "the segment duration")
             require(segmentMicros > 0) { "degenerate segment duration" }
-            val count = totalMicros / segmentMicros + if (totalMicros % segmentMicros != 0L) 1 else 0
+            // endNumber names the last segment, so it counts them when the duration does not.
+            val numbered = template.endNumber?.let { (minus(it, template.startNumber, "the segment count") + 1).coerceAtLeast(0) }
+            val counted = durationMicros?.let { it / segmentMicros + if (it % segmentMicros != 0L) 1 else 0 }
+            val count = listOfNotNull(numbered, counted).minOrNull()
+                ?: throw IllegalArgumentException("cannot count segments without a duration")
             budget.reserve(count)
             var time = 0L
             for (i in 0 until count) {
@@ -418,6 +646,230 @@ public object DashManifestParser {
             }
         }
         return DashSegmentPlan(initialization, mediaUrls)
+    }
+
+    /**
+     * Every segment of [representation] with its place in time, for the HLS route (#295), or null
+     * for a [DashSegmentBase] representation, whose segments only its own index names.
+     *
+     * A static presentation gives all its segments. A dynamic one gives those available at
+     * [nowMicros], microseconds since 1970 UTC: a segment is available once its end has passed
+     * the presentation's availability start plus the Period's start, and it stays so for the
+     * time-shift buffer, or for [DEFAULT_LIVE_WINDOW_MICROS] when the manifest names none. A
+     * representation with no segment addressing is one segment, the whole of its BaseURL, which
+     * needs a duration to say how long it is.
+     *
+     * The ceilings, URL checks and refusals are those of [segmentPlan].
+     */
+    internal fun timedPlan(
+        manifest: DashManifest,
+        period: DashPeriod,
+        representation: DashRepresentation,
+        policy: DashUrlPolicy,
+        nowMicros: Long?,
+        urlLimits: UrlLimits = UrlLimits(),
+        periodStartMicros: Long = period.startMicros ?: 0L,
+        periodDurationMicros: Long? = period.durationMicros ?: manifest.durationMicros,
+    ): DashTimedPlan? {
+        val totalMicros = periodDurationMicros?.also {
+            require(it >= 0) { "a duration of $it microseconds is negative" }
+        }
+        val window = liveWindow(manifest, periodStartMicros, nowMicros)
+        val list = representation.segmentList
+        val template = representation.segmentTemplate
+        return when {
+            list != null && list.segments.isNotEmpty() -> listPlan(list, totalMicros, window)
+            template != null -> templatePlan(template, representation, totalMicros, window, policy, urlLimits)
+            representation.segmentBase != null -> null
+            else -> {
+                require(window == null) { "a live representation needs segment addressing" }
+                val whole = requireNotNull(totalMicros) { "a single-file representation needs a duration" }
+                DashTimedPlan(null, null, listOf(DashTimedSegment(representation.baseUrl, null, 1, 0, whole)))
+            }
+        }
+    }
+
+    /** The default time-shift buffer of a live presentation that names none: two minutes. */
+    internal const val DEFAULT_LIVE_WINDOW_MICROS: Long = 120_000_000L
+
+    /** The span of Period time, in microseconds, whose segments a live presentation has available. */
+    private class LiveWindow(val fromMicros: Long, val edgeMicros: Long)
+
+    private fun liveWindow(manifest: DashManifest, periodStartMicros: Long, nowMicros: Long?): LiveWindow? {
+        if (!manifest.isDynamic) return null
+        val start = requireNotNull(manifest.availabilityStartTimeMicros) {
+            "a live manifest needs an availabilityStartTime"
+        }
+        val now = requireNotNull(nowMicros) { "a live manifest needs the time of day" }
+        val edge = now - start - periodStartMicros
+        return LiveWindow(edge - (manifest.timeShiftBufferDepthMicros ?: DEFAULT_LIVE_WINDOW_MICROS), edge)
+    }
+
+    /** Whether a segment that ends at [endMicros] of Period time is in this window, or anywhere when there is none. */
+    private fun LiveWindow?.holds(endMicros: Long): Boolean =
+        this == null || (endMicros <= edgeMicros && endMicros > fromMicros)
+
+    private fun listPlan(list: DashSegmentList, totalMicros: Long?, window: LiveWindow?): DashTimedPlan {
+        val count = list.segments.size
+        val timeline = expandTimeline(list.timeline, list.timescale, totalMicros, window, count.toLong(), list.presentationTimeOffset)
+        val segments = ArrayList<DashTimedSegment>(count)
+        for ((index, entry) in list.segments.withIndex()) {
+            val (startMicros, durationMicros) = when {
+                timeline.isNotEmpty() -> timeline.getOrNull(index)?.let { it.startMicros to it.durationMicros } ?: break
+                list.duration != null -> {
+                    val each = rescale(list.duration, 1_000_000L, list.timescale, "the segment duration")
+                    require(each > 0) { "degenerate segment duration" }
+                    times(index.toLong(), each, "a segment start") to each
+                }
+                else -> {
+                    val total = requireNotNull(totalMicros) { "a SegmentList without durations needs a total duration" }
+                    val each = total / count
+                    require(each > 0) { "degenerate segment duration" }
+                    index * each to each
+                }
+            }
+            if (window.holds(startMicros + durationMicros)) {
+                segments += DashTimedSegment(entry.url, entry.range, list.startNumber + index, startMicros, durationMicros)
+            }
+        }
+        return DashTimedPlan(list.initializationUrl, list.initializationRange, segments)
+    }
+
+    private fun templatePlan(
+        template: DashSegmentTemplate,
+        representation: DashRepresentation,
+        totalMicros: Long?,
+        window: LiveWindow?,
+        policy: DashUrlPolicy,
+        urlLimits: UrlLimits,
+    ): DashTimedPlan {
+        val media = template.media
+            ?: throw IllegalArgumentException("SegmentTemplate without media for ${representation.id}")
+        require(template.timescale > 0) { "SegmentTemplate timescale must be positive, not ${template.timescale}" }
+        val budget = UrlBudget(urlLimits.planUrls, urlLimits.planChars, "the segment plan")
+        val base = UrlBase(representation.baseUrl)
+        val initialization = template.initialization?.let {
+            budget.resolve(base, substitute(it, representation, number = null, time = null), policy)
+        }
+        val mediaTemplate = compileTemplate(media, representation, numberKnown = true, timeKnown = true)
+        val segments = mutableListOf<DashTimedSegment>()
+        fun add(number: Long, time: Long, startMicros: Long, durationMicros: Long) {
+            segments += DashTimedSegment(
+                budget.resolve(base, renderTemplate(mediaTemplate, number, time), policy),
+                null,
+                number,
+                startMicros,
+                durationMicros,
+            )
+        }
+        if (template.timeline.isNotEmpty()) {
+            for (entry in expandTimeline(template.timeline, template.timescale, totalMicros, window, null, template.presentationTimeOffset)) {
+                val number = plus(template.startNumber, entry.index, "a segment number")
+                if (template.endNumber != null && number > template.endNumber) break
+                budget.reserve(1)
+                add(number, entry.time, entry.startMicros, entry.durationMicros)
+            }
+        } else {
+            val segmentDuration = template.duration
+                ?: throw IllegalArgumentException("SegmentTemplate needs duration or a timeline")
+            val segmentMicros = rescale(segmentDuration, 1_000_000L, template.timescale, "the segment duration")
+            require(segmentMicros > 0) { "degenerate segment duration" }
+            val first: Long
+            var end: Long
+            // endNumber names the last segment, so it counts them when nothing else does.
+            val count = template.endNumber?.let { (minus(it, template.startNumber, "the segment count") + 1).coerceAtLeast(0) }
+            if (window == null) {
+                first = 0
+                end = when (val total = totalMicros) {
+                    null -> count ?: throw IllegalArgumentException("cannot count segments without a duration")
+                    else -> total / segmentMicros + if (total % segmentMicros != 0L) 1 else 0
+                }
+            } else {
+                // Segment k ends at (k + 1) segment lengths, and is available once that has passed.
+                end = if (window.edgeMicros < segmentMicros) 0 else window.edgeMicros / segmentMicros
+                first = if (window.fromMicros < 0) 0 else window.fromMicros / segmentMicros
+            }
+            if (count != null) end = minOf(end, count)
+            budget.reserve((end - first).coerceAtLeast(0))
+            for (k in first until end) {
+                val startMicros = times(k, segmentMicros, "a segment start")
+                // The last segment of a finished presentation ends with it, not a whole length later.
+                val durationMicros = if (window == null && totalMicros != null) {
+                    minOf(segmentMicros, totalMicros - startMicros)
+                } else {
+                    segmentMicros
+                }
+                add(
+                    plus(template.startNumber, k, "a segment number"),
+                    times(k, segmentDuration, "a segment time"),
+                    startMicros,
+                    durationMicros,
+                )
+            }
+        }
+        return DashTimedPlan(initialization, null, segments)
+    }
+
+    /** One timeline segment: its place in the timeline, its time in timescale units, and its span in microseconds. */
+    private class TimelineSegment(val index: Long, val time: Long, val startMicros: Long, val durationMicros: Long)
+
+    /**
+     * [timeline] laid out segment by segment, at most [limit] of them, keeping those in [window].
+     * An `r` of -1 repeats until the next entry's start, the Period's end, or for a live
+     * presentation the live edge. Times count from [presentationTimeOffset].
+     */
+    private fun expandTimeline(
+        timeline: List<DashTimelineEntry>,
+        timescale: Long,
+        totalMicros: Long?,
+        window: LiveWindow?,
+        limit: Long?,
+        presentationTimeOffset: Long = 0,
+    ): List<TimelineSegment> {
+        val out = mutableListOf<TimelineSegment>()
+        var time = 0L
+        var index = 0L
+        fun micros(units: Long) = rescale(units, 1_000_000L, timescale, "a segment time")
+        fun timescaleUnits(micros: Long) = rescale(micros, timescale, 1_000_000L, "the period in timescale units")
+        for ((at, entry) in timeline.withIndex()) {
+            require(entry.d > 0) { "degenerate segment duration" }
+            entry.t?.let { time = it }
+            val repeats: Long = if (entry.r >= 0) entry.r else {
+                val untilTime = timeline.getOrNull(at + 1)?.t
+                    ?: totalMicros?.let { plus(timescaleUnits(it), presentationTimeOffset, "the period end") }
+                    ?: window?.let { plus(timescaleUnits(it.edgeMicros.coerceAtLeast(0)), presentationTimeOffset, "the live edge") }
+                    ?: throw IllegalArgumentException("SegmentTimeline r=-1 needs the next entry's t or a duration to stop at")
+                val span = minus(untilTime, time, "the time until the next entry")
+                if (span <= 0) 0 else (span - 1) / entry.d
+            }
+            val durationMicros = micros(entry.d)
+            var repeat = 0L
+            while (repeat <= repeats) {
+                if (limit != null && index >= limit) return out
+                val startMicros = micros(minus(time, presentationTimeOffset, "a segment start"))
+                if (window != null) {
+                    // Nothing that starts at the live edge has ended, and the timeline is in order.
+                    if (startMicros >= window.edgeMicros) return out
+                    // A live timeline can repeat one entry for days: step over what left the window.
+                    val behind = window.fromMicros - (startMicros + durationMicros)
+                    val skip = if (behind > 0 && durationMicros > 0) minOf(behind / durationMicros, repeats - repeat) else 0
+                    if (skip > 0) {
+                        time = plus(time, times(skip, entry.d, "a segment time"), "a segment time")
+                        index = plus(index, skip, "a segment number")
+                        repeat += skip
+                        continue
+                    }
+                }
+                if (window.holds(startMicros + durationMicros)) {
+                    require(out.size < MAX_PLAN_URLS) { "the segment plan needs more than $MAX_PLAN_URLS URLs" }
+                    out += TimelineSegment(index, time, startMicros, durationMicros)
+                }
+                time = plus(time, entry.d, "a segment time")
+                index = plus(index, 1, "a segment number")
+                repeat++
+            }
+        }
+        return out
     }
 
     /**
@@ -770,6 +1222,13 @@ public object DashManifestParser {
         return resolved
     }
 
+    /**
+     * [url], which a playlist written from the manifest at [manifestUrl] names, checked against
+     * the whole of [policy] as if the manifest had named it.
+     */
+    internal fun requireAllowed(manifestUrl: String, url: String, policy: DashUrlPolicy): String =
+        checkAgainst(UrlBase(manifestUrl), url, policy)
+
     /** The manifest URL itself goes through the scheme half of the policy before it is fetched. */
     internal fun requireAllowedScheme(url: String, policy: DashUrlPolicy) {
         val scheme = schemeOf(url)
@@ -818,6 +1277,41 @@ public object DashManifestParser {
             (g[7].toDoubleOrNull() ?: 0.0)
         return (total * 1_000_000).toLong()
     }
+
+    /**
+     * An xs:dateTime such as `2026-10-02T10:00:00Z`, `2026-10-02T12:00:00.5+02:00` or
+     * `2026-10-02T10:00:00`, in microseconds since 1970 UTC. A time without a zone is read as
+     * UTC, which is what live packagers mean by it.
+     */
+    internal fun parseDateTimeMicros(raw: String): Long {
+        val match = DATE_TIME.matchEntire(raw.trim()) ?: throw IllegalArgumentException("not an xs:dateTime: $raw")
+        val g = match.groupValues
+        val year = g[1].toLong()
+        val month = g[2].toInt()
+        val day = g[3].toInt()
+        require(month in 1..12 && day in 1..31) { "not an xs:dateTime: $raw" }
+        val seconds = daysFromCivil(year, month, day) * 86_400 + g[4].toLong() * 3_600 + g[5].toLong() * 60 + g[6].toLong()
+        val fraction = g[7].takeIf { it.isNotEmpty() }?.let { (it.take(6).padEnd(6, '0')).toLong() } ?: 0L
+        val offsetSeconds = when {
+            g[8].isEmpty() || g[8] == "Z" -> 0L
+            else -> (if (g[8].startsWith('-')) -1 else 1) * (g[9].toLong() * 3_600 + g[10].toLong() * 60)
+        }
+        return (seconds - offsetSeconds) * 1_000_000 + fraction
+    }
+
+    /** Days from 1970-01-01 to the proleptic Gregorian [year]-[month]-[day]. */
+    private fun daysFromCivil(year: Long, month: Int, day: Int): Long {
+        val y = if (month <= 2) year - 1 else year
+        val era = (if (y >= 0) y else y - 399) / 400
+        val yearOfEra = y - era * 400
+        val dayOfYear = (153 * (if (month > 2) month - 3 else month + 9) + 2) / 5 + day - 1
+        val dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
+        return era * 146_097 + dayOfEra - 719_468
+    }
+
+    private val DATE_TIME = Regex(
+        """(-?\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-](\d{2}):(\d{2}))?""",
+    )
 
     /** Appendix B of RFC 3986 without the scheme, which [schemeOf] reads by its grammar first. */
     private val RELATIVE_PARTS = Regex("""(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#([\s\S]*))?""")

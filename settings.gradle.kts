@@ -113,3 +113,6 @@ include(":kiteplayer-sample-desktop")
 // number, the per-frame cost of converting and drawing a 1080p frame on wasm with ONE thread, and
 // this module exists to produce it before any binding work is committed to.
 include(":kiteplayer-sample-web")
+// The worker binary that KitePlayerWorker loads (#100). An application like the samples, not
+// published; everything it runs lives in :kiteplayer.
+include(":kiteplayer-web-worker")

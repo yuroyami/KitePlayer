@@ -195,6 +195,8 @@ class WorkerProtocolTest {
         PlaybackError.SourceUnavailable("https://example.com/x", null, "HTTP 404"),
         PlaybackError.SourceUnavailable("https://example.com/y", null),
         PlaybackError.SourceStalled("https://example.com/x", 30.seconds),
+        PlaybackError.SchemeUnsupported("srt://example.com:9000", "srt", "SRT needs libsrt"),
+        PlaybackError.SchemeUnsupported("rtsp://camera/stream", "rtsp"),
         PlaybackError.NotMedia("https://example.com/x", "no stream"),
         PlaybackError.NoPlayableStream(tracks.all),
         PlaybackError.DecoderFailed("hevc", "no decoder"),
@@ -364,7 +366,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Failed(error))
             assertEquals(message, message.roundTrip(), "the error $error changed on the way")
         }
-        assertEquals(10, errors.map { it::class }.distinct().size, "every kind of error is here")
+        assertEquals(11, errors.map { it::class }.distinct().size, "every kind of error is here")
     }
 
     @Test

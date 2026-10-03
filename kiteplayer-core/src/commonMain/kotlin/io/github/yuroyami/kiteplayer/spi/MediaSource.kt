@@ -79,6 +79,20 @@ public interface PlayerMediaSource : AutoCloseable {
     public val timestampsMayJump: Boolean
 
     /**
+     * True when a sender pushes this stream at the pace it plays, as RTSP, RTMP, UDP and RTP do.
+     *
+     * Media from such a source arrives no faster than real time, so whatever has arrived and not
+     * yet been heard is delay behind the sender, and a stall that is later made good leaves the
+     * picture that much later for good unless the player catches up. The engine keeps that delay
+     * bounded for a source that says true here, by playing a little faster for a while.
+     *
+     * A live HLS or DASH stream is not one: its segments arrive faster than they play, up to the
+     * live edge, so its buffer says nothing about how far behind it is. Defaulted to false, so an
+     * existing source keeps compiling and keeps playing at the speed it is given.
+     */
+    public val realTime: Boolean get() = false
+
+    /**
      * Packets for streams outside this set are read and discarded by the source.
      *
      * Every index must be one this source offers. A set naming one it does not is a caller

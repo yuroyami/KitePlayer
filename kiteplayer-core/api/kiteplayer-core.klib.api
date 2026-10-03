@@ -684,6 +684,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/
         open fun <get-attachments>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/MediaAttachment> // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.attachments.<get-attachments>|<get-attachments>(){}[0]
     open val containerBitrateBps // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.containerBitrateBps|{}containerBitrateBps[0]
         open fun <get-containerBitrateBps>(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.containerBitrateBps.<get-containerBitrateBps>|<get-containerBitrateBps>(){}[0]
+    open val realTime // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.realTime|{}realTime[0]
+        open fun <get-realTime>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.realTime.<get-realTime>|<get-realTime>(){}[0]
     open val selectedVariant // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectedVariant|{}selectedVariant[0]
         open fun <get-selectedVariant>(): kotlin/Int? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectedVariant.<get-selectedVariant>|<get-selectedVariant>(){}[0]
     open val streamDivergences // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.streamDivergences|{}streamDivergences[0]
@@ -3976,6 +3978,26 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised // io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised.copy|copy(kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.RuntimeCompromised.hashCode|hashCode(){}[0]
+    }
+
+    final class SchemeUnsupported : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported|null[0]
+        constructor <init>(kotlin/String, kotlin/String, kotlin/String? = ...) // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.<init>|<init>(kotlin.String;kotlin.String;kotlin.String?){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String? // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.detail.<get-detail>|<get-detail>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.message.<get-message>|<get-message>(){}[0]
+        final val scheme // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.scheme|{}scheme[0]
+            final fun <get-scheme>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.scheme.<get-scheme>|<get-scheme>(){}[0]
+        final val uri // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.uri|{}uri[0]
+            final fun <get-uri>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.uri.<get-uri>|<get-uri>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.component1|component1(){}[0]
+        final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.component2|component2(){}[0]
+        final fun component3(): kotlin/String? // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.component3|component3(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.copy|copy(kotlin.String;kotlin.String;kotlin.String?){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.SchemeUnsupported.hashCode|hashCode(){}[0]
     }
 
     final class SourceStalled : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.SourceStalled|null[0]

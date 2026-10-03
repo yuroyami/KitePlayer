@@ -33,6 +33,25 @@ public sealed class PlaybackError {
     }
 
     /**
+     * The item's address has a scheme this build has no way to open, such as `srt://` or
+     * `rtmps://`, or `rtsp://` on the web, where the player has no sockets of its own. Nothing was
+     * sent over any network: the address was refused for its scheme alone.
+     *
+     * The same address fails the same way every time in this build, which is what separates it
+     * from [SourceUnavailable], where the bytes could not be reached this time. [scheme] is the
+     * address's scheme in lower case, without its colon, and [detail] may say what would open it.
+     * [MediaItem]'s documentation lists the schemes each platform opens.
+     */
+    public data class SchemeUnsupported(
+        val uri: String,
+        val scheme: String,
+        val detail: String? = null,
+    ) : PlaybackError() {
+        override val message: String
+            get() = "this build cannot open $scheme addresses: ${redactUri(uri)}" + (detail?.let { ". ${redactUrisIn(it)}" } ?: "")
+    }
+
+    /**
      * The source stopped answering: a read waited [stalledFor] without a packet or a byte, which is
      * at least `BufferPolicy.stallTimeout`. The engine interrupted the read and ended the session.
      * The same media may play when the network recovers.

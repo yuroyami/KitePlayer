@@ -34,12 +34,21 @@ class SecretFreeTextTest {
             PlaybackError.SourceUnavailable(signed, cause = null, detail = "HTTP 403 for $signed"),
             PlaybackError.SourceStalled(signed, 30.seconds),
             PlaybackError.NotMedia(signed),
+            PlaybackError.SchemeUnsupported(signed, "https", "for $signed"),
         )
         for (error in errors) {
             assertFalse("SECRET" in error.message, error.message)
             assertFalse("SECRET" in error.toString(), error.toString())
             assertTrue("lesson-3.mp4" in error.message, error.message)
         }
+    }
+
+    @Test
+    fun aCameraAddressRefusedForItsSchemeKeepsItsPasswordOut() {
+        val error = PlaybackError.SchemeUnsupported("rtsps://admin:SECRET@192.168.1.10:322/stream1", "rtsps")
+        assertFalse("SECRET" in error.message, error.message)
+        assertFalse("SECRET" in error.toString(), error.toString())
+        assertTrue("rtsps" in error.message && "stream1" in error.message, error.message)
     }
 
     @Test

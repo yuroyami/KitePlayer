@@ -11,8 +11,9 @@
 # entry point makes the raw module about four times bigger and the gzipped one only about six
 # percent bigger. The measurement uses Python's zlib, so macOS and Linux count the same bytes.
 #
-# The codec budget is the size of the module that KiteFFmpeg 0.3.0 publishes, 1.42 MiB, which the
-# owner chose on #58. The worker budget is 1.25 MiB, the binary's 1.21 MiB when it first shipped
+# The codec budget was the size of the module that KiteFFmpeg 0.3.0 publishes, 1.42 MiB, which the
+# owner chose on #58. KiteFFmpeg 0.5.0 raised it to 1.46 MiB, because its module carries FFmpeg's
+# HLS reader so that a nested opener can play HLS and DASH in a browser. The worker budget is 1.25 MiB, the binary's 1.21 MiB when it first shipped
 # with a little room. Both are ratchets: a new KiteFFmpeg pin, or player code, that grows a module
 # past its budget fails here, and raising a budget is a decision made in the same commit, with both
 # numbers in its message.
@@ -24,8 +25,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# 1.42 MiB.
-BUDGET_BYTES=1488978
+# 1.46 MiB.
+BUDGET_BYTES=1530921
 # 1.25 MiB.
 WORKER_BUDGET_BYTES=1310720
 

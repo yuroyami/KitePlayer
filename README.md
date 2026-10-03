@@ -824,7 +824,7 @@ already listening when a song starts. Album art does not count as a picture.
 | **tvOS, watchOS, iOS x64, Android native** | Only the engine modules build there; CI runs the tvOS and watchOS tests on their simulators. |
 | **js** | The facade reports unavailable. |
 
-KitePlayer's JVM and Android classes are Java 11 bytecode, and so is the KiteFFmpeg 0.4.0 jar, so a
+KitePlayer's JVM and Android classes are Java 11 bytecode, and so is the KiteFFmpeg 0.5.0 jar, so a
 desktop app runs on Java 11 or later.
 
 <details>

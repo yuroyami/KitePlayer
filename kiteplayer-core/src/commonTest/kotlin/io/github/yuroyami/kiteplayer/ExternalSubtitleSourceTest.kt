@@ -103,6 +103,32 @@ class ExternalSubtitleSourceTest {
     }
 
     @Test
+    fun aFileNamedInAPreferredLanguageIsThatLanguageAndIsChosenAtOpen() = runTest {
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 10_000_000),
+            config = PlayerConfig(subtitles = SubtitleConfig(preferredLanguages = listOf("ja"))),
+        )
+        harness.core.open(
+            MediaItem(
+                "scripted://one",
+                externalSubtitles = listOf(
+                    SubtitleSource(uri = "memory://Film.en.sdh.srt", io = { BytesIo(SRT.encodeToByteArray()) }),
+                    SubtitleSource(uri = "memory://Film.ja.srt", io = { BytesIo(SRT.encodeToByteArray()) }),
+                    SubtitleSource(uri = "memory://Film.de.srt", language = "fr", io = { BytesIo(SRT.encodeToByteArray()) }),
+                ),
+            ),
+        )
+        harness.run(100.milliseconds)
+        val tracks = harness.core.snapshots.value.tracks
+        val subtitles = tracks.all.filter { it.kind == TrackKind.Subtitle }
+        assertEquals(listOf("en", "ja", "fr"), subtitles.map { it.language }, "a caller's language wins over the name")
+        assertEquals(listOf(true, false, false), subtitles.map { it.isAccessibility })
+        assertEquals(subtitles[1].id, tracks.selectedSubtitle, "the Japanese file was not chosen for a viewer who prefers Japanese")
+        harness.close()
+    }
+
+    @Test
     fun `a subtitle that cannot be read is skipped with a typed warning`() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 10_000_000))
         harness.core.open(

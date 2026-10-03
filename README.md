@@ -593,6 +593,10 @@ and labels it.
 
 - SubRip, WebVTT and SubStation Alpha, from the container or from an external file. External files
   load in the middle of playback.
+- An external file added without a language takes one from its name, as `Film.en.srt`,
+  `Film.eng.forced.srt` and `Film.pt-BR.sdh.srt` say it, with `forced`, and `sdh`, `cc` or `hi`,
+  marking the track, and a file in a preferred language is chosen at open over the container's
+  track in a later one ([#514](https://github.com/yuroyami/KitePlayer/issues/514)).
 - WebVTT keeps its colours: the standard's colour classes such as `<c.yellow>` and `<c.bg_blue>`,
   and the `::cue` rules of its `STYLE` blocks for colour, background, bold, italic, underline,
   font and relative size, by class, voice and cue identifier. A rule that asks for anything more

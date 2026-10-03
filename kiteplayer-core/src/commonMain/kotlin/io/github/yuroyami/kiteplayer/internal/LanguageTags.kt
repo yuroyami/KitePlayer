@@ -63,6 +63,14 @@ internal class LanguageTag(val language: String, val script: String?, val region
             return LanguageTag(language, script, region)
         }
 
+        /**
+         * True when [code], a lower-case two or three letter code, is one of ISO 639-1, its ISO 639-2
+         * equivalents, or a withdrawn or individual-language code this table knows. Any two or three
+         * letters parse as a code, so a name read for a language checks here first.
+         */
+        fun isKnownCode(code: String): Boolean =
+            code in LEGACY || code in TWO_LETTER_BY_THREE || (code.length == 2 && code in TWO_LETTER_BY_THREE.values)
+
         /** The one spelling of [code], a lower-case two or three letter code, or null for no language. */
         private fun canonicalLanguage(code: String): String? {
             if (code in NO_LANGUAGE) return null

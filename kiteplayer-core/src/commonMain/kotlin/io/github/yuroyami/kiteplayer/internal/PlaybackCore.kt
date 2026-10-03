@@ -553,7 +553,10 @@ internal class PlaybackCore(
         // The encoding is decided from the bytes, not assumed. A file that needed a guess says so,
         // because a viewer looking at mojibake can act on "I read this as windows-1252" and cannot
         // act on silence. The East Asian tables are the parser's, because they live above the core.
-        val decoded = decodeSubtitleBytes(bytes, sourceFile.language, eastAsian = parser::decode)
+        // A caller's language wins; without one, the file's name may say it (#514).
+        val hints = subtitleNameHints(sourceFile.uri)
+        val language = sourceFile.language ?: hints.language
+        val decoded = decodeSubtitleBytes(bytes, language, eastAsian = parser::decode)
         if (!decoded.confident) {
             report(
                 PlaybackWarning.SubtitleCharsetGuessed(
@@ -589,8 +592,10 @@ internal class PlaybackCore(
                         isAss -> "external/ass"
                         else -> "external/subrip"
                     },
-                    language = sourceFile.language,
+                    language = language,
                     title = sourceFile.title ?: sourceFile.uri.substringAfterLast('/'),
+                    isForced = hints.forced,
+                    isAccessibility = hints.hearingImpaired,
                 ),
                 cues = cues.sortedBy { cue -> cue.startMicros },
                 script = if (isAss) trimmed else null,
@@ -2698,7 +2703,12 @@ internal class PlaybackCore(
                     .getOrNull(-track.id.value - 1)?.selectImmediately == true
             }
             val subtitleChoice = if (immediateExternal != null) StreamChoice.None else StreamChoice.Auto
-            var built = buildSession(command.media, StreamChoice.Auto, StreamChoice.Auto, subtitleChoice)
+            var built = buildSession(
+                command.media, StreamChoice.Auto, StreamChoice.Auto, subtitleChoice,
+                externalSubtitles = parsedExternals.map { it.info },
+            )
+            // An external file in a preferred language, picked over the container's own (#514).
+            val preferredExternal = built.preferredExternalSubtitle?.let { id -> parsedExternals.firstOrNull { it.id == id } }
             session = built
             // Parked from the first packet when the player was configured that way, so an
             // audio-only application never decodes a frame it is going to throw away.
@@ -2776,7 +2786,7 @@ internal class PlaybackCore(
             adoptExternalSubtitles(command.media, parsedExternals)
             // Unconditional: when this is non-null the container's subtitle stream was left
             // unselected above, so there is never a competing selection to defer to.
-            immediateExternal?.let { applyExternalSubtitle(it.id) }
+            (immediateExternal ?: preferredExternal)?.let { applyExternalSubtitle(it.id) }
             refreshTypesetting()
             // The start position's second half: the exact landing, as an ordinary precise seek
             // through the ordinary machine, so the masked position report, generation fencing
@@ -2842,6 +2852,8 @@ internal class PlaybackCore(
         },
         /** Set for the gapless preload, which must not touch the player while another item plays. */
         pending: PendingBuild? = null,
+        /** The item's external subtitle tracks, which an open weighs against the container's own (#514). */
+        externalSubtitles: List<TrackInfo> = emptyList(),
     ): OpenSession {
         val report: (PlaybackWarning) -> Unit = pending?.report ?: ::warn
         fun stage(next: OpenStage) {
@@ -2920,9 +2932,19 @@ internal class PlaybackCore(
                 resolveStreamChoice(audioChoice, source.streams, TrackKind.Audio, report) {
                     pickAudio(source.streams)
                 }
+            var preferredExternal: TrackId? = null
             val subtitleCandidate =
                 resolveStreamChoice(subtitleChoice, source.streams, TrackKind.Subtitle, report) {
-                    pickSubtitle(source.streams, audioCandidate)
+                    val container = pickSubtitle(source.streams, audioCandidate)
+                    // An external file that matches the preferences better leaves the container's unselected,
+                    // and the open selects the file once its track exists (#514).
+                    val external = preferredExternalSubtitle(container, externalSubtitles, config.subtitles)
+                    if (external != null) {
+                        preferredExternal = external.id
+                        null
+                    } else {
+                        container
+                    }
                 }
 
             var videoStream = videoCandidate
@@ -3103,6 +3125,7 @@ internal class PlaybackCore(
                 null
             }
             return OpenSession(
+                preferredExternalSubtitle = preferredExternal,
                 token = pending?.token ?: nextSessionToken++,
                 backendSession = backendSession,
                 source = source,
@@ -6537,6 +6560,7 @@ internal class PlaybackCore(
                     subtitleChoice = if (immediate) StreamChoice.None else StreamChoice.Auto,
                     videoSelection = VideoDecoderSelection.Configured,
                     pending = build,
+                    externalSubtitles = externals.map { it.info },
                 )
                 Result.success(PreparedNext(built, externals))
             } catch (cancellation: CancellationException) {
@@ -6783,9 +6807,11 @@ internal class PlaybackCore(
                 return
             }
             adoptExternalSubtitles(next.item, prepared.externals)
-            prepared.externals
-                .firstOrNull { track -> next.item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true }
-                ?.let { applyExternalSubtitle(it.id) }
+            (
+                prepared.externals
+                    .firstOrNull { track -> next.item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true }
+                    ?.id ?: prepared.session.preferredExternalSubtitle
+                )?.let { applyExternalSubtitle(it) }
             refreshTypesetting()
             setStatus(PlaybackStatus.Paused)
             emitEvent(PlayerEvent.Opened(next.item, tracks))
@@ -6874,9 +6900,11 @@ internal class PlaybackCore(
         next.build.warnings.release()
         next.build.events.forEach(::emitEvent)
         adoptExternalSubtitles(next.item, prepared.externals)
-        prepared.externals
-            .firstOrNull { track -> next.item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true }
-            ?.let { applyExternalSubtitle(it.id) }
+        (
+            prepared.externals
+                .firstOrNull { track -> next.item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true }
+                ?.id ?: prepared.session.preferredExternalSubtitle
+            )?.let { applyExternalSubtitle(it) }
         refreshTypesetting()
         startAudioEventCollector(incoming)
         if (incoming.videoDecoderDeferred) startDeferredVideo(incoming)
@@ -9985,6 +10013,11 @@ internal class PlaybackCore(
         val stallWatch: StallWatch,
         /** The reader the item's address resolved to, before the engine's own layers, for its network rate. */
         val networkIo: MediaIo? = null,
+        /**
+         * The external subtitle track the build chose over the container's own by language, which
+         * the open selects once the track exists, or null (#514).
+         */
+        val preferredExternalSubtitle: TrackId? = null,
     ) {
         /**
          * True once the source answered that it cannot interrupt a stalled read. The session then
@@ -11062,6 +11095,28 @@ internal fun pickSubtitleStream(
             ?.let { return it }
     }
     return null
+}
+
+/**
+ * The external subtitle track to select at open over [container], the container's own choice, or
+ * null to keep that (#514). An external file wins when it matches the language preferences and the
+ * container's choice matches a later one, matches the same one no more closely, or matches none: a
+ * file the caller added for this item in the language the viewer prefers was added to be seen. With
+ * no preferences, the container's choice stands.
+ */
+internal fun preferredExternalSubtitle(container: PlayerStreamInfo?, externals: List<TrackInfo>, config: SubtitleConfig): TrackInfo? {
+    if (externals.isEmpty()) return null
+    val preferences = LanguagePreferences(config.preferredLanguages)
+    if (preferences.isEmpty) return null
+    val (track, match) = externals.mapNotNull { track -> preferences.match(track.language, track.title)?.let { track to it } }
+        .sortedWith(compareBy({ it.second.preference }, { -it.second.closeness }, { it.first.isForced }))
+        .firstOrNull() ?: return null
+    val ours = container?.let { preferences.match(it.language, it.title) } ?: return track
+    return when {
+        match.preference < ours.preference -> track
+        match.preference == ours.preference && match.closeness >= ours.closeness -> track
+        else -> null
+    }
 }
 
 /** Where a seek on this source is cut: its length, unless that length is only an estimate (#422). */

@@ -67,7 +67,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoDecoderFa
 }
 
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame, io/github/yuroyami/kiteplayer/spi/VideoFrame {
-	public synthetic fun <init> (Lio/github/yuroyami/kiteffmpeg/Frame;JLio/github/yuroyami/kiteplayer/Pts;JIZLio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteffmpeg/Frame;JLio/github/yuroyami/kiteplayer/Pts;JIZLio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;Ljava/lang/Float;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
 	public fun copyPlane (I[BI)V
 	public fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
@@ -82,6 +82,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : i
 	public fun getPlaneFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
 	public fun getPts-BBkgT00 ()J
 	public fun getRotationDegrees ()I
+	public fun getSceneMaxNits ()Ljava/lang/Float;
 	public fun getSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
 	public fun planeHeight (I)I
 	public fun planeStride (I)I

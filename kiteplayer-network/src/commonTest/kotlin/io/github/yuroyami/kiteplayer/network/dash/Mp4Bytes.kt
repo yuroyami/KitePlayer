@@ -48,6 +48,21 @@ internal object Mp4Bytes {
     }
 
     /**
+     * A visual sample entry of type [type] whose `hvcC` holds [vps], [sps] and [pps] with 4-byte
+     * NAL lengths, as `hvc1` and `hev1` carry it, and Dolby Vision's `dvh1` and `dvhe` beside a `dvcC`.
+     */
+    fun hevcEntry(type: String, vps: ByteArray, sps: ByteArray, pps: ByteArray): ByteArray {
+        fun array(nalType: Int, unit: ByteArray) =
+            byteArrayOf(nalType.toByte(), 0, 1, (unit.size shr 8).toByte(), unit.size.toByte()) + unit
+        // Twenty-one bytes of profile, level and format fields, the NAL length size in the low bits
+        // of the twenty-second, then the count of arrays.
+        val hvcC = byteArrayOf(1) + ByteArray(20) + byteArrayOf(0x0F, 3) +
+            array(32, vps) + array(33, sps) + array(34, pps)
+        val dvcC = if (type.startsWith("dv")) box("dvcC", byteArrayOf(1, 0, 10, 0x35, 0, 0, 0, 0) + ByteArray(16)) else ByteArray(0)
+        return box(type, ByteArray(78) + box("hvcC", hvcC) + dvcC)
+    }
+
+    /**
      * A media segment of one fragment of [trackId]: a `tfdt` of [decodeTime], and a `trun` with a
      * data offset and, for each sample, its size and its duration when it has one.
      */

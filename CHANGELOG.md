@@ -287,6 +287,30 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   that cannot draw into half floats. It is off by default and costs memory, about 50 MB for a 720p
   film with `Fast`. The Metal renderer does not run it yet (#421). `AnimationUpscaleDeviceTest`
   checks both tiers against a CPU reference and logs what a frame costs on the device.
+- `PlayerStreamInfo` and `TrackInfo` gain `dolbyVision`, null for a stream that is not Dolby
+  Vision, so their constructors and `copy` change (#470). Its `DolbyVisionInfo` holds the profile,
+  the level and what the base layer is on its own, so an application can show "Dolby Vision 8.1"
+  and tell from `baseLayerPlaysAlone` whether every frame must be composed. `VideoFrame` gains
+  `sceneMaxNits`, null by default, so a frame class of your own keeps compiling, and the
+  `toneMapPeakNits` extension gives the peak a tone mapper should roll off from.
+- A Dolby Vision profile 5 or 10.0 picture plays in its real colours instead of green and purple
+  (#470). Its base layer is coded in Dolby's IPT colour space, so the FFmpeg decoder composes each
+  frame with its RPU into HDR10 on the processor, in bands of rows across the converter's threads,
+  before a filter or a renderer sees it, and every renderer that shows HDR10 shows it. That costs
+  about 70 ms of one core for a 1080p frame, so 4K waits for composition on the GPU (#459). A frame
+  decoded by VideoToolbox or D3D11VA is downloaded first. MediaCodec hands back the base layer
+  without its RPU, so FFmpeg's MediaCodec route stands down for such a stream with a
+  `HardwareDecodeUnavailable` warning and the direct MediaCodec decoder refuses it, and the
+  software decoder plays it. A profile 8, 7 or 10 stream whose base layer plays alone plays it as
+  before, hardware included. The HLS variant choice still prefers any other variant to profile 5.
+  This needs KiteFFmpeg 0.5.0 (yuroyami/KiteFFmpeg#137).
+- The software converter, which Compose's canvas and the desktop views draw through, and the Metal
+  renderer tone map each Dolby Vision scene from its own peak, the RPU's level 1 metadata, held at
+  most at the title's peak, instead of the title's peak alone, so a dark scene is not dimmed for
+  highlights it does not have (#470). Profile 8 streams get this with no composition. A renderer
+  that leaves HDR to the platform, such as Android's GPU renderer, is unchanged.
+- A DASH Period whose initialization is `dvh1`, `dvhe`, `dva1` or `dvav` carries its parameter sets
+  in band when Periods are joined, as `hvc1`, `hev1`, `avc1` and `avc3` already did (#470).
 
 ### Removed
 

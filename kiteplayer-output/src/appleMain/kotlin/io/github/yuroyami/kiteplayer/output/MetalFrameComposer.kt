@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import io.github.yuroyami.kiteplayer.spi.toneMapPeakNits
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
@@ -137,7 +138,7 @@ internal class MetalFrameComposer(
         pictureColor = frame.colorSpace
         val dstPeak = SDR_WHITE_NITS * (extendedRangeHeadroom?.coerceAtLeast(1f) ?: 1f)
         val toneUniforms = if (toneMapped) {
-            packToneUniforms(frame.colorSpace, dstPeak, frame.hdr?.peakNits)
+            packToneUniforms(frame.colorSpace, dstPeak, frame.toneMapPeakNits)
         } else {
             DISABLED_TONE_UNIFORMS
         }

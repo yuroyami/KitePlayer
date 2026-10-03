@@ -355,6 +355,7 @@ public class MetalVideoRenderer internal constructor(
         override val colorSpace: io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo,
         override val hdr: io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata?,
         override val mirrored: Boolean,
+        override val sceneMaxNits: Float?,
     ) : VideoFrame {
         override val pts: io.github.yuroyami.kiteplayer.Pts = io.github.yuroyami.kiteplayer.Pts.Zero
         override val duration: io.github.yuroyami.kiteplayer.Pts? = null
@@ -373,7 +374,7 @@ public class MetalVideoRenderer internal constructor(
         }
         releaseRetained()
         retainedPicture = picture
-        retainedMeta = RetainedFrameMeta(frame.size, frame.rotationDegrees, frame.colorSpace, frame.hdr, frame.mirrored)
+        retainedMeta = RetainedFrameMeta(frame.size, frame.rotationDegrees, frame.colorSpace, frame.hdr, frame.mirrored, frame.sceneMaxNits)
     }
 
     private fun releaseRetained() {

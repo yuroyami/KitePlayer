@@ -125,6 +125,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame : io.githu
         final fun <get-pts>(): io.github.yuroyami.kiteplayer/Pts // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.pts.<get-pts>|<get-pts>(){}[0]
     final val rotationDegrees // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.rotationDegrees|{}rotationDegrees[0]
         final fun <get-rotationDegrees>(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.rotationDegrees.<get-rotationDegrees>|<get-rotationDegrees>(){}[0]
+    final val sceneMaxNits // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.sceneMaxNits|{}sceneMaxNits[0]
+        final fun <get-sceneMaxNits>(): kotlin/Float? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.sceneMaxNits.<get-sceneMaxNits>|<get-sceneMaxNits>(){}[0]
     final val size // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.size|{}size[0]
         final fun <get-size>(): io.github.yuroyami.kiteplayer/VideoSize // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.size.<get-size>|<get-size>(){}[0]
 

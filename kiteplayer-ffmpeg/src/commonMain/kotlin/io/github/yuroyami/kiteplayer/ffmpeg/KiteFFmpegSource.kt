@@ -8,6 +8,8 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.Chapter
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.DeinterlacePolicy
+import io.github.yuroyami.kiteplayer.DolbyVisionInfo
+import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -45,6 +47,7 @@ import io.github.yuroyami.kiteplayer.spi.Vp9Level
 import io.github.yuroyami.kiteplayer.spi.Vp9Profile
 import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
 import io.github.yuroyami.kiteffmpeg.DecoderId
+import io.github.yuroyami.kiteffmpeg.DolbyVisionMetadata
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 import io.github.yuroyami.kiteffmpeg.dsl.DecoderOptions
 import io.github.yuroyami.kiteffmpeg.MediaSource
@@ -477,14 +480,15 @@ private const val SYNTHESIZED_FRAME_STEP_US: Long = 40_000
  *
  * Replay begins at the last decoded keyframe. Remembering the timestamp immediately before that
  * keyframe makes a timestampless replay reproduce the same synthetic sequence, so ordinal
- * suppression neither jumps backward to zero nor advances the timeline twice. The colour-warning
- * latch is also per stream, not per wrapper, and deliberately survives seeks.
+ * suppression neither jumps backward to zero nor advances the timeline twice. The two warning
+ * latches are also per stream, not per wrapper, and deliberately survive seeks.
  */
 internal class VideoDecoderContinuity {
     private var lastPts: Pts? = null
     private var replaySeed: Pts? = null
     private var replaySeedPending: Boolean = false
     private var colorWarningClaimed: Boolean = false
+    private var dolbyVisionWarningClaimed: Boolean = false
 
     internal fun timestamp(
         real: Pts?,
@@ -522,6 +526,13 @@ internal class VideoDecoderContinuity {
     internal fun claimColorWarning(): Boolean {
         if (colorWarningClaimed) return false
         colorWarningClaimed = true
+        return true
+    }
+
+    /** The latch of the warning that a Dolby Vision frame came without the RPU to compose it. */
+    internal fun claimDolbyVisionWarning(): Boolean {
+        if (dolbyVisionWarningClaimed) return false
+        dolbyVisionWarningClaimed = true
         return true
     }
 }
@@ -600,6 +611,14 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: 
         sampleRate = audio?.sampleRate,
         channels = audio?.channels,
         hdr = video?.hdr?.toPlayerHdr(),
+        dolbyVision = video?.dolbyVision?.let { config ->
+            DolbyVisionInfo(
+                profile = config.profile,
+                level = config.level,
+                baseLayerCompatibility = config.baseLayerCompatibility,
+                hasEnhancementLayer = config.hasEnhancementLayer,
+            )
+        },
         fieldOrder = when (video?.fieldOrder) {
             io.github.yuroyami.kiteffmpeg.FieldOrder.Progressive -> io.github.yuroyami.kiteplayer.spi.FieldOrder.Progressive
             io.github.yuroyami.kiteffmpeg.FieldOrder.TopFirst -> io.github.yuroyami.kiteplayer.spi.FieldOrder.TopFirst
@@ -686,6 +705,21 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
             return if (hwdec == HwdecPolicy.Require) null else source.newVideoDecoder(stream, filter = filter)
         }
 
+        // MediaCodec hands back pictures without the RPU, so a stream whose base layer needs it
+        // plays in software. VideoToolbox and Direct3D frames keep the RPU, and are downloaded
+        // for the composer.
+        val dolbyVision = stream.dolbyVision
+        if (dolbyVision != null && !dolbyVision.baseLayerPlaysAlone && selection.hardware?.kind == HwdecKind.MediaCodec) {
+            source.onWarning(
+                PlaybackWarning.HardwareDecodeUnavailable(
+                    stream.codec,
+                    "the stream is Dolby Vision profile ${dolbyVision.profileName}, and MediaCodec hands back " +
+                        "pictures without the RPU that composes them",
+                ),
+            )
+            return if (hwdec == HwdecPolicy.Require) null else source.newVideoDecoder(stream, filter = filter)
+        }
+
         if (selection.hardware == null) return source.newVideoDecoder(stream, filter = filter)
 
         val continuity = VideoDecoderContinuity()
@@ -751,6 +785,12 @@ internal fun deinterlaceFilter(policy: DeinterlacePolicy, fieldOrder: FieldOrder
     DeinterlacePolicy.Always -> "$DEINTERLACER=mode=send_frame:parity=auto:deint=all"
 }
 
+/** Two frame times this close are one time written in two time bases: a millisecond. */
+private const val SAME_TIME_US: Long = 1_000
+
+/** A decoded picture, composed when its stream needs it, and the peak of its scene when its RPU says. */
+private class DecodedPicture(val picture: KiteFrame, val sceneMaxNits: Float?)
+
 private class KiteFFmpegVideoDecoder(
     private val decoder: StreamDecoder,
     private val stream: PlayerStreamInfo,
@@ -766,7 +806,7 @@ private class KiteFFmpegVideoDecoder(
 
     /** The graph, built lazily from the FIRST decoded frame's own geometry and format. */
     private var filterGraph: io.github.yuroyami.kiteffmpeg.FilterGraph? = null
-    private val filteredPending = ArrayDeque<KiteFrame>()
+    private val filteredPending = ArrayDeque<DecodedPicture>()
     private var filterFlushed = false
 
     override suspend fun send(packet: PlayerPacket?): Boolean =
@@ -781,7 +821,8 @@ private class KiteFFmpegVideoDecoder(
             (filterDescription == null || filterGraph == null || (filterFlushed && filteredPending.isEmpty()))
 
     override suspend fun receive(): VideoFrame? {
-        val frame = nextDecodedFrame() ?: return null
+        val decoded = nextDecodedFrame() ?: return null
+        val frame = decoded.picture
         val duration = mapper.mapDuration(frame.durationMicros)
         val info = frame.info
         val pts = continuity.timestamp(
@@ -793,7 +834,7 @@ private class KiteFFmpegVideoDecoder(
         // The rotation is the stream's, taken from the container's display matrix once at open. Every
         // frame of the stream carries it, because the renderer sees frames and nothing else.
         val wrapped = KiteFFmpegVideoFrame(
-            frame, pts, duration, generation, stream.rotationDegrees, stream.mirrored, stream.hdr,
+            frame, pts, duration, generation, stream.rotationDegrees, stream.mirrored, stream.hdr, decoded.sceneMaxNits,
         )
         try {
             warnIfColorIsApproximated(wrapped.colorSpace)
@@ -814,18 +855,21 @@ private class KiteFFmpegVideoDecoder(
      * friends); fps-changing chains are the KD roadmap's own next step and refuse nothing today
      * because their output time base would silently disagree with the stream's.
      */
-    private fun nextDecodedFrame(): KiteFrame? {
-        val description = filterDescription ?: return decoder.receive()
+    private fun nextDecodedFrame(): DecodedPicture? {
+        val description = filterDescription ?: return decoder.receive()?.let(::readDolbyVision)
         while (filteredPending.isEmpty()) {
-            val raw = decoder.receive()
-            if (raw == null) {
+            val decoded = decoder.receive()
+            if (decoded == null) {
                 if (decoder.isDrained && filterGraph != null && !filterFlushed) {
                     filterFlushed = true
-                    filterGraph?.flushInput(0) { out -> filteredPending.addLast(out.copy()) }
+                    filterGraph?.flushInput(0) { out -> filteredPending.addLast(DecodedPicture(out.copy(), scenePeakOf(out))) }
                     continue
                 }
                 return null
             }
+            // Composed first, so a filter sees the picture rather than Dolby Vision's IPT signal.
+            val picture = readDolbyVision(decoded)
+            val raw = picture.picture
             val info = raw.info
             val graph = filterGraph ?: try {
                 io.github.yuroyami.kiteffmpeg.FilterGraph.buildVideo(
@@ -842,10 +886,93 @@ private class KiteFFmpegVideoDecoder(
                 raw.close()
                 throw failure
             }.also { filterGraph = it }
+            scenePeaksInGraph.addLast(raw.ptsMicros to picture.sceneMaxNits)
             // feedInput owns and closes the raw frame; every output is copied out of the callback.
-            graph.feedInput(0, raw) { out -> filteredPending.addLast(out.copy()) }
+            graph.feedInput(0, raw) { out -> filteredPending.addLast(DecodedPicture(out.copy(), scenePeakOf(out))) }
         }
         return filteredPending.removeFirst()
+    }
+
+    /**
+     * The scene peaks of the frames inside the filter graph, in the order they went in, by their
+     * times in microseconds. A filter such as the deinterlacer gives a frame back an input later
+     * than it took it, and in a time base of its own, so an output takes the peak of the input at
+     * its own time, not of the last one in.
+     */
+    private val scenePeaksInGraph = ArrayDeque<Pair<Long?, Float?>>()
+
+    /** The scene peak of the input [out] came from, forgetting the inputs before it, which the graph dropped. */
+    private fun scenePeakOf(out: KiteFrame): Float? {
+        val time = out.ptsMicros ?: return scenePeaksInGraph.removeFirstOrNull()?.second
+        while (scenePeaksInGraph.isNotEmpty() && (scenePeaksInGraph.first().first ?: Long.MIN_VALUE) < time - SAME_TIME_US) {
+            scenePeaksInGraph.removeFirst()
+        }
+        val (inputTime, peak) = scenePeaksInGraph.firstOrNull() ?: return null
+        return peak.takeIf { inputTime != null && inputTime <= time + SAME_TIME_US }
+    }
+
+    /** Whether this stream's frames mean nothing until they are composed with their RPU. */
+    private val composesDolbyVision: Boolean = stream.dolbyVision?.baseLayerPlaysAlone == false
+
+    /**
+     * [frame] as a renderer should see it, with its scene's peak from the RPU it carries.
+     *
+     * Every frame of a Dolby Vision stream is read for its level 1, which profile 8 benefits from
+     * as much as profile 5. A stream whose base layer does not play alone is composed into HDR10
+     * here, in bands on the converter's row-slice threads. A hardware frame is downloaded first,
+     * because the composer reads memory; a frame without an RPU passes as it came.
+     */
+    private fun readDolbyVision(frame: KiteFrame): DecodedPicture {
+        if (stream.dolbyVision == null) return DecodedPicture(frame, null)
+        val metadata = try {
+            frame.dolbyVision()
+        } catch (failure: Throwable) {
+            frame.close()
+            throw failure
+        }
+        if (metadata == null) {
+            if (composesDolbyVision) warnUncomposed()
+            return DecodedPicture(frame, null)
+        }
+        val sceneMaxNits = metadata.sceneBrightness?.let { DolbyVisionMetadata.nitsOfPq(it.maxPq).toFloat() }
+        return DecodedPicture(if (composesDolbyVision) composeDolbyVision(frame) else frame, sceneMaxNits)
+    }
+
+    /** The HDR10 composition of [frame], which this takes and closes. */
+    private fun composeDolbyVision(frame: KiteFrame): KiteFrame {
+        val readable = if (frame.info.isHardware) {
+            try {
+                frame.downloadFromHardware()
+            } finally {
+                frame.close()
+            }
+        } else {
+            frame
+        }
+        val composition = try {
+            readable.beginDolbyVisionComposition()
+        } catch (failure: Throwable) {
+            readable.close()
+            throw failure
+        } ?: return readable
+        val width = readable.info.width
+        // The composition holds its own reference to the picture it reads.
+        readable.close()
+        return composition.use {
+            parallelRowSlices(width, it.height) { start, end -> it.composeRows(start, end) }
+            it.finish()
+        }
+    }
+
+    /** Says once that a frame of a stream that needs composition came without the RPU to compose it. */
+    private fun warnUncomposed() {
+        if (!continuity.claimDolbyVisionWarning()) return
+        warn(
+            PlaybackWarning.ColorApproximated(
+                "a frame of Dolby Vision profile ${stream.dolbyVision?.profileName} on stream ${stream.index} " +
+                    "carries no RPU, so its base layer is shown as it is",
+            ),
+        )
     }
 
     private fun frameRateRational(): io.github.yuroyami.kiteffmpeg.Rational {
@@ -854,7 +981,8 @@ private class KiteFFmpegVideoDecoder(
     }
 
     private fun dropFilterState() {
-        while (true) filteredPending.removeFirstOrNull()?.close() ?: break
+        while (true) filteredPending.removeFirstOrNull()?.picture?.close() ?: break
+        scenePeaksInGraph.clear()
         filterGraph?.close()
         filterGraph = null
         filterFlushed = false
@@ -1151,6 +1279,8 @@ public class KiteFFmpegVideoFrame internal constructor(
     override val mirrored: Boolean,
     /** The stream's static HDR metadata, which a frame that carries none of its own reports. */
     private val streamHdr: HdrStaticMetadata? = null,
+    /** The peak of this frame's scene, from the Dolby Vision RPU the decoder read, in nits. */
+    override val sceneMaxNits: Float? = null,
 ) : VideoFrame, SoftwareReadableFrame {
 
     private val info = frame.info

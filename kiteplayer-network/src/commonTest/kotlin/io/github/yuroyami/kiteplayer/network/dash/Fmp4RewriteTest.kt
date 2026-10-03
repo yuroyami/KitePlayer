@@ -105,4 +105,29 @@ class Fmp4RewriteTest {
         assertEquals(null, Fmp4Rewrite.inBandParameterSets(twoBytePrefix, avc))
         assertEquals(null, Fmp4Rewrite.inBandParameterSets(opus, opus))
     }
+
+    @Test
+    fun aDolbyVisionPeriodCarriesItsParameterSetsAsHevcDoes() {
+        // dvh1 and dvhe are HEVC with an RPU, so a Period of either restates its VPS, SPS and PPS,
+        // and joins a stream that began as hvc1.
+        val vps = byteArrayOf(0x40, 1)
+        val sps = byteArrayOf(0x42, 1, 7)
+        val pps = byteArrayOf(0x44, 1)
+        val dvh1 = track(Mp4Bytes.init(1, 1000, "vide", "dvh1", entry = Mp4Bytes.hevcEntry("dvh1", vps, sps, pps)))
+        val hvc1 = track(Mp4Bytes.init(1, 1000, "vide", "hvc1", entry = Mp4Bytes.hevcEntry("hvc1", byteArrayOf(0x40, 2), byteArrayOf(0x42, 2), byteArrayOf(0x44, 2))))
+        val segment = Mp4Bytes.segment(1, 0, listOf(Sample(1000, byteArrayOf(0x26, 1), sync)))
+        val samples = Fmp4.samples(Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(dvh1, hvc1, 0, null)), hvc1)
+        val parameterSets = byteArrayOf(0, 0, 0, 2, 0x40, 1, 0, 0, 0, 3, 0x42, 1, 7, 0, 0, 0, 2, 0x44, 1)
+        assertContentEquals(parameterSets + byteArrayOf(0x26, 1), samples.single().data)
+        val dvhe = track(Mp4Bytes.init(1, 1000, "vide", "dvhe", entry = Mp4Bytes.hevcEntry("dvhe", vps, sps, pps)))
+        assertContentEquals(parameterSets, Fmp4Rewrite.inBandParameterSets(dvhe, dvh1))
+    }
+
+    @Test
+    fun aDolbyVisionH264PeriodCarriesItsParameterSetsAsH264Does() {
+        val dva1 = Mp4Bytes.avc1(sps = byteArrayOf(0x67, 3), pps = byteArrayOf(0x68, 3)).also { "dva1".encodeToByteArray().copyInto(it, 4) }
+        val source = track(Mp4Bytes.init(1, 1000, "vide", "dva1", entry = dva1))
+        val target = track(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = avcA))
+        assertContentEquals(byteArrayOf(0, 0, 0, 2, 0x67, 3, 0, 0, 0, 2, 0x68, 3), Fmp4Rewrite.inBandParameterSets(source, target))
+    }
 }

@@ -105,6 +105,8 @@ video decoder.
 
 - True HDR: HDR10 and HLG show as HDR on a display that can show it, through Metal on a Mac or an
   iPhone and through `KitePlayerView` on an Android HDR display. Elsewhere they are tone mapped.
+- Dolby Vision: profile 5 and 10.0 are composed into HDR10 on the processor, which keeps up at
+  1080p, and each scene's own brightness guides the tone mapping.
 - Picture-in-picture on Android, iOS, macOS and in the browser, and a floating window on the
   desktop JVM.
 - Rotation and mirroring from the file, on every renderer.
@@ -547,7 +549,7 @@ can read it back.
 | **Loudness** | `PlayerConfig.audio.volumeCeiling` allows volume up to 2.0 through a limiter. `PlayerConfig.audio.replayGain` applies the file's own ReplayGain tags, off by default |
 | **Surround** | Multichannel audio folds into the speakers the device has. `PlayerConfig.audio.upmix = UpmixMode.Surround` also plays mono and stereo from the other speakers of a surround device, off by default |
 | **Picture** | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan) |
-| **HDR** | `setHdrPolicy`. HDR10 and HLG show as HDR on a display that can: through Metal on a Mac or an iPhone with extended range, and through `KitePlayerView` on an Android HDR display. Elsewhere they are tone mapped, and `PlaybackWarning.HdrToneMapped` says so. `HdrPolicy.ToneMap` tone maps everywhere, and `videoDynamicRange` says what the screen shows |
+| **HDR** | `setHdrPolicy`. HDR10 and HLG show as HDR on a display that can: through Metal on a Mac or an iPhone with extended range, and through `KitePlayerView` on an Android HDR display. Elsewhere they are tone mapped, and `PlaybackWarning.HdrToneMapped` says so. `HdrPolicy.ToneMap` tone maps everywhere, and `videoDynamicRange` says what the screen shows. `TrackInfo.dolbyVision` names a Dolby Vision track's profile, and a profile 5 or 10.0 track is composed into HDR10 on the processor |
 | **Subtitles** | `selectTrack`, `selectSecondarySubtitle`, `addExternalSubtitle`, `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, `setSubtitleStyle`, `setSubtitleSafeArea`, and `subtitleCues` to draw the lines yourself |
 | **Sections** | `setAbLoop` repeats between two points. `setMarkers` fires an event when playback crosses a position |
 | **Chapters** | `chapterAt`, `seekToChapter`, `nextChapter`, `previousChapter` |

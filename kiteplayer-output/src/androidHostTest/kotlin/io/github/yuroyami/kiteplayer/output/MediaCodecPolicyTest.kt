@@ -48,3 +48,20 @@ class DirectSurfaceGeometryTest {
         kotlin.test.assertNull(directSurfaceGeometryRefusal(stream, applyCodecRotation = true))
     }
 }
+
+class DirectSurfaceDolbyVisionTest {
+    private val stream = io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo(
+        index = 0,
+        kind = io.github.yuroyami.kiteplayer.TrackKind.Video,
+        codec = "hevc",
+    )
+
+    @Test
+    fun `a Dolby Vision base layer that cannot play alone is refused and one that can is kept`() {
+        val profile5 = stream.copy(dolbyVision = io.github.yuroyami.kiteplayer.DolbyVisionInfo(profile = 5, level = 6, baseLayerCompatibility = 0))
+        val profile81 = stream.copy(dolbyVision = io.github.yuroyami.kiteplayer.DolbyVisionInfo(profile = 8, level = 6, baseLayerCompatibility = 1))
+        assertTrue(directSurfaceDolbyVisionRefusal(profile5).orEmpty().contains("profile 5"))
+        kotlin.test.assertNull(directSurfaceDolbyVisionRefusal(profile81))
+        kotlin.test.assertNull(directSurfaceDolbyVisionRefusal(stream))
+    }
+}

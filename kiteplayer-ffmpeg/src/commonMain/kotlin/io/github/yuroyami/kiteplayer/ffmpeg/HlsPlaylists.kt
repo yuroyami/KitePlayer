@@ -107,8 +107,9 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
     val hdr: Boolean = attributes["VIDEO-RANGE"].let { it == "PQ" || it == "HLG" }
 
     /**
-     * True for Dolby Vision profile 5, whose picture has no HDR10 or SDR base layer. Without Dolby
-     * Vision processing its colours come out wrong, so it plays only when nothing else is offered.
+     * True for Dolby Vision profile 5, whose picture has no HDR10 or SDR base layer. The engine
+     * composes each of its frames into HDR10 on the processor, which costs tens of milliseconds a
+     * frame at 1080p and more than a phone has at 4K, so it plays only when nothing else is offered.
      */
     val dolbyVisionOnly: Boolean = codecs.any { it.startsWith("dvh1.05") || it.startsWith("dvhe.05") }
 
@@ -120,10 +121,10 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
 
 /**
  * Chooses the variant to play. A variant with a picture wins over one with sound only, one without
- * Dolby Vision profile 5 over one with it, and SDR over HDR, because the renderers show HDR tone
- * mapped. Among the rest, the variant with the highest bitrate within [maxBitrate] and
- * [maxVideoHeight] plays, and the first one listed wins a tie. When none fits, the one with the
- * lowest bitrate plays.
+ * Dolby Vision profile 5 over one with it, because profile 5 is composed on the processor, and SDR
+ * over HDR, because the renderers show HDR tone mapped. Among the rest, the variant with the
+ * highest bitrate within [maxBitrate] and [maxVideoHeight] plays, and the first one listed wins a
+ * tie. When none fits, the one with the lowest bitrate plays.
  */
 internal fun chooseHlsVariant(variants: List<HlsVariant>, maxBitrate: Long?, maxVideoHeight: Int?): HlsVariant {
     require(variants.isNotEmpty()) { "a master playlist has at least one variant" }

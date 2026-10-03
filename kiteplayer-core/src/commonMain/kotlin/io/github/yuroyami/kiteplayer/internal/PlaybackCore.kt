@@ -10525,6 +10525,7 @@ private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
             channels = stream.channels,
             isCoverArt = stream.isCoverArt,
             metadata = stream.metadata,
+            dolbyVision = stream.dolbyVision,
         )
     },
 )

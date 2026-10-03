@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteffmpeg.Frame as KiteFrame
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
+import io.github.yuroyami.kiteplayer.spi.toneMapPeakNits
 
 /**
  * Turns a decoded CPU-readable frame into tightly packed RGBA on JVM and Android.
@@ -62,7 +63,7 @@ public object SoftwareConverter {
             pixelFormat = info.pixelFormat.toPlayerFormat(),
             colorSpace = info.color.toPlayerColorSpace(info.pixelFormat),
             into = into,
-            hdrPeakNits = frame.hdr?.peakNits,
+            hdrPeakNits = frame.toneMapPeakNits,
         )
     }
 

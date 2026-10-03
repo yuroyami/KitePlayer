@@ -102,6 +102,19 @@ internal fun directSurfaceOutputContract(
 internal fun directSurfaceGeometryRefusal(stream: PlayerStreamInfo, applyCodecRotation: Boolean): String? =
     if (applyCodecRotation && stream.mirrored) "the direct Surface cannot mirror a mirrored stream" else null
 
+/**
+ * Why MediaCodec cannot decode [stream] into a picture that means anything, or null when it can.
+ * A Dolby Vision stream whose base layer does not play alone, such as profile 5, needs every
+ * frame composed with its RPU, and the HEVC and AV1 decoders hand back the base layer alone. The
+ * FFmpeg decoder composes it instead.
+ */
+internal fun directSurfaceDolbyVisionRefusal(stream: PlayerStreamInfo): String? {
+    val dolbyVision = stream.dolbyVision ?: return null
+    if (dolbyVision.baseLayerPlaysAlone) return null
+    return "Dolby Vision profile ${dolbyVision.profileName} needs each frame composed with its RPU, " +
+        "and MediaCodec hands back the base layer alone"
+}
+
 /** A hardware decoder paired with the Surface target owned by one Android video renderer. */
 internal class MediaCodecVideoDecoderFactory(
     private val target: MediaCodecSurfaceTarget,
@@ -116,6 +129,7 @@ internal class MediaCodecVideoDecoderFactory(
         }
         if (stream.kind != TrackKind.Video || !hwdec.allowsMediaCodec()) return null
         directSurfaceGeometryRefusal(stream, applyCodecRotation)?.let { return refuseMediaCodec(hwdec, it) }
+        directSurfaceDolbyVisionRefusal(stream)?.let { return refuseMediaCodec(hwdec, it) }
         val size = stream.videoSize
             ?: return refuseMediaCodec(hwdec, "the stream has no coded video size")
         if (size.width <= 0 || size.height <= 0) {

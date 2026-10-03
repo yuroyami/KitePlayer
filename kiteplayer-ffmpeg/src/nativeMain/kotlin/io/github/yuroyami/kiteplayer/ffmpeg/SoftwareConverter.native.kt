@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.spi.ChromaLocation
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
+import io.github.yuroyami.kiteplayer.spi.toneMapPeakNits
 import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
 import io.github.yuroyami.kiteffmpeg.withPlanes
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -89,7 +90,7 @@ public object SoftwareConverter {
         // path runs: this converter used to skip it, so the same public API
         // returned washed-out pixels here and tone-mapped ones on the JVM. SDR frames answer
         // null and stay bit-exact.
-        HdrToneMap.forColorSpaceOrNull(frame.colorSpace, frame.hdr?.peakNits)?.mapInPlace(out)
+        HdrToneMap.forColorSpaceOrNull(frame.colorSpace, frame.toneMapPeakNits)?.mapInPlace(out)
         return out
     }
 

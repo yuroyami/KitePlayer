@@ -6,7 +6,7 @@ import io.github.yuroyami.kiteplayer.spi.AudioSink
 import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.js.JsAny
 import kotlin.js.Promise
 
@@ -68,7 +68,10 @@ internal class WebAudioWorkletDevice private constructor(
          * to create a player at all.
          */
         suspend fun createOrNull(requestedChannels: Int, blockFrames: Int): WebAudioWorkletDevice? {
-            val state = awaitJs(webAudioSetup(PROCESSOR_SOURCE, requestedChannels, blockFrames)) ?: return null
+            val state = awaitJs(
+                webAudioSetup(PROCESSOR_SOURCE, requestedChannels, blockFrames),
+                discardLate = ::webAudioClose,
+            ) ?: return null
             return WebAudioWorkletDevice(
                 state = state,
                 sampleRate = webAudioSampleRate(state).toInt(),
@@ -283,11 +286,22 @@ private external fun webAudioClose(state: JsAny)
  * The same shape `BindingProof.awaitInt` uses. A rejected `resume()` means the browser refused the
  * gesture, which is a state this sink already handles by playing nothing, so there is nothing here
  * that a thrown exception would tell a caller that null does not.
+ *
+ * Cancellable. A promise may stay pending as long as it likes, as `resume()` may on a page nobody
+ * has touched yet, and a caller that stops waiting must not keep waiting with it (#479). What a
+ * promise fulfils with after its caller stopped waiting goes to [discardLate], so a device built
+ * for a caller who left is closed rather than left running.
  */
-internal suspend fun awaitJs(promise: Promise<JsAny?>): JsAny? =
-    suspendCoroutine { continuation ->
+internal suspend fun awaitJs(promise: Promise<JsAny?>, discardLate: ((JsAny) -> Unit)? = null): JsAny? =
+    suspendCancellableCoroutine { continuation ->
         promise.then(
-            onFulfilled = { value -> continuation.resumeWith(Result.success(value)); value },
-            onRejected = { error -> continuation.resumeWith(Result.success(null)); error },
+            onFulfilled = { value ->
+                continuation.resume(value) { _, late, _ -> late?.let { discardLate?.invoke(it) } }
+                value
+            },
+            onRejected = { error ->
+                continuation.resume(null) { _, _, _ -> }
+                error
+            },
         )
     }

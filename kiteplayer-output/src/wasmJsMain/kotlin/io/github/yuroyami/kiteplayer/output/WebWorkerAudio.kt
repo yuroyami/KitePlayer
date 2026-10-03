@@ -53,7 +53,7 @@ public class WebWorkletAudio private constructor(private val state: JsAny) {
          * what it gives.
          */
         public suspend fun createOrNull(channels: Int = 2): WebWorkletAudio? =
-            awaitJs(webWorkletSetup(PROCESSOR_SOURCE, channels))?.let(::WebWorkletAudio)
+            awaitJs(webWorkletSetup(PROCESSOR_SOURCE, channels), discardLate = ::webWorkletClose)?.let(::WebWorkletAudio)
     }
 }
 

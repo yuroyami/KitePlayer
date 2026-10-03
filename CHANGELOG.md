@@ -267,6 +267,18 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `KitePlayerJava.openQueueAsync` and `addToQueueAsync` copy on the caller's thread, before the
   call runs on another one. A snapshot's `queue` now refuses an edit, also through the
   `java.util.List` a Java caller sees.
+- A long or multi-Period DASH presentation keeps every segment its playlists list (#405). The
+  reader dropped the oldest of its converted subtitle segments past 4,096 and of its joined-Period
+  segments past 8,192, counting every track together, while the playlists still listed them, so
+  two subtitle languages of 70 minutes lost the start of the first, and a one-hour two-Period
+  presentation lost a whole video bitrate. A static presentation now keeps every address for the
+  reader's life, and a live one keeps every address that a track's current or previous playlist
+  lists, and lets the rest go.
+- The DASH reader lets go of the initializations it read for joined Periods and MP4 subtitles
+  (#407). It kept every one until the reader was gone, close included, so a live session that kept
+  adding Periods grew without end. An initialization now goes once nothing still listed refers to
+  it, the oldest go when all of them pass 32 MB, one that went is read again when it is asked for,
+  and closing the reader lets go of all of them.
 
 ### Removed
 

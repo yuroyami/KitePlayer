@@ -91,6 +91,8 @@ internal data class ScriptedSubtitleTrack(
     val isForced: Boolean = false,
     /** False makes the scripted decoder factory refuse this specific track. */
     val decoderAccepted: Boolean = true,
+    /** True makes this track's decoder refuse every packet, as a decoder that is full does. */
+    val refusesPackets: Boolean = false,
 ) {
     val cuesByStart: Map<Long, List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
         cues.groupBy { it.startMicros }
@@ -505,6 +507,7 @@ internal class ScriptedSubtitleDecoder(
 
     override suspend fun send(packet: PlayerPacket?): Boolean {
         if (packet == null) return true
+        if (track.refusesPackets) return false
         val pts = packet.pts?.micros ?: return true
         val cues = track.cuesByStart[pts].orEmpty()
         pending.addAll(cues)

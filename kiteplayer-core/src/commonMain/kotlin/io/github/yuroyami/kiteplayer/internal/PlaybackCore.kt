@@ -8174,8 +8174,12 @@ internal class PlaybackCore(
             session.subtitleQueues.values.forEach { queue ->
                 release("subtitle queue ${queue.streamIndex}") { queue.close() }
             }
+            // A packet a decoder refused is held off its queue for the next pass, so closing the
+            // queues misses it. The secondary track holds one too, which used to be left open (#482).
             runCatching { session.pendingSubtitlePacket?.close() }
             session.pendingSubtitlePacket = null
+            runCatching { session.pendingSubtitle2Packet?.close() }
+            session.pendingSubtitle2Packet = null
             // Closes the sink too: the audio path owns the device it was given. A gapless handoff
             // gave both to the next item, which closes them.
             if (session.ownsAudio) release("audio playback") { session.audio?.close() }

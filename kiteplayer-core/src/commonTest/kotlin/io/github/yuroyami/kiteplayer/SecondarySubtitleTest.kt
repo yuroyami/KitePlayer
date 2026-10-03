@@ -121,4 +121,33 @@ class SecondarySubtitleTest {
         harness.close()
     }
 
+
+    @Test
+    fun aSecondaryPacketItsDecoderRefusedIsClosedWithTheSession() = runTest {
+        // The decoder never takes the packet, so the engine holds it off the queue for a later pass.
+        val refusing = MediaScript(
+            durationUs = 6_000_000,
+            subtitleCues = listOf(cue(500_000, 4_000_000, "primary line")),
+            additionalSubtitleTracks = listOf(
+                ScriptedSubtitleTrack(
+                    index = 3,
+                    cues = listOf(cue(1_500_000, 4_000_000, "secondary line")),
+                    language = "jpn",
+                    refusesPackets = true,
+                ),
+            ),
+        )
+        val harness = CoreHarness(this, script = refusing)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(300.milliseconds)
+        assertTrue(harness.core.selectSecondarySubtitle(TrackId(3)) is TrackChange.Applied)
+        harness.run(700.milliseconds)
+
+        harness.core.stop()
+        harness.run(100.milliseconds)
+        assertEquals(0, harness.ledger.liveCount, "the held secondary packet outlived its session (#482)")
+        assertEquals(0, harness.ledger.doubleCloseCount)
+        harness.close()
+    }
 }

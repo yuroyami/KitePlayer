@@ -257,6 +257,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `MediaIo.networkBitsPerSecond` reports how fast the network delivers a reader's bytes. The
   default answers null. `KtorMediaIo` measures it on its downloads, with the time a response
   waits for the player left out, and the step up reads it (#376).
+- A TTML subtitle document resolves each named style once (#408). A style that named other styles
+  was followed nine levels deep for every element that used it, so a style naming itself ten times
+  took six seconds for one cue, in 155 bytes of input. A loop of style names is now cut at its first
+  repeat, as TTML2 counts it an error, and one document follows at most 100,000 style names.
 
 ### Removed
 

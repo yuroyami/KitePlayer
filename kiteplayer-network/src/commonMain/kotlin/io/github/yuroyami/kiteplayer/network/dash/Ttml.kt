@@ -8,6 +8,13 @@ import kotlin.math.roundToLong
 /** One subtitle cue: its text, with `<i>`, `<b>` and `<u>` and line breaks, from [startMicros] until [endMicros]. */
 internal class TimedCue(val startMicros: Long, val endMicros: Long, val text: String)
 
+/** What reading one TTML document cost, for a test to hold the cost to the document's size. */
+internal class TtmlWork {
+    /** How many named styles had their own attributes read. Each is read at most once per document. */
+    var styleVisits: Int = 0
+        internal set
+}
+
 /**
  * TTML documents as cues (#402), for the subtitle sets of a DASH presentation that FFmpeg cannot
  * read: a sidecar TTML file, and the TTML document in each sample of an `stpp` track. The cues
@@ -23,12 +30,15 @@ internal class TimedCue(val startMicros: Long, val endMicros: Long, val text: St
 internal object Ttml {
 
     /** The cues of [xml], in time order, their times plus [offsetMicros]. */
-    fun cues(xml: String, offsetMicros: Long = 0): List<TimedCue> {
+    fun cues(xml: String, offsetMicros: Long = 0, work: TtmlWork = TtmlWork()): List<TimedCue> {
         val root = XmlMini.parse(xml, XmlMini.Limits(keepContent = true))
         require(root.name == "tt") { "not a TTML document: the root element is <${root.name}>" }
         val clock = Clock(root)
-        val styles = root.child("head")?.child("styling")?.children("style").orEmpty()
-            .mapNotNull { style -> style.attr("id")?.let { it to style } }.toMap()
+        val styles = Styles(
+            root.child("head")?.child("styling")?.children("style").orEmpty()
+                .mapNotNull { style -> style.attr("id")?.let { it to style } }.toMap(),
+            work,
+        )
         val out = ArrayList<TimedCue>()
         val body = root.child("body") ?: return out
         walk(body, 0L, null, Look.NONE, styles, clock, offsetMicros, out)
@@ -40,7 +50,7 @@ internal object Ttml {
         parentBegin: Long,
         parentEnd: Long?,
         inherited: Look,
-        styles: Map<String, XmlElement>,
+        styles: Styles,
         clock: Clock,
         offsetMicros: Long,
         out: MutableList<TimedCue>,
@@ -67,7 +77,7 @@ internal object Ttml {
     private class Run(val text: String, val look: Look)
 
     /** The runs inside [element], in order, with each span in its own look and `br` as a line break. */
-    private fun runs(element: XmlElement, look: Look, styles: Map<String, XmlElement>, preserve: Boolean, out: MutableList<Run>) {
+    private fun runs(element: XmlElement, look: Look, styles: Styles, preserve: Boolean, out: MutableList<Run>) {
         for (node in element.content) {
             when (node) {
                 is XmlText -> {
@@ -110,30 +120,75 @@ internal object Ttml {
 
     private fun escape(text: String): String = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+    /**
+     * The named styles of one document, each resolved once (#408).
+     *
+     * A style's [Effect] is what the styles it names set, each after the styles that one names, and
+     * then its own attributes, so the TTML2 order of overrides holds. It is worked out the first
+     * time anything names the style and kept for the rest of the document. A style that names one
+     * still being worked out is a loop, which TTML2 (10.4.1.3) calls an error: the repeat adds
+     * nothing. Following every chain to a fixed depth instead cost about n^9 visits for a style that
+     * named itself n times, and repeated that for every element that named it.
+     */
+    private class Styles(private val byId: Map<String, XmlElement>, private val work: TtmlWork) {
+        private val resolved = HashMap<String, Effect>()
+        private val resolving = HashSet<String>()
+
+        /** Names left to follow in this document. Past it, a name is ignored, so a hostile document still ends. */
+        private var budget = MAX_STYLE_REFERENCES
+
+        /** What the styles in [names] set, in their order. */
+        fun effectOf(names: String?): Effect {
+            if (names.isNullOrBlank()) return Effect.NONE
+            var effect = Effect.NONE
+            for (name in names.trim().split(WHITESPACE)) {
+                if (budget <= 0) break
+                budget--
+                effect = effect.then(resolve(name))
+            }
+            return effect
+        }
+
+        private fun resolve(id: String): Effect {
+            resolved[id]?.let { return it }
+            if (id in resolving || resolving.size >= MAX_STYLE_CHAIN) return Effect.NONE
+            val style = byId[id] ?: return Effect.NONE
+            resolving += id
+            work.styleVisits++
+            val effect = effectOf(style.attr("style")).then(Effect.of(style))
+            resolving -= id
+            resolved[id] = effect
+            return effect
+        }
+    }
+
+    /** What one source of style sets: each of italic, bold and underline, or null where it says nothing. */
+    private data class Effect(val italic: Boolean?, val bold: Boolean?, val underline: Boolean?) {
+        /** This, with what [later] sets put over it. */
+        fun then(later: Effect): Effect =
+            Effect(later.italic ?: italic, later.bold ?: bold, later.underline ?: underline)
+
+        companion object {
+            val NONE = Effect(null, null, null)
+
+            /** What [source]'s own attributes set. */
+            fun of(source: XmlElement): Effect = Effect(
+                italic = source.attr("fontStyle")?.let { it == "italic" || it == "oblique" },
+                bold = source.attr("fontWeight")?.let { it == "bold" },
+                underline = source.attr("textDecoration")?.let { decoration ->
+                    if ("noUnderline" in decoration) false else if ("underline" in decoration) true else null
+                },
+            )
+        }
+    }
+
     /** Italic, bold and underline as TTML styles them. */
     private data class Look(val italic: Boolean, val bold: Boolean, val underline: Boolean) {
         /** This look under [element]: the styles it names, each after the styles that one names, then its own attributes. */
-        fun with(element: XmlElement, styles: Map<String, XmlElement>): Look {
-            var italic = italic
-            var bold = bold
-            var underline = underline
-            fun apply(source: XmlElement) {
-                source.attr("fontStyle")?.let { italic = it == "italic" || it == "oblique" }
-                source.attr("fontWeight")?.let { bold = it == "bold" }
-                source.attr("textDecoration")?.let { decoration ->
-                    if ("noUnderline" in decoration) underline = false else if ("underline" in decoration) underline = true
-                }
-            }
-            fun applyNamed(names: String?, depth: Int) {
-                if (depth > MAX_STYLE_DEPTH) return
-                names?.split(WHITESPACE)?.mapNotNull { styles[it] }?.forEach { named ->
-                    applyNamed(named.attr("style"), depth + 1)
-                    apply(named)
-                }
-            }
-            if (element.name != "style") applyNamed(element.attr("style"), 0)
-            apply(element)
-            return Look(italic, bold, underline)
+        fun with(element: XmlElement, styles: Styles): Look {
+            val named = if (element.name != "style") styles.effectOf(element.attr("style")) else Effect.NONE
+            val effect = named.then(Effect.of(element))
+            return Look(effect.italic ?: italic, effect.bold ?: bold, effect.underline ?: underline)
         }
 
         fun tags(): List<String> = buildList {
@@ -193,8 +248,18 @@ internal object Ttml {
         }
     }
 
-    /** How deep styles that name other styles are followed, so a loop of names ends. */
-    private const val MAX_STYLE_DEPTH = 8
+    /**
+     * How many style names one document may follow in all. Resolving each style once keeps an
+     * ordinary document far below it; it bounds one whose style attributes name styles thousands of
+     * times over.
+     */
+    private const val MAX_STYLE_REFERENCES = 100_000
+
+    /**
+     * How long a chain of styles naming styles is followed. Each link is a level of recursion, so a
+     * hostile chain of thousands would overflow the stack; no real document comes near it.
+     */
+    private const val MAX_STYLE_CHAIN = 64
 
     private val WHITESPACE = Regex("\\s+")
     private val SPACES = Regex(" {2,}")

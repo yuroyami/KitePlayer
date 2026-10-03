@@ -595,6 +595,7 @@ private fun encodeRenderQuality(value: RenderQuality): JsAny = record {
     put("debandGrain", value.debandGrain)
     put("scaler", value.scaler)
     put("linearLight", value.linearLight)
+    put("animationUpscaler", value.animationUpscaler)
 }
 
 private fun encodeTransform(value: VideoTransform): JsAny = record {
@@ -1309,6 +1310,7 @@ private fun decodeRenderQuality(o: JsAny): RenderQuality {
         debandGrain = o.float("debandGrain") ?: default.debandGrain,
         scaler = o.enum<VideoScaler>("scaler") ?: default.scaler,
         linearLight = o.flag("linearLight"),
+        animationUpscaler = o.enum<AnimationUpscaler>("animationUpscaler") ?: default.animationUpscaler,
     )
 }
 

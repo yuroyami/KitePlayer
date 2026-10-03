@@ -122,6 +122,7 @@ public data class PlayerMemento(
         put("quality.debandGrain", renderQuality.debandGrain.toString())
         put("quality.scaler", renderQuality.scaler.name)
         put("quality.linearLight", renderQuality.linearLight.toString())
+        put("quality.animationUpscaler", renderQuality.animationUpscaler.name)
         put("hdrPolicy", hdrPolicy.name)
         subtitleStyle?.let { style ->
             put("subtitleStyle.present", "true")
@@ -231,6 +232,8 @@ public data class PlayerMemento(
                     debandGrain = properties["quality.debandGrain"]?.toFloat() ?: 48f,
                     scaler = properties["quality.scaler"]?.let { VideoScaler.valueOf(it) } ?: VideoScaler.Bilinear,
                     linearLight = properties["quality.linearLight"]?.toBooleanStrict() ?: false,
+                    animationUpscaler = properties["quality.animationUpscaler"]
+                        ?.let { AnimationUpscaler.valueOf(it) } ?: AnimationUpscaler.Off,
                 ),
                 hdrPolicy = properties["hdrPolicy"]?.let { HdrPolicy.valueOf(it) } ?: HdrPolicy.Auto,
                 videoEnabled = properties["videoEnabled"]?.toBooleanStrict() ?: true,

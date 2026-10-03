@@ -380,7 +380,11 @@ class MementoTest {
             videoScale = VideoScale.Stretch,
             videoTransform = VideoTransform(aspectOverride = 2.35f, zoom = 1.1f),
             videoAdjustments = VideoAdjustments(saturation = 0.5f, gamma = 1.6f),
-            renderQuality = RenderQuality(dither = true, scaler = VideoScaler.CatmullRom),
+            renderQuality = RenderQuality(
+                dither = true,
+                scaler = VideoScaler.CatmullRom,
+                animationUpscaler = AnimationUpscaler.Quality,
+            ),
             hdrPolicy = HdrPolicy.ToneMap,
             videoEnabled = false,
         )

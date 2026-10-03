@@ -1,3 +1,12 @@
+public final class io/github/yuroyami/kiteplayer/AnimationUpscaler : java/lang/Enum {
+	public static final field Fast Lio/github/yuroyami/kiteplayer/AnimationUpscaler;
+	public static final field Off Lio/github/yuroyami/kiteplayer/AnimationUpscaler;
+	public static final field Quality Lio/github/yuroyami/kiteplayer/AnimationUpscaler;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/AnimationUpscaler;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/AnimationUpscaler;
+}
+
 public final class io/github/yuroyami/kiteplayer/AudioClockSnapshot {
 	public final fun getGeneration-exH1Oj8 ()J
 	public final fun getHostTimeNanos ()J
@@ -2112,8 +2121,8 @@ public final class io/github/yuroyami/kiteplayer/QueueConfigBuilder {
 public final class io/github/yuroyami/kiteplayer/RenderQuality {
 	public static final field Companion Lio/github/yuroyami/kiteplayer/RenderQuality$Companion;
 	public fun <init> ()V
-	public fun <init> (ZZFFFLio/github/yuroyami/kiteplayer/VideoScaler;Z)V
-	public synthetic fun <init> (ZZFFFLio/github/yuroyami/kiteplayer/VideoScaler;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (ZZFFFLio/github/yuroyami/kiteplayer/VideoScaler;ZLio/github/yuroyami/kiteplayer/AnimationUpscaler;)V
+	public synthetic fun <init> (ZZFFFLio/github/yuroyami/kiteplayer/VideoScaler;ZLio/github/yuroyami/kiteplayer/AnimationUpscaler;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Z
 	public final fun component2 ()Z
 	public final fun component3 ()F
@@ -2121,9 +2130,11 @@ public final class io/github/yuroyami/kiteplayer/RenderQuality {
 	public final fun component5 ()F
 	public final fun component6 ()Lio/github/yuroyami/kiteplayer/VideoScaler;
 	public final fun component7 ()Z
-	public final fun copy (ZZFFFLio/github/yuroyami/kiteplayer/VideoScaler;Z)Lio/github/yuroyami/kiteplayer/RenderQuality;
-	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/RenderQuality;ZZFFFLio/github/yuroyami/kiteplayer/VideoScaler;ZILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/RenderQuality;
+	public final fun component8 ()Lio/github/yuroyami/kiteplayer/AnimationUpscaler;
+	public final fun copy (ZZFFFLio/github/yuroyami/kiteplayer/VideoScaler;ZLio/github/yuroyami/kiteplayer/AnimationUpscaler;)Lio/github/yuroyami/kiteplayer/RenderQuality;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/RenderQuality;ZZFFFLio/github/yuroyami/kiteplayer/VideoScaler;ZLio/github/yuroyami/kiteplayer/AnimationUpscaler;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/RenderQuality;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAnimationUpscaler ()Lio/github/yuroyami/kiteplayer/AnimationUpscaler;
 	public final fun getDeband ()Z
 	public final fun getDebandGrain ()F
 	public final fun getDebandRange ()F

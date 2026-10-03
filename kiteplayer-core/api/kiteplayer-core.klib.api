@@ -304,6 +304,18 @@ final enum class io.github.yuroyami.kiteplayer.subtitle/CueWrap : kotlin/Enum<io
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.subtitle/CueWrap> // io.github.yuroyami.kiteplayer.subtitle/CueWrap.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer/AnimationUpscaler : kotlin/Enum<io.github.yuroyami.kiteplayer/AnimationUpscaler> { // io.github.yuroyami.kiteplayer/AnimationUpscaler|null[0]
+    enum entry Fast // io.github.yuroyami.kiteplayer/AnimationUpscaler.Fast|null[0]
+    enum entry Off // io.github.yuroyami.kiteplayer/AnimationUpscaler.Off|null[0]
+    enum entry Quality // io.github.yuroyami.kiteplayer/AnimationUpscaler.Quality|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer/AnimationUpscaler.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer/AnimationUpscaler> // io.github.yuroyami.kiteplayer/AnimationUpscaler.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer/AnimationUpscaler // io.github.yuroyami.kiteplayer/AnimationUpscaler.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/AnimationUpscaler> // io.github.yuroyami.kiteplayer/AnimationUpscaler.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer/CorruptPackets : kotlin/Enum<io.github.yuroyami.kiteplayer/CorruptPackets> { // io.github.yuroyami.kiteplayer/CorruptPackets|null[0]
     enum entry Drop // io.github.yuroyami.kiteplayer/CorruptPackets.Drop|null[0]
     enum entry Keep // io.github.yuroyami.kiteplayer/CorruptPackets.Keep|null[0]
@@ -3329,8 +3341,10 @@ final class io.github.yuroyami.kiteplayer/QueueConfigBuilder { // io.github.yuro
 }
 
 final class io.github.yuroyami.kiteplayer/RenderQuality { // io.github.yuroyami.kiteplayer/RenderQuality|null[0]
-    constructor <init>(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer/VideoScaler = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/RenderQuality.<init>|<init>(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Float;kotlin.Float;io.github.yuroyami.kiteplayer.VideoScaler;kotlin.Boolean){}[0]
+    constructor <init>(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer/VideoScaler = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/AnimationUpscaler = ...) // io.github.yuroyami.kiteplayer/RenderQuality.<init>|<init>(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Float;kotlin.Float;io.github.yuroyami.kiteplayer.VideoScaler;kotlin.Boolean;io.github.yuroyami.kiteplayer.AnimationUpscaler){}[0]
 
+    final val animationUpscaler // io.github.yuroyami.kiteplayer/RenderQuality.animationUpscaler|{}animationUpscaler[0]
+        final fun <get-animationUpscaler>(): io.github.yuroyami.kiteplayer/AnimationUpscaler // io.github.yuroyami.kiteplayer/RenderQuality.animationUpscaler.<get-animationUpscaler>|<get-animationUpscaler>(){}[0]
     final val deband // io.github.yuroyami.kiteplayer/RenderQuality.deband|{}deband[0]
         final fun <get-deband>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/RenderQuality.deband.<get-deband>|<get-deband>(){}[0]
     final val debandGrain // io.github.yuroyami.kiteplayer/RenderQuality.debandGrain|{}debandGrain[0]
@@ -3355,7 +3369,8 @@ final class io.github.yuroyami.kiteplayer/RenderQuality { // io.github.yuroyami.
     final fun component5(): kotlin/Float // io.github.yuroyami.kiteplayer/RenderQuality.component5|component5(){}[0]
     final fun component6(): io.github.yuroyami.kiteplayer/VideoScaler // io.github.yuroyami.kiteplayer/RenderQuality.component6|component6(){}[0]
     final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer/RenderQuality.component7|component7(){}[0]
-    final fun copy(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer/VideoScaler = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/RenderQuality // io.github.yuroyami.kiteplayer/RenderQuality.copy|copy(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Float;kotlin.Float;io.github.yuroyami.kiteplayer.VideoScaler;kotlin.Boolean){}[0]
+    final fun component8(): io.github.yuroyami.kiteplayer/AnimationUpscaler // io.github.yuroyami.kiteplayer/RenderQuality.component8|component8(){}[0]
+    final fun copy(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer/VideoScaler = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/AnimationUpscaler = ...): io.github.yuroyami.kiteplayer/RenderQuality // io.github.yuroyami.kiteplayer/RenderQuality.copy|copy(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Float;kotlin.Float;io.github.yuroyami.kiteplayer.VideoScaler;kotlin.Boolean;io.github.yuroyami.kiteplayer.AnimationUpscaler){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/RenderQuality.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/RenderQuality.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/RenderQuality.toString|toString(){}[0]

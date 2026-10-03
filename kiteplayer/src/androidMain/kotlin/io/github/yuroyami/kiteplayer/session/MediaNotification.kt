@@ -227,7 +227,9 @@ internal class MediaNotificationHandle(
 
     init {
         manager.createNotificationChannel(
-            NotificationChannel(options.channelId, options.channelName, NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(options.channelId, options.channelName, NotificationManager.IMPORTANCE_LOW).apply {
+                if (playbackChannelHidesBadge(Build.VERSION.SDK_INT)) setShowBadge(false)
+            },
         )
         options.contentIntent?.let(session::setSessionActivity)
         onMain { if (!closed) MediaNotificationRegistry.attach(this) }
@@ -395,6 +397,14 @@ internal class MediaNotificationHandle(
         if (Looper.myLooper() == Looper.getMainLooper()) block() else main.post(block)
     }
 }
+
+/**
+ * Whether the playback channel asks for no dot on the launcher icon. Android 8.0 and 8.1 put one there
+ * for every channel that does not ask, so a playing item looked like a message waiting; from Android 9
+ * the system leaves a media notification's dot off by itself (#426). A channel the application created
+ * first under the same id keeps its own choice, because Android does not change it on a second creation.
+ */
+internal fun playbackChannelHidesBadge(sdk: Int): Boolean = sdk < Build.VERSION_CODES.P
 
 /** Rounded up, so the timer never fires before the machine's own clock says the wait is over. */
 private fun Duration.inWholeMillisecondsRoundedUp(): Long = (inWholeMicroseconds + 999) / 1000

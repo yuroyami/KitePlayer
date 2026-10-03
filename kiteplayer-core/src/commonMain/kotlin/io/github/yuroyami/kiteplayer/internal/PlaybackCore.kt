@@ -853,7 +853,21 @@ internal class PlaybackCore(
     private var liveCheckedAtNanos: Long = NO_POSITION
 
     /** The speed the pipelines run at: the caller's, times the external clock's and the live trims. */
-    private val effectiveSpeed: Double get() = speed * externalTrim * liveTrim
+    private val effectiveSpeed: Double get() = pipelineSpeed(speed)
+
+    /**
+     * [requested] times the external clock's and the live trims, held inside the tempo stage's range.
+     *
+     * A trim corrects a drift of a fraction of a percent, so at either end of the legal range it
+     * saturates rather than asking the pipeline for a speed it refuses, which failed the session at
+     * 4x or 0.25x as soon as the clock pulled outwards (#413). A requested speed outside the range is
+     * left for the pipeline to refuse, as before.
+     */
+    private fun pipelineSpeed(requested: Double): Double {
+        val trimmed = requested * externalTrim * liveTrim
+        if (requested < TempoStage.MIN_SPEED || requested > TempoStage.MAX_SPEED) return trimmed
+        return trimmed.coerceIn(TempoStage.MIN_SPEED, TempoStage.MAX_SPEED)
+    }
 
     /** Whether speed keeps pitch, seeded from config. A live change applies at once, like speed. */
     private var preservePitch: Boolean = config.audio.preservePitch
@@ -2136,8 +2150,8 @@ internal class PlaybackCore(
                 // schedule paces at the rate the clock reports, so it changes at the same moment.
                 // Nothing stops, nothing is flushed, and an unseekable source changes speed too.
                 val failure = runCatching {
-                    active?.audio?.speed = command.value * externalTrim * liveTrim
-                    active?.video?.speed = command.value * externalTrim * liveTrim
+                    active?.audio?.speed = pipelineSpeed(command.value)
+                    active?.video?.speed = pipelineSpeed(command.value)
                 }.exceptionOrNull()
                 if (failure != null) {
                     command.reply.completeExceptionally(failure)

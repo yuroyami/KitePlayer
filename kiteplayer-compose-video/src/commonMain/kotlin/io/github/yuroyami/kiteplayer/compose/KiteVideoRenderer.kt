@@ -136,8 +136,9 @@ internal class KiteVideoRenderer(
      * The render-quality ladder reaches TWO places from here, and it has to reach both.
      *
      * The scaler is Compose's own: the draw phase enlarges the published image, so the kernel is
-     * a `filterQuality` on that one call. Dithering and debanding are not Compose's to do, so
-     * they go on to the platform GPU tier, which is the only thing in this path holding a shader.
+     * a `filterQuality` on that one call. Dithering, debanding and the animation upscaler are not
+     * Compose's to do, so they go on to the platform GPU tier, which is the only thing in this path
+     * holding a shader.
      * Forgetting the second half is why a dither could be switched on and change nothing on the
      * Android GPU tier: the engine talks to THIS renderer, never to the one underneath it.
      */

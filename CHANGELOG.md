@@ -279,6 +279,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   adding Periods grew without end. An initialization now goes once nothing still listed refers to
   it, the oldest go when all of them pass 32 MB, one that went is read again when it is asked for,
   and closing the reader lets go of all of them.
+- `RenderQuality.animationUpscaler` enlarges animation with a network trained on line art and flat
+  colour (#67): Anime4K v3.2's CNN x2 networks by bloc97, MIT, ported as two tiers. `Fast` runs the
+  small network, for phones, and `Quality` the medium one, for tablets and desktops. The Android
+  GPU renderer runs it when the picture is drawn at more than 1.2 times its own size, doubling the
+  picture before the scaler takes it the rest of the way, and skips it, with one log line, on a GPU
+  that cannot draw into half floats. It is off by default and costs memory, about 50 MB for a 720p
+  film with `Fast`. The Metal renderer does not run it yet (#421). `AnimationUpscaleDeviceTest`
+  checks both tiers against a CPU reference and logs what a frame costs on the device.
 
 ### Removed
 

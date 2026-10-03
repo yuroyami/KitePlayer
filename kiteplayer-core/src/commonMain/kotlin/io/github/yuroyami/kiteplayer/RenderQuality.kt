@@ -74,6 +74,8 @@ public data class RenderQuality(
      * picture is one more at twice that size, so this costs memory as well as time: about 50 MB for
      * a 720p film with [AnimationUpscaler.Fast], and several times that for 1080p with
      * [AnimationUpscaler.Quality]. A GPU that cannot render to half floats skips it.
+     *
+     * The Android GPU renderer runs it. The Metal renderer ignores it until #421.
      */
     public val animationUpscaler: AnimationUpscaler = AnimationUpscaler.Off,
 ) {

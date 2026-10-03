@@ -104,6 +104,12 @@ public class AndroidGpuImageVideoRenderer(
      * source's size to the viewport's. A 480p film on a 1080p phone goes from about 8 MB to about
      * 50 MB. It is bounded by the display and it is opt-in, which is why the cost is taken rather
      * than capped, but it is a cost and it belongs next to the switch that spends it.
+     *
+     * The animation upscaler lets the blit enlarge for the same reason, and runs ahead of it: the
+     * picture is drawn at its own size, debanded there if asked, the network doubles it, and the
+     * blit then takes the doubled picture to the viewport with the kernel, the colour controls and
+     * the dither. It runs only past the network's 1.2x rule, and a GPU that cannot draw into half
+     * floats skips it, once, with a log line saying why.
      */
     override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
         bridge.ditherStep.set(if (quality.dither) 1f / 255f else 0f)
@@ -114,6 +120,7 @@ public class AndroidGpuImageVideoRenderer(
         bridge.debandGrain.set(if (quality.deband) quality.debandGrain / 16384f else 0f)
         bridge.bicubic.set(quality.scaler == io.github.yuroyami.kiteplayer.VideoScaler.CatmullRom)
         bridge.linearLight.set(quality.linearLight)
+        bridge.animationUpscaler.set(quality.animationUpscaler)
     }
 
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
@@ -436,6 +443,9 @@ private class OesRgbaBridge(
 
     /** True scales in linear light: each tap is decoded to light before it is weighted. */
     val linearLight = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** The animation upscaler's tier. Off is the blit alone, bit for bit. */
+    val animationUpscaler = AtomicReference(io.github.yuroyami.kiteplayer.AnimationUpscaler.Off)
     private val startup = AtomicReference<Result<GlState>>()
     private val ready = CountDownLatch(1)
     @Volatile private var closed = false
@@ -464,6 +474,7 @@ private class OesRgbaBridge(
                         debandGrain,
                         bicubic,
                         linearLight,
+                        animationUpscaler,
                         publish,
                         recordSuperseded,
                         reportFailure,
@@ -604,32 +615,17 @@ internal class GlState private constructor(
     private val texture: Int,
     private val surfaceTexture: SurfaceTexture,
     val decoderSurface: Surface,
-    private val program: Int,
-    private val position: Int,
-    private val texCoord: Int,
-    private val sampler: Int,
-    private val texMatrixUniform: Int,
-    private val colorMatrixUniform: Int,
-    private val colorOffsetUniform: Int,
-    private val colorEnabledUniform: Int,
-    private val gammaExponentUniform: Int,
-    private val gammaEnabledUniform: Int,
+    /** The production blit, over MediaCodec's external texture. */
+    private val blit: BlitProgram,
     /** The packed colour law, written by setAdjustments on any thread. */
     private val adjust: AtomicReference<FloatArray?>,
     private val ditherStep: java.util.concurrent.atomic.AtomicReference<Float>,
-    private val ditherStepUniform: Int,
     private val debandThreshold: java.util.concurrent.atomic.AtomicReference<Float>,
     private val debandRange: java.util.concurrent.atomic.AtomicReference<Float>,
     private val debandGrain: java.util.concurrent.atomic.AtomicReference<Float>,
     private val bicubic: java.util.concurrent.atomic.AtomicBoolean,
     private val linearLight: java.util.concurrent.atomic.AtomicBoolean,
-    private val debandThresholdUniform: Int,
-    private val debandRangeUniform: Int,
-    private val debandGrainUniform: Int,
-    private val debandSeedUniform: Int,
-    private val sourceSizeUniform: Int,
-    private val bicubicUniform: Int,
-    private val linearLightUniform: Int,
+    private val animationUpscaler: AtomicReference<io.github.yuroyami.kiteplayer.AnimationUpscaler>,
 ) : AutoCloseable {
     /** Advances per draw so the debanding ring and its grain do not sit still. */
     private val debandSeed = java.util.concurrent.atomic.AtomicInteger(0)
@@ -648,6 +644,15 @@ internal class GlState private constructor(
     private val queueFence = Any()
     private val allQueues = mutableSetOf<OutputQueue>()
 
+    /** The network for the chosen tier, held only while a picture needs it. */
+    private var upscale: AnimationUpscaleGl? = null
+
+    /** The blit body over an ordinary texture, which is what the doubled picture is. */
+    private var plainBlit: BlitProgram? = null
+
+    /** Tiers this context could not run, each logged once and never tried again. */
+    private val refusedUpscalers = mutableSetOf<io.github.yuroyami.kiteplayer.AnimationUpscaler>()
+
     private fun configure(
         size: VideoSize,
         rotationDegrees: Int,
@@ -656,8 +661,9 @@ internal class GlState private constructor(
     ) {
         if (closed || size.width <= 0 || size.height <= 0) return
         val rotation = normalizedGpuQuarterTurn(rotationDegrees)
-        val outputSize =
-            fittedGpuOutputSize(size, rotation, requestedViewport.get(), bicubic.get())
+        val enlarge = bicubic.get() ||
+            animationUpscaler.get() != io.github.yuroyami.kiteplayer.AnimationUpscaler.Off
+        val outputSize = fittedGpuOutputSize(size, rotation, requestedViewport.get(), enlarge)
         val sourceChanged = size != configuredSourceSize
         val metadataChanged =
             sourceChanged || rotation != configuredRotation || colorSpace != configuredColorSpace ||
@@ -734,45 +740,27 @@ internal class GlState private constructor(
         try {
             surfaceTexture.getTransformMatrix(transform)
             makeCurrent(outputSurface)
-            GLES20.glViewport(0, 0, outputSize.width, outputSize.height)
-            GLES20.glUseProgram(program)
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture)
-            GLES20.glUniform1i(sampler, 0)
-            GLES20.glUniformMatrix4fv(texMatrixUniform, 1, false, transform, 0)
-            // The picture controls at the one hook the direct-to-Surface tier has.
-            val packed = adjust.get()
-            if (packed == null) {
-                GLES20.glUniform1f(colorEnabledUniform, 0f)
-                GLES20.glUniform1f(gammaEnabledUniform, 0f)
-            } else {
-                GLES20.glUniformMatrix3fv(colorMatrixUniform, 1, false, packed, 0)
-                GLES20.glUniform3f(colorOffsetUniform, packed[9], packed[10], packed[11])
-                GLES20.glUniform1f(colorEnabledUniform, packed[12])
-                GLES20.glUniform1f(gammaExponentUniform, packed[13])
-                GLES20.glUniform1f(gammaEnabledUniform, packed[14])
+            val seed = (debandSeed.getAndIncrement() % 1024).toFloat()
+            val upscaler = upscalerFor(sourceSize, outputSize)
+            if (upscaler == null || !drawUpscaledOrRefuse(upscaler, outputSize, seed)) {
+                GLES20.glViewport(0, 0, outputSize.width, outputSize.height)
+                blit.draw(
+                    GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                    texture,
+                    transform,
+                    TEX_COORDS,
+                    sourceSize.width,
+                    sourceSize.height,
+                    adjust.get(),
+                    ditherStep.get(),
+                    debandThreshold.get(),
+                    debandRange.get(),
+                    debandGrain.get(),
+                    seed,
+                    bicubic.get(),
+                    linearLight.get(),
+                )
             }
-            // The source's own size, which is what makes a tap offset mean one SOURCE texel
-            // rather than one output texel. The vertex half turns it into the two step vectors.
-            GLES20.glUniform2f(
-                sourceSizeUniform,
-                sourceSize.width.coerceAtLeast(1).toFloat(),
-                sourceSize.height.coerceAtLeast(1).toFloat(),
-            )
-            GLES20.glUniform1f(ditherStepUniform, ditherStep.get())
-            GLES20.glUniform1f(debandThresholdUniform, debandThreshold.get())
-            GLES20.glUniform1f(debandRangeUniform, debandRange.get())
-            GLES20.glUniform1f(debandGrainUniform, debandGrain.get())
-            GLES20.glUniform1f(debandSeedUniform, (debandSeed.getAndIncrement() % 1024).toFloat())
-            GLES20.glUniform1f(bicubicUniform, if (bicubic.get()) 1f else 0f)
-            GLES20.glUniform1f(linearLightUniform, if (linearLight.get()) 1f else 0f)
-            GLES20.glEnableVertexAttribArray(position)
-            GLES20.glEnableVertexAttribArray(texCoord)
-            VERTICES.position(0)
-            TEX_COORDS.position(0)
-            GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 0, VERTICES)
-            GLES20.glVertexAttribPointer(texCoord, 2, GLES20.GL_FLOAT, false, 0, TEX_COORDS)
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
             glCheck("draw external texture")
             // API 33 exposes Image.getFence(), so that path waits on a second handler and lets this
             // GL thread pipeline subsequent blits. API 29-32 have no public acquire-fence API for
@@ -786,6 +774,78 @@ internal class GlState private constructor(
             check(queue.cancelOutput()) { "the failed RGBA swap lost its output ownership" }
             throw failure
         }
+    }
+
+    /**
+     * The network for this frame, sized for its source, or null for the blit alone: when no tier
+     * is chosen, when the picture is not enlarged past the network's rule, or when this context
+     * refused the tier. A picture that stops needing the network gives its textures back.
+     */
+    private fun upscalerFor(sourceSize: VideoSize, outputSize: VideoSize): AnimationUpscaleGl? {
+        val tier = animationUpscaler.get()
+        val network = Anime4kNetwork.of(tier)
+        if (network == null || tier in refusedUpscalers) {
+            releaseUpscaler()
+            return null
+        }
+        if (!Anime4kNetwork.runsAt(sourceSize.width, sourceSize.height, outputSize.width, outputSize.height)) {
+            upscale?.releaseTextures()
+            return null
+        }
+        return try {
+            val current = upscale?.takeIf { it.network === network } ?: run {
+                releaseUpscaler()
+                AnimationUpscaleGl.create(network).also { upscale = it }
+            }
+            if (plainBlit == null) plainBlit = BlitProgram(linkProgram(VERTEX_SHADER, PLAIN_FRAGMENT_SHADER))
+            current.resize(sourceSize.width, sourceSize.height)
+            current
+        } catch (failure: Exception) {
+            refuseUpscaler(tier, failure)
+            null
+        }
+    }
+
+    private fun drawUpscaledOrRefuse(upscaler: AnimationUpscaleGl, outputSize: VideoSize, seed: Float): Boolean =
+        try {
+            drawUpscaled(
+                upscaler,
+                blit,
+                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                texture,
+                transform,
+                checkNotNull(plainBlit),
+                0,
+                outputSize.width,
+                outputSize.height,
+                adjust.get(),
+                ditherStep.get(),
+                debandThreshold.get(),
+                debandRange.get(),
+                debandGrain.get(),
+                seed,
+                bicubic.get(),
+                linearLight.get(),
+            )
+            glCheck("draw the upscaled picture")
+            true
+        } catch (failure: Exception) {
+            refuseUpscaler(animationUpscaler.get(), failure)
+            false
+        }
+
+    private fun refuseUpscaler(tier: io.github.yuroyami.kiteplayer.AnimationUpscaler, failure: Exception) {
+        refusedUpscalers += tier
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        releaseUpscaler()
+        // A failed pass can leave an error flag behind, and the blit's own check must not read it.
+        for (attempt in 0 until 16) if (GLES20.glGetError() == GLES20.GL_NO_ERROR) break
+        KiteLog.log(UPSCALE_LOG_TAG, "the animation upscaler's $tier tier is off on this GPU: ${failure.message}")
+    }
+
+    private fun releaseUpscaler() {
+        upscale?.close()
+        upscale = null
     }
 
     private fun rebuildOutput() {
@@ -949,8 +1009,11 @@ internal class GlState private constructor(
         failure = cleanupFailure(failure) { destroyOutput(force = true) }
         failure = cleanupFailure(failure, decoderSurface::release)
         failure = cleanupFailure(failure, surfaceTexture::release)
+        failure = cleanupFailure(failure) { releaseUpscaler() }
         failure = cleanupFailure(failure) {
-            GLES20.glDeleteProgram(program)
+            GLES20.glDeleteProgram(blit.program)
+            plainBlit?.let { GLES20.glDeleteProgram(it.program) }
+            plainBlit = null
             GLES20.glDeleteTextures(1, intArrayOf(texture), 0)
             glCheck("delete bridge resources")
         }
@@ -1226,8 +1289,28 @@ internal class GlState private constructor(
 
         const val FRAGMENT_SHADER = EXTERNAL_SAMPLER_HEADER + FRAGMENT_BODY
 
-        /** The device test's program: same body, ordinary sampler. */
-        const val TEST_FRAGMENT_SHADER = PLAIN_SAMPLER_HEADER + FRAGMENT_BODY
+        /**
+         * The same body over an ordinary texture: what draws the animation upscaler's doubled
+         * picture, and what the device tests compile.
+         */
+        const val PLAIN_FRAGMENT_SHADER = PLAIN_SAMPLER_HEADER + FRAGMENT_BODY
+
+        /**
+         * The quad's texture coordinates turned upside down, for drawing a picture into a texture
+         * whose row 0 is the picture's TOP row, which is the animation upscaler's picture space.
+         * The blit's coordinates put the picture's bottom row at row 0, as GL does.
+         */
+        val TEX_COORDS_TOP_FIRST: ByteBuffer = floatBuffer(0f, 1f, 1f, 1f, 0f, 0f, 1f, 0f)
+
+        /** The texture matrix that draws a top-first texture upright: t becomes 1 - t. */
+        val TOP_FIRST_TEXTURE_MATRIX: FloatArray = floatArrayOf(
+            1f, 0f, 0f, 0f,
+            0f, -1f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            0f, 1f, 0f, 1f,
+        )
+
+        const val UPSCALE_LOG_TAG = "KiteGpuBridge"
 
         /**
          * The Android half: the engine's ONE colour-matrix law and its gamma curve, packed for
@@ -1262,6 +1345,7 @@ internal class GlState private constructor(
             debandGrain: java.util.concurrent.atomic.AtomicReference<Float>,
             bicubic: java.util.concurrent.atomic.AtomicBoolean,
             linearLight: java.util.concurrent.atomic.AtomicBoolean,
+            animationUpscaler: AtomicReference<io.github.yuroyami.kiteplayer.AnimationUpscaler>,
             publish: (AndroidGpuImageFrame) -> Unit,
             recordSuperseded: (Long) -> Unit,
             reportFailure: (Throwable) -> Unit,
@@ -1341,29 +1425,7 @@ internal class GlState private constructor(
                 }
                 decoderSurface = Surface(surfaceTexture)
                 program = linkProgram(VERTEX_SHADER, FRAGMENT_SHADER)
-                val position = GLES20.glGetAttribLocation(program, "aPosition")
-                val texCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
-                val sampler = GLES20.glGetUniformLocation(program, "uTexture")
-                val texMatrixUniform = GLES20.glGetUniformLocation(program, "uTexMatrix")
-                val colorMatrixUniform = GLES20.glGetUniformLocation(program, "uColorMatrix")
-                val colorOffsetUniform = GLES20.glGetUniformLocation(program, "uColorOffset")
-                val colorEnabledUniform = GLES20.glGetUniformLocation(program, "uColorEnabled")
-                val gammaExponentUniform = GLES20.glGetUniformLocation(program, "uGammaExponent")
-                val gammaEnabledUniform = GLES20.glGetUniformLocation(program, "uGammaEnabled")
-                val ditherStepUniform = GLES20.glGetUniformLocation(program, "uDitherStep")
-                val debandThresholdUniform = GLES20.glGetUniformLocation(program, "uDebandThreshold")
-                val debandRangeUniform = GLES20.glGetUniformLocation(program, "uDebandRange")
-                val debandGrainUniform = GLES20.glGetUniformLocation(program, "uDebandGrain")
-                val debandSeedUniform = GLES20.glGetUniformLocation(program, "uDebandSeed")
-                val sourceSizeUniform = GLES20.glGetUniformLocation(program, "uSourceSize")
-                val bicubicUniform = GLES20.glGetUniformLocation(program, "uBicubic")
-                val linearLightUniform = GLES20.glGetUniformLocation(program, "uLinearLight")
-                check(
-                    position >= 0 && texCoord >= 0 && sampler >= 0 &&
-                        texMatrixUniform >= 0 && sourceSizeUniform >= 0,
-                ) {
-                    "Android GPU image shader interface was optimized away"
-                }
+                val blit = BlitProgram(program)
                 val state = GlState(
                     handler = handler,
                     imageHandler = imageHandler,
@@ -1379,31 +1441,15 @@ internal class GlState private constructor(
                     texture = texture,
                     surfaceTexture = surfaceTexture,
                     decoderSurface = decoderSurface,
-                    program = program,
-                    position = position,
-                    texCoord = texCoord,
-                    sampler = sampler,
-                    texMatrixUniform = texMatrixUniform,
-                    colorMatrixUniform = colorMatrixUniform,
-                    colorOffsetUniform = colorOffsetUniform,
-                    colorEnabledUniform = colorEnabledUniform,
-                    gammaExponentUniform = gammaExponentUniform,
-                    gammaEnabledUniform = gammaEnabledUniform,
+                    blit = blit,
                     adjust = adjust,
                     ditherStep = ditherStep,
-                    ditherStepUniform = ditherStepUniform,
                     debandThreshold = debandThreshold,
                     debandRange = debandRange,
                     debandGrain = debandGrain,
                     bicubic = bicubic,
                     linearLight = linearLight,
-                    debandThresholdUniform = debandThresholdUniform,
-                    debandRangeUniform = debandRangeUniform,
-                    debandGrainUniform = debandGrainUniform,
-                    debandSeedUniform = debandSeedUniform,
-                    sourceSizeUniform = sourceSizeUniform,
-                    bicubicUniform = bicubicUniform,
-                    linearLightUniform = linearLightUniform,
+                    animationUpscaler = animationUpscaler,
                 )
                 surfaceTexture.setOnFrameAvailableListener(
                     {
@@ -1449,6 +1495,99 @@ internal class GlState private constructor(
                 throw requireNotNull(teardownFailure)
             }
         }
+    }
+}
+
+/**
+ * The blit's program and where its inputs go. The production blit reads MediaCodec's external
+ * texture through [GlState.FRAGMENT_SHADER]; the same body over an ordinary texture,
+ * [GlState.PLAIN_FRAGMENT_SHADER], draws the animation upscaler's doubled picture.
+ */
+internal class BlitProgram(val program: Int) {
+    private val position = GLES20.glGetAttribLocation(program, "aPosition")
+    private val texCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
+    private val sampler = GLES20.glGetUniformLocation(program, "uTexture")
+    private val texMatrixUniform = GLES20.glGetUniformLocation(program, "uTexMatrix")
+    private val colorMatrixUniform = GLES20.glGetUniformLocation(program, "uColorMatrix")
+    private val colorOffsetUniform = GLES20.glGetUniformLocation(program, "uColorOffset")
+    private val colorEnabledUniform = GLES20.glGetUniformLocation(program, "uColorEnabled")
+    private val gammaExponentUniform = GLES20.glGetUniformLocation(program, "uGammaExponent")
+    private val gammaEnabledUniform = GLES20.glGetUniformLocation(program, "uGammaEnabled")
+    private val ditherStepUniform = GLES20.glGetUniformLocation(program, "uDitherStep")
+    private val debandThresholdUniform = GLES20.glGetUniformLocation(program, "uDebandThreshold")
+    private val debandRangeUniform = GLES20.glGetUniformLocation(program, "uDebandRange")
+    private val debandGrainUniform = GLES20.glGetUniformLocation(program, "uDebandGrain")
+    private val debandSeedUniform = GLES20.glGetUniformLocation(program, "uDebandSeed")
+    private val sourceSizeUniform = GLES20.glGetUniformLocation(program, "uSourceSize")
+    private val bicubicUniform = GLES20.glGetUniformLocation(program, "uBicubic")
+    private val linearLightUniform = GLES20.glGetUniformLocation(program, "uLinearLight")
+
+    init {
+        check(
+            position >= 0 && texCoord >= 0 && sampler >= 0 &&
+                texMatrixUniform >= 0 && sourceSizeUniform >= 0,
+        ) {
+            "Android GPU image shader interface was optimized away"
+        }
+    }
+
+    /**
+     * Draws [texture] over the bound framebuffer's viewport. [texCoords] says which way up the
+     * picture lands, and [sourceWidth] by [sourceHeight] is the size of what [texture] holds.
+     */
+    fun draw(
+        textureTarget: Int,
+        texture: Int,
+        textureMatrix: FloatArray,
+        texCoords: ByteBuffer,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        adjust: FloatArray?,
+        ditherStep: Float,
+        debandThreshold: Float,
+        debandRange: Float,
+        debandGrain: Float,
+        debandSeed: Float,
+        bicubic: Boolean,
+        linearLight: Boolean,
+    ) {
+        GLES20.glUseProgram(program)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(textureTarget, texture)
+        GLES20.glUniform1i(sampler, 0)
+        GLES20.glUniformMatrix4fv(texMatrixUniform, 1, false, textureMatrix, 0)
+        // The picture controls at the one hook the direct-to-Surface tier has.
+        if (adjust == null) {
+            GLES20.glUniform1f(colorEnabledUniform, 0f)
+            GLES20.glUniform1f(gammaEnabledUniform, 0f)
+        } else {
+            GLES20.glUniformMatrix3fv(colorMatrixUniform, 1, false, adjust, 0)
+            GLES20.glUniform3f(colorOffsetUniform, adjust[9], adjust[10], adjust[11])
+            GLES20.glUniform1f(colorEnabledUniform, adjust[12])
+            GLES20.glUniform1f(gammaExponentUniform, adjust[13])
+            GLES20.glUniform1f(gammaEnabledUniform, adjust[14])
+        }
+        // The source's own size, which is what makes a tap offset mean one SOURCE texel
+        // rather than one output texel. The vertex half turns it into the two step vectors.
+        GLES20.glUniform2f(
+            sourceSizeUniform,
+            sourceWidth.coerceAtLeast(1).toFloat(),
+            sourceHeight.coerceAtLeast(1).toFloat(),
+        )
+        GLES20.glUniform1f(ditherStepUniform, ditherStep)
+        GLES20.glUniform1f(debandThresholdUniform, debandThreshold)
+        GLES20.glUniform1f(debandRangeUniform, debandRange)
+        GLES20.glUniform1f(debandGrainUniform, debandGrain)
+        GLES20.glUniform1f(debandSeedUniform, debandSeed)
+        GLES20.glUniform1f(bicubicUniform, if (bicubic) 1f else 0f)
+        GLES20.glUniform1f(linearLightUniform, if (linearLight) 1f else 0f)
+        GLES20.glEnableVertexAttribArray(position)
+        GLES20.glEnableVertexAttribArray(texCoord)
+        GlState.VERTICES.position(0)
+        texCoords.position(0)
+        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 0, GlState.VERTICES)
+        GLES20.glVertexAttribPointer(texCoord, 2, GLES20.GL_FLOAT, false, 0, texCoords)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
 }
 

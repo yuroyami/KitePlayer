@@ -26,7 +26,7 @@ kiteplayer-ffmpeg android 307311
 kiteplayer-ffmpeg macosArm64 337963
 kiteplayer-ffmpeg iosArm64 337949
 kiteplayer-output jvm 110239
-kiteplayer-output android 313299
+kiteplayer-output android 381699
 kiteplayer-output macosArm64 338223
 kiteplayer-output iosArm64 317139
 kiteplayer-output macosArm64-cinterop-kitemetal 9250

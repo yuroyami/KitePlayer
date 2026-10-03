@@ -23,8 +23,11 @@ import kotlin.time.Duration.Companion.seconds
  *
  * ### What it is made of
  *
- * The state and the decisions live in one session actor on its own thread, with five workers on theirs:
- * demux, video decode, audio decode, audio feed, video schedule. This class is the outside of that.
+ * The state and the decisions live in one session actor, with workers beside it for demux, video decode,
+ * audio decode, audio feed, video schedule, subtitle raster and release. Each of the eight runs on a
+ * serial lane of its own, so it does one thing at a time, but a lane is not a thread: on the JVM, Android
+ * and the native targets all eight are lanes over the shared `Dispatchers.Default` and `Dispatchers.IO`
+ * pools, and on the web they share the page's one thread. This class is the outside of that.
  * Accepted state-changing commands are actor messages: awaited calls carry one reply each, while
  * fire-and-forget calls discard or omit theirs. The two close routes instead share one terminal result. After the actor
  * returns, its independent close finalizer alone publishes the terminal snapshot and result. Calling from
@@ -1378,9 +1381,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
          * explicit pair is `KiteFFmpegMediaBackend()` from `kiteplayer-ffmpeg` and `AppleOutputBackend` from
          * `kiteplayer-output`; the engine never names either, which is what keeps it free of any platform.
          *
-         * The player owns six threads from here until terminal close completes, one for the session actor
-         * and one for each worker, because that is the confinement every contract inside the engine is
-         * written against. [close] requests that work; [closeAndAwait] proves its completion.
+         * The player owns no thread. From here until terminal close completes it runs eight serial lanes,
+         * one for the session actor and one for each worker, over the shared `Dispatchers.Default` and
+         * `Dispatchers.IO` pools, and each lane does one thing at a time, which is the confinement every
+         * contract inside the engine is written against. The one thread that is pinned is the audio
+         * device's own callback, which the platform output owns. [close] requests that work;
+         * [closeAndAwait] proves its completion.
          *
          * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] when no media backend or no
          *         output backend was supplied.

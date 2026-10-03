@@ -535,7 +535,7 @@ internal class PlaybackCore(
     /**
      * Answers an [addExternalSubtitle] only once the rebuild its selection triggered has landed.
      *
-     * Launched on the session dispatcher, which is the actor's own thread, so the rollback below
+     * Launched on the session dispatcher, which is the actor's own lane, so the rollback below
      * touches actor state under exactly the confinement every handler runs in. A selection that did
      * not apply takes the appended track back out again: a row in the track table that nothing can
      * ever show is worse than a call that failed and said so.

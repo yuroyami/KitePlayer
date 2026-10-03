@@ -93,9 +93,12 @@ only answer.
 
 ## What the engine guarantees back
 
-- One thread per role: your source is only ever touched from the demux worker, each decoder from
-  its own decode worker, and `flush` from that same worker during seeks. No backend object needs
-  its own locking for engine calls. The one exception is a recording, below.
+- One lane per role: your source is only ever touched from the demux worker, each decoder from
+  its own decode worker, and `flush` from that same worker during seeks. A lane makes one call at a
+  time and each call sees what the one before it wrote, so no backend object needs its own locking
+  for engine calls. The one exception is a recording, below. A lane is not a fixed thread: on the
+  threaded targets it runs over a shared pool, so two calls can arrive on two different threads, and
+  nothing may depend on thread identity or thread-local state.
 - Quiescence before mutation: seeks stop the sink, park the workers and flush the decoders in a
   fixed, tested order (the `ScriptTrace` assertions in the seek suite pin it).
 - Ownership is absolute: anything you hand over is closed exactly once by the engine; anything

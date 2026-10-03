@@ -24,14 +24,16 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * Where each of the engine's coroutines runs.
  *
- * One context per worker, and each of those contexts is expected to be a single thread. That is not a
- * style choice: a libavcodec decoding context must be touched by exactly one thread, the demuxer cursor
- * is single threaded for the same reason, and the audio ring is a single-producer single-consumer
- * structure whose producer is the feeder. Handing the engine a multithreaded dispatcher for any of
- * these is how a player gets corruption that only shows up on some machines.
+ * One context per worker, and each of those contexts is expected to run one task at a time, with each
+ * task seeing everything the one before it wrote: a single thread, or a serial lane such as
+ * `limitedParallelism(1)` over a shared pool, which is what the threaded targets use. That is not a
+ * style choice: a libavcodec decoding context must be touched by one thread at a time, the demuxer
+ * cursor is single threaded for the same reason, and the audio ring is a single-producer
+ * single-consumer structure whose producer is the feeder. Handing the engine a dispatcher that runs two
+ * tasks of one worker at once is how a player gets corruption that only shows up on some machines.
  *
- * Common code cannot build such a set, because `newSingleThreadContext` does not exist on every target
- * this module compiles for. So the set is passed in: a platform builds the real one, and a virtual-time
+ * Common code does not choose the pools, because they and the number of threads differ by target.
+ * So the set is passed in: a platform builds the real one, and a virtual-time
  * test passes [sharing] with the test dispatcher, which keeps every worker on one cooperative thread
  * and makes a whole session deterministic.
  */

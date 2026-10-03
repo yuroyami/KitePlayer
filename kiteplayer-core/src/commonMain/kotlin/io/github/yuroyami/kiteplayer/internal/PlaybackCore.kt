@@ -83,6 +83,7 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -348,6 +349,28 @@ internal class PlaybackCore(
             }
         }
 
+    /**
+     * [parseExternalSubtitles] for an open, while the actor keeps reading its mailbox (#412).
+     *
+     * A stop or a close cancels the read and preempts the open, as it preempts the backend open. The
+     * read runs in the player's scope rather than under this call, so a reader that ignores the
+     * cancel cannot hold the actor, and a reader it makes anyway is closed by the read itself.
+     *
+     * @throws OpenPreempted when a stop or a close came first.
+     */
+    private suspend fun readOpenSubtitles(item: MediaItem): List<ExternalSubtitleTrack> {
+        if (item.externalSubtitles.isEmpty()) return emptyList()
+        val reading = scope.async { parseExternalSubtitles(item) }
+        while (!reading.isCompleted) {
+            if (preempted()) {
+                reading.cancel()
+                throw OpenPreempted()
+            }
+            withTimeoutOrNull(WORKER_POLL) { reading.join() }
+        }
+        return reading.await()
+    }
+
     /** Merges what [parseExternalSubtitles] read into the session's track table. */
     private fun adoptExternalSubtitles(item: MediaItem, parsed: List<ExternalSubtitleTrack>) {
         // Every DECLARED file mints an id, loaded or not: the count of loaded tracks
@@ -376,21 +399,32 @@ internal class PlaybackCore(
         source: SubtitleSource,
         parent: MediaItem?,
     ): SubtitleBytes {
+        // The stall limit starts before the reader exists, so a factory or a resolver that never
+        // answers is bounded as a silent read is (#412).
+        val stallLimit = config.buffer.stallTimeout
         val factory = source.io
         if (factory != null) {
-            return runCatching { readWholly(factory.open(), source.uri) }
-                .getOrElse { SubtitleBytes.Refused("its reader failed${causeDetail(it)}") }
+            val reader = when (val opened = openSubtitleReader(stallLimit) { factory.open() }) {
+                is SubtitleReader.Opened -> opened.reader ?: return SubtitleBytes.Refused("its reader opened nothing")
+                SubtitleReader.TimedOut -> return SubtitleBytes.Refused("its reader did not open within $stallLimit")
+                is SubtitleReader.Failed -> return SubtitleBytes.Refused("its reader failed${causeDetail(opened.cause)}")
+            }
+            return readOrRefuse(reader, source.uri) { "its reader failed${causeDetail(it)}" }
         }
         if (source.uri.startsWith("http://", true) || source.uri.startsWith("https://", true)) {
             val headers = if (parent != null && sameHttpOrigin(source.uri, parent.uri)) parent.headers else emptyMap()
-            val reader = runCatching {
+            val opened = openSubtitleReader(stallLimit) {
                 resolveMediaIo(MediaItem(source.uri, headers = headers), config.network)
-            }.getOrElse { return SubtitleBytes.Refused("the address could not be reached${causeDetail(it)}") }
-                ?: return SubtitleBytes.Refused(
+            }
+            val reader = when (opened) {
+                is SubtitleReader.Opened -> opened.reader ?: return SubtitleBytes.Refused(
                     "nothing here can fetch an address; add the network module or give the source its own reader",
                 )
-            return runCatching { readWholly(reader, source.uri) }
-                .getOrElse { SubtitleBytes.Refused("the address could not be read${causeDetail(it)}") }
+                SubtitleReader.TimedOut -> return SubtitleBytes.Refused("the address did not answer within $stallLimit")
+                is SubtitleReader.Failed ->
+                    return SubtitleBytes.Refused("the address could not be reached${causeDetail(opened.cause)}")
+            }
+            return readOrRefuse(reader, source.uri) { "the address could not be read${causeDetail(it)}" }
         }
         return when (val file = readExternalFile(source.uri, MAX_SUBTITLE_BYTES)) {
             is ExternalFile.Read -> SubtitleBytes.Read(file.bytes)
@@ -398,6 +432,48 @@ internal class PlaybackCore(
                 SubtitleBytes.Refused("it holds more than $MAX_SUBTITLE_BYTES bytes, and a subtitle file that large is not one")
             ExternalFile.Unreadable -> SubtitleBytes.Refused("the file could not be read")
         }
+    }
+
+    private sealed interface SubtitleReader {
+        class Opened(val reader: MediaIo?) : SubtitleReader
+        object TimedOut : SubtitleReader
+        class Failed(val cause: Throwable) : SubtitleReader
+    }
+
+    /**
+     * A subtitle file's reader from [open], within [limit] (#412).
+     *
+     * A reader that [open] hands back after the limit has passed, or after the task was cancelled,
+     * has no one else to close it, so it is closed here, and a reader handed on is closed by
+     * [readWholly] alone: either way, exactly once. A cancellation is the task's own end and is
+     * thrown on, never read as a failed reader.
+     */
+    private suspend fun openSubtitleReader(limit: Duration, open: suspend () -> MediaIo?): SubtitleReader {
+        var made: MediaIo? = null
+        try {
+            val opened = withTimeoutOrNull(limit) {
+                made = open()
+                true
+            }
+            if (opened == true) return SubtitleReader.Opened(made)
+            made?.let { runCatching { it.close() } }
+            return SubtitleReader.TimedOut
+        } catch (cancellation: CancellationException) {
+            made?.let { runCatching { it.close() } }
+            throw cancellation
+        } catch (failure: Throwable) {
+            made?.let { runCatching { it.close() } }
+            return SubtitleReader.Failed(failure)
+        }
+    }
+
+    /** [readWholly], with a failure read as a refusal that [reason] words, and a cancellation thrown on. */
+    private suspend fun readOrRefuse(reader: MediaIo, uri: String, reason: (Throwable) -> String): SubtitleBytes = try {
+        readWholly(reader, uri)
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (failure: Throwable) {
+        SubtitleBytes.Refused(reason(failure))
     }
 
     /**
@@ -528,7 +604,7 @@ internal class PlaybackCore(
      * menu. Unlike the open path, a file that cannot load fails the call typed and loudly: this
      * is a direct answer to a direct request, not a best-effort side dish of an open.
      */
-    private suspend fun addExternalSubtitle(command: CoreCommand.AddExternalSubtitle) {
+    private fun addExternalSubtitle(command: CoreCommand.AddExternalSubtitle) {
         val active = session
         if (active == null) {
             command.reply.completeExceptionally(
@@ -538,8 +614,67 @@ internal class PlaybackCore(
         }
         externalSubtitleIdsMinted++
         val id = TrackId(-externalSubtitleIdsMinted)
-        when (val parsed = parseExternalSubtitle(command.source, id, media)) {
-            is ExternalSubtitleParse.Failed -> command.reply.completeExceptionally(
+        // The reading and the parsing run as a task this request owns, so the actor keeps reading its
+        // mailbox: a reader that is slow to open or to answer used to hold every stop and close behind
+        // it (#412). The answer comes back to the actor as a command, and only the actor changes the
+        // track table. A stop or a close cancels the task, and so does the caller leaving.
+        val parent = media
+        val acquisition = SubtitleAcquisition(id, command.reply, active)
+        acquisition.job = scope.launch(start = CoroutineStart.LAZY) {
+            val parsed = try {
+                parseExternalSubtitle(command.source, id, parent)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                ExternalSubtitleParse.Failed("the external subtitle file could not be read${causeDetail(failure)}")
+            }
+            commands.trySend(CoreCommand.ExternalSubtitleRead { adoptExternalSubtitle(acquisition, parsed) })
+        }
+        subtitleAcquisitions += acquisition
+        command.reply.invokeOnCompletion { cause -> if (cause is CancellationException) acquisition.job?.cancel() }
+        acquisition.job?.start()
+    }
+
+    /** One [addExternalSubtitle] whose file is still being read, owned by the request that asked. */
+    private class SubtitleAcquisition(
+        val id: TrackId,
+        val reply: CompletableDeferred<TrackId>,
+        /** The session the file was asked for. A file that comes back to another one is not added. */
+        val session: OpenSession,
+    ) {
+        var job: Job? = null
+    }
+
+    /** The external subtitle reads in flight. Actor-confined. */
+    private val subtitleAcquisitions = mutableListOf<SubtitleAcquisition>()
+
+    /** Cancels every external subtitle read in flight and answers its caller with [failure] (#412). */
+    private fun cancelSubtitleAcquisitions(failure: () -> Throwable) {
+        if (subtitleAcquisitions.isEmpty()) return
+        val cancelled = subtitleAcquisitions.toList()
+        subtitleAcquisitions.clear()
+        for (acquisition in cancelled) {
+            acquisition.job?.cancel()
+            acquisition.reply.completeExceptionally(failure())
+        }
+    }
+
+    /** Adds the track a finished [SubtitleAcquisition] read, on the actor, if it is still wanted. */
+    private suspend fun adoptExternalSubtitle(acquisition: SubtitleAcquisition, parsed: ExternalSubtitleParse) {
+        // Gone means a stop or a close cancelled it and already answered its caller.
+        if (!subtitleAcquisitions.remove(acquisition)) return
+        // A caller that left wants nothing added.
+        if (acquisition.reply.isCompleted) return
+        val active = session
+        if (active == null || active !== acquisition.session) {
+            acquisition.reply.completeExceptionally(
+                IllegalStateException("the media changed before the subtitle file finished loading"),
+            )
+            return
+        }
+        val id = acquisition.id
+        when (parsed) {
+            is ExternalSubtitleParse.Failed -> acquisition.reply.completeExceptionally(
                 IllegalArgumentException(parsed.reason),
             )
             is ExternalSubtitleParse.Loaded -> {
@@ -554,11 +689,12 @@ internal class PlaybackCore(
                     pendingExternalSubtitle = id
                     val selection = CompletableDeferred<TrackChange>()
                     queueSelection(TrackKind.Subtitle, id, selection)
-                    awaitSubtitleAdd(id, selection, command.reply)
+                    awaitSubtitleAdd(id, selection, acquisition.reply)
                 } else {
                     applyExternalSubtitle(id)
-                    command.reply.complete(id)
+                    acquisition.reply.complete(id)
                 }
+                publishSnapshot()
             }
         }
     }
@@ -1327,7 +1463,13 @@ internal class PlaybackCore(
     suspend fun addExternalSubtitle(source: SubtitleSource): TrackId {
         val reply = CompletableDeferred<TrackId>()
         send(CoreCommand.AddExternalSubtitle(source, reply))
-        return awaitReply(reply)
+        return try {
+            awaitReply(reply)
+        } catch (cancellation: CancellationException) {
+            // The caller left, so the read it asked for is cancelled too, and nothing is added (#412).
+            reply.cancel(cancellation)
+            throw cancellation
+        }
     }
 
     suspend fun setVolume(value: Float) {
@@ -1905,6 +2047,14 @@ internal class PlaybackCore(
                 }
             }
             is CoreCommand.SelectTrack -> {
+                // Commands apply in the order they were sent: a subtitle choice made after an add
+                // whose file is still loading replaces the add's own selection, as it did when the
+                // file was read inline, so the add is refused and adds no row (#412).
+                if (command.kind == TrackKind.Subtitle) {
+                    cancelSubtitleAcquisitions {
+                        IllegalStateException("a later track selection replaced it before the subtitle file finished loading")
+                    }
+                }
                 traceUntilReplied(command.reply, "track", "switch") {
                     mapOf("kind" to command.kind.name, "track" to (command.track?.value?.toString() ?: "none"))
                 }
@@ -2136,6 +2286,7 @@ internal class PlaybackCore(
                 command.reply.complete(Unit)
             }
             is CoreCommand.AddExternalSubtitle -> addExternalSubtitle(command)
+            is CoreCommand.ExternalSubtitleRead -> command.adopt()
             is CoreCommand.SetLoop -> {
                 loop = command.mode
                 command.reply.complete(Unit)
@@ -2525,7 +2676,7 @@ internal class PlaybackCore(
             // only when no container subtitle happened to be active, which made an unconditional
             // promise conditional on the file. Choosing here rather than
             // afterwards means no rebuild and no moment where both selections exist.
-            val parsedExternals = parseExternalSubtitles(command.media)
+            val parsedExternals = readOpenSubtitles(command.media)
             val immediateExternal = parsedExternals.firstOrNull { track ->
                 command.media.externalSubtitles
                     .getOrNull(-track.id.value - 1)?.selectImmediately == true
@@ -7703,6 +7854,7 @@ internal class PlaybackCore(
 
     private suspend fun runStop() {
         sessionOwner = null
+        cancelSubtitleAcquisitions { IllegalStateException("stop() ended the subtitle file's load before it finished") }
         playRequested = false
         pendingVideoRecovery = null
         pendingSeek = null
@@ -7740,6 +7892,7 @@ internal class PlaybackCore(
         playRequested = false
         pendingVideoRecovery = null
         pendingSeek = null
+        cancelSubtitleAcquisitions { IllegalStateException("close() ended the subtitle file's load before it finished") }
         // Nothing here may block before the release below starts, because the close deadline is
         // the release's: finishing a recording, releasing the preload and waiting for preload
         // builds still unwinding all run inside it. Each used to run on the actor first, outside
@@ -10640,6 +10793,14 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetAudioDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setAudioDelay", reply)
     class AddExternalSubtitle(val source: SubtitleSource, val reply: CompletableDeferred<TrackId>) :
         CoreCommand("addExternalSubtitle", reply)
+
+    /**
+     * The answer of an [AddExternalSubtitle]'s read, back on the actor, where [adopt] adds the track
+     * (#412). Posted by the read's own task, never by a caller, so its reply is a completed
+     * placeholder; the caller's reply is the one the read carries.
+     */
+    class ExternalSubtitleRead(val adopt: suspend () -> Unit) :
+        CoreCommand("addExternalSubtitle", CompletableDeferred(Unit))
 
     class SelectSecondarySubtitle(
         val track: TrackId?,

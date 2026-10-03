@@ -328,7 +328,10 @@ class DashThroughHlsTest {
     @Test
     fun twoWebmPeriodsPlayAsOnePresentation() = withSource("webm-periods.mpd") { source ->
         assertEquals(40.0, assertNotNull(source.duration).micros / 1e6, 0.5)
-        // The seek comes first: once FFmpeg's HLS reader has read WebM to its end, it seeks nowhere.
+        val timeline = source.readTimeline()
+        assertContinuous(timeline.video, from = 0.0, to = 40.0, "picture")
+        assertContinuous(timeline.audio, from = 0.0, to = 40.0, "sound")
+        // A WebM stream read to its end still seeks, which FFmpeg's Matroska reader once refused (KiteFFmpeg#125).
         source.seekToKeyframe(Pts(30_000_000))
         val after = source.readFor(seconds = 1.0)
         assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 30 s is at ${after.firstVideo} s")
@@ -342,10 +345,16 @@ class DashThroughHlsTest {
         } finally {
             decoder.close()
         }
-        source.seekToKeyframe(Pts(0))
+    }
+
+    @Test
+    fun aWebmSetReadToItsEndSeeksBackToTheMiddle() = withSource("webm.mpd") { source ->
         val timeline = source.readTimeline()
-        assertContinuous(timeline.video, from = 0.0, to = 40.0, "picture")
-        assertContinuous(timeline.audio, from = 0.0, to = 40.0, "sound")
+        assertTrue(timeline.video.last() > 69.0, "the reading stopped at ${timeline.video.last()} s, short of the end")
+        source.seekToKeyframe(Pts(30_000_000))
+        val after = source.readFor(seconds = 2.0)
+        assertTrue(after.firstVideo in 27.9..30.1, "the first picture after the seek to 30 s is at ${after.firstVideo} s")
+        assertTrue(after.firstAudio in 27.5..30.5, "the first sound after the seek is at ${after.firstAudio} s")
     }
 
     @Test

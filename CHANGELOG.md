@@ -74,6 +74,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `kite.wasm` and `kite.mjs` 38,170 bytes bigger after gzip than 0.4.0's, 1,525,527 bytes in all,
   so the web size check's budget for them rises from 1.42 MiB to 1.46 MiB. KiteFFmpeg's own
   changelog lists its changes.
+- A WebM DASH presentation that has been read to its end seeks again. FFmpeg's Matroska reader
+  used to answer end of file for ever after, so a seek returned and no packet followed, with one
+  Period or several. KiteFFmpeg 0.5.0 carries the FFmpeg fix.
 - An HLS track with no title of its own takes its rendition's `NAME` as its title, unless the name
   only repeats its language (#404). FFmpeg files that name under the stream's `comment`, where
   `PlayerStreamInfo.metadata` still shows it.

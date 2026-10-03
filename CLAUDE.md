@@ -321,10 +321,6 @@ Each line is something that bit someone. Delete a line when it stops being true.
   keyframe seek lands up to one segment early and a precise seek decodes forward from there. It
   reads a run of byte-range fragments of one file through one reader, so playing from the start
   asks for that file from byte 0 only, and a range request appears only after a seek (#209).
-- FFmpeg's HLS reader cannot seek a WebM stream once it has read it to the end: the seek returns
-  and no packet follows, with one Period or several. MP4 and MPEG-TS seek fine. The Matroska
-  reader's end flag survives the HLS reader's byte-level reset, so this is upstream; a WebM test
-  seeks before it reads to the end (#403).
 - FFmpeg's MP4 reader keeps the first `moov` it sees and skips every later one, and a decoder keeps
   the last H.264 or HEVC parameter sets it was given. So every fMP4 segment of a joined DASH
   presentation carries its own Period's parameter sets in band, even a Period whose

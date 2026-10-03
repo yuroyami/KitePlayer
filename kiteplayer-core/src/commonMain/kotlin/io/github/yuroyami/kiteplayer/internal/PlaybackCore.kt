@@ -18,6 +18,7 @@ import io.github.yuroyami.kiteplayer.MediaInspection
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Marker
+import io.github.yuroyami.kiteplayer.SubtitleConfig
 import io.github.yuroyami.kiteplayer.SubtitleSource
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
@@ -3299,7 +3300,6 @@ internal class PlaybackCore(
 
     private fun StreamChoice.selectedIndex(): Int? = (this as? StreamChoice.At)?.index
 
-    /** Language preference first, then the container's default disposition, then the first audio track. */
     /**
      * The automatic subtitle choice, per SubtitleConfig and the container's dispositions:
      * an accessibility track in a preferred language wins, then any preferred-language track
@@ -3309,38 +3309,7 @@ internal class PlaybackCore(
     private fun pickSubtitle(
         streams: List<PlayerStreamInfo>,
         audio: PlayerStreamInfo?,
-    ): PlayerStreamInfo? {
-        val subtitles = streams.filter { it.kind == TrackKind.Subtitle }
-        if (subtitles.isEmpty()) return null
-        val preferred = config.subtitles.preferredLanguages.map { it.lowercase() }
-        fun matches(stream: PlayerStreamInfo) = stream.language?.lowercase() in preferred
-        if (preferred.isNotEmpty()) {
-            subtitles.firstOrNull { matches(it) && it.isAccessibility }?.let { return it }
-            subtitles.filter { matches(it) }.sortedByDescending { it.isDefault }.firstOrNull()?.let { return it }
-        }
-        if (config.subtitles.autoSelectForced) {
-            val audioLanguage = audio?.language?.lowercase()
-            val audioPreferred = audioLanguage in preferred
-            if (preferred.isNotEmpty() && !audioPreferred) {
-                subtitles.firstOrNull { it.isForced && matches(it) }?.let { return it }
-            }
-            // A forced track is authored for the viewers of this audio: foreign lines inside
-            // audio they otherwise understand. That pairing holds with no language preference
-            // configured at all, so it must not hide behind preferredLanguages.
-            if (audioLanguage != null) {
-                subtitles.firstOrNull { it.isForced && it.language?.lowercase() == audioLanguage }
-                    ?.let { return it }
-            }
-        }
-        // The plain default: subtitled media shows its subtitles. Default-flagged first, and a
-        // forced-only track never wins here, because forced tracks exist for foreign lines
-        // inside otherwise-understood audio, not as the default face of the media.
-        if (config.subtitles.autoSelect) {
-            subtitles.filter { !it.isForced }.sortedByDescending { it.isDefault }.firstOrNull()
-                ?.let { return it }
-        }
-        return null
-    }
+    ): PlayerStreamInfo? = pickSubtitleStream(streams, audio, config.subtitles)
 
     private fun pickAudio(streams: List<PlayerStreamInfo>): PlayerStreamInfo? =
         pickAudioStream(streams, config.audio.preferredLanguages)
@@ -10736,13 +10705,70 @@ internal fun pickAudioStream(streams: List<PlayerStreamInfo>, preferredLanguages
     val audio = streams.filter { it.kind == TrackKind.Audio }
     if (audio.isEmpty()) return null
     val ranked = audio.sortedBy { it.isAccessibility }
-    for (language in preferredLanguages) {
-        ranked.firstOrNull { it.language?.startsWith(language, ignoreCase = true) == true }?.let { return it }
+    // Codes are compared as languages, not as spellings, so `ja` finds a `jpn` track (#435). The
+    // first preference that any track matches decides; ordinary tracks still come first inside it,
+    // and then the track whose script and region agree with the preference.
+    val preferences = LanguagePreferences(preferredLanguages)
+    if (!preferences.isEmpty) {
+        ranked.mapNotNull { stream -> preferences.match(stream.language, stream.title)?.let { stream to it } }
+            .sortedWith(compareBy({ it.second.preference }, { it.first.isAccessibility }, { -it.second.closeness }))
+            .firstOrNull()?.let { return it.first }
     }
     return ranked.firstOrNull { it.isDefault && !it.isAccessibility }
         ?: ranked.firstOrNull { !it.isAccessibility }
         ?: ranked.firstOrNull { it.isDefault }
         ?: ranked.first()
+}
+
+/**
+ * The subtitle stream an open picks when nothing was chosen, per [config] and the container's
+ * dispositions: an accessibility track in a preferred language wins, then any preferred-language
+ * track, closest to the preference and then default-flagged first; then, when the audio is not in a
+ * preferred language and the config allows it, a forced track in a preferred language, and a forced
+ * track in the audio's own language whatever the preferences. Then, when [SubtitleConfig.autoSelect]
+ * asks for it, the plain default.
+ *
+ * Languages are compared as languages, so `ja` finds a `jpn` track and `en` audio pairs with an
+ * `eng` forced track, and one rule serves the preference, the audio and the forced pairing (#435).
+ */
+internal fun pickSubtitleStream(
+    streams: List<PlayerStreamInfo>,
+    audio: PlayerStreamInfo?,
+    config: SubtitleConfig,
+): PlayerStreamInfo? {
+    val subtitles = streams.filter { it.kind == TrackKind.Subtitle }
+    if (subtitles.isEmpty()) return null
+    val preferences = LanguagePreferences(config.preferredLanguages)
+    fun best(candidates: List<PlayerStreamInfo>): PlayerStreamInfo? =
+        candidates.mapNotNull { stream -> preferences.match(stream.language, stream.title)?.let { stream to it } }
+            .sortedWith(compareBy({ it.second.preference }, { -it.second.closeness }, { !it.first.isDefault }))
+            .firstOrNull()?.first
+    if (!preferences.isEmpty) {
+        best(subtitles.filter { it.isAccessibility })?.let { return it }
+        best(subtitles)?.let { return it }
+    }
+    if (config.autoSelectForced) {
+        val audioLanguage = audio?.language
+        val audioPreferred = preferences.matches(audioLanguage)
+        if (!preferences.isEmpty && !audioPreferred) {
+            best(subtitles.filter { it.isForced })?.let { return it }
+        }
+        // A forced track is authored for the viewers of this audio: foreign lines inside
+        // audio they otherwise understand. That pairing holds with no language preference
+        // configured at all, so it must not hide behind preferredLanguages.
+        if (audioLanguage != null) {
+            subtitles.firstOrNull { it.isForced && sameLanguage(it.language, audioLanguage) }
+                ?.let { return it }
+        }
+    }
+    // The plain default: subtitled media shows its subtitles. Default-flagged first, and a
+    // forced-only track never wins here, because forced tracks exist for foreign lines
+    // inside otherwise-understood audio, not as the default face of the media.
+    if (config.autoSelect) {
+        subtitles.filter { !it.isForced }.sortedByDescending { it.isDefault }.firstOrNull()
+            ?.let { return it }
+    }
+    return null
 }
 
 /**

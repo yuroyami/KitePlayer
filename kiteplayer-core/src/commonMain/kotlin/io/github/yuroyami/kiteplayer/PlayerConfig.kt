@@ -250,7 +250,14 @@ public data class QueueConfig(
  * and the setters on [KitePlayer] change most of them while it plays.
  */
 public data class AudioConfig(
-    /** Preferred language tags, best first, matched against the container's track languages. */
+    /**
+     * Preferred languages, best first, as ISO 639 codes or BCP 47 tags.
+     *
+     * A track matches when it names the same language in any spelling: `ja` matches a track tagged
+     * `jpn` or `ja-JP`, and `de` one tagged `ger` or `deu`. The first preference any track matches
+     * decides. Among its tracks, one whose script and region also agree comes first, so `pt-BR`
+     * prefers a `pt-BR` track and takes a `pt-PT` one over nothing.
+     */
     val preferredLanguages: List<String> = emptyList(),
     /**
      * Play at a different rate without changing pitch. True stretches the sound in time; false
@@ -479,7 +486,14 @@ public data class DownmixConfig(
  * held for the session and pruned on flush.
  */
 public data class SubtitleConfig(
-    /** Select a subtitle track automatically when one matches these languages. */
+    /**
+     * Select a subtitle track automatically when one matches these languages, best first, given as
+     * ISO 639 codes or BCP 47 tags.
+     *
+     * Languages match as [AudioConfig.preferredLanguages] describes: `ja` matches a track tagged
+     * `jpn`, a region or a script in the preference picks the closer of several tracks in one
+     * language, and `zh-Hant` takes a plain Chinese track whose title says Traditional or 繁體.
+     */
     val preferredLanguages: List<String> = emptyList(),
     /**
      * Select a forced-subtitles track automatically: one in a preferred language when the audio

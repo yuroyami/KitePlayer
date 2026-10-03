@@ -101,9 +101,10 @@ public class DashMediaIo(
 }
 
 /**
- * A manifest that the DASH door does not play: one with several Periods, or one whose segments HLS
- * cannot carry, such as WebM, when it is live or carries its audio in an adaptation set of its
- * own. It is refused rather than played wrong, so an application can fall back to another route.
+ * A manifest that the DASH door does not play: one with several Periods, or one whose segments the
+ * HLS path cannot carry, in a container other than fragmented MP4, MPEG-TS or WebM, when it is live
+ * or carries its audio in an adaptation set of its own. It is refused rather than played wrong, so
+ * an application can fall back to another route.
  */
 public class DashUnsupportedException(message: String) : IllegalArgumentException(message)
 
@@ -351,11 +352,12 @@ public object Dash {
      * A playable [MediaItem] for [mpdUrl], over [client]. The item's uri stays the manifest's, for
      * labels. [readerPolicy] limits the manifest fetch and every later fetch, as in [manifest].
      *
-     * When every picture and sound representation of the Period is fragmented MP4 or MPEG-TS, the
-     * item plays through the player's HLS path (#295). The door writes an HLS master playlist with
+     * When every picture and sound representation of the Period is fragmented MP4, MPEG-TS or WebM,
+     * the item plays through the player's HLS path (#295, #401). The door writes an HLS master playlist with
      * a variant for each video representation, an audio rendition for each audio set and a
      * subtitle rendition for each WebVTT set, and a media playlist for each, from the manifest's
-     * templates, timelines, lists or segment indexes. So separate audio and video sets play
+     * templates, timelines, lists or segment indexes, an MP4 file's `sidx` or a WebM file's `Cues`.
+     * So separate audio and video sets play
      * together, the item seeks, and its variants are listed and chosen as an HLS item's are. Its
      * segment readers share one measure of the network rate, which the automatic variant steps
      * read. A subtitle set in another format, such as

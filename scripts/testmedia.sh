@@ -617,6 +617,28 @@ ffmpeg -v error -y \
   -f lavfi -i "sine=frequency=660:sample_rate=48000:duration=70" \
   -c:a aac -b:a 96k -frag_duration 2000000 \
   -movflags +empty_moov+default_base_moof+global_sidx -f mp4 dash/ondemand-audio.mp4
+# WebM, which the DASH tests also play through the HLS path (#401): VP9 and Opus in sets of their
+# own in numbered two second segments, as a live packager writes them, and one file per set whose
+# Cues name its clusters, with the manifest ffmpeg writes for those files.
+dash_vp9=(-c:v libvpx-vp9 -deadline realtime -cpu-used 8 -row-mt 1 -pix_fmt yuv420p -g 60 -keyint_min 60)
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=70" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=70" \
+  -map 0:v -map 1:a "${dash_vp9[@]}" -b:v 300k -c:a libopus -b:a 64k \
+  -f dash -dash_segment_type webm -seg_duration 2 -use_template 1 -use_timeline 1 \
+  -adaptation_sets "id=0,streams=v id=1,streams=a" \
+  -init_seg_name 'webm-$RepresentationID$-init.webm' \
+  -media_seg_name 'webm-$RepresentationID$-$Number%05d$.webm' dash/webm.mpd
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x180:rate=30:duration=70" \
+  "${dash_vp9[@]}" -b:v 300k -an -f webm -dash 1 dash/ondemand-video.webm
+ffmpeg -v error -y \
+  -f lavfi -i "sine=frequency=660:sample_rate=48000:duration=70" \
+  -c:a libopus -b:a 64k -vn -f webm -dash 1 -cluster_time_limit 2000 dash/ondemand-audio.webm
+ffmpeg -v error -y \
+  -f webm_dash_manifest -i dash/ondemand-video.webm -f webm_dash_manifest -i dash/ondemand-audio.webm \
+  -c copy -map 0 -map 1 -f webm_dash_manifest -adaptation_sets "id=0,streams=0 id=1,streams=1" \
+  dash/webm-ondemand.mpd
 
 # ---------------------------------------------------------------------------------------------
 # Provenance.

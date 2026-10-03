@@ -38,7 +38,7 @@ class DashTimeoutTest {
 
     private val quick = HttpReaderPolicy(connectTimeout = 500.milliseconds, readTimeout = 500.milliseconds)
 
-    /** In MPEG-TS the item plays through the HLS stand-in; in WebM, through the one-stream door. */
+    /** In MPEG-TS the item plays through the HLS stand-in; in FLV, which that path does not take, through the one-stream door. */
     private fun mpd(mimeType: String) = """
         <?xml version="1.0"?>
         <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT2S">
@@ -137,7 +137,7 @@ class DashTimeoutTest {
 
     @Test
     fun aSegmentThatStopsSendingFailsTheReadAtTheReadTimeout() = runBlocking {
-        val port = serve(silentManifest = false, mimeType = "video/webm")
+        val port = serve(silentManifest = false, mimeType = "video/x-flv")
         val client = HttpClient()
         try {
             val item = Dash.mediaItemFor("http://127.0.0.1:$port/movie.mpd", client, readerPolicy = quick)

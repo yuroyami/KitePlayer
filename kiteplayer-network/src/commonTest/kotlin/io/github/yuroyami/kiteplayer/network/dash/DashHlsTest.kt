@@ -129,24 +129,66 @@ class DashHlsTest {
     }
 
     @Test
-    fun webmSegmentsAreLeftToTheOneStreamDoor() {
+    fun webmSegmentsAreCarriedAsFragmentedMp4Is() {
         val period = parse(
             """
             <MPD type="static" mediaPresentationDuration="PT4S">
                 <Period>
                     <AdaptationSet contentType="video" mimeType="video/webm">
-                        <SegmentTemplate media="v-${'$'}Number${'$'}.webm" timescale="1" duration="2"/>
-                        <Representation id="v" bandwidth="500000"/>
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.webm" initialization="v-init.webm" timescale="1" duration="2"/>
+                        <Representation id="v" bandwidth="500000" codecs="vp09.00.11.08" width="320" height="180"/>
                     </AdaptationSet>
                     <AdaptationSet contentType="audio" mimeType="audio/webm">
-                        <SegmentTemplate media="a-${'$'}Number${'$'}.webm" timescale="1" duration="2"/>
-                        <Representation id="a" bandwidth="64000"/>
+                        <SegmentTemplate media="a-${'$'}Number${'$'}.webm" initialization="a-init.webm" timescale="1" duration="2"/>
+                        <Representation id="a" bandwidth="64000" codecs="opus"/>
                     </AdaptationSet>
                 </Period>
             </MPD>
             """.trimIndent(),
         ).periods.single()
-        assertFalse(DashHls.carries(period))
+        assertTrue(DashHls.carries(period), "WebM rides the HLS path (#401)")
+        val presentation = DashHls.presentation(period)
+        assertTrue("CODECS=\"vp09.00.11.08,opus\"" in presentation.master, presentation.master)
+        assertTrue("#EXT-X-MEDIA:TYPE=AUDIO" in presentation.master, presentation.master)
+    }
+
+    @Test
+    fun aWebmFileWhoseCuesNameItsClustersBecomesByteRanges() = runTest {
+        val file = WebmBytes.file(listOf(0, 2000, 4000), blockBytes = 500, durationMillis = 5000.0)
+        val init = file.firstCluster
+        for (segmentBase in listOf(
+            // As ffmpeg's webm_dash_manifest muxer writes it.
+            "<SegmentBase indexRange=\"${file.cues.first}-${file.cues.last}\"><Initialization range=\"0-${init - 1}\"/></SegmentBase>",
+            // Nothing given: the start of the file says where the Segment, the scale and the Cues are.
+            "<SegmentBase/>",
+        )) {
+            val manifest = parse(
+                """
+                <MPD type="static" mediaPresentationDuration="PT5S">
+                    <Period>
+                        <AdaptationSet contentType="video" mimeType="video/webm" codecs="vp9">
+                            <Representation id="v" bandwidth="500000"><BaseURL>single.webm</BaseURL>$segmentBase</Representation>
+                        </AdaptationSet>
+                    </Period>
+                </MPD>
+                """.trimIndent(),
+            )
+            val period = manifest.periods.single()
+            assertTrue(DashHls.carries(period), "a single WebM file with an index rides the HLS path")
+            val presentation = DashHls.presentation(period)
+            val io = DashHlsMediaIo(presentation, manifest, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default, { url ->
+                assertEquals("https://cdn.test/vod/single.webm", url)
+                BytesMediaIo(file.bytes)
+            }, null, { 0L })
+            val playlist = io.openRelated(presentation.tracks.single().address)!!.readAll().decodeToString()
+            assertTrue("#EXT-X-MAP:URI=\"https://cdn.test/vod/single.webm\",BYTERANGE=\"$init@0\"" in playlist, playlist)
+            assertEquals(
+                file.clusters.map { "#EXT-X-BYTERANGE:${it.last - it.first + 1}@${it.first}" },
+                playlist.lines().filter { it.startsWith("#EXT-X-BYTERANGE") },
+                "each cluster is a segment, and the last ends where the Cues begin",
+            )
+            assertEquals(listOf("#EXTINF:2.000000,", "#EXTINF:2.000000,", "#EXTINF:1.000000,"), playlist.lines().filter { it.startsWith("#EXTINF") })
+        }
     }
 
     private val live = """

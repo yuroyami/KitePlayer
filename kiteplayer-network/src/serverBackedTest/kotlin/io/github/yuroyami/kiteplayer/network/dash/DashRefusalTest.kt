@@ -92,21 +92,21 @@ class DashRefusalTest {
         }
     }
 
-    // The usual layout: video and audio in sets of their own. HLS carries it in fragmented MP4
-    // (DashHlsTest), and WebM is left to the one-stream door, which plays one set, so the video
-    // used to play silent.
+    // Video and audio in sets of their own, in a container the HLS path does not take. The
+    // one-stream door plays one set, so the video used to play silent. Fragmented MP4, MPEG-TS
+    // and WebM play through HLS instead (DashHlsTest).
     @Test
     fun aSeparateAudioSetIsRefusedTypedNotPlayedSilent() = runBlocking {
         val port = serveMpd(
             """
             <MPD type="static" mediaPresentationDuration="PT4S">
                 <Period>
-                    <AdaptationSet contentType="video" mimeType="video/webm">
-                        <SegmentTemplate media="v-${'$'}Number${'$'}.webm" timescale="1" duration="2"/>
+                    <AdaptationSet contentType="video" mimeType="video/x-flv">
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.flv" timescale="1" duration="2"/>
                         <Representation id="v" bandwidth="2"/>
                     </AdaptationSet>
-                    <AdaptationSet contentType="audio" mimeType="audio/webm">
-                        <SegmentTemplate media="a-${'$'}Number${'$'}.webm" timescale="1" duration="2"/>
+                    <AdaptationSet contentType="audio" mimeType="audio/x-flv">
+                        <SegmentTemplate media="a-${'$'}Number${'$'}.flv" timescale="1" duration="2"/>
                         <Representation id="a" bandwidth="1"/>
                     </AdaptationSet>
                 </Period>
@@ -133,7 +133,7 @@ class DashRefusalTest {
             <MPD type="dynamic">
                 <Period>
                     <AdaptationSet contentType="video">
-                        <SegmentTemplate media="v-${'$'}Number${'$'}.webm" timescale="1" duration="2"/>
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.flv" timescale="1" duration="2"/>
                         <Representation id="v" bandwidth="1"/>
                     </AdaptationSet>
                 </Period>

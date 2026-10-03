@@ -40,15 +40,18 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `Dash.mediaItemFor` plays a manifest of fMP4 or MPEG-TS segments through the HLS path (#295).
   Separate video and audio sets now play together instead of being refused, the item seeks, and a
   live manifest plays. The item's reader therefore serves an HLS master playlist, not the segment
-  bytes, so code that read `item.io` directly sees a playlist. A WebM manifest still plays through
-  the one-stream reader. The manifest model gains fields with defaults, so a constructor or `copy`
-  call compiled against 0.2.0 must be compiled again.
+  bytes, so code that read `item.io` directly sees a playlist. The manifest model gains fields with
+  defaults, so a constructor or `copy` call compiled against 0.2.0 must be compiled again.
 - A DASH address plays through the default stack with no call to `Dash.mediaItemFor` (#400). The
   automatic transport, and `KtorMediaIoResolver`, recognise a manifest by its `application/dash+xml`
   type, by a path that ends in `.mpd`, or by its root element when the server sends it as text or
   bytes, and play it as `Dash.mediaItemFor` plays it, with `DashUrlPolicy.Default`. The item's
   headers reach the manifest and the segments of its origin. The reader these resolvers return for
   such an address serves an HLS master playlist, not the manifest.
+- A WebM DASH manifest plays through the HLS path, as fragmented MP4 does (#401). Separate VP9 or
+  AV1 and Opus or Vorbis sets now play together instead of being refused, the item seeks, a live
+  WebM manifest plays, and a single WebM file plays as segments that its `Cues` name, read by byte
+  range. The one-stream reader is left for containers other than fragmented MP4, MPEG-TS and WebM.
 - An HLS playlist that nothing marks is recognised by its first bytes (#400). A reader whose bytes
   start with `#EXTM3U` plays through the HLS path when no format hint, HLS content type or `.m3u8`
   address says so, which an address with no extension sent as text or bytes never did. A format

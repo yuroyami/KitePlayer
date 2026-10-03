@@ -24,8 +24,8 @@ import kotlin.test.assertTrue
  * DASH played through the HLS path (#295), with the real FFmpeg backend reading the `dash/`
  * fixtures from a local HTTP server that answers range requests: separate video and audio sets,
  * one numbered set, single files whose segment index names their fragments, and a live manifest
- * written over the numbered set's segments. The automatic transport plays the same manifests from
- * addresses with no extension and no type (#400).
+ * written over the numbered set's segments, and the same layouts in WebM (#401). The automatic
+ * transport plays the manifests from addresses with no extension and no type (#400).
  */
 class DashThroughHlsTest {
 
@@ -159,6 +159,30 @@ class DashThroughHlsTest {
         } finally {
             source.close()
         }
+    }
+
+    @Test
+    fun webmSetsOfVp9AndOpusPlayTogetherAndSeekToSixtySeconds() = withSource("webm.mpd") { source ->
+        assertEquals(listOf("vp9", "opus"), source.streams.map { it.codec }.sortedDescending(), "the WebM sets are not both streams")
+        val read = source.readFor(seconds = 4.0)
+        assertTrue(read.video > 90, "only ${read.video} video packets in the first seconds")
+        assertTrue(read.audio > 150, "only ${read.audio} audio packets: the sound set did not play")
+        source.seekToKeyframe(Pts(60_000_000))
+        val after = source.readFor(seconds = 2.0)
+        assertTrue(after.firstVideo in 57.9..60.1, "the first picture after the seek to 60 s is at ${after.firstVideo} s")
+        assertTrue(after.firstAudio in 57.5..60.5, "the first sound after the seek is at ${after.firstAudio} s")
+        assertTrue(asked.any { it.startsWith("webm-0-0003") }, "no segment near 60 s was read: $asked")
+    }
+
+    @Test
+    fun singleWebmFilesWhoseCuesNameTheirClustersPlayAndSeek() = withSource("webm-ondemand.mpd") { source ->
+        val read = source.readFor(seconds = 3.0)
+        assertTrue(read.video > 60, "only ${read.video} video packets")
+        assertTrue(read.audio > 100, "only ${read.audio} audio packets")
+        source.seekToKeyframe(Pts(60_000_000))
+        val after = source.readFor(seconds = 2.0)
+        assertTrue(after.firstVideo in 57.9..60.1, "the first picture after the seek to 60 s is at ${after.firstVideo} s")
+        assertTrue(after.firstAudio in 57.5..60.5, "the first sound after the seek is at ${after.firstAudio} s")
     }
 
     @Test

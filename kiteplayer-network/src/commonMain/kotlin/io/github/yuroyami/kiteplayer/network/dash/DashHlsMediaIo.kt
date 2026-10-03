@@ -20,7 +20,8 @@ import kotlinx.coroutines.sync.withLock
  * those loads even when a refreshed manifest counts its segments from a different number.
  *
  * A [DashSegmentBase] representation names its segments only in its file's segment index, which
- * this reads through [openUrl] the first time the representation's playlist is asked for.
+ * this reads through [openUrl] the first time the representation's playlist is asked for: the
+ * `sidx` of an MP4 file, or the `Cues` of a WebM one (#401).
  */
 internal class DashHlsMediaIo(
     private val presentation: DashHlsPresentation,
@@ -103,11 +104,17 @@ internal class DashHlsMediaIo(
 
     private suspend fun plan(track: DashHlsTrack, from: DashManifest, now: Long?): DashTimedPlan {
         val period = from.periods.single()
-        val representation = period.adaptationSets.getOrNull(track.setIndex)?.representations?.getOrNull(track.representationIndex)
-            ?: track.representation
+        val set = period.adaptationSets.getOrNull(track.setIndex) ?: track.set
+        val representation = set.representations.getOrNull(track.representationIndex) ?: track.representation
         DashManifestParser.timedPlan(from, period, representation, policy, now)?.let { return it }
         val base = checkNotNull(representation.segmentBase) { "a representation without segments" }
-        return indexed.getOrPut(track.address) { indexedPlan(representation, base) }
+        return indexed.getOrPut(track.address) {
+            if (DashHls.isWebm(set, representation)) {
+                webmPlan(representation, base, period.durationMicros ?: from.durationMicros)
+            } else {
+                indexedPlan(representation, base)
+            }
+        }
     }
 
     /** The manifest fetched again when it is live, its minimum update period has passed, and it still has one Period. */
@@ -145,6 +152,69 @@ internal class DashHlsMediaIo(
                 DashTimedSegment(file, reference.range, index + 1L, reference.startMicros - firstStart, reference.durationMicros)
             },
         )
+    }
+
+    /**
+     * The segments that the `Cues` of [base]'s WebM file name, each the run of clusters from one
+     * cue point's cluster to the next (#401). The start of the file says where the `Segment`'s
+     * data begins, which the cluster positions count from, the timestamp scale, and, when the
+     * manifest gives no index range, where the `Cues` are. The last run ends where the `Cues`
+     * begin when they follow the clusters, or else at the end of the `Segment` or the file, and
+     * lasts until [totalMicros], or as long as the run before it when nothing gives the length.
+     */
+    private suspend fun webmPlan(representation: DashRepresentation, base: DashSegmentBase, totalMicros: Long?): DashTimedPlan {
+        val file = representation.baseUrl
+        val headEnd = base.initializationRange?.let { it.last + 1 } ?: WEBM_HEAD_BYTES
+        val layout = WebmIndex.layout(readRange(file, 0L until headEnd, allowShort = true))
+        val cuesRange = base.indexRange ?: run {
+            val start = layout.cuesStart ?: throw DashUnsupportedException("$file names no Cues, so its clusters cannot be found")
+            val size = WebmIndex.elementSize(readRange(file, start until start + EBML_HEADER_BYTES, allowShort = true))
+                ?: throw DashUnsupportedException("the Cues of $file have no size")
+            start until start + size
+        }
+        require(cuesRange.last - cuesRange.first < MAX_INDEX_BYTES) {
+            "the Cues of ${representation.id} are larger than $MAX_INDEX_BYTES bytes"
+        }
+        val points = WebmIndex.cuePoints(readRange(file, cuesRange))
+        if (points.isEmpty()) throw DashUnsupportedException("the Cues of ${representation.id} name no clusters")
+        val starts = points.map { layout.segmentDataStart + it.clusterPosition }.toMutableList()
+        val ticks = points.map { it.time }.toMutableList()
+        // Clusters before the first cue point play from the start.
+        layout.firstCluster?.let { first ->
+            if (first < starts.first()) {
+                starts.add(0, first)
+                ticks.add(0, 0L)
+            }
+        }
+        val end = if (cuesRange.first > starts.last()) cuesRange.first else layout.segmentEnd ?: sizeOf(file)
+        fun micros(tick: Long): Long = tick * layout.timestampScaleNanos / 1000
+        val total = totalMicros ?: layout.durationNanos?.let { (it / 1000).toLong() }
+        val segments = ArrayList<DashTimedSegment>(starts.size)
+        for (i in starts.indices) {
+            val startMicros = micros(ticks[i] - ticks[0])
+            val durationMicros = when {
+                i + 1 < starts.size -> micros(ticks[i + 1] - ticks[i])
+                total != null && total > startMicros -> total - startMicros
+                else -> segments.lastOrNull()?.durationMicros ?: 1_000_000L
+            }
+            val until = if (i + 1 < starts.size) starts[i + 1] else end
+            segments += DashTimedSegment(file, starts[i] until until, i + 1L, startMicros, durationMicros.coerceAtLeast(1))
+        }
+        return DashTimedPlan(
+            initializationUrl = base.initializationUrl ?: file,
+            initializationRange = base.initializationRange ?: (0L until starts.first()),
+            segments = segments,
+        )
+    }
+
+    /** The size of [file], which its first response states. */
+    private suspend fun sizeOf(file: String): Long {
+        val io = openUrl(DashManifestParser.requireAllowed(manifestUrl, file, policy))
+        try {
+            return io.size ?: throw DashUnsupportedException("$file states no size, so where its last clusters end is unknown")
+        } finally {
+            io.close()
+        }
     }
 
     /** Where the segment index of [file] is, read from the top-level boxes at its start. */
@@ -243,5 +313,11 @@ internal class DashHlsMediaIo(
 
         private const val MAX_BOXES_BEFORE_INDEX = 16
         private const val BOX_HEADER_BYTES = 16L
+
+        /** How much of a WebM file is read to find its layout when the manifest gives no initialization range. */
+        private const val WEBM_HEAD_BYTES = 64L * 1024
+
+        /** The longest EBML element header: a four byte ID and an eight byte size. */
+        private const val EBML_HEADER_BYTES = 12L
     }
 }

@@ -52,7 +52,8 @@ class DashRedirectTest {
 
     /**
      * A manifest whose one representation is the single segment at [segment]. In [mimeType]
-     * video/mp4 it plays through the HLS stand-in, and in video/webm through the one-stream door.
+     * video/mp4 it plays through the HLS stand-in, and in video/x-flv, which that path does not take,
+     * through the one-stream door.
      */
     private fun segmentList(segment: String, mimeType: String = "video/mp4") = """
         <MPD type="static" mediaPresentationDuration="PT2S">
@@ -114,7 +115,7 @@ class DashRedirectTest {
                     trustedRequests.update { it + uri }
                     when {
                         uri == "/list.mpd" -> call.respondText(segmentList(checkNotNull(call.request.queryParameters["seg"])))
-                        uri == "/webm.mpd" -> call.respondText(segmentList(checkNotNull(call.request.queryParameters["seg"]), "video/webm"))
+                        uri == "/flv.mpd" -> call.respondText(segmentList(checkNotNull(call.request.queryParameters["seg"]), "video/x-flv"))
                         uri == "/file.mpd" -> call.respondText(singleFile(checkNotNull(call.request.queryParameters["file"])))
                         uri == "/to-other.m4s" -> call.redirectTo("$elsewhere/collect")
                         uri == "/to-other.mpd" -> call.redirectTo("$elsewhere/movie.mpd")
@@ -199,7 +200,7 @@ class DashRedirectTest {
     @Test
     fun theOneStreamDoorRefusesTheSameRedirect() = runBlocking {
         val refusal = assertFailsWith<DashUrlRefusedException> {
-            readSegments("$trusted/webm.mpd?seg=/to-other.m4s", DashUrlPolicy.SameOrigin)
+            readSegments("$trusted/flv.mpd?seg=/to-other.m4s", DashUrlPolicy.SameOrigin)
         }
         assertTrue("sameOriginOnly" in refusal.message.orEmpty(), refusal.message)
         assertEquals(emptyList(), otherRequests.value, "the other origin got a request")
@@ -254,7 +255,7 @@ class DashRedirectTest {
             readSegments("$trusted/list.mpd?seg=/nowhere.m4s", DashUrlPolicy.SameOrigin)
         }
         assertTrue("302" in failure.message.orEmpty(), failure.message)
-        assertFailsWith<IllegalArgumentException> { readSegments("$trusted/webm.mpd?seg=/nowhere.m4s", DashUrlPolicy.SameOrigin) }
+        assertFailsWith<IllegalArgumentException> { readSegments("$trusted/flv.mpd?seg=/nowhere.m4s", DashUrlPolicy.SameOrigin) }
         assertEquals(emptyList(), otherRequests.value)
     }
 

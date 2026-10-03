@@ -61,7 +61,7 @@ internal object DashHls {
 
     /**
      * Whether HLS can carry [period]: a set with a picture or sound, every such representation
-     * in fragmented MP4 or MPEG-TS with segment addressing of some kind. A subtitle set that is
+     * in fragmented MP4, MPEG-TS or WebM with segment addressing of some kind. A subtitle set that is
      * not WebVTT does not decide it; it is left out of the stand-in.
      */
     fun carries(period: DashPeriod): Boolean {
@@ -175,10 +175,14 @@ internal object DashHls {
         }
     }
 
-    /** Fragmented MP4 or MPEG-TS, with segments that HLS can name. */
+    /**
+     * Fragmented MP4, MPEG-TS or WebM, with segments that a playlist can name. The HLS
+     * specification names only the first two, but FFmpeg's HLS reader probes each playlist's
+     * segments for their format, so it reads WebM as well (#401).
+     */
     private fun carriable(set: DashAdaptationSet, rep: DashRepresentation): Boolean {
         val mime = (rep.mimeType ?: set.mimeType)?.lowercase()
-        val container = mime in MP4_TYPES || mime in TS_TYPES ||
+        val container = mime in MP4_TYPES || mime in TS_TYPES || mime in WEBM_TYPES ||
             (mime == null && rep.segmentTemplate?.media?.substringBefore('?')?.lowercase()?.let { media ->
                 CARRIED_EXTENSIONS.any { media.endsWith(it) }
             } == true)
@@ -215,5 +219,14 @@ internal object DashHls {
     private const val SUBTITLE_GROUP = "subtitles"
     private val MP4_TYPES = setOf("video/mp4", "audio/mp4")
     private val TS_TYPES = setOf("video/mp2t", "audio/mp2t")
-    private val CARRIED_EXTENSIONS = listOf(".m4s", ".mp4", ".m4v", ".m4a", ".cmfv", ".cmfa", ".ts")
+    private val WEBM_TYPES = setOf("video/webm", "audio/webm", "video/x-matroska", "audio/x-matroska")
+    private val CARRIED_EXTENSIONS = listOf(".m4s", ".mp4", ".m4v", ".m4a", ".cmfv", ".cmfa", ".ts", ".webm", ".weba", ".mkv", ".mka")
+
+    /** Whether [rep] is WebM or Matroska, whose single files an index of `Cues` describes instead of a `sidx`. */
+    fun isWebm(set: DashAdaptationSet, rep: DashRepresentation): Boolean {
+        val mime = (rep.mimeType ?: set.mimeType)?.lowercase()
+        if (mime != null) return mime in WEBM_TYPES
+        val path = rep.baseUrl.substringBefore('#').substringBefore('?').lowercase()
+        return listOf(".webm", ".weba", ".mkv", ".mka").any { path.endsWith(it) }
+    }
 }

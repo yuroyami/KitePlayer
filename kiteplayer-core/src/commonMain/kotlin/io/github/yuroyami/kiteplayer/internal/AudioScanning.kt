@@ -10,6 +10,7 @@ import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.spi.AudioBuffer
 import io.github.yuroyami.kiteplayer.spi.AudioDecoder
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
@@ -31,6 +32,13 @@ internal suspend fun scanMediaAudio(
     sink: AudioScanSink,
 ): AudioScanResult {
     val session = backend.open(media)
+    // A read can block its thread inside the backend, where a cancellation cannot reach it, so
+    // the caller's cancellation is linked to the source's interrupt for the whole scan (#411). A
+    // child job is cancelled the moment its parent is, even while this thread is blocked, and its
+    // handler runs on the thread that cancelled. It is detached before the session closes, because
+    // an interrupt must never run after the close.
+    val link = currentCoroutineContext()[Job]?.let { Job(it) }
+    link?.invokeOnCompletion { cause -> if (cause != null) session.source.interrupt() }
     try {
         val source = session.source
         val stream = if (track != null) {
@@ -104,7 +112,12 @@ internal suspend fun scanMediaAudio(
         } finally {
             active.close()
         }
+    } catch (failure: Throwable) {
+        // An interrupted read fails with the backend's own error; the caller asked for a cancellation.
+        currentCoroutineContext().ensureActive()
+        throw failure
     } finally {
+        link?.complete()
         session.close()
     }
 }

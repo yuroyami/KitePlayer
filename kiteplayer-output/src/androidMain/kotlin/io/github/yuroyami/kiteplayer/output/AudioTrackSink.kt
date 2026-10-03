@@ -40,7 +40,9 @@ public class AudioTrackSink internal constructor(
 ) : AudioSink {
 
     public constructor() : this(
-        AudioTrackDriverFactory { accepted -> PlatformAudioTrackDriver(accepted) },
+        AudioTrackDriverFactory { accepted ->
+            openWithFloatFallback { encoding -> PlatformAudioTrackDriver(accepted, encoding) }
+        },
         AndroidMonotonicClock,
     )
 
@@ -100,6 +102,9 @@ public class AudioTrackSink internal constructor(
     )
 
     override val events: Flow<AudioSinkEvent> get() = eventFlow
+
+    /** Whether the 16-bit fallback was reported. Written by the writer thread only. */
+    @Volatile private var reportedPcm16 = false
 
     override val deviceBufferFrames: Int
         get() = driver?.bufferSizeInFrames ?: 0
@@ -359,6 +364,17 @@ public class AudioTrackSink internal constructor(
     private fun writerLoop() {
         val d = driver ?: return
         d.onWriterThreadStart()
+        // Said from here, once for the sink, and not from open: the engine listens to the events
+        // only once the session that opened the device exists, and a flow with no listener drops
+        // what it is given (#445).
+        if (d.encoding == DriverEncoding.Pcm16 && !reportedPcm16) {
+            reportedPcm16 = true
+            eventFlow.tryEmit(
+                AudioSinkEvent.DeviceChanged(
+                    "this device refused 32-bit float output, so the sound plays as 16-bit PCM with dither",
+                ),
+            )
+        }
         val format = accepted ?: return
         val callback = render ?: return
         val adapter = blockAdapter ?: return

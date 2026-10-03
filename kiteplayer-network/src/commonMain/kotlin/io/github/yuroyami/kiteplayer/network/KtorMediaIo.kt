@@ -9,6 +9,7 @@ import io.ktor.client.plugins.cookies.AcceptAllCookiesStorage
 import io.ktor.client.plugins.cookies.HttpCookies
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -61,6 +62,18 @@ import kotlin.time.TimeSource
  * as [PlaybackWarning.SourceReconnecting]. A reader whose server has no ranges can start again
  * only before its first byte.
  *
+ * A live stream is the exception (#508): an internet radio station's answer, with no length and no
+ * ranges, from a Shoutcast or Icecast server, which says so with its `icy-` and `ice-` headers.
+ * Such a server closes a listener's connection as a matter of course, when a paused player has
+ * stopped reading, when its encoder restarts or when a load balancer moves the listener, so the end
+ * of the body is a drop rather than the end of the media. The reader then connects again with a
+ * plain request, under the same limit and backoff, and the new answer continues from the live
+ * edge: an MP3 or AAC decoder finds its next frame by itself. Icecast answers 404 while a station's
+ * encoder connects again, so 404 and 410 are tried again too, and a station that still answers
+ * them once the reconnects are spent has ended: the stream ends there. A response with no length and no
+ * ranges but none of those headers ends where its body ends, because a media server that encodes
+ * a song as it sends it answers the same way, and asking it again would play the song again.
+ *
  * [openRelated] opens the other addresses that the media names, such as the segments of an HLS
  * playlist, as readers of their own on the same client. Only http and https addresses open. The
  * item's own headers go only to the scheme, host and port of the item's address, because the
@@ -83,6 +96,8 @@ public class KtorMediaIo private constructor(
     private val entityTag: String?,
     /** The `Date` header of the first response, which a live DASH clock can read (#404), or null. */
     internal val date: String?,
+    /** True for a live radio stream, whose server closing the body is a drop and not an end (#508). */
+    private val live: Boolean,
     firstBody: ByteReadChannel,
     firstJob: Job,
     private val scope: CoroutineScope,
@@ -135,7 +150,11 @@ public class KtorMediaIo private constructor(
                 currentCoroutineContext().ensureActive()
                 failure
             }
-            if (closed || reconnects >= policy.maxReconnects || !canResumeAfter(failure)) throw failure
+            if (closed || reconnects >= policy.maxReconnects || !canResumeAfter(failure)) {
+                // A station still gone once the reconnects are spent has ended.
+                if (failure is KtorMediaIoException && failure.streamEnded) return -1
+                throw failure
+            }
             reconnects++
             dropBody()
             warningSink(
@@ -235,6 +254,11 @@ public class KtorMediaIo private constructor(
                 dropBody()
                 throw KtorMediaIoException("the response from $shown ended at byte $position of $knownSize", retryable = true)
             }
+            // A live stream has no end of its own, so its server closed the connection (#508).
+            if (live) {
+                dropBody()
+                throw KtorMediaIoException("the server of the live stream $shown closed it at byte $position", retryable = true)
+            }
             return -1
         }
         bodyPosition += pulled
@@ -245,12 +269,12 @@ public class KtorMediaIo private constructor(
     /**
      * True when a reconnect may cure [failure]: a timeout, a dropped connection or a server error,
      * at a byte that the server can resume from. Without ranges, only a read that has not reached
-     * its first byte can start again.
+     * its first byte can start again, or a live stream, which goes on from wherever it is now.
      */
     private fun canResumeAfter(failure: Throwable): Boolean {
         if (failure is KtorMediaIoException && !failure.retryable) return false
         if (redirects?.isRefusal(failure) == true) return false
-        return seekable || position == 0L
+        return seekable || position == 0L || live
     }
 
     override suspend fun seek(position: Long) {
@@ -273,7 +297,9 @@ public class KtorMediaIo private constructor(
 
     /**
      * One ranged GET at [target], streamed through a bounded pipe. Returns once the response has
-     * begun, which [HttpReaderPolicy.connectTimeout] bounds: that is what limits a seek.
+     * begun, which [HttpReaderPolicy.connectTimeout] bounds: that is what limits a seek. A live
+     * stream asks for no range, because its bytes have no place to resume from: the answer
+     * continues from the live edge, and counts on from [target].
      */
     private suspend fun openAt(target: Long): ByteReadChannel {
         if (closed) throw KtorMediaIoException("openAt after close on $shown")
@@ -287,54 +313,19 @@ public class KtorMediaIo private constructor(
                     client.prepareGet(uri) {
                         mark()
                         requestHeaders.forEach { (key, value) -> header(key, value) }
-                        // A rewind to zero asks for a range too, so its answer is checked like any other.
-                        header(HttpHeaders.Range, "bytes=$target-")
-                        // A server that honours this answers with the whole file, not a range, when
-                        // the file changed since the first response.
-                        entityTag?.let { header(HttpHeaders.IfRange, it) }
+                        if (!live) {
+                            // A rewind to zero asks for a range too, so its answer is checked like any other.
+                            header(HttpHeaders.Range, "bytes=$target-")
+                            // A server that honours this answers with the whole file, not a range, when
+                            // the file changed since the first response.
+                            entityTag?.let { header(HttpHeaders.IfRange, it) }
+                        }
                     }.execute { response ->
                         redirects?.refuseHidden(response, shown)
-                        val ok = response.status == HttpStatusCode.PartialContent ||
-                            (target == 0L && response.status == HttpStatusCode.OK)
-                        if (!ok) {
-                            val changed = if (entityTag != null && response.status == HttpStatusCode.OK) {
-                                ", so the file changed since it was opened"
-                            } else {
-                                ""
-                            }
-                            throw KtorMediaIoException(
-                                "server answered ${response.status} to a ranged read at byte $target of $shown$changed",
-                                // A server error may pass. A refusal, or no ranges at all, will not.
-                                retryable = response.status.value >= 500,
-                            )
-                        }
-                        // The bytes must start where the reader stands, in the same file, or they would
-                        // splice in the wrong place (#283). RFC 9110, 14.4: Content-Range names the
-                        // range the body holds, so a 206 without a valid one proves nothing.
-                        val total = if (response.status == HttpStatusCode.PartialContent) {
-                            val range = parseContentRange(response.headers[HttpHeaders.ContentRange])
-                                ?: throw KtorMediaIoException(
-                                    "server answered a ranged read at byte $target of $shown with no valid Content-Range",
-                                )
-                            if (range.first != target) {
-                                throw KtorMediaIoException(
-                                    "server answered from byte ${range.first} to a ranged read at byte $target of $shown",
-                                )
-                            }
-                            range.complete
+                        if (live) {
+                            checkLiveAnswer(response.status, response.headers[HttpHeaders.ContentType])
                         } else {
-                            response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                        }
-                        if (size != null && total != size) {
-                            throw KtorMediaIoException(
-                                "the file at $shown changed since it was opened: it had $size bytes and has ${total ?: "an unknown size"}",
-                            )
-                        }
-                        val tag = response.headers[HttpHeaders.ETag]
-                        if (entityTag != null && tag != null && tag != entityTag) {
-                            throw KtorMediaIoException(
-                                "the file at $shown changed since it was opened: its entity tag was $entityTag and is $tag",
-                            )
+                            checkRangedAnswer(response, target)
                         }
                         answered.complete(Unit)
                         copyMeasured(response.bodyAsChannel(), pipe, meter, sent)
@@ -362,6 +353,78 @@ public class KtorMediaIo private constructor(
             )
         }
         return pipe
+    }
+
+    /** Refuses an answer to a ranged read at [target] that does not continue the same file there. */
+    private fun checkRangedAnswer(response: HttpResponse, target: Long) {
+        val ok = response.status == HttpStatusCode.PartialContent ||
+            (target == 0L && response.status == HttpStatusCode.OK)
+        if (!ok) {
+            val changed = if (entityTag != null && response.status == HttpStatusCode.OK) {
+                ", so the file changed since it was opened"
+            } else {
+                ""
+            }
+            throw KtorMediaIoException(
+                "server answered ${response.status} to a ranged read at byte $target of $shown$changed",
+                // A server error may pass. A refusal, or no ranges at all, will not.
+                retryable = response.status.value >= 500,
+            )
+        }
+        // The bytes must start where the reader stands, in the same file, or they would
+        // splice in the wrong place (#283). RFC 9110, 14.4: Content-Range names the
+        // range the body holds, so a 206 without a valid one proves nothing.
+        val total = if (response.status == HttpStatusCode.PartialContent) {
+            val range = parseContentRange(response.headers[HttpHeaders.ContentRange])
+                ?: throw KtorMediaIoException(
+                    "server answered a ranged read at byte $target of $shown with no valid Content-Range",
+                )
+            if (range.first != target) {
+                throw KtorMediaIoException(
+                    "server answered from byte ${range.first} to a ranged read at byte $target of $shown",
+                )
+            }
+            range.complete
+        } else {
+            response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        }
+        if (size != null && total != size) {
+            throw KtorMediaIoException(
+                "the file at $shown changed since it was opened: it had $size bytes and has ${total ?: "an unknown size"}",
+            )
+        }
+        val tag = response.headers[HttpHeaders.ETag]
+        if (entityTag != null && tag != null && tag != entityTag) {
+            throw KtorMediaIoException(
+                "the file at $shown changed since it was opened: its entity tag was $entityTag and is $tag",
+            )
+        }
+    }
+
+    /**
+     * Refuses a live stream's answer to a reconnect that cannot continue it: anything but 200, and
+     * a body of another type than the stream's, such as a page of markup that would reach the
+     * decoder as sound. A 404 or 410 says the station is gone, for now or for good.
+     */
+    private fun checkLiveAnswer(status: HttpStatusCode, type: String?) {
+        if (status == HttpStatusCode.NotFound || status == HttpStatusCode.Gone) {
+            throw KtorMediaIoException(
+                "the live stream $shown is gone: the reconnect was answered $status",
+                retryable = true,
+                streamEnded = true,
+            )
+        }
+        if (status != HttpStatusCode.OK) {
+            throw KtorMediaIoException(
+                "server answered $status to a reconnect to the live stream $shown",
+                retryable = status.value >= 500 || status == HttpStatusCode.RequestTimeout || status == HttpStatusCode.TooManyRequests,
+            )
+        }
+        val was = contentType?.substringBefore(';')?.trim()?.lowercase()
+        val now = type?.substringBefore(';')?.trim()?.lowercase()
+        if (was != null && now != null && was != now) {
+            throw KtorMediaIoException("the live stream $shown was $was and its reconnect answered $now")
+        }
     }
 
     /** Gives up the current response. The next read opens a new one at [position]. */
@@ -449,6 +512,10 @@ public class KtorMediaIo private constructor(
                             val location = response.call.request.url.toString()
                             val type = response.headers[HttpHeaders.ContentType]
                             val date = response.headers[HttpHeaders.Date]
+                            // Shoutcast and Icecast name the station in headers of their own (#508).
+                            val radio = response.headers.names().any {
+                                it.startsWith("icy-", ignoreCase = true) || it.startsWith("ice-", ignoreCase = true)
+                            }
                             when (response.status) {
                                 HttpStatusCode.PartialContent -> {
                                     // Content-Range: bytes 0-last/total, total possibly "*". A range that
@@ -464,7 +531,7 @@ public class KtorMediaIo private constructor(
                                 }
                                 HttpStatusCode.OK -> {
                                     val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                                    probe.complete(Probe(total, seekable = false, tag, location, type, date))
+                                    probe.complete(Probe(total, seekable = false, tag, location, type, date, live = total == null && radio))
                                 }
                                 else -> throw KtorMediaIoException(
                                     "cannot open $shown: ${response.status}",
@@ -503,6 +570,7 @@ public class KtorMediaIo private constructor(
                 contentType = answer.contentType,
                 entityTag = answer.entityTag,
                 date = answer.date,
+                live = answer.live,
                 firstBody = pipe,
                 firstJob = job,
                 scope = scope,
@@ -573,6 +641,7 @@ private class Probe(
     val location: String,
     val contentType: String?,
     val date: String?,
+    val live: Boolean = false,
 )
 
 /**
@@ -598,6 +667,8 @@ public class KtorMediaIoException internal constructor(
     message: String,
     /** True when a reconnect may cure it: a timeout, a response that ended early, a server error. */
     internal val retryable: Boolean,
+    /** True when a live stream's reconnect was answered 404 or 410: the station may have ended (#508). */
+    internal val streamEnded: Boolean = false,
 ) : Exception(message) {
     /** A failure that a reconnect cannot cure. */
     public constructor(message: String) : this(message, retryable = false)

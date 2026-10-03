@@ -676,6 +676,14 @@ list by the same marks as an HLS playlist, but with no `#EXT-X-` tag in it.
 - The streams open through the list's reader, on its client, so a `MediaIo` of your
   own serves them through `openRelated`, as for HLS. A list that names another list is followed,
   three levels deep at most.
+- A station's server closes a listener's connection now and then, after a long pause, when its
+  encoder restarts or when a load balancer moves the listener. A stream with no length and no
+  ranges that carries Shoutcast or Icecast `icy-` headers connects again and goes on from the live
+  edge, with `PlaybackWarning.SourceReconnecting` each time, and ends only when the station still
+  answers 404 or 410 once the reconnects are spent
+  ([#508](https://github.com/yuroyami/KitePlayer/issues/508)). Without those headers
+  the stream ends where the server stops, because a media server that encodes a song as it sends
+  it answers the same way, and asking it again would play the song again.
 
 ### DASH
 

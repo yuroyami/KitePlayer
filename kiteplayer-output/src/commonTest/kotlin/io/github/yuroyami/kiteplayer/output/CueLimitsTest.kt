@@ -64,6 +64,10 @@ class CueLimitsTest {
         assertEquals(360f, cueFontSizePx(CueStyle(), layout, 360, Float.POSITIVE_INFINITY))
         assertEquals(1f, cueFontSizePx(CueStyle(fontSizePx = -40f), layout, 360, 1f))
         assertEquals(18f, cueFontSizePx(CueStyle(fontSizePx = Float.NaN), layout, 360, 1f))
+        // A stylesheet's factor scales the size the cue would have had (#498), and a broken one is ignored.
+        assertEquals(27f, cueFontSizePx(CueStyle(relativeSize = 1.5f), layout, 360, 1f))
+        assertEquals(18f, cueFontSizePx(CueStyle(relativeSize = Float.NaN), layout, 360, 1f))
+        assertEquals(18f, cueFontSizePx(CueStyle(relativeSize = -2f), layout, 360, 1f))
         // An authoring height that is not a height is ignored rather than divided by.
         assertEquals(20f, cueFontSizePx(CueStyle(fontSizePx = 20f), CueLayout(authoredHeight = 0), 360, 1f))
     }

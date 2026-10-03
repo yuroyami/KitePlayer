@@ -77,7 +77,7 @@ public data class StyledSpan(
  * | Field | Desktop | Apple | Android |
  * |---|---|---|---|
  * | [primaryColor], [bold], [italic], [underline], [strikeThrough] | per span | per span | per span |
- * | [fontSizePx], [outlineColor], [outlineWidthPx] | per span | per span | per span |
+ * | [fontSizePx], [relativeSize], [outlineColor], [outlineWidthPx] | per span | per span | per span |
  * | [fontFamily] | per span | per span | per span |
  * | [shadowColor], [shadowOffsetPx] | first span, whole cue | first span, whole cue | first span, whole cue |
  *
@@ -117,11 +117,17 @@ public data class CueStyle(
     val shadowOffsetPx: Float = 1f,
     /**
      * ARGB box behind each line of text, padded by [backgroundPaddingPx]. The default is fully
-     * transparent, which draws nothing and costs nothing; no subtitle format authors this field,
-     * it exists for the viewer's [SubtitleStyleOverride]. Taken from the cue's FIRST span.
+     * transparent, which draws nothing and costs nothing. WebVTT authors it with its `bg_` colour
+     * classes and its stylesheets, and the viewer's [SubtitleStyleOverride] sets it. Taken from
+     * the cue's FIRST span.
      */
     val backgroundColor: Int = 0x00000000,
     val backgroundPaddingPx: Float = 4f,
+    /**
+     * A factor on the size the text would otherwise have, from [fontSizePx] or the renderer's
+     * default, as a WebVTT stylesheet's `font-size: 120%` gives one. 1 leaves the size alone.
+     */
+    val relativeSize: Float = 1f,
 )
 
 /** Where a cue goes. */

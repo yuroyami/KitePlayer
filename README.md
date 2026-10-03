@@ -593,6 +593,11 @@ and labels it.
 
 - SubRip, WebVTT and SubStation Alpha, from the container or from an external file. External files
   load in the middle of playback.
+- WebVTT keeps its colours: the standard's colour classes such as `<c.yellow>` and `<c.bg_blue>`,
+  and the `::cue` rules of its `STYLE` blocks for colour, background, bold, italic, underline,
+  font and relative size, by class, voice and cue identifier. A rule that asks for anything more
+  is ignored whole ([#498](https://github.com/yuroyami/KitePlayer/issues/498)). A
+  `SubtitleStyleOverride` still wins over the file's colours.
 - Blu-ray (PGS), DVB, DVD and XSUB image subtitles from the container, placed on the picture they
   were authored for.
 - ASS and SSA tracks are drawn by libass as authored: moving signs, animated transforms, karaoke

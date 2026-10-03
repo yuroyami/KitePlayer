@@ -87,13 +87,15 @@ internal const val STACK_GAP_PX: Int = 8
 
 /**
  * The font size of [style] in viewport pixels: about one twentieth of the viewport height unless
- * the cue says otherwise, scaled by the viewer's [fontScale] and by the authoring resolution when
- * the format declared one. From 1 pixel up to the viewport height, whatever the cue asked for.
+ * the cue says otherwise, scaled by the cue's [CueStyle.relativeSize], by the viewer's [fontScale]
+ * and by the authoring resolution when the format declared one. From 1 pixel up to the viewport
+ * height, whatever the cue asked for.
  */
 internal fun cueFontSizePx(style: CueStyle, layout: CueLayout, viewportHeight: Int, fontScale: Float): Float {
     val default = viewportHeight / 20f
     val authoredScale = layout.authoredHeight?.takeIf { it > 0 }?.let { viewportHeight.toFloat() / it } ?: 1f
-    val size = (style.fontSizePx?.times(authoredScale) ?: default) * fontScale
+    val relative = style.relativeSize.takeIf { it.isFinite() && it > 0f } ?: 1f
+    val size = (style.fontSizePx?.times(authoredScale) ?: default) * relative * fontScale
     return if (size.isNaN()) default.coerceAtLeast(1f) else size.coerceIn(1f, viewportHeight.toFloat().coerceAtLeast(1f))
 }
 

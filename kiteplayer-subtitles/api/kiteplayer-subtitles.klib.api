@@ -10,6 +10,10 @@ final class io.github.yuroyami.kiteplayer.subtitle/AssTrackParser { // io.github
     final fun parseEvent(kotlin/String, kotlin/Long, kotlin/Long): io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text? // io.github.yuroyami.kiteplayer.subtitle/AssTrackParser.parseEvent|parseEvent(kotlin.String;kotlin.Long;kotlin.Long){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.subtitle/WebVttTrackParser { // io.github.yuroyami.kiteplayer.subtitle/WebVttTrackParser|null[0]
+    final fun parseCueBody(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/StyledSpan> // io.github.yuroyami.kiteplayer.subtitle/WebVttTrackParser.parseCueBody|parseCueBody(kotlin.String){}[0]
+}
+
 final object io.github.yuroyami.kiteplayer.subtitle/AssParser { // io.github.yuroyami.kiteplayer.subtitle/AssParser|null[0]
     final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue> // io.github.yuroyami.kiteplayer.subtitle/AssParser.parse|parse(kotlin.String){}[0]
     final fun trackParser(kotlin/String): io.github.yuroyami.kiteplayer.subtitle/AssTrackParser // io.github.yuroyami.kiteplayer.subtitle/AssParser.trackParser|trackParser(kotlin.String){}[0]
@@ -31,4 +35,5 @@ final object io.github.yuroyami.kiteplayer.subtitle/SubRipParser { // io.github.
 final object io.github.yuroyami.kiteplayer.subtitle/WebVttParser { // io.github.yuroyami.kiteplayer.subtitle/WebVttParser|null[0]
     final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/WebVttParser.parse|parse(kotlin.String){}[0]
     final fun parseCueBody(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/StyledSpan> // io.github.yuroyami.kiteplayer.subtitle/WebVttParser.parseCueBody|parseCueBody(kotlin.String){}[0]
+    final fun trackParser(kotlin/String): io.github.yuroyami.kiteplayer.subtitle/WebVttTrackParser // io.github.yuroyami.kiteplayer.subtitle/WebVttParser.trackParser|trackParser(kotlin.String){}[0]
 }

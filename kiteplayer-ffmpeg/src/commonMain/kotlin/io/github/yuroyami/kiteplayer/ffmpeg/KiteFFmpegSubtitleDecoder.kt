@@ -12,6 +12,7 @@ import io.github.yuroyami.kiteplayer.subtitle.AssTrackParser
 import io.github.yuroyami.kiteplayer.subtitle.SubRipParser
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import io.github.yuroyami.kiteplayer.subtitle.WebVttParser
+import io.github.yuroyami.kiteplayer.subtitle.WebVttTrackParser
 
 /**
  * Text subtitle decode over the packet path: a Matroska SubRip, WebVTT or ASS track's
@@ -35,7 +36,10 @@ internal class KiteFFmpegSubtitleDecoderFactory : SubtitleDecoderFactory {
         "mov_text" -> timedTextDefaultStyle(stream.codecExtradata).let { default ->
             KiteFFmpegTextSubtitleDecoder { payload, start, end -> timedTextCue(payload, default, start, end) }
         }
-        "webvtt" -> KiteFFmpegTextSubtitleDecoder { payload, start, end -> webVttCue(payload.decodeToString(), start, end) }
+        // Matroska keeps the start of the file, its STYLE blocks included, as the track's private data (#498).
+        "webvtt" -> WebVttParser.trackParser(stream.codecExtradata?.decodeToString() ?: "").let { track ->
+            KiteFFmpegTextSubtitleDecoder { payload, start, end -> webVttCue(track, payload.decodeToString(), start, end) }
+        }
         // The Kotlin ASS dialogue tier. The track header, styles included, travels as
         // codec extradata; each packet is one FFmpeg-normalised event line.
         "ass", "ssa" -> KiteFFmpegAssSubtitleDecoder(
@@ -126,5 +130,5 @@ internal class KiteFFmpegTextSubtitleDecoder(
 }
 
 /** A WebVTT packet's cue. Matroska keeps the cue settings outside the body, so only the text is here. */
-private fun webVttCue(body: String, startMicros: Long, endMicros: Long): SubtitleCue.Text? =
-    WebVttParser.parseCueBody(body).takeIf { it.isNotEmpty() }?.let { SubtitleCue.Text(startMicros, endMicros, it) }
+private fun webVttCue(track: WebVttTrackParser, body: String, startMicros: Long, endMicros: Long): SubtitleCue.Text? =
+    track.parseCueBody(body).takeIf { it.isNotEmpty() }?.let { SubtitleCue.Text(startMicros, endMicros, it) }

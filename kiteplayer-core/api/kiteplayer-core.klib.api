@@ -1945,7 +1945,7 @@ final class io.github.yuroyami.kiteplayer.subtitle/CueLayout { // io.github.yuro
 }
 
 final class io.github.yuroyami.kiteplayer.subtitle/CueStyle { // io.github.yuroyami.kiteplayer.subtitle/CueStyle|null[0]
-    constructor <init>(kotlin/String? = ..., kotlin/Float? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Int = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer.subtitle/CueStyle.<init>|<init>(kotlin.String?;kotlin.Float?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Float;kotlin.Float;kotlin.Int;kotlin.Float){}[0]
+    constructor <init>(kotlin/String? = ..., kotlin/Float? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Int = ..., kotlin/Float = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer.subtitle/CueStyle.<init>|<init>(kotlin.String?;kotlin.Float?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Float;kotlin.Float;kotlin.Int;kotlin.Float;kotlin.Float){}[0]
 
     final val backgroundColor // io.github.yuroyami.kiteplayer.subtitle/CueStyle.backgroundColor|{}backgroundColor[0]
         final fun <get-backgroundColor>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueStyle.backgroundColor.<get-backgroundColor>|<get-backgroundColor>(){}[0]
@@ -1965,6 +1965,8 @@ final class io.github.yuroyami.kiteplayer.subtitle/CueStyle { // io.github.yuroy
         final fun <get-outlineWidthPx>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueStyle.outlineWidthPx.<get-outlineWidthPx>|<get-outlineWidthPx>(){}[0]
     final val primaryColor // io.github.yuroyami.kiteplayer.subtitle/CueStyle.primaryColor|{}primaryColor[0]
         final fun <get-primaryColor>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueStyle.primaryColor.<get-primaryColor>|<get-primaryColor>(){}[0]
+    final val relativeSize // io.github.yuroyami.kiteplayer.subtitle/CueStyle.relativeSize|{}relativeSize[0]
+        final fun <get-relativeSize>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueStyle.relativeSize.<get-relativeSize>|<get-relativeSize>(){}[0]
     final val shadowColor // io.github.yuroyami.kiteplayer.subtitle/CueStyle.shadowColor|{}shadowColor[0]
         final fun <get-shadowColor>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueStyle.shadowColor.<get-shadowColor>|<get-shadowColor>(){}[0]
     final val shadowOffsetPx // io.github.yuroyami.kiteplayer.subtitle/CueStyle.shadowOffsetPx|{}shadowOffsetPx[0]
@@ -1979,6 +1981,7 @@ final class io.github.yuroyami.kiteplayer.subtitle/CueStyle { // io.github.yuroy
     final fun component11(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueStyle.component11|component11(){}[0]
     final fun component12(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueStyle.component12|component12(){}[0]
     final fun component13(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueStyle.component13|component13(){}[0]
+    final fun component14(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueStyle.component14|component14(){}[0]
     final fun component2(): kotlin/Float? // io.github.yuroyami.kiteplayer.subtitle/CueStyle.component2|component2(){}[0]
     final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/CueStyle.component3|component3(){}[0]
     final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/CueStyle.component4|component4(){}[0]
@@ -1987,7 +1990,7 @@ final class io.github.yuroyami.kiteplayer.subtitle/CueStyle { // io.github.yuroy
     final fun component7(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueStyle.component7|component7(){}[0]
     final fun component8(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueStyle.component8|component8(){}[0]
     final fun component9(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueStyle.component9|component9(){}[0]
-    final fun copy(kotlin/String? = ..., kotlin/Float? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Int = ..., kotlin/Float = ...): io.github.yuroyami.kiteplayer.subtitle/CueStyle // io.github.yuroyami.kiteplayer.subtitle/CueStyle.copy|copy(kotlin.String?;kotlin.Float?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Float;kotlin.Float;kotlin.Int;kotlin.Float){}[0]
+    final fun copy(kotlin/String? = ..., kotlin/Float? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Int = ..., kotlin/Float = ..., kotlin/Float = ...): io.github.yuroyami.kiteplayer.subtitle/CueStyle // io.github.yuroyami.kiteplayer.subtitle/CueStyle.copy|copy(kotlin.String?;kotlin.Float?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Float;kotlin.Float;kotlin.Int;kotlin.Float;kotlin.Float){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/CueStyle.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueStyle.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/CueStyle.toString|toString(){}[0]

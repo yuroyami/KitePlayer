@@ -102,20 +102,18 @@ class TextScanCostTest {
     @Test
     fun voiceAndClassTagsWithoutACloseAreReadAFewTimesPerCharacter() {
         for (body in listOf("<v ".repeat(10_000), "<c.".repeat(10_000), "</v x".repeat(6_000), "<".repeat(30_000))) {
-            for (isTag in listOf<(CharSequence, Int, Int) -> Boolean>({ _, _, _ -> false }, { _, _, _ -> true })) {
-                val text = CountingText(body)
-                assertEquals(body, stripTags(text, isTag), "no tag ends, so nothing is removed")
-                assertFewReads(text, body.take(6))
-            }
+            val text = CountingText(body)
+            assertEquals(body, vttSpans(text, VttStyleSheet.EMPTY, null).joinToString("") { it.text }, "no tag ends, so nothing is removed")
+            assertFewReads(text, body.take(6))
         }
     }
 
     @Test
-    fun stripTagsRemovesWhatItsTestAcceptsUpToTheFirstClose() {
-        val voiceOnly: (CharSequence, Int, Int) -> Boolean = { text, from, to -> text.substring(from, to).startsWith("v") }
-        assertEquals("Hi there", stripTags("<v Bob>Hi<v> there", voiceOnly))
-        assertEquals("", stripTags("<v Bob<i>", voiceOnly), "a tag runs to the first close after it")
-        assertEquals("<b>x<", stripTags("<b>x<", voiceOnly))
+    fun aTagRunsToTheFirstCloseAfterIt() {
+        fun read(body: String) = vttSpans(body, VttStyleSheet.EMPTY, null).joinToString("") { it.text }
+        assertEquals("Hi there", read("<v Bob>Hi<v> there"))
+        assertEquals("", read("<v Bob<i>"), "a tag runs to the first close after it")
+        assertEquals("x<", read("<b>x<"))
         val cues = WebVttParser.parse("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Bob><c.loud>Hi</c></v> <00:00:01.500>there\n")
         assertEquals("Hi there", cues.single().spans.joinToString("") { it.text })
     }

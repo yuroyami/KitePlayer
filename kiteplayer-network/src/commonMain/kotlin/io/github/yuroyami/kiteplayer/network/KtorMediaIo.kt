@@ -10,7 +10,10 @@ import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.URLBuilder
+import io.ktor.http.URLProtocol
 import io.ktor.http.Url
+import io.ktor.util.encodeBase64
 import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.cancel
@@ -398,9 +401,14 @@ public class KtorMediaIo private constructor(
             defaultHeaders: Map<String, String> = emptyMap(),
             meter: DownloadMeter = DownloadMeter(),
         ): KtorMediaIo {
-            val related = RelatedRequests(uri, defaultHeaders, headers)
+            // A user name and password in the address become its login, sent to the item's own
+            // origin as the item's headers are, and the address is requested without them (#448).
+            val login = basicLogin(uri)
+            val requested = login?.uri ?: uri
+            val itemHeaders = login?.let { withLogin(headers, it) } ?: headers
+            val related = RelatedRequests(requested, defaultHeaders, itemHeaders)
             return open(
-                uri, client ?: HttpClient(), ownsClient = client == null, headers, related, policy, redirects, meter,
+                requested, client ?: HttpClient(), ownsClient = client == null, itemHeaders, related, policy, redirects, meter,
             )
         }
 
@@ -415,6 +423,10 @@ public class KtorMediaIo private constructor(
             redirects: RedirectRule?,
             meter: DownloadMeter,
         ): KtorMediaIo {
+            // An address that the media names can carry a login of its own, as the item's can.
+            basicLogin(uri)?.let { login ->
+                return open(login.uri, http, ownsClient, withLogin(headers, login), related, policy, redirects, meter)
+            }
             val shown = shownUri(uri)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val probe = CompletableDeferred<Probe>()
@@ -499,6 +511,42 @@ public class KtorMediaIo private constructor(
         }
     }
 }
+
+/** An address's user name and password as a Basic login, and the address without them. */
+internal class BasicLogin(val uri: String, val authorization: String)
+
+/**
+ * The login in [uri], an http or https address written `scheme://user:password@host/...`, or null
+ * when it has none (#448).
+ *
+ * FFmpeg's own http reader logs in with such an address, and so do ffplay, VLC and mpv, which is
+ * how private Icecast servers, NAS media servers and cameras are commonly given. Ktor sends the
+ * login only through its own basic auth call, and OkHttp keeps it in the address unsent, so the
+ * reader lifts it out into a Basic `Authorization` header here. The header is one of the item's
+ * own, so it goes only to the item's scheme, host and port, and Ktor drops it on a redirect to
+ * another host. The user name and the password are read percent-decoded, as the address spells
+ * them, and sent as UTF-8.
+ */
+internal fun basicLogin(uri: String): BasicLogin? {
+    val url = runCatching { Url(uri) }.getOrNull() ?: return null
+    if (url.protocol != URLProtocol.HTTP && url.protocol != URLProtocol.HTTPS) return null
+    val user = url.user ?: return null
+    if (user.isEmpty() && url.password.isNullOrEmpty()) return null
+    val bare = URLBuilder(url).apply {
+        this.user = null
+        this.password = null
+    }.buildString()
+    val token = "$user:${url.password.orEmpty()}".encodeToByteArray().encodeBase64()
+    return BasicLogin(bare, "Basic $token")
+}
+
+/** [headers] with [login] added, unless they carry an `Authorization` of their own, which wins. */
+internal fun withLogin(headers: Map<String, String>, login: BasicLogin): Map<String, String> =
+    if (headers.keys.any { it.equals(HttpHeaders.Authorization, ignoreCase = true) }) {
+        headers
+    } else {
+        headers + (HttpHeaders.Authorization to login.authorization)
+    }
 
 /** What the first response said about the file. */
 private class Probe(

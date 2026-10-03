@@ -52,9 +52,13 @@ private class AndroidInterruptionHandle(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
+    @Volatile
+    private var closed = false
+
     // The focus callback, the noisy receiver and the status collector run on different threads,
-    // and the lifecycle and the applier are not thread safe, so each call holds its monitor.
-    private fun handle(event: InterruptionEvent) = synchronized(applier) { applier.handle(event) }
+    // and the lifecycle and the applier are not thread safe, so each call holds its monitor. A
+    // closed handle reacts to nothing, so a callback already on its way cannot pause the player.
+    private fun handle(event: InterruptionEvent) = synchronized(applier) { if (!closed) applier.handle(event) }
 
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         // A permanent loss ends this hold: the next play asks again (#282).
@@ -95,11 +99,17 @@ private class AndroidInterruptionHandle(
             player.state.map { it.status }.distinctUntilChanged().collect { status ->
                 when (synchronized(lifecycle) { lifecycle.on(status) }) {
                     true -> {
+                        // A blocking platform call, which cancelling the scope does not stop, so the
+                        // answer may come back after close (#415).
                         val granted = audioManager.requestAudioFocus(focusRequest) ==
                             AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-                        synchronized(lifecycle) { lifecycle.answered(granted) }
-                        // No focus, no sound: a denied request is a loss, and the policy pauses.
-                        if (!granted) handle(InterruptionEvent.Lost)
+                        when (synchronized(lifecycle) { lifecycle.answered(granted) }) {
+                            FocusAnswer.Held -> Unit
+                            // No focus, no sound: a denied request is a loss, and the policy pauses.
+                            FocusAnswer.Denied -> handle(InterruptionEvent.Lost)
+                            // Close gave back only what was held then; this grant has no other owner.
+                            FocusAnswer.AfterClose -> if (granted) audioManager.abandonAudioFocusRequest(focusRequest)
+                        }
                     }
                     false -> audioManager.abandonAudioFocusRequest(focusRequest)
                     null -> Unit
@@ -109,6 +119,7 @@ private class AndroidInterruptionHandle(
     }
 
     override fun close() {
+        closed = true
         scope.cancel()
         runCatching { context.unregisterReceiver(noisyReceiver) }
         if (synchronized(lifecycle) { lifecycle.release() }) audioManager.abandonAudioFocusRequest(focusRequest)

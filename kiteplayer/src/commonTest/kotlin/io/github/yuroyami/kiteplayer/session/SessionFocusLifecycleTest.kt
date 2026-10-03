@@ -84,4 +84,42 @@ class SessionFocusLifecycleTest {
         assertTrue(lifecycle.release())
         assertFalse(lifecycle.release())
     }
+
+    // The request is on its way to the platform when close runs, so close finds nothing held (#415).
+    @Test
+    fun aGrantThatComesBackAfterCloseIsGivenBack() {
+        val lifecycle = SessionFocusLifecycle()
+        assertEquals(true, lifecycle.on(PlaybackStatus.Playing))
+        assertFalse(lifecycle.release(), "nothing was held yet when close ran")
+        assertEquals(FocusAnswer.AfterClose, lifecycle.answered(granted = true))
+        assertFalse(lifecycle.release(), "the late grant was recorded as held, with no owner left to give it back")
+    }
+
+    @Test
+    fun aDenialAfterCloseIsNotALossToActOn() {
+        val lifecycle = SessionFocusLifecycle()
+        lifecycle.on(PlaybackStatus.Playing)
+        lifecycle.release()
+        assertEquals(FocusAnswer.AfterClose, lifecycle.answered(granted = false))
+    }
+
+    @Test
+    fun aClosedLifecycleAsksForNothingAndGivesNothingBack() {
+        val lifecycle = SessionFocusLifecycle()
+        lifecycle.on(PlaybackStatus.Playing)
+        lifecycle.answered(granted = true)
+        assertTrue(lifecycle.release())
+        assertNull(lifecycle.on(PlaybackStatus.Playing))
+        assertNull(lifecycle.on(PlaybackStatus.Idle))
+    }
+
+    @Test
+    fun anAnswerBeforeCloseSaysWhetherItIsHeld() {
+        val lifecycle = SessionFocusLifecycle()
+        lifecycle.on(PlaybackStatus.Playing)
+        assertEquals(FocusAnswer.Held, lifecycle.answered(granted = true))
+        assertEquals(false, lifecycle.on(PlaybackStatus.Idle))
+        lifecycle.on(PlaybackStatus.Playing)
+        assertEquals(FocusAnswer.Denied, lifecycle.answered(granted = false))
+    }
 }

@@ -112,22 +112,27 @@ internal class InterruptionApplier(
  * holder that the sound is theirs again.
  *
  * Only a grant holds it. A denied request, or a permanent loss, leaves nothing held, so the next
- * play asks again (#282). Not thread safe: a platform guard calls it from one thread at a time.
+ * play asks again (#282). A request still on its way to the platform when [release] closes the
+ * lifecycle answers [FocusAnswer.AfterClose], so a grant nobody would otherwise give back is given
+ * back at once (#415). Not thread safe: a platform guard calls it from one thread at a time.
  */
 internal class SessionFocusLifecycle {
     private var held = false
+    private var closed = false
 
-    /** True to request, false to give back, null when nothing needs to change. */
-    fun on(status: PlaybackStatus): Boolean? = when (status) {
+    /** True to request, false to give back, null when nothing needs to change. Always null once closed. */
+    fun on(status: PlaybackStatus): Boolean? = if (closed) null else when (status) {
         PlaybackStatus.Playing, PlaybackStatus.Buffering -> if (held) null else true
         PlaybackStatus.Idle, PlaybackStatus.Ended, PlaybackStatus.Failed ->
             if (held) false.also { held = false } else null
         PlaybackStatus.Paused, PlaybackStatus.Opening -> null
     }
 
-    /** The platform's answer to a request [on] asked for. A denial holds nothing. */
-    fun answered(granted: Boolean) {
-        held = granted
+    /** The platform's answer to a request [on] asked for, and what the caller does with it. */
+    fun answered(granted: Boolean): FocusAnswer = when {
+        closed -> FocusAnswer.AfterClose
+        granted -> FocusAnswer.Held.also { held = true }
+        else -> FocusAnswer.Denied.also { held = false }
     }
 
     /** The platform took the sound away for good, so the next play has to ask again. */
@@ -135,6 +140,21 @@ internal class SessionFocusLifecycle {
         held = false
     }
 
-    /** Gives it back on close, when it was held. */
-    fun release(): Boolean = held.also { held = false }
+    /** Closes the lifecycle, and says whether something was held to give back. */
+    fun release(): Boolean {
+        closed = true
+        return held.also { held = false }
+    }
+}
+
+/** What a caller does with the platform's answer to a focus request. */
+internal enum class FocusAnswer {
+    /** Granted, and now held until the player goes idle or the lifecycle closes. */
+    Held,
+
+    /** Refused. Nothing is held, and there is no sound to make. */
+    Denied,
+
+    /** It came back after close, which gave back only what was held then: give a grant back now. */
+    AfterClose,
 }

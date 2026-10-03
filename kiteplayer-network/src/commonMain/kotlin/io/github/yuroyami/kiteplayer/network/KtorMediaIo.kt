@@ -5,6 +5,8 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.MediaIoResolver
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.cookies.AcceptAllCookiesStorage
+import io.ktor.client.plugins.cookies.HttpCookies
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
@@ -408,7 +410,7 @@ public class KtorMediaIo private constructor(
             val itemHeaders = login?.let { withLogin(headers, it) } ?: headers
             val related = RelatedRequests(requested, defaultHeaders, itemHeaders)
             return open(
-                requested, client ?: HttpClient(), ownsClient = client == null, itemHeaders, related, policy, redirects, meter,
+                requested, client ?: itemClient(), ownsClient = client == null, itemHeaders, related, policy, redirects, meter,
             )
         }
 
@@ -512,6 +514,21 @@ public class KtorMediaIo private constructor(
     }
 }
 
+/**
+ * The client a reader makes for itself when it is given none, as the automatic transport does for
+ * each item: the item's reader and every reader it opens for the addresses the media names share
+ * it, and it closes with the item (#449).
+ *
+ * It keeps cookies, because some CDNs protect a stream with one: the playlist's or the manifest's
+ * response sets a session cookie, and every segment must send it back, which FFmpeg's own HLS
+ * reader does. A cookie goes back only to the hosts and paths its own rules name, and the store dies
+ * with the client, so one item's session never reaches another item or another player. A cookie
+ * the item sets in its headers is kept with the others.
+ */
+internal fun itemClient(): HttpClient = HttpClient {
+    install(HttpCookies) { storage = AcceptAllCookiesStorage() }
+}
+
 /** An address's user name and password as a Basic login, and the address without them. */
 internal class BasicLogin(val uri: String, val authorization: String)
 
@@ -601,6 +618,11 @@ public class KtorMediaIoException internal constructor(
  * provider plays it: the manifest is recognised by its content type, by a path that ends in `.mpd`,
  * or by its root element when the type leaves room for one, and its segments open on this
  * resolver's client.
+ *
+ * The client this resolver creates is shared by every item it opens, so it keeps no cookies: one
+ * item's session must not reach another. A stream protected by a cookie plays through the automatic
+ * transport, whose client belongs to one item and keeps them, or through a client of your own with
+ * Ktor's `HttpCookies` installed.
  *
  * The lazily created client lives for the resolver's lifetime, which is normally the process:
  * exactly how OkHttp and NSURLSession want to be held. A resolver with a shorter life closes

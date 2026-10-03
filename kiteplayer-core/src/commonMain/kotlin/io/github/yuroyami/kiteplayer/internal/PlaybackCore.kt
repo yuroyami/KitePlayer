@@ -193,6 +193,13 @@ internal class PlaybackCore(
 
     /** Commands taken off the channel but not yet executed, so nothing is lost to a preemption check. */
     private val heldCommands = ArrayDeque<CoreCommand>()
+
+    /**
+     * The reply of the request that built the session that is open or being opened, or null after a
+     * stop. A cancelled request's stop names its reply, and only stops while it is still this (#410).
+     * The queue's own advance builds with a reply nobody holds, so no earlier request owns the next item.
+     */
+    private var sessionOwner: Any? = null
     private val heldOutcomes = ArrayDeque<WorkerOutcome>()
 
     private val snapshotState = MutableStateFlow(PlayerSnapshot())
@@ -1454,7 +1461,8 @@ internal class PlaybackCore(
             // The caller went away. Nothing half built may be left behind, and cancellation is never
             // reported as a playback failure.
             if (stopOnCancellation && !closedNow.value) {
-                commands.trySend(CoreCommand.Stop(CompletableDeferred()))
+                // Scoped to this request: the actor stops only a session this reply built (#410).
+                commands.trySend(CoreCommand.Stop(CompletableDeferred(), owner = reply))
             }
             throw cancellation
         }
@@ -1537,8 +1545,14 @@ internal class PlaybackCore(
             val command = commands.tryReceive().getOrNull() ?: break
             heldCommands.addLast(command)
         }
-        return heldCommands.any { it is CoreCommand.Stop || it is CoreCommand.Close }
+        return heldCommands.any { (it is CoreCommand.Stop && stopApplies(it)) || it is CoreCommand.Close }
     }
+
+    /**
+     * Whether [stop] is for the session that is open or being built: a plain stop always is, and a
+     * cancelled request's stop only while the session is still the one that request built.
+     */
+    private fun stopApplies(stop: CoreCommand.Stop): Boolean = stop.owner == null || stop.owner === sessionOwner
 
     /**
      * True when a NEWER seek is waiting in the mailbox (owner report 2026-08-26).
@@ -1847,7 +1861,8 @@ internal class PlaybackCore(
                 clearSeekMaskUnlessPending()
             }
             is CoreCommand.Stop -> {
-                runStop()
+                // A cancelled request's stop that finds another request's session leaves it alone.
+                if (stopApplies(command)) runStop()
                 command.reply.complete(Unit)
             }
             is CoreCommand.Close -> runClose(command.reply)
@@ -2473,6 +2488,7 @@ internal class PlaybackCore(
 
     private suspend fun runOpen(command: CoreCommand.Open) {
         traceUntilReplied(command.reply, "session", "open") { mapOf("uri" to redactUri(command.media.uri)) }
+        sessionOwner = command.reply
         // Open is legal from Ended, and Ended keeps its session alive so the viewer can seek back.
         // That session must be fully torn down and awaited BEFORE the new one is installed:
         // overwriting the field would strand its source, workers, decoders, sink and queues live
@@ -6491,6 +6507,7 @@ internal class PlaybackCore(
      */
     private suspend fun runOpenPrepared(next: PendingNext, reply: CompletableDeferred<Unit>) {
         traceUntilReplied(reply, "session", "open") { mapOf("uri" to redactUri(next.item.uri)) }
+        sessionOwner = reply
         val prepared = next.prepared ?: error("runOpenPrepared needs a primed preload")
         val incoming = prepared.session
         // Adopted, not dropped: the teardown below must leave it alone.
@@ -6750,11 +6767,12 @@ internal class PlaybackCore(
         is CoreCommand.QueueNext -> primedFor(neighbourInOrder(1)) == null
         is CoreCommand.Open, is CoreCommand.OpenQueue, is CoreCommand.QueuePrevious,
         is CoreCommand.EditQueue, is CoreCommand.SetShuffle, is CoreCommand.RestoreQueueOrder,
-        is CoreCommand.Seek, is CoreCommand.SeekLater, is CoreCommand.Stop, is CoreCommand.Close,
+        is CoreCommand.Seek, is CoreCommand.SeekLater, is CoreCommand.Close,
         is CoreCommand.SelectTrack, is CoreCommand.SelectSecondarySubtitle,
         is CoreCommand.AttachRenderer, is CoreCommand.DetachRenderer, is CoreCommand.StepFrame,
         is CoreCommand.SetSleepTimer, is CoreCommand.SetAbLoop,
         -> true
+        is CoreCommand.Stop -> stopApplies(command)
         is CoreCommand.SetLoop -> command.mode != loop
         is CoreCommand.SetSpeed -> command.value != speed
         is CoreCommand.SetPreservePitch -> command.value != preservePitch
@@ -7661,6 +7679,7 @@ internal class PlaybackCore(
     // ---------------------------------------------------------------------------------------------
 
     private suspend fun runStop() {
+        sessionOwner = null
         playRequested = false
         pendingVideoRecovery = null
         pendingSeek = null
@@ -10546,7 +10565,12 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class Play(val reply: CompletableDeferred<Unit>) : CoreCommand("play", reply)
     class Pause(val reply: CompletableDeferred<Unit>) : CoreCommand("pause", reply)
     class Seek(val request: SeekRequest, val reply: CompletableDeferred<SeekResult>) : CoreCommand("seek", reply)
-    class Stop(val reply: CompletableDeferred<Unit>) : CoreCommand("stop", reply)
+    /**
+     * Stops whatever is open, or, with an [owner], only the session the request that [owner] names
+     * built. A cancelled open posts the second kind, so a cancel that arrives late cannot stop a
+     * newer item that another call opened in between (#410).
+     */
+    class Stop(val reply: CompletableDeferred<Unit>, val owner: Any? = null) : CoreCommand("stop", reply)
     class Close(val reply: CompletableDeferred<Unit>) : CoreCommand("close", reply)
     class SetSpeed(val value: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setSpeed", reply)
     class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply)

@@ -90,6 +90,7 @@ internal class CoreHarness(
         },
         closeDispatchers = false,
         closeDeadline = closeDeadline,
+        recordTransitions = true,
         // Under the test's own background lifetime, so a test that fails an assertion before it closes
         // still leaves no worker running. Without it, one failed assertion leaves five loops on the
         // scheduler and the test framework drains them for ever.

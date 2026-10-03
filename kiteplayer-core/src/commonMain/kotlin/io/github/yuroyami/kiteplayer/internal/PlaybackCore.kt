@@ -173,6 +173,12 @@ internal class PlaybackCore(
      * running.
      */
     parent: Job? = null,
+    /**
+     * Whether [statusHistory] and [illegalTransitions] are kept. Tests turn it on; a player does
+     * not, because it lives as long as its application and both lists would grow at every pause
+     * and every seek for all that time (#481).
+     */
+    private val recordTransitions: Boolean = false,
 ) : AutoCloseable {
 
     private val clock = output.clock
@@ -941,8 +947,21 @@ internal class PlaybackCore(
                 append(" finished=").append(open.workers.count { it.isFinished })
             }
         }
-    val statusHistory: MutableList<PlaybackStatus> = mutableListOf(PlaybackStatus.Idle)
-    val illegalTransitions: MutableList<String> = mutableListOf()
+    /** Every status the player has had, from its first Idle, when [recordTransitions] is on, and empty otherwise. */
+    val statusHistory: List<PlaybackStatus> get() = recordedStatuses
+
+    /** Every transition the status machine forbids, as "from to to", when [recordTransitions] is on. */
+    val illegalTransitions: List<String> get() = recordedIllegal
+
+    private val recordedStatuses = if (recordTransitions) mutableListOf(PlaybackStatus.Idle) else mutableListOf()
+    private val recordedIllegal = mutableListOf<String>()
+
+    /** Notes the move from [from] to [to] for the tests that read it. A player keeps nothing. */
+    private fun recordTransition(from: PlaybackStatus, to: PlaybackStatus) {
+        if (!recordTransitions) return
+        if (!StatusMachine.isLegal(from, to)) recordedIllegal += "$from to $to"
+        recordedStatuses += to
+    }
 
     /** Called with each handler's name as it runs, so a test can record the real order. */
     var onHandlerRun: ((String) -> Unit)? = null
@@ -7914,11 +7933,8 @@ internal class PlaybackCore(
             emitEvent(PlayerEvent.Failed(error))
         }
         if (status != PlaybackStatus.Idle) {
-            if (!StatusMachine.isLegal(status, PlaybackStatus.Idle)) {
-                illegalTransitions += "$status to ${PlaybackStatus.Idle}"
-            }
+            recordTransition(status, PlaybackStatus.Idle)
             status = PlaybackStatus.Idle
-            statusHistory += PlaybackStatus.Idle
         }
         // Terminal close leaves nothing of the closed media behind: a snapshot still naming the
         // media, its tracks or its position would describe a session that no longer exists.
@@ -8269,9 +8285,8 @@ internal class PlaybackCore(
 
     private fun setStatus(next: PlaybackStatus) {
         if (status == next) return
-        if (!StatusMachine.isLegal(status, next)) illegalTransitions += "$status to $next"
+        recordTransition(status, next)
         status = next
-        statusHistory += next
         // A new attempt replaces the old failure rather than leaving two truths on the snapshot.
         if (next == PlaybackStatus.Opening) lastError = null
         // Published here and not only at the end of the pass. A handler that then spends a second inside

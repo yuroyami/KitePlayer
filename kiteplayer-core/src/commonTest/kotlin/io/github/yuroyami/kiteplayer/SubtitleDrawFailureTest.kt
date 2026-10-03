@@ -83,4 +83,44 @@ class SubtitleDrawFailureTest {
         assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
         harness.close()
     }
+
+    private fun CoreHarness.notReleasedWarnings(): List<String> =
+        core.warningHistory().map { it.warning }.filterIsInstance<PlaybackWarning.ResourcesNotReleased>().map { it.detail }
+
+    /** Plays until the first line is on screen, then makes the renderer refuse to take it down. */
+    private suspend fun CoreHarness.firstLineOnARendererThatCannotWithdraw() {
+        openWithRenderer()
+        core.play()
+        run(800.milliseconds)
+        val renderer = checkNotNull(renderer)
+        assertEquals(1, renderer.overlays.last()?.images?.size, "the first line was never drawn")
+        renderer.withdrawalFailure = IllegalStateException("the surface is gone")
+    }
+
+    @Test
+    fun aRendererThatCannotWithdrawTheOverlayStillLetsCloseReleaseTheSession() = runTest {
+        val harness = CoreHarness(this, script = script)
+        harness.firstLineOnARendererThatCannotWithdraw()
+        val session = harness.session
+        // Close reports no failure: the steps after the withdrawal ran, and its refusal is a warning.
+        harness.close()
+        assertEquals(1, session.closeCount, "the backend session was never closed (#472)")
+        assertTrue(
+            harness.notReleasedWarnings().any { "subtitle overlay withdrawal: the surface is gone" in it },
+            "the refused withdrawal left no trace: ${harness.notReleasedWarnings()}",
+        )
+    }
+
+    @Test
+    fun aRendererThatCannotWithdrawTheOverlayStillLetsStopReleaseTheSession() = runTest {
+        val harness = CoreHarness(this, script = script)
+        harness.firstLineOnARendererThatCannotWithdraw()
+        val session = harness.session
+        harness.core.stop()
+        harness.run(100.milliseconds)
+        assertEquals(1, session.closeCount, "the backend session was never closed (#472)")
+        assertEquals(0, harness.ledger.liveCount, "a packet or a frame of the stopped session leaked")
+        checkNotNull(harness.renderer).withdrawalFailure = null
+        harness.close()
+    }
 }

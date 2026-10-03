@@ -223,8 +223,12 @@ internal class RecordingRenderer(
     /** Thrown by every overlay with images while set, as a renderer that cannot upload would. */
     var overlayFailure: Exception? = null
 
+    /** Thrown by every overlay with no images while set, as a renderer that lost its target would. */
+    var withdrawalFailure: Exception? = null
+
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         if (overlay != null && overlay.images.isNotEmpty()) overlayFailure?.let { throw it }
+        if (overlay != null && overlay.images.isEmpty()) withdrawalFailure?.let { throw it }
         if (overlayPublishDuration > Duration.ZERO && overlay != null && overlay.images.isNotEmpty()) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
                 kotlinx.coroutines.delay(overlayPublishDuration)

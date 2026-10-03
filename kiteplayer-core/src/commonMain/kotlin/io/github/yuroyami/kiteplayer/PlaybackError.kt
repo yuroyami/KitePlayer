@@ -82,12 +82,15 @@ public sealed class PlaybackError {
     }
 
     /**
-     * A shutdown did not complete inside its deadline, so part of the pipeline may still be running.
+     * A shutdown did not complete inside its deadline, or stopped part way, so part of the pipeline
+     * may still be running or still hold resources.
      *
      * A native call that has wedged cannot be killed from inside the process. When teardown exceeds its
      * bound the honest answer is this, not a successful close: the caller learns that the runtime is
      * compromised and that resources may still be held, which is information it can act on. Reporting
-     * success and leaking a thread is what leaves an application with a mystery instead.
+     * success and leaking a thread is what leaves an application with a mystery instead. A release
+     * step that refuses is a warning, `PlaybackWarning.ResourcesNotReleased`, and the steps after it
+     * still run; this is the report for a release that could not go on to them.
      */
     public data class RuntimeCompromised(val detail: String) : PlaybackError() {
         override val message: String get() = "shutdown did not complete: $detail"

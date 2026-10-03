@@ -7674,32 +7674,39 @@ internal class PlaybackCore(
         val detached = detachSession()
         // A zero budget is used by tests to force the compromised-runtime result. It must not prevent
         // teardown from starting: a missed deadline changes the report, never resource ownership.
-        val finished = when {
+        val outcome = when {
             // First, and before the "nothing to release" case: a zero budget is the test override
             // that forces the compromised report deterministically, and it must do that whether or
             // not a session was open.
             closeDeadline <= Duration.ZERO -> {
-                if (detached != null) releaseSession(detached)
-                false
+                if (detached != null) releaseReporting(detached)
+                ReleaseOutcome.Overran
             }
-            detached == null -> true
+            detached == null -> ReleaseOutcome.Released
             else -> awaitRelease(detached)
         }
         settleOutstandingForClose()
-        val failure = if (!finished) {
-            val error = PlaybackError.RuntimeCompromised(
-                if (teardownWedged.value) {
-                    "teardown did not finish within $closeDeadline and is STILL RUNNING, so the " +
-                        "playback threads were left alive rather than closed under it; a native " +
-                        "call that has wedged cannot be killed from inside the process, so a caller " +
-                        "that needs those threads back has to terminate the process"
-                } else {
-                    "teardown did not finish within $closeDeadline, so a worker may still hold resources"
-                },
+        val failure = when (outcome) {
+            ReleaseOutcome.Released -> null
+            ReleaseOutcome.Overran -> PlaybackException(
+                PlaybackError.RuntimeCompromised(
+                    if (teardownWedged.value) {
+                        "teardown did not finish within $closeDeadline and is STILL RUNNING, so the " +
+                            "playback threads were left alive rather than closed under it; a native " +
+                            "call that has wedged cannot be killed from inside the process, so a caller " +
+                            "that needs those threads back has to terminate the process"
+                    } else {
+                        "teardown did not finish within $closeDeadline, so a worker may still hold resources"
+                    },
+                ),
             )
-            PlaybackException(error)
-        } else {
-            null
+            // A release that ended by throwing finished, and finishing is not releasing (#472).
+            is ReleaseOutcome.Failed -> PlaybackException(
+                PlaybackError.RuntimeCompromised(
+                    "the session release stopped part way${causeDetail(outcome.cause)}, so a resource " +
+                        "it had not reached may still be held",
+                ),
+            )
         }
         terminalCloseOutcome.compareAndSet(
             expect = null,
@@ -7717,28 +7724,51 @@ internal class PlaybackCore(
      * is not abandoned, because abandoning it would leak the graph outright; what changes is that
      * the actor stops WAITING for it and reports the truth.
      *
-     * @return true when the release finished inside the deadline.
+     * @return how the release ended: inside the deadline cleanly, inside it by throwing, or not
+     *         inside it at all.
      */
-    private suspend fun awaitRelease(detached: OpenSession): Boolean {
+    private suspend fun awaitRelease(detached: OpenSession): ReleaseOutcome {
+        var thrown: Throwable? = null
         // Parentless, so cancelling anything cannot abandon the graph half released, and on the
         // release lane, which is the one lane the actor is not standing on.
         val release = GlobalScope.launch(
             context = dispatchers.release + CoroutineName("kiteplayer-session-release"),
         ) {
-            try {
-                releaseSession(detached)
-            } catch (thrown: Throwable) {
-                // This job has no parent to report to, so a throw here would be an unhandled
-                // failure. warn() is fence-locked and safe from any thread.
-                warn(PlaybackWarning.ResourcesNotReleased("the session release failed${causeDetail(thrown)}"))
-            }
+            thrown = releaseReporting(detached)
         }
-        if (withTimeoutOrNull(closeDeadline) { release.join() } != null) return true
+        if (withTimeoutOrNull(closeDeadline) { release.join() } != null) {
+            return thrown?.let { ReleaseOutcome.Failed(it) } ?: ReleaseOutcome.Released
+        }
         // Still running. The dispatchers it is standing on must NOT be closed under it, so the
         // finalizer is told to leave them alone: leaked threads are recoverable by ending the
         // process, and closing a dispatcher a wedged native call is running on is not.
         teardownWedged.value = true
-        return false
+        return ReleaseOutcome.Overran
+    }
+
+    /**
+     * Releases [detached] and returns what it threw, after warning about it. The release job has
+     * no parent to report to, so a throw out of it would be an unhandled failure. warn() is
+     * fence-locked and safe from any thread.
+     */
+    private suspend fun releaseReporting(detached: OpenSession): Throwable? = try {
+        releaseSession(detached)
+        null
+    } catch (thrown: Throwable) {
+        warn(PlaybackWarning.ResourcesNotReleased("the session release failed${causeDetail(thrown)}"))
+        thrown
+    }
+
+    /** How the release of a detached session ended, which decides what close reports. */
+    private sealed interface ReleaseOutcome {
+        /** It returned inside the deadline. A step that refused was warned about and the rest ran. */
+        data object Released : ReleaseOutcome
+
+        /** It threw inside the deadline, so the steps after the throw never ran. */
+        class Failed(val cause: Throwable) : ReleaseOutcome
+
+        /** It was still running at the deadline. */
+        data object Overran : ReleaseOutcome
     }
 
     /** Set when a release outlived its deadline, so the finalizer leaves its dispatchers alone. */
@@ -8000,27 +8030,7 @@ internal class PlaybackCore(
         // that is preferable to returning while a worker can still touch freed native state.
         withContext(NonCancellable) {
             session.schedulerMode.value = SCHEDULER_IDLE
-            // Owner report 2026-08-26: the platform renderer is SHARED across
-            // rebuilds while the "did I publish" key is per-session, so an overlay outlived the
-            // session that published it: after a track change, the fresh session's empty key said
-            // "nothing to clear" and the old text stayed on the glass for ever, which read as
-            // "disable subtitles does nothing". A dying session therefore withdraws its own cues.
-            session.typeset?.let { lane ->
-                lane.epoch.incrementAndGet()
-                lane.job?.let { job -> job.cancel(); runCatching { job.join() } }
-            }
-            val rasterPublished = retireRasterJob(session)
-            if (session.publishedCueKey != null || session.typeset?.published?.value == true || rasterPublished) {
-                session.renderer.setOverlay(
-                    SubtitleOverlay(
-                        images = emptyList(),
-                        viewportWidth = session.publishedCanvas?.first ?: DEFAULT_SUBTITLE_CANVAS_WIDTH,
-                        viewportHeight = session.publishedCanvas?.second ?: DEFAULT_SUBTITLE_CANVAS_HEIGHT,
-                        contentHash = session.overlayGeneration.incrementAndGet(),
-                    ),
-                )
-            }
-            // Every close still runs even when an earlier one failed, which is why each is wrapped.
+            // Every step still runs even when an earlier one failed, which is why each is wrapped.
             // What changed is that the failures are COLLECTED rather than dropped: a decoder or a
             // device that refused to close used to leave no trace anywhere.
             val releaseFailures = mutableListOf<String>()
@@ -8031,6 +8041,34 @@ internal class PlaybackCore(
                     throw cancellation
                 } catch (failure: Throwable) {
                     releaseFailures += "$what: ${failure.message ?: failure::class.simpleName}"
+                }
+            }
+            // Owner report 2026-08-26: the platform renderer is SHARED across
+            // rebuilds while the "did I publish" key is per-session, so an overlay outlived the
+            // session that published it: after a track change, the fresh session's empty key said
+            // "nothing to clear" and the old text stayed on the glass for ever, which read as
+            // "disable subtitles does nothing". A dying session therefore withdraws its own cues.
+            // The withdrawal goes through the ledger like every close below it: a renderer that
+            // throws while it withdraws, one that lost its target for instance, used to skip every
+            // release after it, so the workers, decoders, queues and source of the session were
+            // never closed and close still reported success (#472).
+            session.typeset?.let { lane ->
+                lane.epoch.incrementAndGet()
+                lane.job?.let { job -> job.cancel(); runCatching { job.join() } }
+            }
+            // A raster job that could not be retired may have published, so it counts as published.
+            var rasterPublished = true
+            release("subtitle raster") { rasterPublished = retireRasterJob(session) }
+            if (session.publishedCueKey != null || session.typeset?.published?.value == true || rasterPublished) {
+                release("subtitle overlay withdrawal") {
+                    session.renderer.setOverlay(
+                        SubtitleOverlay(
+                            images = emptyList(),
+                            viewportWidth = session.publishedCanvas?.first ?: DEFAULT_SUBTITLE_CANVAS_WIDTH,
+                            viewportHeight = session.publishedCanvas?.second ?: DEFAULT_SUBTITLE_CANVAS_HEIGHT,
+                            contentHash = session.overlayGeneration.incrementAndGet(),
+                        ),
+                    )
                 }
             }
             if (session.ownsAudio) release("audio device stop") { session.sink?.stop() }

@@ -1,10 +1,14 @@
+@file:OptIn(ExperimentalAtomicApi::class)
+
 package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
-import kotlinx.atomicfu.AtomicLongArray
 import kotlinx.atomicfu.atomic
+import kotlin.concurrent.atomics.AtomicLongArray
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetchAt
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -175,7 +179,9 @@ internal class KotlinAudioRing(
     // segments. Written by the feeder, read by the callback. Arrays rather than objects, because the
     // side that reads them is a real-time thread that must not allocate. Each slot is published by
     // its own sequence counter, odd while the feeder changes it, and every element is read
-    // atomically so that the closing counter read cannot pass the payload reads.
+    // atomically so that the closing counter read cannot pass the payload reads. The standard
+    // library's arrays load and store each element with sequential consistency on every target,
+    // which is that order; atomicfu's own array type is deprecated for removal (#417).
     private val segmentStartFrame = AtomicLongArray(MAX_SEGMENTS)
     private val segmentPtsUs = AtomicLongArray(MAX_SEGMENTS)
     private val segmentSlotSeq = AtomicLongArray(MAX_SEGMENTS)
@@ -290,8 +296,8 @@ internal class KotlinAudioRing(
             // Through framesToMicros and not `delta * 1_000_000L / sampleRate`, which overflows.
             // The naive product overflows a signed 64 bit intermediate at a large frame delta, the
             // same defect once found in KiteFFmpeg's timestamp helpers.
-            val micros = framesToMicros(atFrame - segmentStartFrame[newest].value, format.sampleRate)
-            if (driftWithinTolerance(segmentPtsUs[newest].value, micros, ptsUs)) return true
+            val micros = framesToMicros(atFrame - segmentStartFrame.loadAt(newest), format.sampleRate)
+            if (driftWithinTolerance(segmentPtsUs.loadAt(newest), micros, ptsUs)) return true
         }
         return appendSegment(ptsUs, atFrame)
     }
@@ -347,8 +353,8 @@ internal class KotlinAudioRing(
 
         val slot = (appended % MAX_SEGMENTS).toInt()
         beginSegmentWrite(slot)
-        segmentStartFrame[slot].value = atFrame
-        segmentPtsUs[slot].value = ptsUs
+        segmentStartFrame.storeAt(slot, atFrame)
+        segmentPtsUs.storeAt(slot, ptsUs)
         endSegmentWrite(slot)
         segmentsAppended.value = appended + 1
         return true
@@ -356,11 +362,11 @@ internal class KotlinAudioRing(
 
     /** Makes [slot]'s counter odd, so the callback does not use it until [endSegmentWrite]. Feeder only. */
     internal fun beginSegmentWrite(slot: Int) {
-        segmentSlotSeq[slot].incrementAndGet()
+        segmentSlotSeq.incrementAndFetchAt(slot)
     }
 
     internal fun endSegmentWrite(slot: Int) {
-        segmentSlotSeq[slot].incrementAndGet()
+        segmentSlotSeq.incrementAndFetchAt(slot)
     }
 
     /**
@@ -381,7 +387,7 @@ internal class KotlinAudioRing(
         val retired = segmentsRetired.value
         var stillNeeded = retired
         while (appended - stillNeeded > 1) {
-            val nextStart = segmentStartFrame[((stillNeeded + 1) % MAX_SEGMENTS).toInt()].value
+            val nextStart = segmentStartFrame.loadAt(((stillNeeded + 1) % MAX_SEGMENTS).toInt())
             if (nextStart >= consumedNow) break
             stillNeeded++
         }
@@ -521,14 +527,14 @@ internal class KotlinAudioRing(
         var index = appended - 1
         while (index >= retired) {
             val slot = (index % MAX_SEGMENTS).toInt()
-            val opening = segmentSlotSeq[slot].value
+            val opening = segmentSlotSeq.loadAt(slot)
             if (opening % 2L != 0L) {
                 torn = true
                 break
             }
-            val frame = segmentStartFrame[slot].value
-            val pts = segmentPtsUs[slot].value
-            if (segmentSlotSeq[slot].value != opening) {
+            val frame = segmentStartFrame.loadAt(slot)
+            val pts = segmentPtsUs.loadAt(slot)
+            if (segmentSlotSeq.loadAt(slot) != opening) {
                 torn = true
                 break
             }

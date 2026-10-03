@@ -97,6 +97,34 @@ public class KitePlayerPictureInPicture internal constructor(
             play = player::play,
             pause = player::pause,
         )
+
+        /**
+         * Builds picture in picture for a [canvas] that is drawn from somewhere else, such as the
+         * page's canvas of a worker player, whose drawing was handed to the worker; or answers
+         * null as the other overload does. `KitePlayerWorker.pictureInPictureOrNull` calls this.
+         *
+         * Both features carry a canvas drawn from a worker. Measured in Chromium 141, headless and
+         * on a display: the canvas moved into the document window keeps showing each new frame,
+         * and a live capture of it plays in the video element's window.
+         *
+         * @param canvas the `HTMLCanvasElement` on the page.
+         * @param setViewport sizes the canvas's drawing buffer, as `VideoRenderer.setViewport` does:
+         *        to the window's size while the canvas is in the document window, and back after.
+         * @param play called by the play button of the video element's window.
+         * @param pause called by the pause button of the video element's window.
+         */
+        public fun createOrNull(
+            canvas: JsAny,
+            setViewport: (width: Int, height: Int, scale: Float) -> Unit,
+            play: () -> Unit,
+            pause: () -> Unit,
+        ): KitePlayerPictureInPicture? = webPictureInPictureOrNull(
+            documentPictureInPicture = webDocumentPictureInPicture(),
+            canvas = canvas,
+            setViewport = setViewport,
+            play = play,
+            pause = pause,
+        )
     }
 }
 

@@ -5,6 +5,7 @@ package io.github.yuroyami.kiteplayer
 import io.github.yuroyami.kiteplayer.output.WebWorkletAudio
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride
+import io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,6 +68,7 @@ import kotlin.time.Duration
 public class KitePlayerWorker private constructor(
     private val worker: JsAny,
     private val audio: WebWorkletAudio?,
+    private val canvas: JsAny?,
 ) : AutoCloseable {
 
     private val stateFlow = MutableStateFlow(PlayerSnapshot())
@@ -326,6 +328,25 @@ public class KitePlayerWorker private constructor(
     public fun setMarkers(markers: List<Marker>): Unit = send(Control.SetMarkers(markers))
 
     /**
+     * Picture in picture for the canvas this player draws on, or null when it was started without
+     * one or this browser has neither feature `KitePlayerPictureInPicture` uses. The canvas belongs
+     * to the worker, and both features still carry its frames: the document window takes the page's
+     * canvas element, and the video element's window plays a live capture of it. Its play and pause
+     * buttons play and pause this player. Call `start` from the viewer's click, as there.
+     */
+    public fun pictureInPictureOrNull(): KitePlayerPictureInPicture? {
+        checkOpen()
+        val canvas = canvas ?: return null
+        return KitePlayerPictureInPicture.createOrNull(
+            canvas = canvas,
+            // The window may outlive the player, and a closed player refuses every call.
+            setViewport = { width, height, scale -> if (!closed) setViewport(width, height, scale) },
+            play = { if (!closed) play() },
+            pause = { if (!closed) pause() },
+        )
+    }
+
+    /**
      * Sizes the canvas's drawing buffer to [width] by [height] CSS pixels at [scale] device pixels
      * each, as `VideoRenderer.setViewport` does. The canvas belongs to the worker, so the page sets
      * its size through here rather than on the element.
@@ -506,7 +527,7 @@ public class KitePlayerWorker private constructor(
                 // The worker sets its listener once its code has loaded. A message sent before that
                 // is lost, so the first one waits for the worker to say it is listening.
                 hello.await()
-                val created = KitePlayerWorker(worker, audio)
+                val created = KitePlayerWorker(worker, audio, canvas)
                 val ready = CompletableDeferred<Unit>()
                 created.started = ready
                 player = created

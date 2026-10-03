@@ -105,7 +105,8 @@ video decoder.
 
 - True HDR: HDR10 and HLG show as HDR on a display that can show it, through Metal on a Mac or an
   iPhone and through `KitePlayerView` on an Android HDR display. Elsewhere they are tone mapped.
-- Picture-in-picture on Android, iOS and macOS, and a floating window on the desktop JVM.
+- Picture-in-picture on Android, iOS, macOS and in the browser, and a floating window on the
+  desktop JVM.
 - Rotation and mirroring from the file, on every renderer.
 - Fit, fill and stretch, zoom, pan and a forced aspect ratio. Brightness, contrast, saturation and
   hue.
@@ -321,6 +322,8 @@ it refuses arrives on `events` as `CommandRefused` rather than throwing at the c
 external subtitle, with a reader of its own cannot cross to the worker; give it an address. The
 worker loads `kiteass.mjs` from beside the page too, so the libass web zip from step 2 serves
 both players; pass another `libassUrl` to `KitePlayerWorker.start` if the files live elsewhere.
+`pictureInPictureOrNull()` puts the worker's canvas in a picture in picture window, as
+`KitePlayerPictureInPicture` does for the page's own player.
 
 A multi-threaded codec module would need the page served with
 `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, and

@@ -63,6 +63,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   was read against the worker's. In `kiteplayer-libass`, a background load that lands after
   `KiteLibassWeb.load` has attached its module is set aside, where it used to send the tracks
   waiting for the module to the built-in styling.
+- `KitePlayerWorker.pictureInPictureOrNull()` puts the canvas the worker draws on in a picture in
+  picture window, with the two browser features `KitePlayerPictureInPicture` uses for the page's
+  own player: the canvas moves into a document window, or a video element's window plays a live
+  capture of it (#100). `KitePlayerPictureInPicture.createOrNull` gains an overload that takes the
+  canvas with functions for its size, play and pause instead of a renderer and a player.
 - A Java app on Android or the desktop can use the player without writing Kotlin (#394).
   `KitePlayerJava` in `kiteplayer` adds listeners called on an `Executor`, a `CompletableFuture`
   version of every suspending call, and millisecond versions of the calls that take a `Duration`.

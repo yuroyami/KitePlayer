@@ -14,9 +14,12 @@ import io.github.yuroyami.kiteplayer.SubtitleSource
 import io.github.yuroyami.kiteplayer.TrackChange
 import io.github.yuroyami.kiteplayer.TrackId
 import io.github.yuroyami.kiteplayer.TrackKind
+import io.github.yuroyami.kiteplayer.view.WebPictureInPictureMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.await
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onSubscription
@@ -26,9 +29,13 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.js.JsAny
+import kotlin.js.JsNumber
+import kotlin.js.Promise
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
@@ -227,6 +234,58 @@ class KitePlayerWorkerBrowserTest {
         }
     }
 
+    /**
+     * Picture in picture carries the canvas the worker draws on.
+     *
+     * A browser opens its window only inside a viewer's click, and a test page has none, so the
+     * document window here is a frame on the page, handed out by a stand-in for
+     * `documentPictureInPicture`. The canvas element moves into another document exactly as it does
+     * into the window, and the worker must then draw it at the window's size, which shows both that
+     * the size reached the worker and that its frames reach the moved canvas. The video element's
+     * window plays a live capture of the canvas, so the capture must show the worker's frames too.
+     *
+     * Measured with real windows on 2026-10-03, in Chromium 141 headless and on a display, with
+     * Playwright's clicks: the moved canvas and the capture both kept changing with every frame.
+     */
+    @Test
+    fun pictureInPictureCarriesTheCanvasTheWorkerDrawsOn() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        withContext(Dispatchers.Default) {
+            val canvas = pageCanvas(320, 180)
+            val window = documentWindowStandIn(480, 270)
+            val player = KitePlayerWorker.start(canvas, workerUrl, codecUrl, libassUrl = null)
+            try {
+                player.setViewport(320, 180, 1f)
+                player.open(MediaItem("$media/sync1080p30.mp4"))
+                player.play()
+                withTimeout(60.seconds) { player.progress.first { it.position >= 1.seconds } }
+                assertEquals(320, capturedWidth(canvas).await<JsNumber>().toInt(), "a capture of the canvas shows no frame")
+
+                val pip = assertNotNull(player.pictureInPictureOrNull(), "a page with a canvas has picture in picture")
+                assertEquals(WebPictureInPictureMode.DocumentWindow, pip.mode)
+                pip.start()
+                withTimeout(10.seconds) { pip.active.first { it } }
+                assertTrue(canvasIsIn(canvas, window), "the canvas did not move into the window")
+                val inWindow = windowPixelWidth(window)
+                withTimeout(10.seconds) { while (canvasWidth(canvas) != inWindow) delay(50) }
+
+                pip.stop()
+                assertFalse(pip.isActive)
+                assertTrue(canvasIsBackOnPage(canvas), "the canvas did not come back in place of its placeholder")
+                withTimeout(10.seconds) { while (canvasWidth(canvas) != 320) delay(50) }
+                pip.close()
+            } finally {
+                removeDocumentWindowStandIn(window)
+                player.closeAndAwait()
+            }
+        }
+    }
+
     @Test
     fun aWorkerThatCannotLoadFailsTheStart() = runTest(timeout = 1.minutes) {
         val setup = karmaWorkerConfig()?.split("\n") ?: return@runTest
@@ -271,6 +330,54 @@ private external fun karmaWorkerConfig(): String?
     }""",
 )
 private external fun pageCanvas(width: Int, height: Int): JsAny
+
+/**
+ * A frame of [width] by [height] on the page, whose window `documentPictureInPicture.requestWindow`
+ * now answers with, in place of the browser's own.
+ */
+@JsFun(
+    """(width, height) => {
+        const frame = document.createElement('iframe');
+        frame.style.cssText = 'border:0;width:' + width + 'px;height:' + height + 'px';
+        document.body.appendChild(frame);
+        const standIn = { requestWindow: () => Promise.resolve(frame.contentWindow) };
+        Object.defineProperty(window, 'documentPictureInPicture', { value: standIn, configurable: true });
+        return frame;
+    }""",
+)
+private external fun documentWindowStandIn(width: Int, height: Int): JsAny
+
+/** Gives the browser its own `documentPictureInPicture` back and removes the frame. */
+@JsFun("(frame) => { delete window.documentPictureInPicture; frame.remove(); }")
+private external fun removeDocumentWindowStandIn(frame: JsAny)
+
+@JsFun("(canvas, frame) => canvas.ownerDocument === frame.contentDocument")
+private external fun canvasIsIn(canvas: JsAny, frame: JsAny): Boolean
+
+@JsFun("(canvas) => canvas.ownerDocument === document && canvas.isConnected && !document.querySelector('.kiteplayer-pip-placeholder')")
+private external fun canvasIsBackOnPage(canvas: JsAny): Boolean
+
+/** The drawing buffer width the renderer gives the canvas in [frame]: its CSS width at its pixel ratio. */
+@JsFun("(frame) => Math.trunc(frame.contentWindow.innerWidth * (frame.contentWindow.devicePixelRatio || 1))")
+private external fun windowPixelWidth(frame: JsAny): Int
+
+/** The width of the last frame the worker drew, which a placeholder canvas reports. */
+@JsFun("(canvas) => canvas.width")
+private external fun canvasWidth(canvas: JsAny): Int
+
+/** The frame width a live capture of [canvas] plays, after its first frame or two seconds. */
+@JsFun(
+    """(canvas) => new Promise((resolve) => {
+        const video = document.createElement('video');
+        video.muted = true;
+        video.srcObject = canvas.captureStream();
+        const done = () => { const width = video.videoWidth; video.srcObject.getTracks().forEach((t) => t.stop()); resolve(width); };
+        video.addEventListener('loadeddata', done, { once: true });
+        setTimeout(done, 2000);
+        video.play().catch(() => {});
+    })""",
+)
+private external fun capturedWidth(canvas: JsAny): Promise<JsNumber>
 
 /** A frame loop on the page that keeps the longest gap between two frames. */
 @JsFun(

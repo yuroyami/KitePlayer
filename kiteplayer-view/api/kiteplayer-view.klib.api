@@ -35,6 +35,9 @@ final class io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture : kotl
 
         // Targets: [wasmJs]
         final fun createOrNull(kotlin.js/JsAny, io.github.yuroyami.kiteplayer.spi/VideoRenderer, io.github.yuroyami.kiteplayer/KitePlayer): io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture? // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.Companion.createOrNull|createOrNull(kotlin.js.JsAny;io.github.yuroyami.kiteplayer.spi.VideoRenderer;io.github.yuroyami.kiteplayer.KitePlayer){}[0]
+
+        // Targets: [wasmJs]
+        final fun createOrNull(kotlin.js/JsAny, kotlin/Function3<kotlin/Int, kotlin/Int, kotlin/Float, kotlin/Unit>, kotlin/Function0<kotlin/Unit>, kotlin/Function0<kotlin/Unit>): io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture? // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.Companion.createOrNull|createOrNull(kotlin.js.JsAny;kotlin.Function3<kotlin.Int,kotlin.Int,kotlin.Float,kotlin.Unit>;kotlin.Function0<kotlin.Unit>;kotlin.Function0<kotlin.Unit>){}[0]
     }
 
     // Targets: [apple]

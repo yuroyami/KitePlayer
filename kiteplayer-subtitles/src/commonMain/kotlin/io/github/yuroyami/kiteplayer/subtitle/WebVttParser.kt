@@ -156,28 +156,35 @@ public object WebVttParser {
         }
 
     /**
-     * Voice, class and karaoke-timestamp tags are VTT-only shapes InlineMarkup does not know. Each
-     * kind goes in its own pass, in that order.
+     * Voice, class, language and karaoke-timestamp tags are VTT-only shapes InlineMarkup does not
+     * know, and so is ruby, which no text renderer here can draw above its line (#511). Each kind
+     * goes in its own pass, in that order, and ruby keeps its reading after the base text, in
+     * parentheses.
      */
     private fun stripVttOnlyTags(body: String): String =
-        stripTags(stripTags(stripTags(body, ::isVoiceTag), ::isClassTag), ::isKaraokeTag)
+        flattenRuby(stripTags(stripTags(stripTags(stripTags(body, ::isVoiceTag), ::isClassTag), ::isLangTag), ::isKaraokeTag))
 
     /** `<v>`, `</v>` or `<v Speaker>`, given the inside of the tag. */
-    private fun isVoiceTag(text: CharSequence, from: Int, to: Int): Boolean = isNamedTag(text, from, to, 'v') {
+    private fun isVoiceTag(text: CharSequence, from: Int, to: Int): Boolean = isNamedTag(text, from, to, "v") {
         it.isWhitespace()
     }
 
     /** `<c>`, `</c>` or `<c.class>`, given the inside of the tag. */
-    private fun isClassTag(text: CharSequence, from: Int, to: Int): Boolean = isNamedTag(text, from, to, 'c') {
+    private fun isClassTag(text: CharSequence, from: Int, to: Int): Boolean = isNamedTag(text, from, to, "c") {
         it == '.'
     }
 
+    /** `<lang>`, `</lang>`, `<lang en>` or `<lang.class en>`, given the inside of the tag. */
+    private fun isLangTag(text: CharSequence, from: Int, to: Int): Boolean = isNamedTag(text, from, to, "lang") {
+        it == '.' || it.isWhitespace()
+    }
+
     /** An optional `/`, then [name], then nothing or a character that [opensRest] accepts. */
-    private inline fun isNamedTag(text: CharSequence, from: Int, to: Int, name: Char, opensRest: (Char) -> Boolean): Boolean {
+    private inline fun isNamedTag(text: CharSequence, from: Int, to: Int, name: String, opensRest: (Char) -> Boolean): Boolean {
         var at = from
         if (at < to && text[at] == '/') at++
-        if (at >= to || text[at] != name) return false
-        at++
+        if (to - at < name.length || !text.regionMatches(at, name, 0, name.length)) return false
+        at += name.length
         return at == to || opensRest(text[at])
     }
 
@@ -202,6 +209,72 @@ public object WebVttParser {
         arrayOf(CueAlignment.BottomLeft, CueAlignment.BottomCenter, CueAlignment.BottomRight),
     )
     private val KARAOKE_TIME = Regex("""\d{1,3}:?\d{1,2}:\d{1,2}\.\d{1,3}""")
+}
+
+/**
+ * [text] with its WebVTT ruby written out in line: `<ruby>漢字<rt>かんじ</rt></ruby>` becomes
+ * `漢字(かんじ)`, the reading after the base text in parentheses. The `</rt>` end tag may be left
+ * out before `</ruby>`, and an `<rt>` outside a ruby keeps its text without its tag, as the
+ * specification's parser does. A class on either tag goes with it. The pass reads each character
+ * a bounded number of times, as [stripTags] does.
+ */
+internal fun flattenRuby(text: CharSequence): String {
+    if ('<' !in text) return text.toString()
+    val out = StringBuilder(text.length)
+    var close = text.indexOf('>')
+    var inRuby = false
+    var inReading = false
+    var i = 0
+    while (i < text.length) {
+        val c = text[i]
+        if (c == '<' && close >= 0) {
+            if (close <= i) close = text.indexOf('>', i + 1)
+            if (close > i) {
+                val tag = rubyTag(text, i + 1, close)
+                if (tag != null) {
+                    when (tag) {
+                        RubyTag.RubyStart -> inRuby = true
+                        RubyTag.ReadingStart -> if (inRuby && !inReading) {
+                            out.append('(')
+                            inReading = true
+                        }
+                        RubyTag.ReadingEnd -> if (inReading) {
+                            out.append(')')
+                            inReading = false
+                        }
+                        RubyTag.RubyEnd -> {
+                            if (inReading) out.append(')')
+                            inReading = false
+                            inRuby = false
+                        }
+                    }
+                    i = close + 1
+                    continue
+                }
+            }
+        }
+        out.append(c)
+        i++
+    }
+    if (inReading) out.append(')')
+    return out.toString()
+}
+
+private enum class RubyTag { RubyStart, RubyEnd, ReadingStart, ReadingEnd }
+
+/** Which ruby tag the inside of a tag from [from] to [to] is, or null for any other tag. */
+private fun rubyTag(text: CharSequence, from: Int, to: Int): RubyTag? {
+    var at = from
+    val end = at < to && text[at] == '/'
+    if (end) at++
+    fun named(name: String): Boolean =
+        to - at >= name.length && text.regionMatches(at, name, 0, name.length) &&
+            (at + name.length == to || text[at + name.length] == '.')
+    return when {
+        named("ruby") -> if (end) RubyTag.RubyEnd else RubyTag.RubyStart
+        named("rt") -> if (end) RubyTag.ReadingEnd else RubyTag.ReadingStart
+        else -> null
+    }
 }
 
 /**

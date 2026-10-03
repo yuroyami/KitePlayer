@@ -726,8 +726,12 @@ internal class ScriptedRecordingSource(private val inner: ScriptedSource) :
         recordingPath = path
     }
 
+    /** Runs inside every stop that ends a recording, before it does: a file whose trailer is slow to write. */
+    var finishing: (() -> Unit)? = null
+
     override fun stopRecording() {
         if (recordingPath == null) return
+        finishing?.invoke()
         calls += "stop"
         recordingPath = null
     }

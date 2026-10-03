@@ -317,6 +317,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   written, and the FFmpeg sink refuses to write over the file its source reads, so such a recording
   ends at its first packet with `RecordingStopped` and the file plays on. This needs KiteFFmpeg
   0.5.0 (yuroyami/KiteFFmpeg#146).
+- `close` answers within its deadline even while a recording's file is still being written
+  (#473). Finishing the recording, releasing a preloaded next item and waiting for preload builds
+  still unwinding used to run on the player's own thread before the deadline started, each build
+  with a deadline of its own, so a slow disk could hold `closeAndAwait` for as long as it took.
+  They now run in the release the one deadline covers, after the session's workers are joined, and
+  a close past the deadline reports `RuntimeCompromised` while the release goes on. A release step
+  that refuses, such as a renderer that cannot take the subtitles down, is a `ResourcesNotReleased`
+  warning and the rest of the session is still released (#472).
 
 ### Removed
 

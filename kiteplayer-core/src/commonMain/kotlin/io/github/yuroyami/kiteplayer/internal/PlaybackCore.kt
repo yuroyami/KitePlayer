@@ -7661,17 +7661,24 @@ internal class PlaybackCore(
         playRequested = false
         pendingVideoRecovery = null
         pendingSeek = null
-        // The caller's own end, so it warns nothing. The detach below would warn.
-        session?.let { endRecording(it, reason = null) }
-        // A preload and a handoff are taken back while the session they follow is still installed.
-        dropPending(null)
-        // A build still unwinding runs on the dispatchers the finalizer closes.
-        for (build in retiringBuilds) withTimeoutOrNull(closeDeadline) { build.join() }
-        retiringBuilds.clear()
-        // The session comes off the actor FIRST, so that everything below is about a graph nothing
+        // Nothing here may block before the release below starts, because the close deadline is
+        // the release's: finishing a recording, releasing the preload and waiting for preload
+        // builds still unwinding all run inside it. Each used to run on the actor first, outside
+        // any deadline, and the builds each had a deadline of their own (#473).
+        val preload = takePreloadForClose()
+        // The sessions come off the actor FIRST, so that everything below is about a graph nothing
         // else can reach, and the release can then run somewhere this coroutine is able to stop
-        // waiting for.
-        val detached = detachSession()
+        // waiting for. The close is the caller's own end of a recording, so it warns nothing.
+        val detached = detachSession(quietRecordingEnd = true)
+        val release = ClosingGraph(
+            // The current item first: after a handoff the next item owns the audio device and the
+            // ring the current one's clock reads, so the next item must be released after it.
+            sessions = listOfNotNull(detached, preload.session),
+            preloadBuild = preload.finishedBuild,
+            // A build still unwinding runs on the dispatchers the finalizer closes.
+            unwinding = retiringBuilds.toList() + listOfNotNull(preload.runningBuild),
+        )
+        retiringBuilds.clear()
         // A zero budget is used by tests to force the compromised-runtime result. It must not prevent
         // teardown from starting: a missed deadline changes the report, never resource ownership.
         val outcome = when {
@@ -7679,11 +7686,11 @@ internal class PlaybackCore(
             // that forces the compromised report deterministically, and it must do that whether or
             // not a session was open.
             closeDeadline <= Duration.ZERO -> {
-                if (detached != null) releaseReporting(detached)
+                release.sessions.forEach { releaseReporting(it) }
                 ReleaseOutcome.Overran
             }
-            detached == null -> ReleaseOutcome.Released
-            else -> awaitRelease(detached)
+            release.isEmpty -> ReleaseOutcome.Released
+            else -> awaitRelease(release)
         }
         settleOutstandingForClose()
         val failure = when (outcome) {
@@ -7716,7 +7723,9 @@ internal class PlaybackCore(
     }
 
     /**
-     * Releases [detached] on a lifetime of its own and waits at most [closeDeadline] for it.
+     * Releases [graph] on a lifetime of its own and waits at most [closeDeadline] for it. That is
+     * the close's one deadline: nothing before this call blocks, so a recording whose file is
+     * still being written, a preload or a build still unwinding cannot hold a close past it (#473).
      *
      * The deadline used to wrap [teardownSession] directly, whose whole body is `NonCancellable`,
      * so it could never fire: a native close that wedged kept `closeAndAwait` suspended for ever
@@ -7727,14 +7736,19 @@ internal class PlaybackCore(
      * @return how the release ended: inside the deadline cleanly, inside it by throwing, or not
      *         inside it at all.
      */
-    private suspend fun awaitRelease(detached: OpenSession): ReleaseOutcome {
+    private suspend fun awaitRelease(graph: ClosingGraph): ReleaseOutcome {
         var thrown: Throwable? = null
         // Parentless, so cancelling anything cannot abandon the graph half released, and on the
         // release lane, which is the one lane the actor is not standing on.
         val release = GlobalScope.launch(
             context = dispatchers.release + CoroutineName("kiteplayer-session-release"),
         ) {
-            thrown = releaseReporting(detached)
+            // Every session is released even when an earlier one threw; the first throw is the report.
+            val built = graph.preloadBuild?.let { build -> runCatching { build.await() }.getOrNull()?.getOrNull()?.session }
+            for (session in graph.sessions + listOfNotNull(built)) {
+                releaseReporting(session)?.let { if (thrown == null) thrown = it }
+            }
+            for (build in graph.unwinding) runCatching { build.join() }
         }
         if (withTimeoutOrNull(closeDeadline) { release.join() } != null) {
             return thrown?.let { ReleaseOutcome.Failed(it) } ?: ReleaseOutcome.Released
@@ -7757,6 +7771,50 @@ internal class PlaybackCore(
     } catch (thrown: Throwable) {
         warn(PlaybackWarning.ResourcesNotReleased("the session release failed${causeDetail(thrown)}"))
         thrown
+    }
+
+    /**
+     * Everything a close releases under its one deadline: the sessions it detached, the preload's
+     * finished build whose session nobody adopted, and the cancelled builds still unwinding.
+     */
+    private class ClosingGraph(
+        val sessions: List<OpenSession>,
+        val preloadBuild: Deferred<Result<PreparedNext>>?,
+        val unwinding: List<Job>,
+    ) {
+        val isEmpty: Boolean get() = sessions.isEmpty() && preloadBuild == null && unwinding.isEmpty()
+    }
+
+    /** What [takePreloadForClose] took: a session to release, a finished build to read one from, or a build to wait for. */
+    private class ClosingPreload(
+        val session: OpenSession? = null,
+        val finishedBuild: Deferred<Result<PreparedNext>>? = null,
+        val runningBuild: Job? = null,
+    )
+
+    /**
+     * Takes the preload off the actor for a close, without releasing anything, so the close's
+     * release does that under its deadline (#473). A handoff needs no taking back: the current
+     * item no longer owns the audio, so it is released first and the next item, which owns it,
+     * after it.
+     */
+    private fun takePreloadForClose(): ClosingPreload {
+        val next = pendingNext ?: return ClosingPreload()
+        pendingNext = null
+        snapshotDirty = true
+        next.build.warnings.discard()
+        val prepared = next.prepared
+        return when {
+            prepared != null -> ClosingPreload(session = prepared.session)
+            // A build the player's own cancellation stopped released what it opened, and awaiting
+            // it would throw into the teardown.
+            next.job.isCompleted -> ClosingPreload(finishedBuild = next.job.takeUnless { it.isCancelled })
+            // Still opening: its own rollback releases what it opened, and the close waits for it.
+            else -> {
+                next.job.cancel()
+                ClosingPreload(runningBuild = next.job)
+            }
+        }
     }
 
     /** How the release of a detached session ended, which decides what close reports. */
@@ -7941,12 +7999,15 @@ internal class PlaybackCore(
      * it nothing can read them again and their totals would otherwise fall back to the next
      * session's zero.
      */
-    private fun detachSession(forHandoff: Boolean = false): OpenSession? {
+    private fun detachSession(forHandoff: Boolean = false, quietRecordingEnd: Boolean = false): OpenSession? {
         val detached = session ?: return null
         session = null
         // Every path that retires a session comes through here: the next queue item, a video track
-        // switch, a failure. None of them is an end the caller asked for.
-        endRecording(detached, reason = "the player closed the media being recorded")
+        // switch, a failure. None of them is an end the caller asked for, except a close. The
+        // recording itself ends in the release: finishing its file waits for the demux worker's
+        // write and then writes the trailer, and nothing that can block may run on the actor
+        // before a close starts counting its deadline (#473).
+        if (quietRecordingEnd) detached.recordingEnd = null
         // An armed capture waits for a frame that this session will never present (#197).
         detached.video?.captureRequest?.getAndSet(null)?.completeExceptionally(
             IllegalStateException("the media was closed before captureFrame got a frame"),
@@ -8081,6 +8142,9 @@ internal class PlaybackCore(
             session.workers.forEach { worker -> runCatching { worker.quiesce(QUIESCE_DEADLINE) } }
             session.jobs.forEach { it.cancel() }
             session.jobs.forEach { runCatching { it.join() } }
+            // The demux worker is joined, so no packet of the recording is mid-write, and the file
+            // is finished here, inside whatever deadline the release runs under (#473).
+            release("recording") { endRecording(session, session.recordingEnd) }
             session.typeset?.let { lane ->
                 session.typeset = null
                 release("subtitle typesetter") { withContext(dispatchers.raster) { lane.close() } }
@@ -9830,6 +9894,13 @@ internal class PlaybackCore(
 
         /** What the last published overlay showed, so an unchanged set publishes nothing. */
         var publishedCueKey: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>? = null
+
+        /**
+         * Why a recording this session's source still makes ends when the session is released,
+         * warned as [PlaybackWarning.RecordingStopped], or null when the caller ended it and nothing
+         * is warned. The release finishes the file, after the workers are joined (#473).
+         */
+        var recordingEnd: String? = "the player closed the media being recorded"
 
         /** The surface size the published overlay was rasterised for, so a resize can redraw it. */
         var publishedCanvas: Pair<Int, Int>? = null

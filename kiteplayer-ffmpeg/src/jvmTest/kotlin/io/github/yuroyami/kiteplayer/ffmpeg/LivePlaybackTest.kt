@@ -8,6 +8,7 @@ import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.PlayerConfig
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -46,7 +47,8 @@ import kotlin.time.TimeSource
  * too.
  *
  * The rest stop the sender part way through, by silence or by hanging up, and check that the
- * playback ends within a stated time instead of waiting for a sender that is gone.
+ * playback ends within a stated time instead of waiting for a sender that is gone, or hold its
+ * media for two seconds and check that the player comes back near it.
  *
  * Without `ffmpeg` on PATH every test here skips.
  */
@@ -254,6 +256,97 @@ class LivePlaybackTest {
         }
     }
 
+    /**
+     * A camera whose network holds two seconds of its media and then delivers them at once comes
+     * back near the sender (#395). The delay is how long after the sender sent each beep it was
+     * heard. When the sender sent it is read off the relay, as the earliest that any packet arrived
+     * for its media time.
+     *
+     * The bound is the engine's own, the ready duration of 1 s and the half second it lets build,
+     * plus how late any picture arrived behind that line while it played before the stall, because
+     * the engine measures its delay to the newest picture that has arrived, plus the output's 10 ms
+     * buffer. The open starts the player
+     * behind by as long as FFmpeg's stream discovery took, and the stall leaves it behind by the
+     * stall and the time to resume. From the worst delay heard after each, the excess over the bound
+     * clears at a tenth of a second each second, and a second and a half more covers the 250 ms the
+     * engine waits between looks, as long again for the tempo stage to bring the new speed to the
+     * output, and the second between beeps. From then on the delay stays under the bound. Without
+     * the catching up the player stays about 2.1 s behind from the open, and further after the
+     * stall.
+     */
+    @Test
+    fun anRtspCameraThatStallsComesBackNearTheSender() = live(seconds = 44) { clip ->
+        RtspRelay().use { relay ->
+            sender(clip, "rtsp-stall", listOf("-f", "rtsp", "-rtsp_transport", "tcp", relay.url)).use { publisher ->
+                check(relay.awaitAnnounced(15)) { "nothing was published: ${publisher.logText()}" }
+                val output = PacedOutput()
+                val player = KitePlayer.create(
+                    PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), output), progressInterval = 50.milliseconds),
+                )
+                try {
+                    player.attachRendererAndAwait(FlashRecorder())
+                    withTimeout(30.seconds) { player.open(MediaItem(relay.url, openOptions = mapOf("rtsp_transport" to "tcp"))) }
+                    player.play()
+                    withTimeout(15.seconds) { while (player.state.value.status != PlaybackStatus.Playing) delay(20) }
+                    val playing = output.clock.nanos()
+                    delay(14.seconds)
+                    val stalled = output.clock.nanos()
+                    relay.hold()
+                    delay(2.seconds)
+                    relay.release()
+                    val released = output.clock.nanos()
+                    delay(14.seconds)
+                    // The sender's line: when each moment of its sound left it, which is the
+                    // earliest any packet arrived for its media time.
+                    val line = relay.arrivals.filter { it.first < stalled }.minOf { (at, media) -> at - (media * 1e9).toLong() }
+                    // How late any picture arrived behind that line while the player played.
+                    val latest = relay.videoArrivals.filter { it.first in playing until stalled }
+                        .maxOf { (at, media) -> at - (media * 1e9).toLong() }
+                    val lateMillis = (latest - line) / 1e6
+                    val boundMillis = 1_000.0 + 500.0 + lateMillis + 10.0
+                    // Each beep, by when it was heard, with how far it was behind the sender.
+                    val heard = output.beeps.mapNotNull { beep ->
+                        val modulo = MarkerClip.secondOf(beep.hertz)
+                        // The latest second of that pitch that the sender had sent when the beep was heard.
+                        val latest = ((beep.atNanos - line) / 1_000_000_000L).toInt()
+                        val second = latest - ((latest - modulo) % 8 + 8) % 8
+                        if (second < 0) null else beep.atNanos to (beep.atNanos - line - second * 1_000_000_000L) / 1e6
+                    }
+                    fun since(mark: Long, beeps: List<Pair<Long, Double>>) =
+                        beeps.joinToString { (at, delay) -> "%.1f=%d".format((at - mark) / 1e9, delay.toInt()) }
+                    val opened = heard.filter { it.first in playing until stalled }
+                    val resumed = heard.filter { it.first >= released }
+                    val summary = "bound ${boundMillis.toInt()} ms with pictures up to ${lateMillis.toInt()} ms late; " +
+                        "delay in ms by seconds since playing ${since(playing, opened)}; since the release ${since(released, resumed)}; " +
+                        "warnings ${player.warningHistory().map { it.warning }}"
+                    println("LivePlaybackTest: rtsp stall, $summary")
+                    assertCaughtUp("the open", opened, boundMillis, summary)
+                    assertTrue(resumed.maxOf { it.second } > boundMillis, "the stall never took the player past the bound: $summary")
+                    assertCaughtUp("the stall", resumed, boundMillis, summary)
+                } finally {
+                    player.closeAndAwait()
+                }
+            }
+        }
+    }
+
+    /**
+     * Asserts that the delay of [beeps], each heard at its time with its delay in milliseconds, is
+     * under [boundMillis] within the time its worst excess over that takes to clear at a tenth of a
+     * second each second, plus a second and a half, and stays there.
+     */
+    private fun assertCaughtUp(after: String, beeps: List<Pair<Long, Double>>, boundMillis: Double, summary: String) {
+        assertTrue(beeps.size >= 4, "after $after only ${beeps.size} beeps were heard: $summary")
+        val (worstAt, worst) = beeps.maxBy { it.second }
+        val allowed = worstAt + ((worst - boundMillis).coerceAtLeast(0.0) * 10 * 1e6).toLong() + 1_500_000_000L
+        val backAt = beeps.firstOrNull { it.first >= worstAt && it.second <= boundMillis }?.first ?: Long.MAX_VALUE
+        assertTrue(backAt <= allowed, "after $after the delay was not back under ${boundMillis.toInt()} ms in time: $summary")
+        assertTrue(
+            beeps.filter { it.first >= backAt }.all { it.second <= boundMillis },
+            "after $after the delay did not stay under the bound: $summary",
+        )
+    }
+
     /** The player dials [RtspRelay] as it would a camera, over [transport], which the item chooses. */
     private fun rtspPlaysInSync(transport: String) = live { clip ->
         RtspRelay().use { relay ->
@@ -330,10 +423,10 @@ class LivePlaybackTest {
         }
     }
 
-    /** Runs [test] with a fourteen second marker clip, or skips it when there is no `ffmpeg`. */
-    private fun live(test: suspend (File) -> Unit) = runBlocking {
+    /** Runs [test] with a marker clip of [seconds], or skips it when there is no `ffmpeg`. */
+    private fun live(seconds: Int = 14, test: suspend CoroutineScope.(File) -> Unit) = runBlocking {
         if (ffmpegCli == null) return@runBlocking println("SKIP: no ffmpeg on PATH")
-        withTimeout(90.seconds) { test(MarkerClip.make(14)) }
+        withTimeout((seconds + 76).seconds) { test(MarkerClip.make(seconds)) }
     }
 
     /** The command line sending [clip] in real time, unchanged, to [outputs]. */

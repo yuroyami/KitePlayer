@@ -24,6 +24,13 @@ public data class MediaItem(
      * connection, on which FFmpeg waits twice. The user name and password in an address never
      * reach a log or an error.
      *
+     * The player stays about the buffer policy's ready duration behind such a sender. When the
+     * open or a stall leaves it more than half a second further behind, it plays 1.1 times faster,
+     * keeping the pitch, until it is back within a tenth of a second of that, so each second of
+     * extra delay clears in ten. It leaves a speed the caller chose alone, and does not catch up
+     * with the pitch correction off, which would raise every voice by a tenth. A raw `tcp` address
+     * is not caught up, because a sender there may as well send a file as fast as it can.
+     *
      * When [io] is set, the bytes come from that reader and this is a label. The FFmpeg backend
      * still reads its extension to recognise an HLS playlist, and resolves the playlist's relative
      * addresses against it when the reader reports no [MediaIo.location].

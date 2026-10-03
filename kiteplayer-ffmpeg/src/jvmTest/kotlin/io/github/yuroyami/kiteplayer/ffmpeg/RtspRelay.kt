@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
+import io.github.yuroyami.kiteplayer.MonotonicClock
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 import java.io.OutputStream
@@ -44,17 +45,19 @@ internal class RtspRelay : AutoCloseable {
     private val held = ArrayDeque<Pair<Int, ByteArray>>()
     private var holding = false
 
-    /** When each RTP packet of [timedStream] arrived from the publisher, with its media time. */
-    val arrivals: MutableList<Pair<Long, Double>> = CopyOnWriteArrayList()
+    private val audio = Timeline("audio")
+    private val video = Timeline("video")
 
-    /** The stream whose packets [arrivals] dates, and that stream's RTP clock rate. */
-    @Volatile
-    var timedStream: Int = -1
-        private set
-    private var timedClockRate = 0
-    private var firstTimestamp = -1L
-    private var unwrapped = 0L
-    private var lastTimestamp = -1L
+    /**
+     * When each RTP packet of the first audio stream the publisher announced arrived from it, on
+     * [MonotonicClock.System], with its media time in seconds from that stream's first packet. The
+     * publisher packs several AAC frames into one packet, so a packet can leave well after the
+     * media time it carries.
+     */
+    val arrivals: List<Pair<Long, Double>> get() = audio.arrivals
+
+    /** The same for the first video stream, whose pictures leave as they are due, a packet at a time. */
+    val videoArrivals: List<Pair<Long, Double>> get() = video.arrivals
 
     val url: String get() = "rtsp://127.0.0.1:${server.localPort}/live"
 
@@ -164,7 +167,10 @@ internal class RtspRelay : AutoCloseable {
             publisherChannels.entries.firstOrNull { it.value == channel || it.value + 1 == channel }
         } ?: return
         val rtcp = channel == stream.value + 1
-        if (!rtcp) date(stream.key, packet)
+        if (!rtcp) {
+            audio.date(stream.key, packet)
+            video.date(stream.key, packet)
+        }
         val tagged = (if (rtcp) 2 * stream.key + 1 else 2 * stream.key)
         synchronized(held) {
             if (rtcp && packet.size > 1 && (packet[1].toInt() and 0xFF) == SENDER_REPORT) reports[stream.key] = packet
@@ -176,33 +182,41 @@ internal class RtspRelay : AutoCloseable {
         }
     }
 
-    /** Dates the RTP packets of the first audio stream the publisher announced. */
-    private fun date(stream: Int, packet: ByteArray) {
-        if (timedStream == -1) {
-            val rate = audioClockRate(stream) ?: return
-            timedStream = stream
-            timedClockRate = rate
-        }
-        if (stream != timedStream || packet.size < 12) return
-        val timestamp = ((packet[4].toLong() and 0xFF) shl 24) or ((packet[5].toLong() and 0xFF) shl 16) or
-            ((packet[6].toLong() and 0xFF) shl 8) or (packet[7].toLong() and 0xFF)
-        if (firstTimestamp < 0) {
-            firstTimestamp = timestamp
+    /** Dates the RTP packets of the first stream of [kind] the publisher announced, on the thread that reads the publisher. */
+    private inner class Timeline(private val kind: String) {
+        val arrivals: MutableList<Pair<Long, Double>> = CopyOnWriteArrayList()
+        private var stream = -1
+        private var clockRate = 0
+        private var firstTimestamp = -1L
+        private var unwrapped = 0L
+        private var lastTimestamp = -1L
+
+        fun date(stream: Int, packet: ByteArray) {
+            if (this.stream == -1) {
+                clockRate = clockRate(stream, kind) ?: return
+                this.stream = stream
+            }
+            if (stream != this.stream || packet.size < 12) return
+            val timestamp = ((packet[4].toLong() and 0xFF) shl 24) or ((packet[5].toLong() and 0xFF) shl 16) or
+                ((packet[6].toLong() and 0xFF) shl 8) or (packet[7].toLong() and 0xFF)
+            if (firstTimestamp < 0) {
+                firstTimestamp = timestamp
+                lastTimestamp = timestamp
+            }
+            // The 32-bit timestamp wraps; the difference from the last one is small either way.
+            var step = timestamp - lastTimestamp
+            if (step < -(1L shl 31)) step += 1L shl 32
+            if (step > (1L shl 31)) step -= 1L shl 32
+            unwrapped += step
             lastTimestamp = timestamp
+            arrivals += MonotonicClock.System.nanos() to unwrapped.toDouble() / clockRate
         }
-        // The 32-bit timestamp wraps; the difference from the last one is small either way.
-        var step = timestamp - lastTimestamp
-        if (step < -(1L shl 31)) step += 1L shl 32
-        if (step > (1L shl 31)) step -= 1L shl 32
-        unwrapped += step
-        lastTimestamp = timestamp
-        arrivals += System.nanoTime() to unwrapped.toDouble() / timedClockRate
     }
 
-    /** The RTP clock rate of [stream] when the announced session says it is audio. */
-    private fun audioClockRate(stream: Int): Int? {
+    /** The RTP clock rate of [stream] when the announced session says it is of [kind]. */
+    private fun clockRate(stream: Int, kind: String): Int? {
         val media = sdp?.split("\nm=")?.drop(1)?.getOrNull(stream) ?: return null
-        if (!media.startsWith("audio")) return null
+        if (!media.startsWith(kind)) return null
         return Regex("a=rtpmap:\\d+ [^/]+/(\\d+)").find(media)?.groupValues?.get(1)?.toInt()
     }
 

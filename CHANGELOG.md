@@ -93,6 +93,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   An address whose scheme FFmpeg here has no protocol for, such as `srt`, `rtmps` or `rtsps`, and
   on the web every address with no reader, fails with `SchemeUnsupported` before anything goes
   over the network, where it used to fail inside FFmpeg.
+- A live sender over `rtsp`, `rtmp`, `udp` or `rtp`, or a `.sdp` session, is followed at a bounded
+  delay (#395). The open starts the player as far behind as FFmpeg's stream discovery took, about
+  two seconds over RTSP, and a stall that the network later makes good leaves it that much
+  further behind for good. Now, whenever the delay is more than half a second past the buffer
+  policy's ready duration, the player plays 1.1 times faster, keeping the pitch, until it is
+  within a tenth of a second of it, so each second of extra delay clears in ten. It never does so
+  for a file or an HLS or DASH stream, at a speed the caller chose, with the pitch correction off,
+  or while it follows an external clock.
 - An HLS track with no title of its own takes its rendition's `NAME` as its title, unless the name
   only repeats its language (#404). FFmpeg files that name under the stream's `comment`, where
   `PlayerStreamInfo.metadata` still shows it.

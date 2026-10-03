@@ -67,6 +67,9 @@ class PlaybackCoreTest {
             // After the status and the position have settled for this pass, so the difference from
             // an external clock is measured on what this pass will publish.
             "handleExternalClock",
+            // Right after it, because an external clock owns the speed when there is one, and the
+            // live delay is measured on the same settled position.
+            "handleLiveDelay",
             // After the status has settled for this pass, so a timer reads the real position and
             // the real playing state; before the queue advances, because an end-of-item timer must
             // stop the queue rather than watch it move on.

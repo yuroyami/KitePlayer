@@ -177,6 +177,20 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - The `ffmpeg` 6.1 command line's `-sdp_file` holds only the first stream of an RTP output with
   two. It prints a description to standard output as each stream starts, and only the last one
   names both, so a test takes that one (#395).
+- The `ffmpeg` command line's RTSP publisher packs about 0.7 s of AAC into each RTP packet, so its
+  audio arrives twice a second, up to 0.65 s after the media it carries, and the start of each
+  session arrives in one burst, late by as long as the relay took to accept it. Audio arrivals
+  therefore measure the packing, not the network. Date the sender's line on the earliest audio
+  arrival and measure lateness on the video arrivals after play starts, which come one picture at
+  a time within 20 ms (#395).
+- The loopback sync readings step by about 30 ms from one run to the next, and now and then within
+  a run, and the step is in the engine's clock against the sound actually heard: the test renderer
+  is handed each picture within 2 ms of the time that clock gives it. Raw UDP and TCP read 18 ms
+  early or 14 ms late, RTSP over UDP 7 ms early or 34 ms late, RTSP over TCP 7 or 38 ms early, and
+  the file, steady at 6 ms early, read 28 ms early in three runs of four once the test renderer did
+  a little more work per picture. RTSP over TCP's second reading sits on the 40 ms edge of the
+  window, so that test can fail on it with no catch-up running at all; the catch-up adds only about
+  10 ms of the tempo stage's own spread while it runs (#395).
 
 ### Language and toolchain
 

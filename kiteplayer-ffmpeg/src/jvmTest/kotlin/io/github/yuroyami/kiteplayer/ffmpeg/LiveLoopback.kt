@@ -139,7 +139,8 @@ internal class PacedOutput : OutputBackend {
         private var since = 0L
 
         // The beep listener, on the puller thread only: the quiet frames since the last loud one,
-        // and for the beep in progress, when it began, its frames so far and its sign changes.
+        // and for the beep in progress, when it began, its frames so far and the sign changes in
+        // its middle.
         private var quiet = Long.MAX_VALUE
         private var inBeep = false
         private var onsetNanos = 0L
@@ -219,14 +220,18 @@ internal class PacedOutput : OutputBackend {
                 quiet = if (loud) 0 else if (quiet == Long.MAX_VALUE) quiet else quiet + 1
                 if (!inBeep) continue
                 span++
-                val sign = if (sample > 0f) 1 else if (sample < 0f) -1 else 0
-                if (sign != 0 && lastSign != 0 && sign != lastSign) crossings++
-                if (sign != 0) lastSign = sign
-                // Twenty milliseconds of quiet end the beep, and the quiet is not part of it.
+                // The pitch is read from the middle of the beep, between 20 and 60 ms, away from
+                // the edges where the codec smears the tone. A beep the tempo stage spliced while
+                // catching up can be 20 ms short of its 100.
+                if (span > gap && span <= 3 * gap) {
+                    val sign = if (sample > 0f) 1 else if (sample < 0f) -1 else 0
+                    if (sign != 0 && lastSign != 0 && sign != lastSign) crossings++
+                    if (sign != 0) lastSign = sign
+                }
+                // Twenty milliseconds of quiet end the beep.
                 if (quiet == gap) {
                     inBeep = false
-                    val seconds = (span - gap).toDouble() / rate
-                    if (seconds > 0.05) beeps += HeardBeep(onsetNanos, crossings / (2 * seconds))
+                    if (span - gap > 3 * gap) beeps += HeardBeep(onsetNanos, crossings / (2 * MIDDLE_SECONDS))
                 }
             }
         }
@@ -249,6 +254,9 @@ internal class PacedOutput : OutputBackend {
 
     private companion object {
         const val BUFFER_NANOS = 10_000_000L
+
+        /** The stretch of each beep its pitch is read from. */
+        const val MIDDLE_SECONDS = 0.04
     }
 }
 

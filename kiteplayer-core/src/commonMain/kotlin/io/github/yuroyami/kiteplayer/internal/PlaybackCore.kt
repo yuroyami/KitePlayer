@@ -661,8 +661,16 @@ internal class PlaybackCore(
     private var externalSeekInFlight: Boolean = false
     private var externalSeekLatencyNanos: Long = 0L
 
-    /** The speed the pipelines run at: the caller's, times the external clock's trim. */
-    private val effectiveSpeed: Double get() = speed * externalTrim
+    /*
+     * Holding the delay behind a live sender (#395). The trim multiplies the caller's speed while the
+     * player catches up with a source that pushes in real time; it is 1 whenever nothing is being
+     * caught up. All actor-confined.
+     */
+    private var liveTrim: Double = 1.0
+    private var liveCheckedAtNanos: Long = NO_POSITION
+
+    /** The speed the pipelines run at: the caller's, times the external clock's and the live trims. */
+    private val effectiveSpeed: Double get() = speed * externalTrim * liveTrim
 
     /** Whether speed keeps pitch, seeded from config. A live change applies at once, like speed. */
     private var preservePitch: Boolean = config.audio.preservePitch
@@ -949,6 +957,7 @@ internal class PlaybackCore(
         Handler("handleEof") { handleEof() },
         Handler("handleLoop") { handleLoop() },
         Handler("handleExternalClock") { handleExternalClock() },
+        Handler("handleLiveDelay") { handleLiveDelay() },
         Handler("handleSleepTimer") { handleSleepTimer() },
         Handler("handleQueueAdvance") { handleQueueAdvance() },
         Handler("handleQueuedSeek") { handleQueuedSeek() },
@@ -1908,8 +1917,8 @@ internal class PlaybackCore(
                 // schedule paces at the rate the clock reports, so it changes at the same moment.
                 // Nothing stops, nothing is flushed, and an unseekable source changes speed too.
                 val failure = runCatching {
-                    active?.audio?.speed = command.value * externalTrim
-                    active?.video?.speed = command.value * externalTrim
+                    active?.audio?.speed = command.value * externalTrim * liveTrim
+                    active?.video?.speed = command.value * externalTrim * liveTrim
                 }.exceptionOrNull()
                 if (failure != null) {
                     command.reply.completeExceptionally(failure)
@@ -5935,6 +5944,57 @@ internal class PlaybackCore(
     private fun applyExternalTrim(trim: Double) {
         if (trim == externalTrim) return
         externalTrim = trim
+        session?.audio?.speed = effectiveSpeed
+        session?.video?.speed = effectiveSpeed
+    }
+
+    /**
+     * Holds the delay behind a sender that pushes in real time (#395). What has arrived and not been
+     * heard is that delay, less the network's own transit. A stall that the network later makes good
+     * grows it by as long as the player waited, because the sender went on sending and its media
+     * arrives late but whole. While the delay is more than [LIVE_CATCH_UP_ABOVE_US] over the buffer
+     * policy's ready duration, the player plays [LIVE_CATCH_UP_SPEED] times faster through the tempo
+     * stage, which keeps the pitch, until it is back within [LIVE_CATCH_UP_UNTIL_US] of it. A
+     * second of excess clears in ten seconds, and the ready duration that every resume waits for is
+     * the delay the player keeps.
+     *
+     * Only while playing at the caller's speed of 1, with no seek in hand and no external clock,
+     * which owns the speed when there is one, and only while speed keeps the pitch: played as on a
+     * turntable, catching up would raise every voice by a tenth. A pause, a stall or a new item
+     * starts from a trim of 1. A delay below zero, or above twice the read-ahead budget, is a jump in the timestamps and not
+     * a delay, so it is not followed.
+     */
+    private fun handleLiveDelay() {
+        val active = session
+        if (active == null || !active.source.realTime || status != PlaybackStatus.Playing || pendingSeek != null ||
+            externalClock != null || speed != 1.0 || !preservePitch
+        ) {
+            if (liveTrim != 1.0) applyLiveTrim(1.0)
+            liveCheckedAtNanos = NO_POSITION
+            return
+        }
+        val now = clock.nanos()
+        val checkedAt = liveCheckedAtNanos
+        if (checkedAt != NO_POSITION && now - checkedAt < LIVE_DELAY_CHECK_NANOS) {
+            wakeIn((LIVE_DELAY_CHECK_NANOS - (now - checkedAt)).nanoseconds)
+            return
+        }
+        liveCheckedAtNanos = now
+        wakeIn(LIVE_DELAY_CHECK_NANOS.nanoseconds)
+        val newestUs = active.readRate.newestUs() ?: return
+        val delayUs = newestUs - currentPosition().micros
+        val readyUs = config.buffer.readyDuration.inWholeMicroseconds
+        when {
+            delayUs < 0 || delayUs > 2 * config.buffer.totalDuration.inWholeMicroseconds -> applyLiveTrim(1.0)
+            delayUs > readyUs + LIVE_CATCH_UP_ABOVE_US -> applyLiveTrim(LIVE_CATCH_UP_SPEED)
+            delayUs <= readyUs + LIVE_CATCH_UP_UNTIL_US -> applyLiveTrim(1.0)
+        }
+    }
+
+    /** Sets the live trim and hands the new effective speed to both pipelines. */
+    private fun applyLiveTrim(trim: Double) {
+        if (trim == liveTrim) return
+        liveTrim = trim
         session?.audio?.speed = effectiveSpeed
         session?.video?.speed = effectiveSpeed
     }
@@ -10014,6 +10074,19 @@ private const val EXTERNAL_SEEK_LATENCY_CAP_NANOS: Long = 2_000_000_000L
 private const val EXTERNAL_MOVED_US: Long = 1_000L
 private const val EXTERNAL_SILENT_NANOS: Long = 2_000_000_000L
 private const val EXTERNAL_TRIM_STEP: Double = 0.0005
+
+// Holding the delay behind a live sender (#395).
+/** How much faster than the caller's speed the player catches up: a second of delay in ten. */
+private const val LIVE_CATCH_UP_SPEED: Double = 1.1
+
+/** How far past the ready duration the delay may grow before the player catches up. */
+private const val LIVE_CATCH_UP_ABOVE_US: Long = 500_000L
+
+/** How close to the ready duration the catching up brings the delay. */
+private const val LIVE_CATCH_UP_UNTIL_US: Long = 100_000L
+
+/** How often the delay is looked at: often enough that catching up overshoots by 25 ms at most. */
+private const val LIVE_DELAY_CHECK_NANOS: Long = 250_000_000L
 
 /**
  * Which stream of a kind a session should use.

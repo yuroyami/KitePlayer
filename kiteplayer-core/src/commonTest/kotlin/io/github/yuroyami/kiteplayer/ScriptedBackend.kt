@@ -194,6 +194,18 @@ internal class MediaScript(
      * so the same link is fast for a low variant and slow for a high one. Null is no link.
      */
     val linkBitsPerSecond: ((clockUs: Long) -> Long)? = null,
+    /**
+     * True makes the source a sender that pushes in real time, as a camera does (#395): a packet
+     * arrives when the test's clock reaches its time, counted from the source's creation, and the
+     * source says it is real time and has no duration.
+     */
+    val live: Boolean = false,
+    /**
+     * Stretches of the test's clock, in microseconds from the source's creation, in which nothing
+     * arrives. The packets due inside one arrive together at its end, as they do from a network that
+     * stalls and then delivers.
+     */
+    val liveHolds: List<LongRange> = emptyList(),
 ) {
     val videoIndex: Int = 0
     val audioIndex: Int = if (hasVideo) 1 else 0
@@ -742,6 +754,18 @@ internal class ScriptedSource(
 
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
 
+    /** When the live sender began, on the test's clock. */
+    val liveOriginNanos: Long = clock?.nanos() ?: 0L
+
+    /** Waits until the live sender's packet at [ptsUs] has arrived. */
+    private suspend fun waitForArrival(ptsUs: Long) {
+        if (!script.live) return
+        val clock = clock ?: return
+        val dueUs = script.liveHolds.firstOrNull { ptsUs in it }?.let { it.last + 1 } ?: ptsUs
+        val nowUs = (clock.nanos() - liveOriginNanos) / 1_000
+        if (dueUs > nowUs) delay((dueUs - nowUs).microseconds)
+    }
+
     /** How long [mediaUs] of the selected variant takes over the script's link. */
     private suspend fun waitForLink(mediaUs: Long) {
         val link = script.linkBitsPerSecond ?: return
@@ -809,8 +833,9 @@ internal class ScriptedSource(
         }
     }
 
-    override val duration: Pts = Pts(script.durationUs)
+    override val duration: Pts? = if (script.live) null else Pts(script.durationUs)
     override val seekable: Boolean = script.seekable
+    override val realTime: Boolean = script.live
     override val metadata: Map<String, String> =
         mapOf("title" to "scripted", "artist" to "the harness", "encoder" to "none") + script.containerTags
     override val chapters: List<Chapter> = script.chapters
@@ -994,6 +1019,7 @@ internal class ScriptedSource(
                 val pts = videoCursorUs
                 videoCursorUs = script.videoPtsAfter(pts)
                 waitForLink(videoCursorUs - pts)
+                waitForArrival(pts)
                 packetRead(
                     FakePacket(
                         streamIndex = script.videoIndex,
@@ -1008,6 +1034,7 @@ internal class ScriptedSource(
                 val pts = audioCursorsUs.getValue(audio.index)
                 val durationUs = audioDurationUs(audio)
                 audioCursorsUs[audio.index] = pts + durationUs
+                waitForArrival(pts)
                 packetRead(
                     FakePacket(
                         streamIndex = audio.index,

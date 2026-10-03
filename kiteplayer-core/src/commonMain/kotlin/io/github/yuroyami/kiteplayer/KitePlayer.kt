@@ -876,6 +876,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * switch, or a write that failed. A seek always ends a recording, because a file with a jump in
      * it is not a recording.
      *
+     * A file already at [path] is replaced when the first packet is written, not before. When
+     * [path] is the file playing, through any link or spelling of it, the recording ends at that
+     * first packet with [PlaybackWarning.RecordingStopped] and the file is left whole.
+     *
      * @throws IllegalStateException when nothing is open, or when a recording already runs.
      * @throws UnsupportedOperationException when the backend cannot record. The FFmpeg backend
      *         records on every platform except the web, where a page has no file to write.

@@ -311,6 +311,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   that leaves HDR to the platform, such as Android's GPU renderer, is unchanged.
 - A DASH Period whose initialization is `dvh1`, `dvhe`, `dva1` or `dvav` carries its parameter sets
   in band when Periods are joined, as `hvc1`, `hev1`, `avc1` and `avc3` already did (#470).
+- A recording never costs the media it records (#471). `startRecording` used to empty the file
+  at its path at once, so recording into the file playing, or into a link or another spelling of
+  it, destroyed that file. A file already at the path is now left whole until the first packet is
+  written, and the FFmpeg sink refuses to write over the file its source reads, so such a recording
+  ends at its first packet with `RecordingStopped` and the file plays on. This needs KiteFFmpeg
+  0.5.0 (yuroyami/KiteFFmpeg#146).
 
 ### Removed
 

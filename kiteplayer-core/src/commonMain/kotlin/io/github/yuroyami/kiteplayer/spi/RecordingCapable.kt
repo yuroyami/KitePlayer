@@ -18,6 +18,9 @@ public interface RecordingCapable {
      * Starts copying the packets of the streams this source reads into a Matroska file at [path],
      * with no re-encode.
      *
+     * A file already at [path] may be the media this source reads, so an implementation leaves it
+     * whole until it knows otherwise, and refuses to write over the media it reads.
+     *
      * @throws IllegalStateException when a recording already runs.
      * @throws IllegalArgumentException when the file at [path] cannot be created.
      * @throws UnsupportedOperationException when this platform cannot write the file.

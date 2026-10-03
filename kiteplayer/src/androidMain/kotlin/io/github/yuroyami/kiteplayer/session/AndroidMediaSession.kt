@@ -2,13 +2,16 @@ package io.github.yuroyami.kiteplayer.session
 
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import kotlinx.coroutines.CancellationException
@@ -235,6 +238,23 @@ public class KitePlayerMediaSession(
         override fun onPause() = player.pauseFromRemote()
         override fun onStop() = player.pauseFromRemote()
 
+        // The platform holds a play-pause key for the double tap timeout and reads a second one as
+        // "next", a rule for a wired headset's one button. A remote, a keyboard or a speaker sends
+        // the same key, so play-pause acts at once here, and only the headset's own key keeps the
+        // double press (#437).
+        override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
+            val event = mediaButtonIntent.keyEvent() ?: return super.onMediaButtonEvent(mediaButtonIntent)
+            return when (mediaKeyAction(event.keyCode, event.action, event.repeatCount)) {
+                MediaKeyAction.Toggle -> {
+                    // Buffering counts as playing: the listener asked for sound, so a toggle means stop.
+                    if (player.state.value.status.isActive) player.pauseFromRemote() else player.playFromRemote()
+                    true
+                }
+                MediaKeyAction.Consume -> true
+                MediaKeyAction.Platform -> super.onMediaButtonEvent(mediaButtonIntent)
+            }
+        }
+
         // A refused seek throws, and an exception that leaves this scope ends the process.
         override fun onSeekTo(positionMillis: Long) {
             scope.launch { runCatching { player.seek(positionMillis.milliseconds) } }
@@ -264,6 +284,39 @@ public class KitePlayerMediaSession(
     }
 
 }
+
+/** What the session does with one media key event. */
+internal enum class MediaKeyAction {
+    /** Plays or pauses, at once. */
+    Toggle,
+
+    /** Taken and ignored: the release or the auto-repeat of a key acted on when it went down. */
+    Consume,
+
+    /** Left to the platform's own handling. */
+    Platform,
+}
+
+/**
+ * The session's answer to a media key (#437). Play-pause acts the moment it goes down, whatever
+ * sent it, and never waits for or reads a second press. The headset hook keeps the platform's
+ * double press for next, because a one-button headset has no other way to skip. Every other key is
+ * the platform's.
+ */
+internal fun mediaKeyAction(keyCode: Int, action: Int, repeatCount: Int): MediaKeyAction = when (keyCode) {
+    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ->
+        if (action == KeyEvent.ACTION_DOWN && repeatCount == 0) MediaKeyAction.Toggle else MediaKeyAction.Consume
+    else -> MediaKeyAction.Platform
+}
+
+/** The key event a media button intent carries, or null. */
+private fun Intent.keyEvent(): KeyEvent? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
+    } else {
+        @Suppress("DEPRECATION")
+        getParcelableExtra(Intent.EXTRA_KEY_EVENT)
+    }
 
 /** A new item, or new tags on the same one, is what makes the artwork loader run again. */
 private fun artworkKey(snapshot: PlayerSnapshot): Any =

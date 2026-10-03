@@ -351,6 +351,17 @@ ffmpeg -v error -y \
   -c:a aac -b:a 96k -c:s mov_text \
   movtext.mp4
 
+echo "MP4 timed text with styled runs: italic, bold, underline and a colour, the last after non-Latin text"
+# FFmpeg's encoder writes each SubRip style as a run in the sample's styl box (#512).
+printf '1\n00:00:00,500 --> 00:00:01,500\n<i>Off screen, a voice</i>\n\n2\n00:00:01,500 --> 00:00:02,500\nA plain line with one <b>bold</b> word\n\n3\n00:00:02,500 --> 00:00:03,500\n日本語 and a <font color="#ff0000">red</font> <u>word</u>\n\n' > movtext-styled.srt
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x240:rate=30:duration=4" \
+  -i movtext-styled.srt \
+  -map 0:v -map 1:0 \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:s mov_text \
+  movtext-styled.mp4
+rm -f movtext-styled.srt
+
 # ---------------------------------------------------------------------------------------------
 # The format conformance matrix. Every clip below is a matrix row; the
 # table itself is FormatMatrix.kt in kiteplayer-ffmpeg. Small and short on purpose: the matrix

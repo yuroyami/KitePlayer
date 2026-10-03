@@ -32,7 +32,8 @@ import kotlin.test.assertTrue
  * one numbered set, single files whose segment index names their fragments, and a live manifest
  * written over the numbered set's segments, and the same layouts in WebM (#401). The automatic
  * transport plays the manifests from addresses with no extension and no type (#400). Several
- * Periods play as one presentation, in fMP4, WebM and MPEG-TS (#403).
+ * Periods play as one presentation, in fMP4, WebM and MPEG-TS (#403), and a live manifest counts
+ * its window on the clock its UTCTiming names (#404).
  */
 class DashThroughHlsTest {
 
@@ -53,6 +54,8 @@ class DashThroughHlsTest {
             asked += path
             val body = when {
                 path == "live.mpd" || path == "edge" -> liveManifest?.encodeToByteArray()
+                // A time server a minute ahead of this machine's clock (#404).
+                path == "time" -> Instant.now().plusSeconds(60).toString().encodeToByteArray()
                 // Addresses with no extension, as tokenised CDN addresses are, and one sent with its own type (#400).
                 path == "watch" || path == "typed" -> File(media, "separate.mpd").readBytes()
                 path == "ondemand.mpd" -> onDemandManifest().encodeToByteArray()
@@ -66,6 +69,14 @@ class DashThroughHlsTest {
                     .replace("</Period>", "$STPP_SET</Period>").encodeToByteArray()
                 // The first fetch names one Period; every refresh after it adds the next (#403).
                 path == "live-periods.mpd" -> livePeriods.getOrNull(minOf(asked.count { it == path }, livePeriods.size) - 1)?.encodeToByteArray()
+                // The sound set named and given roles, and a forced subtitle set beside it (#404).
+                path == "named.mpd" -> File(media, "separate.mpd").readText()
+                    .replace(
+                        """contentType="audio" startWithSAP="1" segmentAlignment="true" bitstreamSwitching="true">""",
+                        """contentType="audio" lang="en" startWithSAP="1" segmentAlignment="true" bitstreamSwitching="true">""" +
+                            """<Label>English, described</Label><Role schemeIdUri="urn:mpeg:dash:role:2011" value="description"/>""",
+                    )
+                    .replace("</Period>", FORCED_SET + "</Period>").encodeToByteArray()
                 path == "periods.mpd" -> periodsManifest(listOf("a", "b", "c"), PeriodLayout.Mp4).encodeToByteArray()
                 path == "webm-periods.mpd" -> periodsManifest(listOf("a", "b"), PeriodLayout.Webm).encodeToByteArray()
                 path == "ts-periods.mpd" -> periodsManifest(listOf("a", "b"), PeriodLayout.Ts).encodeToByteArray()
@@ -213,6 +224,45 @@ class DashThroughHlsTest {
         } finally {
             source.close()
         }
+    }
+
+    @Test
+    fun aLiveManifestCountsItsWindowOnItsTimeServersClock() = runBlocking {
+        // By this machine's clock the presentation starts in thirty seconds; by the time server's,
+        // a minute ahead, it started thirty seconds ago, so segments up to the fifteenth have ended.
+        liveManifest = liveManifest(availabilityStart = Instant.now().plusSeconds(30), clock = true)
+        val source = KiteFFmpegSourceFactory().open(Dash.mediaItemFor("$root/live.mpd", client))
+        try {
+            source.selectStreams(source.streams.map { it.index }.toSet())
+            var timedOut = false
+            val watchdog = launch(Dispatchers.Default) {
+                delay(20_000)
+                timedOut = true
+                source.interrupt()
+            }
+            try {
+                source.readPacket()?.close()
+            } catch (interrupted: Exception) {
+                if (!timedOut) throw interrupted
+            } finally {
+                watchdog.cancel()
+            }
+            assertTrue("time" in asked, "the time server was not asked: $asked")
+            assertTrue("single-0-13.m4s" in asked && "single-0-12.m4s" !in asked, "playback did not start near the time server's live edge: $asked")
+        } finally {
+            source.close()
+        }
+    }
+
+    @Test
+    fun aSetsLabelAndRolesReachTheTracks() = withSource("named.mpd") { source ->
+        val audio = source.streams.single { it.kind == TrackKind.Audio }
+        assertEquals("English, described", audio.title, "the set's label names the track")
+        assertTrue(audio.isAccessibility, "a description of the picture is an accessibility track")
+        assertTrue(audio.isDefault)
+        val subtitle = source.streams.single { it.kind == TrackKind.Subtitle }
+        assertTrue(subtitle.isForced, "forced subtitles are forced")
+        assertEquals("de forced", subtitle.title)
     }
 
     @Test
@@ -446,6 +496,12 @@ class DashThroughHlsTest {
             <Representation id="de" bandwidth="1000"><BaseURL>subs.vtt</BaseURL></Representation>
         </AdaptationSet>"""
 
+        /** The WebVTT set marked as forced subtitles, as a packager marks signs and foreign dialogue (#404). */
+        const val FORCED_SET = """<AdaptationSet contentType="text" mimeType="text/vtt" lang="de">
+            <Role schemeIdUri="urn:mpeg:dash:role:2011" value="forced-subtitle"/>
+            <Representation id="de" bandwidth="1000"><BaseURL>subs.vtt</BaseURL></Representation>
+        </AdaptationSet>"""
+
         /** A sidecar TTML set, as broadcast packagers write subtitles (#402). */
         const val TTML_SET = """<AdaptationSet contentType="text" mimeType="application/ttml+xml" lang="es">
             <Representation id="es" bandwidth="1000"><BaseURL>subs.ttml</BaseURL></Representation>
@@ -477,10 +533,14 @@ class DashThroughHlsTest {
         }
     }
 
-    /** A live manifest over the numbered set's segments, its presentation started at [availabilityStart]. */
-    private fun liveManifest(availabilityStart: Instant): String = """
+    /**
+     * A live manifest over the numbered set's segments, its presentation started at
+     * [availabilityStart], whose time of day is the time server's when [clock] says so.
+     */
+    private fun liveManifest(availabilityStart: Instant, clock: Boolean = false): String = """
         <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="dynamic" availabilityStartTime="$availabilityStart"
              minimumUpdatePeriod="PT2S" timeShiftBufferDepth="PT20S">
+            ${if (clock) """<UTCTiming schemeIdUri="urn:mpeg:dash:utc:http-xsdate:2014" value="time"/>""" else ""}
             <Period id="0" start="PT0S">
                 <AdaptationSet contentType="video" mimeType="video/mp4">
                     <Representation id="0" codecs="avc1.42c00d" bandwidth="300000" width="320" height="180">

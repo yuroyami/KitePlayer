@@ -143,7 +143,7 @@ public class KiteFFmpegSource internal constructor(
 
     /** One canonical table for both the public track list and every reader selection. */
     private val selectableStreams: List<Pair<StreamInfo, PlayerStreamInfo>> = source.streams.mapNotNull { stream ->
-        stream.toPlayerStream(mapper)?.let { exposed -> stream to exposed }
+        stream.toPlayerStream(mapper, renditionNames = source.formatName == "hls")?.let { exposed -> stream to exposed }
     }
 
     override val streams: List<PlayerStreamInfo> = selectableStreams.map { it.second }
@@ -538,7 +538,12 @@ internal fun io.github.yuroyami.kiteffmpeg.HdrMetadata.toPlayerHdr(): HdrStaticM
     return metadata.takeUnless { it == HdrStaticMetadata() }
 }
 
-internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInfo? {
+/**
+ * This stream as the engine sees it. With [renditionNames], for an HLS input, a stream with no
+ * title of its own takes its rendition's `NAME`, which FFmpeg's HLS reader files under `comment`
+ * (#404), unless that name only repeats the stream's language.
+ */
+internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: Boolean = false): PlayerStreamInfo? {
     val kind = when (type) {
         MediaType.Video -> TrackKind.Video
         MediaType.Audio -> TrackKind.Audio
@@ -550,7 +555,9 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInf
         kind = kind,
         codec = codec.name,
         language = language,
-        title = title,
+        title = title ?: metadata["comment"]?.trim()?.takeIf { name ->
+            renditionNames && name.isNotEmpty() && !name.equals(language, ignoreCase = true)
+        },
         isDefault = disposition.default,
         isForced = disposition.forced,
         isAccessibility = disposition.hearingImpaired || disposition.visualImpaired,

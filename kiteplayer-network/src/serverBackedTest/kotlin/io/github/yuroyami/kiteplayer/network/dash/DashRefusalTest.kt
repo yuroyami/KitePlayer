@@ -106,6 +106,36 @@ class DashRefusalTest {
         }
     }
 
+    // Digital rights management is out of scope by decision (#404): an encrypted presentation
+    // used to be played as if it were clear, which decodes to noise.
+    @Test
+    fun anEncryptedManifestIsRefusedTyped() = runBlocking {
+        val port = serveMpd(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet contentType="video" mimeType="video/mp4">
+                        <ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection:2011" value="cenc"/>
+                        <ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/>
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.m4s" timescale="1" duration="2"/>
+                        <Representation id="v" bandwidth="2"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        )
+        val client = HttpClient()
+        try {
+            val failure = assertFailsWith<DashUnsupportedException> {
+                Dash.mediaItemFor("http://127.0.0.1:$port/movie.mpd", client)
+            }
+            assertTrue("encrypted" in failure.message.orEmpty(), "the refusal says why: ${failure.message}")
+            assertTrue("edef8ba9" in failure.message.orEmpty(), "the refusal names the system: ${failure.message}")
+        } finally {
+            client.close()
+        }
+    }
+
     // Video and audio in sets of their own, in a container the HLS path does not take. The
     // one-stream door plays one set, so the video used to play silent. Fragmented MP4, MPEG-TS
     // and WebM play through HLS instead (DashHlsTest).

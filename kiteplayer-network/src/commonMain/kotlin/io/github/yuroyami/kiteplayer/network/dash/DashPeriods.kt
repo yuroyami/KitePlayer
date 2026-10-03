@@ -50,12 +50,12 @@ internal object DashPeriods {
      * when the Period has none. [reference] is the Period the presentation's tracks were taken
      * from. A set with the same `id` wins, then the set at the same place among the sets of its
      * kind when the two Periods have as many, then one in the same language, then the first of
-     * its kind. Within it, a picture or sound track takes the representation whose bandwidth is
+     * its kind. An encrypted set is never chosen. Within it, a picture or sound track takes the representation whose bandwidth is
      * nearest its own, and a subtitle track the first.
      */
     fun match(track: DashHlsTrack, reference: DashPeriod, period: DashPeriod): Pair<Int, Int>? {
         fun ofKind(of: DashPeriod) = of.adaptationSets.withIndex().filter { (_, set) ->
-            DashHls.roleOf(set) == track.role && (track.subtitleFormat == null || DashHls.subtitleFormat(set) != null)
+            !set.isProtected && DashHls.roleOf(set) == track.role && (track.subtitleFormat == null || DashHls.subtitleFormat(set) != null)
         }
         val sets = ofKind(period)
         if (sets.isEmpty()) return null

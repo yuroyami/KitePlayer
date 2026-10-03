@@ -60,6 +60,19 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   when its segments are in a container the HLS path does not take. Time runs on across each
   boundary although each Period's media time starts again, an fMP4 Period of another picture size
   decodes at its own, and a live manifest that a refresh gives a new Period plays on into it.
+- A live DASH manifest counts its window on the time of day that its `UTCTiming` names, by
+  `direct`, `http-xsdate`, `http-iso` or `http-head`, instead of the device's clock, which could be
+  seconds off and ask for segments that did not exist yet (#404). With none that answers, the
+  device's clock stands and the log says so. A refresh fetches the manifest from its `Location`,
+  and a segment template stops at its `endNumber`.
+- DASH audio and subtitle tracks carry their set's `Label` as their title, and their roles reach
+  the player: `main` sound is the default, `forced-subtitle` is forced, and `caption` and
+  `description` are marked as accessibility tracks (#404). An encrypted manifest is refused with
+  `DashUnsupportedException` instead of decoding to noise, and an encrypted set beside clear ones
+  is left out.
+- An HLS track with no title of its own takes its rendition's `NAME` as its title, unless the name
+  only repeats its language (#404). FFmpeg files that name under the stream's `comment`, where
+  `PlayerStreamInfo.metadata` still shows it.
 - An HLS playlist that nothing marks is recognised by its first bytes (#400). A reader whose bytes
   start with `#EXTM3U` plays through the HLS path when no format hint, HLS content type or `.m3u8`
   address says so, which an address with no extension sent as text or bytes never did. A format

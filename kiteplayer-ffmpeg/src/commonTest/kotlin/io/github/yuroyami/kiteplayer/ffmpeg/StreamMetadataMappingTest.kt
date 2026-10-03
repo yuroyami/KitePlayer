@@ -39,6 +39,26 @@ class StreamMetadataMappingTest {
         assertEquals(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat.Yuv444p, PixelFormat("yuvj444p").toPlayerFormat())
     }
     @Test
+    fun anHlsRenditionsNameBecomesTheTitleOfAStreamWithoutOne() {
+        fun audio(metadata: Map<String, String>) = StreamInfo(
+            index = 1,
+            type = MediaType.Audio,
+            codec = CodecId.Aac,
+            timeBase = Rational(1, 48_000),
+            durationMicros = null,
+            bitrateBps = 0,
+            metadata = metadata,
+        )
+        val named = audio(mapOf("comment" to "English, described", "language" to "en"))
+        assertEquals("English, described", named.toPlayerStream(TimestampMapper(0), renditionNames = true)?.title)
+        assertEquals(null, named.toPlayerStream(TimestampMapper(0))?.title, "a comment is no title outside HLS")
+        val onlyTheLanguage = audio(mapOf("comment" to "en", "language" to "en"))
+        assertEquals(null, onlyTheLanguage.toPlayerStream(TimestampMapper(0), renditionNames = true)?.title)
+        val titled = audio(mapOf("comment" to "English", "title" to "Stereo"))
+        assertEquals("Stereo", titled.toPlayerStream(TimestampMapper(0), renditionNames = true)?.title, "a title of its own wins")
+    }
+
+    @Test
     fun streamColorVp9AndExtradataCrossTheBackendBoundaryLosslessly() {
         val extradata = byteArrayOf(1, 2, 3)
         val source = StreamInfo(

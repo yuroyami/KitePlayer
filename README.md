@@ -650,7 +650,8 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
 - Each step opens the stream again, so the picture holds for a moment. A variant that you
   selected stays, and a step up never passes `DemuxPolicy.maxBitrate` or `maxVideoHeight`.
 - MPEG-TS and fMP4 segments, byte ranges, AES-128 keys, separate audio and subtitle renditions, and
-  live playlists play. A finished playlist can seek.
+  live playlists play. A finished playlist can seek. A rendition's `NAME` is its track's title,
+  and its `DEFAULT`, `FORCED` and accessibility `CHARACTERISTICS` set the track's flags.
 - A segment that cannot be read is skipped, and `PlaybackWarning.SegmentSkipped` says so. A stream
   that ends while its last segments fail ends with `PlaybackError.SourceUnavailable`.
 - `MediaItem.headers` go only to the scheme, host and port of the item's own address, because a
@@ -671,6 +672,15 @@ sends it as text, XML or bytes, by its root element
   specification names only the other two
   ([#401](https://github.com/yuroyami/KitePlayer/issues/401)). Separate sets play together, a finished presentation seeks, and a live one
   plays from its live edge and fetches the manifest again after each update period.
+- A live manifest counts its window on the time of day its `UTCTiming` names, by `direct`,
+  `http-xsdate`, `http-iso` or `http-head`, and falls back to the device's clock with a line in the
+  log; a refresh follows its `Location`
+  ([#404](https://github.com/yuroyami/KitePlayer/issues/404)). In a browser `http-head` answers
+  only from a server that exposes its `Date` header.
+- An audio or subtitle track takes its set's `Label` as its title, `main` sound is the default,
+  `forced-subtitle` is a forced track, and `caption` and `description` are marked as
+  accessibility tracks. Digital rights management is out of scope: an encrypted set is left out,
+  and an encrypted manifest is refused with `DashUnsupportedException`.
 - Segment templates, numbered or with a timeline, segment lists, and single files all play: an
   MP4 file through its segment index (`sidx`), and a WebM file through its `Cues`.
 - Subtitle sets of WebVTT play as they are. Sets of TTML, and of TTML or WebVTT in MP4 segments

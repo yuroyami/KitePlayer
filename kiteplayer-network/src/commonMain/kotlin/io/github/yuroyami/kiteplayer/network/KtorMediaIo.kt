@@ -76,6 +76,8 @@ public class KtorMediaIo private constructor(
     override val contentType: String?,
     /** The strong entity tag of the first response, or null. Every ranged request asks for it. */
     private val entityTag: String?,
+    /** The `Date` header of the first response, which a live DASH clock can read (#404), or null. */
+    internal val date: String?,
     firstBody: ByteReadChannel,
     firstJob: Job,
     private val scope: CoroutineScope,
@@ -432,6 +434,7 @@ public class KtorMediaIo private constructor(
                             // The request that answered, after every redirect Ktor followed.
                             val location = response.call.request.url.toString()
                             val type = response.headers[HttpHeaders.ContentType]
+                            val date = response.headers[HttpHeaders.Date]
                             when (response.status) {
                                 HttpStatusCode.PartialContent -> {
                                     // Content-Range: bytes 0-last/total, total possibly "*". A range that
@@ -443,11 +446,11 @@ public class KtorMediaIo private constructor(
                                                 "${response.headers[HttpHeaders.ContentRange]}",
                                         )
                                     }
-                                    probe.complete(Probe(range.complete, seekable = true, tag, location, type))
+                                    probe.complete(Probe(range.complete, seekable = true, tag, location, type, date))
                                 }
                                 HttpStatusCode.OK -> {
                                     val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                                    probe.complete(Probe(total, seekable = false, tag, location, type))
+                                    probe.complete(Probe(total, seekable = false, tag, location, type, date))
                                 }
                                 else -> throw KtorMediaIoException(
                                     "cannot open $shown: ${response.status}",
@@ -485,6 +488,7 @@ public class KtorMediaIo private constructor(
                 location = answer.location,
                 contentType = answer.contentType,
                 entityTag = answer.entityTag,
+                date = answer.date,
                 firstBody = pipe,
                 firstJob = job,
                 scope = scope,
@@ -503,6 +507,7 @@ private class Probe(
     val entityTag: String?,
     val location: String,
     val contentType: String?,
+    val date: String?,
 )
 
 /**

@@ -13,7 +13,8 @@ import io.github.yuroyami.kiteplayer.network.xml.XmlMini
  * Honest scope, stated where it is true: static (VOD) presentations resolve fully. A dynamic
  * (live) manifest parses with its clock, and [Dash.mediaItemFor] plays it when HLS can carry its
  * segments; [DashManifestParser.segmentPlan] still refuses it. Several Periods play joined when
- * HLS can carry every one of them (#403). Xlink and encryption descriptors are out of this tier.
+ * HLS can carry every one of them (#403). Xlink is out of this tier, and an encrypted set is
+ * parsed for its `ContentProtection` schemes only, so the door can refuse it (#404).
  */
 public data class DashManifest(
     val isDynamic: Boolean,
@@ -32,7 +33,7 @@ public data class DashManifest(
     val suggestedPresentationDelayMicros: Long? = null,
     /**
      * The `Location` element, resolved: where a live manifest is to be fetched from from now on,
-     * or null when it names none.
+     * or null when it names none or one the policy refuses.
      */
     val location: String? = null,
     /**
@@ -329,6 +330,14 @@ public object DashManifestParser {
                         },
                         lang = set.attr("lang"),
                         id = set.attr("id"),
+                        label = set.child("Label")?.text?.trim()?.takeIf { it.isNotEmpty() },
+                        roles = set.children("Role")
+                            .filter { it.attr("schemeIdUri").equals(ROLE_SCHEME, ignoreCase = true) }
+                            .mapNotNull { it.attr("value")?.trim() },
+                        // A representation of its own may be the one that says it is encrypted.
+                        contentProtectionSchemes = (set.children("ContentProtection") +
+                            set.children("Representation").flatMap { it.children("ContentProtection") })
+                            .mapNotNull { it.attr("schemeIdUri") }.distinct(),
                     )
                 },
                 startMicros = period.attr("start")?.let(::parseIsoDurationMicros),
@@ -344,6 +353,13 @@ public object DashManifestParser {
             minimumUpdatePeriodMicros = root.attr("minimumUpdatePeriod")?.let(::parseIsoDurationMicros),
             timeShiftBufferDepthMicros = root.attr("timeShiftBufferDepth")?.let(::parseIsoDurationMicros),
             suggestedPresentationDelayMicros = root.attr("suggestedPresentationDelay")?.let(::parseIsoDurationMicros),
+            // A Location the policy refuses is no reason to refuse the manifest that names it.
+            location = root.child("Location")?.text?.trim()?.takeIf { it.isNotEmpty() }?.let { reference ->
+                runCatching { resolveUrl(UrlBase(manifestUrl), reference, policy) }.getOrNull()
+            },
+            utcTimings = root.children("UTCTiming").mapNotNull { timing ->
+                timing.attr("schemeIdUri")?.let { DashUtcTiming(it.trim(), timing.attr("value")?.trim().orEmpty()) }
+            },
         )
     }
 
@@ -384,6 +400,7 @@ public object DashManifestParser {
             segmentUrls = listed.mapNotNull { it.first },
             initializationUrl = initializationUrl,
             frameRate = (rep.attr("frameRate") ?: set.attr("frameRate"))?.let(::parseFrameRate),
+            audioChannels = (rep.child("AudioChannelConfiguration") ?: set.child("AudioChannelConfiguration"))?.let(::channelCount),
             segmentList = segmentList?.let { list ->
                 DashSegmentList(
                     timescale = positiveTimescale(list.attr("timescale")),
@@ -409,6 +426,40 @@ public object DashManifestParser {
             },
         )
     }
+
+    /**
+     * The channels an `AudioChannelConfiguration` states, in the schemes that state a count: a
+     * plain number (ISO/IEC 23003-3), a CICP channel layout index (ISO/IEC 23091-3), or Dolby's
+     * sixteen bit speaker mask, in which some bits stand for a pair. Null for another scheme or a
+     * value it does not know.
+     */
+    internal fun channelCount(configuration: XmlElement): Int? {
+        val value = configuration.attr("value")?.trim() ?: return null
+        return when (configuration.attr("schemeIdUri")?.trim()?.lowercase()) {
+            "urn:mpeg:dash:23003:3:audio_channel_configuration:2011" -> value.toIntOrNull()?.takeIf { it > 0 }
+            "urn:mpeg:mpegb:cicp:channelconfiguration" -> value.toIntOrNull()?.let { CICP_CHANNELS[it] }
+            "tag:dolby.com,2014:dash:audio_channel_configuration:2011", "urn:dolby:dash:audio_channel_configuration:2011" ->
+                value.toIntOrNull(16)?.takeIf { value.length <= 4 }?.let { mask ->
+                    DOLBY_MASK_CHANNELS.indices.sumOf { bit -> if (mask and (0x8000 ushr bit) != 0) DOLBY_MASK_CHANNELS[bit] else 0 }
+                }?.takeIf { it > 0 }
+            else -> null
+        }
+    }
+
+    /** The DASH role scheme, whose values name what an adaptation set is for. */
+    internal const val ROLE_SCHEME: String = "urn:mpeg:dash:role:2011"
+
+    /** The channels of each CICP channel layout index that names a fixed layout. */
+    private val CICP_CHANNELS = mapOf(
+        1 to 1, 2 to 2, 3 to 3, 4 to 4, 5 to 5, 6 to 6, 7 to 8, 9 to 3, 10 to 4, 11 to 7, 12 to 8,
+        13 to 24, 14 to 8, 15 to 12, 16 to 10, 17 to 12, 18 to 14, 19 to 12, 20 to 14,
+    )
+
+    /**
+     * The speakers of each bit of Dolby's mask, from the highest: L, C, R, Ls, Rs, Lc and Rc, Lrs
+     * and Rrs, Cs, Ts, Lsd and Rsd, Lw and Rw, Vhl and Vhr, Vhc, Lts and Rts, LFE2, LFE.
+     */
+    private val DOLBY_MASK_CHANNELS = intArrayOf(1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2, 2, 1, 2, 1, 1)
 
     /** A timescale attribute, 1 when absent, refused when it is not positive. */
     private fun positiveTimescale(raw: String?): Long =
@@ -455,6 +506,7 @@ public object DashManifestParser {
         private val duration: String?,
         private val presentationTimeOffset: String?,
         private val timeline: List<DashTimelineEntry>?,
+        private val endNumber: String?,
     ) {
         /** Built on first use, so a level that only passes attributes down is never checked alone. */
         val template: DashSegmentTemplate by lazy {
@@ -470,6 +522,7 @@ public object DashManifestParser {
                 duration = duration?.toLongOrNull(),
                 timeline = timeline ?: emptyList(),
                 presentationTimeOffset = presentationTimeOffset?.toLongOrNull() ?: 0L,
+                endNumber = endNumber?.toLongOrNull(),
             )
         }
 
@@ -485,6 +538,7 @@ public object DashManifestParser {
                     duration = own.attr("duration") ?: parent?.duration,
                     presentationTimeOffset = own.attr("presentationTimeOffset") ?: parent?.presentationTimeOffset,
                     timeline = own.child("SegmentTimeline")?.let(::parseTimeline) ?: parent?.timeline,
+                    endNumber = own.attr("endNumber") ?: parent?.endNumber,
                 )
             }
         }
@@ -568,6 +622,7 @@ public object DashManifestParser {
                 }
                 budget.reserve(if (repeats < Long.MAX_VALUE) repeats + 1 else repeats)
                 for (repeat in 0..repeats) {
+                    if (template.endNumber != null && number > template.endNumber) break
                     add(number, time)
                     time = plus(time, entry.d, "a segment time")
                     number = plus(number, 1, "a segment number")
@@ -576,11 +631,13 @@ public object DashManifestParser {
         } else {
             val segmentDuration = template.duration
                 ?: throw IllegalArgumentException("SegmentTemplate needs duration or a timeline")
-            val totalMicros = durationMicros
-                ?: throw IllegalArgumentException("cannot count segments without a duration")
             val segmentMicros = rescale(segmentDuration, 1_000_000L, template.timescale, "the segment duration")
             require(segmentMicros > 0) { "degenerate segment duration" }
-            val count = totalMicros / segmentMicros + if (totalMicros % segmentMicros != 0L) 1 else 0
+            // endNumber names the last segment, so it counts them when the duration does not.
+            val numbered = template.endNumber?.let { (minus(it, template.startNumber, "the segment count") + 1).coerceAtLeast(0) }
+            val counted = durationMicros?.let { it / segmentMicros + if (it % segmentMicros != 0L) 1 else 0 }
+            val count = listOfNotNull(numbered, counted).minOrNull()
+                ?: throw IllegalArgumentException("cannot count segments without a duration")
             budget.reserve(count)
             var time = 0L
             for (i in 0 until count) {
@@ -707,8 +764,10 @@ public object DashManifestParser {
         }
         if (template.timeline.isNotEmpty()) {
             for (entry in expandTimeline(template.timeline, template.timescale, totalMicros, window, null, template.presentationTimeOffset)) {
+                val number = plus(template.startNumber, entry.index, "a segment number")
+                if (template.endNumber != null && number > template.endNumber) break
                 budget.reserve(1)
-                add(plus(template.startNumber, entry.index, "a segment number"), entry.time, entry.startMicros, entry.durationMicros)
+                add(number, entry.time, entry.startMicros, entry.durationMicros)
             }
         } else {
             val segmentDuration = template.duration
@@ -716,16 +775,21 @@ public object DashManifestParser {
             val segmentMicros = rescale(segmentDuration, 1_000_000L, template.timescale, "the segment duration")
             require(segmentMicros > 0) { "degenerate segment duration" }
             val first: Long
-            val end: Long
+            var end: Long
+            // endNumber names the last segment, so it counts them when nothing else does.
+            val count = template.endNumber?.let { (minus(it, template.startNumber, "the segment count") + 1).coerceAtLeast(0) }
             if (window == null) {
-                val total = totalMicros ?: throw IllegalArgumentException("cannot count segments without a duration")
                 first = 0
-                end = total / segmentMicros + if (total % segmentMicros != 0L) 1 else 0
+                end = when (val total = totalMicros) {
+                    null -> count ?: throw IllegalArgumentException("cannot count segments without a duration")
+                    else -> total / segmentMicros + if (total % segmentMicros != 0L) 1 else 0
+                }
             } else {
                 // Segment k ends at (k + 1) segment lengths, and is available once that has passed.
                 end = if (window.edgeMicros < segmentMicros) 0 else window.edgeMicros / segmentMicros
                 first = if (window.fromMicros < 0) 0 else window.fromMicros / segmentMicros
             }
+            if (count != null) end = minOf(end, count)
             budget.reserve((end - first).coerceAtLeast(0))
             for (k in first until end) {
                 val startMicros = times(k, segmentMicros, "a segment start")

@@ -19,6 +19,12 @@ internal class DashTimedSegment(
     val discontinuity: Boolean = false,
 )
 
+/**
+ * Whether the set is encrypted: it, or one of its representations, has a `ContentProtection`
+ * element. Digital rights management is out of scope, so such a set is never played (#404).
+ */
+internal val DashAdaptationSet.isProtected: Boolean get() = contentProtectionSchemes.isNotEmpty()
+
 /** A representation's segments in order, after its initialization, if it has one. */
 internal class DashTimedPlan(
     val initializationUrl: String?,
@@ -80,10 +86,11 @@ internal object DashHls {
     /**
      * Whether HLS can carry [period]: a set with a picture or sound, every such representation
      * in fragmented MP4, MPEG-TS or WebM with segment addressing of some kind. A subtitle set does
-     * not decide it; one in a form the reader cannot convert is left out of the stand-in.
+     * not decide it; one in a form the reader cannot convert is left out of the stand-in. An
+     * encrypted set does not decide it either, because the stand-in leaves it out (#404).
      */
     fun carries(period: DashPeriod): Boolean {
-        val media = period.adaptationSets.filter { roleOf(it) == DashHlsRole.Video || roleOf(it) == DashHlsRole.Audio }
+        val media = period.adaptationSets.filter { !it.isProtected && (roleOf(it) == DashHlsRole.Video || roleOf(it) == DashHlsRole.Audio) }
         if (media.isEmpty()) return false
         return media.all { set -> set.representations.isNotEmpty() && set.representations.all { carriable(set, it) } }
     }
@@ -96,7 +103,14 @@ internal object DashHls {
      * representations of the first audio set are the variants, and the other audio sets are not
      * offered. Each audio set offers its highest bandwidth representation as its rendition. A
      * [live] presentation offers no subtitle file that has no segments, because such a file has
-     * no length to give.
+     * no length to give. An encrypted set is not offered at all (#404).
+     *
+     * A rendition is named by its set's `Label`, or else by its language and roles. Its DASH roles
+     * become what HLS says of it: `caption` the accessibility characteristic of subtitles that
+     * describe sound, `description` that of sound that describes the picture, `easyreader` the
+     * easy-to-read one, and `forced-subtitle` a forced rendition. The first audio set whose role is
+     * `main` is the default, or else the first that is neither a description nor a commentary, and
+     * an audio rendition states its channels.
      */
     fun presentation(period: DashPeriod, live: Boolean = false): DashHlsPresentation {
         require(carries(period)) { "HLS cannot carry this Period" }
@@ -105,7 +119,8 @@ internal object DashHls {
         fun track(role: DashHlsRole, setIndex: Int, set: DashAdaptationSet, index: Int, format: DashSubtitleFormat? = null) =
             DashHlsTrack("$root/$setIndex-$index.m3u8", role, setIndex, index, set, set.representations[index], format)
 
-        val sets = period.adaptationSets.withIndex()
+        // An encrypted set keeps its place in the numbering, which the playlists look sets up by.
+        val sets = period.adaptationSets.withIndex().filter { !it.value.isProtected }
         val videoSets = sets.filter { roleOf(it.value) == DashHlsRole.Video }
         val audioSets = sets.filter { roleOf(it.value) == DashHlsRole.Audio }
         val textSets = sets.filter { roleOf(it.value) == DashHlsRole.Subtitles }
@@ -138,11 +153,16 @@ internal object DashHls {
 
         val master = buildString {
             append("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n")
+            // With no set marked main, a description or a commentary is nobody's default sound.
+            val mainAudio = audio.indexOfFirst { "main" in it.set.roles }.takeIf { it >= 0 }
+                ?: audio.indexOfFirst { track -> track.set.roles.none { it == "description" || it == "commentary" } }.coerceAtLeast(0)
+            val audioNames = names("audio", audio)
             for ((index, rendition) in audio.withIndex()) {
-                append(rendition("AUDIO", AUDIO_GROUP, rendition, index))
+                append(rendition("AUDIO", AUDIO_GROUP, rendition, audioNames[index], isDefault = index == mainAudio))
             }
+            val subtitleNames = names("subtitles", subtitles)
             for ((index, rendition) in subtitles.withIndex()) {
-                append(rendition("SUBTITLES", SUBTITLE_GROUP, rendition, index))
+                append(rendition("SUBTITLES", SUBTITLE_GROUP, rendition, subtitleNames[index], isDefault = false))
             }
             val audioBandwidth = audio.maxOfOrNull { it.representation.bandwidth } ?: 0L
             val audioCodecs = audio.mapNotNull { it.representation.codecs }.distinct()
@@ -240,16 +260,55 @@ internal object DashHls {
         return container && addressed
     }
 
-    private fun rendition(type: String, group: String, track: DashHlsTrack, index: Int): String {
-        val language = track.set.lang
-        val name = language?.let { "$it ${index + 1}" } ?: "${type.lowercase()} ${index + 1}"
-        val attributes = mutableListOf("TYPE=$type", "GROUP-ID=\"$group\"", "NAME=\"$name\"")
-        if (language != null) attributes += "LANGUAGE=\"$language\""
-        attributes += "DEFAULT=${if (index == 0 && type == "AUDIO") "YES" else "NO"}"
+    /**
+     * The name of each of [tracks]: its set's label, or else its language, or [kind], and the words
+     * of its roles. A name is unique in its group, so names that would repeat are counted.
+     */
+    private fun names(kind: String, tracks: List<DashHlsTrack>): List<String> {
+        val bases = tracks.map { track ->
+            track.set.label ?: (listOf(track.set.lang ?: kind) + track.set.roles.mapNotNull { ROLE_WORDS[it.lowercase()] }).joinToString(" ")
+        }
+        val seen = HashMap<String, Int>()
+        return bases.map { base ->
+            if (bases.count { it == base } == 1) return@map base
+            val count = (seen[base] ?: 0) + 1
+            seen[base] = count
+            "$base $count"
+        }
+    }
+
+    private fun rendition(type: String, group: String, track: DashHlsTrack, name: String, isDefault: Boolean): String {
+        val set = track.set
+        val language = set.lang
+        val roles = set.roles.map { it.lowercase() }
+        val attributes = mutableListOf("TYPE=$type", "GROUP-ID=\"$group\"", "NAME=\"${quoted(name)}\"")
+        if (language != null) attributes += "LANGUAGE=\"${quoted(language)}\""
+        attributes += "DEFAULT=${if (isDefault) "YES" else "NO"}"
         attributes += "AUTOSELECT=YES"
+        if (type == "SUBTITLES" && "forced-subtitle" in roles) attributes += "FORCED=YES"
+        val characteristics = roles.mapNotNull { CHARACTERISTICS[it] }.distinct()
+        if (characteristics.isNotEmpty()) attributes += "CHARACTERISTICS=\"${characteristics.joinToString(",")}\""
+        if (type == "AUDIO") track.representation.audioChannels?.let { attributes += "CHANNELS=\"$it\"" }
         attributes += "URI=\"${track.address}\""
         return "#EXT-X-MEDIA:" + attributes.joinToString(",") + "\n"
     }
+
+    /** [text] with what cannot stand inside an HLS quoted string, a quote or a line break, replaced. */
+    private fun quoted(text: String): String = text.replace('"', '\'').replace('\n', ' ').replace('\r', ' ')
+
+    /** The words a rendition's made-up name gives its DASH roles. */
+    private val ROLE_WORDS = mapOf(
+        "commentary" to "commentary", "description" to "description", "caption" to "captions",
+        "forced-subtitle" to "forced", "dub" to "dub", "alternate" to "alternate",
+        "supplementary" to "supplementary", "sign" to "sign language", "easyreader" to "easy reader",
+    )
+
+    /** The HLS characteristics (RFC 8216bis, 4.4.6.1) of the DASH roles that have one. */
+    private val CHARACTERISTICS = mapOf(
+        "caption" to "public.accessibility.describes-music-and-sound",
+        "description" to "public.accessibility.describes-video",
+        "easyreader" to "public.easy-to-read",
+    )
 
     /** An HLS byte range, `length@offset`. */
     private fun byteRange(range: LongRange): String = "${range.last - range.first + 1}@${range.first}"

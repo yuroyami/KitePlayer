@@ -101,10 +101,11 @@ public class DashMediaIo(
 }
 
 /**
- * A manifest that the DASH door does not play: one whose segments the HLS path cannot carry, in a
- * container other than fragmented MP4, MPEG-TS or WebM, when it has several Periods, is live or
- * carries its audio in an adaptation set of its own. It is refused rather than played wrong, so an
- * application can fall back to another route.
+ * A manifest that the DASH door does not play: an encrypted one, whose every picture and sound set
+ * has a `ContentProtection` element, because digital rights management is out of scope, or one
+ * whose segments the HLS path cannot carry, in a container other than fragmented MP4, MPEG-TS or
+ * WebM, when it has several Periods, is live or carries its audio in an adaptation set of its own.
+ * It is refused rather than played wrong, so an application can fall back to another route.
  */
 public class DashUnsupportedException(message: String) : IllegalArgumentException(message)
 
@@ -240,8 +241,10 @@ internal class DashTransport(
     val open: suspend (url: String) -> MediaIo,
     /** At most `limit` bytes of a URL, refused typed past it; `what` names it in messages. */
     val fetch: suspend (url: String, limit: Long, what: String) -> ByteArray,
-    /** The manifest fetched again, for a live presentation. */
-    val refetch: suspend () -> DashManifest,
+    /** The manifest fetched again from an address, the first one or the one its `Location` names, for a live presentation. */
+    val refetch: suspend (url: String) -> DashManifest,
+    /** The `Date` header of a URL's response, which a live clock reads (#404), or null when it sends none. */
+    val date: suspend (url: String) -> String? = { null },
     /** How fast the network delivered the bytes of every reader [open] made, or null before it knows. */
     val bitsPerSecond: () -> Long?,
     /** Called once, when the item's reader closes. */
@@ -365,6 +368,13 @@ public object Dash {
      * its playlists follow the time of day and the manifest is fetched again after each minimum
      * update period.
      *
+     * A live manifest counts its window on the time of day its first usable `UTCTiming` names
+     * (`direct`, `http-xsdate`, `http-iso` or `http-head`), or else on the device's clock, and each
+     * refresh fetches it from the address its `Location` names (#404). Each audio and subtitle
+     * rendition is named by its set's `Label`, and its DASH roles say whether it is the main
+     * sound, forced subtitles, captions or a description of the picture. A set with a
+     * `ContentProtection` element is left out, and a Period with nothing else to show is refused.
+     *
      * A manifest of several Periods plays as one presentation (#403), as ad insertion and chapters
      * stitch them: the tracks are the first Period's, each later Period gives each track the set
      * with the same `id`, or at the same place, or in the same language, and the representation
@@ -386,9 +396,10 @@ public object Dash {
      * [manifest]. A segment or file behind a refused redirect fails its read with
      * [DashUrlRefusedException].
      *
-     * Throws [DashUnsupportedException] when the HLS path cannot carry the segments, for more than
-     * one Period, because the one stream would stop after the first, for a live manifest, and for
-     * audio in an adaptation set of its own, because the one stream would play that video silent.
+     * Throws [DashUnsupportedException] for an encrypted manifest, and, when the HLS path cannot
+     * carry the segments, for more than one Period, because the one stream would stop after the
+     * first, for a live manifest, and for audio in an adaptation set of its own, because the one
+     * stream would play that video silent.
      *
      * The player's automatic transport plays a manifest it recognises the same way, with no call
      * to this (#400). This door is for a caller with a client of its own, or a policy other than
@@ -423,7 +434,10 @@ public object Dash {
                                 "segment fetch failed: ${shownUri(url)} is $status"
                             }
                         },
-                        refetch = { manifest(mpdUrl, client, policy, maxManifestBytes, readerPolicy) },
+                        refetch = { url -> manifest(url, client, policy, maxManifestBytes, readerPolicy) },
+                        date = { url ->
+                            KtorMediaIo.open(url, client, emptyMap(), readerPolicy, redirects, meter = meter).use { it.date }
+                        },
                         bitsPerSecond = meter::bitsPerSecond,
                     ),
                 )
@@ -457,7 +471,7 @@ public object Dash {
         val shown = shownUri(mpdUrl)
         DashManifestParser.requireAllowedScheme(mpdUrl, policy)
         val redirects = DashRedirectRule(policy, mpdUrl)
-        suspend fun openChecked(url: String): MediaIo =
+        suspend fun openChecked(url: String): KtorMediaIo =
             io.openRelated(url, redirects) ?: throw DashUrlRefusedException("${shownUri(url)} is not an http or https address")
         val manifest = parseManifest(readAllBounded(io, maxManifestBytes, "the manifest at $shown"), mpdUrl, policy, maxManifestBytes)
         val route = route(mpdUrl, manifest, policy, maxSegmentBytes)
@@ -465,10 +479,11 @@ public object Dash {
             DashTransport(
                 open = ::openChecked,
                 fetch = { url, limit, what -> openChecked(url).use { readAllBounded(it, limit, what) } },
-                refetch = {
-                    val body = openChecked(mpdUrl).use { readAllBounded(it, maxManifestBytes, "the manifest at $shown") }
-                    parseManifest(body, mpdUrl, policy, maxManifestBytes)
+                refetch = { url ->
+                    val body = openChecked(url).use { readAllBounded(it, maxManifestBytes, "the manifest at ${shownUri(url)}") }
+                    parseManifest(body, url, policy, maxManifestBytes)
                 },
+                date = { url -> openChecked(url).use { it.date } },
                 bitsPerSecond = io::networkBitsPerSecond,
                 release = io::close,
             ),
@@ -482,6 +497,18 @@ public object Dash {
     private fun route(mpdUrl: String, manifest: DashManifest, policy: DashUrlPolicy, maxSegmentBytes: Long): DashRoute {
         val period = manifest.periods.firstOrNull()
             ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no Period")
+        // Digital rights management is out of scope by decision (#404). An encrypted set beside
+        // clear ones is left out; a Period with nothing clear to show is refused, not decoded to noise.
+        for ((index, each) in manifest.periods.withIndex()) {
+            val media = each.adaptationSets.filter { it.isVideo() || it.isAudio() }
+            if (media.isNotEmpty() && media.all { it.isProtected }) {
+                val schemes = media.flatMap { it.contentProtectionSchemes }.distinct().joinToString(", ")
+                throw DashUnsupportedException(
+                    "${shownUri(mpdUrl)} is encrypted" + (if (manifest.periods.size > 1) " in Period ${index + 1}" else "") +
+                        " ($schemes), and digital rights management is not supported",
+                )
+            }
+        }
         if (DashHls.carries(manifest)) {
             // Built here, so a manifest whose playlists cannot be written is refused before any open.
             // Every Period plays, joined onto the first one's tracks (#403).
@@ -497,17 +524,17 @@ public object Dash {
                     "and the one-stream reader plays exactly one",
             )
         }
-        val video = period.adaptationSets.firstOrNull { it.isVideo() }
+        val video = period.adaptationSets.firstOrNull { it.isVideo() && !it.isProtected }
         // Merging two elementary streams is not a byte concatenation, so separate audio would be
         // lost. Refused typed rather than played silent.
-        if (video != null && period.adaptationSets.any { it !== video && it.isAudio() }) {
+        if (video != null && period.adaptationSets.any { it !== video && it.isAudio() && !it.isProtected }) {
             throw DashUnsupportedException(
                 "${shownUri(mpdUrl)} carries its audio in a separate adaptation set, and this tier plays " +
                     "one set, so its video would play silent",
             )
         }
         val adaptationSet = video
-            ?: period.adaptationSets.firstOrNull()
+            ?: period.adaptationSets.firstOrNull { !it.isProtected }
             ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no AdaptationSet")
         val representation = adaptationSet.representations.maxByOrNull { it.bandwidth }
             ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no Representation")
@@ -544,6 +571,7 @@ public object Dash {
                 openUrl = transport.open,
                 refetch = if (manifest.isDynamic) transport.refetch else null,
                 nowMicros = ::wallClockMicros,
+                fetchDate = transport.date,
                 bitsPerSecond = transport.bitsPerSecond,
                 release = transport.release,
             )

@@ -16,9 +16,11 @@ import kotlinx.coroutines.sync.withLock
  * through [openUrl] once [policy] accepts it.
  *
  * A static presentation writes each media playlist once. A live one writes it again whenever
- * FFmpeg loads it, from the time of day [nowMicros] gives, and fetches the manifest again through
- * [refetch] once its minimum update period has passed. The media sequence stays continuous across
- * those loads even when a refreshed manifest counts its segments from a different number.
+ * FFmpeg loads it, and fetches the manifest again through [refetch] once its minimum update period
+ * has passed, from the address its `Location` names when it names one (#404). Its window follows
+ * the time of day that its `UTCTiming` names, read through [DashLiveClock], or else the device's,
+ * which [nowMicros] gives. The media sequence stays continuous across those loads even when a
+ * refreshed manifest counts its segments from a different number.
  *
  * A [DashSegmentBase] representation names its segments only in its file's segment index, which
  * this reads through [openUrl] the first time the representation's playlist is asked for: the
@@ -39,11 +41,13 @@ internal class DashHlsMediaIo(
     private val manifestUrl: String,
     private val policy: DashUrlPolicy,
     private val openUrl: suspend (String) -> MediaIo,
-    private val refetch: (suspend () -> DashManifest)?,
+    private val refetch: (suspend (url: String) -> DashManifest)?,
     private val nowMicros: () -> Long,
     private val bitsPerSecond: () -> Long? = { null },
     /** Called once when this reader closes, for what its segment readers depend on, such as the client. */
     private val release: () -> Unit = {},
+    /** The `Date` header of a URL's response, for a live clock whose `UTCTiming` reads one. */
+    private val fetchDate: suspend (url: String) -> String? = { null },
 ) : MediaIo {
 
     private val master = presentation.master.encodeToByteArray()
@@ -77,6 +81,17 @@ internal class DashHlsMediaIo(
         (presentation.tracks.firstOrNull { it.role == DashHlsRole.Video } ?: presentation.tracks.firstOrNull { it.role == DashHlsRole.Audio })
             ?.representation?.offsetMicros() ?: 0L
     private var fetchedAtMicros = nowMicros()
+
+    /** Where a refresh fetches the manifest: the address it came from, or the last `Location` it named. */
+    private var manifestAddress: String = allowedLocation(manifest) ?: manifestUrl
+
+    // A clock's address may be relative, to the manifest's own, and the policy judges it as any other.
+    private val clock = DashLiveClock(
+        manifest.utcTimings,
+        nowMicros,
+        fetchText = { url -> fetch(DashManifestParser.resolveUrl(manifestUrl, url, policy), null, MAX_TIME_BYTES).decodeToString() },
+        fetchDate = { url -> fetchDate(DashManifestParser.resolveUrl(manifestUrl, url, policy)) },
+    )
 
     override val size: Long get() = master.size.toLong()
     override val seekable: Boolean get() = true
@@ -141,8 +156,9 @@ internal class DashHlsMediaIo(
                 DashHls.mediaPlaylist(servedPlan(track, manifest, null), live = false)
             }
         }
-        val now = nowMicros()
-        refreshIfDue(now)
+        // The refresh follows the device's own clock, which only measures how long has passed.
+        refreshIfDue(nowMicros())
+        val now = clock.nowMicros()
         val plan = servedPlan(track, manifest, now)
         val sequence = sequences.getOrPut(track.address) { LiveSequence() }.first(plan)
         DashHls.mediaPlaylist(plan, live = true, sequence = sequence)
@@ -386,7 +402,7 @@ internal class DashHlsMediaIo(
         if (now - fetchedAtMicros < period) return
         fetchedAtMicros = now
         val fresh = try {
-            fetch()
+            fetch(manifestAddress)
         } catch (failure: Throwable) {
             if (failure is CancellationException) throw failure
             // The old manifest still describes the segments it named, and the window it writes
@@ -394,7 +410,21 @@ internal class DashHlsMediaIo(
             KiteLog.log("KiteDash", "the live manifest could not be fetched again: ${failure.message}")
             return
         }
-        if (fresh.isDynamic && fresh.periods.isNotEmpty()) manifest = fresh
+        if (fresh.isDynamic && fresh.periods.isNotEmpty()) {
+            manifest = fresh
+            allowedLocation(fresh)?.let { manifestAddress = it }
+        }
+    }
+
+    /** [from]'s `Location`, or null when it names none, or one that [policy] refuses beside the first address. */
+    private fun allowedLocation(from: DashManifest): String? {
+        val location = from.location ?: return null
+        return try {
+            DashManifestParser.requireAllowed(manifestUrl, location, policy)
+        } catch (refused: Exception) {
+            KiteLog.log("KiteDash", "the live manifest's Location is not followed: ${refused.message}")
+            null
+        }
     }
 
     /** The segments that [base]'s segment index names, read from its file. */
@@ -583,6 +613,9 @@ internal class DashHlsMediaIo(
 
         /** The largest subtitle segment or file read. A whole film of TTML is a few megabytes. */
         const val MAX_SUBTITLE_BYTES: Long = 16L shl 20
+
+        /** The largest answer read from a live clock's address. A time of day is a few dozen bytes. */
+        private const val MAX_TIME_BYTES: Long = 4096
 
         /** How many converted subtitle segments a live reader remembers. */
         private const val MAX_CONVERSIONS = 4096

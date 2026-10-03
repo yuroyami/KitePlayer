@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer
 
 import com.sun.net.httpserver.HttpServer
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegSourceFactory
+import io.github.yuroyami.kiteplayer.network.KtorMediaIoResolver
 import io.github.yuroyami.kiteplayer.network.dash.Dash
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.ktor.client.HttpClient
@@ -23,7 +24,8 @@ import kotlin.test.assertTrue
  * DASH played through the HLS path (#295), with the real FFmpeg backend reading the `dash/`
  * fixtures from a local HTTP server that answers range requests: separate video and audio sets,
  * one numbered set, single files whose segment index names their fragments, and a live manifest
- * written over the numbered set's segments.
+ * written over the numbered set's segments. The automatic transport plays the same manifests from
+ * addresses with no extension and no type (#400).
  */
 class DashThroughHlsTest {
 
@@ -42,7 +44,9 @@ class DashThroughHlsTest {
             val path = exchange.requestURI.path.removePrefix("/")
             asked += path
             val body = when {
-                path == "live.mpd" -> liveManifest?.encodeToByteArray()
+                path == "live.mpd" || path == "edge" -> liveManifest?.encodeToByteArray()
+                // Addresses with no extension, as tokenised CDN addresses are, and one sent with its own type (#400).
+                path == "watch" || path == "typed" -> File(media, "separate.mpd").readBytes()
                 path == "ondemand.mpd" -> onDemandManifest().encodeToByteArray()
                 path == "subtitled.mpd" -> File(media, "separate.mpd").readText()
                     .replace("</Period>", "$SUBTITLE_SET</Period>").encodeToByteArray()
@@ -59,6 +63,7 @@ class DashThroughHlsTest {
             val last = range?.substringAfter('-')?.toLongOrNull()?.coerceAtMost(body.size - 1L) ?: (body.size - 1L)
             val part = body.copyOfRange(first.toInt(), last.toInt() + 1)
             exchange.responseHeaders.add("Accept-Ranges", "bytes")
+            if (path == "typed") exchange.responseHeaders.add("Content-Type", "application/dash+xml")
             if (range != null) {
                 exchange.responseHeaders.add("Content-Range", "bytes $first-$last/${body.size}")
                 exchange.sendResponseHeaders(206, part.size.toLong())
@@ -156,6 +161,40 @@ class DashThroughHlsTest {
         }
     }
 
+    @Test
+    fun aManifestWithNoExtensionAndNoTypePlaysThroughTheAutomaticTransport() = withAutomaticSource("watch?session=7") { source ->
+        assertEquals(listOf(180, 360), source.variants.map { it.height }, "each video representation is a variant")
+        val read = source.readFor(seconds = 4.0)
+        assertTrue(read.video > 90, "only ${read.video} video packets in the first seconds")
+        assertTrue(read.audio > 150, "only ${read.audio} audio packets: the sound set did not play")
+        source.seekToKeyframe(Pts(60_000_000))
+        val after = source.readFor(seconds = 2.0)
+        assertTrue(after.firstVideo in 57.9..60.1, "the first picture after the seek to 60 s is at ${after.firstVideo} s")
+        assertTrue(after.firstAudio in 57.5..60.5, "the first sound after the seek is at ${after.firstAudio} s")
+    }
+
+    @Test
+    fun aManifestSentWithItsOwnTypePlaysThroughTheAutomaticTransport() = withAutomaticSource("typed") { source ->
+        val read = source.readFor(seconds = 2.0)
+        assertTrue(read.video > 30 && read.audio > 50, "${read.video} video and ${read.audio} audio packets arrived")
+    }
+
+    @Test
+    fun aLiveManifestWithNoExtensionPlaysThroughTheAutomaticTransport() = runBlocking {
+        liveManifest = liveManifest(availabilityStart = Instant.now().minusSeconds(30))
+        val reader = KtorMediaIoResolver(client).resolve("$root/edge")
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$root/edge", io = { checkNotNull(reader) }))
+        try {
+            assertNull(source.duration, "a live presentation has no duration")
+            source.selectStreams(source.streams.map { it.index }.toSet())
+            val read = source.readFor(seconds = 2.0)
+            assertTrue(read.video > 30, "only ${read.video} video packets arrived from the live edge")
+            assertTrue("single-0-13.m4s" in asked && "single-0-12.m4s" !in asked, "playback did not start near the live edge: $asked")
+        } finally {
+            source.close()
+        }
+    }
+
     private companion object {
         /** A WebVTT set of one file, as packagers write subtitles that need no segments. */
         const val SUBTITLE_SET = """<AdaptationSet contentType="text" mimeType="text/vtt" lang="de">
@@ -222,6 +261,18 @@ class DashThroughHlsTest {
             at += size
         }
         error("no sidx box")
+    }
+
+    /** [path] played as the default player stack plays an address: through the automatic transport's resolver. */
+    private fun withAutomaticSource(path: String, test: suspend (PlayerMediaSource) -> Unit) = runBlocking {
+        val reader = KtorMediaIoResolver(client).resolve("$root/$path")
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$root/$path", io = { checkNotNull(reader) }))
+        try {
+            source.selectStreams(source.streams.map { it.index }.toSet())
+            test(source)
+        } finally {
+            source.close()
+        }
     }
 
     private fun withSource(manifest: String, test: suspend (PlayerMediaSource) -> Unit) = runBlocking {

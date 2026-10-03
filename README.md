@@ -154,7 +154,8 @@ video decoder.
   MPEG-TS and fMP4 segments, AES-128, separate audio and subtitle renditions, and live playlists.
 - DASH through the HLS path, for fMP4 and MPEG-TS segments: separate video, audio and WebVTT
   sets, seeking, a variant for each video representation, segment indexes of single files, and
-  live manifests.
+  live manifests. A DASH or HLS address plays as it is, recognised by its content type, its
+  extension or its first bytes.
 - Files, memory, bytes that your code pushes, streams, and Android content URIs and assets.
 - Recording of what plays into a Matroska file, with no re-encode.
 
@@ -630,7 +631,9 @@ point includes it. You do not build a resolver or a Ktor client.
 ### HLS
 
 HLS plays through the same transport. An address that ends in `.m3u8`, an HLS content type from
-the server, or `formatHint = "hls"` marks a playlist.
+the server, or `formatHint = "hls"` marks a playlist. When none of those does, the first bytes do:
+a playlist starts with `#EXTM3U`, so one behind an address with no extension, sent as text or as
+bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
 
 - A master playlist plays one variant: the one that `DemuxPolicy.variant` names, or else the one
   with the highest bitrate within `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.
@@ -653,6 +656,24 @@ the server, or `formatHint = "hls"` marks a playlist.
   playlist can name segments on any server.
 - Your own `MediaIo` can serve HLS too: report the address it read in `location`, and open the
   addresses the playlist names in `openRelated`.
+
+### DASH
+
+A DASH address plays as it is, through the same transport, with no call to make. The manifest is
+recognised by its `application/dash+xml` type, by a path that ends in `.mpd`, or, when the server
+sends it as text, XML or bytes, by its root element
+([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
+
+- A manifest whose picture and sound are fragmented MP4 or MPEG-TS plays through the HLS path:
+  each video representation is a variant, each audio set an audio rendition, and each WebVTT set a
+  subtitle rendition. Separate sets play together, a finished presentation seeks, and a live one
+  plays from its live edge and fetches the manifest again after each update period.
+- Segment templates, numbered or with a timeline, segment lists, and single files whose segment
+  index names their fragments all play.
+- `MediaItem.headers` go to the manifest and to the segments of its own scheme, host and port, as
+  for HLS.
+- `Dash.mediaItemFor` builds the item yourself, for a client of your own, a `DashUrlPolicy` other
+  than the default, or other size ceilings. `Dash.manifest` reads a manifest without playing it.
 
 <details>
 <summary><b>Which transport wins</b>, and when a client exists</summary>
@@ -812,7 +833,7 @@ summary.
 
 | Topic | What to expect |
 | --- | --- |
-| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment.<br><br>`Dash.mediaItemFor` plays a DASH manifest of fMP4 or MPEG-TS segments through the HLS path, live ones included, with a variant for each video representation. A manifest of WebM segments plays one representation, cannot seek, and is refused when it is live or keeps its audio in a set of its own (#392). A manifest with more than one Period, TTML subtitles and a persistent cache do not work yet. |
+| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment.<br><br>A DASH manifest of fMP4 or MPEG-TS segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`. A manifest of WebM segments plays one representation, cannot seek, and is refused when it is live or keeps its audio in a set of its own (#392). A manifest with more than one Period, TTML subtitles and a persistent cache do not work yet. |
 | **Native Linux and Windows** | No audio output and no HTTPS. Use the desktop JVM target, or pass your own `OutputBackend`. |
 | **Desktop JVM sound** | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | **AV1 on the web** | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |

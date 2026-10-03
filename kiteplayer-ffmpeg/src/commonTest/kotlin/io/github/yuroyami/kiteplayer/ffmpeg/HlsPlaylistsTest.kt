@@ -23,6 +23,22 @@ class HlsPlaylistsTest {
     }
 
     @Test
+    fun aPlaylistIsRecognisedByItsFirstBytes() {
+        assertTrue(startsLikeHls("#EXTM3U\n#EXT-X-VERSION:3\n".encodeToByteArray()))
+        assertTrue(startsLikeHls("﻿#EXTM3U\r\n#EXT-X-TARGETDURATION:2".encodeToByteArray()))
+        assertTrue(startsLikeHls(" \r\n\t#EXTM3U".encodeToByteArray()))
+        // Only the first bytes a reader gave count, however large the buffer.
+        assertFalse(startsLikeHls("#EXTM3U".encodeToByteArray().copyOf(32), length = 6))
+        assertFalse(startsLikeHls("#EXTM3".encodeToByteArray()))
+        assertFalse(startsLikeHls("WEBVTT\n\n00:00.000 --> 00:01.000\n".encodeToByteArray()))
+        assertFalse(startsLikeHls("#EXTINF:2.0,\nseg-0.ts\n".encodeToByteArray()))
+        assertFalse(startsLikeHls("<?xml version=\"1.0\"?><MPD/>".encodeToByteArray()))
+        // The start of an MP4 file: a box size, then ftyp.
+        assertFalse(startsLikeHls(byteArrayOf(0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d)))
+        assertFalse(startsLikeHls(ByteArray(0)))
+    }
+
+    @Test
     fun attributesKeepCommasInsideQuotes() {
         val attributes = parseHlsAttributes("BANDWIDTH=1280000,CODECS=\"avc1.4d401f,mp4a.40.2\",RESOLUTION=1280x720,AUDIO=\"aac\"")
         assertEquals("1280000", attributes["BANDWIDTH"])

@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.network.dash
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.network.DownloadMeter
 import io.github.yuroyami.kiteplayer.network.HttpReaderPolicy
 import io.github.yuroyami.kiteplayer.network.KtorMediaIo
@@ -27,6 +28,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Clock
@@ -228,6 +230,75 @@ internal class DashRedirectRule(private val policy: DashUrlPolicy, manifestUrl: 
     override fun isRefusal(failure: Throwable): Boolean = failure is DashUrlRefusedException
 }
 
+/**
+ * Where the readers of one DASH item get their bytes: the door's own client for
+ * [Dash.mediaItemFor], or the reader the automatic transport found the manifest with (#400).
+ */
+internal class DashTransport(
+    /** A reader of a URL the manifest names, with every redirect checked. */
+    val open: suspend (url: String) -> MediaIo,
+    /** At most `limit` bytes of a URL, refused typed past it; `what` names it in messages. */
+    val fetch: suspend (url: String, limit: Long, what: String) -> ByteArray,
+    /** The manifest fetched again, for a live presentation. */
+    val refetch: suspend () -> DashManifest,
+    /** How fast the network delivered the bytes of every reader [open] made, or null before it knows. */
+    val bitsPerSecond: () -> Long?,
+    /** Called once, when the item's reader closes. */
+    val release: () -> Unit = {},
+)
+
+/** [inner], which also calls [release] once when it closes. */
+private class ReleasingMediaIo(private val inner: MediaIo, private val release: () -> Unit) : MediaIo {
+    private var released = false
+    override val size: Long? get() = inner.size
+    override val seekable: Boolean get() = inner.seekable
+    override val location: String? get() = inner.location
+    override val contentType: String? get() = inner.contentType
+    override suspend fun read(into: ByteArray, offset: Int, length: Int): Int = inner.read(into, offset, length)
+    override suspend fun seek(position: Long) = inner.seek(position)
+    override fun setWarningSink(sink: (PlaybackWarning) -> Unit) = inner.setWarningSink(sink)
+    override suspend fun openRelated(uri: String): MediaIo? = inner.openRelated(uri)
+    override fun networkBitsPerSecond(): Long? = inner.networkBitsPerSecond()
+
+    override fun close() {
+        if (released) return
+        released = true
+        try {
+            inner.close()
+        } finally {
+            release()
+        }
+    }
+}
+
+/** Everything [io] reads, at most [limit] bytes of it, refused typed the moment it passes. */
+internal suspend fun readAllBounded(io: MediaIo, limit: Long, what: String): ByteArray {
+    io.size?.let { declared ->
+        if (declared > limit) throw DashResponseTooLargeException("$what declares $declared bytes, and the ceiling is $limit")
+    }
+    val chunks = ArrayList<ByteArray>()
+    val buffer = ByteArray(64 * 1024)
+    var total = 0L
+    while (true) {
+        val read = io.read(buffer, 0, buffer.size)
+        if (read < 0) break
+        if (read == 0) {
+            delay(1)
+            continue
+        }
+        total += read
+        if (total > limit) throw DashResponseTooLargeException("$what passed the $limit byte ceiling while reading")
+        chunks += buffer.copyOf(read)
+    }
+    val out = ByteArray(total.toInt())
+    var at = 0
+    for (chunk in chunks) {
+        chunk.copyInto(out, at)
+        at += chunk.size
+    }
+    return out
+}
+
 /** Opens DASH presentations: fetches a manifest, and builds a playable item from it. */
 public object Dash {
 
@@ -265,11 +336,16 @@ public object Dash {
             val body = fetchBounded(client, mpdUrl, maxManifestBytes, "the manifest at $shown", readerPolicy, redirects) { status ->
                 "cannot fetch $shown: $status"
             }
-            // UTF-8 never decodes to more UTF-16 code units than it had bytes, so a length limit
-            // equal to the byte ceiling never refuses what the fetch accepted.
-            val lengthLimit = maxManifestBytes.coerceIn(XmlMini.MAX_LENGTH.toLong(), Int.MAX_VALUE.toLong()).toInt()
-            DashManifestParser.parse(body.decodeToString(), mpdUrl, policy, XmlMini.Limits(maxLength = lengthLimit))
+            parseManifest(body, mpdUrl, policy, maxManifestBytes)
         }
+
+    /** [body] parsed as the manifest at [mpdUrl], under a length limit that never refuses what [maxManifestBytes] accepted. */
+    private fun parseManifest(body: ByteArray, mpdUrl: String, policy: DashUrlPolicy, maxManifestBytes: Long): DashManifest {
+        // UTF-8 never decodes to more UTF-16 code units than it had bytes, so a length limit
+        // equal to the byte ceiling never refuses what the fetch accepted.
+        val lengthLimit = maxManifestBytes.coerceIn(XmlMini.MAX_LENGTH.toLong(), Int.MAX_VALUE.toLong()).toInt()
+        return DashManifestParser.parse(body.decodeToString(), mpdUrl, policy, XmlMini.Limits(maxLength = lengthLimit))
+    }
 
     /**
      * A playable [MediaItem] for [mpdUrl], over [client]. The item's uri stays the manifest's, for
@@ -300,6 +376,10 @@ public object Dash {
      * Throws [DashUnsupportedException] for more than one Period, and, when the HLS path cannot
      * carry the segments, for a live manifest and for audio in an adaptation set of its own,
      * because the one stream would play that video silent.
+     *
+     * The player's automatic transport plays a manifest it recognises the same way, with no call
+     * to this (#400). This door is for a caller with a client of its own, or a policy other than
+     * [DashUrlPolicy.Default].
      */
     @Throws(Exception::class)
     public suspend fun mediaItemFor(
@@ -312,6 +392,81 @@ public object Dash {
     ): MediaItem {
         val manifest = manifest(mpdUrl, client, policy, maxManifestBytes, readerPolicy)
         val redirects = DashRedirectRule(policy, mpdUrl)
+        val route = route(mpdUrl, manifest, policy, maxSegmentBytes)
+        // A factory, so every open of this item gets its own reader. One live reader here meant
+        // the second open of the same item -- a track switch, a loop, a queue coming back round --
+        // was handed the one the previous session had already closed. The route is immutable and
+        // shared by every reader the factory makes.
+        return MediaItem(
+            uri = mpdUrl,
+            io = {
+                // One measure of the network rate per open, shared by all its segment readers.
+                val meter = DownloadMeter()
+                route.reader(
+                    DashTransport(
+                        open = { url -> KtorMediaIo.open(url, client, emptyMap(), readerPolicy, redirects, meter = meter) },
+                        fetch = { url, limit, what ->
+                            fetchBounded(client, url, limit, what, readerPolicy, redirects) { status ->
+                                "segment fetch failed: ${shownUri(url)} is $status"
+                            }
+                        },
+                        refetch = { manifest(mpdUrl, client, policy, maxManifestBytes, readerPolicy) },
+                        bitsPerSecond = meter::bitsPerSecond,
+                    ),
+                )
+            },
+        )
+    }
+
+    /**
+     * The reader that plays the manifest [io] has just begun to answer with, or null when the
+     * answer is not a manifest (#400). A manifest is recognised by its content type, by a path that
+     * ends in `.mpd`, or, when the type leaves room for one, by its root element, and [io] then
+     * keeps the bytes it read for the backend.
+     *
+     * The manifest plays as [mediaItemFor] plays it, under [policy], with its relative addresses
+     * resolved against the address the manifest came from after its redirects. Its segments and
+     * its refetches open through [io], so they share its client, its network measure and the
+     * item's headers on the manifest's own origin, and the returned reader closes [io] with it.
+     */
+    internal suspend fun readerIfManifest(
+        io: KtorMediaIo,
+        policy: DashUrlPolicy = DashUrlPolicy.Default,
+        maxManifestBytes: Long = MAX_MANIFEST_BYTES,
+        maxSegmentBytes: Long = MAX_SEGMENT_BYTES,
+    ): MediaIo? {
+        if (!DashDetection.declared(io.contentType, io.location)) {
+            if (!DashDetection.worthSniffing(io.contentType)) return null
+            val head = io.peek(DashDetection.SNIFF_BYTES)
+            if (!DashDetection.startsLikeMpd(head, head.size)) return null
+        }
+        val mpdUrl = io.location
+        val shown = shownUri(mpdUrl)
+        DashManifestParser.requireAllowedScheme(mpdUrl, policy)
+        val redirects = DashRedirectRule(policy, mpdUrl)
+        suspend fun openChecked(url: String): MediaIo =
+            io.openRelated(url, redirects) ?: throw DashUrlRefusedException("${shownUri(url)} is not an http or https address")
+        val manifest = parseManifest(readAllBounded(io, maxManifestBytes, "the manifest at $shown"), mpdUrl, policy, maxManifestBytes)
+        val route = route(mpdUrl, manifest, policy, maxSegmentBytes)
+        return route.reader(
+            DashTransport(
+                open = ::openChecked,
+                fetch = { url, limit, what -> openChecked(url).use { readAllBounded(it, limit, what) } },
+                refetch = {
+                    val body = openChecked(mpdUrl).use { readAllBounded(it, maxManifestBytes, "the manifest at $shown") }
+                    parseManifest(body, mpdUrl, policy, maxManifestBytes)
+                },
+                bitsPerSecond = io::networkBitsPerSecond,
+                release = io::close,
+            ),
+        )
+    }
+
+    /**
+     * How [manifest] plays: through the HLS path when HLS can carry its Period, otherwise as one
+     * stream. Every refusal happens here, before any reader exists.
+     */
+    private fun route(mpdUrl: String, manifest: DashManifest, policy: DashUrlPolicy, maxSegmentBytes: Long): DashRoute {
         // Refused, not truncated: this tier byte-concatenates ONE period's
         // segments, and silently playing period one of an ad-stitched presentation looked like
         // a player that stops after the pre-roll. Period joining is the adaptive engine's next
@@ -325,7 +480,8 @@ public object Dash {
         val period = manifest.periods.firstOrNull()
             ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no Period")
         if (DashHls.carries(period)) {
-            return hlsItem(mpdUrl, manifest, period, client, policy, maxManifestBytes, readerPolicy, redirects)
+            // Built here, so a manifest whose playlists cannot be written is refused before any open.
+            return DashRoute.Hls(mpdUrl, manifest, DashHls.presentation(period, live = manifest.isDynamic), policy)
         }
         val video = period.adaptationSets.firstOrNull { it.isVideo() }
         // Merging two elementary streams is not a byte concatenation, so separate audio would be
@@ -349,64 +505,49 @@ public object Dash {
             // BaseURL names the media, and then there is nothing to play.
             val file = representation.baseUrl
             require(file != mpdUrl) { "${shownUri(mpdUrl)} names no media for representation ${representation.id}" }
-            return MediaItem(uri = mpdUrl, io = { KtorMediaIo.open(file, client, emptyMap(), readerPolicy, redirects) })
+            return DashRoute.File(file)
         }
-        val plan = DashManifestParser.segmentPlan(manifest, period, representation, policy)
-        // A factory, so every open of this item gets its own segment stream. One live reader here
-        // meant the second open of the same item -- a track switch, a loop, a queue coming back
-        // round -- was handed the one the previous session had already closed.
-        // The plan itself is immutable and shared by every reader the factory makes.
-        return MediaItem(
-            uri = mpdUrl,
-            io = {
-                DashMediaIo(plan) { url ->
-                    val shown = shownUri(url)
-                    fetchBounded(client, url, maxSegmentBytes, "the segment at $shown", readerPolicy, redirects) { status ->
-                        "segment fetch failed: $shown is $status"
-                    }
-                }
-            },
-        )
+        // The plan itself is immutable and shared by every reader the route makes.
+        return DashRoute.Segments(DashManifestParser.segmentPlan(manifest, period, representation, policy), maxSegmentBytes)
     }
 
-    /**
-     * The item of a manifest that HLS can carry: its reader stands in for an HLS master playlist,
-     * and each open of the item gets a reader of its own, whose segment readers share one measure
-     * of the network rate for the automatic variant steps.
-     */
-    private fun hlsItem(
-        mpdUrl: String,
-        manifest: DashManifest,
-        period: DashPeriod,
-        client: HttpClient,
-        policy: DashUrlPolicy,
-        maxManifestBytes: Long,
-        readerPolicy: HttpReaderPolicy,
-        redirects: DashRedirectRule,
-    ): MediaItem {
-        // Built here, so a manifest whose playlists cannot be written is refused before any open.
-        val presentation = DashHls.presentation(period, live = manifest.isDynamic)
-        val refetch: (suspend () -> DashManifest)? = if (manifest.isDynamic) {
-            { manifest(mpdUrl, client, policy, maxManifestBytes, readerPolicy) }
-        } else {
-            null
+    /** One way a manifest plays, decided once; [reader] makes the reader of one open over a [DashTransport]. */
+    private sealed interface DashRoute {
+        suspend fun reader(transport: DashTransport): MediaIo
+
+        /** Through the HLS path: the reader stands in for an HLS master playlist. */
+        class Hls(
+            private val mpdUrl: String,
+            private val manifest: DashManifest,
+            private val presentation: DashHlsPresentation,
+            private val policy: DashUrlPolicy,
+        ) : DashRoute {
+            override suspend fun reader(transport: DashTransport): MediaIo = DashHlsMediaIo(
+                presentation = presentation,
+                manifest = manifest,
+                manifestUrl = mpdUrl,
+                policy = policy,
+                openUrl = transport.open,
+                refetch = if (manifest.isDynamic) transport.refetch else null,
+                nowMicros = ::wallClockMicros,
+                bitsPerSecond = transport.bitsPerSecond,
+                release = transport.release,
+            )
         }
-        return MediaItem(
-            uri = mpdUrl,
-            io = {
-                val meter = DownloadMeter()
-                DashHlsMediaIo(
-                    presentation = presentation,
-                    manifest = manifest,
-                    manifestUrl = mpdUrl,
-                    policy = policy,
-                    openUrl = { url -> KtorMediaIo.open(url, client, emptyMap(), readerPolicy, redirects, meter = meter) },
-                    refetch = refetch,
-                    nowMicros = ::wallClockMicros,
-                    bitsPerSecond = meter::bitsPerSecond,
-                )
-            },
-        )
+
+        /** One file, read with range requests, so it seeks. */
+        class File(private val url: String) : DashRoute {
+            override suspend fun reader(transport: DashTransport): MediaIo =
+                ReleasingMediaIo(transport.open(url), transport.release)
+        }
+
+        /** One representation's segments as one forward stream. */
+        class Segments(private val plan: DashSegmentPlan, private val maxSegmentBytes: Long) : DashRoute {
+            override suspend fun reader(transport: DashTransport): MediaIo = ReleasingMediaIo(
+                DashMediaIo(plan) { url -> transport.fetch(url, maxSegmentBytes, "the segment at ${shownUri(url)}") },
+                transport.release,
+            )
+        }
     }
 
     /** The time of day, in microseconds since 1970 UTC, which a live manifest's clock counts from. */

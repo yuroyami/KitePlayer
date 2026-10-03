@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.network
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoResolver
+import io.github.yuroyami.kiteplayer.network.dash.Dash
 import io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider
 
 /** Public JVM bytecode and a no-argument constructor are required by ServiceLoader. */
@@ -16,9 +17,20 @@ internal class KtorMediaIoResolverProvider : MediaIoResolverProvider {
         override suspend fun resolve(uri: String, headers: Map<String, String>): MediaIo? {
             if (!uri.isHttpUri()) return null
             // Each session owns its reader and private client, including failed-open cleanup.
-            return KtorMediaIo.open(uri, headers = headers)
+            return playableReader(KtorMediaIo.open(uri, headers = headers))
         }
     }
+}
+
+/**
+ * What the automatic transport hands the player for [io]: the reader of a DASH presentation when
+ * [io] answers with a manifest (#400), otherwise [io] itself. [io] is closed when this fails.
+ */
+internal suspend fun playableReader(io: KtorMediaIo): MediaIo = try {
+    Dash.readerIfManifest(io) ?: io
+} catch (failure: Throwable) {
+    io.close()
+    throw failure
 }
 
 internal fun String.isHttpUri(): Boolean =

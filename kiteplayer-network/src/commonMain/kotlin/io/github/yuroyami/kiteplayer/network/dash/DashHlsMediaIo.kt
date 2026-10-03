@@ -31,6 +31,8 @@ internal class DashHlsMediaIo(
     private val refetch: (suspend () -> DashManifest)?,
     private val nowMicros: () -> Long,
     private val bitsPerSecond: () -> Long? = { null },
+    /** Called once when this reader closes, for what its segment readers depend on, such as the client. */
+    private val release: () -> Unit = {},
 ) : MediaIo {
 
     private val master = presentation.master.encodeToByteArray()
@@ -82,7 +84,9 @@ internal class DashHlsMediaIo(
     }
 
     override fun close() {
+        if (closed) return
         closed = true
+        release()
     }
 
     /** The media playlist of [track] as it stands now. */

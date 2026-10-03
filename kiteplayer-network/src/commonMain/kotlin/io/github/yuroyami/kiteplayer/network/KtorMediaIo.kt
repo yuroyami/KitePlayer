@@ -105,9 +105,20 @@ public class KtorMediaIo private constructor(
      */
     private var closed = false
 
+    /** The bytes [peek] read, which the reads give back before any other. Null once they are given back or a seek drops them. */
+    private var peeked: ByteArray? = null
+    private var peekedAt = 0
+
     override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
         if (closed) throw KtorMediaIoException("read after close")
         if (length <= 0) return 0
+        peeked?.let { head ->
+            val count = minOf(length, head.size - peekedAt)
+            head.copyInto(into, offset, peekedAt, peekedAt + count)
+            peekedAt += count
+            if (peekedAt == head.size) peeked = null
+            if (count > 0) return count
+        }
         var reconnects = 0
         while (true) {
             val failure = try {
@@ -142,30 +153,62 @@ public class KtorMediaIo private constructor(
      * A new reader for [uri] on this reader's client, or null when [uri] is not http or https.
      * The reader reports through this reader's warning sink, and the caller closes it.
      */
-    override suspend fun openRelated(uri: String): MediaIo? {
+    override suspend fun openRelated(uri: String): MediaIo? = openRelated(uri, redirects)
+
+    /**
+     * [openRelated], with every redirect of the new reader checked by [rule] instead of this
+     * reader's own. The DASH door opens a manifest's segments this way when the automatic
+     * transport found the manifest (#400).
+     */
+    internal suspend fun openRelated(uri: String, rule: RedirectRule?): KtorMediaIo? {
         if (closed) throw KtorMediaIoException("openRelated after close on $shown")
         if (!uri.isHttpUri()) return null
         var attempts = 0
         while (true) {
             val failure = try {
-                return open(uri, client, ownsClient = false, related.headersFor(uri), related, policy, redirects, meter)
+                return open(uri, client, ownsClient = false, related.headersFor(uri), related, policy, rule, meter)
                     .also { it.setWarningSink(warningSink) }
             } catch (failure: Throwable) {
                 // The caller's own cancellation ends the open. Anything else is the connection's.
                 currentCoroutineContext().ensureActive()
                 failure
             }
-            if (closed || attempts >= policy.maxReconnects || !mayOpenAgainAfter(failure)) throw failure
+            if (closed || attempts >= policy.maxReconnects || !mayOpenAgainAfter(failure, rule)) throw failure
             attempts++
             warningSink(PlaybackWarning.SourceReconnecting(0, attempts, failure.message ?: failure.toString()))
             delay(policy.backoff(attempts))
         }
     }
 
+    /**
+     * Reads up to [count] bytes from the start of the file, before any other read, and returns
+     * them. The reads that follow give them back first, so looking at the start of a response
+     * costs no second request (#400). Fewer come back only when the file is shorter.
+     */
+    internal suspend fun peek(count: Int): ByteArray {
+        check(position == 0L && peeked == null) { "a reader can only peek before its first read" }
+        val head = ByteArray(count)
+        var filled = 0
+        while (filled < count) {
+            val read = read(head, filled, count - filled)
+            when {
+                read < 0 -> break
+                read == 0 -> delay(1)
+                else -> filled += read
+            }
+        }
+        val bytes = if (filled == count) head else head.copyOf(filled)
+        if (bytes.isNotEmpty()) {
+            peeked = bytes
+            peekedAt = 0
+        }
+        return bytes
+    }
+
     /** True when a new attempt may open what [failure] refused: a timeout, a dropped connection or a server error. */
-    private fun mayOpenAgainAfter(failure: Throwable): Boolean {
+    private fun mayOpenAgainAfter(failure: Throwable, rule: RedirectRule?): Boolean {
         if (failure is KtorMediaIoException && !failure.retryable) return false
-        return redirects?.isRefusal(failure) != true
+        return rule?.isRefusal(failure) != true
     }
 
     /** One read from the current response, or from a new one at [position]. */
@@ -208,6 +251,7 @@ public class KtorMediaIo private constructor(
         // Lazy: the reposition is real at the next read, which reopens only when the current
         // stream is not already there. The engine's cache absorbs most seeks before this.
         this.position = position
+        peeked = null
     }
 
     /** Idempotent: closing twice is a no-op, and every later read or seek refuses typed. */
@@ -500,6 +544,11 @@ public class KtorMediaIoException internal constructor(
  * The defaults also go to every related address a reader opens, such as an HLS segment on another
  * server. Per-item headers go only to the scheme, host and port of the item's own address.
  *
+ * An address that answers with a DASH manifest plays as a DASH presentation, as the automatic
+ * provider plays it: the manifest is recognised by its content type, by a path that ends in `.mpd`,
+ * or by its root element when the type leaves room for one, and its segments open on this
+ * resolver's client.
+ *
  * The lazily created client lives for the resolver's lifetime, which is normally the process:
  * exactly how OkHttp and NSURLSession want to be held. A resolver with a shorter life closes
  * the client it created through [close] (it used to leak the engine's connection
@@ -523,7 +572,7 @@ public class KtorMediaIoResolver(
         if (!uri.isHttpUri()) return null
         val itemNames = headers.keys.map { it.lowercase() }.toSet()
         val merged = this.headers.filterKeys { it.lowercase() !in itemNames } + headers
-        return KtorMediaIo.open(uri, shared, merged, policy, redirects = null, defaultHeaders = this.headers)
+        return playableReader(KtorMediaIo.open(uri, shared, merged, policy, redirects = null, defaultHeaders = this.headers))
     }
 
     /** Closes the client this resolver created, if it ever created one. Idempotent. */

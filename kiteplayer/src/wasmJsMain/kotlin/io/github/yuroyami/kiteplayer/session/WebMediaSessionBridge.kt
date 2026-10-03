@@ -94,7 +94,8 @@ internal fun webActionsFor(state: MediaSessionState): Set<String> = buildSet {
         add("seekbackward")
     }
     if (state.hasNext) add("nexttrack")
-    if (state.hasPrevious) add("previoustrack")
+    // Previous also starts the item again, so it is there whenever the item can seek (#424).
+    if (state.offersPrevious) add("previoustrack")
 }
 
 /** Null outside a browser, and in a browser that has no media session. */

@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.session
 
+import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
@@ -72,6 +73,42 @@ public fun PlayerSnapshot.toMediaSessionState(progress: Progress): MediaSessionS
 /** Container tags are written in whatever case the muxer felt like, so match without it. */
 private fun Map<String, String>.tag(name: String): String? =
     entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value?.takeIf { it.isNotBlank() }
+
+/**
+ * Whether the system's previous button is offered: whenever a press does something, which is going
+ * back an item or starting a seekable one again (#424). On the first item of a queue, or a single
+ * file, that still lets a listener start the song again from the lock screen.
+ */
+internal val MediaSessionState.offersPrevious: Boolean get() = hasPrevious || canSeek
+
+/** What one press of the system's previous button does. */
+internal enum class PreviousPress { Restart, GoBack, Nothing }
+
+/**
+ * The rule every music player gives the previous button, and the one [KitePlayer.previousChapter]
+ * keeps for chapters: more than three seconds into a seekable item it starts the item again; nearer
+ * its start it goes to the item before, and starts this one again when there is none (#424).
+ */
+internal fun previousPress(position: Duration, canSeek: Boolean, hasPrevious: Boolean): PreviousPress = when {
+    canSeek && (position >= PREVIOUS_RESTART_WINDOW || !hasPrevious) -> PreviousPress.Restart
+    hasPrevious -> PreviousPress.GoBack
+    else -> PreviousPress.Nothing
+}
+
+/**
+ * Answers a press of the system's previous button by [previousPress]. [KitePlayer.previous] keeps its
+ * own meaning, the item before, for an application that calls it.
+ */
+internal suspend fun KitePlayer.pressPrevious() {
+    val snapshot = state.value
+    when (previousPress(position(), snapshot.seekable, snapshot.hasNeighbourInPlayOrder(-1))) {
+        PreviousPress.Restart -> seek(Duration.ZERO)
+        PreviousPress.GoBack -> previous()
+        PreviousPress.Nothing -> Unit
+    }
+}
+
+private val PREVIOUS_RESTART_WINDOW: Duration = 3.seconds
 
 /** The same step the engine's own next and previous take, so the buttons never lie. */
 private fun PlayerSnapshot.hasNeighbourInPlayOrder(delta: Int): Boolean {

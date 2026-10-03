@@ -62,7 +62,7 @@ public class KitePlayerMediaSession(
         bridge.onAction("pause") { _, _ -> player.pauseFromRemote() }
         bridge.onAction("stop") { _, _ -> player.pauseFromRemote() }
         bridge.onAction("nexttrack") { _, _ -> scope.launch { runCatching { player.next() } } }
-        bridge.onAction("previoustrack") { _, _ -> scope.launch { runCatching { player.previous() } } }
+        bridge.onAction("previoustrack") { _, _ -> scope.launch { runCatching { player.pressPrevious() } } }
         bridge.onAction("seekforward") { _, offset -> skipBy(if (offset > 0.0) offset.seconds else skipInterval) }
         bridge.onAction("seekbackward") { _, offset -> skipBy(-(if (offset > 0.0) offset.seconds else skipInterval)) }
         bridge.onAction("seekto") { time, _ ->

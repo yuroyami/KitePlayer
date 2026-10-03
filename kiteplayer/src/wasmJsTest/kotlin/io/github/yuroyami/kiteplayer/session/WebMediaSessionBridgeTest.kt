@@ -96,10 +96,12 @@ class WebMediaSessionBridgeTest {
         assertTrue(hasHandler(session, "pause"))
         assertFalse(hasHandler(session, "nexttrack"))
         assertFalse(hasHandler(session, "seekto"))
+        assertFalse(hasHandler(session, "previoustrack"), "a lone live stream has nothing to go back to")
         bridge.publishPlayback(state(hasNext = true))
         assertTrue(hasHandler(session, "nexttrack"))
         assertTrue(hasHandler(session, "seekto"))
-        assertFalse(hasHandler(session, "previoustrack"))
+        // Previous also starts a seekable item again, so it is offered with no item before (#424).
+        assertTrue(hasHandler(session, "previoustrack"))
     }
 
     @Test

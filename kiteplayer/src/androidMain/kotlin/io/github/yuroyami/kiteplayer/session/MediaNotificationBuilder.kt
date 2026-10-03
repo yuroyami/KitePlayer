@@ -26,6 +26,7 @@ internal data class MediaNotificationContent(
     val status: PlaybackStatus,
     val title: String?,
     val artist: String?,
+    /** The previous button does something: there is an item before, or this one can start again (#424). */
     val hasPrevious: Boolean,
     val hasNext: Boolean,
     val artwork: Bitmap?,
@@ -45,7 +46,7 @@ internal fun PlayerSnapshot.toMediaNotificationContent(
         status = status,
         title = state.title,
         artist = state.artist,
-        hasPrevious = state.hasPrevious,
+        hasPrevious = state.offersPrevious,
         hasNext = state.hasNext,
         artwork = artwork,
         customActions = customActions,

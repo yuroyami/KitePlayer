@@ -245,7 +245,7 @@ public class KitePlayerMediaSession(
         }
 
         override fun onSkipToPrevious() {
-            scope.launch { runCatching { player.previous() } }
+            scope.launch { runCatching { player.pressPrevious() } }
         }
 
         override fun onFastForward() = skipBy(skipInterval)
@@ -312,7 +312,8 @@ internal fun actionsFor(state: MediaSessionState): Long {
             PlaybackState.ACTION_REWIND
     }
     if (state.hasNext) actions = actions or PlaybackState.ACTION_SKIP_TO_NEXT
-    if (state.hasPrevious) actions = actions or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+    // Previous also starts the item again, so it is there whenever the item can seek (#424).
+    if (state.offersPrevious) actions = actions or PlaybackState.ACTION_SKIP_TO_PREVIOUS
     return actions
 }
 

@@ -130,7 +130,8 @@ public class KitePlayerMediaSession(
         putPosition(state)
         writeInfo()
         commands.nextTrackCommand.enabled = state.hasNext
-        commands.previousTrackCommand.enabled = state.hasPrevious
+        // Previous also starts the item again, so it is there whenever the item can seek (#424).
+        commands.previousTrackCommand.enabled = state.offersPrevious
         commands.changePlaybackPositionCommand.enabled = state.canSeek
         commands.skipForwardCommand.enabled = state.canSeek
         commands.skipBackwardCommand.enabled = state.canSeek
@@ -162,7 +163,7 @@ public class KitePlayerMediaSession(
         }
         handle(commands.stopCommand) { player.pauseFromRemote() }
         handle(commands.nextTrackCommand) { scope.launch { runCatching { player.next() } } }
-        handle(commands.previousTrackCommand) { scope.launch { runCatching { player.previous() } } }
+        handle(commands.previousTrackCommand) { scope.launch { runCatching { player.pressPrevious() } } }
         handle(commands.skipForwardCommand) { skipBy(skipInterval) }
         handle(commands.skipBackwardCommand) { skipBy(-skipInterval) }
 

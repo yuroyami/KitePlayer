@@ -3,16 +3,24 @@
 package io.github.yuroyami.kiteplayer.worker
 
 import io.github.yuroyami.kiteplayer.KitePlayerWorker
+import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackStatus
+import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.PlayerEvent
+import io.github.yuroyami.kiteplayer.SubtitleSource
+import io.github.yuroyami.kiteplayer.TrackChange
+import io.github.yuroyami.kiteplayer.TrackId
+import io.github.yuroyami.kiteplayer.TrackKind
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onSubscription
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -97,6 +105,80 @@ class KitePlayerWorkerBrowserTest {
         }
     }
 
+    /**
+     * The calls past open, play, pause and seek reach the worker's player and answer as
+     * `KitePlayer` does: tracks, a track selection, an external subtitle, setters seen in the
+     * state, a setter the player refuses, a queue, and a dump. `subbed.mkv` holds h264, AAC and an
+     * ASS track at stream 2, and no chapters.
+     */
+    @Test
+    fun theRestOfThePlayerAnswersFromTheWorker() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val mediaPath = setup[3]
+        withContext(Dispatchers.Default) {
+            val player = KitePlayerWorker.start(null, workerUrl, codecUrl)
+            val events = Channel<PlayerEvent>(Channel.UNLIMITED)
+            val subscribed = CompletableDeferred<Unit>()
+            val collector = launch {
+                player.events.onSubscription { subscribed.complete(Unit) }.collect { events.send(it) }
+            }
+            try {
+                subscribed.await()
+                player.open(MediaItem("$media/subbed.mkv"))
+                val opened = withTimeout(30.seconds) { player.state.first { it.tracks.all.isNotEmpty() } }
+                assertEquals(
+                    listOf(TrackKind.Video, TrackKind.Audio, TrackKind.Subtitle),
+                    opened.tracks.all.map { it.kind },
+                    "the worker reports the clip's three tracks",
+                )
+
+                val change = player.selectTrack(TrackKind.Subtitle, TrackId(2))
+                assertEquals(TrackChange.Applied(TrackKind.Subtitle, TrackId(2)), change)
+
+                // A relative address: the page reads it against its own.
+                val external = player.addExternalSubtitle(SubtitleSource("$mediaPath/subs.srt"))
+                assertTrue(external.isExternal, "an external subtitle has a negative id, not $external")
+                withTimeout(10.seconds) { player.state.first { it.tracks.find(external) != null } }
+
+                player.setSpeed(1.5)
+                player.setLoop(LoopMode.One)
+                player.setVolume(0.5f)
+                withTimeout(10.seconds) {
+                    player.state.first { it.speed == 1.5 && it.loop == LoopMode.One && it.volume == 0.5f }
+                }
+
+                player.setSpeed(10.0)
+                val refused = withTimeout(10.seconds) {
+                    events.receiveAsFlow()
+                        .mapNotNull { (it as? PlayerEvent.Warning)?.warning as? PlaybackWarning.CommandRefused }
+                        .first()
+                }
+                assertEquals("setSpeed", refused.member, "the refusal names the setter the page called")
+                assertEquals(1.5, player.state.value.speed, "a refused speed leaves the speed as it was")
+
+                assertTrue(player.diagnosticsDump().isNotEmpty(), "the worker player's dump crosses")
+
+                player.stop()
+                // Relative addresses again, so the state can only hold these objects if the page
+                // mapped the worker's items back to them.
+                val first = MediaItem("$mediaPath/sync1080p30.mp4", title = "first")
+                val second = MediaItem("$mediaPath/sparse-keyframes.mp4", title = "second")
+                player.openQueue(listOf(first, second))
+                player.next()
+                val moved = withTimeout(30.seconds) { player.state.first { it.queueIndex == 1 && it.media == second } }
+                assertEquals(listOf(first, second), moved.queue, "the queue holds the caller's own items")
+            } finally {
+                collector.cancel()
+                player.closeAndAwait()
+            }
+        }
+    }
+
     @Test
     fun aWorkerThatCannotLoadFailsTheStart() = runTest(timeout = 1.minutes) {
         val setup = karmaWorkerConfig()?.split("\n") ?: return@runTest
@@ -116,14 +198,17 @@ class KitePlayerWorkerBrowserTest {
     }
 }
 
-/** The worker, codec and clip paths that karma.config.d/worker.js hands the page, or null outside karma. */
+/**
+ * The worker, codec and clip addresses that karma.config.d/worker.js hands the page, then the clips'
+ * path as the config gives it, relative to the page. Null outside karma.
+ */
 @JsFun(
     """() => {
         const karma = globalThis.__karma__;
         const worker = karma && karma.config ? karma.config.kiteWorker : undefined;
         if (!worker || typeof document === 'undefined') return null;
         const absolute = (p) => new URL(p, document.baseURI).href;
-        return absolute(worker.worker) + "\n" + absolute(worker.codec) + "\n" + absolute(worker.media);
+        return absolute(worker.worker) + "\n" + absolute(worker.codec) + "\n" + absolute(worker.media) + "\n" + worker.media;
     }""",
 )
 private external fun karmaWorkerConfig(): String?

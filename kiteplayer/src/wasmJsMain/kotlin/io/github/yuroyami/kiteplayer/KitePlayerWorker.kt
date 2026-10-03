@@ -3,6 +3,8 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.output.WebWorkletAudio
+import io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea
+import io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlin.js.JsAny
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.microseconds
 
 /**
  * A player that runs in a Web Worker, so the page's own thread stays free while it opens, decodes
@@ -31,12 +32,35 @@ import kotlin.time.Duration.Companion.microseconds
  * cross between the two threads; commands and state do.
  *
  * An `http`, `https` or `blob` item plays here, read with range requests that only a worker may
- * make. The page's own `KitePlayer` cannot open one. A relative address is read against the page's.
+ * make. The page's own `KitePlayer` cannot open one. A relative address, of an item or of one of its
+ * subtitles, is read against the page's.
  *
- * This is the first part of the worker player. It has the commands below and no others yet, and
- * an item crosses as its address, headers, format hint, open options, start position and titles.
- * An item with its own reader, external subtitles, a filter or a demux policy is refused with
- * [PlaybackError.ConfigurationInvalid]. [state] carries no tracks, chapters or subtitle cues yet.
+ * ### The same calls as `KitePlayer`
+ *
+ * Every member below has the name, the parameters, the defaults and the meaning of the `KitePlayer`
+ * member of the same name, and a call that fails throws what `KitePlayer` would throw:
+ * [PlaybackException], [IllegalArgumentException], [IllegalStateException] or
+ * [UnsupportedOperationException]. [state], [progress], [stats] and [events] carry what the worker's
+ * player publishes, and `state.media` and `state.queue` hold the items this facade was given rather
+ * than copies of them.
+ *
+ * Two differences come from the thread between the page and the player:
+ *
+ * - A setter, such as [setSpeed], returns at once and is checked by the player in the worker, so
+ *   the rule is written once. A value the player refuses does not throw at the call, as it does on
+ *   `KitePlayer`: it arrives on [events] as [PlaybackWarning.CommandRefused], naming the setter.
+ *   That warning is not in [warningHistory], which is the worker player's own.
+ * - [diagnosticsDump], [supportBundle] and [warningHistory] ask the worker, so they suspend.
+ *
+ * ### What does not cross
+ *
+ * - `subtitleCues`: the worker draws the subtitles on the canvas itself.
+ * - `position()` and `audioClock()`: read [progress] instead. `transportMark` and `awaitClose`.
+ * - `inspect`, `scanAudio`, `captureFrame`, recording, `memento` and `restore`.
+ * - Attaching or detaching a renderer or an audio tap, and `setExternalClock`.
+ * - An item, or an external subtitle, with its own reader: it is refused with
+ *   [PlaybackError.ConfigurationInvalid]. Give it an address instead.
+ * - A `PlayerConfig`: the worker builds its player on the default one.
  *
  * The page's own `KitePlayer` is unchanged and stays the web default.
  */
@@ -47,40 +71,60 @@ public class KitePlayerWorker private constructor(
 
     private val stateFlow = MutableStateFlow(PlayerSnapshot())
     private val progressFlow = MutableStateFlow(Progress())
+    private val statsFlow = MutableStateFlow(PlaybackStats())
     private val eventFlow = MutableSharedFlow<PlayerEvent>(extraBufferCapacity = 64)
 
-    /** The player's state, as the worker last sent it. */
+    /** The player's state, as the worker last sent it. Position is not in it; see [progress]. */
     public val state: StateFlow<PlayerSnapshot> = stateFlow.asStateFlow()
 
     /** The position and how far ahead the worker has read, as the worker last sent them. */
     public val progress: StateFlow<Progress> = progressFlow.asStateFlow()
 
-    /** What happened in the player. A worker that dies sends [PlayerEvent.Failed] from here. */
+    /** Diagnostics, as the worker last sent them, once a second by default. */
+    public val stats: StateFlow<PlaybackStats> = statsFlow.asStateFlow()
+
+    /**
+     * What happened in the player. A worker that dies sends [PlayerEvent.Failed] from here, and a
+     * setter the player refused sends [PlaybackWarning.CommandRefused].
+     */
     public val events: SharedFlow<PlayerEvent> = eventFlow.asSharedFlow()
 
-    private val pending = HashMap<Int, CompletableDeferred<Unit>>()
+    private val pending = HashMap<Int, CompletableDeferred<Answer?>>()
     private var nextId = 1
-    private var media: MediaItem? = null
     private var closeId: Int? = null
     private var dead: PlaybackError? = null
     private val closed: Boolean get() = closeId != null
+
+    /**
+     * Each item as it crossed to the worker, mapped to the caller's own. The worker's snapshot and
+     * its [PlayerEvent.Opened] are mapped back through this, so the page reads the objects it gave,
+     * relative addresses and all. An item the worker changed, or one this map has forgotten, reads
+     * as it crossed.
+     */
+    private val sentItems = HashMap<MediaItem, MediaItem>()
 
     /** Set by [start] until the worker has answered the first message. */
     private var started: CompletableDeferred<Unit>? = null
 
     /**
-     * Opens [media], replacing whatever was open, and returns once the worker has opened it.
+     * Opens [media] and returns once the first frame is ready and the player is paused on it.
      *
-     * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] for an item with a part
-     *         that cannot cross to the worker, or with the error the open failed with.
+     * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] for an item with a reader
+     *         of its own, which cannot cross to the worker, or with the error the open failed with.
      */
     public suspend fun open(media: MediaItem) {
-        val record = ItemRecord.of(media).getOrThrow()
-        // The worker reads a relative address against its own, so it is made whole here, where it
-        // means what the page meant.
-        val item = record.copy(uri = pageAddress(record.uri))
-        this.media = media
-        call { PageMessage.Open(it, item) }
+        val crossing = crossing(media)
+        sentItems.clear()
+        sentItems[crossing] = media
+        call(Command.Open(crossing))
+    }
+
+    /** Opens [items] as the queue, starting at [startIndex], as `KitePlayer.openQueue` does. */
+    public suspend fun openQueue(items: List<MediaItem>, startIndex: Int = 0) {
+        val crossing = items.map(::crossing)
+        sentItems.clear()
+        crossing.forEachIndexed { i, item -> sentItems[item] = items[i] }
+        call(Command.OpenQueue(crossing, startIndex))
     }
 
     /**
@@ -90,24 +134,196 @@ public class KitePlayerWorker private constructor(
     public fun play() {
         checkOpen()
         audio?.resume()
-        send(PageMessage.Play)
+        send(Control.Play)
     }
 
     /** Pauses playback. */
     public fun pause() {
-        checkOpen()
-        send(PageMessage.Pause)
+        send(Control.Pause)
     }
 
-    /** Seeks to [to], precisely, and returns once the worker has landed there. */
-    public suspend fun seek(to: Duration) {
-        call { PageMessage.Seek(it, to.inWholeMicroseconds) }
+    /** Seeks to [to] and returns once the worker has landed there, as `KitePlayer.seek` does. */
+    public suspend fun seek(to: Duration, mode: SeekMode = SeekMode.Precise) {
+        call(Command.Seek(to, mode))
+    }
+
+    /** Asks for a seek and returns at once, for a seek bar being dragged. */
+    public fun requestSeek(to: Duration, mode: SeekMode = SeekMode.KeyframeThenRefine) {
+        send(Control.RequestSeek(to, mode))
     }
 
     /** Stops playback and closes what was open. The player stays usable. */
     public suspend fun stop() {
-        call { PageMessage.Stop(it) }
+        call(Command.Stop)
     }
+
+    /** Opens the next queue item, keeping the play or pause intent. */
+    public suspend fun next() {
+        call(Command.Next)
+    }
+
+    /** Opens the previous queue item, keeping the play or pause intent. */
+    public suspend fun previous() {
+        call(Command.Previous)
+    }
+
+    /** Inserts [items] at [index], or at the end when [index] is null. */
+    public suspend fun addToQueue(items: List<MediaItem>, index: Int? = null) {
+        val crossing = items.map(::crossing)
+        crossing.forEachIndexed { i, item -> sentItems[item] = items[i] }
+        call(Command.AddToQueue(crossing, index))
+    }
+
+    /** Inserts one item. See the list overload. */
+    public suspend fun addToQueue(item: MediaItem, index: Int? = null) {
+        addToQueue(listOf(item), index)
+    }
+
+    /** Removes the queue item at [index]. */
+    public suspend fun removeFromQueue(index: Int) {
+        call(Command.RemoveFromQueue(index))
+    }
+
+    /** Moves the queue item at [from] so that it sits at [to]. */
+    public suspend fun moveInQueue(from: Int, to: Int) {
+        call(Command.MoveInQueue(from, to))
+    }
+
+    /** Removes every queue item except the one playing. */
+    public suspend fun clearQueue() {
+        call(Command.ClearQueue)
+    }
+
+    /** Steps a paused player by exactly one decoded frame. */
+    public suspend fun stepFrame(direction: StepDirection = StepDirection.Forward) {
+        call(Command.StepFrame(direction))
+    }
+
+    /**
+     * The chapter whose span holds [position], or null: at or after its start and before its end,
+     * and the last such chapter when spans overlap, the rule `KitePlayer.chapterAt` follows.
+     */
+    public fun chapterAt(position: Duration): Chapter? =
+        state.value.chapters.lastOrNull { chapter -> chapter.start <= position && chapter.end.let { it == null || position < it } }
+
+    /** Seeks to the start of chapter [index]. */
+    public suspend fun seekToChapter(index: Int) {
+        call(Command.SeekToChapter(index))
+    }
+
+    /** Seeks to the start of the next chapter. The worker reads the position, so it is exact. */
+    public suspend fun nextChapter() {
+        call(Command.NextChapter)
+    }
+
+    /** Seeks to the start of this chapter, or the one before within its first three seconds. */
+    public suspend fun previousChapter() {
+        call(Command.PreviousChapter)
+    }
+
+    /** Selects a track, or deselects the kind with a null [track], and says what happened. */
+    public suspend fun selectTrack(kind: TrackKind, track: TrackId?): TrackChange =
+        ask<Answer.Change>(Command.SelectTrack(kind, track)).change
+
+    /** Shows a second subtitle track at the top of the picture, or clears it with null. */
+    public suspend fun selectSecondarySubtitle(track: TrackId?): TrackChange =
+        ask<Answer.Change>(Command.SelectSecondarySubtitle(track)).change
+
+    /** Plays the variant at [index] of the tracks' variants, or lets the player choose with null. */
+    public suspend fun selectVariant(index: Int?) {
+        call(Command.SelectVariant(index))
+    }
+
+    /**
+     * Loads a subtitle file, selects it, and returns its id once it is showing. [source] needs an
+     * address: one with its own reader is refused with [PlaybackError.ConfigurationInvalid].
+     */
+    public suspend fun addExternalSubtitle(source: SubtitleSource): TrackId {
+        crossingRefusal(source)?.let { throw it }
+        return ask<Answer.Track>(Command.AddExternalSubtitle(source.copy(uri = pageAddress(source.uri)))).id
+    }
+
+    /** The worker player's diagnostics dump. */
+    public suspend fun diagnosticsDump(): String = ask<Answer.Text>(Command.DiagnosticsDump).text
+
+    /** The worker player's support bundle. */
+    public suspend fun supportBundle(): String = ask<Answer.Text>(Command.SupportBundle).text
+
+    /** The worker player's last warnings, oldest first. */
+    public suspend fun warningHistory(): List<TimedWarning> = ask<Answer.Warnings>(Command.WarningHistory).warnings
+
+    /** Sets the playback rate. */
+    public fun setSpeed(value: Double): Unit = send(Control.SetSpeed(value))
+
+    /** Chooses whether [setSpeed] keeps pitch. */
+    public fun setPreservePitch(value: Boolean): Unit = send(Control.SetPreservePitch(value))
+
+    /** Sets the volume. */
+    public fun setVolume(value: Float): Unit = send(Control.SetVolume(value))
+
+    /** Lowers the sound by [level] without touching the volume. */
+    public fun setDuckLevel(level: Float): Unit = send(Control.SetDuckLevel(level))
+
+    /** Sets the stereo balance. */
+    public fun setBalance(value: Float): Unit = send(Control.SetBalance(value))
+
+    /** Silences the sound without losing the volume. */
+    public fun setMuted(value: Boolean): Unit = send(Control.SetMuted(value))
+
+    /** Parks or resumes video decoding in place. */
+    public fun setVideoEnabled(enabled: Boolean): Unit = send(Control.SetVideoEnabled(enabled))
+
+    /** Sets what happens at the end of the media. */
+    public fun setLoop(mode: LoopMode): Unit = send(Control.SetLoop(mode))
+
+    /** Plays the queue in a shuffled order, or in the order it was given. */
+    public fun setShuffle(enabled: Boolean, seed: Long? = null): Unit = send(Control.SetShuffle(enabled, seed))
+
+    /** Arms or clears the A-B loop. */
+    public fun setAbLoop(a: Duration?, b: Duration? = null): Unit = send(Control.SetAbLoop(a, b))
+
+    /** Sets how the picture occupies the canvas. */
+    public fun setVideoScale(mode: VideoScale): Unit = send(Control.SetVideoScale(mode))
+
+    /** Sets the live picture controls. */
+    public fun setVideoAdjustments(value: VideoAdjustments): Unit = send(Control.SetVideoAdjustments(value))
+
+    /** Sets how much work the renderer spends on the picture. */
+    public fun setRenderQuality(value: RenderQuality): Unit = send(Control.SetRenderQuality(value))
+
+    /** Sets the framing controls. */
+    public fun setVideoTransform(value: VideoTransform): Unit = send(Control.SetVideoTransform(value))
+
+    /** Sets how HDR video reaches the screen. */
+    public fun setHdrPolicy(value: HdrPolicy): Unit = send(Control.SetHdrPolicy(value))
+
+    /** Shifts subtitle timing. Positive shows cues later. */
+    public fun setSubtitleDelay(value: Duration): Unit = send(Control.SetSubtitleDelay(value))
+
+    /** Scales subtitle text over the authored size. */
+    public fun setSubtitleScale(value: Float): Unit = send(Control.SetSubtitleScale(value))
+
+    /** Overrides the authored subtitle style, or clears the override with null. */
+    public fun setSubtitleStyle(override: SubtitleStyleOverride?): Unit = send(Control.SetSubtitleStyle(override))
+
+    /** Moves the subtitles up the screen. */
+    public fun setSubtitlePosition(value: Float): Unit = send(Control.SetSubtitlePosition(value))
+
+    /** Keeps subtitles inside the safe area of the output. */
+    public fun setSubtitleSafeArea(value: SubtitleSafeArea): Unit = send(Control.SetSubtitleSafeArea(value))
+
+    /** Delays the sound against the picture. */
+    public fun setAudioDelay(value: Duration): Unit = send(Control.SetAudioDelay(value))
+
+    /** Stops playback later, fading the sound down first. Null cancels an armed timer. */
+    public fun setSleepTimer(timer: SleepTimer?, fade: Duration = KitePlayer.DEFAULT_SLEEP_FADE): Unit =
+        send(Control.SetSleepTimer(timer, fade))
+
+    /** Sets the ten-band equaliser. */
+    public fun setEqualizer(settings: EqualizerSettings): Unit = send(Control.SetEqualizer(settings))
+
+    /** Sets the positions to announce with [PlayerEvent.MarkerReached]. */
+    public fun setMarkers(markers: List<Marker>): Unit = send(Control.SetMarkers(markers))
 
     /**
      * Sizes the canvas's drawing buffer to [width] by [height] CSS pixels at [scale] device pixels
@@ -115,8 +331,7 @@ public class KitePlayerWorker private constructor(
      * its size through here rather than on the element.
      */
     public fun setViewport(width: Int, height: Int, scale: Float) {
-        checkOpen()
-        send(PageMessage.Viewport(width, height, scale))
+        send(Control.SetViewport(width, height, scale))
     }
 
     /**
@@ -132,7 +347,7 @@ public class KitePlayerWorker private constructor(
             return
         }
         pending[id] = CompletableDeferred()
-        send(PageMessage.Close(id))
+        post(PageMessage.Close(id))
     }
 
     /** [close], returning once the worker has closed the player and ended. */
@@ -145,18 +360,40 @@ public class KitePlayerWorker private constructor(
         check(!closed) { "the player is closed" }
     }
 
-    /** Sends the command [build] makes with a fresh id, and waits for its one reply. */
-    private suspend fun call(build: (Int) -> PageMessage) {
+    /** [media] as it crosses: with its addresses made whole here, where they mean what the page meant. */
+    private fun crossing(media: MediaItem): MediaItem {
+        crossingRefusal(media)?.let { throw it }
+        return media.copy(
+            uri = pageAddress(media.uri),
+            externalSubtitles = media.externalSubtitles.map { it.copy(uri = pageAddress(it.uri)) },
+        )
+    }
+
+    private fun own(item: MediaItem): MediaItem = sentItems[item] ?: item
+
+    /** Sends [command] with a fresh id, and waits for its one reply. */
+    private suspend fun call(command: Command): Answer? {
         checkOpen()
         dead?.let { throw PlaybackException(it) }
         val id = nextId++
-        val reply = CompletableDeferred<Unit>()
+        val reply = CompletableDeferred<Answer?>()
         pending[id] = reply
-        send(build(id))
-        reply.await()
+        post(PageMessage.Call(id, command))
+        return reply.await()
     }
 
-    private fun send(message: PageMessage) {
+    /** [call], for a command whose reply carries an answer of the kind [A]. */
+    private suspend inline fun <reified A : Answer> ask(command: Command): A =
+        call(command) as? A ?: throw PlaybackException(
+            PlaybackError.Internal("the worker answered ${command.member} without what it returns"),
+        )
+
+    private fun send(control: Control) {
+        checkOpen()
+        post(PageMessage.Send(control))
+    }
+
+    private fun post(message: PageMessage) {
         if (dead == null) workerPostTo(worker, message.encode())
     }
 
@@ -168,16 +405,21 @@ public class KitePlayerWorker private constructor(
                 started?.completeExceptionally(PlaybackException(PlaybackError.Internal(message.message)))
             is WorkerMessage.Reply -> {
                 val reply = pending.remove(message.id) ?: return
-                val error = message.error
-                if (error == null) reply.complete(Unit) else reply.completeExceptionally(PlaybackException(error.toError()))
+                val failure = message.failure
+                if (failure == null) reply.complete(message.answer) else reply.completeExceptionally(failure.toException())
                 if (message.id == closeId) finish()
             }
-            is WorkerMessage.State -> stateFlow.value = message.state.toSnapshot(media)
-            is WorkerMessage.Progress -> progressFlow.value = Progress(
-                position = message.positionMicros.microseconds,
-                bufferedAhead = message.bufferedAheadMicros.microseconds,
+            is WorkerMessage.State -> stateFlow.value = message.snapshot.let { snapshot ->
+                snapshot.copy(media = snapshot.media?.let(::own), queue = snapshot.queue.map(::own))
+            }
+            is WorkerMessage.Progressed -> progressFlow.value = message.progress
+            is WorkerMessage.Stats -> statsFlow.value = message.stats
+            is WorkerMessage.Event -> eventFlow.tryEmit(
+                when (val event = message.event) {
+                    is PlayerEvent.Opened -> event.copy(media = own(event.media))
+                    else -> event
+                },
             )
-            is WorkerMessage.Event -> eventFlow.tryEmit(message.event.toEvent())
             is WorkerMessage.Audio -> if (message.resume) audio?.resume() else audio?.suspend()
         }
     }
@@ -198,10 +440,10 @@ public class KitePlayerWorker private constructor(
         waiting.forEach { it.completeExceptionally(PlaybackException(error)) }
         if (closed) {
             finish()
-            closing?.complete(Unit)
+            closing?.complete(null)
             return
         }
-        stateFlow.update { it.copy(status = PlaybackStatus.Failed) }
+        stateFlow.update { it.copy(status = PlaybackStatus.Failed, error = error) }
         eventFlow.tryEmit(PlayerEvent.Failed(error))
         workerTerminate(worker)
     }
@@ -210,7 +452,7 @@ public class KitePlayerWorker private constructor(
     private fun finish() {
         workerTerminate(worker)
         audio?.close()
-        closeId?.let { pending.remove(it) }?.complete(Unit)
+        closeId?.let { pending.remove(it) }?.complete(null)
     }
 
     public companion object {

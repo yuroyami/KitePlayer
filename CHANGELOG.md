@@ -48,6 +48,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third
   module, the worker binary, whose `main` calls `runKitePlayerWorker()`. `kiteplayer-output` gains
   `WebWorkletAudio` and `workerOutputBackend`, the two halves of its sound.
+- `KitePlayerWorker` has the rest of the player's calls now: the queue, frame steps, chapters,
+  tracks, variants, external subtitles, every setter, `stats`, and the diagnostics dump, support
+  bundle and warning history, which suspend there (#100). Each has the name and defaults of the
+  `KitePlayer` member and throws what it throws. A setter is checked once, by the player in the
+  worker, so a value it refuses arrives on `events` as `CommandRefused` instead of throwing at the
+  call. An item crosses whole, filters, demux policy and external subtitles included, unless it or
+  one of its subtitles has a reader of its own. `state.media` and `state.queue` hold the caller's
+  own items.
 - A Java app on Android or the desktop can use the player without writing Kotlin (#394).
   `KitePlayerJava` in `kiteplayer` adds listeners called on an `Executor`, a `CompletableFuture`
   version of every suspending call, and millisecond versions of the calls that take a `Duration`.

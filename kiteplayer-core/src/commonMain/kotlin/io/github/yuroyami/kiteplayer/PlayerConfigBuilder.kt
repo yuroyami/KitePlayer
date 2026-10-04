@@ -219,6 +219,9 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
     /** See [SubtitleConfig.fallbackEncoding]. */
     public var fallbackEncoding: String? = from.fallbackEncoding
 
+    /** See [SubtitleConfig.withMatchingAudio]. */
+    public var withMatchingAudio: MatchingAudioSubtitles = from.withMatchingAudio
+
     /** The [SubtitleConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): SubtitleConfig = SubtitleConfig(
         preferredLanguages = preferredLanguages,
@@ -231,6 +234,7 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
         fonts = fonts,
         hearingImpairedNotes = hearingImpairedNotes,
         fallbackEncoding = fallbackEncoding,
+        withMatchingAudio = withMatchingAudio,
     )
 }
 

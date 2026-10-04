@@ -425,6 +425,18 @@ final enum class io.github.yuroyami.kiteplayer/MasterClock : kotlin/Enum<io.gith
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/MasterClock> // io.github.yuroyami.kiteplayer/MasterClock.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer/MatchingAudioSubtitles : kotlin/Enum<io.github.yuroyami.kiteplayer/MatchingAudioSubtitles> { // io.github.yuroyami.kiteplayer/MatchingAudioSubtitles|null[0]
+    enum entry All // io.github.yuroyami.kiteplayer/MatchingAudioSubtitles.All|null[0]
+    enum entry ForcedOnly // io.github.yuroyami.kiteplayer/MatchingAudioSubtitles.ForcedOnly|null[0]
+    enum entry None // io.github.yuroyami.kiteplayer/MatchingAudioSubtitles.None|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer/MatchingAudioSubtitles.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer/MatchingAudioSubtitles> // io.github.yuroyami.kiteplayer/MatchingAudioSubtitles.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer/MatchingAudioSubtitles // io.github.yuroyami.kiteplayer/MatchingAudioSubtitles.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/MatchingAudioSubtitles> // io.github.yuroyami.kiteplayer/MatchingAudioSubtitles.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer/PlaybackStatus : kotlin/Enum<io.github.yuroyami.kiteplayer/PlaybackStatus> { // io.github.yuroyami.kiteplayer/PlaybackStatus|null[0]
     enum entry Buffering // io.github.yuroyami.kiteplayer/PlaybackStatus.Buffering|null[0]
     enum entry Ended // io.github.yuroyami.kiteplayer/PlaybackStatus.Ended|null[0]
@@ -3492,7 +3504,7 @@ final class io.github.yuroyami.kiteplayer/StreamVariant { // io.github.yuroyami.
 }
 
 final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami.kiteplayer/SubtitleConfig|null[0]
-    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ..., io.github.yuroyami.kiteplayer/HearingImpairedNotes = ..., kotlin/String? = ...) // io.github.yuroyami.kiteplayer/SubtitleConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>;io.github.yuroyami.kiteplayer.HearingImpairedNotes;kotlin.String?){}[0]
+    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ..., io.github.yuroyami.kiteplayer/HearingImpairedNotes = ..., kotlin/String? = ..., io.github.yuroyami.kiteplayer/MatchingAudioSubtitles = ...) // io.github.yuroyami.kiteplayer/SubtitleConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>;io.github.yuroyami.kiteplayer.HearingImpairedNotes;kotlin.String?;io.github.yuroyami.kiteplayer.MatchingAudioSubtitles){}[0]
 
     final val autoSelect // io.github.yuroyami.kiteplayer/SubtitleConfig.autoSelect|{}autoSelect[0]
         final fun <get-autoSelect>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.autoSelect.<get-autoSelect>|<get-autoSelect>(){}[0]
@@ -3514,9 +3526,12 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami
         final fun <get-style>(): io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? // io.github.yuroyami.kiteplayer/SubtitleConfig.style.<get-style>|<get-style>(){}[0]
     final val typesetting // io.github.yuroyami.kiteplayer/SubtitleConfig.typesetting|{}typesetting[0]
         final fun <get-typesetting>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.typesetting.<get-typesetting>|<get-typesetting>(){}[0]
+    final val withMatchingAudio // io.github.yuroyami.kiteplayer/SubtitleConfig.withMatchingAudio|{}withMatchingAudio[0]
+        final fun <get-withMatchingAudio>(): io.github.yuroyami.kiteplayer/MatchingAudioSubtitles // io.github.yuroyami.kiteplayer/SubtitleConfig.withMatchingAudio.<get-withMatchingAudio>|<get-withMatchingAudio>(){}[0]
 
     final fun component1(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/SubtitleConfig.component1|component1(){}[0]
     final fun component10(): kotlin/String? // io.github.yuroyami.kiteplayer/SubtitleConfig.component10|component10(){}[0]
+    final fun component11(): io.github.yuroyami.kiteplayer/MatchingAudioSubtitles // io.github.yuroyami.kiteplayer/SubtitleConfig.component11|component11(){}[0]
     final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component2|component2(){}[0]
     final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component3|component3(){}[0]
     final fun component4(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/SubtitleConfig.component4|component4(){}[0]
@@ -3525,7 +3540,7 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami
     final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component7|component7(){}[0]
     final fun component8(): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> // io.github.yuroyami.kiteplayer/SubtitleConfig.component8|component8(){}[0]
     final fun component9(): io.github.yuroyami.kiteplayer/HearingImpairedNotes // io.github.yuroyami.kiteplayer/SubtitleConfig.component9|component9(){}[0]
-    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ..., io.github.yuroyami.kiteplayer/HearingImpairedNotes = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/SubtitleConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>;io.github.yuroyami.kiteplayer.HearingImpairedNotes;kotlin.String?){}[0]
+    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ..., io.github.yuroyami.kiteplayer/HearingImpairedNotes = ..., kotlin/String? = ..., io.github.yuroyami.kiteplayer/MatchingAudioSubtitles = ...): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/SubtitleConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>;io.github.yuroyami.kiteplayer.HearingImpairedNotes;kotlin.String?;io.github.yuroyami.kiteplayer.MatchingAudioSubtitles){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/SubtitleConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/SubtitleConfig.toString|toString(){}[0]
@@ -3564,6 +3579,9 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfigBuilder { // io.github.y
     final var typesetting // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.typesetting|{}typesetting[0]
         final fun <get-typesetting>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.typesetting.<get-typesetting>|<get-typesetting>(){}[0]
         final fun <set-typesetting>(kotlin/Boolean) // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.typesetting.<set-typesetting>|<set-typesetting>(kotlin.Boolean){}[0]
+    final var withMatchingAudio // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.withMatchingAudio|{}withMatchingAudio[0]
+        final fun <get-withMatchingAudio>(): io.github.yuroyami.kiteplayer/MatchingAudioSubtitles // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.withMatchingAudio.<get-withMatchingAudio>|<get-withMatchingAudio>(){}[0]
+        final fun <set-withMatchingAudio>(io.github.yuroyami.kiteplayer/MatchingAudioSubtitles) // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.withMatchingAudio.<set-withMatchingAudio>|<set-withMatchingAudio>(io.github.yuroyami.kiteplayer.MatchingAudioSubtitles){}[0]
 
     final fun build(): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.build|build(){}[0]
 }

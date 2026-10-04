@@ -601,6 +601,11 @@ and labels it.
   `Film.eng.forced.srt` and `Film.pt-BR.sdh.srt` say it, with `forced`, and `sdh`, `cc` or `hi`,
   marking the track, and a file in a preferred language is chosen at open over the container's
   track in a later one ([#514](https://github.com/yuroyami/KitePlayer/issues/514)).
+- A subtitle the player chose by itself follows the audio: switching an anime to the English dub
+  shows the English signs track made for it, and switching back shows every line again. One the
+  viewer chose stays. `SubtitleConfig.withMatchingAudio`, as mpv's `subs-with-matching-audio`,
+  keeps only forced tracks, or none, under audio in a preferred subtitle language
+  ([#506](https://github.com/yuroyami/KitePlayer/issues/506)).
 - WebVTT keeps its colours: the standard's colour classes such as `<c.yellow>` and `<c.bg_blue>`,
   and the `::cue` rules of its `STYLE` blocks for colour, background, bold, italic, underline,
   font and relative size, by class, voice and cue identifier. A rule that asks for anything more

@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.internal
 
+import io.github.yuroyami.kiteplayer.MatchingAudioSubtitles
 import io.github.yuroyami.kiteplayer.SubtitleConfig
 import io.github.yuroyami.kiteplayer.TrackId
 import io.github.yuroyami.kiteplayer.TrackInfo
@@ -63,20 +64,38 @@ class SubtitleFileNamesTest {
     fun aPreferredLanguageFileBeatsAContainerTrackInALaterOneOrNone() {
         val config = SubtitleConfig(preferredLanguages = listOf("ja", "en"))
         val japanese = external(1, "ja")
-        assertEquals(japanese, preferredExternalSubtitle(null, listOf(japanese), config))
-        assertEquals(japanese, preferredExternalSubtitle(container("eng"), listOf(japanese), config))
+        assertEquals(japanese, preferredExternalSubtitle(null, listOf(japanese), null, config))
+        assertEquals(japanese, preferredExternalSubtitle(container("eng"), listOf(japanese), null, config))
         // The same language: the file the caller added wins the tie.
-        assertEquals(japanese, preferredExternalSubtitle(container("jpn"), listOf(japanese), config))
+        assertEquals(japanese, preferredExternalSubtitle(container("jpn"), listOf(japanese), null, config))
         // A container track in a better language keeps its place.
-        assertNull(preferredExternalSubtitle(container("jpn"), listOf(external(1, "en")), config))
+        assertNull(preferredExternalSubtitle(container("jpn"), listOf(external(1, "en")), null, config))
         // A file in no preferred language, or with no language, never wins.
-        assertNull(preferredExternalSubtitle(null, listOf(external(1, "fr"), external(2, null)), config))
+        assertNull(preferredExternalSubtitle(null, listOf(external(1, "fr"), external(2, null)), null, config))
         // With no preferences the container's choice stands.
-        assertNull(preferredExternalSubtitle(null, listOf(japanese), SubtitleConfig()))
+        assertNull(preferredExternalSubtitle(null, listOf(japanese), null, SubtitleConfig()))
         // Of two files in the language, the one that is not forced.
         val forced = external(1, "ja", forced = true)
         val full = external(2, "ja")
-        assertEquals(full, preferredExternalSubtitle(null, listOf(forced, full), config))
+        assertEquals(full, preferredExternalSubtitle(null, listOf(forced, full), null, config))
+    }
+
+    @Test
+    fun underAudioInAPreferredLanguageTheMatchingAudioSettingHoldsFilesBack() {
+        val forced = external(1, "ja", forced = true)
+        val full = external(2, "ja")
+        fun audio(language: String) = PlayerStreamInfo(index = 1, kind = TrackKind.Audio, codec = "aac", language = language)
+        fun pick(setting: MatchingAudioSubtitles, audio: PlayerStreamInfo) = preferredExternalSubtitle(
+            null,
+            listOf(forced, full),
+            audio,
+            SubtitleConfig(preferredLanguages = listOf("ja"), withMatchingAudio = setting),
+        )
+        assertEquals(full, pick(MatchingAudioSubtitles.All, audio("jpn")))
+        assertEquals(forced, pick(MatchingAudioSubtitles.ForcedOnly, audio("jpn")))
+        assertNull(pick(MatchingAudioSubtitles.None, audio("jpn")))
+        // Audio the viewer does not read subtitles in is subtitled as ever.
+        assertEquals(full, pick(MatchingAudioSubtitles.None, audio("eng")))
     }
 
     @Test

@@ -14,6 +14,7 @@ import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MasterClock
+import io.github.yuroyami.kiteplayer.MatchingAudioSubtitles
 import io.github.yuroyami.kiteplayer.MediaInspection
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -3103,7 +3104,7 @@ internal class PlaybackCore(
                     val container = pickSubtitle(source.streams, audioCandidate)
                     // An external file that matches the preferences better leaves the container's unselected,
                     // and the open selects the file once its track exists (#514).
-                    val external = preferredExternalSubtitle(container, externalSubtitles, config.subtitles)
+                    val external = preferredExternalSubtitle(container, externalSubtitles, audioCandidate, config.subtitles)
                     if (external != null) {
                         preferredExternal = external.id
                         null
@@ -3994,7 +3995,7 @@ internal class PlaybackCore(
     private suspend fun chooseSubtitleForAudio(session: OpenSession) {
         if (!subtitleChosenByPlayer || TrackKind.Subtitle in pendingSelections) return
         val container = pickSubtitle(session.source.streams, session.audioStream)
-        val target = preferredExternalSubtitle(container, externalSubtitleTracks.map { it.info }, config.subtitles)?.id
+        val target = preferredExternalSubtitle(container, externalSubtitleTracks.map { it.info }, session.audioStream, config.subtitles)?.id
             ?: container?.let { TrackId(it.index) }
         if (target == tracks.selectedSubtitle) return
         // One track cannot fill both slots, and the secondary is the viewer's.
@@ -11354,7 +11355,8 @@ internal fun pickAudioStream(streams: List<PlayerStreamInfo>, preferredLanguages
  * track, closest to the preference and then default-flagged first; then, when the audio is not in a
  * preferred language and the config allows it, a forced track in a preferred language, and a forced
  * track in the audio's own language whatever the preferences. Then, when [SubtitleConfig.autoSelect]
- * asks for it, the plain default.
+ * asks for it, the plain default. Under audio in a preferred language,
+ * [SubtitleConfig.withMatchingAudio] may leave only the forced tracks to choose from, or none.
  *
  * Languages are compared as languages, so `ja` finds a `jpn` track and `en` audio pairs with an
  * `eng` forced track, and one rule serves the preference, the audio and the forced pairing (#435).
@@ -11364,9 +11366,10 @@ internal fun pickSubtitleStream(
     audio: PlayerStreamInfo?,
     config: SubtitleConfig,
 ): PlayerStreamInfo? {
-    val subtitles = streams.filter { it.kind == TrackKind.Subtitle }
-    if (subtitles.isEmpty()) return null
     val preferences = LanguagePreferences(config.preferredLanguages)
+    val subtitles = streams.filter { it.kind == TrackKind.Subtitle }
+        .choosableWith(audio, config, preferences) { it.isForced }
+    if (subtitles.isEmpty()) return null
     fun best(candidates: List<PlayerStreamInfo>): PlayerStreamInfo? =
         candidates.mapNotNull { stream -> preferences.match(stream.language, stream.title)?.let { stream to it } }
             .sortedWith(compareBy({ it.second.preference }, { -it.second.closeness }, { !it.first.isDefault }))
@@ -11406,11 +11409,15 @@ internal fun pickSubtitleStream(
  * file the caller added for this item in the language the viewer prefers was added to be seen. With
  * no preferences, the container's choice stands.
  */
-internal fun preferredExternalSubtitle(container: PlayerStreamInfo?, externals: List<TrackInfo>, config: SubtitleConfig): TrackInfo? {
-    if (externals.isEmpty()) return null
+internal fun preferredExternalSubtitle(
+    container: PlayerStreamInfo?,
+    externals: List<TrackInfo>,
+    audio: PlayerStreamInfo?,
+    config: SubtitleConfig,
+): TrackInfo? {
     val preferences = LanguagePreferences(config.preferredLanguages)
     if (preferences.isEmpty) return null
-    val (track, match) = externals.mapNotNull { track -> preferences.match(track.language, track.title)?.let { track to it } }
+    val (track, match) = externals.choosableWith(audio, config, preferences) { it.isForced }.mapNotNull { track -> preferences.match(track.language, track.title)?.let { track to it } }
         .sortedWith(compareBy({ it.second.preference }, { -it.second.closeness }, { it.first.isForced }))
         .firstOrNull() ?: return null
     val ours = container?.let { preferences.match(it.language, it.title) } ?: return track
@@ -11419,6 +11426,23 @@ internal fun preferredExternalSubtitle(container: PlayerStreamInfo?, externals: 
         match.preference == ours.preference && match.closeness >= ours.closeness -> track
         else -> null
     }
+}
+
+/**
+ * The subtitle tracks the player may choose by itself under [audio] (#506). Audio in a preferred
+ * language is audio the viewer understands, and under it [SubtitleConfig.withMatchingAudio] keeps
+ * only the forced tracks, or none, as mpv's `subs-with-matching-audio` does. Under any other audio
+ * every track stays.
+ */
+private inline fun <T> List<T>.choosableWith(
+    audio: PlayerStreamInfo?,
+    config: SubtitleConfig,
+    preferences: LanguagePreferences,
+    isForced: (T) -> Boolean,
+): List<T> = when {
+    config.withMatchingAudio == MatchingAudioSubtitles.All || !preferences.matches(audio?.language) -> this
+    config.withMatchingAudio == MatchingAudioSubtitles.ForcedOnly -> filter(isForced)
+    else -> emptyList()
 }
 
 /** Where a seek on this source is cut: its length, unless that length is only an estimate (#422). */

@@ -578,6 +578,16 @@ public data class SubtitleConfig(
      * East Asian encoding the backend has no table for leaves the guess to decide.
      */
     val fallbackEncoding: String? = null,
+    /**
+     * What the player chooses by itself when the audio is in one of [preferredLanguages], a language
+     * the viewer reads and so understands (#506), as mpv's `subs-with-matching-audio`.
+     * [MatchingAudioSubtitles.All] chooses as ever, so a viewer who prefers English subtitles keeps
+     * them under English audio, which is mpv's default too. A viewer who wants subtitles only for
+     * what they do not understand asks for [MatchingAudioSubtitles.ForcedOnly], and gets the signs
+     * and foreign lines a forced track carries and no more. The choice is made again at each audio
+     * change, and a subtitle chosen by hand is never held back.
+     */
+    val withMatchingAudio: MatchingAudioSubtitles = MatchingAudioSubtitles.All,
 ) {
     init {
         require(fallbackEncoding == null || SubtitleEncodings.canonical(fallbackEncoding) != null) {
@@ -613,6 +623,22 @@ public data class Backends(
     val backend: MediaBackend? = null,
     val output: OutputBackend? = null,
 )
+
+/**
+ * The subtitles [SubtitleConfig.withMatchingAudio] lets the player choose by itself under audio in a
+ * preferred subtitle language (#506). Audio in any other language, or in none it names, is
+ * subtitled as ever.
+ */
+public enum class MatchingAudioSubtitles {
+    /** Any track the choice rules pick. */
+    All,
+
+    /** Only a forced track, which shows the lines that are not in the audio's language. */
+    ForcedOnly,
+
+    /** None, so subtitles show by themselves only under audio in another language. */
+    None,
+}
 
 /** What [SubtitleConfig.hearingImpairedNotes] does with the notes of hearing-impaired subtitles (#493). */
 public enum class HearingImpairedNotes {

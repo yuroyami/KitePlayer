@@ -199,6 +199,89 @@ class SubtitleFollowsAudioTest {
         harness.close()
     }
 
+    private fun preferringEnglish(setting: MatchingAudioSubtitles) =
+        PlayerConfig(subtitles = SubtitleConfig(preferredLanguages = listOf("en"), withMatchingAudio = setting))
+
+    @Test
+    fun forcedOnlyShowsTheSignsUnderAudioTheViewerReadsAndEveryLineUnderAnyOther() = runTest {
+        // mpv's subs-with-matching-audio=forced: English audio is audio this viewer understands.
+        val harness = CoreHarness(this, script = anime(), config = preferringEnglish(MatchingAudioSubtitles.ForcedOnly))
+        harness.openWithRenderer()
+        harness.core.play()
+        assertEquals(full, shownSubtitle(harness), "Japanese audio is not understood, so every line shows")
+        harness.run(1.seconds)
+        applied(harness.core.selectTrack(TrackKind.Audio, english))
+        assertEquals(signs, shownSubtitle(harness), "under English audio only the forced track may show")
+        harness.run(1.seconds)
+        applied(harness.core.selectTrack(TrackKind.Audio, japanese))
+        assertEquals(full, shownSubtitle(harness))
+        harness.close()
+    }
+
+    @Test
+    fun noneShowsNoSubtitleUnderAudioTheViewerReads() = runTest {
+        val harness = CoreHarness(this, script = anime(), config = preferringEnglish(MatchingAudioSubtitles.None))
+        harness.openWithRenderer()
+        harness.core.play()
+        assertEquals(full, shownSubtitle(harness))
+        harness.run(1.seconds)
+        applied(harness.core.selectTrack(TrackKind.Audio, english))
+        assertEquals(null, shownSubtitle(harness), "a subtitle showed under audio the viewer reads")
+        harness.run(1.seconds)
+        applied(harness.core.selectTrack(TrackKind.Audio, japanese))
+        assertEquals(full, shownSubtitle(harness), "the subtitles did not come back for the Japanese audio")
+        // A subtitle the viewer asks for shows whatever the setting.
+        applied(harness.core.selectTrack(TrackKind.Subtitle, full))
+        harness.run(1.seconds)
+        applied(harness.core.selectTrack(TrackKind.Audio, english))
+        assertEquals(full, shownSubtitle(harness), "the setting held back a subtitle the viewer chose")
+        harness.close()
+    }
+
+    @Test
+    fun forcedOnlyHoldsBackAFullFileUnderAudioTheViewerReads() = runTest {
+        val harness = CoreHarness(this, script = anime(), config = preferringEnglish(MatchingAudioSubtitles.ForcedOnly))
+        harness.attachRenderer()
+        harness.core.open(
+            MediaItem(
+                "scripted://anime",
+                externalSubtitles = listOf(
+                    SubtitleSource(uri = "memory://Show.en.srt", io = MediaIo.ofBytes(SRT.encodeToByteArray())),
+                    SubtitleSource(uri = "memory://Show.en.forced.srt", io = MediaIo.ofBytes(SRT.encodeToByteArray())),
+                ),
+            ),
+        )
+        harness.core.play()
+        val fullFile = TrackId(-1)
+        val forcedFile = TrackId(-2)
+        assertEquals(fullFile, shownSubtitle(harness), "the English file did not win under Japanese audio")
+        harness.run(1.seconds)
+        applied(harness.core.selectTrack(TrackKind.Audio, english))
+        assertEquals(forcedFile, shownSubtitle(harness), "the full file stayed under English audio")
+        harness.close()
+    }
+
+    @Test
+    fun forcedOnlyChoosesTheForcedFileAtAnOpenIntoAudioTheViewerReads() = runTest {
+        val config = preferringEnglish(MatchingAudioSubtitles.ForcedOnly).let {
+            it.copy(audio = it.audio.copy(preferredLanguages = listOf("en")))
+        }
+        val harness = CoreHarness(this, script = anime(), config = config)
+        harness.attachRenderer()
+        harness.core.open(
+            MediaItem(
+                "scripted://anime",
+                externalSubtitles = listOf(
+                    SubtitleSource(uri = "memory://Show.en.srt", io = MediaIo.ofBytes(SRT.encodeToByteArray())),
+                    SubtitleSource(uri = "memory://Show.en.forced.srt", io = MediaIo.ofBytes(SRT.encodeToByteArray())),
+                ),
+            ),
+        )
+        assertEquals(english, harness.core.snapshots.value.tracks.selectedAudio)
+        assertEquals(TrackId(-2), shownSubtitle(harness), "the open into English audio chose the full file")
+        harness.close()
+    }
+
     private companion object {
         const val SRT = "1\n00:00:00,500 --> 00:00:05,000\nFrom the file\n\n"
     }

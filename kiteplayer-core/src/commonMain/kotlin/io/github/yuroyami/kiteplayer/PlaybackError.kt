@@ -605,6 +605,17 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The queue item at [index] could not be opened, with [error], and the queue moved past it,
+     * because [QueueConfig.onItemFailure] is [QueueItemFailure.Skip] (#487).
+     */
+    public data class QueueItemSkipped(val index: Int, val uri: String, val error: PlaybackError) : PlaybackWarning() {
+        override val message: String get() = "queue item $index, ${redactUri(uri)}, could not be opened and was skipped: ${error.message}"
+
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("index" to index.toString(), "error" to (error::class.simpleName ?: "PlaybackError"))
+    }
+
+    /**
      * An address that an HLS stream names could not be read: a segment, the key of a segment, or
      * a playlist that a live stream reloads. [detail] says what failed. The demuxer skips a segment
      * it cannot read, so the picture and the sound jump past it. A stream that ends while its last

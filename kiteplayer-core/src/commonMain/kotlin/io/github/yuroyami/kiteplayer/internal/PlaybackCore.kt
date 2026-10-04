@@ -26,6 +26,7 @@ import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackStats
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlaybackWarning
+import io.github.yuroyami.kiteplayer.QueueItemFailure
 import io.github.yuroyami.kiteplayer.TimedWarning
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.PlayerConfig
@@ -274,6 +275,9 @@ internal class PlaybackCore(
             field = if (value is ReadOnlyList) value else ReadOnlyList(value.toList())
         }
     private var queueIndex: Int = -1
+
+    /** Positions into [queueItems] that failed to open and were skipped, until each opens (#487). */
+    private var failedQueueIndices: Set<Int> = emptySet()
 
     /**
      * Shuffle as an order OVER the queue rather than a reorder OF it.
@@ -1970,14 +1974,16 @@ internal class PlaybackCore(
                 // A plain open is single-media by contract: whatever queue existed is replaced.
                 queueItems = emptyList()
                 queueIndex = -1
+                failedQueueIndices = emptySet()
                 rebuildQueueOrder()
                 runOpen(command)
             }
             is CoreCommand.OpenQueue -> {
                 queueItems = command.items
                 queueIndex = command.startIndex
+                failedQueueIndices = emptySet()
                 rebuildQueueOrder()
-                runOpen(CoreCommand.Open(command.items[command.startIndex], command.reply))
+                openQueueItem(command.reply, step = 1)
             }
             is CoreCommand.QueueNext -> jumpQueue(neighbourInOrder(1), command.reply, "next")
             is CoreCommand.QueuePrevious -> jumpQueue(neighbourInOrder(-1), command.reply, "previous")
@@ -2694,7 +2700,11 @@ internal class PlaybackCore(
         setStatus(PlaybackStatus.Opening)
     }
 
-    private suspend fun runOpen(command: CoreCommand.Open) {
+    /**
+     * [absorb] is asked about a failure before the player fails on it. True means its caller moves
+     * on: the session is torn down and nothing is published, and the reply is left for the caller.
+     */
+    private suspend fun runOpen(command: CoreCommand.Open, absorb: ((PlaybackError) -> Boolean)? = null) {
         traceUntilReplied(command.reply, "session", "open") { mapOf("uri" to redactUri(command.media.uri)) }
         sessionOwner = command.reply
         // Open is legal from Ended, and Ended keeps its session alive so the viewer can seek back.
@@ -2819,6 +2829,7 @@ internal class PlaybackCore(
         } catch (failure: Throwable) {
             val error = classify(failure, command.media)
             teardownSession()
+            if (absorb?.invoke(error) == true) return
             fail(error)
             command.reply.completeExceptionally(PlaybackException(error))
         }
@@ -6376,12 +6387,7 @@ internal class PlaybackCore(
         queueMoved(from)
         openCarriesPlay = true
         try {
-            val primed = primedFor(next)
-            if (primed != null) {
-                runOpenPrepared(primed, CompletableDeferred())
-            } else {
-                runOpen(CoreCommand.Open(queueItems[next], CompletableDeferred()))
-            }
+            openQueueItem(CompletableDeferred(), step = 1)
         } finally {
             openCarriesPlay = false
         }
@@ -6800,7 +6806,11 @@ internal class PlaybackCore(
      * it closes as an open closes it, and the preload gets an audio device of its own, opened for
      * its format. Like [runOpen], it ends paused on the item's first frame.
      */
-    private suspend fun runOpenPrepared(next: PendingNext, reply: CompletableDeferred<Unit>) {
+    private suspend fun runOpenPrepared(
+        next: PendingNext,
+        reply: CompletableDeferred<Unit>,
+        absorb: ((PlaybackError) -> Boolean)? = null,
+    ) {
         traceUntilReplied(reply, "session", "open") { mapOf("uri" to redactUri(next.item.uri)) }
         sessionOwner = reply
         val prepared = next.prepared ?: error("runOpenPrepared needs a primed preload")
@@ -6846,6 +6856,7 @@ internal class PlaybackCore(
         } catch (failure: Throwable) {
             val error = classify(failure, next.item)
             teardownSession()
+            if (absorb?.invoke(error) == true) return
             fail(error)
             reply.completeExceptionally(PlaybackException(error))
         }
@@ -7272,6 +7283,48 @@ internal class PlaybackCore(
         if (from == lapEndIndex && queueIndex == lap.first() && lap.size == queueItems.size) queueOrder = lap
     }
 
+    /**
+     * Opens the queue item at [queueIndex], from its preload when one is primed. With
+     * [QueueItemFailure.Skip], an item that cannot be opened is reported and passed over, [step]
+     * places along the play order, until one opens; the player fails with the last error when the
+     * order runs out or when every item in the queue has failed in a row (#487).
+     */
+    private suspend fun openQueueItem(reply: CompletableDeferred<Unit>, step: Int) {
+        val skip = config.queue.onItemFailure == QueueItemFailure.Skip
+        var failedInARow = 0
+        while (true) {
+            val target = queueIndex
+            var failure: PlaybackError? = null
+            val absorb: ((PlaybackError) -> Boolean)? = if (skip) { error -> failure = error; true } else null
+            val primed = primedFor(target)
+            if (primed != null) {
+                runOpenPrepared(primed, reply, absorb)
+            } else {
+                runOpen(CoreCommand.Open(queueItems[target], reply), absorb)
+            }
+            val error = failure
+            if (error == null) {
+                if (target in failedQueueIndices && session != null) {
+                    failedQueueIndices = failedQueueIndices - target
+                    publishSnapshot()
+                }
+                return
+            }
+            failedQueueIndices = failedQueueIndices + target
+            failedInARow++
+            warn(PlaybackWarning.QueueItemSkipped(target, queueItems[target].uri, error))
+            val following = if (failedInARow < queueItems.size) neighbourInOrder(step) else null
+            if (following == null) {
+                fail(error)
+                reply.completeExceptionally(PlaybackException(error))
+                return
+            }
+            val from = queueIndex
+            queueIndex = following
+            queueMoved(from)
+        }
+    }
+
     /** Explicit queue movement, refused typed when there is nowhere to go. */
     private suspend fun jumpQueue(target: Int?, reply: CompletableDeferred<Unit>, direction: String) {
         if (queueItems.isEmpty()) {
@@ -7296,8 +7349,7 @@ internal class PlaybackCore(
         queueMoved(from)
         openCarriesPlay = wasPlaying
         try {
-            val primed = primedFor(target)
-            if (primed != null) runOpenPrepared(primed, reply) else runOpen(CoreCommand.Open(queueItems[target], reply))
+            openQueueItem(reply, step = if (direction == "previous") -1 else 1)
         } finally {
             openCarriesPlay = false
         }
@@ -7336,6 +7388,7 @@ internal class PlaybackCore(
     private fun remapQueueOrder(renumber: (Int) -> Int) {
         nextLapOrder = null
         queueOrder = queueOrder.map(renumber)
+        failedQueueIndices = failedQueueIndices.map(renumber).toSet()
     }
 
     private fun editableQueueSize(): Int =
@@ -7420,6 +7473,7 @@ internal class PlaybackCore(
             }
             QueueEdit.Clear -> {
                 queueItems = listOf(queueItems[queueIndex])
+                failedQueueIndices = if (queueIndex in failedQueueIndices) setOf(0) else emptySet()
                 queueIndex = 0
                 queueOrder = listOf(0)
                 publishSnapshot()
@@ -7433,6 +7487,7 @@ internal class PlaybackCore(
         val removedPlaying = index == queueIndex
         queueItems = queueItems.toMutableList().apply { removeAt(index) }
         queueOrder = queueOrder.filter { it != index }.map { if (it > index) it - 1 else it }
+        failedQueueIndices = failedQueueIndices.filter { it != index }.map { if (it > index) it - 1 else it }.toSet()
         if (!removedPlaying) {
             if (index < queueIndex) queueIndex -= 1
             publishSnapshot()
@@ -7458,7 +7513,7 @@ internal class PlaybackCore(
         }
         val wasPlaying = playRequested
         queueIndex = next
-        runOpen(CoreCommand.Open(queueItems[next], reply))
+        openQueueItem(reply, step = 1)
         playRequested = wasPlaying
     }
 
@@ -8362,6 +8417,7 @@ internal class PlaybackCore(
             queueIndex = queueIndex,
             shuffle = shuffleEnabled,
             queueOrder = queueOrder,
+            failedQueueItems = failedQueueIndices,
             markers = markers,
             playRequested = publishedPlayIntent(),
         )
@@ -8736,6 +8792,7 @@ internal class PlaybackCore(
             queueIndex = queueIndex,
             shuffle = shuffleEnabled,
             queueOrder = queueOrder,
+            failedQueueItems = failedQueueIndices,
             markers = markers,
             playRequested = publishedPlayIntent(),
             preloadedIndex = pendingNext?.takeIf { it.prepared != null }?.index,

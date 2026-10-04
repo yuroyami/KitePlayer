@@ -243,12 +243,36 @@ public data class QueueConfig(
      * seeded shuffle stays reproducible. False keeps one order for every lap.
      */
     val reshuffleEachLap: Boolean = false,
+    /**
+     * What the queue does when an item cannot be opened, such as a moved file, an address that
+     * answers 404 or a format this build cannot decode (#487). [QueueItemFailure.Stop] keeps the
+     * player in [PlaybackStatus.Failed] on that item, for an application that handles the error
+     * itself. [QueueItemFailure.Skip] moves on, as mpv does: see there.
+     */
+    val onItemFailure: QueueItemFailure = QueueItemFailure.Stop,
 ) {
     init {
         require(!preloadNext.isNegative() && preloadNext.isFinite()) {
             "preloadNext must be zero or a finite positive duration, was $preloadNext"
         }
     }
+}
+
+/** What a queue does with an item that cannot be opened. See [QueueConfig.onItemFailure]. */
+public enum class QueueItemFailure {
+    /** Stay on the item, in [PlaybackStatus.Failed] with its error, as a single open does. */
+    Stop,
+
+    /**
+     * Move on in the direction the queue was going: forward at the end of an item and on next,
+     * back on previous. Each item passed over is reported as [PlaybackWarning.QueueItemSkipped]
+     * and listed in [PlayerSnapshot.failedQueueItems] until it opens, and a queue that was playing
+     * keeps playing. Every item is tried again each time the queue reaches it, so with
+     * [LoopMode.All] a file that comes back plays on the next lap. The player stops in
+     * [PlaybackStatus.Failed], with the last error, when the queue has nowhere left to go, or when
+     * every item in it has failed in a row, so a queue of broken items does not go round for ever.
+     */
+    Skip,
 }
 
 /**

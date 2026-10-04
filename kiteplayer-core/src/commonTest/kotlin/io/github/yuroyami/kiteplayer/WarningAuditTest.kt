@@ -50,9 +50,14 @@ class WarningAuditTest {
         PlaybackWarning.SegmentSkipped("https://cdn.example/seg-1.ts", "x"),
         PlaybackWarning.ExternalClockSilent("x"),
         PlaybackWarning.VariantLowered(0, 1, "x"),
+        PlaybackWarning.QueueItemSkipped(1, "file:///music/x.flac", PlaybackError.NotMedia("file:///music/x.flac")),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
+        is PlaybackWarning.QueueItemSkipped -> listOf(
+            "PlaybackCore.openQueueItem, when a queue item fails to open under QueueItemFailure.Skip " +
+                "and the queue moves past it",
+        )
         is PlaybackWarning.VariantLowered -> listOf(
             "PlaybackCore.stepDownWhenStarved, after playback waited 4 s for data while playing an HLS " +
                 "variant the player chose itself",

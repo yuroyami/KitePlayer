@@ -327,10 +327,14 @@ public class QueueConfigBuilder(from: QueueConfig = QueueConfig()) {
     /** See [QueueConfig.reshuffleEachLap]. */
     public var reshuffleEachLap: Boolean = from.reshuffleEachLap
 
+    /** See [QueueConfig.onItemFailure]. */
+    public var onItemFailure: QueueItemFailure = from.onItemFailure
+
     /** The [QueueConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): QueueConfig = QueueConfig(
         preloadNext = preloadNext,
         gapless = gapless,
         reshuffleEachLap = reshuffleEachLap,
+        onItemFailure = onItemFailure,
     )
 }

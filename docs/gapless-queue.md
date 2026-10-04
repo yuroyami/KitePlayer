@@ -26,6 +26,8 @@ Terms used on this page:
 public data class QueueConfig(
     val preloadNext: Duration = 5.seconds,
     val gapless: Boolean = true,
+    val reshuffleEachLap: Boolean = false,
+    val onItemFailure: QueueItemFailure = QueueItemFailure.Stop,
 )
 ```
 
@@ -34,6 +36,11 @@ public data class QueueConfig(
 - `gapless` turns the handoff on. False keeps the old path for every item: the device stops at
   the end of an item, and the next item opens from scratch. With `gapless` false the player
   preloads nothing.
+- `onItemFailure` says what happens when the next item cannot be opened at all, from its
+  preload or from scratch. `Stop` leaves the player in `Failed` on that item. `Skip` warns
+  `PlaybackWarning.QueueItemSkipped`, lists the item in `PlayerSnapshot.failedQueueItems` and
+  opens the item after it, in the direction the queue was going; it stops in `Failed` when the
+  play order runs out or every item has failed in a row (#487).
 
 `PlayerSnapshot.preloadedIndex` is the queue position of the next item once it is open and its
 queues fill in the background. It is null at all other times.

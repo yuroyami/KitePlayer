@@ -132,6 +132,12 @@ public data class PlayerSnapshot(
      */
     val queueOrder: List<Int> = emptyList(),
     /**
+     * Positions into [queue] of the items the queue skipped because they could not be opened, as
+     * [QueueItemFailure.Skip] does (#487). An item leaves the set once it opens, and an edit of the
+     * queue carries the set along with the items it moves.
+     */
+    val failedQueueItems: Set<Int> = emptySet(),
+    /**
      * True while the player means to make sound: while it plays, while it buffers, and while a
      * queue that was playing opens its next item. [status] says whether sound comes out now; this
      * says whether it will once the pipeline can supply it. A guard that pauses for a call or for

@@ -236,6 +236,13 @@ public data class QueueConfig(
      * at the end of an item, and the next item opens from scratch.
      */
     val gapless: Boolean = true,
+    /**
+     * With shuffle and [LoopMode.All] on, draw a fresh order each time the queue comes round
+     * instead of playing the first order again on every lap (#488). The new lap never starts with
+     * the item that ended the last one, and it comes from the shuffle's own random source, so a
+     * seeded shuffle stays reproducible. False keeps one order for every lap.
+     */
+    val reshuffleEachLap: Boolean = false,
 ) {
     init {
         require(!preloadNext.isNegative() && preloadNext.isFinite()) {

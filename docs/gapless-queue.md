@@ -8,7 +8,10 @@ Terms used on this page:
 
 - The **current item** is the queue item that plays now.
 - The **next item** is the item that `next()` would open. It follows the play order, so it
-  follows shuffle, and it wraps from the last item to the first under `LoopMode.All`.
+  follows shuffle, and it wraps from the last item to the first under `LoopMode.All`. With
+  `QueueConfig.reshuffleEachLap`, the wrap goes to the first item of a freshly drawn order
+  instead, which never begins with the item that ended the lap (#488). It is drawn once, when the
+  preload first asks, so the item preloaded is the item that plays.
 - The **ring** is the audio buffer between the engine and the audio device. It holds at least
   200 ms of sound.
 - A **feeder** is the engine worker that converts decoded audio and writes it into the ring.

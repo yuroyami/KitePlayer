@@ -293,6 +293,15 @@ internal class PlaybackCore(
     private var shuffleRandom: Random = Random.Default
     private var queueOrder: List<Int> = emptyList()
 
+    /**
+     * The order of the next lap, drawn once when the queue first looks past the end of this one
+     * with [QueueConfig.reshuffleEachLap] on, so the preload and the advance agree on what follows,
+     * and taken up when the queue moves forward from [lapEndIndex] to its first item (#488). Any
+     * other move, an edit or a new order drops it.
+     */
+    private var nextLapOrder: List<Int>? = null
+    private var lapEndIndex: Int = -1
+
     /** The chapter the last ChapterChanged named, as an index; MIN_VALUE forces the first emit. */
     private var lastChapterIndex: Int = Int.MIN_VALUE
 
@@ -1985,6 +1994,7 @@ internal class PlaybackCore(
                 // A saved shuffle continues where it was, instead of a fresh draw (#214). An order
                 // that is not a permutation of this queue falls back to one.
                 shuffleEnabled = true
+                nextLapOrder = null
                 if (command.order.sorted() == queueItems.indices.toList()) {
                     queueOrder = command.order
                 } else {
@@ -6348,7 +6358,9 @@ internal class PlaybackCore(
         if (loop == LoopMode.One) return
         if (queueItems.size <= 1) return
         val next = neighbourInOrder(1) ?: return
+        val from = queueIndex
         queueIndex = next
+        queueMoved(from)
         openCarriesPlay = true
         try {
             val primed = primedFor(next)
@@ -6868,7 +6880,9 @@ internal class PlaybackCore(
         // What an open resets for a new item, except the play intent, the status and the epoch,
         // which carry on with the device.
         media = next.item
+        val from = queueIndex
         queueIndex = next.index
+        queueMoved(from)
         lastChapterIndex = Int.MIN_VALUE
         markerCursorUs = NO_POSITION
         markerCursorEpoch = null
@@ -7214,10 +7228,35 @@ internal class PlaybackCore(
         val target = at + delta
         return when {
             target in queueOrder.indices -> queueOrder[target]
+            loop == LoopMode.All && delta == 1 && shuffleEnabled && config.queue.reshuffleEachLap && queueOrder.size > 1 ->
+                nextLap().first()
             loop == LoopMode.All ->
                 queueOrder[((target % queueOrder.size) + queueOrder.size) % queueOrder.size]
             else -> null
         }
+    }
+
+    /** The next lap's order, drawn now if it was not yet: never starting with the item ending this lap. */
+    private fun nextLap(): List<Int> {
+        nextLapOrder?.takeIf { lapEndIndex == queueIndex }?.let { return it }
+        val drawn = queueItems.indices.shuffled(shuffleRandom).toMutableList()
+        if (drawn.size > 1 && drawn[0] == queueIndex) {
+            val swap = shuffleRandom.nextInt(1, drawn.size)
+            drawn[0] = drawn[swap].also { drawn[swap] = drawn[0] }
+        }
+        lapEndIndex = queueIndex
+        nextLapOrder = drawn
+        return drawn
+    }
+
+    /**
+     * Called when the queue moved from [from] to [queueIndex]: a move forward off the end of the
+     * lap onto the first item of the drawn next lap takes that lap up, and any other drops it.
+     */
+    private fun queueMoved(from: Int) {
+        val lap = nextLapOrder ?: return
+        nextLapOrder = null
+        if (from == lapEndIndex && queueIndex == lap.first() && lap.size == queueItems.size) queueOrder = lap
     }
 
     /** Explicit queue movement, refused typed when there is nowhere to go. */
@@ -7239,7 +7278,9 @@ internal class PlaybackCore(
             return
         }
         val wasPlaying = playRequested
+        val from = queueIndex
         queueIndex = target
+        queueMoved(from)
         openCarriesPlay = wasPlaying
         try {
             val primed = primedFor(target)
@@ -7264,6 +7305,7 @@ internal class PlaybackCore(
      * else would interrupt what is on screen to obey a setting.
      */
     private fun rebuildQueueOrder() {
+        nextLapOrder = null
         queueOrder = when {
             queueItems.isEmpty() -> emptyList()
             !shuffleEnabled || queueIndex !in queueItems.indices -> queueItems.indices.toList()
@@ -7279,6 +7321,7 @@ internal class PlaybackCore(
      * would change the order of every track after it.
      */
     private fun remapQueueOrder(renumber: (Int) -> Int) {
+        nextLapOrder = null
         queueOrder = queueOrder.map(renumber)
     }
 
@@ -7314,6 +7357,8 @@ internal class PlaybackCore(
      * because that item is gone and something has to take its place.
      */
     private suspend fun applyQueueEdit(edit: QueueEdit, reply: CompletableDeferred<Unit>) {
+        // A lap drawn before the edit names positions the edit may move (#488).
+        nextLapOrder = null
         // The unwritten queue of one becomes a written one on its first edit.
         if (queueItems.isEmpty()) {
             queueItems = listOfNotNull(media)

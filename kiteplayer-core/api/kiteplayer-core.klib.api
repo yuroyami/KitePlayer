@@ -3353,16 +3353,19 @@ final class io.github.yuroyami.kiteplayer/Progress { // io.github.yuroyami.kitep
 }
 
 final class io.github.yuroyami.kiteplayer/QueueConfig { // io.github.yuroyami.kiteplayer/QueueConfig|null[0]
-    constructor <init>(kotlin.time/Duration = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/QueueConfig.<init>|<init>(kotlin.time.Duration;kotlin.Boolean){}[0]
+    constructor <init>(kotlin.time/Duration = ..., kotlin/Boolean = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/QueueConfig.<init>|<init>(kotlin.time.Duration;kotlin.Boolean;kotlin.Boolean){}[0]
 
     final val gapless // io.github.yuroyami.kiteplayer/QueueConfig.gapless|{}gapless[0]
         final fun <get-gapless>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/QueueConfig.gapless.<get-gapless>|<get-gapless>(){}[0]
     final val preloadNext // io.github.yuroyami.kiteplayer/QueueConfig.preloadNext|{}preloadNext[0]
         final fun <get-preloadNext>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/QueueConfig.preloadNext.<get-preloadNext>|<get-preloadNext>(){}[0]
+    final val reshuffleEachLap // io.github.yuroyami.kiteplayer/QueueConfig.reshuffleEachLap|{}reshuffleEachLap[0]
+        final fun <get-reshuffleEachLap>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/QueueConfig.reshuffleEachLap.<get-reshuffleEachLap>|<get-reshuffleEachLap>(){}[0]
 
     final fun component1(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/QueueConfig.component1|component1(){}[0]
     final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer/QueueConfig.component2|component2(){}[0]
-    final fun copy(kotlin.time/Duration = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/QueueConfig // io.github.yuroyami.kiteplayer/QueueConfig.copy|copy(kotlin.time.Duration;kotlin.Boolean){}[0]
+    final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/QueueConfig.component3|component3(){}[0]
+    final fun copy(kotlin.time/Duration = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/QueueConfig // io.github.yuroyami.kiteplayer/QueueConfig.copy|copy(kotlin.time.Duration;kotlin.Boolean;kotlin.Boolean){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/QueueConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/QueueConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/QueueConfig.toString|toString(){}[0]

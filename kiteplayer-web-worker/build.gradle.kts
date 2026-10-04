@@ -21,7 +21,13 @@ kotlin {
 
     sourceSets {
         wasmJsMain.dependencies {
-            implementation(project(":kiteplayer"))
+            // The worker reads every address through its own synchronous resolver, and a configured
+            // resolver always wins, so the automatic network transport that :kiteplayer brings to a
+            // page is never asked here. Linked, its registration keeps Ktor alive: a quarter of the
+            // binary, 169,962 bytes after gzip (#519). scripts/check-web-size.sh notices its return.
+            implementation(project(":kiteplayer")) {
+                exclude(group = "io.github.yuroyami", module = "kiteplayer-network")
+            }
         }
         wasmJsTest.dependencies {
             implementation(kotlin("test"))

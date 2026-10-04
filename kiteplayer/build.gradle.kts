@@ -141,8 +141,8 @@ kotlin {
  * distribution does not inherit a library's files, so they travel as
  * kiteplayer-wasm-js-<version>-web.zip for a consumer to unpack. The production build after
  * Binaryen, without its source map. The compiler's own output sits beside it in `kotlin/` and is
- * more than twice the size gzipped, 1.49 MiB against 0.66 MiB, which is what this zip shipped
- * until #519. scripts/check-web-size.sh measures what this zip holds.
+ * more than twice the size gzipped, 1.49 MiB against 0.66 MiB when #519 found the zip shipping
+ * it. scripts/check-web-size.sh measures what this zip holds.
  */
 val workerBinaryDir = project(":kiteplayer-web-worker").layout.buildDirectory
     .dir("compileSync/wasmJs/main/productionExecutable/optimized")

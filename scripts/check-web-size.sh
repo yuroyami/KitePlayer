@@ -13,10 +13,12 @@
 #
 # The codec budget was the size of the module that KiteFFmpeg 0.3.0 publishes, 1.42 MiB, which the
 # owner chose on #58. KiteFFmpeg 0.5.0 raised it to 1.46 MiB, because its module carries FFmpeg's
-# HLS reader so that a nested opener can play HLS and DASH in a browser. The worker budget is 1.25 MiB, the binary's 1.21 MiB when it first shipped
-# with a little room. Both are ratchets: a new KiteFFmpeg pin, or player code, that grows a module
-# past its budget fails here, and raising a budget is a decision made in the same commit, with both
-# numbers in its message.
+# HLS reader so that a nested opener can play HLS and DASH in a browser. The worker budget is
+# 0.70 MiB, the 0.66 MiB that the binary measured once its zip took Binaryen's optimised build, with
+# a little room. Until #519 the zip held the compiler's unoptimised output instead, 1.21 MiB when it
+# first shipped and 1.49 MiB by then, against a budget of 1.25 MiB. Both are ratchets: a new
+# KiteFFmpeg pin, or player code, that grows a module past its budget fails here, and raising a
+# budget is a decision made in the same commit, with both numbers in its message.
 #
 #   ./scripts/check-web-size.sh    # build, unpack, measure, compare: must PASS
 
@@ -27,8 +29,8 @@ cd "$ROOT"
 
 # 1.46 MiB.
 BUDGET_BYTES=1530921
-# 1.25 MiB.
-WORKER_BUDGET_BYTES=1310720
+# 0.70 MiB.
+WORKER_BUDGET_BYTES=734003
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...

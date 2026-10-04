@@ -320,8 +320,8 @@ the worker player.
 leave the page's thread free (#100). The worker draws on the canvas and sends its sound straight to
 the page's audio device, and it plays `http`, `https` and `blob` addresses. It loads a third module:
 unpack `kiteplayer-wasm-js-<version>-web.zip` beside `index.html` too, for
-`kiteplayer-web-worker.mjs` and the three files beside it. With gzip it is about 1.21 MiB to
-download, and CI holds it to 1.25 MiB. The worker player has the calls and flows of `KitePlayer`
+`kiteplayer-web-worker.mjs` and the three files beside it. With gzip it is about 0.66 MiB to
+download, and CI holds it to 0.70 MiB. The worker player has the calls and flows of `KitePlayer`
 with the same names, except those its KDoc lists, such as `captureFrame` and recording. A setter
 it refuses arrives on `events` as `CommandRefused` rather than throwing at the call. An item, or an
 external subtitle, with a reader of its own cannot cross to the worker; give it an address. The

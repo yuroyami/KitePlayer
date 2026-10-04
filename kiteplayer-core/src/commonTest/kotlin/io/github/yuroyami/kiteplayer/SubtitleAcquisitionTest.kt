@@ -11,6 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -63,13 +64,23 @@ class SubtitleAcquisitionTest {
         }
         harness.run(100.milliseconds)
         adding.cancel()
+        val asked = harness.clock.nanos().nanoseconds
         val stopping = async { harness.core.stop() }
-        val closing = async { harness.core.closeAndAwait() }
+        val closing = async {
+            harness.core.closeAndAwait()
+            harness.clock.nanos().nanoseconds
+        }
         harness.run(1.seconds)
         assertTrue(stopping.isCompleted, "stop waited for the subtitle reader")
-        assertTrue(closing.isCompleted, "close waited for the subtitle reader")
         assertTrue(factoryCancelled, "the reader's open was never cancelled")
+        // A close is answered from a thread of its own, because its last step closes the dispatchers
+        // the engine runs on, so it may still be on its way after a second of virtual time and is
+        // awaited (#521). With the device stopped nothing moves the virtual clock while it comes, so
+        // the time it reads is when the engine let it go: inside the second, where a close held by
+        // the reader would read the 30 second stall limit.
         harness.stopDevice()
+        val closedAt = closing.await()
+        assertTrue(closedAt - asked <= 1.seconds, "close waited ${closedAt - asked} for the subtitle reader")
     }
 
     @Test

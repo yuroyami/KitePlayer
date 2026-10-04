@@ -66,8 +66,8 @@ class SubtitleCharsetTest {
     @Test
     fun `the same Russian words in KOI8-R are not mistaken for windows-1251`() {
         // The hard pair. Both are Cyrillic and both read these bytes as real Cyrillic letters, so
-        // script says nothing; they put the alphabet at different byte values, which is what the
-        // commonest-letters test actually measures.
+        // script says nothing; they put the alphabet at different byte values, and the wrong one
+        // reads as rare letters and as capitals in the middle of words.
         val bytes = byteArrayOf(-16, -46, -55, -41, -59, -44, 32, -51, -55, -46, 32, -53, -63, -53, 32, -44, -41, -49, -55, 32, -60, -59, -52, -63, 32, -45, -59, -57, -49, -60, -50, -47, 10, -19, -39, 32, -41, -51, -59, -45, -44, -59, 32, -45, -51, -49, -44, -46, -55, -51, 32, -36, -44, -49, -44, 32, -58, -55, -52, -40, -51, 10, -17, -50, 32, -49, -34, -59, -50, -40, 32, -55, -50, -44, -59, -46, -59, -45, -50, -39, -54, 32, -55, 32, -53, -46, -63, -45, -55, -41, -39, -54)
         val decoded = decodeSubtitleBytes(bytes)
         assertEquals("KOI8-R", decoded.charset)
@@ -122,12 +122,15 @@ class SubtitleCharsetTest {
     }
 
     @Test
-    fun `an undecidable file falls back and says so instead of throwing`() {
-        // High bytes that no charset's common letters claim, so nothing clears the bar.
+    fun anUndecidableFileIsShownUnsureInsteadOfThrowing() {
+        // High bytes that read as no language's text in any table, and not as an East Asian file
+        // either. The likeliest reading is still shown, and says it is a guess. It is not
+        // windows-1252, which has no character for 0x81.
         val bytes = byteArrayOf(-128, -127, -126, 0x20, -125, -124)
         val decoded = decodeSubtitleBytes(bytes)
-        assertFalse(decoded.confident, "a fallback must not claim confidence")
-        assertEquals("windows-1252", decoded.charset)
+        assertFalse(decoded.confident, "a guess must not claim confidence")
+        assertNotEquals("windows-1252", decoded.charset)
+        assertFalse('\uFFFD' in decoded.text, decoded.text)
         assertNull(decoded.unsupportedGuess)
     }
 
@@ -324,28 +327,247 @@ class SubtitleCharsetTest {
     }
 
     @Test
-    fun aBalticFileIsReadAsWindows1257OnlyWhenItsLanguageSaysSo() {
-        // windows-1257 puts the Baltic letters on the bytes of Western accents, so guessing it from
-        // the bytes alone would read Portuguese and Albanian as Lithuanian (#515). Without a Baltic
-        // language the file keeps the answer it had, a windows-1252 reading with a warning.
-        val unhinted = decodeSubtitleBytes(LITHUANIAN.bytes)
-        assertEquals("windows-1252", unhinted.charset)
-        assertFalse(unhinted.confident)
-        for (hint in listOf("lt", "lit", "lt-LT")) {
+    fun aBalticFileIsReadAsWindows1257WithOrWithoutItsLanguage() {
+        // windows-1257 puts the Baltic letters on the bytes of Western accents, so #515 let only a
+        // Baltic language choose it, for fear of reading Portuguese and Albanian as Lithuanian. The
+        // letters' own frequencies tell them apart (#518): Lithuanian is mostly ė, š and ž and never
+        // Danish ø, and Portuguese is mostly ã, ç and é.
+        for (hint in listOf(null, "lt", "lit", "lt-LT")) {
             val decoded = decodeSubtitleBytes(LITHUANIAN.bytes, languageHint = hint)
             assertEquals("windows-1257", decoded.charset, hint)
             assertEquals(LITHUANIAN.text, decoded.text, hint)
             assertTrue(decoded.confident, hint)
         }
-        val latvian = decodeSubtitleBytes(LATVIAN.bytes, languageHint = "lv")
-        assertEquals("windows-1257", latvian.charset)
-        assertEquals(LATVIAN.text, latvian.text)
+        for (hint in listOf(null, "lv")) {
+            val latvian = decodeSubtitleBytes(LATVIAN.bytes, languageHint = hint)
+            assertEquals("windows-1257", latvian.charset, hint)
+            assertEquals(LATVIAN.text, latvian.text, hint)
+            assertTrue(latvian.confident, hint)
+        }
+        val portuguese = decodeSubtitleBytes(PORTUGUESE.bytes)
+        assertEquals("windows-1252", portuguese.charset)
+        assertEquals(PORTUGUESE.text, portuguese.text)
+        assertTrue(portuguese.confident)
+    }
+
+    @Test
+    fun centralEuropeanAndTurkishFilesReadInTheirOwnTablesWithOrWithoutTheirLanguage() {
+        // Each read as windows-1252 with a warning, even given its language (#518): Turkish and
+        // Hungarian because two tables read them alike and the guess called that a tie, Polish and
+        // Romanian because windows-1250 was scored on Czech letters alone.
+        val files = listOf(
+            Triple("tr", "windows-1254", TURKISH),
+            Triple("hu", "windows-1250", HUNGARIAN),
+            Triple("pl", "windows-1250", POLISH),
+            Triple("ro", "windows-1250", ROMANIAN),
+            Triple("pl", "ISO-8859-2", POLISH_ISO),
+        )
+        for ((language, encoding, fixture) in files) {
+            for (hint in listOf(null, language)) {
+                val decoded = decodeSubtitleBytes(fixture.bytes, languageHint = hint)
+                assertEquals(encoding, decoded.charset, "the $language file, hint $hint")
+                assertEquals(fixture.text, decoded.text, "the $language file, hint $hint")
+                assertTrue(decoded.confident, "the $language file, hint $hint")
+            }
+        }
+    }
+
+    @Test
+    fun tablesThatReadAFileAlikeAreOneAnswer() {
+        // windows-1250 and ISO-8859-2 put every Hungarian letter on the same byte, so they read this
+        // file alike. That is one answer, named for the first of the two, not a tie that leaves the
+        // file unsure (#518).
+        assertEquals(
+            SubtitleCharset.Windows1250.decode(HUNGARIAN.bytes),
+            SubtitleCharset.Iso88592.decode(HUNGARIAN.bytes),
+            "the premise: both tables read the file alike",
+        )
+        val decoded = decodeSubtitleBytes(HUNGARIAN.bytes)
+        assertEquals("windows-1250", decoded.charset)
+        assertTrue(decoded.confident)
+        // Where they differ, as on Polish ą and ś, the file is read by the one it is in.
+        assertNotEquals(
+            SubtitleCharset.Windows1250.decode(POLISH_ISO.bytes),
+            SubtitleCharset.Iso88592.decode(POLISH_ISO.bytes),
+        )
+        assertEquals("ISO-8859-2", decodeSubtitleBytes(POLISH_ISO.bytes).charset)
+    }
+
+    @Test
+    fun turkishWithCurlyQuotesIsReadAsWindows1254() {
+        // ISO-8859-9 reads every Turkish letter as windows-1254 does, and puts a control character
+        // where windows-1254 has the curly quotes, which text never holds (#518).
+        assertTrue(SubtitleCharset.Iso88599.cannotBeText(0x93))
+        assertTrue(SubtitleCharset.Iso88599.cannotBeText(0x94))
+        assertFalse(SubtitleCharset.Windows1254.cannotBeText(0x93))
+        assertFalse(SubtitleCharset.Windows1254.cannotBeText(0x94))
+        assertTrue(SubtitleCharset.Windows1254.cannotBeText(0x81), "a byte windows-1254 does not define")
+        assertFalse(SubtitleCharset.Iso88599.cannotBeText(0xF0), "a letter")
+        assertTrue(0x93.toByte() in TURKISH.bytes && 0x94.toByte() in TURKISH.bytes, "the premise: the file has curly quotes")
+        for (hint in listOf(null, "tr")) {
+            val decoded = decodeSubtitleBytes(TURKISH.bytes, languageHint = hint)
+            assertEquals("windows-1254", decoded.charset, hint)
+            assertEquals(TURKISH.text, decoded.text, hint)
+            assertTrue(decoded.confident, hint)
+        }
+    }
+
+    @Test
+    fun aShortThaiLineIsReadAsWindows874WithoutItsLanguage() {
+        // One line of Thai had too few letters for the old guess to be sure of it (#518).
+        for (hint in listOf(null, "th")) {
+            val decoded = decodeSubtitleBytes(SHORT_THAI.bytes, languageHint = hint)
+            assertEquals("windows-874", decoded.charset, hint)
+            assertEquals(SHORT_THAI.text, decoded.text, hint)
+            assertTrue(decoded.confident, hint)
+        }
+    }
+
+    @Test
+    fun bytesThatCannotTellTwoLanguagesApartAreShownWesternUnlessTheLanguageSaysOtherwise() {
+        // Lithuanian ė is Albanian ë in windows-1252, and a line whose only accent is ė reads as
+        // either. Unsure, the guess shows what such a file is shown as everywhere else, and says it
+        // guessed; a track that says it is Lithuanian is shown as Lithuanian, still unsure.
+        val line = "1\n00:00:01,000 --> 00:00:01,900\n".encodeToByteArray() + hex("54eb74eb206e75eb6a6f206e616d6f2e")
+        val unhinted = decodeSubtitleBytes(line)
+        assertEquals("windows-1252", unhinted.charset)
+        assertTrue(unhinted.text.endsWith("T\u00EBt\u00EB nu\u00EBjo namo."), unhinted.text)
+        assertFalse(unhinted.confident)
+        val hinted = decodeSubtitleBytes(line, languageHint = "lt")
+        assertEquals("windows-1257", hinted.charset)
+        assertTrue(hinted.text.endsWith("T\u0117t\u0117 nu\u0117jo namo."), hinted.text)
+        assertFalse(hinted.confident)
+    }
+
+    @Test
+    fun aShortWesternLineThatAnotherTableReadsNearlyAsWellIsShownWestern() {
+        // windows-1257 has Č where windows-1252 has Ç, and this line reads a little likelier as
+        // Lithuanian than as French. Too close to be sure either way, the guess shows the reading
+        // such a file gets everywhere else, and says it guessed.
+        val text = "1\n00:00:01,000 --> 00:00:01,900\n\u00C7a va mieux."
+        val decoded = decodeSubtitleBytes(latin1(text))
+        assertEquals("windows-1252", decoded.charset)
+        assertEquals(text, decoded.text)
+        assertFalse(decoded.confident)
+    }
+
+    @Test
+    fun aShortLineThatReadsAsTextIsNotOfferedToTheEastAsianTables() {
+        // A short Hebrew line has too few letters to be sure of, and every word of it is a run of
+        // high bytes, which is the byte-pair shape of the East Asian encodings. It still reads as
+        // Hebrew, so no East Asian table is offered it, not even one that would read anything.
+        val text = "1\n00:00:01,000 --> 00:00:01,900\n" +
+            "\u05D4\u05DE\u05E9\u05E4\u05D7\u05D4 \u05E9\u05DC\u05E0\u05D5 \u05D2\u05D3\u05D5\u05DC\u05D4 \u05DE\u05D0\u05D5\u05D3"
+        val bytes = "1\n00:00:01,000 --> 00:00:01,900\n".encodeToByteArray() + hex("e4eef9f4e7e420f9ecf0e520e2e3e5ece420eee0e5e3")
+        val decoded = decodeSubtitleBytes(bytes) { _, _ -> "\u4E00\u4E8C\u4E09" }
+        assertEquals("windows-1255", decoded.charset)
+        assertEquals(text, decoded.text)
+        assertFalse(decoded.confident)
+        assertNull(decoded.unsupportedGuess)
+        assertNull(decodeSubtitleBytes(bytes).unsupportedGuess)
+    }
+
+    @Test
+    fun aThaiLineThatAChineseTableReadsCleanlyIsStillThai() {
+        // One long Thai word of rare letters reads too unlikely to be sure of as Thai, and GBK reads
+        // every byte pair of it as a Chinese character. Those characters are rarer in Chinese than
+        // the Thai letters are in Thai, so the line stays Thai, unsure.
+        val thai = "ศาสตราจารย์ศึกษา" +
+            "เศรษฐศาสตร์พิเศษ"
+        val chinese = "纫实靡ㄒ寐烊帧梢嗳蒙叭沂得炀脏壬"
+        val bytes = CUE + hex("c8d2cab5c3d2a8d2c3c2ecc8d6a1c9d2e0c8c3c9b0c8d2cab5c3ecbed4e0c8c9")
+        val asked = mutableListOf<String>()
+        val decoded = decodeSubtitleBytes(bytes) { _, name ->
+            asked += name
+            if (name == "GBK") CUE.decodeToString() + chinese else null
+        }
+        assertEquals("GBK", asked.first(), "the bytes have the shape of GBK first")
+        assertEquals("windows-874", decoded.charset)
+        assertTrue(decoded.text.endsWith(thai), decoded.text)
+        assertFalse(decoded.confident)
+        assertNull(decoded.unsupportedGuess)
+    }
+
+    @Test
+    fun aJapaneseLineWhoseCharactersEndInAsciiBytesIsStillJapanese() {
+        // Two of these Shift_JIS characters end in a byte that is an ASCII letter on its own. Read
+        // as Arabic, those letters cost nothing, so they are charged as ASCII letters cost in
+        // subtitles, and without that charge the line read as Arabic.
+        val japanese = "\"前代未聞の嵐雲が\""
+        val bytes = CUE + hex("22914f91e396a295b782cc9792895f82aa22")
+        val decoded = decodeSubtitleBytes(bytes) { _, name ->
+            if (name == "Shift_JIS") CUE.decodeToString() + japanese else null
+        }
+        assertEquals("Shift_JIS", decoded.charset)
+        assertTrue(decoded.text.endsWith(japanese), decoded.text)
+        assertTrue(decoded.confident)
+    }
+
+    @Test
+    fun aWordReadThroughTheWrongTableOfItsScriptHasCapitalsAfterSmallLetters() {
+        // windows-1251 and KOI8-R put capital and small Cyrillic letters on opposite halves, and
+        // KOI8-R reads windows-1253's Greek bytes as Cyrillic the same way round. Read through the
+        // wrong table, a word comes out as a small letter followed by capitals, which real text
+        // almost never has. Counted letter by letter alone, each line read likelier as KOI8-R.
+        val cases = listOf(
+            Triple("d5eef0eef8ee2e", "windows-1251", "\u0425\u043E\u0440\u043E\u0448\u043E."),
+            Triple(
+                "c5f5f7e1f1e9f3f4fe2e",
+                "windows-1253",
+                "\u0395\u03C5\u03C7\u03B1\u03C1\u03B9\u03C3\u03C4\u03CE.",
+            ),
+        )
+        for ((bytes, charset, text) in cases) {
+            val decoded = decodeSubtitleBytes(CUE + hex(bytes))
+            assertEquals(charset, decoded.charset, text)
+            assertTrue(decoded.text.endsWith(text), decoded.text)
+            assertTrue(decoded.confident, text)
+        }
+    }
+
+    @Test
+    fun aLineInCapitalsIsReadAsTheLettersItSpells() {
+        // A capital counts as its small letter, so a sign in capitals reads as the words it spells.
+        // Counted as they are, its capitals are rare, and KOI8-R, which reads them as small
+        // letters, won. Only a capital straight after a small letter is a sign of the wrong table:
+        // a capital after another, or after a space, is how a capital is written.
+        val text = "\u0412\u041D\u0418\u041C\u0410\u041D\u0418\u0415! \u041F\u041E\u0416\u0410\u0420!"
+        val decoded = decodeSubtitleBytes(CUE + hex("c2cdc8ccc0cdc8c52120cfcec6c0d021"))
+        assertEquals("windows-1251", decoded.charset)
+        assertTrue(decoded.text.endsWith(text), decoded.text)
+        assertTrue(decoded.confident)
+    }
+
+    @Test
+    fun anAnswerSeveralTablesShareIsNamedForTheLanguageThenForWindows1252() {
+        // Every Latin table reads á and é alike, and so does windows-1254 with ç and ü, so these
+        // lines show the same text in several tables. The name is what the warning and the override
+        // offer: the table the track's language names, then windows-1252, before the one the
+        // letters happen to favour.
+        val spanish = CUE + latin1("Mam\u00E1, \u00E9l no es mi amigo.")
+        assertEquals("windows-1252", decodeSubtitleBytes(spanish).charset)
+        val turkish = CUE + hex("c76f6b2067fc7a656c206269722067fc6e2e")
+        assertEquals("windows-1252", decodeSubtitleBytes(turkish).charset)
+        val named = decodeSubtitleBytes(turkish, languageHint = "tr")
+        assertEquals("windows-1254", named.charset)
+        assertTrue(named.text.endsWith("\u00C7ok g\u00FCzel bir g\u00FCn."), named.text)
+    }
+
+    @Test
+    fun aWordTooShortToReadAsTextIsStillShownInItsLikeliestTable() {
+        // "ใช่", yes in Thai, is three letters with a tone mark, too few to read as convincing
+        // text in any table. It is not East Asian, so the likeliest table is still the best
+        // answer, shown unsure, rather than windows-1252, which shows it as three Latin letters.
+        for (hint in listOf(null, "th")) {
+            val decoded = decodeSubtitleBytes(CUE + hex("e3aae8"), languageHint = hint)
+            assertEquals("windows-874", decoded.charset, hint)
+            assertTrue(decoded.text.endsWith("\u0E43\u0E0A\u0E48"), decoded.text)
+            assertFalse(decoded.confident, hint)
+        }
     }
 
     @Test
     fun aNamedEncodingIsReadAsToldWithNoGuess() {
-        // The guess reads this Polish file as windows-1252, because its letters are Western ones too.
-        assertEquals("windows-1252", decodeSubtitleBytes(POLISH.bytes).charset)
         for (label in listOf("windows-1250", "cp1250", " WINDOWS-1250 ", "x-cp1250")) {
             val decoded = decodeSubtitleBytesAs(POLISH.bytes, label)
             assertEquals("windows-1250", decoded?.charset, label)
@@ -398,9 +620,7 @@ class SubtitleCharsetTest {
         // A UTF-8 file stays UTF-8, as it does in VLC and mpv with their fallback set.
         assertEquals("UTF-8", decodeSubtitleBytes(POLISH.text.encodeToByteArray(), fallback = "windows-1250").charset)
         // A fallback with no table to read it leaves the file to the guess.
-        val guessed = decodeSubtitleBytes(POLISH.bytes, fallback = "GBK")
-        assertEquals("windows-1252", guessed.charset)
-        assertFalse(guessed.confident)
+        assertEquals(decodeSubtitleBytes(POLISH.bytes), decodeSubtitleBytes(POLISH.bytes, fallback = "GBK"))
     }
 
     @Test
@@ -424,6 +644,9 @@ class SubtitleCharsetTest {
         /** The tables whose letters are not Latin ones. */
         val OTHER_SCRIPTS = setOf("windows-1251", "windows-1253", "windows-1255", "windows-1256", "KOI8-R")
 
+        /** A cue's number and times, which hold no byte above ASCII. */
+        val CUE = "1\n00:00:01,000 --> 00:00:01,900\n".encodeToByteArray()
+
         fun hex(text: String): ByteArray =
             ByteArray(text.length / 2) { text.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
 
@@ -431,8 +654,8 @@ class SubtitleCharsetTest {
 
         /**
          * Real dialogue in each table #515 added, and short Polish in windows-1250, which the guess
-         * reads as windows-1252. Each text is what Python's codec of that name decodes the bytes
-         * to, and windows-1258 keeps Vietnamese tones as combining marks after their vowels.
+         * read as windows-1252 until #518. Each text is what Python's codec of that name decodes the
+         * bytes to, and windows-1258 keeps Vietnamese tones as combining marks after their vowels.
          */
         val POLISH = Fixture(
             hex(
@@ -494,6 +717,81 @@ class SubtitleCharsetTest {
             "1\n00:00:01,000 --> 00:00:01,900\nEs nezinu, kurp aizg\u0101ja mans br\u0101lis.\n\n2\n00:00:02,000 --> 00:00:02,900\nR\u012Bt m\u0113s ar b\u0113rniem brauksim uz j\u016Bru.\n\n3\n00:00:03,000 --> 00:00:03,900\nVi\u0146\u0161 teica, ka kafejn\u012Bca jau bija sl\u0113gta.\n\n4\n00:00:04,000 --> 00:00:04,900\nTagad ir par v\u0113lu to main\u012Bt.\n\n5\n00:00:05,000 --> 00:00:05,900\nVai tu mani dzirdi? Atbildi, pirms nav par v\u0113lu.\n\n",
         )
 
+
+        /**
+         * Real dialogue for #518, each in the table its language was written in: Turkish in
+         * windows-1254 with a pair of curly quotes, Hungarian and Romanian in windows-1250, one line
+         * of Thai in windows-874, Polish in ISO-8859-2, and Portuguese in windows-1252.
+         */
+        val TURKISH = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300a427567fc6e2069fe65206769746d6564696d" +
+                "2c20e7fc6e6bfc2068617374617964fd6d2e0a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30322c3930" +
+                "300a4b61726465fe696d2093796172fd6e2067656c69796f72756d94206465646920616d612067656c6d6564692e0a0a330a" +
+                "30303a30303a30332c303030202d2d3e2030303a30303a30332c3930300ade696d6469206e6520796170616361f0fd6dfd7a" +
+                "fd2062696c6d69796f72756d2e0a0a340a30303a30303a30342c303030202d2d3e2030303a30303a30342c3930300a49f064" +
+                "fd72276120676964656e206f746f62fc732073616174206b61e77461206b616c6bfd796f723f0a0a350a30303a30303a3035" +
+                "2c303030202d2d3e2030303a30303a30352c3930300add7374616e62756c276461206861766120627567fc6e20e76f6b2067" +
+                "fc7a656c64692e0a0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\nBug\u00FCn i\u015Fe gitmedim, \u00E7\u00FCnk\u00FC hastayd\u0131m.\n\n2\n00:00:02,000 --> 00:00:02,900\nKarde\u015Fim \u201Cyar\u0131n geliyorum\u201D dedi ama gelmedi.\n\n3\n00:00:03,000 --> 00:00:03,900\n\u015Eimdi ne yapaca\u011F\u0131m\u0131z\u0131 bilmiyorum.\n\n4\n00:00:04,000 --> 00:00:04,900\nI\u011Fd\u0131r'a giden otob\u00FCs saat ka\u00E7ta kalk\u0131yor?\n\n5\n00:00:05,000 --> 00:00:05,900\n\u0130stanbul'da hava bug\u00FCn \u00E7ok g\u00FCzeldi.\n\n",
+        )
+        val HUNGARIAN = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300a4e656d207475646f6d2c20686f76e1206d65" +
+                "6e7420612062e17479e16d2e0a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30322c3930300a486f6c6e" +
+                "617020612067796572656b656b6b656c20656779fc7474206d656779fc6e6b20612074f3686f7a2e0a0a330a30303a30303a" +
+                "30332c303030202d2d3e2030303a30303a30332c3930300a417a74206d6f6e6474612c20686f67792061206dfb736f72206d" +
+                "e1722076e967657420e972742e0a0a340a30303a30303a30342c303030202d2d3e2030303a30303a30342c3930300a4d6f73" +
+                "74206de1722074fa6c206be973f520657a656e2076e16c746f7a7461746e692e0a0a350a30303a30303a30352c303030202d" +
+                "2d3e2030303a30303a30352c3930300a48616c6c61737a20656e67656d3f2056e16c61737a6f6c6a2c206d69656cf5747420" +
+                "74fa6c206be973f5206c65737a2e0a0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\nNem tudom, hov\u00E1 ment a b\u00E1ty\u00E1m.\n\n2\n00:00:02,000 --> 00:00:02,900\nHolnap a gyerekekkel egy\u00FCtt megy\u00FCnk a t\u00F3hoz.\n\n3\n00:00:03,000 --> 00:00:03,900\nAzt mondta, hogy a m\u0171sor m\u00E1r v\u00E9get \u00E9rt.\n\n4\n00:00:04,000 --> 00:00:04,900\nMost m\u00E1r t\u00FAl k\u00E9s\u0151 ezen v\u00E1ltoztatni.\n\n5\n00:00:05,000 --> 00:00:05,900\nHallasz engem? V\u00E1laszolj, miel\u0151tt t\u00FAl k\u00E9s\u0151 lesz.\n\n",
+        )
+        val ROMANIAN = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300a4e7520ba74697520756e6465206120706c65" +
+                "6361742066726174656c65206d65752e0a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30322c3930300a" +
+                "4de2696e65206d657267656d206c61206d61726520637520636f706969692e0a0a330a30303a30303a30332c303030202d2d" +
+                "3e2030303a30303a30332c3930300a4120737075732063e320636166656e65617561206572612064656a6120ee6e63686973" +
+                "e32e0a0a340a30303a30303a30342c303030202d2d3e2030303a30303a30342c3930300a4163756d20657374652070726561" +
+                "2074e2727a69752073e320736368696d62e36d20636576612e0a0a350a30303a30303a30352c303030202d2d3e2030303a30" +
+                "303a30352c3930300a4de32061757a693f2052e37370756e64652d6d692c20746520726f672c20ba6920fe696e65206d696e" +
+                "746520617374612e0a0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\nNu \u015Ftiu unde a plecat fratele meu.\n\n2\n00:00:02,000 --> 00:00:02,900\nM\u00E2ine mergem la mare cu copiii.\n\n3\n00:00:03,000 --> 00:00:03,900\nA spus c\u0103 cafeneaua era deja \u00EEnchis\u0103.\n\n4\n00:00:04,000 --> 00:00:04,900\nAcum este prea t\u00E2rziu s\u0103 schimb\u0103m ceva.\n\n5\n00:00:05,000 --> 00:00:05,900\nM\u0103 auzi? R\u0103spunde-mi, te rog, \u015Fi \u0163ine minte asta.\n\n",
+        )
+        val SHORT_THAI = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300aa9d1b9e4c1e8c3d9e9c7e8d2e0a2d2e4bbe4" +
+                "cbb90a0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\n\u0E09\u0E31\u0E19\u0E44\u0E21\u0E48\u0E23\u0E39\u0E49\u0E27\u0E48\u0E32\u0E40\u0E02\u0E32\u0E44\u0E1B\u0E44\u0E2B\u0E19\n\n",
+        )
+        val POLISH_ISO = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300a447a6965f120646f6272792c20637a79206d" +
+                "f367b36279b6206d6920706f6df3633f0a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30322c3930300a" +
+                "4a61b620777a69b1b3207a6520736f62b1206b7369b1bf6bea206920bc6c65207369ea20637a75b32e0a0a330a30303a3030" +
+                "3a30332c303030202d2d3e2030303a30303a30332c3930300a50726f737aea206f206369737aea2c207a6172617a207a6163" +
+                "7a796e616d792e0a0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\nDzie\u0144 dobry, czy m\u00F3g\u0142by\u015B mi pom\u00F3c?\n\n2\n00:00:02,000 --> 00:00:02,900\nJa\u015B wzi\u0105\u0142 ze sob\u0105 ksi\u0105\u017Ck\u0119 i \u017Ale si\u0119 czu\u0142.\n\n3\n00:00:03,000 --> 00:00:03,900\nProsz\u0119 o cisz\u0119, zaraz zaczynamy.\n\n",
+        )
+        val PORTUGUESE = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300a4ee36f207365692070617261206f6e646520" +
+                "6f206d65752069726de36f20666f692e0a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30322c3930300a" +
+                "416d616e68e32076616d6f7320e020707261696120636f6d20617320637269616ee761732e0a0a330a30303a30303a30332c" +
+                "303030202d2d3e2030303a30303a30332c3930300a456c6520646973736520717565206f20636166e9206ae1206573746176" +
+                "61206665636861646f2e0a0a340a30303a30303a30342c303030202d2d3e2030303a30303a30342c3930300a41676f726120" +
+                "e92074617264652064656d6169732070617261206d75646172206973736f2e0a0a350a30303a30303a30352c303030202d2d" +
+                "3e2030303a30303a30352c3930300a566f63ea206d65206f7576653f20526573706f6e646120616e74657320717565207365" +
+                "6a612074617264652e0a0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\nN\u00E3o sei para onde o meu irm\u00E3o foi.\n\n2\n00:00:02,000 --> 00:00:02,900\nAmanh\u00E3 vamos \u00E0 praia com as crian\u00E7as.\n\n3\n00:00:03,000 --> 00:00:03,900\nEle disse que o caf\u00E9 j\u00E1 estava fechado.\n\n4\n00:00:04,000 --> 00:00:04,900\nAgora \u00E9 tarde demais para mudar isso.\n\n5\n00:00:05,000 --> 00:00:05,900\nVoc\u00EA me ouve? Responda antes que seja tarde.\n\n",
+        )
         /** A SubRip file of one cue per line, each line the hex of its text in the file's encoding. */
         fun subRip(vararg lines: String): ByteArray {
             var file = ByteArray(0)

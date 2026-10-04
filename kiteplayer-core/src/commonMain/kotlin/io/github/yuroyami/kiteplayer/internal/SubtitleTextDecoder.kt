@@ -18,16 +18,41 @@ internal data class DecodedSubtitleText(
     val unsupportedGuess: String? = null,
 )
 
-/** A winner must read this much of the high bytes as its own script. */
-private const val MIN_SCORE = 0.75
+/**
+ * How likely a reading has to be to read as real text: the average, over its high bytes, of the
+ * natural logarithm of each character's share in the language it reads best as. On held-out
+ * subtitle lines, text read through its own table averages about -2 at any length, and 99 samples
+ * in 100 of five lines stay above -3.7, while a multi-byte East Asian file read one byte at a time
+ * falls under -4 in 9 files in 10 of two lines and in all but one in 500 of five; a line or two of
+ * it can still read as Arabic or Thai (#520). Below this, no single-byte reading is certain, and the
+ * file is asked whether it is East Asian.
+ */
+private const val MIN_LIKELIHOOD = -4.0
 
+/**
+ * How much likelier than every reading that shows different text the best one has to be to count
+ * as certain, as a natural logarithm: a factor of about a thousand. It trades confident mistakes
+ * against unsure answers. On the held-out lines, 6 left a third more confident mistakes, and 8 left
+ * three more samples in a hundred unsure.
+ */
+private const val MIN_MARGIN = 7.0
 
+/**
+ * What a track's declared language is worth, as a natural logarithm: the charsets that do not list
+ * it pay this, a factor of about twenty thousand. On the held-out lines, half of it still left a
+ * confident mistake among files with their language given, and twice it changed almost nothing.
+ */
+private const val HINT_WEIGHT = 10.0
 
-/** Real text is largely its own commonest letters; below this share nothing is being read right. */
-private const val MIN_COMMON_SHARE = 0.25
-
-/** How far clear of the runner-up on frequency a winner has to be. */
-private const val MIN_COMMON_GAP = 0.1
+/**
+ * What an ASCII byte from 0x40 to 0x7E is worth in single-byte text, as a natural logarithm: about
+ * one in a thousand. Shift_JIS, GBK and Big5 put many of their second bytes there. A single-byte
+ * reading takes those bytes as ASCII, which its likelihood leaves out, so to be weighed against an
+ * East Asian reading, which counts them, it is charged this for each. In subtitles those capitals
+ * and symbols cost -7 in French, German, Polish and Vietnamese and down to -11.7 in Hebrew; the
+ * cheapest is charged, which favours the single-byte reading.
+ */
+private const val ASCII_SECOND_BYTE_LIKELIHOOD = -7.0
 
 /** Share of high bytes a multi-byte encoding puts into lead/trail pairs. */
 private const val MIN_PAIRED_SHARE = 0.8
@@ -50,41 +75,70 @@ private const val EUC_KR = "EUC-KR"
 /** The order the other multi-byte readings are tried in when the likeliest one does not read. */
 private val EAST_ASIAN_ORDER = listOf(GBK, BIG5, EUC_KR, EUC_JP, SHIFT_JIS)
 
-private class CharsetScore(
-    val charset: SubtitleCharset,
-    /** Share of high bytes that land in this charset's own script. */
-    val inScript: Double,
-    /** Share of high bytes that are this charset's commonest letters. See SubtitleCharset.common. */
-    val common: Double,
-)
+/**
+ * The high bytes of a file, counted once for every charset to read them: how often each occurs
+ * where no ASCII letter touches it, at an even index of [counts], and where one does on either
+ * side, at the odd index after it, both from the byte less 0x80 times two.
+ */
+private class HighBytes(private val bytes: ByteArray) {
+    val counts = IntArray(0x100)
+    var total = 0
+        private set
 
-private fun SubtitleCharset.scoreAgainst(
-    bytes: ByteArray,
-    highBytes: Int,
-    languageHint: String?,
-): CharsetScore {
-    var inScript = 0
-    var commonHits = 0
-    val latin = script == Script.Latin
-    for (i in bytes.indices) {
-        val b = bytes[i].toInt() and 0xFF
-        if (b < 0x80) continue
-        // A letter of another script is never written touching a Latin one, and an accented Latin
-        // letter nearly always is, as in "così". Counted, Italian read as Hebrew and Dutch as Greek,
-        // each with certainty, because their accents land on those tables' commonest letters (#516).
-        if (!latin && (bytes.isAsciiLetterAt(i - 1) || bytes.isAsciiLetterAt(i + 1))) continue
-        if (isCommon(b)) commonHits++
-        if (!isInScript(b)) continue
-        inScript++
+    init {
+        for (i in bytes.indices) {
+            val b = bytes[i].toInt() and 0xFF
+            if (b < 0x80) continue
+            val touching = bytes.isAsciiLetterAt(i - 1) || bytes.isAsciiLetterAt(i + 1)
+            counts[(b - 0x80) * 2 + if (touching) 1 else 0]++
+            total++
+        }
     }
-    // The hint is worth a hair, enough to order two otherwise identical scores and never enough to
-    // promote a charset the bytes argued against.
-    val hint = if (languageHint in languages) 0.001 else 0.0
-    return CharsetScore(
-        charset = this,
-        inScript = inScript.toDouble() / highBytes + hint,
-        common = commonHits.toDouble() / highBytes,
-    )
+
+    /** The high byte values the file holds, ascending. */
+    val present: List<Int> = (0x80..0xFF).filter { counts[(it - 0x80) * 2] + counts[(it - 0x80) * 2 + 1] > 0 }
+
+    /**
+     * How often [charset] reads a capital letter from a high byte straight after a small letter,
+     * which is how a word read through the wrong one of two tables of a script comes out.
+     */
+    fun capitalsAfterSmallLetters(charset: SubtitleCharset): Int {
+        var events = 0
+        for (i in 1 until bytes.size) {
+            val b = bytes[i].toInt() and 0xFF
+            if (b < 0x80 || !charset.decodedChar(b).isUpperCase()) continue
+            val before = bytes[i - 1].toInt() and 0xFF
+            val previous = if (before < 0x80) before.toChar() else charset.decodedChar(before)
+            if (previous.isLowerCase()) events++
+        }
+        return events
+    }
+}
+
+/**
+ * One charset's reading of a file: [score] is how likely its text is in the language it reads best
+ * as, the logarithm summed over the high bytes, and [text] is what those bytes read as, one
+ * character for each byte value present, so two tables that agree on every byte the file holds read
+ * alike.
+ */
+private class Reading(val charset: SubtitleCharset, val score: Double, val text: String)
+
+private fun SubtitleCharset.read(high: HighBytes, language: String?, hinted: Boolean): Reading? {
+    if (models.isEmpty()) return null
+    val capitals = high.capitalsAfterSmallLetters(this)
+    var best = Double.NEGATIVE_INFINITY
+    for (model in models) {
+        var score = 0.0
+        for (b in high.present) {
+            val index = (b - 0x80) * 2
+            score += high.counts[index] * model.apart[b - 0x80] + high.counts[index + 1] * model.touching[b - 0x80]
+        }
+        score += capitals * model.capital + (high.total - capitals) * model.notCapital
+        if (score > best) best = score
+    }
+    if (hinted && language !in languages) best -= HINT_WEIGHT
+    val text = buildString(high.present.size) { for (b in high.present) append(decodedChar(b)) }
+    return Reading(this, best, text)
 }
 
 private fun ByteArray.isAsciiLetterAt(index: Int): Boolean {
@@ -100,10 +154,21 @@ private fun ByteArray.isAsciiLetterAt(index: Int): Boolean {
  * as UTF-8 is as good as one (legacy text almost never validates by accident), and only then does
  * anything guess.
  *
- * [languageHint] is the track's declared language when there is one. It only settles what the bytes
- * leave open: it chooses between charsets that scored too close to call, and admits a charset whose
- * letters the bytes alone cannot tell from the Western ones (see [SubtitleCharset.onlyForItsLanguages]),
- * and it never overrules a clear answer.
+ * The guess reads the file through every single-byte table and asks how likely each text is in the
+ * languages that table is written in, from how often each character appears in their subtitles
+ * ([SUBTITLE_LETTERS]), whether an ASCII letter touches it, and how often a capital follows a small
+ * letter. That is the question uchardet, which mpv uses, asks. Tables that read every byte the file
+ * holds alike are one answer. The best is certain when it reads as real text and is far likelier
+ * than any reading that shows different text. When it is not, the result says so, and shows the best
+ * reading still, or windows-1252, the usual default of VLC and of the Windows that wrote these files,
+ * when that is nearly as likely. Only when no single-byte reading reads as text at all is the file
+ * asked whether it is one of the multi-byte East Asian encodings, and an East Asian reading is kept
+ * only when its characters are likelier in its language ([EAST_ASIAN_CHARACTERS]) than the single-byte
+ * reading's are in theirs.
+ *
+ * [languageHint] is the track's declared language when there is one. It counts against the charsets
+ * that do not list it, which settles readings the bytes leave close, and it never overrules a clear
+ * answer.
  *
  * [fallback] is an encoding to read a file in when it has no byte-order mark and is not UTF-8, in
  * place of the guess. One that cannot be read here, an East Asian name with no table, is ignored.
@@ -127,19 +192,17 @@ internal fun decodeSubtitleBytes(
     // The application's own choice for a file that says nothing about itself, as VLC's default
     // encoding and mpv's sub-codepage are. Nothing is guessed, so nothing is warned (#515).
     if (fallback != null) decodeSubtitleBytesAs(bytes, fallback, eastAsian)?.let { return it }
-    // Not UTF-8 and no mark. Anything from here is inference, and the fallback below is what an
+    // Not UTF-8 and no mark. Anything from here is inference, and an unsure reading is what an
     // honest failure looks like rather than an exception: a subtitle track that shows imperfect
     // text beats one that does not load.
-    val fallback = { guess: String? ->
-        DecodedSubtitleText(
-            text = SubtitleCharset.Windows1252.decode(bytes),
-            charset = SubtitleCharset.Windows1252.label,
-            confident = false,
-            unsupportedGuess = guess,
-        )
-    }
-    val highBytes = bytes.count { (it.toInt() and 0xFF) >= 0x80 }
-    if (highBytes == 0) {
+    fun unsure(charset: SubtitleCharset, guess: String? = null) = DecodedSubtitleText(
+        text = charset.decode(bytes),
+        charset = charset.label,
+        confident = false,
+        unsupportedGuess = guess,
+    )
+    val high = HighBytes(bytes)
+    if (high.total == 0) {
         // Pure ASCII that failed UTF-8 validation is not reachable, but a file of nothing but
         // ASCII is: every charset here agrees about it, so there is nothing to choose.
         return DecodedSubtitleText(bytes.decodeToString(), "US-ASCII", confident = true)
@@ -147,34 +210,64 @@ internal fun decodeSubtitleBytes(
 
     // The hint as one spelling, so `lit`, `lt` and `lt-LT` all name Lithuanian.
     val language = LanguageTag.parse(languageHint)?.language
-    val scored = SubtitleCharset.entries
-        .filter { charset -> !charset.onlyForItsLanguages || language in charset.languages }
-        .filter { charset -> bytes.none { charset.isUndefined(it.toInt() and 0xFF) } }
-        .map { charset -> charset.scoreAgainst(bytes, highBytes, language) }
-        .sortedWith(
-            compareByDescending<CharsetScore> { it.common }
-                .thenByDescending { it.inScript },
-        )
-
-    val leader = scored.firstOrNull() ?: return fallback(null)
-    // Frequency is what actually separates two tables that both map the range into a real script:
-    // Arabic bytes read as Cyrillic ARE Cyrillic letters, they are just not Cyrillic WORDS.
-    val close = scored.filter { it.common > leader.common - MIN_COMMON_GAP }
-    // When the bytes leave a few readings too close to call, a language that names exactly one of
-    // them settles it. Latvian's ā, ē, ī and š sit on the bytes of Turkish â, ç, î and ğ, and five
-    // lines of Latvian read only seven points clear of Turkish (#515).
-    val named = close.filter { language in it.charset.languages }
-    val settled = close.size == 1 || named.size == 1
-    val best = if (named.size == 1) named.single() else leader
-    if (best.inScript < MIN_SCORE || best.common < MIN_COMMON_SHARE || !settled) {
-        // Nothing single-byte fits. Only now is it worth asking about a multi-byte encoding: dense
-        // Cyrillic has exactly the byte-pair shape EUC does, so asking that question first told
-        // every Russian subtitle it was Korean.
-        val candidates = eastAsianCandidates(bytes) ?: return fallback(null)
-        if (eastAsian != null) readEastAsian(bytes, candidates, eastAsian)?.let { return it }
-        return fallback(candidates.first())
+    val hinted = language != null && SubtitleCharset.entries.any { language in it.languages }
+    // A table that reads one of the file's bytes as nothing, or as a control character, is not the
+    // file's. Tables that read every byte present alike show the same text, so they are one answer
+    // and never each other's runner-up: windows-1250 and ISO-8859-2 read most Polish letters alike,
+    // and counted apart, the tie left Polish unsure for ever (#518).
+    val answers = SubtitleCharset.entries
+        .filter { charset -> high.present.none { charset.cannotBeText(it) } }
+        .mapNotNull { charset -> charset.read(high, language, hinted) }
+        .sortedByDescending { it.score }
+        .groupBy { it.text }
+        .values
+        .toList()
+    val best = answers.firstOrNull()
+    val plausible = best != null && best.first().score / high.total >= MIN_LIKELIHOOD
+    if (!plausible) {
+        // Nothing single-byte reads as text. Only now is it worth asking about a multi-byte
+        // encoding: dense Cyrillic has exactly the byte-pair shape EUC does, so asking that
+        // question first told every Russian subtitle it was Korean.
+        eastAsianCandidates(bytes)?.let { candidates ->
+            val reading = eastAsian?.let { readEastAsian(bytes, candidates, it) }
+                ?: return unsure(SubtitleCharset.Windows1252, candidates.first())
+            // GBK and Shift_JIS read almost any run of high bytes without a gap, so a clean reading
+            // is not yet a likely one: a Thai line heavy with rare letters, read below the floor in
+            // Thai, came out as Japanese. The East Asian reading is taken when its characters are
+            // likelier in its own language than the best single-byte reading's are in theirs.
+            val singleByte = best?.first()?.score?.plus(asciiSecondBytes(bytes) * ASCII_SECOND_BYTE_LIKELIHOOD)
+            if (singleByte == null || reading.eastAsianLikelihood() > singleByte) return reading
+        }
     }
-    return DecodedSubtitleText(best.charset.decode(bytes), best.charset.label, confident = true)
+    // Not East Asian either, so the likeliest single-byte reading is still the best there is, only
+    // never a certain one: a one-word Thai line such as "ใช่" reads below the floor in Thai and
+    // far below it in every other table.
+    if (best == null) return unsure(SubtitleCharset.Windows1252)
+    val score = best.first().score
+    // The tables in the answer show the same text, so which one it is named by only matters to
+    // the warning and the override it offers: the one the track's language names, as windows-1254
+    // for Turkish that ISO-8859-9 reads alike, then windows-1252, the usual default, and otherwise
+    // the likeliest.
+    val charset = (
+        best.firstOrNull { language in it.charset.languages }
+            ?: best.firstOrNull { it.charset == SubtitleCharset.Windows1252 }
+            ?: best.first()
+        ).charset
+    val runnerUp = answers.getOrNull(1)?.first()?.score ?: Double.NEGATIVE_INFINITY
+    if (score - runnerUp >= MIN_MARGIN) {
+        return DecodedSubtitleText(charset.decode(bytes), charset.label, confident = plausible)
+    }
+    // Unsure, the file is shown as the likeliest reading, unless windows-1252 is nearly as likely:
+    // that is what such a file is shown as everywhere else, so a wrong guess there is the familiar
+    // one, and it keeps short Western lines with an accent or two from showing as Polish. A track
+    // whose language names the likeliest reading is shown in it all the same: a Lithuanian line
+    // with two ė reads nearly as well as Albanian ë, and its language says which it is.
+    val named = language != null && best.any { language in it.charset.languages }
+    val western = answers.firstOrNull { answer -> answer.any { it.charset == SubtitleCharset.Windows1252 } }
+    if (!named && western != null && western !== best && score - western.first().score < MIN_MARGIN) {
+        return unsure(SubtitleCharset.Windows1252)
+    }
+    return unsure(charset)
 }
 
 /**
@@ -340,6 +433,41 @@ private fun eastAsianCandidates(bytes: ByteArray): List<String>? {
         else -> GBK
     }
     return listOf(likeliest) + (EAST_ASIAN_ORDER - likeliest)
+}
+
+/**
+ * The pairs [eastAsianCandidates] finds whose second byte is ASCII: bytes an East Asian reading
+ * counts as part of a character and a single-byte reading takes as ASCII.
+ */
+private fun asciiSecondBytes(bytes: ByteArray): Int {
+    var count = 0
+    var i = 0
+    while (i < bytes.size - 1) {
+        val lead = bytes[i].toInt() and 0xFF
+        val trail = bytes[i + 1].toInt() and 0xFF
+        if (lead < 0x81 || lead == 0xFF || trail < 0x40 || trail == 0x7F || trail == 0xFF) {
+            i++
+            continue
+        }
+        if (trail < 0x80) count++
+        i += 2
+    }
+    return count
+}
+
+/**
+ * How likely an East Asian reading is in the language its encoding is written in, as
+ * [EastAsianModel.likelihood] says: Japanese for Shift_JIS and EUC-JP, simplified Chinese for GBK,
+ * traditional Chinese for Big5 and Korean for EUC-KR.
+ */
+private fun DecodedSubtitleText.eastAsianLikelihood(): Double {
+    val language = when (charset) {
+        SHIFT_JIS, EUC_JP -> "ja"
+        GBK -> "zh-Hans"
+        BIG5 -> "zh-Hant"
+        else -> "ko"
+    }
+    return eastAsianModels.getValue(language).likelihood(text)
 }
 
 /** ASCII spaces with a high byte on both sides: the gaps between words that Korean writes. */

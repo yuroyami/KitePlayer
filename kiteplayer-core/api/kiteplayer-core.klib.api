@@ -3380,6 +3380,9 @@ final class io.github.yuroyami.kiteplayer/QueueConfigBuilder { // io.github.yuro
     final var preloadNext // io.github.yuroyami.kiteplayer/QueueConfigBuilder.preloadNext|{}preloadNext[0]
         final fun <get-preloadNext>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/QueueConfigBuilder.preloadNext.<get-preloadNext>|<get-preloadNext>(){}[0]
         final fun <set-preloadNext>(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/QueueConfigBuilder.preloadNext.<set-preloadNext>|<set-preloadNext>(kotlin.time.Duration){}[0]
+    final var reshuffleEachLap // io.github.yuroyami.kiteplayer/QueueConfigBuilder.reshuffleEachLap|{}reshuffleEachLap[0]
+        final fun <get-reshuffleEachLap>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/QueueConfigBuilder.reshuffleEachLap.<get-reshuffleEachLap>|<get-reshuffleEachLap>(){}[0]
+        final fun <set-reshuffleEachLap>(kotlin/Boolean) // io.github.yuroyami.kiteplayer/QueueConfigBuilder.reshuffleEachLap.<set-reshuffleEachLap>|<set-reshuffleEachLap>(kotlin.Boolean){}[0]
 
     final fun build(): io.github.yuroyami.kiteplayer/QueueConfig // io.github.yuroyami.kiteplayer/QueueConfigBuilder.build|build(){}[0]
 }

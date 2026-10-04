@@ -320,9 +320,13 @@ public class QueueConfigBuilder(from: QueueConfig = QueueConfig()) {
     /** See [QueueConfig.gapless]. */
     public var gapless: Boolean = from.gapless
 
+    /** See [QueueConfig.reshuffleEachLap]. */
+    public var reshuffleEachLap: Boolean = from.reshuffleEachLap
+
     /** The [QueueConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): QueueConfig = QueueConfig(
         preloadNext = preloadNext,
         gapless = gapless,
+        reshuffleEachLap = reshuffleEachLap,
     )
 }

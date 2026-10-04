@@ -2140,8 +2140,10 @@ public final class io/github/yuroyami/kiteplayer/QueueConfigBuilder {
 	public final fun build ()Lio/github/yuroyami/kiteplayer/QueueConfig;
 	public final fun getGapless ()Z
 	public final fun getPreloadNext-UwyO8pc ()J
+	public final fun getReshuffleEachLap ()Z
 	public final fun setGapless (Z)V
 	public final fun setPreloadNext-LRDsOJo (J)V
+	public final fun setReshuffleEachLap (Z)V
 }
 
 public final class io/github/yuroyami/kiteplayer/RenderQuality {

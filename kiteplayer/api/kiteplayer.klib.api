@@ -267,6 +267,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final suspend fun openQueue(kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem>, kotlin/Int = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.openQueue|openQueue(kotlin.collections.List<io.github.yuroyami.kiteplayer.MediaItem>;kotlin.Int){}[0]
     final suspend fun previous() // io.github.yuroyami.kiteplayer/KitePlayerWorker.previous|previous(){}[0]
     final suspend fun previousChapter() // io.github.yuroyami.kiteplayer/KitePlayerWorker.previousChapter|previousChapter(){}[0]
+    final suspend fun reloadExternalSubtitle(io.github.yuroyami.kiteplayer/TrackId, kotlin/String? = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.reloadExternalSubtitle|reloadExternalSubtitle(io.github.yuroyami.kiteplayer.TrackId;kotlin.String?){}[0]
     final suspend fun removeFromQueue(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayerWorker.removeFromQueue|removeFromQueue(kotlin.Int){}[0]
     final suspend fun seek(kotlin.time/Duration, io.github.yuroyami.kiteplayer/SeekMode = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.seek|seek(kotlin.time.Duration;io.github.yuroyami.kiteplayer.SeekMode){}[0]
     final suspend fun seekToChapter(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayerWorker.seekToChapter|seekToChapter(kotlin.Int){}[0]

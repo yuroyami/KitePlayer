@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
+import io.github.yuroyami.kiteplayer.internal.SubtitleEncodings
 import io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
@@ -564,8 +565,24 @@ public data class SubtitleConfig(
      * container or from a file; ASS signs, typesetting and karaoke are left alone.
      */
     val hearingImpairedNotes: HearingImpairedNotes = HearingImpairedNotes.Keep,
+    /**
+     * The encoding an external subtitle file is read in when it has no byte-order mark and is not
+     * UTF-8, in place of a guess from its bytes (#515). Null guesses.
+     *
+     * This is the standing preference a player's settings offer, as VLC's default subtitle encoding
+     * and mpv's `sub-codepage` are: a UTF-8 file, which most files now are, is still read as UTF-8.
+     * [SubtitleSource.encoding] is the other strength, a choice for one file that is used whatever
+     * its bytes say. The names are [SubtitleSource.ENCODINGS] and the labels for them. A file read
+     * this way raises no [PlaybackWarning.SubtitleCharsetGuessed], because nothing was guessed. An
+     * East Asian encoding the backend has no table for leaves the guess to decide.
+     */
+    val fallbackEncoding: String? = null,
 ) {
     init {
+        require(fallbackEncoding == null || SubtitleEncodings.canonical(fallbackEncoding) != null) {
+            "fallbackEncoding $fallbackEncoding is not an encoding a subtitle file can be read in; " +
+                "the names are ${SubtitleSource.ENCODINGS.joinToString()}"
+        }
         require(fontScale.isFinite() && fontScale > 0f) { "fontScale must be finite and positive, was $fontScale" }
         require(delay.isFinite() && delay.absoluteValue <= KitePlayer.DELAY_MAX) {
             "delay must be finite and at most ${KitePlayer.DELAY_MAX} either way, was $delay"

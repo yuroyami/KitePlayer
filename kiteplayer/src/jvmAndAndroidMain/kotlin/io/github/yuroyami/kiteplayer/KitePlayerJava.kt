@@ -140,6 +140,15 @@ public class KitePlayerJava(
     public fun addExternalSubtitleAsync(source: SubtitleSource): CompletableFuture<Void?> =
         launchCall { player.addExternalSubtitle(source) }
 
+    /**
+     * `KitePlayer.reloadExternalSubtitle`: reads the file of [track] again, in [encoding], or by the
+     * guess for null. Completes once the track holds the new reading, in the same place and with the
+     * same selection.
+     */
+    @JvmOverloads
+    public fun reloadExternalSubtitleAsync(track: TrackInfo, encoding: String? = null): CompletableFuture<Void?> =
+        launchCall { player.reloadExternalSubtitle(track.id, encoding) }
+
     /** `KitePlayer.openQueue`. */
     @JvmOverloads
     public fun openQueueAsync(items: List<MediaItem>, startIndex: Int = 0): CompletableFuture<Void?> {

@@ -1,10 +1,15 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.SubtitleCharset
+import io.github.yuroyami.kiteplayer.internal.SubtitleEncodings
 import io.github.yuroyami.kiteplayer.internal.decodeSubtitleBytes
+import io.github.yuroyami.kiteplayer.internal.decodeSubtitleBytesAs
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -307,6 +312,114 @@ class SubtitleCharsetTest {
         assertFalse(decoded.charset in OTHER_SCRIPTS, "Vietnamese read as ${decoded.charset}")
     }
 
+    @Test
+    fun thaiAndVietnameseAreReadInTheirOwnTables() {
+        // Neither had a table before #515, so both fell back to windows-1252 with a warning.
+        for ((encoding, fixture) in listOf("windows-874" to THAI, "windows-1258" to VIETNAMESE)) {
+            val decoded = decodeSubtitleBytes(fixture.bytes)
+            assertEquals(encoding, decoded.charset)
+            assertEquals(fixture.text, decoded.text, "the $encoding file")
+            assertTrue(decoded.confident, "the $encoding file")
+        }
+    }
+
+    @Test
+    fun aBalticFileIsReadAsWindows1257OnlyWhenItsLanguageSaysSo() {
+        // windows-1257 puts the Baltic letters on the bytes of Western accents, so guessing it from
+        // the bytes alone would read Portuguese and Albanian as Lithuanian (#515). Without a Baltic
+        // language the file keeps the answer it had, a windows-1252 reading with a warning.
+        val unhinted = decodeSubtitleBytes(LITHUANIAN.bytes)
+        assertEquals("windows-1252", unhinted.charset)
+        assertFalse(unhinted.confident)
+        for (hint in listOf("lt", "lit", "lt-LT")) {
+            val decoded = decodeSubtitleBytes(LITHUANIAN.bytes, languageHint = hint)
+            assertEquals("windows-1257", decoded.charset, hint)
+            assertEquals(LITHUANIAN.text, decoded.text, hint)
+            assertTrue(decoded.confident, hint)
+        }
+        val latvian = decodeSubtitleBytes(LATVIAN.bytes, languageHint = "lv")
+        assertEquals("windows-1257", latvian.charset)
+        assertEquals(LATVIAN.text, latvian.text)
+    }
+
+    @Test
+    fun aNamedEncodingIsReadAsToldWithNoGuess() {
+        // The guess reads this Polish file as windows-1252, because its letters are Western ones too.
+        assertEquals("windows-1252", decodeSubtitleBytes(POLISH.bytes).charset)
+        for (label in listOf("windows-1250", "cp1250", " WINDOWS-1250 ", "x-cp1250")) {
+            val decoded = decodeSubtitleBytesAs(POLISH.bytes, label)
+            assertEquals("windows-1250", decoded?.charset, label)
+            assertEquals(POLISH.text, decoded?.text, label)
+            assertTrue(decoded?.confident == true, label)
+        }
+        // Given an encoding it is not in, the file still reads, each byte as that table has it.
+        val wrong = decodeSubtitleBytesAs(POLISH.bytes, "windows-1251")
+        assertEquals("windows-1251", wrong?.charset)
+        assertEquals(POLISH.bytes.size, wrong?.text?.length)
+        assertNotEquals(POLISH.text, wrong?.text)
+        assertTrue('\uFFFD' in decodeSubtitleBytesAs(POLISH.bytes, "utf8")?.text.orEmpty(), "UTF-8 shows what it cannot read")
+        assertNull(decodeSubtitleBytesAs(POLISH.bytes, "klingon"))
+    }
+
+    @Test
+    fun aNamedUnicodeEncodingSkipsOnlyItsOwnMark() {
+        val text = "1\n00:00:01,000 --> 00:00:02,000\n\u017B\u00F3\u0142w\n"
+        val utf8 = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + text.encodeToByteArray()
+        assertEquals(text, decodeSubtitleBytesAs(utf8, "UTF-8")?.text)
+        assertEquals(text, decodeSubtitleBytesAs(text.encodeToByteArray(), "UTF-8")?.text)
+        val utf16 = ByteArray(text.length * 2) { (text[it / 2].code shr (if (it % 2 == 0) 0 else 8)).toByte() }
+        val marked = byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + utf16
+        assertEquals(text, decodeSubtitleBytesAs(marked, "utf-16")?.text, "the standard's utf-16 is little-endian")
+        assertEquals(text, decodeSubtitleBytesAs(utf16, "UTF-16LE")?.text)
+        // Another encoding's mark is bytes like any other.
+        assertEquals("\u00EF\u00BB\u00BF1", decodeSubtitleBytesAs(utf8, "windows-1252")?.text?.take(4))
+    }
+
+    @Test
+    fun aNamedEastAsianEncodingReachesTheParserByItsStandardName() {
+        val bytes = EAST_ASIAN_FILES.getValue("Shift_JIS")
+        val asked = mutableListOf<String>()
+        val decoded = decodeSubtitleBytesAs(bytes, "sjis") { _, name -> asked += name; "read" }
+        assertEquals(listOf("Shift_JIS"), asked)
+        assertEquals("Shift_JIS", decoded?.charset)
+        assertEquals("read", decoded?.text)
+        // With no table there is nothing to read it with, and the caller says so.
+        assertNull(decodeSubtitleBytesAs(bytes, "Shift_JIS"))
+        assertNull(decodeSubtitleBytesAs(bytes, "Shift_JIS") { _, _ -> null })
+        assertNull(decodeSubtitleBytesAs(bytes, "Shift_JIS") { _, _ -> error("no table") })
+    }
+
+    @Test
+    fun theFallbackIsUsedOnlyForAFileThatIsNotUnicode() {
+        val polish = decodeSubtitleBytes(POLISH.bytes, fallback = "windows-1250")
+        assertEquals("windows-1250", polish.charset)
+        assertEquals(POLISH.text, polish.text)
+        assertTrue(polish.confident, "a reading the application asked for is not a guess")
+        // A UTF-8 file stays UTF-8, as it does in VLC and mpv with their fallback set.
+        assertEquals("UTF-8", decodeSubtitleBytes(POLISH.text.encodeToByteArray(), fallback = "windows-1250").charset)
+        // A fallback with no table to read it leaves the file to the guess.
+        val guessed = decodeSubtitleBytes(POLISH.bytes, fallback = "GBK")
+        assertEquals("windows-1252", guessed.charset)
+        assertFalse(guessed.confident)
+    }
+
+    @Test
+    fun everyEncodingTheGuessCanNameCanBeAskedForByThatName() {
+        // A warning names what a file was read as and what it seems to be, and an application offers
+        // those names back, so each must be one the list holds and a source accepts.
+        val guessable = SubtitleCharset.entries.map { it.label } + listOf("UTF-8", "UTF-16LE", "UTF-16BE") + EAST_ASIAN_FILES.keys
+        for (name in guessable) assertTrue(name in SubtitleSource.ENCODINGS, name)
+        for (name in SubtitleSource.ENCODINGS) {
+            assertEquals(name, SubtitleEncodings.canonical(name), name)
+            assertEquals(name, SubtitleSource("file.srt", encoding = name).encoding)
+        }
+        assertEquals(SubtitleSource.ENCODINGS.size, SubtitleSource.ENCODINGS.distinct().size)
+        assertFailsWith<IllegalArgumentException> { SubtitleSource("file.srt", encoding = "klingon") }
+        assertFailsWith<IllegalArgumentException> { SubtitleConfig(fallbackEncoding = "klingon") }
+    }
+
+    private class Fixture(val bytes: ByteArray, val text: String)
+
     private companion object {
         /** The tables whose letters are not Latin ones. */
         val OTHER_SCRIPTS = setOf("windows-1251", "windows-1253", "windows-1255", "windows-1256", "KOI8-R")
@@ -315,6 +428,71 @@ class SubtitleCharsetTest {
             ByteArray(text.length / 2) { text.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
 
         fun latin1(text: String): ByteArray = ByteArray(text.length) { text[it].code.toByte() }
+
+        /**
+         * Real dialogue in each table #515 added, and short Polish in windows-1250, which the guess
+         * reads as windows-1252. Each text is what Python's codec of that name decodes the bytes
+         * to, and windows-1258 keeps Vietnamese tones as combining marks after their vowels.
+         */
+        val POLISH = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300a447a6965f120646f6272792c2070726f737a" +
+                "ea2070616e612e0a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30322c3930300a47647a6965206a6573" +
+                "7420b3617a69656e6b613f0a0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\nDzie\u0144 dobry, prosz\u0119 pana.\n\n2\n00:00:02,000 --> 00:00:02,900\nGdzie jest \u0142azienka?\n\n",
+        )
+        val THAI = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300aa9d1b9e4c1e8c3d9e9c7e8d2bed5e8aad2c2" +
+                "a2cda7a9d1b9e4bbe4cbb90a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30322c3930300abec3d8e8a7" +
+                "b9d5e9e0c3d2a8d0e4bbb7d0e0c5a1d1bae0b4e7a1e60a0a330a30303a30303a30332c303030202d2d3e2030303a30303a30" +
+                "332c3930300ae0a2d2bacda1c7e8d2c3e9d2b9a1d2e1bfbbd4b4e1c5e9c70a0a340a30303a30303a30342c303030202d2d3e" +
+                "2030303a30303a30342c3930300ab5cdb9b9d5e9cad2c2e0a1d4b9e4bbb7d5e8a8d0e0bbc5d5e8c2b9e1c5e9c70a0a350a30" +
+                "303a30303a30352c303030202d2d3e2030303a30303a30352c3930300aa4d8b3e4b4e9c2d4b9a9d1b9e4cbc120b5cdbaa1e8" +
+                "cdb9b7d5e8a8d0cad2c2e0a1d4b9e4bb0a0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\n\u0E09\u0E31\u0E19\u0E44\u0E21\u0E48\u0E23\u0E39\u0E49\u0E27\u0E48\u0E32\u0E1E\u0E35\u0E48\u0E0A\u0E32\u0E22\u0E02\u0E2D\u0E07\u0E09\u0E31\u0E19\u0E44\u0E1B\u0E44\u0E2B\u0E19\n\n2\n00:00:02,000 --> 00:00:02,900\n\u0E1E\u0E23\u0E38\u0E48\u0E07\u0E19\u0E35\u0E49\u0E40\u0E23\u0E32\u0E08\u0E30\u0E44\u0E1B\u0E17\u0E30\u0E40\u0E25\u0E01\u0E31\u0E1A\u0E40\u0E14\u0E47\u0E01\u0E46\n\n3\n00:00:03,000 --> 00:00:03,900\n\u0E40\u0E02\u0E32\u0E1A\u0E2D\u0E01\u0E27\u0E48\u0E32\u0E23\u0E49\u0E32\u0E19\u0E01\u0E32\u0E41\u0E1F\u0E1B\u0E34\u0E14\u0E41\u0E25\u0E49\u0E27\n\n4\n00:00:04,000 --> 00:00:04,900\n\u0E15\u0E2D\u0E19\u0E19\u0E35\u0E49\u0E2A\u0E32\u0E22\u0E40\u0E01\u0E34\u0E19\u0E44\u0E1B\u0E17\u0E35\u0E48\u0E08\u0E30\u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19\u0E41\u0E25\u0E49\u0E27\n\n5\n00:00:05,000 --> 00:00:05,900\n\u0E04\u0E38\u0E13\u0E44\u0E14\u0E49\u0E22\u0E34\u0E19\u0E09\u0E31\u0E19\u0E44\u0E2B\u0E21 \u0E15\u0E2D\u0E1A\u0E01\u0E48\u0E2D\u0E19\u0E17\u0E35\u0E48\u0E08\u0E30\u0E2A\u0E32\u0E22\u0E40\u0E01\u0E34\u0E19\u0E44\u0E1B\n\n",
+        )
+        val VIETNAMESE = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300a54f469206b68f46e67206269eaec7420616e" +
+                "6820747261692074f46920f061de20f06920f0e2752e0a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30" +
+                "322c3930300a4e67e079206d6169206368fa6e67207461207365de20f069206269ead26e2076f5ec6920626ff26e20747265" +
+                "d22e0a0a330a30303a30303a30332c303030202d2d3e2030303a30303a30332c3930300a416e6820e2ec79206ef3692072e3" +
+                "cc6e67207175e16e2063e0207068ea20f061de20f0f36e672063fdd2612e0a0a340a30303a30303a30342c303030202d2d3e" +
+                "2030303a30303a30342c3930300a42e279206769f5cc20f061de207175e1206d75f4f26e20f0ead2207468617920f0f4d269" +
+                "20f069eacc7520f0f32e0a0a350a30303a30303a30352c303030202d2d3e2030303a30303a30352c3930300a4261f26e2063" +
+                "f3206e6768652074f469206b68f46e673f20547261d2206cf5cc69207472fdf5ec63206b6869207175e1206d75f4f26e2e0a" +
+                "0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\nT\u00F4i kh\u00F4ng bi\u00EA\u0301t anh trai t\u00F4i \u0111a\u0303 \u0111i \u0111\u00E2u.\n\n2\n00:00:02,000 --> 00:00:02,900\nNg\u00E0y mai ch\u00FAng ta se\u0303 \u0111i bi\u00EA\u0309n v\u01A1\u0301i bo\u0323n tre\u0309.\n\n3\n00:00:03,000 --> 00:00:03,900\nAnh \u00E2\u0301y n\u00F3i r\u0103\u0300ng qu\u00E1n c\u00E0 ph\u00EA \u0111a\u0303 \u0111\u00F3ng c\u01B0\u0309a.\n\n4\n00:00:04,000 --> 00:00:04,900\nB\u00E2y gi\u01A1\u0300 \u0111a\u0303 qu\u00E1 mu\u00F4\u0323n \u0111\u00EA\u0309 thay \u0111\u00F4\u0309i \u0111i\u00EA\u0300u \u0111\u00F3.\n\n5\n00:00:05,000 --> 00:00:05,900\nBa\u0323n c\u00F3 nghe t\u00F4i kh\u00F4ng? Tra\u0309 l\u01A1\u0300i tr\u01B0\u01A1\u0301c khi qu\u00E1 mu\u00F4\u0323n.\n\n",
+        )
+        val LITHUANIAN = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300a4e65fe696e61752c206b75722069f0eb6a6f" +
+                "206d616e6f2062726f6c69732e0a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30322c3930300a527974" +
+                "6f6a207375207661696b616973207661fe69756f73696d652070726965206afb726f732e0a0a330a30303a30303a30332c30" +
+                "3030202d2d3e2030303a30303a30332c3930300a4a69732073616beb2c206b6164206b6176696eeb206a6175206275766f20" +
+                "75fe6461727974612e0a0a340a30303a30303a30342c303030202d2d3e2030303a30303a30342c3930300a4461626172206a" +
+                "6175207065722076eb6c7520746169206b65697374692e0a0a350a30303a30303a30352c303030202d2d3e2030303a30303a" +
+                "30352c3930300a4172206769726469206d616e653f20417473616b796b2c206b6f6c20646172206e6576eb6c752e0a0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\nNe\u017Einau, kur i\u0161\u0117jo mano brolis.\n\n2\n00:00:02,000 --> 00:00:02,900\nRytoj su vaikais va\u017Eiuosime prie j\u016Bros.\n\n3\n00:00:03,000 --> 00:00:03,900\nJis sak\u0117, kad kavin\u0117 jau buvo u\u017Edaryta.\n\n4\n00:00:04,000 --> 00:00:04,900\nDabar jau per v\u0117lu tai keisti.\n\n5\n00:00:05,000 --> 00:00:05,900\nAr girdi mane? Atsakyk, kol dar nev\u0117lu.\n\n",
+        )
+        val LATVIAN = Fixture(
+            hex(
+                "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300a4573206e657a696e752c206b757270206169" +
+                "7a67e26a61206d616e73206272e26c69732e0a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30322c3930" +
+                "300a52ee74206de7732061722062e7726e69656d20627261756b73696d20757a206afb72752e0a0a330a30303a30303a3033" +
+                "2c303030202d2d3e2030303a30303a30332c3930300a5669f2f02074656963612c206b61206b6166656a6eee6361206a6175" +
+                "2062696a6120736ce76774612e0a0a340a30303a30303a30342c303030202d2d3e2030303a30303a30342c3930300a546167" +
+                "6164206972207061722076e76c7520746f206d61696eee742e0a0a350a30303a30303a30352c303030202d2d3e2030303a30" +
+                "303a30352c3930300a566169207475206d616e6920647a697264693f20417462696c64692c207069726d73206e6176207061" +
+                "722076e76c752e0a0a",
+            ),
+            "1\n00:00:01,000 --> 00:00:01,900\nEs nezinu, kurp aizg\u0101ja mans br\u0101lis.\n\n2\n00:00:02,000 --> 00:00:02,900\nR\u012Bt m\u0113s ar b\u0113rniem brauksim uz j\u016Bru.\n\n3\n00:00:03,000 --> 00:00:03,900\nVi\u0146\u0161 teica, ka kafejn\u012Bca jau bija sl\u0113gta.\n\n4\n00:00:04,000 --> 00:00:04,900\nTagad ir par v\u0113lu to main\u012Bt.\n\n5\n00:00:05,000 --> 00:00:05,900\nVai tu mani dzirdi? Atbildi, pirms nav par v\u0113lu.\n\n",
+        )
 
         /** A SubRip file of one cue per line, each line the hex of its text in the file's encoding. */
         fun subRip(vararg lines: String): ByteArray {

@@ -465,7 +465,11 @@ public sealed class PlaybackWarning {
      * bytes. That is a different answer from "no idea" and worth telling apart.
      *
      * The track still loads. Imperfect subtitles beat absent ones, and an application that shows
-     * this can offer the viewer an override rather than leaving them with mojibake and no reason.
+     * this can offer the viewer an override rather than leaving them with mojibake and no reason:
+     * [KitePlayer.reloadExternalSubtitle] reads the file again in the encoding the viewer picks from
+     * [SubtitleSource.ENCODINGS], whose names are every name [charset] and [detected] can carry.
+     * A file read in an encoding the application named, as [SubtitleSource.encoding] or
+     * [SubtitleConfig.fallbackEncoding], raises none.
      */
     public data class SubtitleCharsetGuessed(
         val uri: String,

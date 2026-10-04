@@ -222,6 +222,13 @@ that passes. So a table must turn every byte sequence it cannot read into U+FFFD
   same warning names the encoding that the bytes appear to be in. A `decode` that throws counts as
   one that answered null.
 
+An application can also name the encoding itself, through `SubtitleSource.encoding`, through
+`KitePlayer.reloadExternalSubtitle` once a file is loaded, or as a standing preference for files
+that are not UTF-8, through `SubtitleConfig.fallbackEncoding`. A named East Asian encoding reaches
+`decode` as the same WHATWG name, and is used as told with no warning. A source that names one to a
+backend whose `decode` answers null fails to load, with an error that says so, rather than
+falling back to a guess the application asked not to have.
+
 `EastAsianText` in `kiteplayer-subtitles` is the one implementation, and the FFmpeg backend's
 parser hands `decode` to it. It follows the standard's decoder algorithms, with tables that
 `scripts/generate-east-asian-tables.py` writes from the standard's index files, so a file reads

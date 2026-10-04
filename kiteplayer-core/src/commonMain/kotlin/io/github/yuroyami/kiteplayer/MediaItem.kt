@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.SubtitleEncodings
 import io.github.yuroyami.kiteplayer.internal.redactUri
 import kotlin.time.Duration
 
@@ -339,6 +340,13 @@ public fun interface MediaIoResolver {
  * The network resolver gets the parent item's [MediaItem.headers] only when [uri] has the same
  * scheme, host and port as the item's own URI, so a subtitle beside a signed URL works. A subtitle
  * on another server gets no item header. To send headers to it, give it its own [io].
+ *
+ * The text's encoding is decided from the bytes unless [encoding] names it: a byte-order mark, then
+ * UTF-8, then [SubtitleConfig.fallbackEncoding] when one is set, and otherwise a guess, which
+ * [PlaybackWarning.SubtitleCharsetGuessed] reports. A track whose guess was wrong can be read again in
+ * another encoding with [KitePlayer.reloadExternalSubtitle].
+ *
+ * @throws IllegalArgumentException when [encoding] is not one of [ENCODINGS] or a label for one.
  */
 public data class SubtitleSource(
     val uri: String,
@@ -355,7 +363,41 @@ public data class SubtitleSource(
      * everything at once and closed.
      */
     val io: MediaIoFactory? = null,
-)
+    /**
+     * The encoding the file is in, which is then used as it is, with no guess (#515). Null decides
+     * from the bytes.
+     *
+     * One of [ENCODINGS], or any label the WHATWG Encoding Standard gives one of them, such as
+     * `cp1250`, `latin2` or `sjis`, in any letter case. A file that is not in the encoding it is
+     * given still loads, with its bytes read as told, so the viewer sees the result of the choice.
+     * The five East Asian encodings are read by the backend's subtitle parser, which the FFmpeg
+     * backend supplies; with a backend that has no table for the one named, the file does not load.
+     */
+    val encoding: String? = null,
+) {
+    init {
+        require(encoding == null || SubtitleEncodings.canonical(encoding) != null) {
+            "$encoding is not an encoding a subtitle file can be read in; the names are ${ENCODINGS.joinToString()}"
+        }
+    }
+
+    public companion object {
+        /**
+         * The encodings [encoding] accepts, by the names the WHATWG Encoding Standard gives them, in
+         * the order a "Text encoding" menu would list them: Unicode, then the single-byte tables by
+         * script, then the East Asian ones. They are also every name
+         * [PlaybackWarning.SubtitleCharsetGuessed] can report.
+         *
+         * `UTF-8`, `UTF-16LE`, `UTF-16BE`; `windows-1252` (Western European), `windows-1250` and
+         * `ISO-8859-2` (Central European), `windows-1257` (Baltic), `windows-1254` and `ISO-8859-9`
+         * (Turkish), `windows-1258` (Vietnamese), `windows-1251` and `KOI8-R` (Cyrillic),
+         * `windows-1253` (Greek), `windows-1255` (Hebrew), `windows-1256` (Arabic), `windows-874`
+         * (Thai); `Shift_JIS` and `EUC-JP` (Japanese), `GBK` (Simplified Chinese), `Big5`
+         * (Traditional Chinese) and `EUC-KR` (Korean).
+         */
+        public val ENCODINGS: List<String> = SubtitleEncodings.names
+    }
+}
 
 /** How exact a seek needs to be, traded against how long it takes. */
 public enum class SeekMode {

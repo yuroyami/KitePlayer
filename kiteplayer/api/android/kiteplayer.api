@@ -58,6 +58,9 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun positionMillis ()J
 	public final fun previousAsync ()Ljava/util/concurrent/CompletableFuture;
 	public final fun previousChapterAsync ()Ljava/util/concurrent/CompletableFuture;
+	public final fun reloadExternalSubtitleAsync (Lio/github/yuroyami/kiteplayer/TrackInfo;)Ljava/util/concurrent/CompletableFuture;
+	public final fun reloadExternalSubtitleAsync (Lio/github/yuroyami/kiteplayer/TrackInfo;Ljava/lang/String;)Ljava/util/concurrent/CompletableFuture;
+	public static synthetic fun reloadExternalSubtitleAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Lio/github/yuroyami/kiteplayer/TrackInfo;Ljava/lang/String;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun removeFromQueueAsync (I)Ljava/util/concurrent/CompletableFuture;
 	public final fun removeListener (Lio/github/yuroyami/kiteplayer/KitePlayerListener;)V
 	public final fun requestSeek (J)V

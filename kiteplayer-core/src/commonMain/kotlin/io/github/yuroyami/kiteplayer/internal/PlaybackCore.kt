@@ -317,6 +317,10 @@ internal class PlaybackCore(
         val cues: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
         /** The whole text of an ASS or SSA file, for the typesetter. Null for other formats. */
         val script: String? = null,
+        /** Where the file came from and how it was asked to be read, for a reload (#515). */
+        val source: SubtitleSource,
+        /** How many times this track was read again, so the typesetter knows a reload from a reselection. */
+        val revision: Int = 0,
     )
 
     /** The media item's parsed external subtitle files, in declaration order. */
@@ -567,10 +571,19 @@ internal class PlaybackCore(
         // The encoding is decided from the bytes, not assumed. A file that needed a guess says so,
         // because a viewer looking at mojibake can act on "I read this as windows-1252" and cannot
         // act on silence. The East Asian tables are the parser's, because they live above the core.
-        // A caller's language wins; without one, the file's name may say it (#514).
+        // A caller's language wins; without one, the file's name may say it (#514). An encoding the
+        // caller named is used as it is, and one the player prefers stands in for the guess (#515).
         val hints = subtitleNameHints(sourceFile.uri)
         val language = sourceFile.language ?: hints.language
-        val decoded = decodeSubtitleBytes(bytes, language, eastAsian = parser::decode)
+        val named = sourceFile.encoding
+        val decoded = if (named != null) {
+            decodeSubtitleBytesAs(bytes, named, eastAsian = parser::decode)
+                ?: return ExternalSubtitleParse.Failed(
+                    "it was to be read as $named, and this backend's subtitle parser has no table for that encoding",
+                )
+        } else {
+            decodeSubtitleBytes(bytes, language, config.subtitles.fallbackEncoding, eastAsian = parser::decode)
+        }
         if (!decoded.confident) {
             report(
                 PlaybackWarning.SubtitleCharsetGuessed(
@@ -615,6 +628,7 @@ internal class PlaybackCore(
                 ),
                 cues = cues.sortedBy { cue -> cue.startMicros },
                 script = if (isAss) trimmed else null,
+                source = sourceFile,
             ),
         )
     }
@@ -656,18 +670,23 @@ internal class PlaybackCore(
         acquisition.job?.start()
     }
 
-    /** One [addExternalSubtitle] whose file is still being read, owned by the request that asked. */
-    private class SubtitleAcquisition(
+    /**
+     * One [addExternalSubtitle] or [reloadExternalSubtitle] whose file is still being read, owned by
+     * the request that asked. [reply] answers the track's id for an add and nothing for a reload.
+     */
+    private class SubtitleAcquisition<T>(
         val id: TrackId,
-        val reply: CompletableDeferred<TrackId>,
+        val reply: CompletableDeferred<T>,
         /** The session the file was asked for. A file that comes back to another one is not added. */
         val session: OpenSession,
+        /** True when the track is already there and this reads its file again. */
+        val reloading: Boolean = false,
     ) {
         var job: Job? = null
     }
 
     /** The external subtitle reads in flight. Actor-confined. */
-    private val subtitleAcquisitions = mutableListOf<SubtitleAcquisition>()
+    private val subtitleAcquisitions = mutableListOf<SubtitleAcquisition<*>>()
 
     /** Cancels every external subtitle read in flight and answers its caller with [failure] (#412). */
     private fun cancelSubtitleAcquisitions(failure: () -> Throwable) {
@@ -681,7 +700,7 @@ internal class PlaybackCore(
     }
 
     /** Adds the track a finished [SubtitleAcquisition] read, on the actor, if it is still wanted. */
-    private suspend fun adoptExternalSubtitle(acquisition: SubtitleAcquisition, parsed: ExternalSubtitleParse) {
+    private suspend fun adoptExternalSubtitle(acquisition: SubtitleAcquisition<TrackId>, parsed: ExternalSubtitleParse) {
         // Gone means a stop or a close cancelled it and already answered its caller.
         if (!subtitleAcquisitions.remove(acquisition)) return
         // A caller that left wants nothing added.
@@ -718,6 +737,101 @@ internal class PlaybackCore(
                 publishSnapshot()
             }
         }
+    }
+
+    /**
+     * Reads an external track's file again, in the encoding the command names or decided from its
+     * bytes when it names none (#515), as a task the request owns, as an add is (#412).
+     *
+     * The track keeps its id and its place, so an application's menu and selection stay valid. A
+     * later reload of the same track replaces one still reading, which is answered as replaced.
+     */
+    private fun reloadExternalSubtitle(command: CoreCommand.ReloadExternalSubtitle) {
+        val active = session
+        if (active == null) {
+            command.reply.completeExceptionally(IllegalStateException("reloadExternalSubtitle needs an open media item"))
+            return
+        }
+        val loaded = externalSubtitleTracks.firstOrNull { it.id == command.track }
+        if (loaded == null) {
+            command.reply.completeExceptionally(
+                IllegalArgumentException("${command.track} is not an external subtitle track of the open media"),
+            )
+            return
+        }
+        subtitleAcquisitions.filter { it.reloading && it.id == command.track }.forEach { earlier ->
+            subtitleAcquisitions.remove(earlier)
+            earlier.job?.cancel()
+            earlier.reply.completeExceptionally(IllegalStateException("a later reload of ${command.track} replaced this one"))
+        }
+        val source = loaded.source.copy(encoding = command.encoding)
+        val parent = media
+        val acquisition = SubtitleAcquisition(command.track, command.reply, active, reloading = true)
+        acquisition.job = scope.launch(start = CoroutineStart.LAZY) {
+            val parsed = try {
+                parseExternalSubtitle(source, command.track, parent)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                ExternalSubtitleParse.Failed("the external subtitle file could not be read${causeDetail(failure)}")
+            }
+            commands.trySend(CoreCommand.ExternalSubtitleRead { adoptReloadedSubtitle(acquisition, parsed) })
+        }
+        subtitleAcquisitions += acquisition
+        command.reply.invokeOnCompletion { cause -> if (cause is CancellationException) acquisition.job?.cancel() }
+        acquisition.job?.start()
+    }
+
+    /**
+     * Puts a track's new reading where the old one was, on the actor (#515).
+     *
+     * A track showing as the primary subtitle swaps its cue table in place, as an external selection
+     * does, and its typesetter takes the new script. One showing as the secondary subtitle swaps that
+     * slot's table. Neither moves playback. A read that failed leaves the track as it was.
+     */
+    private suspend fun adoptReloadedSubtitle(acquisition: SubtitleAcquisition<Unit>, parsed: ExternalSubtitleParse) {
+        if (!subtitleAcquisitions.remove(acquisition)) return
+        if (acquisition.reply.isCompleted) return
+        val active = session
+        if (active == null || active !== acquisition.session) {
+            acquisition.reply.completeExceptionally(
+                IllegalStateException("the media changed before the subtitle file finished loading again"),
+            )
+            return
+        }
+        val id = acquisition.id
+        val at = externalSubtitleTracks.indexOfFirst { it.id == id }
+        if (at < 0) {
+            acquisition.reply.completeExceptionally(
+                IllegalStateException("$id was taken out before its file finished loading again"),
+            )
+            return
+        }
+        val read = when (parsed) {
+            is ExternalSubtitleParse.Failed -> {
+                acquisition.reply.completeExceptionally(IllegalArgumentException(parsed.reason))
+                return
+            }
+            is ExternalSubtitleParse.Loaded -> parsed.track
+        }
+        val old = externalSubtitleTracks[at]
+        val track = ExternalSubtitleTrack(
+            id = id,
+            info = read.info,
+            cues = read.cues,
+            script = read.script,
+            source = read.source,
+            revision = old.revision + 1,
+        )
+        externalSubtitleTracks = externalSubtitleTracks.toMutableList().also { it[at] = track }
+        tracks = tracks.copy(all = tracks.all.map { if (it.id == id) track.info else it })
+        if (selectedExternalSubtitle == id) applyExternalSubtitle(id)
+        if (selectedExternalSubtitle2 == id) {
+            active.subtitle2Cues = track.cues.toMutableList()
+            active.publishedCueKey = null
+        }
+        publishSnapshot()
+        acquisition.reply.complete(Unit)
     }
 
     /**
@@ -1504,6 +1618,18 @@ internal class PlaybackCore(
             awaitReply(reply)
         } catch (cancellation: CancellationException) {
             // The caller left, so the read it asked for is cancelled too, and nothing is added (#412).
+            reply.cancel(cancellation)
+            throw cancellation
+        }
+    }
+
+    suspend fun reloadExternalSubtitle(track: TrackId, encoding: String?) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.ReloadExternalSubtitle(track, encoding, reply))
+        try {
+            awaitReply(reply)
+        } catch (cancellation: CancellationException) {
+            // As for an add: the caller left, so the read stops and the track stays as it was.
             reply.cancel(cancellation)
             throw cancellation
         }
@@ -2326,6 +2452,7 @@ internal class PlaybackCore(
                 command.reply.complete(Unit)
             }
             is CoreCommand.AddExternalSubtitle -> addExternalSubtitle(command)
+            is CoreCommand.ReloadExternalSubtitle -> reloadExternalSubtitle(command)
             is CoreCommand.ExternalSubtitleRead -> command.adopt()
             is CoreCommand.SetLoop -> {
                 loop = command.mode
@@ -5676,7 +5803,7 @@ internal class PlaybackCore(
         val target: Pair<String, TypesetOp>? = when {
             !config.subtitles.typesetting || typesetterRefused -> null
             external != null -> external.script?.let { script ->
-                "external:${external.id.value}" to TypesetOp.Document(script.encodeToByteArray())
+                "external:${external.id.value}:${external.revision}" to TypesetOp.Document(script.encodeToByteArray())
             }
             stream != null && isTypesetCodec(stream.codec) ->
                 "stream:${stream.index}" to TypesetOp.Header(stream.codecExtradata ?: ByteArray(0))
@@ -11024,11 +11151,14 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetAudioDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setAudioDelay", reply)
     class AddExternalSubtitle(val source: SubtitleSource, val reply: CompletableDeferred<TrackId>) :
         CoreCommand("addExternalSubtitle", reply)
+    class ReloadExternalSubtitle(val track: TrackId, val encoding: String?, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("reloadExternalSubtitle", reply)
 
     /**
-     * The answer of an [AddExternalSubtitle]'s read, back on the actor, where [adopt] adds the track
-     * (#412). Posted by the read's own task, never by a caller, so its reply is a completed
-     * placeholder; the caller's reply is the one the read carries.
+     * The answer of an [AddExternalSubtitle]'s or a [ReloadExternalSubtitle]'s read, back on the
+     * actor, where [adopt] adds the track or swaps in its new reading (#412, #515). Posted by the
+     * read's own task, never by a caller, so its reply is a completed placeholder; the caller's reply
+     * is the one the read carries.
      */
     class ExternalSubtitleRead(val adopt: suspend () -> Unit) :
         CoreCommand("addExternalSubtitle", CompletableDeferred(Unit))

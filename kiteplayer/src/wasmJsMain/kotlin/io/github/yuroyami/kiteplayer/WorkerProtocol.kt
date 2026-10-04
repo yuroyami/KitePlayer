@@ -82,6 +82,7 @@ internal sealed class Command(val member: String) {
     data class SelectSecondarySubtitle(val track: TrackId?) : Command("selectSecondarySubtitle")
     data class SelectVariant(val index: Int?) : Command("selectVariant")
     data class AddExternalSubtitle(val source: SubtitleSource) : Command("addExternalSubtitle")
+    data class ReloadExternalSubtitle(val track: TrackId, val encoding: String?) : Command("reloadExternalSubtitle")
     data object DiagnosticsDump : Command("diagnosticsDump")
     data object SupportBundle : Command("supportBundle")
     data object WarningHistory : Command("warningHistory")
@@ -314,6 +315,10 @@ private fun encodeCommand(command: Command): JsAny = record {
         is Command.SelectSecondarySubtitle -> put("track", command.track?.value)
         is Command.SelectVariant -> put("index", command.index)
         is Command.AddExternalSubtitle -> put("source", encodeSubtitle(command.source))
+        is Command.ReloadExternalSubtitle -> {
+            put("track", command.track.value)
+            put("encoding", command.encoding)
+        }
         Command.Stop, Command.Next, Command.Previous, Command.ClearQueue, Command.NextChapter,
         Command.PreviousChapter, Command.DiagnosticsDump, Command.SupportBundle, Command.WarningHistory,
         -> Unit
@@ -451,6 +456,7 @@ private fun encodeSubtitle(source: SubtitleSource): JsAny = record {
     put("title", source.title)
     put("language", source.language)
     put("selectImmediately", source.selectImmediately)
+    put("encoding", source.encoding)
 }
 
 private fun encodeDemux(demux: DemuxPolicy): JsAny = record {
@@ -1100,6 +1106,7 @@ private fun decodeCommand(o: JsAny): Command? = when (o.str("t")) {
     "selectSecondarySubtitle" -> Command.SelectSecondarySubtitle(o.int("track")?.let(::TrackId))
     "selectVariant" -> Command.SelectVariant(o.int("index"))
     "addExternalSubtitle" -> Command.AddExternalSubtitle(decodeSubtitle(o.child("source") ?: missing("source")))
+    "reloadExternalSubtitle" -> Command.ReloadExternalSubtitle(TrackId(o.int("track") ?: missing("track")), o.str("encoding"))
     "diagnosticsDump" -> Command.DiagnosticsDump
     "supportBundle" -> Command.SupportBundle
     "warningHistory" -> Command.WarningHistory
@@ -1186,6 +1193,7 @@ private fun decodeSubtitle(o: JsAny): SubtitleSource = SubtitleSource(
     title = o.str("title"),
     language = o.str("language"),
     selectImmediately = o.flag("selectImmediately"),
+    encoding = o.str("encoding"),
 )
 
 private fun decodeDemux(o: JsAny): DemuxPolicy = DemuxPolicy(

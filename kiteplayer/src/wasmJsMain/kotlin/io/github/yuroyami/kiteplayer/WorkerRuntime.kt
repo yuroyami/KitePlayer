@@ -133,6 +133,7 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
             is Command.SelectSecondarySubtitle -> return Answer.Change(selectSecondarySubtitle(command.track))
             is Command.SelectVariant -> selectVariant(command.index)
             is Command.AddExternalSubtitle -> return Answer.Track(addExternalSubtitle(command.source))
+            is Command.ReloadExternalSubtitle -> reloadExternalSubtitle(command.track, command.encoding)
             Command.DiagnosticsDump -> return Answer.Text(diagnosticsDump())
             Command.SupportBundle -> return Answer.Text(supportBundle())
             Command.WarningHistory -> return Answer.Warnings(warningHistory())

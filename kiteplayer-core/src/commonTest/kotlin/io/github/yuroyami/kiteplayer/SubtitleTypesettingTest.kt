@@ -156,6 +156,45 @@ class SubtitleTypesettingTest {
         assertTrue(fake.closed, "closing the player did not close the typesetter")
     }
 
+    // Reading an external script again in another encoding hands the typesetter the new text (#515).
+    @Test
+    fun aReloadedExternalScriptReachesTheTypesetterAgain() = runTest {
+        val fake = FakeTypesetter()
+        SubtitleTypesetters.register(FakeProvider { fake })
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 6_000_000), config = config())
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(300.milliseconds)
+        // "Dzień dobry" in windows-1250, whose ń the guess reads as the ñ of windows-1252.
+        val file = "[Script Info]\nScriptType: v4.00+\n\n[Events]\nDialogue: 0,0:00:00.50,0:00:02.00,Default,,0,0,0,,Dzie"
+            .encodeToByteArray() + byteArrayOf(0xF1.toByte()) + " dobry\n".encodeToByteArray()
+        val io = object : MediaIo {
+            private var at = 0
+            override val size: Long = file.size.toLong()
+            override val seekable: Boolean = true
+            override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
+                if (at >= file.size) return -1
+                val n = minOf(length, file.size - at)
+                file.copyInto(into, offset, at, at + n)
+                at += n
+                return n
+            }
+            override suspend fun seek(position: Long) {
+                at = position.toInt()
+            }
+            override fun close() = Unit
+        }
+        val id = harness.core.addExternalSubtitle(SubtitleSource(uri = "memory://pl.ass", io = { io.also { it.seek(0) } }))
+        harness.run(200.milliseconds)
+        assertTrue("Dzie\u00F1 dobry" in fake.documents.last().decodeToString(), "the first reading is the guess")
+
+        harness.core.reloadExternalSubtitle(id, "windows-1250")
+        harness.run(200.milliseconds)
+        assertEquals(2, fake.documents.size, "the typesetter never had the new reading")
+        assertTrue("Dzie\u0144 dobry" in fake.documents.last().decodeToString())
+        harness.close()
+    }
+
     // A hardware decoder recovery rebuilds the session and must start a lane on it again (#212).
     @Test
     fun aDecoderRecoveryKeepsTheTypesetter() = runTest {

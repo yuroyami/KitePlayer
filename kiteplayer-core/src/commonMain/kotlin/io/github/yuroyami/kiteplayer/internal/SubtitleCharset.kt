@@ -28,7 +28,7 @@ package io.github.yuroyami.kiteplayer.internal
  * encoding from the byte-pair structure, and a backend without the tables still gets the name in
  * the warning, so a Japanese subtitle file is told what it is instead of being called undetectable.
  */
-internal enum class Script { Arabic, Cyrillic, Greek, Hebrew, Latin }
+internal enum class Script { Arabic, Cyrillic, Greek, Hebrew, Latin, Thai }
 
 /** The single-byte encodings worth carrying, each as its own 0x80..0xFF table. */
 internal enum class SubtitleCharset(
@@ -47,6 +47,12 @@ internal enum class SubtitleCharset(
      * different byte values in each table. A wrong table hits its own common set only by chance.
      */
     private val common: String,
+    /**
+     * Chosen by a guess only for a file whose language is one of [languages]. True where the
+     * charset's letters sit at the byte values of the Western ones, so the bytes alone cannot tell
+     * the two apart: Windows-1257 reads Danish `ø` as Lithuanian `ų` and Albanian `ë` as `ė`.
+     */
+    val onlyForItsLanguages: Boolean = false,
 ) {
     Windows1256(
         label = "windows-1256",
@@ -118,6 +124,28 @@ internal enum class SubtitleCharset(
         high = "\u0080\u0081\u0082\u0083\u0084\u0085\u0086\u0087\u0088\u0089\u008A\u008B\u008C\u008D\u008E\u008F\u0090\u0091\u0092\u0093\u0094\u0095\u0096\u0097\u0098\u0099\u009A\u009B\u009C\u009D\u009E\u009F\u00A0\u00A1\u00A2\u00A3\u00A4\u00A5\u00A6\u00A7\u00A8\u00A9\u00AA\u00AB\u00AC\u00AD\u00AE\u00AF\u00B0\u00B1\u00B2\u00B3\u00B4\u00B5\u00B6\u00B7\u00B8\u00B9\u00BA\u00BB\u00BC\u00BD\u00BE\u00BF\u00C0\u00C1\u00C2\u00C3\u00C4\u00C5\u00C6\u00C7\u00C8\u00C9\u00CA\u00CB\u00CC\u00CD\u00CE\u00CF\u011E\u00D1\u00D2\u00D3\u00D4\u00D5\u00D6\u00D7\u00D8\u00D9\u00DA\u00DB\u00DC\u0130\u015E\u00DF\u00E0\u00E1\u00E2\u00E3\u00E4\u00E5\u00E6\u00E7\u00E8\u00E9\u00EA\u00EB\u00EC\u00ED\u00EE\u00EF\u011F\u00F1\u00F2\u00F3\u00F4\u00F5\u00F6\u00F7\u00F8\u00F9\u00FA\u00FB\u00FC\u0131\u015F\u00FF",
         common = "\u00E2\u00E7\u00E9\u00EE\u00F0\u00F6\u00FC\u00FD\u00FE",
     ),
+    Windows1257(
+        label = "windows-1257",
+        script = Script.Latin,
+        languages = setOf("lt", "lv", "et"),
+        high = "\u20AC\uFFFD\u201A\uFFFD\u201E\u2026\u2020\u2021\uFFFD\u2030\uFFFD\u2039\uFFFD\u00A8\u02C7\u00B8\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\uFFFD\u2122\uFFFD\u203A\uFFFD\u00AF\u02DB\uFFFD\u00A0\uFFFD\u00A2\u00A3\u00A4\uFFFD\u00A6\u00A7\u00D8\u00A9\u0156\u00AB\u00AC\u00AD\u00AE\u00C6\u00B0\u00B1\u00B2\u00B3\u00B4\u00B5\u00B6\u00B7\u00F8\u00B9\u0157\u00BB\u00BC\u00BD\u00BE\u00E6\u0104\u012E\u0100\u0106\u00C4\u00C5\u0118\u0112\u010C\u00C9\u0179\u0116\u0122\u0136\u012A\u013B\u0160\u0143\u0145\u00D3\u014C\u00D5\u00D6\u00D7\u0172\u0141\u015A\u016A\u00DC\u017B\u017D\u00DF\u0105\u012F\u0101\u0107\u00E4\u00E5\u0119\u0113\u010D\u00E9\u017A\u0117\u0123\u0137\u012B\u013C\u0161\u0144\u0146\u00F3\u014D\u00F5\u00F6\u00F7\u0173\u0142\u015B\u016B\u00FC\u017C\u017E\u02D9",
+        common = "\u00E0\u00E1\u00E2\u00E7\u00E8\u00EB\u00EE\u00F0\u00F8\u00FB\u00FE",
+        onlyForItsLanguages = true,
+    ),
+    Windows1258(
+        label = "windows-1258",
+        script = Script.Latin,
+        languages = setOf("vi"),
+        high = "\u20AC\uFFFD\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\uFFFD\u2039\u0152\uFFFD\uFFFD\uFFFD\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\uFFFD\u203A\u0153\uFFFD\uFFFD\u0178\u00A0\u00A1\u00A2\u00A3\u00A4\u00A5\u00A6\u00A7\u00A8\u00A9\u00AA\u00AB\u00AC\u00AD\u00AE\u00AF\u00B0\u00B1\u00B2\u00B3\u00B4\u00B5\u00B6\u00B7\u00B8\u00B9\u00BA\u00BB\u00BC\u00BD\u00BE\u00BF\u00C0\u00C1\u00C2\u0102\u00C4\u00C5\u00C6\u00C7\u00C8\u00C9\u00CA\u00CB\u0300\u00CD\u00CE\u00CF\u0110\u00D1\u0309\u00D3\u00D4\u01A0\u00D6\u00D7\u00D8\u00D9\u00DA\u00DB\u00DC\u01AF\u0303\u00DF\u00E0\u00E1\u00E2\u0103\u00E4\u00E5\u00E6\u00E7\u00E8\u00E9\u00EA\u00EB\u0301\u00ED\u00EE\u00EF\u0111\u00F1\u0323\u00F3\u00F4\u01A1\u00F6\u00F7\u00F8\u00F9\u00FA\u00FB\u00FC\u01B0\u20AB\u00FF",
+        common = "\u00CC\u00D2\u00DE\u00EC\u00F2\u00E2\u00EA\u00F0\u00F5\u00FD",
+    ),
+    Windows874(
+        label = "windows-874",
+        script = Script.Thai,
+        languages = setOf("th"),
+        high = "\u20AC\uFFFD\uFFFD\uFFFD\uFFFD\u2026\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u2018\u2019\u201C\u201D\u2022\u2013\u2014\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u00A0\u0E01\u0E02\u0E03\u0E04\u0E05\u0E06\u0E07\u0E08\u0E09\u0E0A\u0E0B\u0E0C\u0E0D\u0E0E\u0E0F\u0E10\u0E11\u0E12\u0E13\u0E14\u0E15\u0E16\u0E17\u0E18\u0E19\u0E1A\u0E1B\u0E1C\u0E1D\u0E1E\u0E1F\u0E20\u0E21\u0E22\u0E23\u0E24\u0E25\u0E26\u0E27\u0E28\u0E29\u0E2A\u0E2B\u0E2C\u0E2D\u0E2E\u0E2F\u0E30\u0E31\u0E32\u0E33\u0E34\u0E35\u0E36\u0E37\u0E38\u0E39\u0E3A\uFFFD\uFFFD\uFFFD\uFFFD\u0E3F\u0E40\u0E41\u0E42\u0E43\u0E44\u0E45\u0E46\u0E47\u0E48\u0E49\u0E4A\u0E4B\u0E4C\u0E4D\u0E4E\u0E4F\u0E50\u0E51\u0E52\u0E53\u0E54\u0E55\u0E56\u0E57\u0E58\u0E59\u0E5A\u0E5B\uFFFD\uFFFD\uFFFD\uFFFD",
+        common = "\u00D2\u00B9\u00C3\u00CD\u00A1\u00E0\u00E8\u00A7\u00C1\u00C2",
+    ),
     ;
 
     /**
@@ -153,7 +181,8 @@ internal enum class SubtitleCharset(
             Script.Hebrew -> ch in '\u0590'..'\u05FF'
             // Letters rather than the punctuation and symbols every Latin table also carries:
             // counting a curly quote as evidence of Polish would make every charset score alike.
-            Script.Latin -> ch in '\u00C0'..'\u024F'
+            Script.Latin -> ch in '\u00C0'..'\u024F' || ch in '\u0300'..'\u036F'
+            Script.Thai -> ch in '\u0E00'..'\u0E7F'
         }
     }
 

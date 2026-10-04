@@ -245,6 +245,14 @@ public class KitePlayerWorker private constructor(
         return ask<Answer.Track>(Command.AddExternalSubtitle(source.copy(uri = pageAddress(source.uri)))).id
     }
 
+    /**
+     * Reads an external subtitle track's file again in [encoding], or decided from its bytes for
+     * null, as `KitePlayer.reloadExternalSubtitle` does, and returns once the new reading shows.
+     */
+    public suspend fun reloadExternalSubtitle(track: TrackId, encoding: String? = null) {
+        call(Command.ReloadExternalSubtitle(track, encoding))
+    }
+
     /** The worker player's diagnostics dump. */
     public suspend fun diagnosticsDump(): String = ask<Answer.Text>(Command.DiagnosticsDump).text
 

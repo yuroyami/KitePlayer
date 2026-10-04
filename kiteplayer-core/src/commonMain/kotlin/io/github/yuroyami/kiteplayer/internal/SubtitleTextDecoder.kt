@@ -79,7 +79,7 @@ private fun SubtitleCharset.scoreAgainst(
     }
     // The hint is worth a hair, enough to order two otherwise identical scores and never enough to
     // promote a charset the bytes argued against.
-    val hint = if (languageHint != null && languages.any { languageHint.startsWith(it) }) 0.001 else 0.0
+    val hint = if (languageHint in languages) 0.001 else 0.0
     return CharsetScore(
         charset = this,
         inScript = inScript.toDouble() / highBytes + hint,
@@ -100,8 +100,13 @@ private fun ByteArray.isAsciiLetterAt(index: Int): Boolean {
  * as UTF-8 is as good as one (legacy text almost never validates by accident), and only then does
  * anything guess.
  *
- * [languageHint] is the track's declared language when there is one. It only breaks ties: it can
- * choose between two charsets that scored alike and never overrules the bytes.
+ * [languageHint] is the track's declared language when there is one. It only settles what the bytes
+ * leave open: it chooses between charsets that scored too close to call, and admits a charset whose
+ * letters the bytes alone cannot tell from the Western ones (see [SubtitleCharset.onlyForItsLanguages]),
+ * and it never overrules a clear answer.
+ *
+ * [fallback] is an encoding to read a file in when it has no byte-order mark and is not UTF-8, in
+ * place of the guess. One that cannot be read here, an East Asian name with no table, is ignored.
  *
  * [eastAsian] reads bytes as one of the multi-byte East Asian encodings, given the name the WHATWG
  * Encoding Standard uses (`Shift_JIS`, `EUC-JP`, `GBK`, `Big5` or `EUC-KR`), and answers null when
@@ -112,12 +117,16 @@ private fun ByteArray.isAsciiLetterAt(index: Int): Boolean {
 internal fun decodeSubtitleBytes(
     bytes: ByteArray,
     languageHint: String? = null,
+    fallback: String? = null,
     eastAsian: ((ByteArray, String) -> String?)? = null,
 ): DecodedSubtitleText {
     bom(bytes)?.let { return it }
     if (isValidUtf8(bytes)) {
         return DecodedSubtitleText(bytes.decodeToString(), "UTF-8", confident = true)
     }
+    // The application's own choice for a file that says nothing about itself, as VLC's default
+    // encoding and mpv's sub-codepage are. Nothing is guessed, so nothing is warned (#515).
+    if (fallback != null) decodeSubtitleBytesAs(bytes, fallback, eastAsian)?.let { return it }
     // Not UTF-8 and no mark. Anything from here is inference, and the fallback below is what an
     // honest failure looks like rather than an exception: a subtitle track that shows imperfect
     // text beats one that does not load.
@@ -136,20 +145,28 @@ internal fun decodeSubtitleBytes(
         return DecodedSubtitleText(bytes.decodeToString(), "US-ASCII", confident = true)
     }
 
+    // The hint as one spelling, so `lit`, `lt` and `lt-LT` all name Lithuanian.
+    val language = LanguageTag.parse(languageHint)?.language
     val scored = SubtitleCharset.entries
+        .filter { charset -> !charset.onlyForItsLanguages || language in charset.languages }
         .filter { charset -> bytes.none { charset.isUndefined(it.toInt() and 0xFF) } }
-        .map { charset -> charset.scoreAgainst(bytes, highBytes, languageHint) }
+        .map { charset -> charset.scoreAgainst(bytes, highBytes, language) }
         .sortedWith(
             compareByDescending<CharsetScore> { it.common }
                 .thenByDescending { it.inScript },
         )
 
-    val best = scored.firstOrNull() ?: return fallback(null)
-    val runnerUp = scored.getOrNull(1)
+    val leader = scored.firstOrNull() ?: return fallback(null)
     // Frequency is what actually separates two tables that both map the range into a real script:
     // Arabic bytes read as Cyrillic ARE Cyrillic letters, they are just not Cyrillic WORDS.
-    val clearOnFrequency = runnerUp == null || best.common >= runnerUp.common + MIN_COMMON_GAP
-    if (best.inScript < MIN_SCORE || best.common < MIN_COMMON_SHARE || !clearOnFrequency) {
+    val close = scored.filter { it.common > leader.common - MIN_COMMON_GAP }
+    // When the bytes leave a few readings too close to call, a language that names exactly one of
+    // them settles it. Latvian's ā, ē, ī and š sit on the bytes of Turkish â, ç, î and ğ, and five
+    // lines of Latvian read only seven points clear of Turkish (#515).
+    val named = close.filter { language in it.charset.languages }
+    val settled = close.size == 1 || named.size == 1
+    val best = if (named.size == 1) named.single() else leader
+    if (best.inScript < MIN_SCORE || best.common < MIN_COMMON_SHARE || !settled) {
         // Nothing single-byte fits. Only now is it worth asking about a multi-byte encoding: dense
         // Cyrillic has exactly the byte-pair shape EUC does, so asking that question first told
         // every Russian subtitle it was Korean.
@@ -158,6 +175,35 @@ internal fun decodeSubtitleBytes(
         return fallback(candidates.first())
     }
     return DecodedSubtitleText(best.charset.decode(bytes), best.charset.label, confident = true)
+}
+
+/**
+ * Reads [bytes] as [encoding] with no guess, for a file whose encoding the application named (#515).
+ *
+ * [encoding] is one of [SubtitleEncodings.names] or a label for one. The bytes are read as told: a
+ * byte the encoding does not define becomes U+FFFD, so a file that is not in the encoding it was
+ * given shows that, rather than failing. A Unicode encoding skips its own byte-order mark, which is
+ * its signature rather than text; any other mark is read as the bytes it is. Null when [encoding]
+ * names nothing here, or names an East Asian encoding that [eastAsian] has no table for.
+ */
+internal fun decodeSubtitleBytesAs(
+    bytes: ByteArray,
+    encoding: String,
+    eastAsian: ((ByteArray, String) -> String?)? = null,
+): DecodedSubtitleText? {
+    val name = SubtitleEncodings.canonical(encoding) ?: return null
+    val text = when (name) {
+        SubtitleEncodings.UTF_8, SubtitleEncodings.UTF_16LE, SubtitleEncodings.UTF_16BE ->
+            bom(bytes)?.takeIf { it.charset == name }?.text ?: when (name) {
+                SubtitleEncodings.UTF_8 -> bytes.decodeToString()
+                else -> decodeUtf16(bytes, littleEndian = name == SubtitleEncodings.UTF_16LE, from = 0)
+            }
+        in SubtitleEncodings.eastAsian ->
+            // A parser that throws is one without the table, as it is for the guess.
+            eastAsian?.let { read -> runCatching { read(bytes, name) }.getOrNull() } ?: return null
+        else -> SubtitleCharset.entries.first { it.label == name }.decode(bytes)
+    }
+    return DecodedSubtitleText(text, name, confident = true)
 }
 
 private fun bom(bytes: ByteArray): DecodedSubtitleText? {
@@ -179,8 +225,8 @@ private fun bom(bytes: ByteArray): DecodedSubtitleText? {
  * Worth the twenty lines: a file saved as "Unicode" from Notepad is UTF-16, and the old BOM strip
  * ran on an already-decoded string, so those files were garbage in exactly the same silent way.
  */
-private fun decodeUtf16(bytes: ByteArray, littleEndian: Boolean): String = buildString {
-    var i = 2
+private fun decodeUtf16(bytes: ByteArray, littleEndian: Boolean, from: Int = 2): String = buildString {
+    var i = from
     while (i + 1 < bytes.size) {
         val lo = bytes[i].toInt() and 0xFF
         val hi = bytes[i + 1].toInt() and 0xFF

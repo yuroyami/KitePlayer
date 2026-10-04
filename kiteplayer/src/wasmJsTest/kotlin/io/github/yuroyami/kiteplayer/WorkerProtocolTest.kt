@@ -244,6 +244,9 @@ class WorkerProtocolTest {
             Command.SelectVariant(2),
             Command.SelectVariant(null),
             Command.AddExternalSubtitle(SubtitleSource("https://example.com/c.srt", "Commentary", "en", true)),
+            Command.AddExternalSubtitle(SubtitleSource("https://example.com/d.srt", encoding = "windows-1250")),
+            Command.ReloadExternalSubtitle(TrackId(-2), "windows-874"),
+            Command.ReloadExternalSubtitle(TrackId(-1), null),
             Command.DiagnosticsDump,
             Command.SupportBundle,
             Command.WarningHistory,
@@ -252,7 +255,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Call(id, command)
             assertEquals(message, message.roundTrip(), "the call ${command.member} changed on the way")
         }
-        assertEquals(21, commands.map { it.member }.distinct().size, "every command is here")
+        assertEquals(22, commands.map { it.member }.distinct().size, "every command is here")
     }
 
     @Test

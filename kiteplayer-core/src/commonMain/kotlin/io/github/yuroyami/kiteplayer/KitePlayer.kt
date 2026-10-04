@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer
 import io.github.yuroyami.kiteplayer.internal.CoreCommand
 import io.github.yuroyami.kiteplayer.internal.PlaybackCore
 import io.github.yuroyami.kiteplayer.internal.SeekResult
+import io.github.yuroyami.kiteplayer.internal.SubtitleEncodings
 import io.github.yuroyami.kiteplayer.internal.platformPlaybackDispatchers
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.coroutines.CompletableDeferred
@@ -707,6 +708,39 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     @Throws(Exception::class)
     public suspend fun addExternalSubtitle(source: SubtitleSource): TrackId =
         core.addExternalSubtitle(source)
+
+    /**
+     * Reads an external subtitle track's file again, in [encoding], and puts the new reading in
+     * place of the old one (#515).
+     *
+     * For a viewer looking at garbled letters. [PlaybackWarning.SubtitleCharsetGuessed] says when a
+     * file's encoding was guessed, and an application can offer [SubtitleSource.ENCODINGS] as a
+     * "Text encoding" menu and call this with the one chosen. The file is read in it as it is, with
+     * no guess, and a file that is not in it still loads, read as told, so the viewer sees what the
+     * choice does. Null decides from the bytes again, as the first read did, which also suits a
+     * file corrected on disk since it was loaded, because the file itself is read again.
+     *
+     * The track keeps its id, its place in [PlayerSnapshot.tracks], and its selection as the
+     * subtitle or the secondary subtitle, and playback does not move. A read that fails leaves the
+     * track as it was. Works for any external track: one declared in [MediaItem.externalSubtitles]
+     * or one added with [addExternalSubtitle]. The choice holds for this load of the track: the
+     * item's own [SubtitleSource] is unchanged, so opening the item again reads the file as that
+     * source says, and an application that wants the choice to last sets [SubtitleSource.encoding].
+     *
+     * @throws IllegalStateException when nothing is open, when the media changes before the file
+     *         is read, or when a later reload of the same track replaced this one.
+     * @throws IllegalArgumentException when [track] is not an external subtitle track of the open
+     *         media, when [encoding] is not one of [SubtitleSource.ENCODINGS] or a label for one, or
+     *         when the file cannot be read, cannot be parsed, parses to no cues, or is to be read in
+     *         an East Asian encoding the backend has no table for; the message says which.
+     */
+    @Throws(Exception::class)
+    public suspend fun reloadExternalSubtitle(track: TrackId, encoding: String? = null) {
+        require(encoding == null || SubtitleEncodings.canonical(encoding) != null) {
+            "$encoding is not an encoding a subtitle file can be read in; the names are ${SubtitleSource.ENCODINGS.joinToString()}"
+        }
+        core.reloadExternalSubtitle(track, encoding)
+    }
 
     /**
      * Opens [items] as the queue, starting at [startIndex], and returns paused on its first frame

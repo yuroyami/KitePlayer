@@ -296,9 +296,9 @@ internal class PlaybackCore(
 
     /**
      * The order of the next lap, drawn once when the queue first looks past the end of this one
-     * with [QueueConfig.reshuffleEachLap] on, so the preload and the advance agree on what follows,
-     * and taken up when the queue moves forward from [lapEndIndex] to its first item (#488). Any
-     * other move, an edit or a new order drops it.
+     * with [io.github.yuroyami.kiteplayer.QueueConfig.reshuffleEachLap] on, so the preload and the
+     * advance agree on what follows, and taken up when the queue moves forward from [lapEndIndex]
+     * to its first item (#488). Any other move, an edit or a new order drops it.
      */
     private var nextLapOrder: List<Int>? = null
     private var lapEndIndex: Int = -1

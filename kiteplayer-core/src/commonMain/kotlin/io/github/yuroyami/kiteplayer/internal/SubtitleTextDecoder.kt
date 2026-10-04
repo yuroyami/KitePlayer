@@ -65,9 +65,14 @@ private fun SubtitleCharset.scoreAgainst(
 ): CharsetScore {
     var inScript = 0
     var commonHits = 0
-    for (raw in bytes) {
-        val b = raw.toInt() and 0xFF
+    val latin = script == Script.Latin
+    for (i in bytes.indices) {
+        val b = bytes[i].toInt() and 0xFF
         if (b < 0x80) continue
+        // A letter of another script is never written touching a Latin one, and an accented Latin
+        // letter nearly always is, as in "così". Counted, Italian read as Hebrew and Dutch as Greek,
+        // each with certainty, because their accents land on those tables' commonest letters (#516).
+        if (!latin && (bytes.isAsciiLetterAt(i - 1) || bytes.isAsciiLetterAt(i + 1))) continue
         if (isCommon(b)) commonHits++
         if (!isInScript(b)) continue
         inScript++
@@ -80,6 +85,12 @@ private fun SubtitleCharset.scoreAgainst(
         inScript = inScript.toDouble() / highBytes + hint,
         common = commonHits.toDouble() / highBytes,
     )
+}
+
+private fun ByteArray.isAsciiLetterAt(index: Int): Boolean {
+    if (index !in indices) return false
+    val b = this[index].toInt()
+    return b in 'A'.code..'Z'.code || b in 'a'.code..'z'.code
 }
 
 /**

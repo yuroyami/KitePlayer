@@ -262,7 +262,55 @@ class SubtitleCharsetTest {
         assertContentEquals(bytes, latin1(decoded.text), "the windows-1252 reading of this file is the right one")
     }
 
+    @Test
+    fun westernTextIsNotReadAsAnotherScript() {
+        // Each accent here is also a letter in the Hebrew, Greek or Cyrillic table, and several are
+        // those tables' commonest letters, so each file used to read as that script, with certainty
+        // and therefore with no warning (#516). An accent touches the Latin letters around it, and a
+        // letter of another script never does.
+        val files = mapOf(
+            "Italian" to listOf(
+                "Perché non mi hai detto niente?", "Lunedì andiamo al mare con la città.",
+                "È già tardi, non posso più aspettare.", "Così non funziona, però possiamo provare.",
+                "Il caffè è pronto, vuoi una tazza?",
+            ),
+            "Dutch" to listOf(
+                "Ik heb geen idee waar hij naartoe is gegaan.", "Hij zei dat het café al gesloten was.",
+                "Ze hebben een ruïne gevonden bij de rivier.", "Dat is een heel goed idee, bedankt.",
+            ),
+            "Danish" to listOf(
+                "Jeg ved ikke, hvor han er gået hen.", "Vi skal købe brød og smør i morgen.",
+                "Hun går på skole i en lille by på øen.", "Det er for sent at ændre på det nu.",
+            ),
+            "Norwegian" to listOf(
+                "Vi må kjøpe brød og smør før butikken stenger.", "Hun bor på en øy langt mot nord.",
+                "Det er for sent å forandre på det nå.", "Kan du høre meg? Svar meg før det er for sent.",
+            ),
+            "Albanian" to listOf(
+                "Unë nuk e di se ku ka shkuar ai.", "Ne duhet të blejmë bukë para se të mbyllet dyqani.",
+                "Ajo jeton në një fshat të vogël pranë liqenit.", "A më dëgjon? Përgjigjju para se të jetë vonë.",
+            ),
+        )
+        for ((language, lines) in files) {
+            val text = lines.mapIndexed { i, line -> "${i + 1}\n00:00:0${i + 1},000 --> 00:00:0${i + 1},900\n$line\n\n" }.joinToString("")
+            val decoded = decodeSubtitleBytes(latin1(text))
+            assertEquals("windows-1252", decoded.charset, "the $language file")
+            assertEquals(text, decoded.text, "the $language file")
+        }
+        // Two short lines of Vietnamese in windows-1258, whose tone marks follow their vowels.
+        val vietnamese = hex(
+            "310a30303a30303a30312c303030202d2d3e2030303a30303a30312c3930300a58696e206368e06f2c206261f26e206b686f" +
+                "d265206b68f46e673f0a0a320a30303a30303a30322c303030202d2d3e2030303a30303a30322c3930300a4361d26d20f56e" +
+                "206e6869eacc752e0a0a",
+        )
+        val decoded = decodeSubtitleBytes(vietnamese)
+        assertFalse(decoded.charset in OTHER_SCRIPTS, "Vietnamese read as ${decoded.charset}")
+    }
+
     private companion object {
+        /** The tables whose letters are not Latin ones. */
+        val OTHER_SCRIPTS = setOf("windows-1251", "windows-1253", "windows-1255", "windows-1256", "KOI8-R")
+
         fun hex(text: String): ByteArray =
             ByteArray(text.length / 2) { text.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
 

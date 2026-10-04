@@ -521,6 +521,8 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("preloadedIndex", snapshot.preloadedIndex)
     put("hdrPolicy", snapshot.hdrPolicy)
     put("videoDynamicRange", snapshot.videoDynamicRange)
+    put("failedQueueItems", numbers(snapshot.failedQueueItems.sorted().map(Int::toDouble)))
+    put("durationIsEstimate", snapshot.durationIsEstimate)
 }
 
 private fun encodeVideoSize(size: VideoSize): JsAny = record {
@@ -556,6 +558,14 @@ private fun encodeTrack(track: TrackInfo): JsAny = record {
     put("channels", track.channels)
     put("isCoverArt", track.isCoverArt)
     put("metadata", track.metadata.toJsObject())
+    put("dolbyVision", track.dolbyVision?.let(::encodeDolbyVision))
+}
+
+private fun encodeDolbyVision(info: DolbyVisionInfo): JsAny = record {
+    put("profile", info.profile)
+    put("level", info.level)
+    put("baseLayerCompatibility", info.baseLayerCompatibility)
+    put("hasEnhancementLayer", info.hasEnhancementLayer)
 }
 
 private fun encodeVariant(variant: StreamVariant): JsAny = record {
@@ -996,6 +1006,12 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             put("to", warning.to)
             put("detail", warning.detail)
         }
+        is PlaybackWarning.QueueItemSkipped -> {
+            kind("QueueItemSkipped")
+            put("index", warning.index)
+            put("uri", warning.uri)
+            put("error", encodeError(warning.error))
+        }
     }
 }
 
@@ -1236,6 +1252,8 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         preloadedIndex = o.int("preloadedIndex"),
         hdrPolicy = o.enum<HdrPolicy>("hdrPolicy") ?: default.hdrPolicy,
         videoDynamicRange = o.enum<VideoDynamicRange>("videoDynamicRange") ?: default.videoDynamicRange,
+        failedQueueItems = o.numbers("failedQueueItems")?.map(Double::toInt)?.toSet() ?: default.failedQueueItems,
+        durationIsEstimate = o.flag("durationIsEstimate"),
     )
 }
 
@@ -1272,6 +1290,14 @@ private fun decodeTrack(o: JsAny): TrackInfo = TrackInfo(
     channels = o.int("channels"),
     isCoverArt = o.flag("isCoverArt"),
     metadata = o.map("metadata"),
+    dolbyVision = o.child("dolbyVision")?.let(::decodeDolbyVision),
+)
+
+private fun decodeDolbyVision(o: JsAny): DolbyVisionInfo = DolbyVisionInfo(
+    profile = o.int("profile") ?: missing("profile"),
+    level = o.int("level") ?: missing("level"),
+    baseLayerCompatibility = o.int("baseLayerCompatibility") ?: missing("baseLayerCompatibility"),
+    hasEnhancementLayer = o.flag("hasEnhancementLayer"),
 )
 
 private fun decodeVariant(o: JsAny): StreamVariant = StreamVariant(
@@ -1521,6 +1547,11 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "SegmentSkipped" -> PlaybackWarning.SegmentSkipped(o.str("uri").orEmpty(), detail)
         "ExternalClockSilent" -> PlaybackWarning.ExternalClockSilent(detail)
         "VariantLowered" -> PlaybackWarning.VariantLowered(o.int("from") ?: missing("from"), o.int("to") ?: missing("to"), detail)
+        "QueueItemSkipped" -> PlaybackWarning.QueueItemSkipped(
+            o.int("index") ?: missing("index"),
+            o.str("uri").orEmpty(),
+            o.child("error")?.let(::decodeError) ?: missing("error"),
+        )
         else -> null
     }
 }

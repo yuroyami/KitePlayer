@@ -387,6 +387,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - C struct fields are read from JavaScript by byte offset, and those offsets come only from the
   committed generated layout file. A wrong offset reads the neighbouring field and answers
   something plausible.
+- The web worker's protocol copies every field of the snapshot, a track, an item and each warning
+  by hand, and its decoders fill a missing field from the default, so a new member that skips it
+  reads on the page as "nothing" and only a new warning breaks the build. Add each new member both
+  ways and set it off its default in `WorkerProtocolTest`; three fields and a warning went missing
+  this way at once (#517).
 - `runBlocking` does not exist on the web target because there is no thread to block, so a shared
   test written with it will not compile there. The fix is the test-coroutine builder, not moving the
   test into a narrower source set: narrowing silently removes it from every target that no longer

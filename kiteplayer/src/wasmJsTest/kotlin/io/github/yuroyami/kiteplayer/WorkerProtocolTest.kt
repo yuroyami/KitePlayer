@@ -26,7 +26,7 @@ import kotlin.time.Duration.Companion.seconds
  * is encoded to the JS object `postMessage` would copy and decoded from it, so a field that one
  * side writes under one name and the other reads under another fails here rather than in a browser.
  *
- * Every command, control, answer and failure is here, every event, all 36 warnings and all 10
+ * Every command, control, answer and failure is here, every event, all 37 warnings and all 11
  * errors, and a snapshot and statistics with every field off its default.
  */
 class WorkerProtocolTest {
@@ -64,6 +64,7 @@ class WorkerProtocolTest {
                 TrackId(0), TrackKind.Video, "h264", language = "und", title = "Main", isDefault = true,
                 bitrate = 4_000_000L, videoSize = VideoSize(1920, 1080, 4, 3), frameRate = 23.976,
                 metadata = mapOf("handler" to "VideoHandler"),
+                dolbyVision = DolbyVisionInfo(profile = 7, level = 6, baseLayerCompatibility = 6, hasEnhancementLayer = true),
             ),
             TrackInfo(
                 TrackId(1), TrackKind.Audio, "aac", language = "jpn", isForced = true, isAccessibility = true,
@@ -137,6 +138,8 @@ class WorkerProtocolTest {
         preloadedIndex = 1,
         hdrPolicy = HdrPolicy.ToneMap,
         videoDynamicRange = VideoDynamicRange.ToneMapped,
+        failedQueueItems = setOf(1),
+        durationIsEstimate = true,
     )
 
     private val stats = PlaybackStats(
@@ -189,6 +192,7 @@ class WorkerProtocolTest {
         PlaybackWarning.SegmentSkipped("https://example.com/seg1.ts", "HTTP 500"),
         PlaybackWarning.ExternalClockSilent("none set"),
         PlaybackWarning.VariantLowered(2, 1, "waited 3s"),
+        PlaybackWarning.QueueItemSkipped(1, "https://example.com/gone.mp4", PlaybackError.SourceUnavailable("https://example.com/gone.mp4", null, "HTTP 404")),
     )
 
     private val errors = listOf(
@@ -357,7 +361,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(36, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(37, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test

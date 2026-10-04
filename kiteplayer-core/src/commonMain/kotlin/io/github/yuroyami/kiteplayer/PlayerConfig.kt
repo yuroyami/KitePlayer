@@ -530,7 +530,8 @@ public data class SubtitleConfig(
     /**
      * Select a forced-subtitles track automatically: one in a preferred language when the audio
      * language is not preferred, and otherwise one matching the audio's own language, which is
-     * the audience a forced track is authored for.
+     * the audience a forced track is authored for. The choice is made again whenever the audio
+     * changes, until a subtitle is chosen by hand (#506).
      */
     val autoSelectForced: Boolean = true,
     /**

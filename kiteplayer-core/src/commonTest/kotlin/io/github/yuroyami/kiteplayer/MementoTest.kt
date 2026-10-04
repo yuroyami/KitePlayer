@@ -79,6 +79,7 @@ class MementoTest {
         volume: Float = 1f,
         balance: Float = 0f,
         audioLanguage: String? = null,
+        subtitleLanguage: String? = null,
     ) = PlayerMemento(
         queue = listOf(MediaItem("scripted://one")),
         queueIndex = 0,
@@ -92,7 +93,7 @@ class MementoTest {
         subtitleDelay = kotlin.time.Duration.ZERO,
         audioDelay = kotlin.time.Duration.ZERO,
         audioLanguage = audioLanguage,
-        subtitleLanguage = null,
+        subtitleLanguage = subtitleLanguage,
         subtitlesOff = false,
         balance = balance,
     )
@@ -107,6 +108,49 @@ class MementoTest {
         harness.run(100.milliseconds)
         assertEquals(PlaybackStatus.Paused, player.state.value.status)
         assertEquals(1f, player.state.value.volume, "the volume must be clamped to the default ceiling of 1")
+        harness.close()
+    }
+
+    // Japanese audio by default and a dub, a full English subtitle track and a forced signs track
+    // in the dub's language. The restored dub makes the player choose the signs track (#506).
+    private fun dubbed(dub: String) = MediaScript(
+        durationUs = 20_000_000,
+        hasAudio = false,
+        additionalAudioTracks = listOf(
+            ScriptedAudioTrack(index = 1, marker = 1f, language = "jpn", isDefault = true),
+            ScriptedAudioTrack(index = 2, marker = 2f, language = dub),
+        ),
+        additionalSubtitleTracks = listOf(
+            ScriptedSubtitleTrack(index = 3, cues = emptyList(), language = "eng", isDefault = true),
+            ScriptedSubtitleTrack(index = 4, cues = emptyList(), language = dub, isForced = true),
+        ),
+    )
+
+    @Test
+    fun `the restored subtitle language wins over the track the player matched to the restored audio`() = runTest {
+        val harness = CoreHarness(this, script = dubbed("fre"))
+        val player = KitePlayer(harness.core)
+        harness.attachRenderer()
+        player.restore(memento(audioLanguage = "fre", subtitleLanguage = "eng"))
+        harness.run(100.milliseconds)
+        val tracks = player.state.value.tracks
+        assertEquals(TrackId(2), tracks.selectedAudio)
+        assertEquals(TrackId(3), tracks.selectedSubtitle, "the French signs track the audio brought replaced the saved English")
+        harness.close()
+    }
+
+    @Test
+    fun `a subtitle the player matched to the restored audio stays when it is in the saved language`() = runTest {
+        // The memento names a language and nothing more, and the signs track the player chose for
+        // the dub is in it, so it is the better guess at what was showing.
+        val harness = CoreHarness(this, script = dubbed("eng"))
+        val player = KitePlayer(harness.core)
+        harness.attachRenderer()
+        player.restore(memento(audioLanguage = "eng", subtitleLanguage = "eng"))
+        harness.run(100.milliseconds)
+        val tracks = player.state.value.tracks
+        assertEquals(TrackId(2), tracks.selectedAudio)
+        assertEquals(TrackId(4), tracks.selectedSubtitle, "the restore swapped the dub's signs track for the full track")
         harness.close()
     }
 

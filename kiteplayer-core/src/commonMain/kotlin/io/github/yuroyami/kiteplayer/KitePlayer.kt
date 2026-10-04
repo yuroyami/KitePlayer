@@ -1135,17 +1135,23 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             }
         }
 
-        val tracks = state.value.tracks
         memento.audioLanguage?.let { language ->
-            val wanted = tracks.audio.firstOrNull { it.language == language } ?: return@let
-            if (tracks.selectedAudio != wanted.id) selectTrack(TrackKind.Audio, wanted.id)
+            val opened = state.value.tracks
+            val wanted = opened.audio.firstOrNull { it.language == language } ?: return@let
+            if (opened.selectedAudio != wanted.id) selectTrack(TrackKind.Audio, wanted.id)
         }
+        // Read after the audio, because a subtitle the player chose follows the audio (#506). One
+        // already in the memento's language stays: the memento names only a language, and the
+        // player's choice among that language's tracks, a forced one for this audio, is the better
+        // guess at which of them it was.
+        val tracks = state.value.tracks
         if (memento.subtitlesOff) {
             if (tracks.selectedSubtitle != null) selectTrack(TrackKind.Subtitle, null)
         } else {
             memento.subtitleLanguage?.let { language ->
                 val wanted = tracks.subtitles.firstOrNull { it.language == language } ?: return@let
-                if (tracks.selectedSubtitle != wanted.id) selectTrack(TrackKind.Subtitle, wanted.id)
+                val selected = tracks.selectedSubtitle?.let { tracks.find(it) }
+                if (selected?.language != language) selectTrack(TrackKind.Subtitle, wanted.id)
             }
         }
         memento.secondarySubtitleLanguage?.let { language ->
@@ -1195,15 +1201,19 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /**
      * Selects a track, or deselects the kind entirely with a null [track], and says what happened.
      *
-     * Switching a CONTAINER track reopens the container and seeks back to where playback was,
-     * because the demuxer permits its stream selection to be set once before the first read, so
-     * that path needs a seekable source. Selecting an EXTERNAL subtitle track (a negative
-     * [TrackId] from [MediaItem.externalSubtitles]) while no container subtitle stream is
-     * selected is an in-place cue-table swap: no reopen, no seek, any source. Seamless container
-     * switching is tracked as an issue.
+     * An audio or subtitle track switches in place, from the packets the player already keeps for
+     * every track of those kinds, on any source. A VIDEO track reopens the container and seeks back
+     * to where playback was, so that path needs a seekable source. An EXTERNAL subtitle track (a
+     * negative [TrackId] from [MediaItem.externalSubtitles]) is a cue table and switches in place.
      *
-     * Selections of DIFFERENT kinds made close together are merged into one reopen, so setting the
-     * audio track and then the subtitle track costs one rebuild and both are applied. Two requests
+     * A subtitle the open chose by itself follows the audio. After an audio change it is chosen
+     * again by the same rules against the new audio, so a viewer who switches an anime from Japanese
+     * to the English dub gets the English signs track made for the dub instead of every line they now
+     * hear, and the full track again on switching back. A subtitle selected here, or a file added or
+     * flagged to show, is the caller's and stays through every audio change.
+     *
+     * Selections of DIFFERENT kinds made close together apply together, and a video change takes the
+     * audio or subtitle change waiting beside it into its one reopen. Two requests
      * for the SAME kind cannot both be honoured, and the earlier one returns
      * [TrackChange.Superseded] rather than the success it used to report. Read the
      * result when it matters; ignore it when your application only ever selects from one place.
@@ -1214,7 +1224,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws PlaybackException when the reopen itself failed: the media or the device broke.
      * @throws IllegalStateException when nothing is open.
      * @throws IllegalArgumentException when [track] is not a track of [kind] in the current media.
-     * @throws UnsupportedOperationException for a container switch on a source that cannot seek,
+     * @throws UnsupportedOperationException for a video track switch on a source that cannot seek,
      *         and for a container subtitle track when the backend decodes no subtitle format.
      */
     @Throws(Exception::class)

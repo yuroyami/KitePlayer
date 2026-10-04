@@ -428,6 +428,62 @@ class PlaybackCoreTest {
     }
 
     @Test
+    fun `an audio change that rides a decoder recovery takes the subtitle that goes with it`() = runTest {
+        // Japanese by default and an English dub, a full English track and an English signs
+        // track: the dub takes the signs track (#506), here through the software reopen.
+        val script = MediaScript(
+            durationUs = 4_000_000,
+            hasAudio = false,
+            additionalAudioTracks = listOf(
+                ScriptedAudioTrack(index = 1, marker = 1f, language = "jpn", isDefault = true),
+                ScriptedAudioTrack(index = 2, marker = 2f, language = "eng"),
+            ),
+            additionalSubtitleTracks = listOf(
+                ScriptedSubtitleTrack(index = 3, cues = emptyList(), language = "eng", isDefault = true),
+                ScriptedSubtitleTrack(index = 4, cues = emptyList(), language = "eng", isForced = true),
+            ),
+        )
+        val hardwareFrames = LeakLedger()
+        lateinit var harness: CoreHarness
+        var selection: TrackChange? = null
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            queuedRendererDecoderFailingOnReceive(
+                script = script,
+                hardwareFrames = hardwareFrames,
+                failOutputAt = 12,
+                onBeforeFailure = {
+                    backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        selection = harness.core.selectTrack(TrackKind.Audio, TrackId(2))
+                    }
+                },
+            )
+        }
+        harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+
+        harness.openWithRenderer()
+        assertEquals(TrackId(3), harness.core.snapshots.value.tracks.selectedSubtitle)
+        harness.core.play()
+        harness.run(1.seconds)
+
+        assertIs<TrackChange.Applied>(selection, "the audio change was not applied by the recovery")
+        assertEquals(2, harness.backend.openCalls, "the audio change must ride the recovery reopen")
+        assertEquals(TrackId(2), harness.core.snapshots.value.tracks.selectedAudio)
+        assertEquals(
+            TrackId(4),
+            harness.core.snapshots.value.tracks.selectedSubtitle,
+            "the recovery kept every line under the dub",
+        )
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+        assertEquals(0, hardwareFrames.liveCount)
+    }
+
+    @Test
     fun `video deselection queued with decoder failure becomes a valid audio only recovery`() = runTest {
         val script = MediaScript(durationUs = 4_000_000)
         val hardwareFrames = LeakLedger()

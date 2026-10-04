@@ -720,6 +720,7 @@ internal class PlaybackCore(
             is ExternalSubtitleParse.Loaded -> {
                 externalSubtitleTracks = externalSubtitleTracks + parsed.track
                 tracks = tracks.copy(all = tracks.all + parsed.track.info)
+                subtitleChosenByPlayer = false
                 if (active.subtitleStream != null) {
                     // A container stream is timing cues: route through the same rebuild the
                     // ordinary selection path takes, so one selection owner survives. The caller
@@ -1115,6 +1116,14 @@ internal class PlaybackCore(
     /** True when the item's variant is the player's own step down, which it may lower again. */
     private var variantChosenByPlayer = false
 
+    /**
+     * True while the primary subtitle is the one the open chose by its rules, which read the audio,
+     * so an audio change chooses it again (#506). A selection by the viewer or the application, or a
+     * file added or flagged to be shown, makes the subtitle theirs, and it stays through every
+     * audio change.
+     */
+    private var subtitleChosenByPlayer = false
+
     /** When playback began to wait for data while playing, or [NO_POSITION]. */
     private var starvedSinceNanos: Long = NO_POSITION
 
@@ -1132,6 +1141,8 @@ internal class PlaybackCore(
         val kind: TrackKind,
         val track: TrackId?,
         val reply: CompletableDeferred<TrackChange>,
+        /** True for the player's own choice, which no caller asked for and nobody awaits (#506). */
+        val automatic: Boolean = false,
     )
 
     private var pendingVideoRecovery: VideoRecovery? = null
@@ -2220,6 +2231,7 @@ internal class PlaybackCore(
                     cancelSubtitleAcquisitions {
                         IllegalStateException("a later track selection replaced it before the subtitle file finished loading")
                     }
+                    subtitleChosenByPlayer = false
                 }
                 traceUntilReplied(command.reply, "track", "switch") {
                     mapOf("kind" to command.kind.name, "track" to (command.track?.value?.toString() ?: "none"))
@@ -2770,6 +2782,7 @@ internal class PlaybackCore(
     private fun resetForOpen(item: MediaItem, epoch: Generation) {
         media = item
         variantChosenByPlayer = false
+        subtitleChosenByPlayer = false
         starvedSinceNanos = NO_POSITION
         stepUpNotBeforeNanos = NO_POSITION
         stepUpWait = VARIANT_STEP_UP_WAIT
@@ -2937,6 +2950,7 @@ internal class PlaybackCore(
             // Unconditional: when this is non-null the container's subtitle stream was left
             // unselected above, so there is never a competing selection to defer to.
             (immediateExternal ?: preferredExternal)?.let { applyExternalSubtitle(it.id) }
+            subtitleChosenByPlayer = immediateExternal == null
             refreshTypesetting()
             // The start position's second half: the exact landing, as an ordinary precise seek
             // through the ordinary machine, so the masked position report, generation fencing
@@ -3971,6 +3985,26 @@ internal class PlaybackCore(
     }
 
     /**
+     * Chooses the primary subtitle again for the audio [session] now plays, by the open's own rules,
+     * while the open's choice still stands (#506). Those rules read the audio: a forced track goes
+     * with the audio in its language, so a viewer who switches to the dub gets the signs track made
+     * for it, and switching back brings the full track back. Media3 runs its text choice again the
+     * same way. A subtitle the viewer or the application chose stays, and so does a secondary.
+     */
+    private suspend fun chooseSubtitleForAudio(session: OpenSession) {
+        if (!subtitleChosenByPlayer || TrackKind.Subtitle in pendingSelections) return
+        val container = pickSubtitle(session.source.streams, session.audioStream)
+        val target = preferredExternalSubtitle(container, externalSubtitleTracks.map { it.info }, config.subtitles)?.id
+            ?: container?.let { TrackId(it.index) }
+        if (target == tracks.selectedSubtitle) return
+        // One track cannot fill both slots, and the secondary is the viewer's.
+        if (target != null && target == tracks.selectedSecondarySubtitle) return
+        pendingSelections[TrackKind.Subtitle] =
+            SelectionRequest(TrackKind.Subtitle, target, CompletableDeferred(), automatic = true)
+        inPlaceContainerSubtitleChange(session)
+    }
+
+    /**
      * The secondary slot. In place, like every subtitle change: the demuxer already routes
      * every subtitle stream to its own live queue, so a second stream needs a decoder and a cue
      * table, never a reopen. The spec predated that and said reopen; the tree is better.
@@ -4093,7 +4127,16 @@ internal class PlaybackCore(
 
     private fun discardSelection(kind: TrackKind, reason: String) {
         val request = pendingSelections.remove(kind) ?: return
-        warn(PlaybackWarning.CommandRefused("selectTrack", reason))
+        val track = request.track
+        // The player's own choice was never a command, so its refusal names the track it gave up
+        // on, as an open does for a stream nothing decodes.
+        warn(
+            if (request.automatic && track != null) {
+                PlaybackWarning.TrackDeselected(track, reason)
+            } else {
+                PlaybackWarning.CommandRefused("selectTrack", reason)
+            },
+        )
         request.reply.complete(TrackChange.Discarded(reason))
     }
 
@@ -4417,6 +4460,9 @@ internal class PlaybackCore(
         }
         session.audioDeviceNeedsStart = playRequested && targetLane != null
         tracks = tracks.withSelection(TrackKind.Audio, request.track)
+        // Before the reply, so a caller that awaited the audio reads the subtitle that goes with it,
+        // and while the request is still pending, so a close that cancels this answers it.
+        chooseSubtitleForAudio(session)
         publishSnapshot()
         pendingSelections.remove(TrackKind.Audio)
         request.reply.complete(TrackChange.Applied(TrackKind.Audio, request.track))
@@ -4467,6 +4513,7 @@ internal class PlaybackCore(
         val at = currentPosition()
         val wasPlaying = playRequested
         val secondaryBefore = tracks.selectedSecondarySubtitle
+        val audioBefore = current.audioStream?.index
         // Another variant numbers its streams its own way, so what was not asked for is chosen again.
         fun keptOrChosen(kind: TrackKind, index: Int?): StreamChoice = when {
             variantRequest == null || requested.any { it.kind == kind } -> choiceFor(requested, kind, index)
@@ -4533,6 +4580,9 @@ internal class PlaybackCore(
             // external rows and both subtitle selections go back on top of it.
             restoreSubtitleState(secondaryBefore)
             refreshTypesetting()
+            // An audio change that rode the rebuild, beside a video change or on another variant,
+            // takes the subtitle that goes with it as the in-place one does (#506).
+            if (variantRequest != null || rebuilt.audioStream?.index != audioBefore) chooseSubtitleForAudio(rebuilt)
             setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
             // Published before the replies, as the in-place audio and subtitle changes do. The
             // status write above publishes only when the status moves, and a paused player's
@@ -4684,6 +4734,8 @@ internal class PlaybackCore(
                 requested.forEach { it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION)) }
                 return
             }
+            // An audio change that rode the recovery takes the subtitle that goes with it (#506).
+            if (result.session.audioStream?.index != recovery.audio.selectedIndex()) chooseSubtitleForAudio(result.session)
             publishSnapshot()
             requested.forEach { it.reply.complete(TrackChange.Applied(it.kind, it.track)) }
             if (userSeek != null) {
@@ -6566,6 +6618,19 @@ internal class PlaybackCore(
     )
 
     /**
+     * Selects the external file a prepared [item] opens with, as an open does: one flagged to show
+     * at once, or else one the build preferred over the container's own (#514). The subtitle is the
+     * player's own choice unless a file asked to be shown (#506).
+     */
+    private suspend fun applyPreparedSubtitle(item: MediaItem, prepared: PreparedNext) {
+        val immediate = prepared.externals
+            .firstOrNull { track -> item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true }
+            ?.id
+        (immediate ?: prepared.session.preferredExternalSubtitle)?.let { applyExternalSubtitle(it) }
+        subtitleChosenByPlayer = immediate == null
+    }
+
+    /**
      * What a background build for the preload does differently from an open: it writes no player
      * state, holds its warnings and events for the swap, opens no audio device, and never takes a
      * renderer's own video decoder. See [buildSession].
@@ -6969,11 +7034,7 @@ internal class PlaybackCore(
                 return
             }
             adoptExternalSubtitles(next.item, prepared.externals)
-            (
-                prepared.externals
-                    .firstOrNull { track -> next.item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true }
-                    ?.id ?: prepared.session.preferredExternalSubtitle
-                )?.let { applyExternalSubtitle(it) }
+            applyPreparedSubtitle(next.item, prepared)
             refreshTypesetting()
             setStatus(PlaybackStatus.Paused)
             emitEvent(PlayerEvent.Opened(next.item, tracks))
@@ -7065,11 +7126,7 @@ internal class PlaybackCore(
         next.build.warnings.release()
         next.build.events.forEach(::emitEvent)
         adoptExternalSubtitles(next.item, prepared.externals)
-        (
-            prepared.externals
-                .firstOrNull { track -> next.item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true }
-                ?.id ?: prepared.session.preferredExternalSubtitle
-            )?.let { applyExternalSubtitle(it) }
+        applyPreparedSubtitle(next.item, prepared)
         refreshTypesetting()
         startAudioEventCollector(incoming)
         if (incoming.videoDecoderDeferred) startDeferredVideo(incoming)

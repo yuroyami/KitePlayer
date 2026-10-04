@@ -430,6 +430,15 @@ public final class io/github/yuroyami/kiteplayer/HdrPolicy : java/lang/Enum {
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/HdrPolicy;
 }
 
+public final class io/github/yuroyami/kiteplayer/HearingImpairedNotes : java/lang/Enum {
+	public static final field Hide Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
+	public static final field HideStrict Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
+	public static final field Keep Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
+}
+
 public final class io/github/yuroyami/kiteplayer/HwdecKind : java/lang/Enum {
 	public static final field D3d11va Lio/github/yuroyami/kiteplayer/HwdecKind;
 	public static final field MediaCodec Lio/github/yuroyami/kiteplayer/HwdecKind;
@@ -2266,8 +2275,8 @@ public final class io/github/yuroyami/kiteplayer/SubtitleCompositorKt {
 
 public final class io/github/yuroyami/kiteplayer/SubtitleConfig {
 	public fun <init> ()V
-	public synthetic fun <init> (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/util/List;
 	public final fun component2 ()Z
 	public final fun component3 ()Z
@@ -2276,14 +2285,16 @@ public final class io/github/yuroyami/kiteplayer/SubtitleConfig {
 	public final fun component6 ()Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;
 	public final fun component7 ()Z
 	public final fun component8 ()Ljava/util/List;
-	public final fun copy-mGOUYlo (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
-	public static synthetic fun copy-mGOUYlo$default (Lio/github/yuroyami/kiteplayer/SubtitleConfig;Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
+	public final fun component9 ()Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
+	public final fun copy-SBKQj6I (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
+	public static synthetic fun copy-SBKQj6I$default (Lio/github/yuroyami/kiteplayer/SubtitleConfig;Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAutoSelect ()Z
 	public final fun getAutoSelectForced ()Z
 	public final fun getDelay-UwyO8pc ()J
 	public final fun getFontScale ()F
 	public final fun getFonts ()Ljava/util/List;
+	public final fun getHearingImpairedNotes ()Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
 	public final fun getPreferredLanguages ()Ljava/util/List;
 	public final fun getStyle ()Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;
 	public final fun getTypesetting ()Z
@@ -2301,6 +2312,7 @@ public final class io/github/yuroyami/kiteplayer/SubtitleConfigBuilder {
 	public final fun getDelay-UwyO8pc ()J
 	public final fun getFontScale ()F
 	public final fun getFonts ()Ljava/util/List;
+	public final fun getHearingImpairedNotes ()Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
 	public final fun getPreferredLanguages ()Ljava/util/List;
 	public final fun getStyle ()Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;
 	public final fun getTypesetting ()Z
@@ -2309,6 +2321,7 @@ public final class io/github/yuroyami/kiteplayer/SubtitleConfigBuilder {
 	public final fun setDelay-LRDsOJo (J)V
 	public final fun setFontScale (F)V
 	public final fun setFonts (Ljava/util/List;)V
+	public final fun setHearingImpairedNotes (Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;)V
 	public final fun setPreferredLanguages (Ljava/util/List;)V
 	public final fun setStyle (Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;)V
 	public final fun setTypesetting (Z)V

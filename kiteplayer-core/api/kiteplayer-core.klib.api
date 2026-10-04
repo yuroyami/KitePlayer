@@ -362,6 +362,18 @@ final enum class io.github.yuroyami.kiteplayer/HdrPolicy : kotlin/Enum<io.github
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/HdrPolicy> // io.github.yuroyami.kiteplayer/HdrPolicy.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer/HearingImpairedNotes : kotlin/Enum<io.github.yuroyami.kiteplayer/HearingImpairedNotes> { // io.github.yuroyami.kiteplayer/HearingImpairedNotes|null[0]
+    enum entry Hide // io.github.yuroyami.kiteplayer/HearingImpairedNotes.Hide|null[0]
+    enum entry HideStrict // io.github.yuroyami.kiteplayer/HearingImpairedNotes.HideStrict|null[0]
+    enum entry Keep // io.github.yuroyami.kiteplayer/HearingImpairedNotes.Keep|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer/HearingImpairedNotes.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer/HearingImpairedNotes> // io.github.yuroyami.kiteplayer/HearingImpairedNotes.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer/HearingImpairedNotes // io.github.yuroyami.kiteplayer/HearingImpairedNotes.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/HearingImpairedNotes> // io.github.yuroyami.kiteplayer/HearingImpairedNotes.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer/HwdecKind : kotlin/Enum<io.github.yuroyami.kiteplayer/HwdecKind> { // io.github.yuroyami.kiteplayer/HwdecKind|null[0]
     enum entry D3d11va // io.github.yuroyami.kiteplayer/HwdecKind.D3d11va|null[0]
     enum entry MediaCodec // io.github.yuroyami.kiteplayer/HwdecKind.MediaCodec|null[0]
@@ -3459,7 +3471,7 @@ final class io.github.yuroyami.kiteplayer/StreamVariant { // io.github.yuroyami.
 }
 
 final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami.kiteplayer/SubtitleConfig|null[0]
-    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ...) // io.github.yuroyami.kiteplayer/SubtitleConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>){}[0]
+    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ..., io.github.yuroyami.kiteplayer/HearingImpairedNotes = ...) // io.github.yuroyami.kiteplayer/SubtitleConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>;io.github.yuroyami.kiteplayer.HearingImpairedNotes){}[0]
 
     final val autoSelect // io.github.yuroyami.kiteplayer/SubtitleConfig.autoSelect|{}autoSelect[0]
         final fun <get-autoSelect>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.autoSelect.<get-autoSelect>|<get-autoSelect>(){}[0]
@@ -3471,6 +3483,8 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami
         final fun <get-fontScale>(): kotlin/Float // io.github.yuroyami.kiteplayer/SubtitleConfig.fontScale.<get-fontScale>|<get-fontScale>(){}[0]
     final val fonts // io.github.yuroyami.kiteplayer/SubtitleConfig.fonts|{}fonts[0]
         final fun <get-fonts>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> // io.github.yuroyami.kiteplayer/SubtitleConfig.fonts.<get-fonts>|<get-fonts>(){}[0]
+    final val hearingImpairedNotes // io.github.yuroyami.kiteplayer/SubtitleConfig.hearingImpairedNotes|{}hearingImpairedNotes[0]
+        final fun <get-hearingImpairedNotes>(): io.github.yuroyami.kiteplayer/HearingImpairedNotes // io.github.yuroyami.kiteplayer/SubtitleConfig.hearingImpairedNotes.<get-hearingImpairedNotes>|<get-hearingImpairedNotes>(){}[0]
     final val preferredLanguages // io.github.yuroyami.kiteplayer/SubtitleConfig.preferredLanguages|{}preferredLanguages[0]
         final fun <get-preferredLanguages>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/SubtitleConfig.preferredLanguages.<get-preferredLanguages>|<get-preferredLanguages>(){}[0]
     final val style // io.github.yuroyami.kiteplayer/SubtitleConfig.style|{}style[0]
@@ -3486,7 +3500,8 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami
     final fun component6(): io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? // io.github.yuroyami.kiteplayer/SubtitleConfig.component6|component6(){}[0]
     final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component7|component7(){}[0]
     final fun component8(): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> // io.github.yuroyami.kiteplayer/SubtitleConfig.component8|component8(){}[0]
-    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ...): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/SubtitleConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>){}[0]
+    final fun component9(): io.github.yuroyami.kiteplayer/HearingImpairedNotes // io.github.yuroyami.kiteplayer/SubtitleConfig.component9|component9(){}[0]
+    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ..., io.github.yuroyami.kiteplayer/HearingImpairedNotes = ...): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/SubtitleConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>;io.github.yuroyami.kiteplayer.HearingImpairedNotes){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/SubtitleConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/SubtitleConfig.toString|toString(){}[0]
@@ -3510,6 +3525,9 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfigBuilder { // io.github.y
     final var fonts // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.fonts|{}fonts[0]
         final fun <get-fonts>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.fonts.<get-fonts>|<get-fonts>(){}[0]
         final fun <set-fonts>(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont>) // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.fonts.<set-fonts>|<set-fonts>(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>){}[0]
+    final var hearingImpairedNotes // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.hearingImpairedNotes|{}hearingImpairedNotes[0]
+        final fun <get-hearingImpairedNotes>(): io.github.yuroyami.kiteplayer/HearingImpairedNotes // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.hearingImpairedNotes.<get-hearingImpairedNotes>|<get-hearingImpairedNotes>(){}[0]
+        final fun <set-hearingImpairedNotes>(io.github.yuroyami.kiteplayer/HearingImpairedNotes) // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.hearingImpairedNotes.<set-hearingImpairedNotes>|<set-hearingImpairedNotes>(io.github.yuroyami.kiteplayer.HearingImpairedNotes){}[0]
     final var preferredLanguages // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.preferredLanguages|{}preferredLanguages[0]
         final fun <get-preferredLanguages>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.preferredLanguages.<get-preferredLanguages>|<get-preferredLanguages>(){}[0]
         final fun <set-preferredLanguages>(kotlin.collections/List<kotlin/String>) // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.preferredLanguages.<set-preferredLanguages>|<set-preferredLanguages>(kotlin.collections.List<kotlin.String>){}[0]

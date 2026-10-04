@@ -533,6 +533,13 @@ public data class SubtitleConfig(
      * Ignored by the Kotlin tier, which uses the platform's own font system.
      */
     val fonts: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont> = emptyList(),
+    /**
+     * What happens to the notes that subtitles for deaf and hard-of-hearing viewers carry, such as
+     * `[DOOR SLAMS]`, `(laughs)`, `JOHN:` and lines of `♪` music (#493). [HearingImpairedNotes.Keep]
+     * shows them as authored. The setting reads SubRip, WebVTT, MP4 and other text tracks, from the
+     * container or from a file; ASS signs, typesetting and karaoke are left alone.
+     */
+    val hearingImpairedNotes: HearingImpairedNotes = HearingImpairedNotes.Keep,
 ) {
     init {
         require(fontScale.isFinite() && fontScale > 0f) { "fontScale must be finite and positive, was $fontScale" }
@@ -564,3 +571,19 @@ public data class Backends(
     val backend: MediaBackend? = null,
     val output: OutputBackend? = null,
 )
+
+/** What [SubtitleConfig.hearingImpairedNotes] does with the notes of hearing-impaired subtitles (#493). */
+public enum class HearingImpairedNotes {
+    /** The notes show as authored. */
+    Keep,
+
+    /**
+     * Sound descriptions in square brackets, a parenthesis that opens a line or fills it, a
+     * speaker's name in capitals before a colon at the start of a line, and lines of `♪` music go.
+     * A line left empty goes, and a cue left with no line is not shown.
+     */
+    Hide,
+
+    /** As [Hide], and every parenthesis within a line goes too. */
+    HideStrict,
+}

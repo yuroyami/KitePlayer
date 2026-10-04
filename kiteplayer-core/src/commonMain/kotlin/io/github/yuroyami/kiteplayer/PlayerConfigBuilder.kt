@@ -213,6 +213,9 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
     /** See [SubtitleConfig.fonts]. */
     public var fonts: List<SubtitleFont> = from.fonts
 
+    /** See [SubtitleConfig.hearingImpairedNotes]. */
+    public var hearingImpairedNotes: HearingImpairedNotes = from.hearingImpairedNotes
+
     /** The [SubtitleConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): SubtitleConfig = SubtitleConfig(
         preferredLanguages = preferredLanguages,
@@ -223,6 +226,7 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
         style = style,
         typesetting = typesetting,
         fonts = fonts,
+        hearingImpairedNotes = hearingImpairedNotes,
     )
 }
 

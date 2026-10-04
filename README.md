@@ -593,6 +593,10 @@ and labels it.
 
 - SubRip, WebVTT and SubStation Alpha, from the container or from an external file. External files
   load in the middle of playback.
+- `SubtitleConfig.hearingImpairedNotes` hides the notes of subtitles made for deaf and
+  hard-of-hearing viewers: `[DOOR SLAMS]`, a `(laughs)` that opens a line, `JOHN:` and `♪` music
+  lines, and with `HideStrict` every parenthesis. ASS scripts are left alone
+  ([#493](https://github.com/yuroyami/KitePlayer/issues/493)).
 - An external file added without a language takes one from its name, as `Film.en.srt`,
   `Film.eng.forced.srt` and `Film.pt-BR.sdh.srt` say it, with `forced`, and `sdh`, `cc` or `hi`,
   marking the track, and a file in a preferred language is chosen at open over the container's

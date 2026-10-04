@@ -20,6 +20,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Marker
 import io.github.yuroyami.kiteplayer.SubtitleConfig
 import io.github.yuroyami.kiteplayer.SubtitleSource
+import io.github.yuroyami.kiteplayer.HearingImpairedNotes
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackStats
@@ -580,11 +581,13 @@ internal class PlaybackCore(
         // The same self-announcement the backend's parser routes on: labelling every
         // non-VTT file SubRip told a track list that an ASS script was something it is not.
         val isAss = trimmed.trimStart(' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true)
-        val cues = runCatching { parser.parse(trimmed, isVtt) }.getOrElse { failure ->
+        val parsed = runCatching { parser.parse(trimmed, isVtt) }.getOrElse { failure ->
             return ExternalSubtitleParse.Failed(
                 "the external subtitle file failed to parse: ${redactUri(sourceFile.uri)}${causeDetail(failure)}",
             )
         }
+        // The notes of hearing-impaired subtitles go as the file is read, but never an ASS script's (#493).
+        val cues = if (isAss) parsed else hideHearingImpairedNotes(parsed, config.subtitles.hearingImpairedNotes)
         if (cues.isEmpty()) {
             return ExternalSubtitleParse.Failed(
                 "the external subtitle file parsed to no cues: ${redactUri(sourceFile.uri)}",
@@ -5176,7 +5179,7 @@ internal class PlaybackCore(
                 }
                 receiveBatches++
                 cuesInserted = true
-                insertCues(session.subtitleCues, decoded)
+                insertCues(session.subtitleCues, withoutNotes(decoded, session.subtitleStream))
                 if (actorWorkWaiting()) {
                     interrupted = true
                     return
@@ -5297,7 +5300,7 @@ internal class PlaybackCore(
                 }
                 receiveBatches++
                 cuesInserted = true
-                insertCues(session.subtitle2Cues, decoded)
+                insertCues(session.subtitle2Cues, withoutNotes(decoded, session.subtitle2Stream))
                 if (actorWorkWaiting()) {
                     interrupted = true
                     return
@@ -5460,6 +5463,16 @@ internal class PlaybackCore(
             val untilNext = (nextUs - positionUs).microseconds
             if (untilNext > Duration.ZERO) wakeIn(minOf(untilNext, WORKER_POLL))
         }
+    }
+
+    /** [decoded] without the notes of hearing-impaired subtitles, unless [stream] is ASS, whose text is often signs (#493). */
+    private fun withoutNotes(
+        decoded: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+        stream: PlayerStreamInfo?,
+    ): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> {
+        val mode = config.subtitles.hearingImpairedNotes
+        if (mode == HearingImpairedNotes.Keep || stream?.codec?.lowercase() in ASS_CODECS) return decoded
+        return hideHearingImpairedNotes(decoded, mode)
     }
 
     private fun insertCues(

@@ -63,10 +63,10 @@ public fun interface SubtitleFileParser {
      *
      * The engine decides the encoding from the bytes, and asks only for the multi-byte East Asian
      * ones: `Shift_JIS`, `EUC-JP`, `GBK`, `Big5` and `EUC-KR`, as the WHATWG Encoding Standard
-     * names them. It may ask for several of them for one file, and it keeps the first reading with
-     * almost no U+FFFD in it, so a byte sequence the table cannot read must become U+FFFD. With the
-     * default null, such a file is read as windows-1252 and the engine warns. An exception counts as
-     * null.
+     * names them. It may ask for all five for one file. It sets aside a reading with more than a
+     * little U+FFFD in it and weighs the rest by how likely their characters are, so a byte sequence
+     * the table cannot read must become U+FFFD. With the default null, such a file is read as
+     * single-byte text and the engine warns. An exception counts as null.
      */
     public fun decode(bytes: ByteArray, encoding: String): String? = null
 }

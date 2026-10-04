@@ -23,9 +23,10 @@ internal data class DecodedSubtitleText(
  * natural logarithm of each character's share in the language it reads best as. On held-out
  * subtitle lines, text read through its own table averages about -2 at any length, and 99 samples
  * in 100 of five lines stay above -3.7, while a multi-byte East Asian file read one byte at a time
- * falls under -4 in 9 files in 10 of two lines and in all but one in 500 of five; a line or two of
- * it can still read as Arabic or Thai (#520). Below this, no single-byte reading is certain, and the
- * file is asked whether it is East Asian.
+ * falls under -4 in 9 files in 10 of two lines and in all but one in 500 of five. A line or two of
+ * it can still read as Arabic or Thai, which is why an East Asian reading is weighed beside the
+ * single-byte ones rather than only asked for below this (#520). Below this, no single-byte reading
+ * is certain.
  */
 private const val MIN_LIKELIHOOD = -4.0
 
@@ -53,6 +54,28 @@ private const val HINT_WEIGHT = 10.0
  * cheapest is charged, which favours the single-byte reading.
  */
 private const val ASCII_SECOND_BYTE_LIKELIHOOD = -7.0
+
+/**
+ * How many byte pairs a file needs before an East Asian reading is weighed: two, which is two
+ * characters. A pair or two happens by chance in other text, and what keeps that text single-byte is
+ * how unlikely its East Asian reading is, not a count. On held-out subtitle lines, each line a file of
+ * its own, a minimum of eight pairs left 46 files in 100 unread, and two leaves 4 (#520). One pair
+ * reads a few more, and read three Western files of 25,000 as Big5.
+ */
+private const val MIN_PAIRS = 2
+
+/** [MIN_PAIRS] for a track whose language is Chinese, Japanese or Korean, which says what one pair is. */
+private const val MIN_PAIRS_IN_ITS_LANGUAGE = 1
+
+/**
+ * How many byte pairs it takes to name an East Asian encoding with no reading to weigh, when no table
+ * reads the file and nothing single-byte reads as text. Two pairs that no table reads are a short
+ * Greek or Thai line far more often than they are Chinese.
+ */
+private const val MIN_PAIRS_TO_NAME = 8
+
+/** The languages written in the multi-byte East Asian encodings, which no single-byte table lists. */
+private val EAST_ASIAN_LANGUAGES = setOf("ja", "zh", "ko")
 
 /** Share of high bytes a multi-byte encoding puts into lead/trail pairs. */
 private const val MIN_PAIRED_SHARE = 0.8
@@ -161,14 +184,17 @@ private fun ByteArray.isAsciiLetterAt(index: Int): Boolean {
  * holds alike are one answer. The best is certain when it reads as real text and is far likelier
  * than any reading that shows different text. When it is not, the result says so, and shows the best
  * reading still, or windows-1252, the usual default of VLC and of the Windows that wrote these files,
- * when that is nearly as likely. Only when no single-byte reading reads as text at all is the file
- * asked whether it is one of the multi-byte East Asian encodings, and an East Asian reading is kept
- * only when its characters are likelier in its language ([EAST_ASIAN_CHARACTERS]) than the single-byte
- * reading's are in theirs.
+ * when that is nearly as likely. A file with the byte pairs of the multi-byte East Asian encodings is
+ * also read through each of them, and the East Asian reading whose characters are likeliest in its
+ * language ([EAST_ASIAN_CHARACTERS]) is kept when it is likelier than the best single-byte reading.
+ * It is certain when it is the encoding the byte pairs look most like, reads with nothing left over,
+ * and is far likelier than every other reading of either kind.
  *
  * [languageHint] is the track's declared language when there is one. It counts against the charsets
  * that do not list it, which settles readings the bytes leave close, and it never overrules a clear
- * answer.
+ * answer. Chinese, Japanese and Korean name the East Asian encodings they are written in, so they
+ * count against every single-byte reading and the East Asian readings in other languages, and the
+ * encoding they name is asked first: `zh-TW` or `zh-Hant` names Big5 and `zh-CN` or `zh-Hans` GBK.
  *
  * [fallback] is an encoding to read a file in when it has no byte-order mark and is not UTF-8, in
  * place of the guess. One that cannot be read here, an East Asian name with no table, is ignored.
@@ -209,8 +235,10 @@ internal fun decodeSubtitleBytes(
     }
 
     // The hint as one spelling, so `lit`, `lt` and `lt-LT` all name Lithuanian.
-    val language = LanguageTag.parse(languageHint)?.language
-    val hinted = language != null && SubtitleCharset.entries.any { language in it.languages }
+    val tag = LanguageTag.parse(languageHint)
+    val language = tag?.language
+    val eastAsianHint = language in EAST_ASIAN_LANGUAGES
+    val hinted = language != null && (eastAsianHint || SubtitleCharset.entries.any { language in it.languages })
     // A table that reads one of the file's bytes as nothing, or as a control character, is not the
     // file's. Tables that read every byte present alike show the same text, so they are one answer
     // and never each other's runner-up: windows-1250 and ISO-8859-2 read most Polish letters alike,
@@ -224,20 +252,40 @@ internal fun decodeSubtitleBytes(
         .toList()
     val best = answers.firstOrNull()
     val plausible = best != null && best.first().score / high.total >= MIN_LIKELIHOOD
-    if (!plausible) {
-        // Nothing single-byte reads as text. Only now is it worth asking about a multi-byte
-        // encoding: dense Cyrillic has exactly the byte-pair shape EUC does, so asking that
-        // question first told every Russian subtitle it was Korean.
-        eastAsianCandidates(bytes)?.let { candidates ->
-            val reading = eastAsian?.let { readEastAsian(bytes, candidates, it) }
-                ?: return unsure(SubtitleCharset.Windows1252, candidates.first())
-            // GBK and Shift_JIS read almost any run of high bytes without a gap, so a clean reading
-            // is not yet a likely one: a Thai line heavy with rare letters, read below the floor in
-            // Thai, came out as Japanese. The East Asian reading is taken when its characters are
-            // likelier in its own language than the best single-byte reading's are in theirs.
-            val singleByte = best?.first()?.score?.plus(asciiSecondBytes(bytes) * ASCII_SECOND_BYTE_LIKELIHOOD)
-            if (singleByte == null || reading.eastAsianLikelihood() > singleByte) return reading
+    // A line of GBK, Big5 or EUC is also a line of Arabic letters in windows-1256 or Thai ones in
+    // windows-874, and on a line or two that reading looks like text often enough, so an East Asian
+    // reading is weighed beside the single-byte ones and not only below their floor (#520). Dense
+    // Cyrillic has the byte-pair shape of EUC, and its Korean reading is what keeps it Russian: far
+    // less likely in Korean than the Cyrillic is in Russian.
+    var eastAsianRunnerUp = Double.NEGATIVE_INFINITY
+    eastAsianCandidates(bytes, if (eastAsianHint) MIN_PAIRS_IN_ITS_LANGUAGE else MIN_PAIRS)?.let { shapes ->
+        val candidates = if (eastAsianHint) tag.namedFirst(shapes) else shapes
+        val readings = eastAsian?.let { table ->
+            readEastAsian(bytes, candidates, table) { name -> if (hinted && !tag.names(name)) HINT_WEIGHT else 0.0 }
+        }.orEmpty()
+        val top = readings.firstOrNull()
+        if (top == null) {
+            // No table read it, so the bytes have only their shape to say they are East Asian. That
+            // is enough to name the encoding in the warning when the track's language is East Asian,
+            // or when nothing single-byte reads as text and the file has many pairs.
+            val named = eastAsianHint || (!plausible && eastAsianCandidates(bytes, MIN_PAIRS_TO_NAME) != null)
+            if (named) return unsure(SubtitleCharset.Windows1252, candidates.first())
+            return@let
         }
+        // The single-byte reading takes the ASCII second bytes of the pairs as ASCII, which its
+        // likelihood leaves out, so it is charged for them before the two are weighed.
+        val asciiCharge = asciiSecondBytes(bytes) * ASCII_SECOND_BYTE_LIKELIHOOD
+        val singleByte = best?.first()?.score?.plus(asciiCharge) ?: Double.NEGATIVE_INFINITY
+        if (top.likelihood > singleByte) {
+            // GBK reads most Big5 pairs and EUC-KR most GBK ones without a gap, so on a short line
+            // a clean reading is not yet a certain one: it has to be far likelier than the others.
+            val rival = readings.firstOrNull { it.text != top.text }?.likelihood ?: Double.NEGATIVE_INFINITY
+            val confident = top.clean && top.name == candidates.first() &&
+                top.likelihood - maxOf(rival, singleByte) >= MIN_MARGIN
+            return DecodedSubtitleText(top.text, top.name, confident)
+        }
+        // A close East Asian reading leaves the single-byte one unsure, as a close single-byte one does.
+        eastAsianRunnerUp = top.likelihood - asciiCharge
     }
     // Not East Asian either, so the likeliest single-byte reading is still the best there is, only
     // never a certain one: a one-word Thai line such as "ใช่" reads below the floor in Thai and
@@ -253,7 +301,7 @@ internal fun decodeSubtitleBytes(
             ?: best.firstOrNull { it.charset == SubtitleCharset.Windows1252 }
             ?: best.first()
         ).charset
-    val runnerUp = answers.getOrNull(1)?.first()?.score ?: Double.NEGATIVE_INFINITY
+    val runnerUp = maxOf(answers.getOrNull(1)?.first()?.score ?: Double.NEGATIVE_INFINITY, eastAsianRunnerUp)
     if (score - runnerUp >= MIN_MARGIN) {
         return DecodedSubtitleText(charset.decode(bytes), charset.label, confident = plausible)
     }
@@ -358,7 +406,7 @@ private fun isValidUtf8(bytes: ByteArray): Boolean {
 
 /**
  * Names the multi-byte East Asian encodings the bytes could be in, likeliest first, from their
- * byte-pair shape alone. Null when they do not have that shape.
+ * byte-pair shape alone. Null when they do not have that shape, or have fewer than [minPairs] pairs.
  *
  * All five put a character in a lead byte from 0x81 up and a trail byte after it. What tells them
  * apart is where each language's commonest characters sit:
@@ -372,10 +420,12 @@ private fun isValidUtf8(bytes: ByteArray): Boolean {
  *   rows above as well, where Korean has only Hanja. Korean also puts a space between words, and
  *   Chinese almost never puts one between two characters, which settles Korean with some Hanja.
  *
- * The other four follow the likeliest, so a table that cannot read the bytes can hand over to the
- * next. This decodes nothing: the tables live in `kiteplayer-subtitles`, above the core.
+ * The other four follow the likeliest. Every one of them is read, because on a line or two the shape
+ * often names the wrong one, and the readings themselves decide. The first is the one a reading
+ * must be to be certain. This decodes nothing: the tables live in `kiteplayer-subtitles`, above the
+ * core.
  */
-private fun eastAsianCandidates(bytes: ByteArray): List<String>? {
+private fun eastAsianCandidates(bytes: ByteArray, minPairs: Int): List<String>? {
     var shiftJisLeads = 0
     var lowTrails = 0
     var middleTrails = 0
@@ -409,10 +459,10 @@ private fun eastAsianCandidates(bytes: ByteArray): List<String>? {
     }
     val pairs = shiftJisLeads + lowTrails + middleTrails + eucPairs
     val highBytes = bytes.count { (it.toInt() and 0xFF) >= 0x80 }
-    // A handful of pairs happens by chance in any text; a real CJK file is almost entirely pairs.
-    // A PROPORTION rather than an exact count: requiring every high byte to pair made this turn on
-    // whether the total happened to be even, which is not a property of the encoding.
-    if (pairs < 8 || pairs * 2 < highBytes * MIN_PAIRED_SHARE) return null
+    // A real CJK file is almost entirely pairs. A PROPORTION rather than an exact count: requiring
+    // every high byte to pair made this turn on whether the total happened to be even, which is not
+    // a property of the encoding.
+    if (pairs < minPairs || pairs * 2 < highBytes * MIN_PAIRED_SHARE) return null
     // Latin text pairs up too, an accented letter with the letter after it, but its trails are
     // plain ASCII. The five put well over a third of their trails at 0x80 or above, so a text with
     // fewer than a quarter there is none of them.
@@ -456,18 +506,39 @@ private fun asciiSecondBytes(bytes: ByteArray): Int {
 }
 
 /**
- * How likely an East Asian reading is in the language its encoding is written in, as
+ * How likely [text], read as [encoding], is in the language that encoding is written in, as
  * [EastAsianModel.likelihood] says: Japanese for Shift_JIS and EUC-JP, simplified Chinese for GBK,
  * traditional Chinese for Big5 and Korean for EUC-KR.
  */
-private fun DecodedSubtitleText.eastAsianLikelihood(): Double {
-    val language = when (charset) {
+private fun eastAsianLikelihood(encoding: String, text: String): Double {
+    val language = when (encoding) {
         SHIFT_JIS, EUC_JP -> "ja"
         GBK -> "zh-Hans"
         BIG5 -> "zh-Hant"
         else -> "ko"
     }
     return eastAsianModels.getValue(language).likelihood(text)
+}
+
+/**
+ * Whether this track's language is written in [encoding]: Japanese in Shift_JIS and EUC-JP, Korean in
+ * EUC-KR, and Chinese in GBK and Big5, or in only one of them when the tag implies its script.
+ */
+private fun LanguageTag?.names(encoding: String): Boolean = when (this?.language) {
+    "ja" -> encoding == SHIFT_JIS || encoding == EUC_JP
+    "ko" -> encoding == EUC_KR
+    "zh" -> when (impliedScript) {
+        "Hant" -> encoding == BIG5
+        "Hans" -> encoding == GBK
+        else -> encoding == GBK || encoding == BIG5
+    }
+    else -> false
+}
+
+/** [candidates] with the encodings this track's language names moved to the front, in their order. */
+private fun LanguageTag?.namedFirst(candidates: List<String>): List<String> {
+    val named = candidates.filter { names(it) }
+    return named + (candidates - named.toSet())
 }
 
 /** ASCII spaces with a high byte on both sides: the gaps between words that Korean writes. */
@@ -482,20 +553,25 @@ private fun spacesBetweenCharacters(bytes: ByteArray): Int {
 }
 
 /**
- * The first reading, in [candidates] order, that leaves at most [MAX_UNREADABLE_SHARE] of its
- * characters unread, or null when none does.
- *
- * Only the likeliest encoding read cleanly counts as confident. A reading that forgave anything, or
- * needed a later candidate, says so through the warning.
+ * One East Asian table's reading of a file: its [likelihood] in the table's language less any
+ * [readEastAsian] charge, and whether it is [clean], every character read.
+ */
+private class EastAsianReading(val name: String, val text: String, val likelihood: Double, val clean: Boolean)
+
+/**
+ * Every reading of [bytes] that leaves at most [MAX_UNREADABLE_SHARE] of its characters unread,
+ * likeliest first, each less what [charge] asks of its encoding. Ties keep [candidates] order.
  */
 private fun readEastAsian(
     bytes: ByteArray,
     candidates: List<String>,
     eastAsian: (ByteArray, String) -> String?,
-): DecodedSubtitleText? {
-    candidates.forEachIndexed { rank, name ->
+    charge: (String) -> Double,
+): List<EastAsianReading> {
+    val readings = mutableListOf<EastAsianReading>()
+    for (name in candidates) {
         // A parser that throws is treated as one without that table: a subtitle never fails an open.
-        val text = runCatching { eastAsian(bytes, name) }.getOrNull() ?: return@forEachIndexed
+        val text = runCatching { eastAsian(bytes, name) }.getOrNull() ?: continue
         var nonAscii = 0
         var unreadable = 0
         for (c in text) {
@@ -504,8 +580,8 @@ private fun readEastAsian(
             if (c == '\uFFFD' || c in '\uE000'..'\uF8FF') unreadable++
         }
         if (unreadable <= nonAscii * MAX_UNREADABLE_SHARE) {
-            return DecodedSubtitleText(text, name, confident = rank == 0 && unreadable == 0)
+            readings += EastAsianReading(name, text, eastAsianLikelihood(name, text) - charge(name), clean = unreadable == 0)
         }
     }
-    return null
+    return readings.sortedByDescending { it.likelihood }
 }

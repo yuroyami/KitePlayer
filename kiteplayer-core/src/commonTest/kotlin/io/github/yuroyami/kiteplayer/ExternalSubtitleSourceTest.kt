@@ -225,7 +225,7 @@ class ExternalSubtitleSourceTest {
             ),
         )
         harness.run(100.milliseconds)
-        assertEquals(listOf("Shift_JIS"), asked, "the engine never handed the bytes to the parser's table")
+        assertEquals("Shift_JIS", asked.firstOrNull(), "the engine never handed the bytes to the parser's table first")
         val guessed = harness.core.warningHistory().map { it.warning }
             .filterIsInstance<PlaybackWarning.SubtitleCharsetGuessed>()
         assertTrue(guessed.isEmpty(), "a file the table read cleanly is not a guess: $guessed")

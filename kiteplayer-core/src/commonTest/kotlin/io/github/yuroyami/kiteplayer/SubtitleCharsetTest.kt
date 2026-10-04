@@ -194,7 +194,8 @@ class SubtitleCharsetTest {
                 asked += name
                 if (name == encoding) "read as $name" else null
             }
-            assertEquals(listOf(encoding), asked, "the $encoding file asked the wrong table first")
+            assertEquals(encoding, asked.first(), "the $encoding file asked the wrong table first")
+            assertEquals(EAST_ASIAN_FILES.keys, asked.toSet(), "every table reads the $encoding file")
             assertEquals("read as $encoding", decoded.text)
             assertEquals(encoding, decoded.charset)
             assertTrue(decoded.confident, "the likeliest table reading cleanly is not a guess")
@@ -203,9 +204,10 @@ class SubtitleCharsetTest {
     }
 
     @Test
-    fun aTableThatCannotReadTheBytesHandsOverToTheNextAndTheResultIsAGuess() {
-        // Korean is likeliest here. A table that leaves one character in three unread is wrong,
-        // so the next name gets its turn, and a reading that needed a second try must say so.
+    fun aTableThatCannotReadTheBytesIsPassedOverAndTheResultIsAGuess() {
+        // Korean is likeliest here. A table that leaves one character in three unread is wrong, so
+        // the reading another table makes is kept, and since that table is not the one the bytes
+        // looked most like, it says it guessed.
         val asked = mutableListOf<String>()
         val decoded = decodeSubtitleBytes(EAST_ASIAN_FILES.getValue("EUC-KR")) { _, name ->
             asked += name
@@ -215,7 +217,7 @@ class SubtitleCharsetTest {
                 else -> null
             }
         }
-        assertEquals(listOf("EUC-KR", "GBK"), asked)
+        assertEquals(listOf("EUC-KR", "GBK", "Big5", "EUC-JP", "Shift_JIS"), asked)
         assertEquals("GBK", decoded.charset)
         assertEquals("\u97E9\u56FD\u8BED", decoded.text)
         assertFalse(decoded.confident)
@@ -452,19 +454,141 @@ class SubtitleCharsetTest {
     }
 
     @Test
-    fun aShortLineThatReadsAsTextIsNotOfferedToTheEastAsianTables() {
-        // A short Hebrew line has too few letters to be sure of, and every word of it is a run of
-        // high bytes, which is the byte-pair shape of the East Asian encodings. It still reads as
-        // Hebrew, so no East Asian table is offered it, not even one that would read anything.
-        val text = "1\n00:00:01,000 --> 00:00:01,900\n" +
-            "\u05D4\u05DE\u05E9\u05E4\u05D7\u05D4 \u05E9\u05DC\u05E0\u05D5 \u05D2\u05D3\u05D5\u05DC\u05D4 \u05DE\u05D0\u05D5\u05D3"
-        val bytes = "1\n00:00:01,000 --> 00:00:01,900\n".encodeToByteArray() + hex("e4eef9f4e7e420f9ecf0e520e2e3e5ece420eee0e5e3")
-        val decoded = decodeSubtitleBytes(bytes) { _, _ -> "\u4E00\u4E8C\u4E09" }
-        assertEquals("windows-1255", decoded.charset)
-        assertEquals(text, decoded.text)
+    fun aShortLineThatNoEastAsianTableReadsStaysInItsOwnScript() {
+        // Every word of a short Hebrew, Greek or Thai line is a run of high bytes, which is the
+        // byte-pair shape of the East Asian encodings, so each table is asked, and each leaves a
+        // character it cannot make out. Too few letters to be sure of, each line is still shown in
+        // its own script, and with no reading to weigh, two or three pairs are not enough to name an
+        // East Asian encoding in a warning.
+        val cases = listOf(
+            Triple(HEBREW, "windows-1255", "\u05D4\u05DE\u05E9\u05E4\u05D7\u05D4 \u05E9\u05DC\u05E0\u05D5 \u05D2\u05D3\u05D5\u05DC\u05D4 \u05DE\u05D0\u05D5\u05D3"),
+            Triple(GREEK, "windows-1253", "\u0384E\u03BB\u03B1, \u03A6\u03C1\u03B1\u03BD\u03BA."),
+            Triple(THAI_NAME, "windows-874", "\u0E44\u0E1A\u0E42\u0E2D-\u0E1E\u0E2D\u0E23\u0E4C\u0E17"),
+        )
+        for ((line, charset, text) in cases) {
+            val asked = mutableListOf<String>()
+            val decoded = decodeSubtitleBytes(line.bytes) { bytes, name ->
+                asked += name
+                line.tables(bytes, name)
+            }
+            assertEquals(EAST_ASIAN_FILES.keys, asked.toSet(), text)
+            assertEquals(charset, decoded.charset, text)
+            assertEquals(CUE.decodeToString() + text, decoded.text)
+            assertFalse(decoded.confident, text)
+            assertNull(decoded.unsupportedGuess, text)
+            val untabled = decodeSubtitleBytes(line.bytes)
+            assertEquals(charset, untabled.charset, text)
+            assertNull(untabled.unsupportedGuess, text)
+        }
+    }
+
+    @Test
+    fun aShortEastAsianLineIsReadInItsOwnTableAndIsCertain() {
+        // Lines #520 found shown as Arabic or Thai, a word or two each. Several tables read each of
+        // them cleanly, and its own table reads it as characters far likelier in its language.
+        for ((line, encoding) in listOf(WHAT to "Big5", WHERE to "EUC-KR", RIGHT to "Shift_JIS")) {
+            val decoded = decodeSubtitleBytes(line.bytes, eastAsian = line.tables)
+            assertEquals(encoding, decoded.charset, line.text(encoding))
+            assertEquals(line.text(encoding), decoded.text)
+            assertTrue(decoded.confident, line.text(encoding))
+            assertNull(decoded.unsupportedGuess)
+        }
+    }
+
+    @Test
+    fun twoCharactersThatSeveralTablesReadAreSettledByTheTracksLanguage() {
+        // Shift_JIS, GBK and EUC-KR each read these four bytes as two common characters, so on its
+        // own the line is a guess. The track's language says which language they are in.
+        val alone = decodeSubtitleBytes(BETSUNI.bytes, eastAsian = BETSUNI.tables)
+        assertFalse(alone.confident, alone.text)
+        for (hint in listOf("ja", "jpn", "ja-JP")) {
+            val decoded = decodeSubtitleBytes(BETSUNI.bytes, languageHint = hint, eastAsian = BETSUNI.tables)
+            assertEquals("Shift_JIS", decoded.charset, hint)
+            assertEquals(BETSUNI.text("Shift_JIS"), decoded.text)
+            assertTrue(decoded.confident, hint)
+        }
+    }
+
+    @Test
+    fun aChineseTagThatImpliesItsScriptNamesBig5OrGbk() {
+        // Traditional Chinese in Big5 that GBK also reads cleanly, as other characters. Chinese alone
+        // names both tables, so the line stays a guess; Taiwan or the traditional script names Big5.
+        val bare = decodeSubtitleBytes(CRICKET.bytes, languageHint = "zh", eastAsian = CRICKET.tables)
+        assertFalse(bare.confident, bare.text)
+        for (hint in listOf("zh-TW", "zh-Hant", "zh-HK")) {
+            val decoded = decodeSubtitleBytes(CRICKET.bytes, languageHint = hint, eastAsian = CRICKET.tables)
+            assertEquals("Big5", decoded.charset, hint)
+            assertEquals(CRICKET.text("Big5"), decoded.text)
+            assertTrue(decoded.confident, hint)
+        }
+        val simplified = decodeSubtitleBytes(UNDERSTOOD.bytes, languageHint = "zh-CN", eastAsian = UNDERSTOOD.tables)
+        assertEquals("GBK", simplified.charset)
+        assertEquals(UNDERSTOOD.text("GBK"), simplified.text)
+        assertTrue(simplified.confident)
+    }
+
+    @Test
+    fun oneCharacterIsEnoughWhenTheTrackNamesItsLanguage() {
+        // A one-word line, which Korean and Japanese subtitles have often, is one byte pair. Without
+        // a language one pair is as likely two accents side by side, so no table is asked; with
+        // Korean or Japanese named, it is one character of that language.
+        for ((line, hint, encoding) in listOf(Triple(YES, "ko", "EUC-KR"), Triple(EH, "ja", "Shift_JIS"))) {
+            val decoded = decodeSubtitleBytes(line.bytes, languageHint = hint, eastAsian = line.tables)
+            assertEquals(encoding, decoded.charset, hint)
+            assertEquals(line.text(encoding), decoded.text)
+            assertTrue(decoded.confident, hint)
+            val asked = mutableListOf<String>()
+            decodeSubtitleBytes(line.bytes) { _, name ->
+                asked += name
+                null
+            }
+            assertEquals(emptyList(), asked, line.text(encoding))
+        }
+    }
+
+    @Test
+    fun aCloseEastAsianReadingLeavesTheSingleByteOneUnsure() {
+        // Read one byte at a time, these two Japanese characters are four Cyrillic letters that
+        // windows-1251 reads far likelier than any other single-byte table. The Japanese reading is
+        // not much less likely, so the Cyrillic is a guess, and with Japanese named the line is read
+        // as Japanese.
+        val alone = decodeSubtitleBytes(ROGER.bytes, eastAsian = ROGER.tables)
+        assertEquals("windows-1251", alone.charset)
+        assertFalse(alone.confident)
+        val japanese = decodeSubtitleBytes(ROGER.bytes, languageHint = "ja", eastAsian = ROGER.tables)
+        assertEquals("EUC-JP", japanese.charset)
+        assertEquals(ROGER.text("EUC-JP"), japanese.text)
+    }
+
+    @Test
+    fun aShortChineseLineThatKoreanReadsCleanlyIsNotCertain() {
+        // EUC-KR reads these three GBK characters as three Hangul syllables, every one of them real.
+        // The Chinese reading is the likelier, and too short to be sure of; before #520 the line was
+        // shown as Korean with certainty.
+        val decoded = decodeSubtitleBytes(UNDERSTOOD.bytes, eastAsian = UNDERSTOOD.tables)
+        assertEquals("GBK", decoded.charset)
+        assertEquals(UNDERSTOOD.text("GBK"), decoded.text)
         assertFalse(decoded.confident)
-        assertNull(decoded.unsupportedGuess)
-        assertNull(decodeSubtitleBytes(bytes).unsupportedGuess)
+    }
+
+    @Test
+    fun aWesternWordWithTwoAccentsInARowIsNotCertainWithoutItsLanguage() {
+        // "maïsbrood" written with a diaeresis before the i, two high bytes that Big5 and EUC-KR each
+        // read as one character. Without a language the line is a guess; Dutch settles it.
+        val text = "Ik heb ma\u00A8\u00EFsbrood met chili gemaakt.\nZei je ma\u00A8\u00EFsbrood en chili?"
+        val bytes = CUE + latin1(text)
+        val tables: (ByteArray, String) -> String? = { _, name ->
+            when (name) {
+                "Big5" -> "\u5241"
+                "EUC-KR" -> "\u2468"
+                "GBK" -> "\uE7D2"
+                else -> null
+            }?.let { CUE.decodeToString() + text.replace("\u00A8\u00EF", it) }
+        }
+        assertFalse(decodeSubtitleBytes(bytes, eastAsian = tables).confident)
+        val dutch = decodeSubtitleBytes(bytes, languageHint = "nl", eastAsian = tables)
+        assertEquals("windows-1252", dutch.charset)
+        assertEquals(CUE.decodeToString() + text, dutch.text)
     }
 
     @Test
@@ -639,6 +763,22 @@ class SubtitleCharsetTest {
     }
 
     private class Fixture(val bytes: ByteArray, val text: String)
+
+    /**
+     * A short line after a cue, and what each East Asian table reads it as, by the detector's name for
+     * the table. The readings are Python's codecs cp932, euc_jp, gb18030, big5hkscs and cp949, the
+     * nearest there to the WHATWG tables `kiteplayer-subtitles` reads with. A reading with U+FFFD or a
+     * private-use character in it is one that table could not make out.
+     */
+    private class EastAsianLine(line: String, vararg readings: Pair<String, String>) {
+        private val byName = readings.toMap()
+        val bytes = CUE + hex(line)
+
+        /** A backend's tables, which read the cue as ASCII and the line as the readings say. */
+        val tables: (ByteArray, String) -> String? = { _, name -> byName[name]?.let { CUE.decodeToString() + it } }
+
+        fun text(encoding: String): String = CUE.decodeToString() + byName.getValue(encoding)
+    }
 
     private companion object {
         /** The tables whose letters are not Latin ones. */
@@ -834,6 +974,126 @@ class SubtitleCharsetTest {
                 "bfaa20bed5bfa1bcad20b1e2b4d9b8aeb0ed20c0d6c0b8b4cfb1ee20bba1b8ae20bfcd20c1d6bcbcbfe42e",
                 "b0edb8b6bff62e20b4d9c0bdbfa120c3b5c3b5c8f720c0ccbedfb1e2c7cfc0da2e",
             ),
+        )
+
+        /** 什麼？, "what?", in Big5. */
+        val WHAT = EastAsianLine(
+            "a4b0bbf2a148",
+            "Shift_JIS" to "\uFF64\uFF70\uFF7B\uE1D8H",
+            "EUC-JP" to "\u3050\u8CDC\uFFFDH",
+            "GBK" to "\u3050\u6216\uE4CE",
+            "Big5" to "\u4EC0\u9EBC\uFF1F",
+            "EUC-KR" to "\u3140\uC0C0\uC8AD",
+        )
+
+        /** 어디 가?, "where are you going?", in EUC-KR. */
+        val WHERE = EastAsianLine(
+            "beeeb5f020b0a13f",
+            "Shift_JIS" to "\uFF7E\u92D9\uFFFD \uFF70\uFF61?",
+            "EUC-JP" to "\u5B22\u5DE8 \u4E9C?",
+            "GBK" to "\u7EE2\u53FC \u554A?",
+            "Big5" to "\u6A6B\u86E4 \u965B?",
+            "EUC-KR" to "\uC5B4\uB514 \uAC00?",
+        )
+
+        /** - そうだ, "- that's right", in Shift_JIS. */
+        val RIGHT = EastAsianLine(
+            "2d2082bb82a482be",
+            "Shift_JIS" to "- \u305D\u3046\u3060",
+            "EUC-JP" to "- \uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD",
+            "GBK" to "- \u5066\u5046\u5069",
+            "Big5" to "- \uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD",
+            "EUC-KR" to "- \uADA9\uAD8E\uADAC",
+        )
+
+        /** 別に, "not really", in Shift_JIS. */
+        val BETSUNI = EastAsianLine(
+            "95ca82c9",
+            "Shift_JIS" to "\u5225\u306B",
+            "EUC-JP" to "\uFFFD\uFFFD\uFFFD\uFFFD",
+            "GBK" to "\u66BF\u5075",
+            "Big5" to "\uD853\uDC09\uFFFD\uFFFD",
+            "EUC-KR" to "\uBE76\uADB8",
+        )
+
+        /** 讓蟋蟀, "let the cricket", in Big5. */
+        val CRICKET = EastAsianLine(
+            "c5fdc1b5c1ac",
+            "Shift_JIS" to "\uFF85\uF8F1\uFF81\uFF75\uFF81\uFF6C",
+            "EUC-JP" to "\u7D71\u7985\u92AD",
+            "GBK" to "\u7435\u604B\u8FDE",
+            "Big5" to "\u8B93\u87CB\u87C0",
+            "EUC-KR" to "\uD248\uC854\uC82F",
+        )
+
+        /** 明白了, "understood", in GBK. */
+        val UNDERSTOOD = EastAsianLine(
+            "c3f7b0d7c1cb",
+            "Shift_JIS" to "\uFF83\uE593\uFF97\uFF81\uFF8B",
+            "EUC-JP" to "\u82E7\u6613\u963B",
+            "GBK" to "\u660E\u767D\u4E86",
+            "Big5" to "\u96B4\u555E\u8CF8",
+            "EUC-KR" to "\uCE20\uAC9C\uC8C4",
+        )
+
+        /** "΄Eλα, Φρανκ.", "come on, Frank", in windows-1253, as a file of the corpus wrote it. */
+        val GREEK = EastAsianLine(
+            "b445ebe12c20d6f1e1edea2e",
+            "Shift_JIS" to "\uFF74E\uFFFD\uFFFD, \uFF96\uE15C\u6E3C.",
+            "EUC-JP" to "\uFFFDE\u8AF1, \u5E62\u7622\uFFFD.",
+            "GBK" to "\u788B\u8136, \u7AF9\u72B4\uFFFD.",
+            "Big5" to "\u5AA7\u9306, \u7F63\u647F\uFFFD.",
+            "EUC-KR" to "\uD032\u541F, \u8CC2\uF970\uFFFD.",
+        )
+
+        /** ไบโอ-พอร์ท, a name, in windows-874. */
+        val THAI_NAME = EastAsianLine(
+            "e4bae2cd2dbecdc3ecb7",
+            "Shift_JIS" to "\u83A0\u7C23-\uFF7E\uFF8D\uFF83\uFFFD\uFF77",
+            "EUC-JP" to "\u7BCB\u775B-\u7965\u67F1\uFFFD",
+            "GBK" to "\u6D5C\u9994-\u5C31\u6E3A\uFFFD",
+            "Big5" to "\u922D\u734C-\u61A9\u93C8\uFFFD",
+            "EUC-KR" to "\u96C5\u9700-\uC54E\uCDEC\uFFFD",
+        )
+
+        /** "our family is very big" in windows-1255. */
+        val HEBREW = EastAsianLine(
+            "e4eef9f4e7e420f9ecf0e520e2e3e5ece420eee0e5e3",
+            "Shift_JIS" to "\u84A1\uE74F\u9215 \uE747\uE0A4 \u7CA4\u890C\uFFFD \u9AD9\u88D9",
+            "EUC-JP" to "\u7CAE\uFFFD\uFFFD\u822E \uFFFD\u8DDF\uFFFD \u77E3\u7E7B\uFFFD \u91F5\u7E5D",
+            "GBK" to "\u6F15\uE2E5\u739F \uE2DD\u75B1 \u5FCF\u5C50\uFFFD \u94B9\u9088",
+            "Big5" to "\u510B\u2562\u8AD9 \u2558\u8B25 \u777C\u6A26\uFFFD \u9357\u6A0D",
+            "EUC-KR" to "\u54C0\u5AE6\uF9B7 \u76D2\u91E3 \u6812\u8AFA\uFFFD \u7E3E\u61B6",
+        )
+
+        /** 네?, "yes?", in EUC-KR. */
+        val YES = EastAsianLine(
+            "b3d73f",
+            "Shift_JIS" to "\uFF73\uFF97?",
+            "EUC-JP" to "\u9769?",
+            "GBK" to "\u5319?",
+            "Big5" to "\u557B?",
+            "EUC-KR" to "\uB124?",
+        )
+
+        /** え?, "huh?", in Shift_JIS. */
+        val EH = EastAsianLine(
+            "82a63f",
+            "Shift_JIS" to "\u3048?",
+            "EUC-JP" to "\uFFFD\uFFFD?",
+            "GBK" to "\u504A?",
+            "Big5" to "\uFFFD\uFFFD?",
+            "EUC-KR" to "\uAD91?",
+        )
+
+        /** 了解, "roger", in EUC-JP. */
+        val ROGER = EastAsianLine(
+            "cebbb2f2",
+            "Shift_JIS" to "\uFF8E\uFF7B\uFF72\uFFFD",
+            "EUC-JP" to "\u4E86\u89E3",
+            "GBK" to "\u4F4D\u8C7A",
+            "Big5" to "\u5F07\u8378",
+            "EUC-KR" to "\u8CAB\uB01D",
         )
     }
 }

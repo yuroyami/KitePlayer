@@ -210,17 +210,28 @@ take about 110 KB of generated source, so they live above the core, and
 `SubtitleFileParser.decode(bytes, encoding)` is the optional member that reads them. The default
 answers null.
 
-The engine names the encoding from the shape of the byte pairs, spelled as the WHATWG Encoding
-Standard spells it: `Shift_JIS`, `EUC-JP`, `GBK`, `Big5` or `EUC-KR`. It asks `decode` for the
-likeliest name first. When the answer leaves more than one character in fifty as U+FFFD or as a
-private use character, it asks for the other names in a fixed order, and keeps the first reading
-that passes. So a table must turn every byte sequence it cannot read into U+FFFD.
+The engine names the encodings from the shape of the byte pairs, spelled as the WHATWG Encoding
+Standard spells them: `Shift_JIS`, `EUC-JP`, `GBK`, `Big5` and `EUC-KR`. A file with two byte pairs
+or more, or one under a track whose language is Chinese, Japanese or Korean, is read through `decode`
+as each of the five, the likeliest first. A reading that leaves more than one character in fifty as
+U+FFFD or as a private use character is set aside, so a table must turn every byte sequence it
+cannot read into U+FFFD. Of the rest, the reading whose characters are likeliest in its language is
+kept when it is also likelier than the best single-byte reading. On a line or two several tables
+often read the bytes cleanly, as different characters, so being readable is not enough on its own.
 
-- The likeliest name, read with nothing left over, is certain, and the engine says nothing.
-- Any other reading is kept, and `PlaybackWarning.SubtitleCharsetGuessed` names the encoding used.
-- When every answer is null, or no reading passes, the engine reads the file as windows-1252. The
-  same warning names the encoding that the bytes appear to be in. A `decode` that throws counts as
-  one that answered null.
+The track's language counts against the readings in other languages, and the encodings it names
+are taken as the likeliest: Japanese names `Shift_JIS` and `EUC-JP`, Korean `EUC-KR`, and Chinese
+`GBK` and `Big5`, or only `Big5` for `zh-TW`, `zh-HK` or `zh-Hant` and only `GBK` for `zh-CN` or
+`zh-Hans`.
+
+- A reading in the likeliest encoding, with nothing left over and far likelier than every other
+  reading, single-byte or East Asian, is certain, and the engine says nothing.
+- Any other reading that is kept is shown, and `PlaybackWarning.SubtitleCharsetGuessed` names the
+  encoding used. So is a single-byte reading that an East Asian one came close to.
+- When every answer is null, or no reading passes, the file is read as single-byte text. When the
+  track's language is Chinese, Japanese or Korean, or the file has many byte pairs and no
+  single-byte table reads it as text, that text is windows-1252, and the same warning names the
+  encoding that the bytes appear to be in. A `decode` that throws counts as one that answered null.
 
 An application can also name the encoding itself, through `SubtitleSource.encoding`, through
 `KitePlayer.reloadExternalSubtitle` once a file is loaded, or as a standing preference for files

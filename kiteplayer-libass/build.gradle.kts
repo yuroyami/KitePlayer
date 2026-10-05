@@ -280,6 +280,12 @@ kotlin {
         }
         getByName("macosArm64Test").dependsOn(hostRenderTest)
         getByName("jvmTest").dependsOn(hostRenderTest)
+        // The hosts where the typesetter reads the system's font files itself (#507): Linux,
+        // natively and through the JVM adapter. The JVM half has nothing to prove on macOS and
+        // Windows, whose font providers answer for a missing font, and says so.
+        val systemFontsTest = maybeCreate("systemFontsTest").apply { dependsOn(getByName("commonTest")) }
+        getByName("linuxTest").dependsOn(systemFontsTest)
+        getByName("jvmTest").dependsOn(systemFontsTest)
         getByName("androidDeviceTest").dependencies {
             implementation(kotlin("test"))
             implementation(libs.androidx.test.core)

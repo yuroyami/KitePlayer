@@ -23,9 +23,10 @@ public object KiteLibass {
     public var fontDirectories: List<String> = defaultFontDirectories()
 
     /**
-     * How many bytes of system font files one typesetter loads, sans-serif faces first. The
-     * default fits the Latin sans family and one East Asian face on a stock Android system; raise
-     * it for full coverage at the cost of memory, lower it on a constrained device.
+     * How many bytes of system font files one typesetter loads: the platform's Latin sans face
+     * first, which becomes the family a style naming a missing font falls back to, then one East
+     * Asian face, then the other scripts. The default fits all three on a stock Android system;
+     * raise it for full coverage at the cost of memory, lower it on a constrained device.
      */
     public var systemFontBudgetBytes: Long = 24L * 1024 * 1024
 

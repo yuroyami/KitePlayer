@@ -462,6 +462,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   picture off keeps it off, and choosing a picture that appeared after the open switches in place
   too. Turning the picture off while none plays now answers at once instead of opening the item
   again, so a live source, which refused it before, takes it as well.
+- Turning the picture off while a sound plays happens in place too (#529), as in mpv and VLC: the
+  item is not opened again, so the sound and the subtitles play on without a break, and a live
+  source, which refused the choice because it cannot seek back to the position, takes it as well.
+  The demux lane goes on reading the picture, so turning it back on also happens in place, from its
+  keyframe at the position. The renderer keeps the last picture it was given, as it did after the
+  reopen. A picture with no sound beside it carries the clock, so `selectTrack` now refuses to turn
+  it off with `UnsupportedOperationException`, as it refuses to turn off the sound of a song; the
+  reopen it ran before failed the player for want of a stream.
 - A file whose sound starts after its picture shows that picture, with silence, as mpv and VLC do
   (#526). Before, it opened on the picture and then jumped to the first sound sample on play, so a
   recording whose sound starts two seconds in lost its first two seconds of picture, and a seek into

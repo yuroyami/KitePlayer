@@ -1221,9 +1221,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * Selects a track, or deselects the kind entirely with a null [track], and says what happened.
      *
      * An audio or subtitle track switches in place, from the packets the player already keeps for
-     * every track of those kinds, on any source. A VIDEO track reopens the container and seeks back
-     * to where playback was, so that path needs a seekable source. An EXTERNAL subtitle track (a
-     * negative [TrackId] from [MediaItem.externalSubtitles]) is a cue table and switches in place.
+     * every track of those kinds, on any source. So do no video while a sound plays, a VIDEO track
+     * that appeared after the open, and one turned off before, because the player keeps the packets
+     * of those too. Any other VIDEO track reopens the container and seeks back to where playback was,
+     * so that path needs a seekable source. An EXTERNAL subtitle track (a negative [TrackId] from
+     * [MediaItem.externalSubtitles]) is a cue table and switches in place.
      *
      * A subtitle the open chose by itself follows the audio. After an audio change it is chosen
      * again by the same rules against the new audio, so a viewer who switches an anime from Japanese
@@ -1243,8 +1245,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws PlaybackException when the reopen itself failed: the media or the device broke.
      * @throws IllegalStateException when nothing is open.
      * @throws IllegalArgumentException when [track] is not a track of [kind] in the current media.
-     * @throws UnsupportedOperationException for a video track switch on a source that cannot seek,
-     *         and for a container subtitle track when the backend decodes no subtitle format.
+     * @throws UnsupportedOperationException for a video track switch that reopens, on a source that
+     *         cannot seek, for turning off the picture or the sound when it is the only one that
+     *         plays, and for a container subtitle track when the backend decodes no subtitle format.
      */
     @Throws(Exception::class)
     public suspend fun selectTrack(kind: TrackKind, track: TrackId?): TrackChange =

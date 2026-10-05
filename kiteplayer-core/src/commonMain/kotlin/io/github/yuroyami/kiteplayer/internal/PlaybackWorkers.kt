@@ -137,9 +137,14 @@ internal class Worker(val name: String) {
      */
     val releases: Int get() = releaseCount.value
 
-    /** Worker side. Parks here when the actor asked, and returns when it is released. */
-    suspend fun checkpoint() {
+    /**
+     * Worker side. Parks here when the actor asked, and returns when it is released. [beforePark]
+     * runs once before the actor hears that this worker parked, so whatever it lets go is gone before
+     * the actor changes anything.
+     */
+    suspend fun checkpoint(beforePark: () -> Unit = {}) {
         if (!pauseRequested.value) return
+        var prepared = false
         try {
             while (true) {
                 // parkedNow drops BEFORE the flag's deciding re-read. The old
@@ -149,6 +154,10 @@ internal class Worker(val name: String) {
                 // true beforehand, and this worker's next deciding read must see it.
                 parkedNow.value = false
                 if (!pauseRequested.value) return
+                if (!prepared) {
+                    prepared = true
+                    beforePark()
+                }
                 parkedNow.value = true
                 acked.trySend(Unit)
                 // Bounded, so a release that raced the park is noticed even if its token was consumed.

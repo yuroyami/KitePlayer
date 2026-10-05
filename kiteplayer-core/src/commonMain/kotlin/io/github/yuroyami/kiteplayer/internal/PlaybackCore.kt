@@ -2068,6 +2068,16 @@ internal class PlaybackCore(
                     )
                 session == null && pendingVideoRecovery == null ->
                     IllegalStateException("selectTrack needs an open media item")
+                // The sound's rule below, the other way round: a picture with no sound beside it
+                // carries the clock, and a reopen without it failed the player for want of a stream.
+                command.kind == TrackKind.Video && command.track == null && when {
+                    session != null -> session?.videoStream != null && session?.audioLane == null
+                    pendingVideoRecovery != null -> pendingVideoRecovery?.audio == StreamChoice.None
+                    else -> false
+                } ->
+                    UnsupportedOperationException(
+                        "the picture is the only timeline-carrying stream, so disabling it would leave no playable output",
+                    )
                 session != null && session?.source?.seekable != true && command.kind == TrackKind.Video &&
                     !pictureChangesInPlace(command.track) ->
                     UnsupportedOperationException(
@@ -4264,15 +4274,20 @@ internal class PlaybackCore(
     /**
      * A viewer's choice of a picture the demux lane reads into a cache, made in place (#527): a reopen
      * would not list a picture that appeared after the open, and a source that cannot seek could not
-     * come back to the position. Turning the picture off while none plays changes nothing that
-     * plays, and only keeps off a picture that appears later. The picture that plays now, or one with
-     * no cache, is left to the rebuild, which is what a renderer that needs a new decoder asks for.
+     * come back to the position. Turning the picture off happens in place too while a sound carries
+     * the clock (#529), and while none plays it changes nothing that plays and only keeps off a
+     * picture that appears later. The picture that plays now, or one with no cache, is left to the
+     * rebuild, which is what a renderer that needs a new decoder asks for.
      */
     private suspend fun inPlacePictureChange(session: OpenSession) {
         val request = pendingSelections[TrackKind.Video] ?: return
-        if (request.track == null && session.videoStream == null) {
+        if (request.track == null) {
+            if (session.videoStream != null && session.audioLane == null) return
             pendingSelections.remove(TrackKind.Video)
-            request.reply.complete(TrackChange.Applied(TrackKind.Video, null))
+            val refusal = if (session.videoStream == null) null else pictureOffInPlace(session)
+            request.reply.complete(
+                if (refusal == null) TrackChange.Applied(TrackKind.Video, null) else TrackChange.Discarded(refusal),
+            )
             return
         }
         val index = request.track?.value ?: return
@@ -4295,14 +4310,69 @@ internal class PlaybackCore(
     }
 
     /**
-     * Whether choosing [track] as the picture needs no rebuild (#527), so a source that cannot seek
-     * can take it: a picture read into a cache that does not play now, or no picture while none
-     * plays.
+     * Whether choosing [track] as the picture needs no rebuild (#527, #529), so a source that cannot
+     * seek can take it: a picture read into a cache that does not play now, or no picture, while none
+     * plays or while a sound carries the clock.
      */
     private fun pictureChangesInPlace(track: TrackId?): Boolean {
         val open = session ?: return false
         val playing = open.videoStream?.index
-        return if (track == null) playing == null else track.value != playing && track.value in open.pictureQueues
+        return if (track == null) {
+            playing == null || open.audioLane != null
+        } else {
+            track.value != playing && track.value in open.pictureQueues
+        }
+    }
+
+    /**
+     * Takes the picture that plays off, in place (#529): the video lanes stop and end, the frames
+     * waiting to be shown and the decoder go, and the sound and the subtitles play on untouched. The
+     * picture's queue stays a cache the demux lane goes on filling, so choosing the picture again
+     * plays it in place from its keyframe at the position, and the lanes start again then. The
+     * renderer keeps the last picture it was given, as it does when a reopen leaves no picture.
+     *
+     * @return null when the picture is off, or why it is not.
+     */
+    private suspend fun pictureOffInPlace(session: OpenSession): String? {
+        val decodeWorker = session.videoDecodeWorker
+        val scheduler = session.videoScheduler
+        decodeWorker?.requestQuiesce()
+        scheduler?.requestQuiesce()
+        val decodeParked = decodeWorker?.awaitQuiesced(QUIESCE_DEADLINE) ?: true
+        val scheduleParked = scheduler?.awaitQuiesced(QUIESCE_DEADLINE) ?: true
+        if (!decodeParked || !scheduleParked) {
+            decodeWorker?.release(decodeWorker.epoch)
+            scheduler?.release(scheduler.epoch)
+            return "the video lanes did not stop within $QUIESCE_DEADLINE"
+        }
+        val playback = session.video
+        val retired = session.videoDecoder
+        // The frames go before their decoder, because a hardware frame holds one of its slots.
+        playback?.flush(requestedEpoch)
+        session.removePicture()
+        session.videoDecoder = null
+        session.videoDecoderOrigin = null
+        session.coupledRenderer = null
+        session.videoDecodeWorker = null
+        session.videoScheduler = null
+        session.pictureSwitchDiscardBeforeUs.value = Long.MIN_VALUE
+        session.lastVideoPtsUs.value = NO_POSITION
+        session.shownSlot.value = null
+        if (retired != null) {
+            withContext(NonCancellable + dispatchers.videoDecode) { runCatching { retired.close() } }
+                .exceptionOrNull()?.let { failure ->
+                    warn(PlaybackWarning.ResourcesNotReleased("retired video decoder: ${failure.message}"))
+                }
+        }
+        playback?.close()
+        // Released into nothing: each lane finds the session no longer runs it, and ends.
+        decodeWorker?.release(decodeWorker.epoch)
+        scheduler?.release(scheduler.epoch)
+        // A viewer's choice stands for the whole item, so a seek brings back no picture.
+        session.pictureTimeline.clear()
+        tracks = tracks.withSelection(TrackKind.Video, null)
+        publishSnapshot()
+        return null
     }
 
     /**
@@ -10609,7 +10679,10 @@ internal class PlaybackCore(
         val held = HeldLanding()
         try {
             while (true) {
-                worker.checkpoint()
+                // Every park ends in a restart, which drops the held frame, so it goes before the
+                // park, while its decoder is alive: a picture that changes or goes off closes that
+                // decoder while this lane is parked (#527, #529).
+                worker.checkpoint { held.drop(session) }
                 if (worker.releases != restarts) {
                     restarts = worker.releases
                     epoch = worker.epoch
@@ -10620,6 +10693,9 @@ internal class PlaybackCore(
                     skippingToKeyframe = false
                     // A frame held for a backward landing belongs to the timeline the flush ended.
                     held.drop(session)
+                    // A picture turned off ended this lane while it was parked, and one turned on
+                    // again later gets a lane of its own (#529).
+                    if (session.videoDecodeWorker !== worker) return
                     // A picture that gave way to another changed the queue and the decoder while this
                     // lane was parked (#527). A new decoder skips nothing until it is told to.
                     queue = session.videoQueue ?: return
@@ -11333,6 +11409,8 @@ internal class PlaybackCore(
         val video = session.video ?: return
         while (true) {
             worker.checkpoint()
+            // A picture turned off ended this lane while it was parked (#529).
+            if (session.videoScheduler !== worker) return
             when (session.schedulerMode.value) {
                 SCHEDULER_RUNNING -> {
                     // The pause and resume arithmetic of the design, applied here and not by the actor,
@@ -11597,8 +11675,21 @@ internal class PlaybackCore(
          * lanes parked or not started.
          */
         fun installPicture(stream: PlayerStreamInfo, queue: PacketQueue, playback: VideoPlayback) {
+            replacePicture(PictureLane(stream, queue, playback))
+        }
+
+        /**
+         * Takes the picture off (#529). The queue it read stays a cache the demux lane goes on
+         * filling, so choosing the picture again plays in place. Actor only, with the video lanes
+         * parked.
+         */
+        fun removePicture() {
+            replacePicture(PictureLane(null, null, null))
+        }
+
+        private fun replacePicture(next: PictureLane) {
             val before = pictureLane.value
-            pictureLane.value = PictureLane(stream, queue, playback)
+            pictureLane.value = next
             val table = queueTable.value
             val left = before.stream?.index
             val pictures = if (left != null && before.queue != null && left !in table.pictures) {
@@ -11606,8 +11697,8 @@ internal class PlaybackCore(
             } else {
                 table.pictures
             }
-            queueTable.value = QueueTable(queue, table.audio, table.subtitle, pictures)
-            audioRouting.value = AudioRouting(audioLane, listOfNotNull(queue, audioLane?.queue))
+            queueTable.value = QueueTable(next.queue, table.audio, table.subtitle, pictures)
+            audioRouting.value = AudioRouting(audioLane, listOfNotNull(next.queue, audioLane?.queue))
         }
 
         /**

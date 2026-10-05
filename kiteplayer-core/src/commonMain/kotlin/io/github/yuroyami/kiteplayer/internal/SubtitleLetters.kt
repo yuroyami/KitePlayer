@@ -127,7 +127,7 @@ internal val SUBTITLE_CAPITALS: Map<String, Int> = mapOf(
 )
 
 /** The quotes, dashes and ellipsis, which say nothing about the language a file is in. */
-internal const val POOLED_PUNCTUATION: String = "\u00A0«»–—‘’‚“”„•…‹›"
+internal const val POOLED_PUNCTUATION: String = "\u00A0«»–\u2014‘’‚“”„•…‹›"
 
 /**
  * The 1023 characters above ASCII that subtitles of each East Asian language use most,

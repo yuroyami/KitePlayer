@@ -112,7 +112,7 @@ EAST_ASIAN = {
 BANDS = 10
 
 # Typographic punctuation every table puts above ASCII, measured once for all languages.
-POOLED = " «»–—‘’‚“”„•…‹›"
+POOLED = " «»–\u2014‘’‚“”„•…‹›"
 
 # A character seen fewer times than this is left out, as the stray bytes of a badly converted
 # file rather than a part of the language.

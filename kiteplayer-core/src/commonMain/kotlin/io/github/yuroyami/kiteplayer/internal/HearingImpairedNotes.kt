@@ -170,7 +170,7 @@ private fun tidy(line: List<StyledSpan>): List<StyledSpan> {
 private const val MUSIC = "♪♫♬"
 private val SQUARE = Regex("""\[[^\[\]\n]*]|［[^［］\n]*］|【[^【】\n]*】""")
 private val PARENTHESES = Regex("""\([^()\n]*\)|（[^（）\n]*）""")
-private const val DASHES = "-–—"
+private const val DASHES = "-–\u2014"
 private const val SPEAKER_MARKS = " .'#&-"
 private const val MAX_SPEAKER_CHARS = 40
 

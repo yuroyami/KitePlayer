@@ -19,7 +19,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -30,6 +29,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -834,11 +834,22 @@ class PlaybackCoreTest {
         val caller = launch { runCatching { harness.core.open(MediaItem("https://example.com/silent.mp4", io = reader)) } }
         harness.run(100.milliseconds)
 
-        val closed = withTimeoutOrNull(500.milliseconds) { harness.core.closeAndAwait() }
-        assertNotNull(closed, "a close must not wait for the reader to give up (#398)")
+        val asked = harness.clock.nanos().nanoseconds
+        val closing = async {
+            harness.core.closeAndAwait()
+            harness.clock.nanos().nanoseconds
+        }
+        harness.run(500.milliseconds)
         assertTrue(reader.cancelled, "the reader's open was cancelled, not left running")
-        caller.join()
+        // A close is answered from a thread of its own, because its last step closes the dispatchers
+        // the engine runs on, so it may still be on its way after the half second and is awaited, as
+        // in #521. With the device stopped nothing moves the virtual clock while it comes, so the
+        // time it reads is when the engine let it go. A close held by this reader, which never gives
+        // up, would not come at all.
         harness.stopDevice()
+        val closedAt = closing.await()
+        assertTrue(closedAt - asked <= 500.milliseconds, "a close waited ${closedAt - asked} for the reader to give up (#398)")
+        caller.join()
     }
 
     // ---------------------------------------------------------------------------------------------

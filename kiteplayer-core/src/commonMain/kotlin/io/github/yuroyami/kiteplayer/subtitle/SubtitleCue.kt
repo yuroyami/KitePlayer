@@ -19,9 +19,9 @@ public sealed interface SubtitleCue {
      * The built-in sources give a text cue with no end one before it reaches the engine. The SubRip
      * and WebVTT parsers close it at the next cue's start, or 3 seconds later when no cue follows.
      * The FFmpeg backend holds a text cue from a packet with no duration for 10 seconds, and an ASS
-     * event for 5 seconds. An image cue from a stream that gives no end, as Blu-ray subtitles do,
-     * arrives as [OPEN_END], and the engine closes it at the start of the next cue of its track.
-     * A custom source sets its own end.
+     * event for 5 seconds. A cue from a stream that gives no end, as Blu-ray subtitles and teletext
+     * pages do, arrives as [OPEN_END], and the engine closes it at the start of the next cue of its
+     * track. A custom source sets its own end.
      */
     public val endMicros: Long
 
@@ -31,8 +31,8 @@ public sealed interface SubtitleCue {
     public companion object {
         /**
          * The end of a cue that lasts until the next cue of its track starts. A decoder uses it for
-         * a stream that states no end, such as a Blu-ray subtitle, which stays on screen until the
-         * next one replaces or clears it.
+         * a stream that states no end, such as a Blu-ray subtitle or a teletext page, which stays on
+         * screen until the next one replaces or clears it.
          */
         public const val OPEN_END: Long = Long.MAX_VALUE
     }

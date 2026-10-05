@@ -6,7 +6,9 @@ import kotlin.jvm.JvmInline
  * Identifies one track for the life of one opened media item.
  *
  * This is the stream index inside the container for tracks that came from the container, and a
- * negative value for tracks the application added, for example an external subtitle file. Both are
+ * negative value for tracks the application added, for example an external subtitle file. A
+ * teletext stream lists one track per subtitle page (#510): its first page keeps the stream's
+ * index and each further page has an id of its own above every stream index. All of them are
  * opaque to callers: pass back what [Tracks] gave you.
  */
 @JvmInline

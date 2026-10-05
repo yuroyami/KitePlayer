@@ -10,6 +10,14 @@ final class io.github.yuroyami.kiteplayer.subtitle/AssTrackParser { // io.github
     final fun parseEvent(kotlin/String, kotlin/Long, kotlin/Long): io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text? // io.github.yuroyami.kiteplayer.subtitle/AssTrackParser.parseEvent|parseEvent(kotlin.String;kotlin.Long;kotlin.Long){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.subtitle/TeletextPageReader { // io.github.yuroyami.kiteplayer.subtitle/TeletextPageReader|null[0]
+    constructor <init>(kotlin/Int? = ..., kotlin/String? = ...) // io.github.yuroyami.kiteplayer.subtitle/TeletextPageReader.<init>|<init>(kotlin.Int?;kotlin.String?){}[0]
+
+    final fun end(): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/TeletextPageReader.end|end(){}[0]
+    final fun read(kotlin/ByteArray, kotlin/Long): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/TeletextPageReader.read|read(kotlin.ByteArray;kotlin.Long){}[0]
+    final fun reset() // io.github.yuroyami.kiteplayer.subtitle/TeletextPageReader.reset|reset(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.subtitle/WebVttTrackParser { // io.github.yuroyami.kiteplayer.subtitle/WebVttTrackParser|null[0]
     final fun parseCueBody(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/StyledSpan> // io.github.yuroyami.kiteplayer.subtitle/WebVttTrackParser.parseCueBody|parseCueBody(kotlin.String){}[0]
 }

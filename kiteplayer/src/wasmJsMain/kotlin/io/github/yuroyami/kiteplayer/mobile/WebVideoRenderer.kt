@@ -3,17 +3,13 @@
 package io.github.yuroyami.kiteplayer.mobile
 
 import io.github.yuroyami.kiteplayer.Generation
-import io.github.yuroyami.kiteplayer.VideoScale
-import io.github.yuroyami.kiteplayer.VideoTransform
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegWebPainter
 import io.github.yuroyami.kiteplayer.output.WebCanvasVideoRenderer
 import io.github.yuroyami.kiteplayer.output.WebFramePainter
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer
-import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
-import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
@@ -60,30 +56,53 @@ internal fun webColorLimits(colorSpace: ColorSpaceInfo): List<String> = buildLis
  *
  * The painter holds a scratch buffer sized to the largest frame it has seen, 24.9 MB for 4K, and
  * that memory belongs to the codec module rather than to any collector that could reclaim it. So it
- * is closed with the renderer, explicitly. Everything else is the plain renderer's behaviour.
+ * is closed with the renderer, explicitly. Everything else is the plain renderer's behaviour, handed
+ * on whole by delegation: a list of calls written out by hand dropped `outputSize`, so subtitles were
+ * laid out for the picture and stretched over the bars, and dropped `clearPicture` the same way
+ * (#535). Only the two things this adds are written here.
  */
-private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
+private class KiteFFmpegWebCanvasRenderer private constructor(
+    private val painter: LimitReportingPainter,
+    private val delegate: WebCanvasVideoRenderer,
+) : VideoRenderer by delegate {
+
+    constructor(canvas: JsAny) : this(canvas, LimitReportingPainter())
+
+    private constructor(canvas: JsAny, painter: LimitReportingPainter) : this(
+        painter,
+        WebCanvasVideoRenderer(canvas = canvas, painter = WebFramePainter(painter::paint)),
+    )
+
+    override fun close() {
+        try {
+            delegate.close()
+        } finally {
+            painter.close()
+        }
+    }
+
+    override val events: Flow<RendererEvent> get() = merge(delegate.events, painter.limits)
+}
+
+/**
+ * Paints with KiteFFmpeg and says what it could not draw exactly.
+ *
+ * A frame from another backend is refused rather than cast, the same law the Compose converters
+ * state: the renderer reports a drop and playback continues, instead of a ClassCastException
+ * whose message reads differently on every platform.
+ */
+private class LimitReportingPainter {
 
     private val webPainter = KiteFFmpegWebPainter()
 
     /** Colour limits met while painting, published beside the plain renderer's own events. */
-    private val limits = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 4)
+    val limits = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 4)
 
     /** The limits reported for the generation being drawn, so a limit is published once per generation. */
     private val reported = mutableSetOf<String>()
     private var reportedFor: Generation? = null
 
-    private val delegate = WebCanvasVideoRenderer(
-        canvas = canvas,
-        painter = WebFramePainter { frame, destination -> paint(frame, destination) },
-    )
-
-    /**
-     * A frame from another backend is refused rather than cast, the same law the Compose converters
-     * state: the renderer reports a drop and playback continues, instead of a ClassCastException
-     * whose message reads differently on every platform.
-     */
-    private fun paint(frame: VideoFrame, destination: JsAny): Boolean {
+    fun paint(frame: VideoFrame, destination: JsAny): Boolean {
         // Said out loud rather than drawn silently wrong. The engine keeps the first of each per open.
         if (frame.generation != reportedFor) {
             reportedFor = frame.generation
@@ -95,23 +114,5 @@ private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
         return webPainter.paint(frame, destination)
     }
 
-    override fun close() {
-        try {
-            delegate.close()
-        } finally {
-            webPainter.close()
-        }
-    }
-
-    override fun supportedHardwareSurfaces() = delegate.supportedHardwareSurfaces()
-    override fun supports(format: PlayerPixelFormat) = delegate.supports(format)
-    override fun accepts(shape: io.github.yuroyami.kiteplayer.spi.FrameShape) = delegate.accepts(shape)
-    override suspend fun present(frame: VideoFrame, targetNanos: Long) = delegate.present(frame, targetNanos)
-    override fun vsyncIntervalNanos() = delegate.vsyncIntervalNanos()
-    override fun setViewport(width: Int, height: Int, scale: Float) = delegate.setViewport(width, height, scale)
-    override fun setScaleMode(mode: VideoScale) = delegate.setScaleMode(mode)
-    override fun setTransform(transform: VideoTransform) = delegate.setTransform(transform)
-    override suspend fun setOverlay(overlay: SubtitleOverlay?) = delegate.setOverlay(overlay)
-    override fun clearPicture() = delegate.clearPicture()
-    override val events: Flow<RendererEvent> get() = merge(delegate.events, limits)
+    fun close() = webPainter.close()
 }

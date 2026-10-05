@@ -491,6 +491,9 @@ public class CoreAudioSink private constructor(
         stop()
     }
 
+    /** Stopping the output unit cuts the sound where it is, so the engine fades it first (#486). */
+    override val cutsSoundOnStop: Boolean get() = true
+
     /** Stopping the unit keeps the device open, so nothing buffered is lost and resuming is quick. */
     override suspend fun setPaused(paused: Boolean): Boolean {
         val sink = handle ?: return false

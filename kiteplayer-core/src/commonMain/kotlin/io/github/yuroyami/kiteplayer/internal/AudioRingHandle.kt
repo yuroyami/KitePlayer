@@ -79,6 +79,29 @@ internal interface AudioRingHandle {
      */
     fun setGain(target: Float)
 
+    /**
+     * Fades the sound out and holds it there, or lets it play again (#486).
+     *
+     * While [held], the render walks the applied gain down to silence over the real frames it
+     * renders, at the slope [setGain] walks, and from the frame the walk reaches silence it consumes
+     * nothing: it hands the device silence, publishes no anchor and counts no underrun, so the audio
+     * after the fade waits in the ring. A device stopped at any moment after that stops on silence,
+     * which is what keeps a pause or a seek from clicking. Released, the render consumes again and
+     * walks up from silence to the gain, so the resumed sound fades in and a volume change made
+     * while held is in place from the first resumed frame.
+     *
+     * Safe from any thread.
+     */
+    fun hold(held: Boolean)
+
+    /**
+     * True once a held ring has reached silence, which is when its device can stop without a click.
+     * Every render answers it again, so a device that is not pulling never gets there. A true here
+     * comes after the anchor of the last faded frame, so [anchor] then says when the fade ends at
+     * the speaker. Safe from any thread.
+     */
+    val silent: Boolean
+
     /** Tells the ring that the feeder has finished, so trailing silence is not an underrun. */
     fun markEnding()
 

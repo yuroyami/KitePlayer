@@ -103,6 +103,9 @@ struct kprt_ring {
      * may not take a lock. `gain_current` belongs to the consumer alone and needs no atomic;
      * `gain_slope` is immutable after create. */
     _Alignas(KPRT_CACHELINE) _Atomic uint32_t gain_target_bits;
+    /* Nonzero while `kprt_ring_set_hold` holds the sound: the session owner writes it, the render
+     * reads it. */
+    _Atomic int32_t hold;
     float gain_current;
     float gain_slope;
     /* Zero until the first frame is rendered. A ring opened muted has gain_current at unity and a
@@ -110,6 +113,9 @@ struct kprt_ring {
      * near-full-scale sound at the moment silence was asked for. Snapping is right here and only
      * here, because nothing has been heard yet and there is no step to click. Consumer-private. */
     int32_t gain_started;
+    /* Whether a held ring has reached silence. The render stores it at the end of every call, with
+     * release after the anchor, and `kprt_ring_is_silent` reads it with acquire. */
+    _Atomic int32_t silent;
 
     /* ---- The anchor seqlock. Consumer writes, anybody reads. ---- */
     _Alignas(KPRT_CACHELINE) _Atomic int64_t anchor_seq;

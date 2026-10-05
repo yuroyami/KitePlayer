@@ -23,6 +23,7 @@ import kotlin.math.max
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 
 /**
  * The engine's audio half: a device, a ring, and the clock derived from them.
@@ -714,21 +715,100 @@ public class AudioPlayback(
         anchorLocked()
     }
 
-    /** Starts the device and lets the clock run. Belongs to the session owner. */
+    /**
+     * Whether the device was started and has not been stopped since, so a fade has a device pulling
+     * it. The session owner's alone, like [play] and [pause].
+     */
+    private var deviceRunning = false
+
+    /**
+     * Starts the device and lets the clock run. Belongs to the session owner.
+     *
+     * A ring that a fade left silent walks back up to the volume over its first frames, so the
+     * sound fades in rather than starting at full level (#486).
+     */
     public suspend fun play() {
         synchronized(lock) {
             playoutClock.resume()
             anchorFloorNanos = ring?.anchor()?.audibleAtNanos
+            ring?.hold(false)
         }
         sink.setPaused(false)
         sink.start()
+        deviceRunning = true
     }
 
-    /** Freezes the clock and holds the device without discarding. Belongs to the session owner. */
+    /**
+     * Freezes the clock and holds the device without discarding. Belongs to the session owner.
+     *
+     * On a device that cuts the sound where it stops, the sound fades out first and the clock
+     * freezes where the fade ended, so the paused position is the last one the listener heard and
+     * the resume carries on from the frame after it (#486).
+     */
     public suspend fun pause() {
+        val faded = fadeOut()
         // Under the lock like play: position and anchorClock move this clock from other threads.
-        synchronized(lock) { playoutClock.pause() }
-        if (!sink.setPaused(true)) sink.stop()
+        synchronized(lock) {
+            playoutClock.pause()
+            if (faded) settleOnFadeLocked()
+        }
+        if (faded) {
+            // The device holds only the silence after the fade now, so dropping it costs nothing
+            // and saves the resume from playing that silence before the sound.
+            sink.stop()
+            sink.setPaused(true)
+        } else if (!sink.setPaused(true)) {
+            sink.stop()
+        }
+        deviceRunning = false
+    }
+
+    /**
+     * Fades the sound out and stops the device, discarding what it holds. The seek path and the
+     * end of a session take the device down through this, so neither cuts the sound mid-wave
+     * (#486). Belongs to the session owner.
+     */
+    internal suspend fun stopDevice() {
+        fadeOut()
+        sink.stop()
+        deviceRunning = false
+    }
+
+    /**
+     * Fades the sound out through the ring and waits until the device has played the fade (#486).
+     *
+     * Only on a running device that says it [AudioSink.cutsSoundOnStop]. The wait is twofold, both
+     * halves bounded: until the ring reports silence, which the device's next pull or two brings,
+     * and then until the last faded frame is due at the speaker by the deadline the device dated it
+     * with, which covers whatever the device buffers beyond the ring. A device that stops pulling
+     * leaves the first wait at its bound, and the stop then cuts as it did before.
+     *
+     * @return true when the device is now playing silence, so stopping it cannot click.
+     */
+    private suspend fun fadeOut(): Boolean {
+        if (!deviceRunning || !sink.cutsSoundOnStop) return false
+        if (synchronized(lock) { ring?.also { it.hold(true) } } == null) return false
+        var polls = 0
+        while (synchronized(lock) { ring?.silent != true }) {
+            if (polls++ >= FADE_SILENCE_POLLS) return false
+            delay(FADE_POLL)
+        }
+        val due = synchronized(lock) { ring?.anchor()?.audibleAtNanos } ?: return true
+        val ahead = (due - clock.nanos()).coerceAtMost(FADE_SPEAKER_WAIT.inWholeNanoseconds)
+        if (ahead > 0) delay(ahead.nanoseconds)
+        return true
+    }
+
+    /**
+     * Freezes the paused clock at the end of the fade rather than at the moment the device stopped.
+     * Between the two the device played the silence after the fade, which is not media heard, and
+     * the clock, running on from the fade's last anchor, counted it. Anchoring the frozen clock
+     * sets it to that anchor, which is the frame after the last one faded. The floor still rules:
+     * when the device published nothing since [play], the clock keeps the position the resume gave
+     * it.
+     */
+    private fun settleOnFadeLocked() {
+        anchorLocked()
     }
 
     /**
@@ -742,7 +822,9 @@ public class AudioPlayback(
      * from a ring being cleared would play a mixture of the old position and the new one.
      */
     public suspend fun flush(newGeneration: Generation) {
-        sink.stop()
+        // Fades out first on a device that is still playing, so the seek does not cut the wave; the
+        // sound of the new position then fades in from the silence the fade left (#486).
+        stopDevice()
         // Under the lock: the C ring's flush clears the anchor and both
         // caches, and [position] and [anchorClock] read them under this same lock, so without it
         // nothing excluded a progress report from interleaving with the clearing. The C contract
@@ -817,6 +899,7 @@ public class AudioPlayback(
             delay(ring.bufferedUs.microseconds.coerceIn(FULL_RING_WAIT_MIN, fullRingWait))
         }
         sink.drain()
+        deviceRunning = false
     }
 
     /**
@@ -1065,5 +1148,21 @@ public class AudioPlayback(
 
         /** Timeline lines kept behind the newest anchor, well past any device's latency. */
         const val TIMELINE_KEEP_US = 2_000_000L
+
+        /** How often a fade asks the ring whether it has reached silence. */
+        val FADE_POLL: Duration = 1.milliseconds
+
+        /**
+         * How many times a fade asks before it gives up on a device that stopped pulling: about
+         * 200 ms, where a pulling device answers within one or two of its periods.
+         */
+        const val FADE_SILENCE_POLLS = 200
+
+        /**
+         * The longest a fade waits for its last frame to reach the speaker. The deepest device
+         * buffer here is the web's queue of 4096 frames, about 85 ms at 48 kHz, before whatever
+         * output latency the browser adds.
+         */
+        val FADE_SPEAKER_WAIT: Duration = 250.milliseconds
     }
 }

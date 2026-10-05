@@ -67,6 +67,22 @@ public interface AudioSink : AutoCloseable {
      */
     public suspend fun setPaused(paused: Boolean): Boolean
 
+    /**
+     * Whether stopping or pausing this device cuts the sound at whatever sample it reached (#486).
+     *
+     * A wave that drops from its level to silence in one sample is heard as a click, and so is one
+     * that jumps back at the resume. When this is true the engine fades the sound out over 5 ms
+     * before it pauses, seeks or stops, waits until the device has played that fade, and fades in
+     * again after the restart, the way a volume change already walks. It waits by the deadlines the
+     * render callback is handed, so a sink that answers true must keep pulling its render callback
+     * until it is stopped and must date the deadlines it hands over honestly.
+     *
+     * False by default, which keeps the old cut, and false is right for a platform that fades on
+     * its own: Android's mixer ramps a paused track down, and fading again ahead of a buffer that
+     * deep would only make the pause late.
+     */
+    public val cutsSoundOnStop: Boolean get() = false
+
     /** The device's own buffer size in sample frames. Sizes the engine's ring. */
     public val deviceBufferFrames: Int
 

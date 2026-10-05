@@ -87,6 +87,9 @@ internal class WebAudioSink(
         device.flush()
     }
 
+    /** Suspending the context cuts the sound where it is, so the engine fades it first (#486). */
+    override val cutsSoundOnStop: Boolean get() = true
+
     override suspend fun setPaused(paused: Boolean): Boolean {
         if (paused) {
             feeder?.cancelAndJoin()

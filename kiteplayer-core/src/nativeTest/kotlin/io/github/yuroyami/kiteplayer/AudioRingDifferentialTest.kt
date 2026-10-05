@@ -136,6 +136,9 @@ class AudioRingDifferentialTest {
      */
     private class SetGain(val target: Float) : Step
 
+    /** Both rings are told to fade to silence and hold there, or to play again (#486). */
+    private class Hold(val held: Boolean) : Step
+
     /** The seek path: both rings are flushed. */
     private object Flush : Step
 
@@ -246,6 +249,11 @@ class AudioRingDifferentialTest {
                         nativeRing.setGain(step.target)
                     }
 
+                    is Hold -> {
+                        kotlinRing.hold(step.held)
+                        nativeRing.hold(step.held)
+                    }
+
                     Flush -> {
                         kotlinRing.flush()
                         nativeRing.flush()
@@ -274,6 +282,7 @@ class AudioRingDifferentialTest {
         assertEquals(kotlinRing.freeFrames, nativeRing.freeFrames, "$at: free frames")
         assertEquals(kotlinRing.bufferedUs, nativeRing.bufferedUs, "$at: buffered microseconds")
         assertSameAnchor(kotlinRing.anchor(), nativeRing.anchor(), at)
+        assertEquals(kotlinRing.silent, nativeRing.silent, "$at: silent under the hold")
     }
 
     private fun assertSameAnchor(expected: AudioAnchor?, actual: AudioAnchor?, at: String) {
@@ -894,6 +903,77 @@ class AudioRingDifferentialTest {
         val out = CapturingSinkBuffer(format, 64)
         ring.render(out, 64, FIRST_DEADLINE_NANOS)
         assertEquals(0f, out.samples[0], "a ring opened muted must render its first frame silent")
+    }
+
+    @Test
+    fun `a fade to silence and back agrees at every rate and channel count`() {
+        // The fade stops consuming on the frame its walk reaches zero, so the two rings agree on
+        // every sample only if they agree on that frame too, which the float walk decides one way
+        // or the other at each rate. Pulls shorter than the fade compare it mid-flight; the pulls
+        // under the held silence compare that nothing is consumed or dated; the release compares
+        // the walk back up to a gain set while held (#486).
+        for (rate in rates) {
+            for (channels in listOf(1, 2, 6)) {
+                runScenario(
+                    Scenario(
+                        "a pause and a resume",
+                        capacityFrames = 8_192,
+                        steps = listOf(
+                            FeedConstant(frames = 6_000, value = 0.8f),
+                            Pull(frames = 100),
+                            Hold(true),
+                            Pull(frames = 96),
+                            Pull(frames = 96),
+                            Pull(frames = 1_024),
+                            Pull(frames = 512),
+                            SetGain(0.5f),
+                            Hold(false),
+                            Pull(frames = 96),
+                            Pull(frames = 1_024),
+                            // A boost faded from above unity walks through the fold on the way down.
+                            SetGain(2f),
+                            Pull(frames = 1_024),
+                            Hold(true),
+                            Pull(frames = 1_024),
+                            Pull(frames = 1_024),
+                        ),
+                    ),
+                    sampleRate = rate,
+                    channels = channels,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a fade that runs dry or holds before any sound agrees`() {
+        runScenario(
+            Scenario(
+                "held before the first frame, then a seek's flush, then dry partway down",
+                capacityFrames = 4_096,
+                steps = listOf(
+                    Feed(frames = 1_024, mediaFrame = 0),
+                    Hold(true),
+                    Pull(frames = 256),
+                    Hold(false),
+                    Pull(frames = 512),
+                    Hold(true),
+                    Pull(frames = 512),
+                    Flush,
+                    Feed(frames = 300, mediaFrame = 48_000),
+                    Hold(false),
+                    Pull(frames = 200),
+                    Hold(true),
+                    // 100 frames left, fewer than the fade wants.
+                    Pull(frames = 512),
+                    Feed(frames = 512, mediaFrame = null),
+                    Pull(frames = 512),
+                    Hold(false),
+                    Pull(frames = 512),
+                ),
+            ),
+            sampleRate = 48_000,
+        )
     }
 
     @Test

@@ -166,6 +166,25 @@ void kprt_ring_set_gain(kprt_ring *ring, float target)
     atomic_store_explicit(&ring->gain_target_bits, bits, memory_order_relaxed);
 }
 
+void kprt_ring_set_hold(kprt_ring *ring, int32_t held)
+{
+    if (ring == NULL)
+        return;
+    /* Not silent first, then the hold, so a reader that sees the new hold cannot pair it with an
+     * answer from before it. A render already in flight may still store a 1 it worked out under
+     * the old hold. It stores that only with the gain at zero, and being the latest render it
+     * leaves the gain there, so the 1 is true until the next render answers again. */
+    atomic_store_explicit(&ring->silent, 0, memory_order_relaxed);
+    atomic_store_explicit(&ring->hold, held != 0 ? 1 : 0, memory_order_release);
+}
+
+int32_t kprt_ring_is_silent(const kprt_ring *ring)
+{
+    if (ring == NULL)
+        return 0;
+    return atomic_load_explicit(&ring->silent, memory_order_acquire);
+}
+
 void kprt_ring_destroy(kprt_ring *ring)
 {
     void *block;

@@ -91,6 +91,10 @@ private class HeldGainRing(override val format: AudioFormat) : AudioRingHandle {
         }
     }
 
+    override fun hold(held: Boolean) = Unit
+
+    override val silent: Boolean get() = false
+
     override fun markEnding() = Unit
 
     override fun flush() = Unit

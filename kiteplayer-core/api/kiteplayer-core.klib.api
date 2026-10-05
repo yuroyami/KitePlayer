@@ -662,6 +662,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/AudioSink : kotlin/AutoClos
         abstract fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/AudioSinkEvent> // io.github.yuroyami.kiteplayer.spi/AudioSink.events.<get-events>|<get-events>(){}[0]
     abstract val latencyQuality // io.github.yuroyami.kiteplayer.spi/AudioSink.latencyQuality|{}latencyQuality[0]
         abstract fun <get-latencyQuality>(): io.github.yuroyami.kiteplayer/LatencyQuality // io.github.yuroyami.kiteplayer.spi/AudioSink.latencyQuality.<get-latencyQuality>|<get-latencyQuality>(){}[0]
+    open val cutsSoundOnStop // io.github.yuroyami.kiteplayer.spi/AudioSink.cutsSoundOnStop|{}cutsSoundOnStop[0]
+        open fun <get-cutsSoundOnStop>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/AudioSink.cutsSoundOnStop.<get-cutsSoundOnStop>|<get-cutsSoundOnStop>(){}[0]
     open val platformSessionId // io.github.yuroyami.kiteplayer.spi/AudioSink.platformSessionId|{}platformSessionId[0]
         open fun <get-platformSessionId>(): kotlin/Int? // io.github.yuroyami.kiteplayer.spi/AudioSink.platformSessionId.<get-platformSessionId>|<get-platformSessionId>(){}[0]
 

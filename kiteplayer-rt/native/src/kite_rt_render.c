@@ -243,11 +243,28 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
     int64_t available;
     int32_t to_read;
     int32_t channels;
+    int32_t holding;
 
     if (ring == NULL || destination == NULL || frames <= 0)
         return 0;
 
     channels = ring->channels;
+    /* Acquire, paired with the release in `kprt_ring_set_hold`. */
+    holding = atomic_load_explicit(&ring->hold, memory_order_acquire);
+    if (holding != 0) {
+        /* Nothing heard yet, so there is no level to walk down from. */
+        if (ring->gain_started == 0) {
+            ring->gain_started = 1;
+            ring->gain_current = 0.0f;
+        }
+        if (ring->gain_current == 0.0f) {
+            /* Held at silence: exact zeroes, nothing consumed, no anchor and no underrun, so the
+             * audio after the fade waits for the resume (#486). */
+            memset(destination, 0, (size_t)frames * (size_t)channels * sizeof(float));
+            atomic_store_explicit(&ring->silent, 1, memory_order_release);
+            return frames;
+        }
+    }
     start = atomic_load_explicit(&ring->consumed, memory_order_relaxed);
     /* Acquire, and this is the one that matters: it is paired with the release on `written` in
      * commit, so seeing a new value here guarantees seeing the samples and the segment too. */
@@ -283,6 +300,10 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
             int32_t total = to_read * channels;
             int32_t i;
             memcpy(&wanted, &bits, sizeof(wanted));
+            /* A hold walks to silence whatever the volume, and stops consuming at the frame that
+             * reaches it. The gain is above zero here, so the walk below is the one that runs. */
+            if (holding != 0)
+                wanted = 0.0f;
             if (ring->gain_started == 0) {
                 ring->gain_started = 1;
                 ring->gain_current = wanted;
@@ -325,6 +346,12 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
                             destination[base + i] *= gain;
                     }
                     base += channels;
+                    if (holding != 0 && gain == 0.0f) {
+                        /* The fade ends on this frame; the rest of the request is the silence
+                         * below, and the frames after it stay in the ring. */
+                        to_read = frame + 1;
+                        break;
+                    }
                 }
                 ring->gain_current = gain;
             }
@@ -340,7 +367,12 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
         memset(destination + (size_t)to_read * (size_t)channels,
                0,
                (size_t)(frames - to_read) * (size_t)channels * sizeof(float));
-        if (atomic_load_explicit(&ring->ending, memory_order_relaxed) == 0)
+        /* A held ring that stops short is silent from here on purpose, or ran dry partway down
+         * the fade, and either way what follows is silence: the gain goes there too, so the next
+         * render does not step back up to the level the walk had reached. */
+        if (holding != 0)
+            ring->gain_current = 0.0f;
+        else if (atomic_load_explicit(&ring->ending, memory_order_relaxed) == 0)
             kprt_counter_bump(&ring->underruns);
     }
 
@@ -353,7 +385,11 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
         publish_anchor(ring, start + to_read - 1, boundary_nanos);
     }
 
-    return to_read;
+    /* After the anchor, with release, so a reader that sees silence also sees when the last faded
+     * frame reaches the speaker. */
+    atomic_store_explicit(&ring->silent, holding != 0 && ring->gain_current == 0.0f ? 1 : 0,
+                          memory_order_release);
+    return holding != 0 ? frames : to_read;
 }
 
 /* ---- The device callback's body ---- */

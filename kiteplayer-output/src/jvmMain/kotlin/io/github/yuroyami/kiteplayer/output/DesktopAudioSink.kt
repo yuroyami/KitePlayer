@@ -301,6 +301,9 @@ public class DesktopAudioSink internal constructor(
         clearHeldBlock()
     }
 
+    /** Stopping a line cuts the sound where it is, so the engine fades it first (#486). */
+    override val cutsSoundOnStop: Boolean get() = true
+
     override suspend fun setPaused(paused: Boolean): Boolean {
         if (paused) {
             /* Signal, stop the line to unblock a blocking write, join WITHOUT flushing: a pause

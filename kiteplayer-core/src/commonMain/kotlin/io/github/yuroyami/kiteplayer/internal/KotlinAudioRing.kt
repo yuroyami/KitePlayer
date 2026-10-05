@@ -158,6 +158,12 @@ internal class KotlinAudioRing(
     private var gainStarted = false
     private val gainSlopePerFrame: Float = 1f / gainRampFrames(format.sampleRate)
 
+    /** Whether [hold] holds the sound. Written by the session owner, read by the render. */
+    private val holding = atomic(false)
+
+    /** Whether a held ring has reached silence. Stored by every render; see [silent]. */
+    private val silentNow = atomic(false)
+
     /** Total frames ever written by the feeder. Only the feeder advances it. */
     private val written = atomic(0L)
 
@@ -402,6 +408,16 @@ internal class KotlinAudioRing(
         gainTarget.value = target
     }
 
+    override fun hold(held: Boolean) {
+        // Not silent first, then the hold, in the order `kprt_ring_set_hold` takes. A render in
+        // flight may still store a true it worked out under the old hold; it does that only with
+        // the gain at zero, and being the latest render it leaves the gain there.
+        silentNow.value = false
+        holding.value = held
+    }
+
+    override val silent: Boolean get() = silentNow.value
+
     /**
      * Fills [destination] from the ring. Called on the device's real-time thread.
      *
@@ -413,9 +429,24 @@ internal class KotlinAudioRing(
      * @return frames of real audio written. The rest of [destination] is silence.
      */
     fun render(destination: AudioSinkBuffer, frames: Int, deadlineNanos: Long): Int {
+        val held = holding.value
+        if (held) {
+            // Nothing heard yet, so there is no level to walk down from.
+            if (!gainStarted) {
+                gainStarted = true
+                gainCurrent = 0f
+            }
+            if (gainCurrent == 0f) {
+                // Held at silence: exact zeroes, nothing consumed, no anchor and no underrun, so
+                // the audio after the fade waits for the resume (#486).
+                destination.writeSilence(frameOffset = 0, frames = frames)
+                silentNow.value = true
+                return frames
+            }
+        }
         val startFrame = consumed.value
         val available = (written.value - startFrame).toInt().coerceAtLeast(0)
-        val toRead = min(frames, available)
+        var toRead = min(frames, available)
 
         if (toRead > 0) {
             // Copy out first, then scale the copy. Two steps and not one, because `data` belongs to
@@ -433,7 +464,7 @@ internal class KotlinAudioRing(
                 frameIndex = (frameIndex + runFrames) % capacityFrames
                 writtenSoFar += runFrames
             }
-            applyGain(renderScratch, toRead)
+            toRead = applyGain(renderScratch, toRead, held)
             destination.writeInterleaved(
                 source = renderScratch,
                 sourceOffset = 0,
@@ -445,7 +476,14 @@ internal class KotlinAudioRing(
 
         if (toRead < frames) {
             destination.writeSilence(frameOffset = toRead, frames = frames - toRead)
-            if (!ending.value) underrunCount.incrementAndGet()
+            // A held ring that stops short is silent from here on purpose, or ran dry partway down
+            // the fade, and either way what follows is silence: the gain goes there too, so the
+            // next render does not step back up to the level the walk had reached.
+            if (held) {
+                gainCurrent = 0f
+            } else if (!ending.value) {
+                underrunCount.incrementAndGet()
+            }
         }
 
         if (toRead > 0) {
@@ -455,7 +493,12 @@ internal class KotlinAudioRing(
             publishAnchor(lastRealFrame = startFrame + toRead - 1, atNanos = boundaryNanos)
         }
 
-        return toRead
+        // After the anchor, so a reader that sees silence also sees when the last faded frame
+        // reaches the speaker. A held ring answers every frame, because its silence is deliberate
+        // rather than a device going hungry, and a sink that reports a short render as an underrun
+        // must not report a pause as one.
+        silentNow.value = held && gainCurrent == 0f
+        return if (held) frames else toRead
     }
 
     /**
@@ -466,9 +509,14 @@ internal class KotlinAudioRing(
      *
      * The C ring does the same thing in the same order; the differential oracle compares the
      * samples, so a difference here is a failing row there rather than a surprise on one platform.
+     *
+     * @return the frames to consume: all of [frames], or under a [held] fade only those up to and
+     *         including the one that reaches silence.
      */
-    private fun applyGain(samples: FloatArray, frames: Int) {
-        val wanted = gainTarget.value
+    private fun applyGain(samples: FloatArray, frames: Int, held: Boolean): Int {
+        // A hold walks to silence whatever the volume, and stops at the frame that reaches it. The
+        // gain is above zero whenever this runs under a hold, so the walk below is the one that runs.
+        val wanted = if (held) 0f else gainTarget.value
         if (!gainStarted) {
             gainStarted = true
             gainCurrent = wanted
@@ -484,7 +532,7 @@ internal class KotlinAudioRing(
             } else if (wanted != 1f) {
                 for (i in 0 until frames * channels) samples[i] *= wanted
             }
-            return
+            return frames
         }
         var base = 0
         for (frame in 0 until frames) {
@@ -501,8 +549,14 @@ internal class KotlinAudioRing(
                 for (channel in 0 until channels) samples[base + channel] *= gain
             }
             base += channels
+            if (held && gain == 0f) {
+                // The fade ends on this frame; the frames after it stay in the ring.
+                gainCurrent = gain
+                return frame + 1
+            }
         }
         gainCurrent = gain
+        return frames
     }
 
     /**

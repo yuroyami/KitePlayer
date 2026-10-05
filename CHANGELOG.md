@@ -153,6 +153,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   once its backend has a `Context`, through `AndroidOutputBackend.withContext` or
   `AudioTrackSinkFactory(context)`. `PlayerStreamInfo.isCommentary` carries the container's
   commentary flag.
+- Pausing, resuming, seeking and stopping no longer click on Apple, the desktop and the web (#486).
+  The sound fades out over 5 ms before the device stops and fades in again after it starts, the way
+  a volume change already walks, and the paused position is where the fade ended, so the resume
+  carries on from the next sample. A volume or mute change made while paused is in place from the
+  first resumed sample. A sink declares that it needs this through the new
+  `AudioSink.cutsSoundOnStop`, false by default; Android's mixer fades a paused track itself.
 - `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
   page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third

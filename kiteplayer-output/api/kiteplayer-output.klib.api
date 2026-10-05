@@ -48,6 +48,8 @@ final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroy
     constructor <init>(io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy, io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppleAudioSessionPolicy;io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
     constructor <init>(io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
 
+    final val cutsSoundOnStop // io.github.yuroyami.kiteplayer.output/CoreAudioSink.cutsSoundOnStop|{}cutsSoundOnStop[0]
+        final fun <get-cutsSoundOnStop>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/CoreAudioSink.cutsSoundOnStop.<get-cutsSoundOnStop>|<get-cutsSoundOnStop>(){}[0]
     final val deviceBufferFrames // io.github.yuroyami.kiteplayer.output/CoreAudioSink.deviceBufferFrames|{}deviceBufferFrames[0]
         final fun <get-deviceBufferFrames>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/CoreAudioSink.deviceBufferFrames.<get-deviceBufferFrames>|<get-deviceBufferFrames>(){}[0]
     final val events // io.github.yuroyami.kiteplayer.output/CoreAudioSink.events|{}events[0]

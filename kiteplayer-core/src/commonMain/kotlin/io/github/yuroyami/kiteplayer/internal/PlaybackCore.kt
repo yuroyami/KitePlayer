@@ -4820,7 +4820,7 @@ internal class PlaybackCore(
         while (true) {
             if (attempt > 0) {
                 rebuilt.schedulerMode.value = SCHEDULER_IDLE
-                rebuilt.sink?.stop()
+                stopAudioDevice(rebuilt)
                 if (!quiesceWorkers(rebuilt)) {
                     error("the software recovery workers did not quiesce for precise preroll")
                 }
@@ -8177,7 +8177,8 @@ internal class PlaybackCore(
 
         // 2
         session.schedulerMode.value = SCHEDULER_IDLE
-        session.sink?.stop()
+        // A playing device fades out before it stops, so the seek does not cut the wave (#486).
+        stopAudioDevice(session)
         val unparked = unparkedWorkers(session)
         if (unparked.isNotEmpty()) {
             // Quiescence is the precondition of every mutation below. Without it, flushing a
@@ -9017,6 +9018,15 @@ internal class PlaybackCore(
     private fun ioBytesOf(session: OpenSession?): Long =
         (session?.cachingIo?.upstreamBytesRead?.value ?: 0L) + (session?.relatedTraffic?.bytes?.value ?: 0L)
 
+    /**
+     * Stops the session's audio device, fading the sound out first where the device would cut it
+     * (#486). A session with a device and no audio path yet has nothing playing to fade.
+     */
+    private suspend fun stopAudioDevice(session: OpenSession) {
+        val audio = session.audio
+        if (audio != null) audio.stopDevice() else session.sink?.stop()
+    }
+
     private suspend fun releaseSession(session: OpenSession) {
         // Once detached, this is the only remaining owner of the graph. Cancellation and the close
         // reporting budget may no longer skip any release below, otherwise the detached decoder or
@@ -9065,7 +9075,7 @@ internal class PlaybackCore(
                     )
                 }
             }
-            if (session.ownsAudio) release("audio device stop") { session.sink?.stop() }
+            if (session.ownsAudio) release("audio device stop") { stopAudioDevice(session) }
             // A lane blocked inside an uncancellable native read would
             // make the quiesce below burn its whole deadline and the joins after it wait for
             // ever. The session is ending and the source is about to close, so aborting whatever

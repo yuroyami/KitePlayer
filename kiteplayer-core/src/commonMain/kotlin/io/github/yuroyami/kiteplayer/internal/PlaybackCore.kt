@@ -5952,7 +5952,12 @@ internal class PlaybackCore(
                 wakeIn(Duration.ZERO)
                 return
             }
-            if (session.subtitleCues.isEmpty() && session.publishedCueKey.isNullOrEmpty()) return
+            // The secondary lane decodes and draws whether or not a primary one runs.
+            if (driveSecondarySubtitleDecode(session)) return
+            // Nothing to draw and nothing drawn, so a session without subtitles pays no cue work.
+            // What is drawn is read from the flow rather than the publish key, because a change
+            // that forces a republish clears the key with the last cues still on screen.
+            if (session.subtitleCues.isEmpty() && session.subtitle2Cues.isEmpty() && cuesState.value.isEmpty()) return
             timeAndPublishCues(session)
             return
         }

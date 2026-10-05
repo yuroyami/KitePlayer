@@ -73,6 +73,26 @@ class SecondarySubtitleTest {
     }
 
     @Test
+    fun aSecondaryWithNoPrimaryStillDraws() = runTest {
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(300.milliseconds)
+        assertTrue(harness.core.selectTrack(TrackKind.Subtitle, null) is TrackChange.Applied)
+        assertTrue(harness.core.selectSecondarySubtitle(TrackId(3)) is TrackChange.Applied)
+        harness.run(700.milliseconds)
+        assertEquals(
+            listOf("secondary line"),
+            texts(harness.core.subtitleCues.value),
+            "a secondary track chosen with the primary off drew nothing",
+        )
+        harness.core.selectSecondarySubtitle(null)
+        harness.run(300.milliseconds)
+        assertEquals(emptyList(), texts(harness.core.subtitleCues.value), "clearing the only track left its line on screen")
+        harness.close()
+    }
+
+    @Test
     fun `the same track on both slots refuses`() = runTest {
         val harness = CoreHarness(this, script = script)
         harness.openWithRenderer()

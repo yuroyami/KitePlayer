@@ -69,6 +69,7 @@ import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.RecordingCapable
+import io.github.yuroyami.kiteplayer.KeyframeChoice
 import io.github.yuroyami.kiteplayer.KiteTrace
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
@@ -1521,11 +1522,25 @@ internal class PlaybackCore(
         commands.trySend(CoreCommand.Pause(CompletableDeferred()))
     }
 
+    /**
+     * Which keyframe a plain keyframe seek lands on (#496). Read when a request is made, so each
+     * request keeps the setting it was made under however long it waits; it holds no session state.
+     */
+    private val keyframeChoice = atomic(config.keyframeChoice)
+
+    /** Sets [keyframeChoice] for the seek requests made from now on. */
+    fun setKeyframeChoice(choice: KeyframeChoice) {
+        keyframeChoice.value = choice
+    }
+
+    /** The [KeyframeChoice] the next seek request takes. */
+    val currentKeyframeChoice: KeyframeChoice get() = keyframeChoice.value
+
     /** Seeks and returns what happened to this request: it landed, or a later request replaced it. */
     suspend fun seek(to: Pts, mode: SeekMode): SeekResult {
         val reply = CompletableDeferred<SeekResult>()
         maskedSeekTargetMicros.value = maskFor(to)
-        send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(to), mode), reply))
+        send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(to), mode, keyframe = keyframeChoice.value), reply))
         return awaitReply(reply)
     }
 
@@ -1536,7 +1551,7 @@ internal class PlaybackCore(
         // caller polls position() in the gap before the command is drained, and an absolute target
         // needs no session state to name it. A request the drain drops withdraws the mask there.
         maskedSeekTargetMicros.value = maskFor(to)
-        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(to), mode)))
+        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(to), mode, keyframe = keyframeChoice.value)))
     }
 
     /**
@@ -1564,7 +1579,7 @@ internal class PlaybackCore(
      */
     fun seekByLater(offset: Duration, mode: SeekMode) {
         checkOpenFor("requestSeek")
-        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Relative(offset), mode)))
+        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Relative(offset), mode, keyframe = keyframeChoice.value)))
     }
 
     /** Seeks to a fraction of the duration. What dragging a seek bar produces. */
@@ -1573,7 +1588,7 @@ internal class PlaybackCore(
             "a seek bar position must be between 0 and 1, was $fraction"
         }
         checkOpenFor("requestSeek")
-        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Factor(fraction), mode)))
+        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Factor(fraction), mode, keyframe = keyframeChoice.value)))
     }
 
     suspend fun stop() {
@@ -8158,8 +8173,18 @@ internal class PlaybackCore(
         val session = session ?: return
         val tracing = KiteTrace.enabled
         var phaseBegin = if (tracing) clock.nanos() else 0L
-        val target = request.resolve(currentPosition(), session.source.duration, session.source.seekCeiling)
+        val origin = currentPosition()
+        val target = request.resolve(origin, session.source.duration, session.source.seekCeiling)
         val landsBefore = request.landing == SeekLanding.Before
+        // Only a plain keyframe seek takes the choice (#496). The precise modes decode forward from
+        // the keyframe before the target, and a backward landing needs the frame before the one on
+        // screen, so both keep the keyframe before.
+        val keyframe = when {
+            request.mode != SeekMode.Keyframe || landsBefore -> KeyframeChoice.Before
+            request.keyframe == KeyframeChoice.InSeekDirection ->
+                if (target > origin) KeyframeChoice.After else KeyframeChoice.Before
+            else -> request.keyframe
+        }
         session.pictureHoldsPosition = false
 
         // 1
@@ -8236,7 +8261,7 @@ internal class PlaybackCore(
             // seek fails typed. A source that cannot interrupt keeps the old unbounded wait,
             // which is no worse than every engine before this one.
             val seekCall = scope.async(dispatchers.demux) {
-                runCatching { session.source.seekToKeyframe(aim) }
+                runCatching { session.source.seekToKeyframe(aim, keyframe) }
             }
             val prompt = withTimeoutOrNull(SEEK_NATIVE_DEADLINE) { seekCall.await() }
             val seekOutcome = when {
@@ -8293,8 +8318,9 @@ internal class PlaybackCore(
             // produced is the evidence, so that is what is judged here.
             val decoded = session.firstDecodedVideo.of(epoch) ?: session.firstAudio.of(epoch)
             // A backward landing has overshot as soon as the first frame is not before the
-            // target, because then there is no earlier frame to show.
-            val overshot = decoded != null && if (landsBefore) {
+            // target, because then there is no earlier frame to show. A keyframe chosen after the
+            // target or nearest to it lands past the target on purpose, so it has no overshoot.
+            val overshot = decoded != null && keyframe == KeyframeChoice.Before && if (landsBefore) {
                 decoded.micros >= target.micros
             } else {
                 decoded.micros > target.micros + SeekTiming.PRECISE_TOLERANCE_US

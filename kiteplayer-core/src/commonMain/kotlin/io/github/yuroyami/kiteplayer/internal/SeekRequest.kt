@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.internal
 
+import io.github.yuroyami.kiteplayer.KeyframeChoice
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.SeekMode
 import kotlin.time.Duration
@@ -15,6 +16,8 @@ internal data class SeekRequest(
     val target: SeekTarget,
     val mode: SeekMode,
     val landing: SeekLanding = SeekLanding.AtOrAfter,
+    /** Which keyframe a plain [SeekMode.Keyframe] seek lands on (#496); the precise modes ignore it. */
+    val keyframe: KeyframeChoice = KeyframeChoice.Before,
 ) {
     /**
      * Folds [next] into this pending request.
@@ -30,6 +33,8 @@ internal data class SeekRequest(
      *   keyframe seek by a later coarse one.
      * - The landing follows the newer request, because it describes the newer target: a backward
      *   step's "the frame before this one" means nothing for a target it did not name.
+     * - The keyframe choice follows the newer request too, because it was the player's setting
+     *   when that request was made.
      */
     fun merge(next: SeekRequest): SeekRequest {
         val mergedTarget = when {
@@ -37,7 +42,7 @@ internal data class SeekRequest(
                 SeekTarget.Relative(target.offset + next.target.offset)
             else -> next.target
         }
-        return SeekRequest(mergedTarget, strictest(mode, next.mode), next.landing)
+        return SeekRequest(mergedTarget, strictest(mode, next.mode), next.landing, next.keyframe)
     }
 
     /**

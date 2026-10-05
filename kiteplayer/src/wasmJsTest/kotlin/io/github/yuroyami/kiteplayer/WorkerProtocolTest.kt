@@ -269,6 +269,7 @@ class WorkerProtocolTest {
             Control.SetSpeed(1.5),
             Control.SetPreservePitch(false),
             Control.SetPreservePitch(true),
+            Control.SetKeyframeChoice(KeyframeChoice.Closest),
             Control.SetVolume(0.5f),
             Control.SetDuckLevel(0.2f),
             Control.SetBalance(-0.75f),
@@ -306,7 +307,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Send(control)
             assertEquals(message, message.roundTrip(), "the control ${control.member} changed on the way")
         }
-        assertEquals(28, controls.map { it.member }.distinct().size, "every control is here")
+        assertEquals(29, controls.map { it.member }.distinct().size, "every control is here")
     }
 
     @Test

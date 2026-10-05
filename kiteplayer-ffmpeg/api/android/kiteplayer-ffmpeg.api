@@ -45,6 +45,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public fun interrupt ()Z
 	public fun readPacket (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seekToKeyframe-HwpeAyI (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun seekToKeyframe-h5-aQVI (JLio/github/yuroyami/kiteplayer/KeyframeChoice;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun selectStreams (Ljava/util/Set;)V
 	public final fun setOnWarning (Lkotlin/jvm/functions/Function1;)V
 	public fun startRecording (Ljava/lang/String;)V

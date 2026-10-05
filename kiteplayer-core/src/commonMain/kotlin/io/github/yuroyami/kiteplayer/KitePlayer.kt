@@ -228,6 +228,20 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Chooses which keyframe a [SeekMode.Keyframe] seek lands on, for the seeks asked for from now
+     * on. [KeyframeChoice.InSeekDirection] is what a skip button wants in a file whose keyframes
+     * are far apart. The precise modes are not affected.
+     *
+     * Seeded from [PlayerConfig.keyframeChoice].
+     */
+    public fun setKeyframeChoice(choice: KeyframeChoice) {
+        core.setKeyframeChoice(choice)
+    }
+
+    /** The [KeyframeChoice] the next keyframe seek takes; see [setKeyframeChoice]. */
+    public val keyframeChoice: KeyframeChoice get() = core.currentKeyframeChoice
+
+    /**
      * Stops playback, tears the session down and returns to Idle.
      *
      * Preempts an open, a seek or a drain that is still running. Idempotent.

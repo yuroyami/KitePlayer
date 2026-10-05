@@ -101,6 +101,7 @@ internal sealed class Control(val member: String) {
     data class RequestSeek(val to: Duration, val mode: SeekMode) : Control("requestSeek")
     data class SetSpeed(val value: Double) : Control("setSpeed")
     data class SetPreservePitch(val value: Boolean) : Control("setPreservePitch")
+    data class SetKeyframeChoice(val choice: KeyframeChoice) : Control("setKeyframeChoice")
     data class SetVolume(val value: Float) : Control("setVolume")
     data class SetDuckLevel(val level: Float) : Control("setDuckLevel")
     data class SetBalance(val value: Float) : Control("setBalance")
@@ -340,6 +341,7 @@ private fun encodeControl(control: Control): JsAny = record {
         }
         is Control.SetSpeed -> put("value", control.value)
         is Control.SetPreservePitch -> put("value", control.value)
+        is Control.SetKeyframeChoice -> put("choice", control.choice)
         is Control.SetVolume -> put("value", control.value)
         is Control.SetDuckLevel -> put("value", control.level)
         is Control.SetBalance -> put("value", control.value)
@@ -1126,6 +1128,7 @@ private fun decodeControl(o: JsAny): Control? = when (o.str("t")) {
     "requestSeek" -> Control.RequestSeek(o.micros("to") ?: missing("to"), o.enum<SeekMode>("mode") ?: missing("mode"))
     "setSpeed" -> Control.SetSpeed(o.num("value") ?: missing("value"))
     "setPreservePitch" -> Control.SetPreservePitch(o.flag("value"))
+    "setKeyframeChoice" -> Control.SetKeyframeChoice(o.enum<KeyframeChoice>("choice") ?: missing("choice"))
     "setVolume" -> Control.SetVolume(o.float("value") ?: missing("value"))
     "setDuckLevel" -> Control.SetDuckLevel(o.float("value") ?: missing("value"))
     "setBalance" -> Control.SetBalance(o.float("value") ?: missing("value"))

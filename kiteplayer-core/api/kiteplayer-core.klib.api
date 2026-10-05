@@ -402,6 +402,19 @@ final enum class io.github.yuroyami.kiteplayer/HwdecKind : kotlin/Enum<io.github
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/HwdecKind> // io.github.yuroyami.kiteplayer/HwdecKind.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer/KeyframeChoice : kotlin/Enum<io.github.yuroyami.kiteplayer/KeyframeChoice> { // io.github.yuroyami.kiteplayer/KeyframeChoice|null[0]
+    enum entry After // io.github.yuroyami.kiteplayer/KeyframeChoice.After|null[0]
+    enum entry Before // io.github.yuroyami.kiteplayer/KeyframeChoice.Before|null[0]
+    enum entry Closest // io.github.yuroyami.kiteplayer/KeyframeChoice.Closest|null[0]
+    enum entry InSeekDirection // io.github.yuroyami.kiteplayer/KeyframeChoice.InSeekDirection|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer/KeyframeChoice.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer/KeyframeChoice> // io.github.yuroyami.kiteplayer/KeyframeChoice.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer/KeyframeChoice // io.github.yuroyami.kiteplayer/KeyframeChoice.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/KeyframeChoice> // io.github.yuroyami.kiteplayer/KeyframeChoice.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer/LatencyQuality : kotlin/Enum<io.github.yuroyami.kiteplayer/LatencyQuality> { // io.github.yuroyami.kiteplayer/LatencyQuality|null[0]
     enum entry Estimated // io.github.yuroyami.kiteplayer/LatencyQuality.Estimated|null[0]
     enum entry Exact // io.github.yuroyami.kiteplayer/LatencyQuality.Exact|null[0]
@@ -763,6 +776,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/
     abstract suspend fun readPacket(): io.github.yuroyami.kiteplayer.spi/PlayerPacket? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.readPacket|readPacket(){}[0]
     abstract suspend fun seekToKeyframe(io.github.yuroyami.kiteplayer/Pts): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.seekToKeyframe|seekToKeyframe(io.github.yuroyami.kiteplayer.Pts){}[0]
     open fun interrupt(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.interrupt|interrupt(){}[0]
+    open suspend fun seekToKeyframe(io.github.yuroyami.kiteplayer/Pts, io.github.yuroyami.kiteplayer/KeyframeChoice): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.seekToKeyframe|seekToKeyframe(io.github.yuroyami.kiteplayer.Pts;io.github.yuroyami.kiteplayer.KeyframeChoice){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/PlayerPacket : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/PlayerPacket|null[0]
@@ -2640,6 +2654,8 @@ final class io.github.yuroyami.kiteplayer/IoCachePolicyBuilder { // io.github.yu
 final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/KitePlayer|null[0]
     final val events // io.github.yuroyami.kiteplayer/KitePlayer.events|{}events[0]
         final fun <get-events>(): kotlinx.coroutines.flow/SharedFlow<io.github.yuroyami.kiteplayer/PlayerEvent> // io.github.yuroyami.kiteplayer/KitePlayer.events.<get-events>|<get-events>(){}[0]
+    final val keyframeChoice // io.github.yuroyami.kiteplayer/KitePlayer.keyframeChoice|{}keyframeChoice[0]
+        final fun <get-keyframeChoice>(): io.github.yuroyami.kiteplayer/KeyframeChoice // io.github.yuroyami.kiteplayer/KitePlayer.keyframeChoice.<get-keyframeChoice>|<get-keyframeChoice>(){}[0]
     final val losslessEvents // io.github.yuroyami.kiteplayer/KitePlayer.losslessEvents|{}losslessEvents[0]
         final fun <get-losslessEvents>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer/PlayerEvent> // io.github.yuroyami.kiteplayer/KitePlayer.losslessEvents.<get-losslessEvents>|<get-losslessEvents>(){}[0]
     final val progress // io.github.yuroyami.kiteplayer/KitePlayer.progress|{}progress[0]
@@ -2675,6 +2691,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final fun setEqualizer(io.github.yuroyami.kiteplayer/EqualizerSettings) // io.github.yuroyami.kiteplayer/KitePlayer.setEqualizer|setEqualizer(io.github.yuroyami.kiteplayer.EqualizerSettings){}[0]
     final fun setExternalClock(io.github.yuroyami.kiteplayer/ExternalClock?) // io.github.yuroyami.kiteplayer/KitePlayer.setExternalClock|setExternalClock(io.github.yuroyami.kiteplayer.ExternalClock?){}[0]
     final fun setHdrPolicy(io.github.yuroyami.kiteplayer/HdrPolicy) // io.github.yuroyami.kiteplayer/KitePlayer.setHdrPolicy|setHdrPolicy(io.github.yuroyami.kiteplayer.HdrPolicy){}[0]
+    final fun setKeyframeChoice(io.github.yuroyami.kiteplayer/KeyframeChoice) // io.github.yuroyami.kiteplayer/KitePlayer.setKeyframeChoice|setKeyframeChoice(io.github.yuroyami.kiteplayer.KeyframeChoice){}[0]
     final fun setLoop(io.github.yuroyami.kiteplayer/LoopMode) // io.github.yuroyami.kiteplayer/KitePlayer.setLoop|setLoop(io.github.yuroyami.kiteplayer.LoopMode){}[0]
     final fun setMarkers(kotlin.collections/List<io.github.yuroyami.kiteplayer/Marker>) // io.github.yuroyami.kiteplayer/KitePlayer.setMarkers|setMarkers(kotlin.collections.List<io.github.yuroyami.kiteplayer.Marker>){}[0]
     final fun setMuted(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayer.setMuted|setMuted(kotlin.Boolean){}[0]
@@ -3037,7 +3054,7 @@ final class io.github.yuroyami.kiteplayer/PlaybackStats { // io.github.yuroyami.
 }
 
 final class io.github.yuroyami.kiteplayer/PlayerConfig { // io.github.yuroyami.kiteplayer/PlayerConfig|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/SyncMode = ..., io.github.yuroyami.kiteplayer/HwdecPolicy = ..., io.github.yuroyami.kiteplayer/FrameDropPolicy = ..., io.github.yuroyami.kiteplayer/BufferPolicy = ..., io.github.yuroyami.kiteplayer/AudioConfig = ..., io.github.yuroyami.kiteplayer/SubtitleConfig = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/Backends = ..., io.github.yuroyami.kiteplayer/NetworkConfig = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DeinterlacePolicy = ..., io.github.yuroyami.kiteplayer/QueueConfig = ..., io.github.yuroyami.kiteplayer/HdrPolicy = ..., io.github.yuroyami.kiteplayer/ExternalClockPolicy = ...) // io.github.yuroyami.kiteplayer/PlayerConfig.<init>|<init>(io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.SyncMode;io.github.yuroyami.kiteplayer.HwdecPolicy;io.github.yuroyami.kiteplayer.FrameDropPolicy;io.github.yuroyami.kiteplayer.BufferPolicy;io.github.yuroyami.kiteplayer.AudioConfig;io.github.yuroyami.kiteplayer.SubtitleConfig;kotlin.time.Duration;kotlin.time.Duration;kotlin.Boolean;io.github.yuroyami.kiteplayer.Backends;io.github.yuroyami.kiteplayer.NetworkConfig;kotlin.Boolean;io.github.yuroyami.kiteplayer.DeinterlacePolicy;io.github.yuroyami.kiteplayer.QueueConfig;io.github.yuroyami.kiteplayer.HdrPolicy;io.github.yuroyami.kiteplayer.ExternalClockPolicy){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/SyncMode = ..., io.github.yuroyami.kiteplayer/HwdecPolicy = ..., io.github.yuroyami.kiteplayer/FrameDropPolicy = ..., io.github.yuroyami.kiteplayer/BufferPolicy = ..., io.github.yuroyami.kiteplayer/AudioConfig = ..., io.github.yuroyami.kiteplayer/SubtitleConfig = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/Backends = ..., io.github.yuroyami.kiteplayer/NetworkConfig = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DeinterlacePolicy = ..., io.github.yuroyami.kiteplayer/QueueConfig = ..., io.github.yuroyami.kiteplayer/HdrPolicy = ..., io.github.yuroyami.kiteplayer/ExternalClockPolicy = ..., io.github.yuroyami.kiteplayer/KeyframeChoice = ...) // io.github.yuroyami.kiteplayer/PlayerConfig.<init>|<init>(io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.SyncMode;io.github.yuroyami.kiteplayer.HwdecPolicy;io.github.yuroyami.kiteplayer.FrameDropPolicy;io.github.yuroyami.kiteplayer.BufferPolicy;io.github.yuroyami.kiteplayer.AudioConfig;io.github.yuroyami.kiteplayer.SubtitleConfig;kotlin.time.Duration;kotlin.time.Duration;kotlin.Boolean;io.github.yuroyami.kiteplayer.Backends;io.github.yuroyami.kiteplayer.NetworkConfig;kotlin.Boolean;io.github.yuroyami.kiteplayer.DeinterlacePolicy;io.github.yuroyami.kiteplayer.QueueConfig;io.github.yuroyami.kiteplayer.HdrPolicy;io.github.yuroyami.kiteplayer.ExternalClockPolicy;io.github.yuroyami.kiteplayer.KeyframeChoice){}[0]
 
     final val audio // io.github.yuroyami.kiteplayer/PlayerConfig.audio|{}audio[0]
         final fun <get-audio>(): io.github.yuroyami.kiteplayer/AudioConfig // io.github.yuroyami.kiteplayer/PlayerConfig.audio.<get-audio>|<get-audio>(){}[0]
@@ -3057,6 +3074,8 @@ final class io.github.yuroyami.kiteplayer/PlayerConfig { // io.github.yuroyami.k
         final fun <get-hardwareDecode>(): io.github.yuroyami.kiteplayer/HwdecPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.hardwareDecode.<get-hardwareDecode>|<get-hardwareDecode>(){}[0]
     final val hdrPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.hdrPolicy|{}hdrPolicy[0]
         final fun <get-hdrPolicy>(): io.github.yuroyami.kiteplayer/HdrPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.hdrPolicy.<get-hdrPolicy>|<get-hdrPolicy>(){}[0]
+    final val keyframeChoice // io.github.yuroyami.kiteplayer/PlayerConfig.keyframeChoice|{}keyframeChoice[0]
+        final fun <get-keyframeChoice>(): io.github.yuroyami.kiteplayer/KeyframeChoice // io.github.yuroyami.kiteplayer/PlayerConfig.keyframeChoice.<get-keyframeChoice>|<get-keyframeChoice>(){}[0]
     final val network // io.github.yuroyami.kiteplayer/PlayerConfig.network|{}network[0]
         final fun <get-network>(): io.github.yuroyami.kiteplayer/NetworkConfig // io.github.yuroyami.kiteplayer/PlayerConfig.network.<get-network>|<get-network>(){}[0]
     final val progressInterval // io.github.yuroyami.kiteplayer/PlayerConfig.progressInterval|{}progressInterval[0]
@@ -3083,6 +3102,7 @@ final class io.github.yuroyami.kiteplayer/PlayerConfig { // io.github.yuroyami.k
     final fun component15(): io.github.yuroyami.kiteplayer/QueueConfig // io.github.yuroyami.kiteplayer/PlayerConfig.component15|component15(){}[0]
     final fun component16(): io.github.yuroyami.kiteplayer/HdrPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.component16|component16(){}[0]
     final fun component17(): io.github.yuroyami.kiteplayer/ExternalClockPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.component17|component17(){}[0]
+    final fun component18(): io.github.yuroyami.kiteplayer/KeyframeChoice // io.github.yuroyami.kiteplayer/PlayerConfig.component18|component18(){}[0]
     final fun component2(): io.github.yuroyami.kiteplayer/SyncMode // io.github.yuroyami.kiteplayer/PlayerConfig.component2|component2(){}[0]
     final fun component3(): io.github.yuroyami.kiteplayer/HwdecPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.component3|component3(){}[0]
     final fun component4(): io.github.yuroyami.kiteplayer/FrameDropPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.component4|component4(){}[0]
@@ -3091,7 +3111,7 @@ final class io.github.yuroyami.kiteplayer/PlayerConfig { // io.github.yuroyami.k
     final fun component7(): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/PlayerConfig.component7|component7(){}[0]
     final fun component8(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/PlayerConfig.component8|component8(){}[0]
     final fun component9(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/PlayerConfig.component9|component9(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/SyncMode = ..., io.github.yuroyami.kiteplayer/HwdecPolicy = ..., io.github.yuroyami.kiteplayer/FrameDropPolicy = ..., io.github.yuroyami.kiteplayer/BufferPolicy = ..., io.github.yuroyami.kiteplayer/AudioConfig = ..., io.github.yuroyami.kiteplayer/SubtitleConfig = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/Backends = ..., io.github.yuroyami.kiteplayer/NetworkConfig = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DeinterlacePolicy = ..., io.github.yuroyami.kiteplayer/QueueConfig = ..., io.github.yuroyami.kiteplayer/HdrPolicy = ..., io.github.yuroyami.kiteplayer/ExternalClockPolicy = ...): io.github.yuroyami.kiteplayer/PlayerConfig // io.github.yuroyami.kiteplayer/PlayerConfig.copy|copy(io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.SyncMode;io.github.yuroyami.kiteplayer.HwdecPolicy;io.github.yuroyami.kiteplayer.FrameDropPolicy;io.github.yuroyami.kiteplayer.BufferPolicy;io.github.yuroyami.kiteplayer.AudioConfig;io.github.yuroyami.kiteplayer.SubtitleConfig;kotlin.time.Duration;kotlin.time.Duration;kotlin.Boolean;io.github.yuroyami.kiteplayer.Backends;io.github.yuroyami.kiteplayer.NetworkConfig;kotlin.Boolean;io.github.yuroyami.kiteplayer.DeinterlacePolicy;io.github.yuroyami.kiteplayer.QueueConfig;io.github.yuroyami.kiteplayer.HdrPolicy;io.github.yuroyami.kiteplayer.ExternalClockPolicy){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/SyncMode = ..., io.github.yuroyami.kiteplayer/HwdecPolicy = ..., io.github.yuroyami.kiteplayer/FrameDropPolicy = ..., io.github.yuroyami.kiteplayer/BufferPolicy = ..., io.github.yuroyami.kiteplayer/AudioConfig = ..., io.github.yuroyami.kiteplayer/SubtitleConfig = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/Backends = ..., io.github.yuroyami.kiteplayer/NetworkConfig = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DeinterlacePolicy = ..., io.github.yuroyami.kiteplayer/QueueConfig = ..., io.github.yuroyami.kiteplayer/HdrPolicy = ..., io.github.yuroyami.kiteplayer/ExternalClockPolicy = ..., io.github.yuroyami.kiteplayer/KeyframeChoice = ...): io.github.yuroyami.kiteplayer/PlayerConfig // io.github.yuroyami.kiteplayer/PlayerConfig.copy|copy(io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.SyncMode;io.github.yuroyami.kiteplayer.HwdecPolicy;io.github.yuroyami.kiteplayer.FrameDropPolicy;io.github.yuroyami.kiteplayer.BufferPolicy;io.github.yuroyami.kiteplayer.AudioConfig;io.github.yuroyami.kiteplayer.SubtitleConfig;kotlin.time.Duration;kotlin.time.Duration;kotlin.Boolean;io.github.yuroyami.kiteplayer.Backends;io.github.yuroyami.kiteplayer.NetworkConfig;kotlin.Boolean;io.github.yuroyami.kiteplayer.DeinterlacePolicy;io.github.yuroyami.kiteplayer.QueueConfig;io.github.yuroyami.kiteplayer.HdrPolicy;io.github.yuroyami.kiteplayer.ExternalClockPolicy;io.github.yuroyami.kiteplayer.KeyframeChoice){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerConfig.toString|toString(){}[0]
@@ -3127,6 +3147,9 @@ final class io.github.yuroyami.kiteplayer/PlayerConfigBuilder { // io.github.yur
     final var hdrPolicy // io.github.yuroyami.kiteplayer/PlayerConfigBuilder.hdrPolicy|{}hdrPolicy[0]
         final fun <get-hdrPolicy>(): io.github.yuroyami.kiteplayer/HdrPolicy // io.github.yuroyami.kiteplayer/PlayerConfigBuilder.hdrPolicy.<get-hdrPolicy>|<get-hdrPolicy>(){}[0]
         final fun <set-hdrPolicy>(io.github.yuroyami.kiteplayer/HdrPolicy) // io.github.yuroyami.kiteplayer/PlayerConfigBuilder.hdrPolicy.<set-hdrPolicy>|<set-hdrPolicy>(io.github.yuroyami.kiteplayer.HdrPolicy){}[0]
+    final var keyframeChoice // io.github.yuroyami.kiteplayer/PlayerConfigBuilder.keyframeChoice|{}keyframeChoice[0]
+        final fun <get-keyframeChoice>(): io.github.yuroyami.kiteplayer/KeyframeChoice // io.github.yuroyami.kiteplayer/PlayerConfigBuilder.keyframeChoice.<get-keyframeChoice>|<get-keyframeChoice>(){}[0]
+        final fun <set-keyframeChoice>(io.github.yuroyami.kiteplayer/KeyframeChoice) // io.github.yuroyami.kiteplayer/PlayerConfigBuilder.keyframeChoice.<set-keyframeChoice>|<set-keyframeChoice>(io.github.yuroyami.kiteplayer.KeyframeChoice){}[0]
     final var network // io.github.yuroyami.kiteplayer/PlayerConfigBuilder.network|{}network[0]
         final fun <get-network>(): io.github.yuroyami.kiteplayer/NetworkConfig // io.github.yuroyami.kiteplayer/PlayerConfigBuilder.network.<get-network>|<get-network>(){}[0]
         final fun <set-network>(io.github.yuroyami.kiteplayer/NetworkConfig) // io.github.yuroyami.kiteplayer/PlayerConfigBuilder.network.<set-network>|<set-network>(io.github.yuroyami.kiteplayer.NetworkConfig){}[0]

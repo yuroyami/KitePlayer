@@ -83,6 +83,11 @@ public data class PlayerConfig(
     val hdrPolicy: HdrPolicy = HdrPolicy.Auto,
     /** How playback follows a clock set with [KitePlayer.setExternalClock]. See [ExternalClock]. */
     val externalClock: ExternalClockPolicy = ExternalClockPolicy(),
+    /**
+     * Which keyframe a [SeekMode.Keyframe] seek lands on. Change it live with
+     * [KitePlayer.setKeyframeChoice]; this is only the value a fresh player starts at.
+     */
+    val keyframeChoice: KeyframeChoice = KeyframeChoice.Before,
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive

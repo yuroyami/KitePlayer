@@ -91,6 +91,9 @@ public class PlayerConfigBuilder(from: PlayerConfig = PlayerConfig()) {
     /** See [PlayerConfig.externalClock]. */
     public var externalClock: ExternalClockPolicy = from.externalClock
 
+    /** See [PlayerConfig.keyframeChoice]. */
+    public var keyframeChoice: KeyframeChoice = from.keyframeChoice
+
     /** Changes [audio] field by field. */
     public fun audio(build: AudioConfigBuilder.() -> Unit) {
         audio = AudioConfigBuilder(audio).apply(build).build()
@@ -135,6 +138,7 @@ public class PlayerConfigBuilder(from: PlayerConfig = PlayerConfig()) {
         queue = queue,
         hdrPolicy = hdrPolicy,
         externalClock = externalClock,
+        keyframeChoice = keyframeChoice,
     )
 }
 

@@ -301,6 +301,13 @@ internal class MediaScript(
         videoKeyframesUs?.let { keys -> keys.filter { it <= aimedUs }.maxOrNull() ?: keys.min() }
             ?: (aimedUs / keyframeIntervalUs * keyframeIntervalUs)
 
+    /** The first keyframe at or after [aimedUs], or null when none follows it. */
+    fun keyframeAtOrAfter(aimedUs: Long): Long? {
+        val keys = videoKeyframesUs ?: return ((aimedUs + keyframeIntervalUs - 1) / keyframeIntervalUs * keyframeIntervalUs)
+            .takeIf { it < durationUs }
+        return keys.filter { it >= aimedUs }.minOrNull()
+    }
+
     init {
         videoTimestampsUs?.let { list ->
             require(list.isNotEmpty() && list.zipWithNext().all { (a, b) -> a < b } && list.last() < durationUs) {
@@ -907,6 +914,9 @@ internal class ScriptedSource(
     var seeks: Int = 0
         private set
     val seekTargets: MutableList<Long> = mutableListOf()
+
+    /** The keyframe choice each seek asked for, beside [seekTargets]. */
+    val seekChoices: MutableList<KeyframeChoice> = mutableListOf()
     var selectCalls: Int = 0
         private set
     var interruptCalls: Int = 0
@@ -1092,14 +1102,24 @@ internal class ScriptedSource(
         }
     }
 
-    override suspend fun seekToKeyframe(target: Pts): Pts? {
+    override suspend fun seekToKeyframe(target: Pts): Pts? = seekToKeyframe(target, KeyframeChoice.Before)
+
+    override suspend fun seekToKeyframe(target: Pts, choice: KeyframeChoice): Pts? {
         check(selectCalls > 0) { "selectStreams must be called before seeking" }
+        check(choice != KeyframeChoice.InSeekDirection) { "the engine resolves the seek's direction itself" }
         seeks++
         if (faults.seekWedges && !wedgeReleased.isCompleted) wedge("seek")
         seekTargets += target.micros
+        seekChoices += choice
         trace.record("source.seek")
         val aimed = (target.micros + script.seekOvershootUs).coerceIn(0L, script.durationUs)
-        val landing = script.keyframeAtOrBefore(aimed)
+        val before = script.keyframeAtOrBefore(aimed)
+        val after = script.keyframeAtOrAfter(aimed)
+        val landing = when {
+            after == null || choice == KeyframeChoice.Before -> before
+            choice == KeyframeChoice.After -> after
+            else -> if (after - aimed < aimed - before) after else before
+        }
         for (track in script.subtitleTracks) {
             subtitleSeekFloorsUs[track.index] = landing
             // Redelivery starts at the landing in FILE order, exactly like a backward

@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.spi
 
 import io.github.yuroyami.kiteplayer.Chapter
 import io.github.yuroyami.kiteplayer.DolbyVisionInfo
+import io.github.yuroyami.kiteplayer.KeyframeChoice
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
@@ -147,6 +148,20 @@ public interface PlayerMediaSource : AutoCloseable {
      *         the engine then discovers it from the first decoded frame.
      */
     public suspend fun seekToKeyframe(target: Pts): Pts?
+
+    /**
+     * Moves the read cursor to the keyframe [choice] names around [target], under the same rules as
+     * the call without a choice.
+     *
+     * The engine resolves [KeyframeChoice.InSeekDirection] itself, so
+     * [choice] is one of `Before`, `After` and `Closest`. `After` and `Closest` fall back to the
+     * keyframe before [target] when none follows it.
+     *
+     * The default serves every choice as `Before`, which is what a source that cannot look for a
+     * keyframe after the target can honestly do.
+     */
+    public suspend fun seekToKeyframe(target: Pts, choice: KeyframeChoice): Pts? =
+        seekToKeyframe(target)
 
     /**
      * The versions of this media at other qualities, such as the variants of an HLS master

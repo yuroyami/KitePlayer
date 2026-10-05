@@ -408,8 +408,9 @@ public data class SubtitleSource(
 /** How exact a seek needs to be, traded against how long it takes. */
 public enum class SeekMode {
     /**
-     * Land on the nearest keyframe at or before the target. One decode, always fast, and up to a
-     * whole group of pictures away from where you asked.
+     * Land on a keyframe near the target without decoding forward to it: by default the last one
+     * at or before the target, and [KeyframeChoice] picks another. One decode, always fast, and up
+     * to a whole group of pictures away from where you asked.
      */
     Keyframe,
 
@@ -431,4 +432,39 @@ public enum class SeekMode {
      * second time; that cost buys the immediate picture, mpv's own trade.
      */
     KeyframeThenRefine,
+}
+
+/**
+ * Which keyframe a [SeekMode.Keyframe] seek lands on, since it does not decode forward to the
+ * exact target.
+ *
+ * In a file whose keyframes are far apart, such as a screen recording, a long-GOP encode or the
+ * recording of a live stream, the choice decides whether a short jump forward goes anywhere: with
+ * ten seconds between keyframes, a five second skip forward under [Before] lands where it started or even
+ * earlier.
+ * Set it with [PlayerConfig.keyframeChoice] or live with [KitePlayer.setKeyframeChoice]. The precise
+ * modes are not affected: [SeekMode.KeyframeThenRefine] always shows the keyframe before the target
+ * first, because that is where its decode forward starts.
+ */
+public enum class KeyframeChoice {
+    /** The last keyframe at or before the target. Never lands past where you asked; the default. */
+    Before,
+
+    /**
+     * The first keyframe at or after the target, or the last one before it when none follows,
+     * so a seek near the end still lands rather than failing.
+     */
+    After,
+
+    /**
+     * Whichever of the keyframes either side of the target is nearer to it, the one before on a
+     * tie or when none follows.
+     */
+    Closest,
+
+    /**
+     * [After] for a seek forward from the current position and [Before] for a seek backward, so a
+     * skip button always moves the way it points. mpv applies the same rule to a relative keyframe seek.
+     */
+    InSeekDirection,
 }

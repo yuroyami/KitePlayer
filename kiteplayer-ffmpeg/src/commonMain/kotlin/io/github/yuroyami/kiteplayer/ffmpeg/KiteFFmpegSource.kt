@@ -12,6 +12,7 @@ import io.github.yuroyami.kiteplayer.DolbyVisionInfo
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
+import io.github.yuroyami.kiteplayer.KeyframeChoice
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.Pts
@@ -51,6 +52,8 @@ import io.github.yuroyami.kiteffmpeg.DolbyVisionMetadata
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 import io.github.yuroyami.kiteffmpeg.dsl.DecoderOptions
 import io.github.yuroyami.kiteffmpeg.MediaSource
+import io.github.yuroyami.kiteffmpeg.FFmpegError
+import io.github.yuroyami.kiteffmpeg.FFmpegException
 import io.github.yuroyami.kiteffmpeg.MediaType
 import io.github.yuroyami.kiteffmpeg.Packet
 import io.github.yuroyami.kiteffmpeg.PacketReader
@@ -315,6 +318,74 @@ public class KiteFFmpegSource internal constructor(
         return null
     }
 
+    /**
+     * Finds the keyframes either side of [target] by reading the first picture after a forward seek
+     * and, for [KeyframeChoice.Closest], after a backward one, then lands with a backward seek aimed
+     * at the chosen keyframe's own time, which KiteFFmpeg lands on exactly (#496). A source with no
+     * picture has nothing to choose between, because every sound packet is a keyframe.
+     */
+    override suspend fun seekToKeyframe(target: Pts, choice: KeyframeChoice): Pts? {
+        if (choice == KeyframeChoice.Before) return seekToKeyframe(target)
+        val reader = reader ?: error("selectStreams must be called before seeking")
+        val picture = readStreams.firstOrNull { it.type == MediaType.Video && !it.disposition.attachedPicture }
+            ?: return seekToKeyframe(target)
+        recorder.endForSeek()
+        val after = keyframeAfter(reader, picture.index, target.micros)
+        val aim = when {
+            after == null -> target.micros
+            choice == KeyframeChoice.After -> after
+            else -> {
+                seekBackward(target.micros) { micros, floor ->
+                    reader.seek(micros, SeekDirection.Backward, notEarlierThan = floor)
+                }
+                val before = firstKeyframe(reader, picture.index, Long.MIN_VALUE)
+                if (before != null && target.micros - before <= after - target.micros) target.micros else after
+            }
+        }
+        seekBackward(aim) { micros, floor ->
+            reader.seek(micros, SeekDirection.Backward, notEarlierThan = floor)
+        }
+        return null
+    }
+
+    /** The time of the first keyframe of [stream] that shows at or after [micros], or null when none follows. */
+    private fun keyframeAfter(reader: PacketReader, stream: Int, micros: Long): Long? {
+        try {
+            reader.seek(micros, SeekDirection.Forward)
+        } catch (failure: FFmpegException) {
+            // FFmpeg refuses a forward seek with nothing after the target, and how depends on the
+            // demuxer: the MP4 reader answers a bare -1, which reads as EPERM. Any refusal means
+            // "take the one before", and the backward seek that follows reports a real failure
+            // itself. An interrupt is the engine abandoning the seek, so it is never swallowed.
+            when (failure.error) {
+                is FFmpegError.Interrupted, is FFmpegError.OutOfMemory, is FFmpegError.Internal -> throw failure
+                else -> return null
+            }
+        }
+        return firstKeyframe(reader, stream, micros)
+    }
+
+    /**
+     * Reads on to the first keyframe of [stream] that shows at or after [notBefore] and returns its
+     * time, closing every packet it reads. Null at the end of the media, or past
+     * [KEYFRAME_SEARCH_BYTES] of input, which bounds a stream whose keyframes are lost.
+     */
+    private fun firstKeyframe(reader: PacketReader, stream: Int, notBefore: Long): Long? {
+        var bytes = 0L
+        while (bytes < KEYFRAME_SEARCH_BYTES) {
+            val packet = reader.read() ?: return null
+            try {
+                bytes += packet.sizeBytes
+                if (packet.streamIndex != stream || !packet.isKeyframe) continue
+                val shows = mapper.mapTimestamp(packet.ptsMicros)?.micros ?: continue
+                if (shows >= notBefore) return shows
+            } finally {
+                packet.close()
+            }
+        }
+        return null
+    }
+
     override fun close() {
         closeInOrder(
             recorder::close,
@@ -480,6 +551,12 @@ internal class TimestampMapper(private val containerStartMicros: Long) {
     /** An interval. Rescaled by KiteFFmpeg and shifted by nothing. */
     fun mapDuration(micros: Long?): Pts? = micros?.let { Pts(it) }
 }
+
+/**
+ * How much input a keyframe choice reads looking for the next keyframe before it gives up and takes
+ * the one before: the same 32 MB KiteFFmpeg's backward seek reads to check its own landing.
+ */
+private const val KEYFRAME_SEARCH_BYTES: Long = 32L * 1024 * 1024
 
 /**
  * The last resort step between two synthesised video timestamps: 40 milliseconds, or 25 frames a

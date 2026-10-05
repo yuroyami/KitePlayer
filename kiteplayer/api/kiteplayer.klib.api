@@ -235,6 +235,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final fun setDuckLevel(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setDuckLevel|setDuckLevel(kotlin.Float){}[0]
     final fun setEqualizer(io.github.yuroyami.kiteplayer/EqualizerSettings) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setEqualizer|setEqualizer(io.github.yuroyami.kiteplayer.EqualizerSettings){}[0]
     final fun setHdrPolicy(io.github.yuroyami.kiteplayer/HdrPolicy) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setHdrPolicy|setHdrPolicy(io.github.yuroyami.kiteplayer.HdrPolicy){}[0]
+    final fun setKeyframeChoice(io.github.yuroyami.kiteplayer/KeyframeChoice) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setKeyframeChoice|setKeyframeChoice(io.github.yuroyami.kiteplayer.KeyframeChoice){}[0]
     final fun setLoop(io.github.yuroyami.kiteplayer/LoopMode) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setLoop|setLoop(io.github.yuroyami.kiteplayer.LoopMode){}[0]
     final fun setMarkers(kotlin.collections/List<io.github.yuroyami.kiteplayer/Marker>) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setMarkers|setMarkers(kotlin.collections.List<io.github.yuroyami.kiteplayer.Marker>){}[0]
     final fun setMuted(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setMuted|setMuted(kotlin.Boolean){}[0]

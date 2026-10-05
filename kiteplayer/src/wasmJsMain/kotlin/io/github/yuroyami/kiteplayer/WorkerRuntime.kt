@@ -149,6 +149,7 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
             is Control.RequestSeek -> requestSeek(control.to, control.mode)
             is Control.SetSpeed -> setSpeed(control.value)
             is Control.SetPreservePitch -> setPreservePitch(control.value)
+            is Control.SetKeyframeChoice -> setKeyframeChoice(control.choice)
             is Control.SetVolume -> setVolume(control.value)
             is Control.SetDuckLevel -> setDuckLevel(control.level)
             is Control.SetBalance -> setBalance(control.value)

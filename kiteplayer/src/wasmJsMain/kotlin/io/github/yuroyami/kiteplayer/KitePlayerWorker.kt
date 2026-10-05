@@ -268,6 +268,9 @@ public class KitePlayerWorker private constructor(
     /** Chooses whether [setSpeed] keeps pitch. */
     public fun setPreservePitch(value: Boolean): Unit = send(Control.SetPreservePitch(value))
 
+    /** Chooses which keyframe a [SeekMode.Keyframe] seek lands on; see [KitePlayer.setKeyframeChoice]. */
+    public fun setKeyframeChoice(choice: KeyframeChoice): Unit = send(Control.SetKeyframeChoice(choice))
+
     /** Sets the volume. */
     public fun setVolume(value: Float): Unit = send(Control.SetVolume(value))
 

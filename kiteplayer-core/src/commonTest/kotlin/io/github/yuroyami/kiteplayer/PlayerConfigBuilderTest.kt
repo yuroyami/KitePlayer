@@ -17,6 +17,7 @@ class PlayerConfigBuilderTest {
     fun `nested blocks set nested fields and keep every other default`() {
         val built = PlayerConfig {
             hdrPolicy = HdrPolicy.ToneMap
+            keyframeChoice = KeyframeChoice.InSeekDirection
             subtitles { preferredLanguages = listOf("ja") }
             audio { replayGain = ReplayGainMode.Track }
             network { ioCache { forwardWindowBytes = 64L * 1024 * 1024 } }
@@ -25,6 +26,7 @@ class PlayerConfigBuilderTest {
         }
         val expected = PlayerConfig(
             hdrPolicy = HdrPolicy.ToneMap,
+            keyframeChoice = KeyframeChoice.InSeekDirection,
             subtitles = SubtitleConfig(preferredLanguages = listOf("ja")),
             audio = AudioConfig(replayGain = ReplayGainMode.Track),
             network = NetworkConfig(ioCache = IoCachePolicy(forwardWindowBytes = 64L * 1024 * 1024)),

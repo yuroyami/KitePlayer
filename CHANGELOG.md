@@ -166,6 +166,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   it already holds, so it adds no delay. Audio that never passes full scale is untouched, sample for
   sample. `PlaybackStats.audioLimitedFrames` counts the frames it lowered, and the diagnostics
   report shows it beside the underruns.
+- A keyframe seek can land on the keyframe after its target, the nearer one, or the one in the
+  seek's direction, not only the one before it (#496). In a file whose keyframes are far apart, such
+  as a screen recording, a ten second skip forward used to land where it started or earlier.
+  `KeyframeChoice` picks the rule, set with `PlayerConfig.keyframeChoice` or live with
+  `KitePlayer.setKeyframeChoice`; `InSeekDirection` is what a skip button wants. The default stays
+  the keyframe before, and the precise modes are unchanged. A source receives the choice
+  through a new `seekToKeyframe` overload, whose default keeps the keyframe before.
 - `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
   page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third

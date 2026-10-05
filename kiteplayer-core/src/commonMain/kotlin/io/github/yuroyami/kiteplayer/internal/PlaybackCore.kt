@@ -1173,6 +1173,7 @@ internal class PlaybackCore(
     private var retiredRefused = 0L
     private var retiredRepeated = 0L
     private var retiredUnderruns = 0L
+    private var retiredLimited = 0L
     private var stillImageShownSinceNanos: Long = 0
     private var stillImageFinished = false
     private var firstFrameSeen = false
@@ -8873,6 +8874,7 @@ internal class PlaybackCore(
             refusedFrames = retiredRefused,
             repeatedFrames = retiredRepeated,
             audioUnderruns = retiredUnderruns,
+            audioLimitedFrames = retiredLimited,
             droppedEvents = droppedEvents.value,
             rebuffers = rebuffers,
             syncMode = config.syncMode,
@@ -9011,6 +9013,7 @@ internal class PlaybackCore(
         retiredRefused += session.video?.refusedFrames ?: 0
         retiredRepeated += session.video?.repeatedFrames ?: 0
         if (session.ownsAudio) retiredUnderruns += session.audio?.underruns ?: 0
+        if (session.ownsAudio) retiredLimited += session.audio?.limitedFrames ?: 0
         retiredIoBytes += ioBytesOf(session)
     }
 
@@ -9400,6 +9403,7 @@ internal class PlaybackCore(
                 refusedFrames = retiredRefused + (session?.video?.refusedFrames ?: 0),
                 repeatedFrames = retiredRepeated + (session?.video?.repeatedFrames ?: 0),
                 audioUnderruns = underrunsNow,
+                audioLimitedFrames = retiredLimited + (session?.audio?.limitedFrames ?: 0),
                 droppedEvents = droppedEvents.value,
                 rebuffers = rebuffers,
                 avDrift = (session?.driftUs?.value ?: 0L).microseconds,
@@ -9565,8 +9569,8 @@ internal class PlaybackCore(
         appendLine("  decoded=${liveStats.decodedVideoFrames} submitted=${liveStats.submittedFrames} " +
             "headless=${liveStats.headlessFrames} droppedLate=${liveStats.droppedFramesLate} " +
             "refused=${liveStats.refusedFrames} repeated=${liveStats.repeatedFrames}")
-        appendLine("  underruns=${liveStats.audioUnderruns} rebuffers=${liveStats.rebuffers} " +
-            "avDrift=${liveStats.avDrift} master=${liveStats.masterClock} hwdec=${liveStats.hardwareDecode}")
+        appendLine("  underruns=${liveStats.audioUnderruns} limited=${liveStats.audioLimitedFrames} " +
+            "rebuffers=${liveStats.rebuffers} avDrift=${liveStats.avDrift} master=${liveStats.masterClock} hwdec=${liveStats.hardwareDecode}")
         // Anything but zero means this session's event feed is not a complete record, which a bug
         // report that reasons from the events needs to know before it reasons.
         appendLine("  eventsDropped=${liveStats.droppedEvents} (a full buffer: the collector was slower " +

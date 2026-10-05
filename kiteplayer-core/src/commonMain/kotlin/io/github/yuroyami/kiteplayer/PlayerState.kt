@@ -395,6 +395,16 @@ public data class PlaybackStats(
     val containerBitrate: Long? = null,
     val syncMode: SyncMode = SyncMode.Auto,
     val masterClock: MasterClock = MasterClock.None,
+    /**
+     * Audio frames the output's peak limiter turned down because they would have passed full scale.
+     *
+     * A loud surround mix folded to stereo, or an equaliser boost, can add up past full scale, and a
+     * device clamps each such sample, which squares off the wave and is heard as crackle. The player
+     * lowers the gain smoothly for a few milliseconds around such a passage instead, and counts each
+     * frame it lowered here. Zero for anything that never passes full scale, so a rising figure says
+     * the mix is too hot for the output.
+     */
+    val audioLimitedFrames: Long = 0,
 )
 
 public data class VideoSize(

@@ -133,6 +133,41 @@ struct kprt_ring {
     _Atomic int64_t cache_base_pts_us;
     _Atomic int32_t cache_valid;
 
+    /* ---- The peak limiter (#504). Consumer-private but for the two atomics. ----
+     *
+     * The render limits frame `s` with the mean of `held` over the box of frames
+     * [s, s + lookahead), where `held[j]` is the smallest gain any frame in [j - lookahead + 1, j]
+     * needs to stay within full scale. Every box that holds a frame `k` therefore holds only
+     * values at or below the gain `k` needs, so the mean reaches it by the time `k` plays, and it
+     * walks there at most 1/lookahead of the range per frame. A frame not yet in the ring counts
+     * as needing nothing until it arrives.
+     *
+     * `lim_reset` is how `kprt_ring_flush` and create reach the rest: they raise it and the render
+     * starts the limiter over at its next call, so no thread but the render's ever writes the
+     * plain fields below. */
+    _Alignas(KPRT_CACHELINE) _Atomic int64_t limited_frames;
+    _Atomic int32_t lim_reset;
+    int32_t lim_lookahead;
+    float lim_release;
+    /* The gain the last rendered frame was limited by, 1 when it was not. */
+    float lim_gain;
+    /* The next frame to enter the box, and the sum of `held` over the box. The sum is a double and
+     * is set back to exactly `lim_lookahead` whenever no frame in the box needs a reduction, so it
+     * cannot drift over a long session. */
+    int64_t lim_entered;
+    double lim_sum;
+    int32_t lim_reduced;
+    /* Slots of `lim_held` for the next frame to render and for `lim_entered`. */
+    int32_t lim_out_slot;
+    int32_t lim_in_slot;
+    /* Ascending by gain from the front: the frames over full scale among the last `lim_lookahead`
+     * entered, each with the gain it needs. Circular. */
+    int32_t lim_queue_head;
+    int32_t lim_queue_count;
+    float lim_held[KPRT_LIMIT_MAX_LOOKAHEAD];
+    float lim_queue_gain[KPRT_LIMIT_MAX_LOOKAHEAD];
+    int64_t lim_queue_frame[KPRT_LIMIT_MAX_LOOKAHEAD];
+
     /* ---- Anchor-reader-private state. `kprt_ring_anchor` writes these, and so does
      * `kprt_ring_flush`, which clears `reader_valid` when it abandons a position; the comment
      * that said "only kprt_ring_anchor" was corrected later, the same

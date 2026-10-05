@@ -137,7 +137,30 @@ kprt_ring *kprt_ring_create(int32_t sample_rate, int32_t channels, int32_t capac
     ring->gain_current = 1.0f;
     ring->gain_slope = 1.0f / (float)kprt_gain_ramp_frames(sample_rate);
     kprt_ring_set_gain(ring, 1.0f);
+    ring->lim_lookahead = kprt_limit_lookahead_frames(sample_rate);
+    ring->lim_release = 1.0f / (float)kprt_limit_release_frames(sample_rate);
+    atomic_store_explicit(&ring->lim_reset, 1, memory_order_relaxed);
     return ring;
+}
+
+int32_t kprt_limit_lookahead_frames(int32_t sample_rate)
+{
+    int64_t frames;
+    if (sample_rate <= 0)
+        return 1;
+    frames = (int64_t)sample_rate * KPRT_LIMIT_LOOKAHEAD_MICROS / 1000000;
+    if (frames < 1)
+        return 1;
+    return frames > KPRT_LIMIT_MAX_LOOKAHEAD ? KPRT_LIMIT_MAX_LOOKAHEAD : (int32_t)frames;
+}
+
+int32_t kprt_limit_release_frames(int32_t sample_rate)
+{
+    int64_t frames;
+    if (sample_rate <= 0)
+        return 1;
+    frames = (int64_t)sample_rate * KPRT_LIMIT_RELEASE_MICROS / 1000000;
+    return frames < 1 ? 1 : (int32_t)frames;
 }
 
 int32_t kprt_gain_ramp_frames(int32_t sample_rate)
@@ -503,6 +526,11 @@ int64_t kprt_ring_underruns(const kprt_ring *ring)
     return ring == NULL ? 0 : atomic_load_explicit(&ring->underruns, memory_order_relaxed);
 }
 
+int64_t kprt_ring_limited_frames(const kprt_ring *ring)
+{
+    return ring == NULL ? 0 : atomic_load_explicit(&ring->limited_frames, memory_order_relaxed);
+}
+
 int64_t kprt_ring_written_frames(const kprt_ring *ring)
 {
     return ring == NULL ? 0 : atomic_load_explicit(&ring->written, memory_order_acquire);
@@ -581,4 +609,9 @@ void kprt_ring_flush(kprt_ring *ring)
 
     atomic_store_explicit(&ring->has_pending, 0, memory_order_relaxed);
     atomic_store_explicit(&ring->pending_frames, 0, memory_order_relaxed);
+
+    /* The frames the limiter read ahead are gone, so its next render starts it over from the new
+     * position. Release, paired with the render's acquire: the render then sees the new consumed
+     * count it starts from. */
+    atomic_store_explicit(&ring->lim_reset, 1, memory_order_release);
 }

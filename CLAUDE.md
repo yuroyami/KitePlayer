@@ -140,6 +140,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
   40 ms. It now pulls on an exact running total. A test that needs an underrun must stall decoding
   (`stallAudioDecodeReceive`): with an honest device a slow reader makes the engine buffer while the
   ring still holds sound (#373).
+- Both rings limit any sample past full scale (#504), so a ring test that labels each frame with its
+  index as its sample value reads back turned-down values from the second frame on, which looks like
+  a wrap or ordering bug. Label frames with values inside full scale; the ring suites use n / 2^24.
 - A fake audio device pumped by the same loop that feeds the ring deadlocks when one buffer
   releases more audio than the ring has room for, and runTest then reports a test that never
   finished. After a change from 2x to 0.5x the tempo stage releases about 120 ms at once, the

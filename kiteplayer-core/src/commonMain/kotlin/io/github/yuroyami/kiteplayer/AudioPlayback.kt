@@ -255,6 +255,12 @@ public class AudioPlayback(
     /** Callbacks handed silence because the ring had run dry. Under the lock, as [buffered] is. */
     public val underruns: Long get() = synchronized(lock) { ring?.underruns ?: 0 }
 
+    /**
+     * Rendered frames the ring's peak limiter turned down because they would have passed full
+     * scale. Under the lock, as [buffered] is.
+     */
+    public val limitedFrames: Long get() = synchronized(lock) { ring?.limitedFrames ?: 0 }
+
     public val latencyQuality: LatencyQuality get() = sink.latencyQuality
 
     /** The sink's platform handle for audio effects, or null. See `AudioSink.platformSessionId`. */

@@ -685,6 +685,7 @@ private fun encodeStats(stats: PlaybackStats): JsAny = record {
     put("droppedFramesDecode", stats.droppedFramesDecode)
     put("repeatedFrames", stats.repeatedFrames)
     put("audioUnderruns", stats.audioUnderruns)
+    put("audioLimitedFrames", stats.audioLimitedFrames)
     put("rebuffers", stats.rebuffers)
     put("droppedEvents", stats.droppedEvents)
     put("avDrift", stats.avDrift)
@@ -1410,6 +1411,7 @@ private fun decodeStats(o: JsAny): PlaybackStats {
         droppedFramesDecode = o.long("droppedFramesDecode") ?: 0L,
         repeatedFrames = o.long("repeatedFrames") ?: 0L,
         audioUnderruns = o.long("audioUnderruns") ?: 0L,
+        audioLimitedFrames = o.long("audioLimitedFrames") ?: 0L,
         rebuffers = o.long("rebuffers") ?: 0L,
         droppedEvents = o.long("droppedEvents") ?: 0L,
         avDrift = o.micros("avDrift") ?: Duration.ZERO,

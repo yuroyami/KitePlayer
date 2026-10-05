@@ -1367,9 +1367,15 @@ internal class ScriptedAudioBuffer(
     }
 }
 
-/** The sample value one epoch's audio carries: magnitude names it, sign survives the gain stage. */
+/**
+ * The sample value one epoch's audio carries: magnitude names it, sign survives the gain stage.
+ *
+ * The magnitude is 1 / (epoch + 1), so the first epoch is a constant at full scale and every later
+ * one is a distinct value inside it. Anything past full scale would be turned down by the ring's peak
+ * limiter (#504) and no longer name its epoch.
+ */
 internal fun epochSample(generation: Generation): Float =
-    (generation.value + 1).toFloat() * if (generation.value % 2L == 0L) 1f else -1f
+    (1f / (generation.value + 1).toFloat()) * if (generation.value % 2L == 0L) 1f else -1f
 
 /** Audio identity that retains the epoch sign while giving each track a distinct magnitude. */
 internal fun trackSample(generation: Generation, marker: Float): Float = epochSample(generation) * marker

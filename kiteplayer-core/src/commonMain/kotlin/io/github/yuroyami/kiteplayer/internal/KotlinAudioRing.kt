@@ -158,6 +158,39 @@ internal class KotlinAudioRing(
     private var gainStarted = false
     private val gainSlopePerFrame: Float = 1f / gainRampFrames(format.sampleRate)
 
+    /**
+     * The peak limiter's state (#504), the mirror of the `lim_` fields of the C ring.
+     *
+     * The render limits frame `s` with the mean of [limitHeld] over the box of frames
+     * `[s, s + lookahead)`, where the held value of frame `j` is the smallest gain any frame in
+     * `[j - lookahead + 1, j]` needs to stay within full scale. Every box that holds a frame `k`
+     * therefore holds only values at or below the gain `k` needs, so the mean reaches it by the time
+     * `k` plays, and it walks there at most 1/lookahead of the range per frame. A frame not yet in
+     * the ring counts as needing nothing until it arrives.
+     *
+     * [limitReset] is how [flush] reaches the rest: it raises the flag and the render starts the
+     * limiter over at its next call, so only the render ever writes the plain fields. The arrays are
+     * sized here because the device's thread may not allocate.
+     */
+    private val limitReset = atomic(true)
+    private val limitedCount = atomic(0L)
+    private val limitLookahead: Int = limitLookaheadFrames(format.sampleRate)
+    private val limitRelease: Float = 1f / limitReleaseFrames(format.sampleRate)
+    private var limitGain = 1f
+    private var limitEntered = 0L
+    private var limitSum = 0.0
+    private var limitReduced = 0
+    private var limitOutSlot = 0
+    private var limitInSlot = 0
+    private var limitQueueHead = 0
+    private var limitQueueCount = 0
+    private val limitHeld = FloatArray(limitLookahead)
+    private val limitQueueGain = FloatArray(limitLookahead)
+    private val limitQueueFrame = LongArray(limitLookahead)
+
+    /** The loudest the frames waiting in the ring can leave the gain walk unfolded; see [applyGain]. */
+    private var limitScale = 1f
+
     /** Whether [hold] holds the sound. Written by the session owner, read by the render. */
     private val holding = atomic(false)
 
@@ -218,6 +251,8 @@ internal class KotlinAudioRing(
     private val nanosPerFrame: Double = if (format.sampleRate > 0) 1_000_000_000.0 / format.sampleRate else 0.0
 
     override val underruns: Long get() = underrunCount.value
+
+    override val limitedFrames: Long get() = limitedCount.value
 
     /** Frames written but not yet handed to the device. */
     override val bufferedFrames: Int get() = (written.value - consumed.value).toInt().coerceAtLeast(0)
@@ -445,7 +480,8 @@ internal class KotlinAudioRing(
             }
         }
         val startFrame = consumed.value
-        val available = (written.value - startFrame).toInt().coerceAtLeast(0)
+        val writtenNow = written.value
+        val available = (writtenNow - startFrame).toInt().coerceAtLeast(0)
         var toRead = min(frames, available)
 
         if (toRead > 0) {
@@ -465,6 +501,9 @@ internal class KotlinAudioRing(
                 writtenSoFar += runFrames
             }
             toRead = applyGain(renderScratch, toRead, held)
+            // Before `consumed` moves, because the frames it reads must still be the feeder's to
+            // leave alone.
+            limit(renderScratch, startFrame, toRead, writtenNow, limitScale)
             destination.writeInterleaved(
                 source = renderScratch,
                 sourceOffset = 0,
@@ -522,6 +561,11 @@ internal class KotlinAudioRing(
             gainCurrent = wanted
         }
         var gain = gainCurrent
+        // The loudest the frames still waiting can leave here unfolded. The walk moves between this
+        // gain and the wanted one, and above unity the fold keeps every sample within full scale,
+        // so only the part of that span at or below unity counts, and a boost that stays a boost
+        // needs no limiting at all.
+        limitScale = if (gain > 1f && wanted > 1f) 0f else min(if (gain > wanted) gain else wanted, 1f)
         if (gain == wanted) {
             if (wanted > 1f) {
                 // Boosting. Fold, so a loud passage cannot leave here squared off.
@@ -557,6 +601,121 @@ internal class KotlinAudioRing(
         }
         gainCurrent = gain
         return frames
+    }
+
+    /**
+     * The peak limiter (#504): turns the gain down ahead of any frame that would pass full scale,
+     * and leaves every other frame exactly as it was.
+     *
+     * [samples] holds [frames] frames already scaled by the volume, the first of them ring frame
+     * [start]. The frames after them that the ring already holds are the lookahead, read raw from
+     * [data] and scaled by [scale]; a frame the ring does not hold yet counts as needing nothing until
+     * it arrives. The gain falls no faster than the box lets it and rises no faster than the
+     * release. A frame the lookahead could not see coming, because it was not in the ring yet or the
+     * volume rose after it was read, is turned down on the spot instead, and whatever rounding leaves
+     * above full scale after the multiply is clamped, only on a frame being limited.
+     *
+     * Identical in order and arithmetic to `kprt_limit` in `kite_rt_render.c`, because the
+     * differential oracle compares the samples.
+     */
+    private fun limit(samples: FloatArray, start: Long, frames: Int, writtenNow: Long, scale: Float) {
+        val lookahead = limitLookahead
+        var gain = limitGain
+        var limited = 0L
+        var base = 0
+
+        if (limitReset.value) {
+            limitReset.value = false
+            limitEntered = start
+            limitSum = lookahead.toDouble()
+            limitReduced = 0
+            limitOutSlot = 0
+            limitInSlot = 0
+            limitQueueHead = 0
+            limitQueueCount = 0
+            gain = 1f
+        }
+        var inPos = (limitEntered % capacityFrames).toInt()
+
+        for (frame in 0 until frames) {
+            val tail = start + frame + lookahead - 1
+
+            // Bring the box's last frame in, and any before it that arrived late.
+            while (limitEntered <= tail && limitEntered < writtenNow) {
+                val entering = limitEntered
+                val x = inPos * channels
+                var level = 0f
+                for (i in 0 until channels) {
+                    val a = if (data[x + i] < 0f) -data[x + i] else data[x + i]
+                    if (a > level) level = a
+                }
+                level = level * scale
+                while (limitQueueCount > 0 && limitQueueFrame[limitQueueHead] <= entering - lookahead) {
+                    limitQueueHead = if (limitQueueHead + 1 == lookahead) 0 else limitQueueHead + 1
+                    limitQueueCount--
+                }
+                if (level > 1f) {
+                    val need = 1f / level
+                    while (limitQueueCount > 0) {
+                        var back = limitQueueHead + limitQueueCount - 1
+                        if (back >= lookahead) back -= lookahead
+                        if (limitQueueGain[back] < need) break
+                        limitQueueCount--
+                    }
+                    var back = limitQueueHead + limitQueueCount
+                    if (back >= lookahead) back -= lookahead
+                    limitQueueGain[back] = need
+                    limitQueueFrame[back] = entering
+                    limitQueueCount++
+                }
+                val held = if (limitQueueCount > 0) limitQueueGain[limitQueueHead] else 1f
+                limitHeld[limitInSlot] = held
+                if (held < 1f) {
+                    limitSum = limitSum + (held.toDouble() - 1.0)
+                    limitReduced++
+                }
+                limitInSlot = if (limitInSlot + 1 == lookahead) 0 else limitInSlot + 1
+                inPos = if (inPos + 1 == capacityFrames) 0 else inPos + 1
+                limitEntered = entering + 1
+            }
+
+            val target: Float
+            if (limitReduced == 0) {
+                limitSum = lookahead.toDouble()
+                target = 1f
+            } else {
+                target = (limitSum / lookahead.toDouble()).toFloat()
+            }
+            gain = gain + limitRelease
+            if (gain > target) gain = target
+            if (gain > 1f) gain = 1f
+            var peak = 0f
+            for (i in 0 until channels) {
+                val y = samples[base + i]
+                val a = if (y < 0f) -y else y
+                if (a > peak) peak = a
+            }
+            if (peak * gain > 1f) gain = 1f / peak
+            if (gain < 1f) {
+                for (i in 0 until channels) {
+                    var y = samples[base + i] * gain
+                    if (y > 1f) y = 1f else if (y < -1f) y = -1f
+                    samples[base + i] = y
+                }
+                limited++
+            }
+            base += channels
+
+            // The frame leaves the box, and the frame after the box's end, not in it yet, counts as 1.
+            val leaving = limitHeld[limitOutSlot]
+            if (leaving < 1f) {
+                limitSum = limitSum + (1.0 - leaving.toDouble())
+                limitReduced--
+            }
+            limitOutSlot = if (limitOutSlot + 1 == lookahead) 0 else limitOutSlot + 1
+        }
+        limitGain = gain
+        if (limited > 0) limitedCount.value = limitedCount.value + limited
     }
 
     /**
@@ -669,6 +828,8 @@ internal class KotlinAudioRing(
         segmentsRetired.value = 0
         segmentsAppended.value = 0
         consumed.value = written.value
+        // The frames the limiter read ahead are gone, so its next render starts it over.
+        limitReset.value = true
     }
 
     internal companion object {

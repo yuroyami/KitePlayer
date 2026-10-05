@@ -38,6 +38,9 @@ internal interface AudioRingHandle {
     /** Callbacks that were handed silence because the ring had run dry while the stream was live. */
     val underruns: Long
 
+    /** Rendered frames the peak limiter turned down because they would have passed full scale (#504). */
+    val limitedFrames: Long
+
     /** Frames written but not yet handed to the device. */
     val bufferedFrames: Int
 
@@ -193,5 +196,36 @@ internal const val GAIN_MAX: Float = 2f
 internal fun gainRampFrames(sampleRate: Int): Int {
     require(sampleRate > 0) { "a sample rate of $sampleRate is not a rate" }
     val frames = sampleRate.toLong() * GAIN_RAMP_DURATION.inWholeMicroseconds / 1_000_000L
+    return maxOf(1, frames.toInt())
+}
+
+/**
+ * How far ahead the render's peak limiter looks (#504).
+ *
+ * At or below unity the ring does not fold, so a sample past full scale, which a downmix or an
+ * equaliser can produce on its own, would reach the device and be clamped there, squaring off the
+ * wave. The render instead turns the gain down smoothly before such a sample arrives, reading the
+ * frames that wait in the ring after the ones it hands over, so the lookahead adds no delay. One law
+ * shared with the C ring's `KPRT_LIMIT_LOOKAHEAD_MICROS`.
+ */
+internal val LIMIT_LOOKAHEAD_DURATION: kotlin.time.Duration = kotlin.time.Duration.parse("5ms")
+
+/** How long the limiter takes to give back the whole range. One law with `KPRT_LIMIT_RELEASE_MICROS`. */
+internal val LIMIT_RELEASE_DURATION: kotlin.time.Duration = kotlin.time.Duration.parse("100ms")
+
+/** The longest lookahead a ring keeps state for, in frames. One law with `KPRT_LIMIT_MAX_LOOKAHEAD`. */
+internal const val LIMIT_MAX_LOOKAHEAD: Int = 2048
+
+/** Frames [LIMIT_LOOKAHEAD_DURATION] is worth at [sampleRate], from 1 to [LIMIT_MAX_LOOKAHEAD]. */
+internal fun limitLookaheadFrames(sampleRate: Int): Int {
+    if (sampleRate <= 0) return 1
+    val frames = sampleRate.toLong() * LIMIT_LOOKAHEAD_DURATION.inWholeMicroseconds / 1_000_000L
+    return frames.coerceIn(1L, LIMIT_MAX_LOOKAHEAD.toLong()).toInt()
+}
+
+/** Frames [LIMIT_RELEASE_DURATION] is worth at [sampleRate], at least one. */
+internal fun limitReleaseFrames(sampleRate: Int): Int {
+    if (sampleRate <= 0) return 1
+    val frames = sampleRate.toLong() * LIMIT_RELEASE_DURATION.inWholeMicroseconds / 1_000_000L
     return maxOf(1, frames.toInt())
 }

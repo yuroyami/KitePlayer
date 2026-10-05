@@ -159,6 +159,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   carries on from the next sample. A volume or mute change made while paused is in place from the
   first resumed sample. A sink declares that it needs this through the new
   `AudioSink.cutsSoundOnStop`, false by default; Android's mixer fades a paused track itself.
+- Sound past full scale is turned down smoothly instead of being clamped by the device (#504). A
+  loud surround mix folded to stereo, or an equaliser boost, can add up past full scale, and the
+  device then squares off each such peak, which is heard as crackle. The output now lowers the gain
+  over 5 ms ahead of such a passage and gives it back gradually after it, reading ahead in the audio
+  it already holds, so it adds no delay. Audio that never passes full scale is untouched, sample for
+  sample. `PlaybackStats.audioLimitedFrames` counts the frames it lowered, and the diagnostics
+  report shows it beside the underruns.
 - `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
   page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third

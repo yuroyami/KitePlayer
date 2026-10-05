@@ -90,9 +90,15 @@ class AudioRingTest {
 
     private val stereo48k = AudioFormat(sampleRate = 48_000, channels = 2, sampleFormat = SampleFormat.F32)
 
+    /**
+     * Frame [frame]'s value in a [ramp]: exact and distinct for every frame below 2^24, and within
+     * full scale, because the render's peak limiter turns down anything above it (#504).
+     */
+    private fun value(frame: Int): Float = frame.toFloat() * (1f / 16_777_216f)
+
     /** A ramp, so every frame is identifiable by its value. */
     private fun ramp(frames: Int, from: Int = 0): FloatArray =
-        FloatArray(frames * 2) { i -> (from + i / 2).toFloat() }
+        FloatArray(frames * 2) { i -> value(from + i / 2) }
 
     @Test
     fun `samples come back in order`() {
@@ -102,7 +108,7 @@ class AudioRingTest {
         val out = CapturingSinkBuffer(stereo48k, 256)
         assertEquals(256, ring.render(out, 256, deadlineNanos = 0))
 
-        for (i in 0 until 256) assertEquals(i.toFloat(), out.frame(i))
+        for (i in 0 until 256) assertEquals(value(i), out.frame(i))
     }
 
     @Test
@@ -121,7 +127,7 @@ class AudioRingTest {
         val out = CapturingSinkBuffer(stereo48k, 40)
         assertEquals(40, ring.render(out, 40, 0))
         for (i in 0 until 40) {
-            assertEquals((1_000 + i).toFloat(), out.frame(i), "frame $i of a wrapped read")
+            assertEquals(value(1_000 + i), out.frame(i), "frame $i of a wrapped read")
         }
     }
 
@@ -146,8 +152,8 @@ class AudioRingTest {
         assertEquals(100, ring.render(out, 256, 0), "only the real audio is reported")
         assertEquals(1, ring.underruns)
 
-        assertEquals(1f, out.frame(0))
-        assertEquals(100f, out.frame(99))
+        assertEquals(value(1), out.frame(0))
+        assertEquals(value(100), out.frame(99))
         for (i in 100 until 256) {
             assertEquals(0f, out.frame(i), "frame $i must be silence, never left uninitialised")
         }
@@ -518,7 +524,7 @@ class AudioRingTest {
             val out = CapturingSinkBuffer(stereo48k, 50)
             val got = ring.render(out, 50, deadlineNanos = 0)
             for (i in 0 until got) {
-                assertEquals((readFrames + i).toFloat(), out.frame(i), "sample ${readFrames + i}")
+                assertEquals(value(readFrames + i), out.frame(i), "sample ${readFrames + i}")
             }
             readFrames += got
         }

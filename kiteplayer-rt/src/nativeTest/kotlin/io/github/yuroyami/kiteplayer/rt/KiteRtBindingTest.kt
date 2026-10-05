@@ -100,7 +100,7 @@ class KiteRtBindingTest {
             for (frame in 0 until frames) {
                 for (channel in 0 until channels) {
                     assertEquals(
-                        frame.toFloat(),
+                        value(frame.toLong()),
                         out[frame * channels + channel],
                         "frame $frame channel $channel came back wrong across the cinterop seam",
                     )
@@ -320,6 +320,12 @@ class KiteRtBindingTest {
     }
 
     /** Writes a ramp through the reservation API, the way `NativeAudioRing` does. */
+    /**
+     * Frame [frame]'s value in a ramp: exact and distinct below 2^24, and within full scale, because
+     * the render's peak limiter turns down anything above it (#504).
+     */
+    private fun value(frame: Long): Float = frame.toFloat() * (1f / 16_777_216f)
+
     private fun writeRamp(ring: CPointer<kprt_ring>, frames: Int, from: Long, ptsUs: Long?): Int = memScoped {
         val window = alloc<kprt_ring_write_window>()
         val granted = kprt_ring_begin_write(ring, frames, window.ptr)
@@ -328,7 +334,7 @@ class KiteRtBindingTest {
         if (first != null) {
             for (frame in 0 until window.first_frames) {
                 for (channel in 0 until channels) {
-                    first[frame * channels + channel] = (from + frame).toFloat()
+                    first[frame * channels + channel] = value(from + frame)
                 }
             }
         }
@@ -336,7 +342,7 @@ class KiteRtBindingTest {
         if (second != null) {
             for (frame in 0 until window.second_frames) {
                 for (channel in 0 until channels) {
-                    second[frame * channels + channel] = (from + window.first_frames + frame).toFloat()
+                    second[frame * channels + channel] = value(from + window.first_frames + frame)
                 }
             }
         }

@@ -151,7 +151,7 @@ class WorkerProtocolTest {
         audioLatencyQuality = LatencyQuality.Estimated, hardwareDecode = HwdecStatus.HardwareWithDownload(HwdecKind.WebCodecs),
         ioBytesTotal = 123_456_789L, ioBytesPerSecond = 1_000_000L, decodeTimeP50 = 3_100.microseconds,
         decodeTimeP95 = 9_800.microseconds, presentLatenessP95 = (-2).milliseconds, containerBitrate = 4_500_000L,
-        syncMode = SyncMode.AudioMaster, masterClock = MasterClock.Audio,
+        syncMode = SyncMode.AudioMaster, masterClock = MasterClock.Audio, audioLimitedFrames = 31L,
     )
 
     @Suppress("DEPRECATION")

@@ -138,6 +138,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   film. It is fixed when the device opens, so it follows each item and a change of audio track.
   `PlayerSnapshot.audioContent` gives the answer, for an application that sets up its own audio
   session, and an `AudioSink` hears it through its new `setContent`, which does nothing by default.
+- Opening or playing something silent leaves another app's music playing (#436). On Android an
+  item with no audio track selected, such as a muted preview, asks for no audio focus, and gives
+  back the focus an item before it held. On iOS the audio session is active from the open but
+  mixes with other apps until something first plays, so opening a paused video no longer stops
+  the Music app; the first play does. An item with no audio track already opened no device there.
 - `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
   page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third

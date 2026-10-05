@@ -122,4 +122,34 @@ class SessionFocusLifecycleTest {
         lifecycle.on(PlaybackStatus.Playing)
         assertEquals(FocusAnswer.Denied, lifecycle.answered(granted = false))
     }
+
+    // A muted preview in a feed leaves another app's music playing (#436).
+    @Test
+    fun anItemWithNoSoundAsksForNothing() {
+        val lifecycle = SessionFocusLifecycle()
+        assertNull(lifecycle.on(PlaybackStatus.Playing, hasSound = false))
+        assertNull(lifecycle.on(PlaybackStatus.Buffering, hasSound = false))
+        assertNull(lifecycle.on(PlaybackStatus.Paused, hasSound = false))
+        assertFalse(lifecycle.release(), "an item with no sound held something")
+    }
+
+    @Test
+    fun anItemWithNoSoundGivesBackWhatTheItemBeforeItHeld() {
+        val lifecycle = SessionFocusLifecycle()
+        assertEquals(true, lifecycle.on(PlaybackStatus.Playing))
+        lifecycle.answered(granted = true)
+        assertNull(lifecycle.on(PlaybackStatus.Opening, hasSound = false), "an item still opening has no tracks yet")
+        assertEquals(false, lifecycle.on(PlaybackStatus.Playing, hasSound = false))
+        assertNull(lifecycle.on(PlaybackStatus.Playing, hasSound = false))
+        assertEquals(true, lifecycle.on(PlaybackStatus.Playing), "sound coming back did not ask again")
+    }
+
+    @Test
+    fun aPausedItemWithNoSoundGivesBackToo() {
+        val lifecycle = SessionFocusLifecycle()
+        lifecycle.on(PlaybackStatus.Playing)
+        lifecycle.answered(granted = true)
+        assertEquals(false, lifecycle.on(PlaybackStatus.Paused, hasSound = false))
+        assertFalse(lifecycle.release())
+    }
 }

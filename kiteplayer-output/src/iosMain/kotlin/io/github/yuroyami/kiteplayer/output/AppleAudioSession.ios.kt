@@ -9,6 +9,7 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.value
 import platform.AVFAudio.AVAudioSession
+import platform.AVFAudio.AVAudioSessionCategoryOptionMixWithOthers
 import platform.AVFAudio.AVAudioSessionCategoryPlayback
 import platform.AVFAudio.AVAudioSessionModeDefault
 import platform.AVFAudio.AVAudioSessionModeMoviePlayback
@@ -23,7 +24,7 @@ internal actual fun platformAppleAudioSessionController(): AppleAudioSessionCont
 private object IosAppleAudioSessionController : AppleAudioSessionController {
     private val session: AVAudioSession get() = AVAudioSession.sharedInstance()
 
-    override fun setPlaybackCategory(content: AudioContent) {
+    override fun setPlaybackCategory(content: AudioContent, mixesWithOthers: Boolean) {
         call("configuring AVAudioSession for playback") { error ->
             session.setCategory(
                 category = AVAudioSessionCategoryPlayback,
@@ -32,7 +33,7 @@ private object IosAppleAudioSessionController : AppleAudioSessionController {
                     AudioContent.Speech -> AVAudioSessionModeSpokenAudio
                     AudioContent.Movie, AudioContent.Automatic -> AVAudioSessionModeMoviePlayback
                 },
-                options = 0uL,
+                options = if (mixesWithOthers) AVAudioSessionCategoryOptionMixWithOthers else 0uL,
                 error = error,
             )
         }

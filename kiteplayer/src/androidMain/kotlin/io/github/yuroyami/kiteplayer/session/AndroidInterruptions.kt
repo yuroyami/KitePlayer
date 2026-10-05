@@ -103,8 +103,10 @@ private class AndroidInterruptionHandle(
             context.registerReceiver(noisyReceiver, filter)
         }
         scope.launch {
-            player.state.map { it.status }.distinctUntilChanged().collect { status ->
-                when (synchronized(lifecycle) { lifecycle.on(status) }) {
+            // An item with no audio track selected asks for nothing, so a muted preview leaves
+            // another app's music playing (#436).
+            player.state.map { it.status to (it.tracks.selectedAudio != null) }.distinctUntilChanged().collect { (status, hasSound) ->
+                when (synchronized(lifecycle) { lifecycle.on(status, hasSound) }) {
                     true -> {
                         // A blocking platform call, which cancelling the scope does not stop, so the
                         // answer may come back after close (#415).

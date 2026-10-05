@@ -107,7 +107,8 @@ internal class InterruptionApplier(
 /**
  * When to ask the platform for the right to make sound and when to give it back.
  *
- * Held from a granted request until the player goes idle, across a pause. Giving it back at a
+ * Held from a granted request until the player goes idle, across a pause, and only for an item
+ * with sound. Giving it back at a
  * pause would look tidier and would break resuming after a phone call: the platform only tells a
  * holder that the sound is theirs again.
  *
@@ -120,13 +121,23 @@ internal class SessionFocusLifecycle {
     private var held = false
     private var closed = false
 
-    /** True to request, false to give back, null when nothing needs to change. Always null once closed. */
-    fun on(status: PlaybackStatus): Boolean? = if (closed) null else when (status) {
-        PlaybackStatus.Playing, PlaybackStatus.Buffering -> if (held) null else true
-        PlaybackStatus.Idle, PlaybackStatus.Ended, PlaybackStatus.Failed ->
-            if (held) false.also { held = false } else null
-        PlaybackStatus.Paused, PlaybackStatus.Opening -> null
+    /**
+     * True to request, false to give back, null when nothing needs to change. Always null once closed.
+     *
+     * [hasSound] is false for an item with no audio track selected, such as a muted preview in a
+     * feed. Such an item asks for nothing, so another app's music plays on, and gives back what an
+     * item before it held, playing or paused (#436). An item that is still opening keeps what is
+     * held, because its tracks are not known yet.
+     */
+    fun on(status: PlaybackStatus, hasSound: Boolean = true): Boolean? = if (closed) null else when (status) {
+        PlaybackStatus.Playing, PlaybackStatus.Buffering ->
+            if (hasSound) (if (held) null else true) else giveBack()
+        PlaybackStatus.Paused -> if (hasSound) null else giveBack()
+        PlaybackStatus.Idle, PlaybackStatus.Ended, PlaybackStatus.Failed -> giveBack()
+        PlaybackStatus.Opening -> null
     }
+
+    private fun giveBack(): Boolean? = if (held) false.also { held = false } else null
 
     /** The platform's answer to a request [on] asked for, and what the caller does with it. */
     fun answered(granted: Boolean): FocusAnswer = when {

@@ -408,6 +408,15 @@ public sealed class PlaybackWarning {
         override val message: String get() = "unknown channel layout for $channels channels: $detail"
     }
 
+    /**
+     * A crop the container states for stream [streamIndex] leaves nothing of its pictures, or has a
+     * negative count, so the pictures are shown whole (#497). Emitted once per stream. See
+     * [PictureCrop].
+     */
+    public data class CropIgnored(val streamIndex: Int, val detail: String) : PlaybackWarning() {
+        override val message: String get() = "crop ignored on stream $streamIndex: $detail"
+    }
+
     /** Timestamps in the stream are broken and the engine is compensating. */
     public data class BadTimestamps(val detail: String) : PlaybackWarning() {
         override val message: String get() = "compensating for bad timestamps: $detail"

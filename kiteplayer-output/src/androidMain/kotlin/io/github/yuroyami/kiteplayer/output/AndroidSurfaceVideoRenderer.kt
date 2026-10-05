@@ -11,6 +11,7 @@ import android.view.Surface
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import kotlin.math.roundToInt
@@ -104,7 +105,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     /** A separate UI layer used when MediaCodec owns the video Surface. */
     private val overlayConsumer: ((SubtitleOverlay?) -> Unit)? = null,
     /** Keeps the view geometry in step with both direct and software decoder output. */
-    private val geometryConsumer: ((VideoSize, Int) -> Unit)? = null,
+    private val geometryConsumer: ((VideoSize, Int, PictureCrop?) -> Unit)? = null,
     /** Whether [convert] rolls this frame's HDR off to SDR. See the public constructors. */
     private val toneMapped: (VideoFrame) -> Boolean = { false },
 ) : VideoRenderer {
@@ -134,11 +135,15 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      * [toneMapped] answers whether [convert] rolls a frame's HDR off to SDR, because only the
      * converter knows. The renderer then reports `RendererEvent.ToneMapEngaged`. The default
      * answers false, for a converter that never tone maps.
+     *
+     * [onVideoGeometry] hears the stored size, the turn and the crop of the pictures MediaCodec
+     * writes straight into the Surface. Nothing draws those pictures, so the view that owns the
+     * Surface is what hides the cropped edges (#497).
      */
     public constructor(
         convert: (VideoFrame) -> ByteArray,
         onOverlay: (SubtitleOverlay?) -> Unit,
-        onVideoGeometry: (VideoSize, Int) -> Unit = { _, _ -> },
+        onVideoGeometry: (VideoSize, Int, PictureCrop?) -> Unit = { _, _, _ -> },
         toneMapped: (VideoFrame) -> Boolean = { false },
     ) : this(
         convert = convert,
@@ -429,7 +434,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         val mirrored = frame.mirrored
-        geometryConsumer?.invoke(size, rotation)
+        geometryConsumer?.invoke(size, rotation, null)
         if (toneMapped(frame)) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
         val converted = try {
             convert(frame)
@@ -835,7 +840,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
 /** One shared lifecycle target for the direct codec producer and the software Canvas fallback. */
 private class AndroidSurfaceTargets(
     initialSurface: Surface?,
-    val geometryConsumer: ((VideoSize, Int) -> Unit)? = null,
+    val geometryConsumer: ((VideoSize, Int, PictureCrop?) -> Unit)? = null,
 ) {
     val codec = MediaCodecSurfaceTarget(initialSurface, geometryConsumer)
     val canvas: CanvasTarget = SwitchingSurfaceCanvasTarget(codec)

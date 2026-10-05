@@ -177,6 +177,7 @@ class WorkerProtocolTest {
         PlaybackWarning.AudioSourceFormatChanged(48_000, 2, 44_100, 6),
         PlaybackWarning.HdrToneMapped("smpte2084", 0),
         PlaybackWarning.ColorApproximated("bt2020c"),
+        PlaybackWarning.CropIgnored(1, "left 1920 of 1920 columns"),
         PlaybackWarning.TonemappingUnavailable("old"),
         PlaybackWarning.ChannelLayoutUnknown(3, "guessed"),
         PlaybackWarning.BadTimestamps("non monotonic"),

@@ -1,6 +1,6 @@
 public final class io/github/yuroyami/kiteplayer/mobile/MobileAndroidPlayerViewRendererFactory : io/github/yuroyami/kiteplayer/view/AndroidPlayerViewRendererFactory {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/mobile/MobileAndroidPlayerViewRendererFactory;
-	public fun create (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;)Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;
+	public fun create (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function1;)Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;
 }
 
 public final class io/github/yuroyami/kiteplayer/mobile/MobilePlayerViewRenderer_androidKt {

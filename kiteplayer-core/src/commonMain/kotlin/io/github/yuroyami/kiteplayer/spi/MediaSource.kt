@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.Chapter
 import io.github.yuroyami.kiteplayer.DolbyVisionInfo
 import io.github.yuroyami.kiteplayer.KeyframeChoice
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.VideoSize
@@ -266,7 +267,19 @@ public data class PlayerStreamInfo(
      * Never chosen in place of the main mix for its channel count (#466).
      */
     val isCommentary: Boolean = false,
+    /**
+     * The edges of each stored picture that the container says are not part of the image, or null
+     * when it says none (#497). [videoSize] stays the stored size; [visibleVideoSize] is what is
+     * shown. See [PictureCrop].
+     */
+    val crop: PictureCrop? = null,
 ) {
+    /**
+     * The size of the picture as it is shown: [videoSize] with [crop]'s edges taken away, or
+     * [videoSize] itself when the crop is absent or does not fit it.
+     */
+    val visibleVideoSize: VideoSize? get() = videoSize?.cropped(crop)
+
     /**
      * By CONTENT, including [codecExtradata].
      *
@@ -303,6 +316,7 @@ public data class PlayerStreamInfo(
             mirrored == other.mirrored &&
             dolbyVision == other.dolbyVision &&
             isCommentary == other.isCommentary &&
+            crop == other.crop &&
             (codecExtradata?.contentEquals(other.codecExtradata) ?: (other.codecExtradata == null))
     }
 
@@ -332,6 +346,7 @@ public data class PlayerStreamInfo(
         result = 31 * result + mirrored.hashCode()
         result = 31 * result + (dolbyVision?.hashCode() ?: 0)
         result = 31 * result + isCommentary.hashCode()
+        result = 31 * result + (crop?.hashCode() ?: 0)
         result = 31 * result + (codecExtradata?.contentHashCode() ?: 0)
         return result
     }

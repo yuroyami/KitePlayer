@@ -15,6 +15,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.widget.FrameLayout
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.VideoScale
@@ -79,7 +80,7 @@ public open class KitePlayerView @JvmOverloads constructor(
                     onOverlay = { overlay ->
                         runForRenderer(generation) { subtitleView.showOverlay(overlay) }
                     },
-                    onVideoGeometry = { size, rotationDegrees ->
+                    onVideoGeometry = { size, rotationDegrees, _ ->
                         runForRenderer(generation) {
                             setVideoGeometry(size.displayAspect, rotationDegrees)
                         }
@@ -525,10 +526,14 @@ public fun interface AndroidPlayerViewRendererFactory {
     /**
      * Creates one renderer generation. UI callbacks may arrive off the main thread; the view safely
      * marshals them before changing its overlay or layout.
+     *
+     * [onVideoGeometry] carries the stored size and the turn of pictures that a decoder writes
+     * straight into the view's Surface, and the crop their container states, or null for none.
+     * Nothing draws such a picture, so the view hides the cropped edges itself (#497).
      */
     public fun create(
         onOverlay: (SubtitleOverlay?) -> Unit,
-        onVideoGeometry: (VideoSize, rotationDegrees: Int) -> Unit,
+        onVideoGeometry: (VideoSize, rotationDegrees: Int, crop: PictureCrop?) -> Unit,
         onScaleMode: (VideoScale) -> Unit,
     ): AndroidPlayerViewRenderer
 }

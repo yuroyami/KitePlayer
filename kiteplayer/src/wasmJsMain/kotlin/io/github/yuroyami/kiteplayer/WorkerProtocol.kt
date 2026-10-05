@@ -937,6 +937,11 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             kind("ColorApproximated")
             put("detail", warning.detail)
         }
+        is PlaybackWarning.CropIgnored -> {
+            kind("CropIgnored")
+            put("stream", warning.streamIndex)
+            put("detail", warning.detail)
+        }
         is PlaybackWarning.TonemappingUnavailable -> {
             kind("TonemappingUnavailable")
             put("detail", warning.detail)
@@ -1565,6 +1570,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         )
         "HdrToneMapped" -> PlaybackWarning.HdrToneMapped(o.str("transfer").orEmpty(), o.int("stream") ?: missing("stream"))
         "ColorApproximated" -> PlaybackWarning.ColorApproximated(detail)
+        "CropIgnored" -> PlaybackWarning.CropIgnored(o.int("stream") ?: missing("stream"), detail)
         "TonemappingUnavailable" -> PlaybackWarning.TonemappingUnavailable(detail)
         "ChannelLayoutUnknown" -> PlaybackWarning.ChannelLayoutUnknown(o.int("channels") ?: missing("channels"), detail)
         "BadTimestamps" -> PlaybackWarning.BadTimestamps(detail)

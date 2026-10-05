@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.spi
 
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecStatus
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.VideoSize
 
@@ -78,12 +79,31 @@ public interface VideoFrame : AutoCloseable {
      */
     public val mirrored: Boolean get() = false
 
+    /**
+     * The edges of the stored picture that are not part of the image, as its container states, or
+     * null when it states none (#497). See [PictureCrop].
+     *
+     * Like the turn and the mirror, the crop is a presentation instruction: the pixels and [size]
+     * stay as stored, and a renderer draws only the rectangle the crop leaves, as a source
+     * rectangle, so a hardware frame is cropped with no copy. The crop comes first, before the
+     * mirror and the turn, and [visibleSize] is what the fit, the zoom and the overlay layout use.
+     * A decoder never hands out a crop that does not [fit][PictureCrop.fits] its frame: it drops
+     * such a crop with [io.github.yuroyami.kiteplayer.PlaybackWarning.CropIgnored].
+     */
+    public val crop: PictureCrop? get() = null
+
     /** Set when the frame lives in GPU or hardware memory and needs a matching renderer. */
     public val hardwareSurface: HwSurfaceKind?
 
     /** The epoch this frame belongs to. A frame from a superseded generation is never presented. */
     public val generation: Generation
 }
+
+/**
+ * The size of the picture this frame shows: [VideoFrame.size] with [VideoFrame.crop]'s edges taken
+ * away, before the turn, which still swaps width and height for a renderer.
+ */
+public val VideoFrame.visibleSize: VideoSize get() = size.cropped(crop)
 
 /**
  * A frame whose pixels can be read, for the cases that genuinely need them: a screenshot, a

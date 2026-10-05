@@ -20,6 +20,10 @@ public data class PlayerSnapshot(
      */
     val duration: Duration? = null,
     val seekable: Boolean = false,
+    /**
+     * The size of the picture as it is shown, after any crop its container states (#497). See
+     * [PictureCrop].
+     */
     val videoSize: VideoSize? = null,
     val tracks: Tracks = Tracks.Empty,
     /**
@@ -427,6 +431,50 @@ public data class VideoSize(
 
     public val displayAspect: Float
         get() = if (height == 0) 0f else displayWidth.toFloat() / height.toFloat()
+
+    /**
+     * What is left of this size once [crop]'s edges are taken away, with the same pixel aspect, or
+     * this size when [crop] is null or does not [fit][PictureCrop.fits] it. The display aspect of
+     * the result is the aspect of what is left, which is why a cropped 1920 by 1088 picture shows
+     * at exactly 16:9.
+     */
+    public fun cropped(crop: PictureCrop?): VideoSize {
+        if (crop == null || crop.isEmpty || !crop.fits(width, height)) return this
+        return copy(width = width - crop.left - crop.right, height = height - crop.top - crop.bottom)
+    }
+}
+
+/**
+ * Rows and columns at the edges of a stored picture that are not part of the image (#497).
+ *
+ * A container can say so: a Matroska track's `PixelCrop` elements, or an MP4 track's clean
+ * aperture. Encoders use it to show 1080 lines of a 1088-line coded picture, cameras to hide sensor
+ * margins, and remuxers to hide black bars without re-encoding. FFmpeg reads it and leaves applying
+ * it to the player, as mpv and the `ffmpeg` command line do. The crop inside the bitstream itself,
+ * such as an H.264 sequence parameter set's, is a different thing that the decoder has already
+ * applied, so a picture never carries that one.
+ *
+ * Each count is in stored pixels, taken from the picture as it is stored, before it is mirrored,
+ * turned or stretched by its pixel aspect. The size, the display aspect, the fit, the zoom and the
+ * subtitles all use what is left.
+ */
+public data class PictureCrop(
+    val top: Int = 0,
+    val bottom: Int = 0,
+    val left: Int = 0,
+    val right: Int = 0,
+) {
+    /** True when the crop takes nothing away. */
+    public val isEmpty: Boolean get() = top == 0 && bottom == 0 && left == 0 && right == 0
+
+    /**
+     * True when no count is negative and at least one pixel of a [width] by [height] picture is
+     * left each way. A crop that does not fit is ignored rather than trusted, with
+     * [PlaybackWarning.CropIgnored], because it comes from a file and a file can say anything.
+     */
+    public fun fits(width: Int, height: Int): Boolean =
+        top >= 0 && bottom >= 0 && left >= 0 && right >= 0 &&
+            top.toLong() + bottom < height && left.toLong() + right < width
 }
 
 public enum class LoopMode {

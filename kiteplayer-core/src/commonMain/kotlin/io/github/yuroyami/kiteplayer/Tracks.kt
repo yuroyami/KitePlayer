@@ -37,6 +37,7 @@ public data class TrackInfo(
     val isAccessibility: Boolean = false,
     val bitrate: Long? = null,
     // Video only.
+    /** The size of the picture as it is shown, after any crop its container states. See [PictureCrop]. */
     val videoSize: VideoSize? = null,
     val frameRate: Double? = null,
     // Audio only.

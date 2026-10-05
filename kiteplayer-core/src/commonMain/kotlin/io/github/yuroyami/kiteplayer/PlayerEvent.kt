@@ -34,7 +34,10 @@ public sealed interface PlayerEvent {
         public val landedAtMillis: Long get() = landedAt.inWholeMilliseconds
     }
 
-    /** The video's size or pixel aspect changed, at the start or mid-stream. */
+    /**
+     * The video's size or pixel aspect changed, at the start or mid-stream. [size] is the picture
+     * as it is shown, after any crop its container states. See [PictureCrop].
+     */
     public data class VideoSizeChanged(val size: VideoSize) : PlayerEvent
 
     /** The audio output format changed, at the start or after a device change. */

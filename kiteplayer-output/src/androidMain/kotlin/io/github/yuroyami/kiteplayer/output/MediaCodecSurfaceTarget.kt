@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import android.view.Surface
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoSize
 
 /**
@@ -12,12 +13,12 @@ import io.github.yuroyami.kiteplayer.VideoSize
  */
 internal class MediaCodecSurfaceTarget(
     initialSurface: Surface? = null,
-    geometryConsumer: ((VideoSize, Int) -> Unit)? = null,
+    geometryConsumer: ((VideoSize, Int, PictureCrop?) -> Unit)? = null,
 ) {
     private var displaySurface: Surface? = initialSurface
     private var displayVersion: Long = 0L
     private var switcher: Switcher? = null
-    private var geometryConsumer: ((VideoSize, Int) -> Unit)? = geometryConsumer
+    private var geometryConsumer: ((VideoSize, Int, PictureCrop?) -> Unit)? = geometryConsumer
 
     internal fun interface Switcher {
         /** Called under the target fence. It must switch the codec before returning. */
@@ -67,9 +68,9 @@ internal class MediaCodecSurfaceTarget(
         }
     }
 
-    internal fun publishGeometry(size: VideoSize, rotationDegrees: Int) {
+    internal fun publishGeometry(size: VideoSize, rotationDegrees: Int, crop: PictureCrop? = null) {
         val consumer = synchronized(this) { geometryConsumer }
-        consumer?.invoke(size, rotationDegrees)
+        consumer?.invoke(size, rotationDegrees, crop)
     }
 
     internal fun clearGeometryConsumer() {

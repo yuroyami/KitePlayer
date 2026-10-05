@@ -912,6 +912,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoFrame : kotlin/AutoClo
         abstract fun <get-pts>(): io.github.yuroyami.kiteplayer/Pts // io.github.yuroyami.kiteplayer.spi/VideoFrame.pts.<get-pts>|<get-pts>(){}[0]
     abstract val size // io.github.yuroyami.kiteplayer.spi/VideoFrame.size|{}size[0]
         abstract fun <get-size>(): io.github.yuroyami.kiteplayer/VideoSize // io.github.yuroyami.kiteplayer.spi/VideoFrame.size.<get-size>|<get-size>(){}[0]
+    open val crop // io.github.yuroyami.kiteplayer.spi/VideoFrame.crop|{}crop[0]
+        open fun <get-crop>(): io.github.yuroyami.kiteplayer/PictureCrop? // io.github.yuroyami.kiteplayer.spi/VideoFrame.crop.<get-crop>|<get-crop>(){}[0]
     open val hdr // io.github.yuroyami.kiteplayer.spi/VideoFrame.hdr|{}hdr[0]
         open fun <get-hdr>(): io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? // io.github.yuroyami.kiteplayer.spi/VideoFrame.hdr.<get-hdr>|<get-hdr>(){}[0]
     open val mirrored // io.github.yuroyami.kiteplayer.spi/VideoFrame.mirrored|{}mirrored[0]
@@ -1765,7 +1767,7 @@ final class io.github.yuroyami.kiteplayer.spi/OverlayImage { // io.github.yuroya
 }
 
 final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo|null[0]
-    constructor <init>(kotlin/Int, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.spi/FieldOrder = ..., io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DolbyVisionInfo? = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.<init>|<init>(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.spi.FieldOrder;io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata?;kotlin.Boolean;io.github.yuroyami.kiteplayer.DolbyVisionInfo?;kotlin.Boolean){}[0]
+    constructor <init>(kotlin/Int, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.spi/FieldOrder = ..., io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DolbyVisionInfo? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/PictureCrop? = ...) // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.<init>|<init>(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.spi.FieldOrder;io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata?;kotlin.Boolean;io.github.yuroyami.kiteplayer.DolbyVisionInfo?;kotlin.Boolean;io.github.yuroyami.kiteplayer.PictureCrop?){}[0]
 
     final val bitrate // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.bitrate|{}bitrate[0]
         final fun <get-bitrate>(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.bitrate.<get-bitrate>|<get-bitrate>(){}[0]
@@ -1777,6 +1779,8 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
         final fun <get-codecExtradata>(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.codecExtradata.<get-codecExtradata>|<get-codecExtradata>(){}[0]
     final val colorSpace // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.colorSpace|{}colorSpace[0]
         final fun <get-colorSpace>(): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.colorSpace.<get-colorSpace>|<get-colorSpace>(){}[0]
+    final val crop // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.crop|{}crop[0]
+        final fun <get-crop>(): io.github.yuroyami.kiteplayer/PictureCrop? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.crop.<get-crop>|<get-crop>(){}[0]
     final val dolbyVision // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.dolbyVision|{}dolbyVision[0]
         final fun <get-dolbyVision>(): io.github.yuroyami.kiteplayer/DolbyVisionInfo? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.dolbyVision.<get-dolbyVision>|<get-dolbyVision>(){}[0]
     final val fieldOrder // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.fieldOrder|{}fieldOrder[0]
@@ -1817,6 +1821,8 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
         final fun <get-title>(): kotlin/String? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.title.<get-title>|<get-title>(){}[0]
     final val videoSize // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.videoSize|{}videoSize[0]
         final fun <get-videoSize>(): io.github.yuroyami.kiteplayer/VideoSize? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.videoSize.<get-videoSize>|<get-videoSize>(){}[0]
+    final val visibleVideoSize // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.visibleVideoSize|{}visibleVideoSize[0]
+        final fun <get-visibleVideoSize>(): io.github.yuroyami.kiteplayer/VideoSize? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.visibleVideoSize.<get-visibleVideoSize>|<get-visibleVideoSize>(){}[0]
     final val vp9 // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.vp9|{}vp9[0]
         final fun <get-vp9>(): io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.vp9.<get-vp9>|<get-vp9>(){}[0]
 
@@ -1839,6 +1845,7 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
     final fun component24(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component24|component24(){}[0]
     final fun component25(): io.github.yuroyami.kiteplayer/DolbyVisionInfo? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component25|component25(){}[0]
     final fun component26(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component26|component26(){}[0]
+    final fun component27(): io.github.yuroyami.kiteplayer/PictureCrop? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component27|component27(){}[0]
     final fun component3(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component3|component3(){}[0]
     final fun component4(): kotlin/String? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component4|component4(){}[0]
     final fun component5(): kotlin/String? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component5|component5(){}[0]
@@ -1846,7 +1853,7 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
     final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component7|component7(){}[0]
     final fun component8(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component8|component8(){}[0]
     final fun component9(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component9|component9(){}[0]
-    final fun copy(kotlin/Int = ..., io.github.yuroyami.kiteplayer/TrackKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.spi/FieldOrder = ..., io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DolbyVisionInfo? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.copy|copy(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.spi.FieldOrder;io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata?;kotlin.Boolean;io.github.yuroyami.kiteplayer.DolbyVisionInfo?;kotlin.Boolean){}[0]
+    final fun copy(kotlin/Int = ..., io.github.yuroyami.kiteplayer/TrackKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.spi/FieldOrder = ..., io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DolbyVisionInfo? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/PictureCrop? = ...): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.copy|copy(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.spi.FieldOrder;io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata?;kotlin.Boolean;io.github.yuroyami.kiteplayer.DolbyVisionInfo?;kotlin.Boolean;io.github.yuroyami.kiteplayer.PictureCrop?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.toString|toString(){}[0]
@@ -2986,6 +2993,31 @@ final class io.github.yuroyami.kiteplayer/NetworkConfigBuilder { // io.github.yu
     final fun ioCache(kotlin/Function1<io.github.yuroyami.kiteplayer/IoCachePolicyBuilder, kotlin/Unit>) // io.github.yuroyami.kiteplayer/NetworkConfigBuilder.ioCache|ioCache(kotlin.Function1<io.github.yuroyami.kiteplayer.IoCachePolicyBuilder,kotlin.Unit>){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer/PictureCrop { // io.github.yuroyami.kiteplayer/PictureCrop|null[0]
+    constructor <init>(kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...) // io.github.yuroyami.kiteplayer/PictureCrop.<init>|<init>(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+
+    final val bottom // io.github.yuroyami.kiteplayer/PictureCrop.bottom|{}bottom[0]
+        final fun <get-bottom>(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureCrop.bottom.<get-bottom>|<get-bottom>(){}[0]
+    final val isEmpty // io.github.yuroyami.kiteplayer/PictureCrop.isEmpty|{}isEmpty[0]
+        final fun <get-isEmpty>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PictureCrop.isEmpty.<get-isEmpty>|<get-isEmpty>(){}[0]
+    final val left // io.github.yuroyami.kiteplayer/PictureCrop.left|{}left[0]
+        final fun <get-left>(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureCrop.left.<get-left>|<get-left>(){}[0]
+    final val right // io.github.yuroyami.kiteplayer/PictureCrop.right|{}right[0]
+        final fun <get-right>(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureCrop.right.<get-right>|<get-right>(){}[0]
+    final val top // io.github.yuroyami.kiteplayer/PictureCrop.top|{}top[0]
+        final fun <get-top>(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureCrop.top.<get-top>|<get-top>(){}[0]
+
+    final fun component1(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureCrop.component1|component1(){}[0]
+    final fun component2(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureCrop.component2|component2(){}[0]
+    final fun component3(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureCrop.component3|component3(){}[0]
+    final fun component4(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureCrop.component4|component4(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/PictureCrop // io.github.yuroyami.kiteplayer/PictureCrop.copy|copy(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PictureCrop.equals|equals(kotlin.Any?){}[0]
+    final fun fits(kotlin/Int, kotlin/Int): kotlin/Boolean // io.github.yuroyami.kiteplayer/PictureCrop.fits|fits(kotlin.Int;kotlin.Int){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureCrop.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PictureCrop.toString|toString(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/PipedMediaIo : io.github.yuroyami.kiteplayer/MediaIo { // io.github.yuroyami.kiteplayer/PipedMediaIo|null[0]
     constructor <init>(kotlin/Int = ...) // io.github.yuroyami.kiteplayer/PipedMediaIo.<init>|<init>(kotlin.Int){}[0]
 
@@ -3960,6 +3992,7 @@ final class io.github.yuroyami.kiteplayer/VideoSize { // io.github.yuroyami.kite
     final fun component3(): kotlin/Int // io.github.yuroyami.kiteplayer/VideoSize.component3|component3(){}[0]
     final fun component4(): kotlin/Int // io.github.yuroyami.kiteplayer/VideoSize.component4|component4(){}[0]
     final fun copy(kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/VideoSize // io.github.yuroyami.kiteplayer/VideoSize.copy|copy(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+    final fun cropped(io.github.yuroyami.kiteplayer/PictureCrop?): io.github.yuroyami.kiteplayer/VideoSize // io.github.yuroyami.kiteplayer/VideoSize.cropped|cropped(io.github.yuroyami.kiteplayer.PictureCrop?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/VideoSize.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/VideoSize.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/VideoSize.toString|toString(){}[0]
@@ -4515,6 +4548,23 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.hashCode|hashCode(){}[0]
     }
 
+    final class CropIgnored : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored|null[0]
+        constructor <init>(kotlin/Int, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.<init>|<init>(kotlin.Int;kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.detail.<get-detail>|<get-detail>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.message.<get-message>|<get-message>(){}[0]
+        final val streamIndex // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.streamIndex|{}streamIndex[0]
+            final fun <get-streamIndex>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.streamIndex.<get-streamIndex>|<get-streamIndex>(){}[0]
+
+        final fun component1(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.component1|component1(){}[0]
+        final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.component2|component2(){}[0]
+        final fun copy(kotlin/Int = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.copy|copy(kotlin.Int;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.CropIgnored.hashCode|hashCode(){}[0]
+    }
+
     final class DeinterlaceUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.DeinterlaceUnavailable|null[0]
         constructor <init>(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.DeinterlaceUnavailable.<init>|<init>(kotlin.String;kotlin.String){}[0]
 
@@ -4990,6 +5040,8 @@ final object io.github.yuroyami.kiteplayer/KiteTrace { // io.github.yuroyami.kit
 
 final val io.github.yuroyami.kiteplayer.spi/toneMapPeakNits // io.github.yuroyami.kiteplayer.spi/toneMapPeakNits|@io.github.yuroyami.kiteplayer.spi.VideoFrame{}toneMapPeakNits[0]
     final fun (io.github.yuroyami.kiteplayer.spi/VideoFrame).<get-toneMapPeakNits>(): kotlin/Float? // io.github.yuroyami.kiteplayer.spi/toneMapPeakNits.<get-toneMapPeakNits>|<get-toneMapPeakNits>@io.github.yuroyami.kiteplayer.spi.VideoFrame(){}[0]
+final val io.github.yuroyami.kiteplayer.spi/visibleSize // io.github.yuroyami.kiteplayer.spi/visibleSize|@io.github.yuroyami.kiteplayer.spi.VideoFrame{}visibleSize[0]
+    final fun (io.github.yuroyami.kiteplayer.spi/VideoFrame).<get-visibleSize>(): io.github.yuroyami.kiteplayer/VideoSize // io.github.yuroyami.kiteplayer.spi/visibleSize.<get-visibleSize>|<get-visibleSize>@io.github.yuroyami.kiteplayer.spi.VideoFrame(){}[0]
 
 final fun (io.github.yuroyami.kiteplayer.spi/SubtitleOverlay).io.github.yuroyami.kiteplayer/drawOver(kotlin/ByteArray, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer/drawOver|drawOver@io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
 final fun (io.github.yuroyami.kiteplayer/MediaIo.Companion).io.github.yuroyami.kiteplayer/ofBytes(kotlin/ByteArray): io.github.yuroyami.kiteplayer/MediaIoFactory // io.github.yuroyami.kiteplayer/ofBytes|ofBytes@io.github.yuroyami.kiteplayer.MediaIo.Companion(kotlin.ByteArray){}[0]

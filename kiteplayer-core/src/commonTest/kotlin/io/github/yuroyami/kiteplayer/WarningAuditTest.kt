@@ -26,6 +26,7 @@ class WarningAuditTest {
         PlaybackWarning.TonemappingUnavailable("x"),
         PlaybackWarning.HdrToneMapped("PQ", 0),
         PlaybackWarning.ColorApproximated("x"),
+        PlaybackWarning.CropIgnored(0, "x"),
         PlaybackWarning.ChannelLayoutUnknown(6, "x"),
         PlaybackWarning.BadTimestamps("x"),
         PlaybackWarning.TrackDeselected(TrackId(0), "x"),
@@ -161,6 +162,12 @@ class WarningAuditTest {
         is PlaybackWarning.ColorApproximated -> listOf(
             "KiteFFmpegSource.warnIfColorIsApproximated in :kiteplayer-ffmpeg, once per stream, for " +
                 "BT.2020 constant luminance since 2026-08-25 and for ICtCp since 2026-09-23",
+        )
+        is PlaybackWarning.CropIgnored -> listOf(
+            "KiteFFmpegSource's video decoder in :kiteplayer-ffmpeg, once per stream, when the " +
+                "container's crop does not fit a decoded frame",
+            "MediaCodecVideoDecoder in :kiteplayer-output, once per stream, when the container's " +
+                "crop does not fit the codec's output",
         )
         // DELIBERATELY NEVER EMITTED. Deprecated 2026-08-25: it conflated a true
         // BT.2020 CL claim with an HDR claim that was false on every built-in display path. Kept

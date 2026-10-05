@@ -45,6 +45,8 @@ public data class PlayerMemento(
     /** Subtitle size, place and styling. Accessibility settings, so they travel. */
     val subtitleScale: Float = 1f,
     val subtitlePosition: Float = 1f,
+    /** Whether only the forced pictures of an image subtitle track drew (#513). */
+    val forcedPicturesOnly: Boolean = false,
     val subtitleStyle: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = null,
     val videoScale: VideoScale = VideoScale.Fit,
     val videoTransform: VideoTransform = VideoTransform.Identity,
@@ -106,6 +108,7 @@ public data class PlayerMemento(
         put("equalizer.gainsDb", equalizer.gainsDb.joinToString(" "))
         put("subtitleScale", subtitleScale.toString())
         put("subtitlePosition", subtitlePosition.toString())
+        put("forcedPicturesOnly", forcedPicturesOnly.toString())
         put("videoScale", videoScale.name)
         put("videoEnabled", videoEnabled.toString())
         put("transform.zoom", videoTransform.zoom.toString())
@@ -213,6 +216,7 @@ public data class PlayerMemento(
                 ),
                 subtitleScale = properties["subtitleScale"]?.toFloat() ?: 1f,
                 subtitlePosition = properties["subtitlePosition"]?.toFloat() ?: 1f,
+                forcedPicturesOnly = properties["forcedPicturesOnly"]?.toBooleanStrict() ?: false,
                 subtitleStyle = subtitleStyleFrom(properties),
                 videoScale = properties["videoScale"]?.let { VideoScale.valueOf(it) } ?: VideoScale.Fit,
                 videoTransform = VideoTransform(

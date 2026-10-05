@@ -1066,6 +1066,9 @@ internal class PlaybackCore(
      */
     private var subtitlePosition: Float = 1f
 
+    /** Whether only the forced pictures of an image subtitle track draw (#513), seeded from config. Actor only. */
+    private var forcedPicturesOnly: Boolean = config.subtitles.forcedPicturesOnly
+
     /**
      * The part of the output the Kotlin tier lays text out in, as insets that are fractions of the
      * output. Typeset tracks keep their author's placement. Actor only.
@@ -2529,6 +2532,12 @@ internal class PlaybackCore(
             is CoreCommand.SetSubtitlePosition -> {
                 subtitlePosition = command.value
                 // Re-rasterised on the very next pass, the same key-drop as a scale change.
+                session?.publishedCueKey = null
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetForcedPicturesOnly -> {
+                forcedPicturesOnly = command.value
+                // Drawn again on the very next pass, the same key-drop as a scale change.
                 session?.publishedCueKey = null
                 command.reply.complete(Unit)
             }
@@ -9573,6 +9582,7 @@ internal class PlaybackCore(
             subtitleScale = subtitleScale,
             subtitleStyle = subtitleStyle,
             subtitlePosition = subtitlePosition,
+            forcedPicturesOnly = forcedPicturesOnly,
             subtitleTypesetter = session?.typeset?.providerId,
             audioDelay = audioDelay,
             abLoopA = abLoopA,
@@ -9962,6 +9972,7 @@ internal class PlaybackCore(
             subtitleScale = subtitleScale,
             subtitleStyle = subtitleStyle,
             subtitlePosition = subtitlePosition,
+            forcedPicturesOnly = forcedPicturesOnly,
             subtitleTypesetter = session?.typeset?.providerId,
             audioDelay = audioDelay,
             abLoopA = abLoopA,
@@ -12674,6 +12685,8 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     ) : CoreCommand("setSubtitleStyle", reply)
     class SetSubtitlePosition(val value: Float, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setSubtitlePosition", reply)
+    class SetForcedPicturesOnly(val value: Boolean, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setForcedPicturesOnly", reply)
     class SetSubtitleSafeArea(
         val value: io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea,
         val reply: CompletableDeferred<Unit>,

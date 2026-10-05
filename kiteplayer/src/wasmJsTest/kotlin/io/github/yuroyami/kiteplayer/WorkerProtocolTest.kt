@@ -124,6 +124,7 @@ class WorkerProtocolTest {
         subtitleScale = 1.25f,
         subtitleStyle = style,
         subtitlePosition = 0.9f,
+        forcedPicturesOnly = true,
         subtitleTypesetter = "libass",
         audioDelay = 200.milliseconds,
         abLoopA = 10.seconds,
@@ -302,6 +303,8 @@ class WorkerProtocolTest {
             Control.SetSubtitleStyle(SubtitleStyleOverride(bold = false)),
             Control.SetSubtitleStyle(null),
             Control.SetSubtitlePosition(0.85f),
+            Control.SetForcedPicturesOnly(true),
+            Control.SetForcedPicturesOnly(false),
             Control.SetSubtitleSafeArea(SubtitleSafeArea(0.05f, 0.1f, 0.15f, 0.2f)),
             Control.SetAudioDelay(Duration.INFINITE),
             Control.SetSleepTimer(SleepTimer.After(30.minutes), 5.seconds),
@@ -316,7 +319,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Send(control)
             assertEquals(message, message.roundTrip(), "the control ${control.member} changed on the way")
         }
-        assertEquals(29, controls.map { it.member }.distinct().size, "every control is here")
+        assertEquals(30, controls.map { it.member }.distinct().size, "every control is here")
     }
 
     @Test

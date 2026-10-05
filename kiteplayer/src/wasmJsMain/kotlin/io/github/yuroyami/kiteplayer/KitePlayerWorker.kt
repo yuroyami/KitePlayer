@@ -327,6 +327,9 @@ public class KitePlayerWorker private constructor(
     /** Moves the subtitles up the screen. */
     public fun setSubtitlePosition(value: Float): Unit = send(Control.SetSubtitlePosition(value))
 
+    /** Draws only the forced pictures of a Blu-ray or DVD subtitle track, or every picture again. */
+    public fun setForcedPicturesOnly(value: Boolean): Unit = send(Control.SetForcedPicturesOnly(value))
+
     /** Keeps subtitles inside the safe area of the output. */
     public fun setSubtitleSafeArea(value: SubtitleSafeArea): Unit = send(Control.SetSubtitleSafeArea(value))
 

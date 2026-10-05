@@ -230,6 +230,12 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
     /** See [SubtitleConfig.withMatchingAudio]. */
     public var withMatchingAudio: MatchingAudioSubtitles = from.withMatchingAudio
 
+    /** See [SubtitleConfig.forcedPicturesOnly]. */
+    public var forcedPicturesOnly: Boolean = from.forcedPicturesOnly
+
+    /** See [SubtitleConfig.forcedPicturesWhenOff]. */
+    public var forcedPicturesWhenOff: Boolean = from.forcedPicturesWhenOff
+
     /** The [SubtitleConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): SubtitleConfig = SubtitleConfig(
         preferredLanguages = preferredLanguages,
@@ -243,6 +249,8 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
         hearingImpairedNotes = hearingImpairedNotes,
         fallbackEncoding = fallbackEncoding,
         withMatchingAudio = withMatchingAudio,
+        forcedPicturesOnly = forcedPicturesOnly,
+        forcedPicturesWhenOff = forcedPicturesWhenOff,
     )
 }
 

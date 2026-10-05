@@ -375,6 +375,7 @@ class MementoTest {
         original.setRenderQuality(RenderQuality(dither = true, deband = true))
         original.setSubtitleScale(1.4f)
         original.setSubtitlePosition(0.8f)
+        original.setForcedPicturesOnly(true)
         original.setSubtitleStyle(SubtitleStyleOverride(fontSizePx = 40f, bold = true))
         original.setVideoEnabled(false)
         first.run(100.milliseconds)
@@ -393,6 +394,7 @@ class MementoTest {
         assertTrue(snapshot.renderQuality.dither && snapshot.renderQuality.deband)
         assertEquals(1.4f, snapshot.subtitleScale)
         assertEquals(0.8f, snapshot.subtitlePosition)
+        assertEquals(true, snapshot.forcedPicturesOnly)
         assertEquals(40f, snapshot.subtitleStyle?.fontSizePx)
         assertEquals(false, snapshot.videoEnabled)
         first.close()
@@ -421,6 +423,7 @@ class MementoTest {
             equalizer = EqualizerSettings(gainsDb = List(10) { it.toFloat() }, preampDb = 1.5f),
             subtitleScale = 1.3f,
             subtitlePosition = 0.7f,
+            forcedPicturesOnly = true,
             subtitleStyle = SubtitleStyleOverride(fontFamily = "Serif", bold = true, primaryColor = -1),
             videoScale = VideoScale.Stretch,
             videoTransform = VideoTransform(aspectOverride = 2.35f, zoom = 1.1f),

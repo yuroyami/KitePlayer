@@ -691,6 +691,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Draws only the forced pictures of a Blu-ray or DVD subtitle track, or every picture again
+     * (#513), as mpv's `sub-forced-events-only`. [SubtitleConfig.forcedPicturesOnly] says what
+     * that means and is where the player starts. Applies to the subtitles showing now, with no
+     * reselection; published as [PlayerSnapshot.forcedPicturesOnly].
+     */
+    @Throws(IllegalStateException::class)
+    public fun setForcedPicturesOnly(value: Boolean) {
+        core.post(CoreCommand.SetForcedPicturesOnly(value, CompletableDeferred()))
+    }
+
+    /**
      * Delays the sound against the picture by [value], mpv's `audio-delay` sign. A positive value
      * presents every video frame that much earlier. It is for sound that reaches the ear early.
      *
@@ -1068,6 +1079,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             equalizer = snapshot.equalizer,
             subtitleScale = snapshot.subtitleScale,
             subtitlePosition = snapshot.subtitlePosition,
+            forcedPicturesOnly = snapshot.forcedPicturesOnly,
             subtitleStyle = snapshot.subtitleStyle,
             videoScale = snapshot.videoScale,
             videoTransform = snapshot.videoTransform,
@@ -1132,6 +1144,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setEqualizer(memento.equalizer)
         setSubtitleScale(memento.subtitleScale)
         setSubtitlePosition(memento.subtitlePosition)
+        setForcedPicturesOnly(memento.forcedPicturesOnly)
         setSubtitleStyle(memento.subtitleStyle)
         setVideoScale(memento.videoScale)
         setVideoTransform(memento.videoTransform)

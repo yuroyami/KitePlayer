@@ -168,6 +168,7 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
             is Control.SetSubtitleScale -> setSubtitleScale(control.value)
             is Control.SetSubtitleStyle -> setSubtitleStyle(control.value)
             is Control.SetSubtitlePosition -> setSubtitlePosition(control.value)
+            is Control.SetForcedPicturesOnly -> setForcedPicturesOnly(control.value)
             is Control.SetSubtitleSafeArea -> setSubtitleSafeArea(control.value)
             is Control.SetAudioDelay -> setAudioDelay(control.value)
             is Control.SetSleepTimer -> setSleepTimer(control.timer, control.fade)

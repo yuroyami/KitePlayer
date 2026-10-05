@@ -120,6 +120,7 @@ internal sealed class Control(val member: String) {
     data class SetSubtitleScale(val value: Float) : Control("setSubtitleScale")
     data class SetSubtitleStyle(val value: SubtitleStyleOverride?) : Control("setSubtitleStyle")
     data class SetSubtitlePosition(val value: Float) : Control("setSubtitlePosition")
+    data class SetForcedPicturesOnly(val value: Boolean) : Control("setForcedPicturesOnly")
     data class SetSubtitleSafeArea(val value: SubtitleSafeArea) : Control("setSubtitleSafeArea")
     data class SetAudioDelay(val value: Duration) : Control("setAudioDelay")
     data class SetSleepTimer(val timer: SleepTimer?, val fade: Duration) : Control("setSleepTimer")
@@ -367,6 +368,7 @@ private fun encodeControl(control: Control): JsAny = record {
         is Control.SetSubtitleScale -> put("value", control.value)
         is Control.SetSubtitleStyle -> put("value", control.value?.let(::encodeStyle))
         is Control.SetSubtitlePosition -> put("value", control.value)
+        is Control.SetForcedPicturesOnly -> put("value", control.value)
         is Control.SetSubtitleSafeArea -> put("value", encodeSafeArea(control.value))
         is Control.SetAudioDelay -> put("value", control.value)
         is Control.SetSleepTimer -> {
@@ -512,6 +514,7 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("subtitleScale", snapshot.subtitleScale)
     put("subtitleStyle", snapshot.subtitleStyle?.let(::encodeStyle))
     put("subtitlePosition", snapshot.subtitlePosition)
+    put("forcedPicturesOnly", snapshot.forcedPicturesOnly)
     put("subtitleTypesetter", snapshot.subtitleTypesetter)
     put("audioDelay", snapshot.audioDelay)
     put("abLoopA", snapshot.abLoopA)
@@ -1174,6 +1177,7 @@ private fun decodeControl(o: JsAny): Control? = when (o.str("t")) {
     "setSubtitleScale" -> Control.SetSubtitleScale(o.float("value") ?: missing("value"))
     "setSubtitleStyle" -> Control.SetSubtitleStyle(o.child("value")?.let(::decodeStyle))
     "setSubtitlePosition" -> Control.SetSubtitlePosition(o.float("value") ?: missing("value"))
+    "setForcedPicturesOnly" -> Control.SetForcedPicturesOnly(o.bool("value") ?: missing("value"))
     "setSubtitleSafeArea" -> Control.SetSubtitleSafeArea(decodeSafeArea(o.child("value") ?: missing("value")))
     "setAudioDelay" -> Control.SetAudioDelay(o.micros("value") ?: missing("value"))
     "setSleepTimer" -> Control.SetSleepTimer(o.child("value")?.let(::decodeSleepTimer), o.micros("fade") ?: missing("fade"))
@@ -1274,6 +1278,7 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         subtitleScale = o.float("subtitleScale") ?: default.subtitleScale,
         subtitleStyle = o.child("subtitleStyle")?.let(::decodeStyle),
         subtitlePosition = o.float("subtitlePosition") ?: default.subtitlePosition,
+        forcedPicturesOnly = o.bool("forcedPicturesOnly") ?: default.forcedPicturesOnly,
         subtitleTypesetter = o.str("subtitleTypesetter"),
         audioDelay = o.micros("audioDelay") ?: default.audioDelay,
         abLoopA = o.micros("abLoopA"),

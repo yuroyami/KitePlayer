@@ -232,6 +232,13 @@ public data class BitmapRegion(
     val canvasWidth: Int,
     val canvasHeight: Int,
     val bitmap: RgbaBitmap,
+    /**
+     * True when the stream marks this picture as forced: a caption for a line in another language
+     * or a sign the viewer must read, which a disc player shows even with subtitles off (#513).
+     * Blu-ray (PGS) and DVD tracks can mix forced pictures with the ordinary ones in one track.
+     * [io.github.yuroyami.kiteplayer.SubtitleConfig.forcedPicturesOnly] draws only these.
+     */
+    val forced: Boolean = false,
 )
 
 /**

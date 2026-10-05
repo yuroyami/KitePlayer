@@ -610,6 +610,23 @@ public data class SubtitleConfig(
      * change, and a subtitle chosen by hand is never held back.
      */
     val withMatchingAudio: MatchingAudioSubtitles = MatchingAudioSubtitles.All,
+    /**
+     * Draw only the pictures an image subtitle track marks as forced (#513), as mpv's
+     * `sub-forced-events-only` does. A Blu-ray or DVD track often holds the full subtitles and a
+     * few forced captions together, and this shows a viewer only the captions for the lines in
+     * another language and the signs. A track the container flags as forced counts as forced
+     * whole, and a text track has no such mark, so both draw as ever. Applies to both subtitle
+     * slots, and [KitePlayer.setForcedPicturesOnly] changes it while playing.
+     */
+    val forcedPicturesOnly: Boolean = false,
+    /**
+     * While no subtitle is selected, draw the forced pictures of the Blu-ray or DVD subtitle track
+     * in the audio's language, as a disc player does with subtitles off (#513). The track is not
+     * selected by this: [Tracks.selectedSubtitle] stays null, and the choice follows the audio.
+     * Selecting any subtitle, a secondary one included, ends it; turning subtitles off brings it
+     * back. Off by default, so subtitles off draws nothing.
+     */
+    val forcedPicturesWhenOff: Boolean = false,
 ) {
     init {
         require(fallbackEncoding == null || SubtitleEncodings.canonical(fallbackEncoding) != null) {

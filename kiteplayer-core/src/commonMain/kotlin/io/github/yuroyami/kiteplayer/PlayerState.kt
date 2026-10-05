@@ -61,6 +61,8 @@ public data class PlayerSnapshot(
     val subtitleStyle: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = null,
     /** Where the implicit subtitle stack anchors, as a fraction of the height. 1.0 is the bottom. */
     val subtitlePosition: Float = 1.0f,
+    /** True while only the forced pictures of an image subtitle track draw. See [KitePlayer.setForcedPicturesOnly]. */
+    val forcedPicturesOnly: Boolean = false,
     /**
      * The identifier of the typesetting engine drawing the selected subtitle track, or null when
      * the built-in styling draws it. Non-null only for an ASS or SSA track with `kiteplayer-libass`

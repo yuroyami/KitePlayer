@@ -93,6 +93,9 @@ video decoder.
   what FFmpeg decodes.
 - Audio: AAC, MP3, Opus, Vorbis, FLAC, ALAC, AC-3, E-AC-3, DTS, TrueHD and PCM.
 - Containers: MKV, WebM, MP4, MOV, MPEG-TS, AVI, FLV, VOB, WMV, WAV and raw streams.
+- A transport stream with several channels, such as a DVB recording or an IPTV multiplex, plays one
+  channel's tracks together. `Tracks.programs` lists the channels, `DemuxPolicy.program` picks one
+  before the open and `KitePlayer.selectProgram` switches while playing.
 - Hardware decoding through MediaCodec on Android and VideoToolbox on Apple, with software decoding
   when the device cannot. AV1 decodes with dav1d where the device has no AV1 hardware.
 - The web build carries a smaller set: H.264, HEVC, VP9, AAC, MP3, Opus, Vorbis, FLAC and PCM, in

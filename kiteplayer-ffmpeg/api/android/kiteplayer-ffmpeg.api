@@ -34,6 +34,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public final fun getFirstVideo ()Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
 	public fun getMetadata ()Ljava/util/Map;
 	public final fun getOnWarning ()Lkotlin/jvm/functions/Function1;
+	public fun getPrograms ()Ljava/util/List;
 	public fun getRealTime ()Z
 	public fun getRecordingPath ()Ljava/lang/String;
 	public fun getSeekable ()Z

@@ -171,6 +171,15 @@ public interface PlayerMediaSource : AutoCloseable {
 
     /** The [io.github.yuroyami.kiteplayer.StreamVariant.index] of the variant this source reads, or null. */
     public val selectedVariant: Int? get() = null
+
+    /**
+     * The channels of a multiplex, each a set of [streams] that play together, or empty when the
+     * container declares none (#505). Every [io.github.yuroyami.kiteplayer.MediaProgram.tracks]
+     * entry names one of [streams] by its index, and every number is one only that programme has.
+     * The engine lists them in [io.github.yuroyami.kiteplayer.Tracks.programs] and, when there are
+     * two or more, picks every track from one of them.
+     */
+    public val programs: List<io.github.yuroyami.kiteplayer.MediaProgram> get() = emptyList()
 }
 
 /** What the container declares about one stream. */

@@ -75,6 +75,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun seekAsync (JLio/github/yuroyami/kiteplayer/SeekMode;)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun seekAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;JLio/github/yuroyami/kiteplayer/SeekMode;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun seekToChapterAsync (I)Ljava/util/concurrent/CompletableFuture;
+	public final fun selectProgramAsync (Ljava/lang/Integer;)Ljava/util/concurrent/CompletableFuture;
 	public final fun selectSecondarySubtitleAsync (Lio/github/yuroyami/kiteplayer/TrackInfo;)Ljava/util/concurrent/CompletableFuture;
 	public final fun selectTrackAsync (Lio/github/yuroyami/kiteplayer/TrackKind;Lio/github/yuroyami/kiteplayer/TrackInfo;)Ljava/util/concurrent/CompletableFuture;
 	public final fun selectVariantAsync (Ljava/lang/Integer;)Ljava/util/concurrent/CompletableFuture;

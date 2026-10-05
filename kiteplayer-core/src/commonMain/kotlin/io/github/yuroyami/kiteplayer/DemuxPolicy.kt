@@ -73,11 +73,19 @@ public data class DemuxPolicy(
      * the player also steps down and up by itself as the network allows; a set index stays.
      */
     val variant: Int? = null,
+    /**
+     * The [MediaProgram.number] of the channel to play from a multiplex, or null to play the first
+     * one with a picture. The player then picks the picture, the sound and the subtitles from that
+     * channel's tracks only. A number the media does not have is ignored, and the choice is made as
+     * for null. [KitePlayer.selectProgram] sets it on the item that plays (#505).
+     */
+    val program: Int? = null,
 ) {
     init {
         require(skipInitialBytes >= 0) { "skipInitialBytes must not be negative, was $skipInitialBytes" }
         require(maxBitrate == null || maxBitrate > 0) { "maxBitrate must be positive, was $maxBitrate" }
         require(maxVideoHeight == null || maxVideoHeight > 0) { "maxVideoHeight must be positive, was $maxVideoHeight" }
         require(variant == null || variant >= 0) { "variant must not be negative, was $variant" }
+        require(program == null || program > 0) { "program must be positive, was $program" }
     }
 }

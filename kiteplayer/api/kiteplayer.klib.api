@@ -272,6 +272,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final suspend fun removeFromQueue(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayerWorker.removeFromQueue|removeFromQueue(kotlin.Int){}[0]
     final suspend fun seek(kotlin.time/Duration, io.github.yuroyami.kiteplayer/SeekMode = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.seek|seek(kotlin.time.Duration;io.github.yuroyami.kiteplayer.SeekMode){}[0]
     final suspend fun seekToChapter(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayerWorker.seekToChapter|seekToChapter(kotlin.Int){}[0]
+    final suspend fun selectProgram(kotlin/Int?) // io.github.yuroyami.kiteplayer/KitePlayerWorker.selectProgram|selectProgram(kotlin.Int?){}[0]
     final suspend fun selectSecondarySubtitle(io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayerWorker.selectSecondarySubtitle|selectSecondarySubtitle(io.github.yuroyami.kiteplayer.TrackId?){}[0]
     final suspend fun selectTrack(io.github.yuroyami.kiteplayer/TrackKind, io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayerWorker.selectTrack|selectTrack(io.github.yuroyami.kiteplayer.TrackKind;io.github.yuroyami.kiteplayer.TrackId?){}[0]
     final suspend fun selectVariant(kotlin/Int?) // io.github.yuroyami.kiteplayer/KitePlayerWorker.selectVariant|selectVariant(kotlin.Int?){}[0]

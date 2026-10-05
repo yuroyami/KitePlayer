@@ -236,6 +236,11 @@ public class KitePlayerWorker private constructor(
         call(Command.SelectVariant(index))
     }
 
+    /** Plays the channel numbered [number] of the tracks' programmes, or lets the player choose with null. */
+    public suspend fun selectProgram(number: Int?) {
+        call(Command.SelectProgram(number))
+    }
+
     /**
      * Loads a subtitle file, selects it, and returns its id once it is showing. [source] needs an
      * address: one with its own reader is refused with [PlaybackError.ConfigurationInvalid].

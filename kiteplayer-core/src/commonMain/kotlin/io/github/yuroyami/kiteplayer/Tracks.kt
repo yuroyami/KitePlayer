@@ -97,6 +97,17 @@ public data class Tracks(
     val variants: List<StreamVariant> = emptyList(),
     /** The [StreamVariant.index] of the variant that plays, or null for media with one version. */
     val selectedVariant: Int? = null,
+    /**
+     * The channels of a multiplex, such as a DVB recording or an IPTV transport stream, each with
+     * the tracks that play together, or empty for media that declares none, as MP4 and Matroska do
+     * not. Switch with [KitePlayer.selectProgram] (#505).
+     */
+    val programs: List<MediaProgram> = emptyList(),
+    /**
+     * The [MediaProgram.number] of the channel the player chose its tracks from, or null when the
+     * media declares no programme.
+     */
+    val selectedProgram: Int? = null,
 ) {
     public val video: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Video }
     public val audio: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Audio }
@@ -109,6 +120,9 @@ public data class Tracks(
     }
 
     public fun find(id: TrackId): TrackInfo? = all.firstOrNull { it.id == id }
+
+    /** The programmes [id] belongs to, which is none for media without programmes or an external file. */
+    public fun programsOf(id: TrackId): List<MediaProgram> = programs.filter { id in it.tracks }
 
     /**
      * The track of [kind] that plays, or null when none does. The same answer as [selected], as

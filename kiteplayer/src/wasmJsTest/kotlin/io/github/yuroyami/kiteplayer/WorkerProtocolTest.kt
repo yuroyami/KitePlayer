@@ -51,6 +51,7 @@ class WorkerProtocolTest {
             maxBitrate = 5_000_000L,
             maxVideoHeight = 720,
             variant = 2,
+            program = 202,
         ),
         title = "Title",
         artist = "Artist",
@@ -80,6 +81,11 @@ class WorkerProtocolTest {
         selectedSecondarySubtitle = TrackId(-1),
         variants = listOf(StreamVariant(0, 800_000L, 640, 360, 30.0, "avc1.4d401e"), StreamVariant(1, 3_000_000L)),
         selectedVariant = 1,
+        programs = listOf(
+            MediaProgram(101, listOf(TrackId(0), TrackId(1)), "ChannelA", "Kite", mapOf("service_name" to "ChannelA")),
+            MediaProgram(202, listOf(TrackId(2))),
+        ),
+        selectedProgram = 202,
     )
 
     private val style = SubtitleStyleOverride(
@@ -244,6 +250,8 @@ class WorkerProtocolTest {
             Command.SelectSecondarySubtitle(null),
             Command.SelectVariant(2),
             Command.SelectVariant(null),
+            Command.SelectProgram(202),
+            Command.SelectProgram(null),
             Command.AddExternalSubtitle(SubtitleSource("https://example.com/c.srt", "Commentary", "en", true)),
             Command.AddExternalSubtitle(SubtitleSource("https://example.com/d.srt", encoding = "windows-1250")),
             Command.ReloadExternalSubtitle(TrackId(-2), "windows-874"),

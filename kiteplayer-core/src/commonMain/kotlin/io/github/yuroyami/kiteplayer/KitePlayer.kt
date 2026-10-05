@@ -1285,6 +1285,31 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Plays the channel numbered [number] of [Tracks.programs], or chooses one again, the first
+     * with a picture, when [number] is null (#505). The media opens again on that channel, through
+     * the same rebuild as a video track change, and the picture, the sound and the subtitles are
+     * all chosen again from its tracks by the usual rules, unless a track change waiting beside it
+     * asks for one. The player keeps playing or stays paused. The choice is kept on the item as
+     * [DemuxPolicy.program], so a later rebuild keeps it too.
+     *
+     * Media that can seek opens again at the current position. A live sender, such as an IPTV
+     * multicast, opens again and joins the new channel where the sender is now, as a television
+     * does when it changes channel.
+     *
+     * @throws IllegalStateException when nothing is open, or when a stop, a close, a new open or a
+     *         later call ended the change first.
+     * @throws IllegalArgumentException when the media has no programme [number].
+     * @throws UnsupportedOperationException when the source can neither seek nor be joined live,
+     *         as a pipe cannot, which can only be read once. Open the item again with
+     *         [DemuxPolicy.program] instead.
+     * @throws PlaybackException when the reopen itself failed.
+     */
+    @Throws(Exception::class)
+    public suspend fun selectProgram(number: Int?) {
+        core.selectProgram(number)
+    }
+
+    /**
      * Attaches a renderer, or replaces the one attached. Legal at any time, including while playing.
      *
      * Video decoding never depends on a renderer existing. With none attached the schedule still paces

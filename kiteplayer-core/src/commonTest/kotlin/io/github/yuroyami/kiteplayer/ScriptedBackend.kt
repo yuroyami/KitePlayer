@@ -233,6 +233,8 @@ internal class MediaScript(
     val alternateFramesAreNonReference: Boolean = false,
     /** What the scripted video decoder decoded and skipped, by packet time. */
     val videoProbe: ScriptedVideoProbe = ScriptedVideoProbe(),
+    /** The channels the container declares, as a transport stream multiplex does (#505). */
+    val programs: List<io.github.yuroyami.kiteplayer.MediaProgram> = emptyList(),
 ) {
     /** Whether the picture at [ptsUs] is one nothing is built on, under [alternateFramesAreNonReference]. */
     fun isNonReferenceVideo(ptsUs: Long, isKeyframe: Boolean): Boolean {
@@ -827,6 +829,8 @@ internal class ScriptedSource(
 ) : PlayerMediaSource {
 
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
+
+    override val programs: List<io.github.yuroyami.kiteplayer.MediaProgram> get() = script.programs
 
     /** When the live sender began, on the test's clock. */
     val liveOriginNanos: Long = clock?.nanos() ?: 0L

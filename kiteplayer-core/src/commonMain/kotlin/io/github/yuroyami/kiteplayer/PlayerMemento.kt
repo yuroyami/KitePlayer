@@ -144,7 +144,7 @@ public data class PlayerMemento(
 
     public companion object {
         /** The version [asProperties] stamps. [fromProperties] also reads every older one. */
-        public const val FORMAT_VERSION: Int = 6
+        public const val FORMAT_VERSION: Int = 7
 
         /**
          * Reads what [asProperties] wrote.
@@ -157,7 +157,8 @@ public data class PlayerMemento(
             // Version 1 knew nothing about balance, the equaliser or any picture and subtitle
             // setting, version 2 nothing about the demux settings, version 3 nothing about the
             // item titles or the shuffle order, version 4 nothing about the variant limits or the
-            // HDR policy, and version 5 nothing about an item's audio content.
+            // HDR policy, version 5 nothing about an item's audio content, and version 6 nothing
+            // about the programme an item plays.
             // Each reads back with the defaults for those, which is what a player that had never
             // been told about them would have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
@@ -288,6 +289,7 @@ private fun MutableMap<String, String>.putDemux(prefix: String, demux: DemuxPoli
     demux.maxBitrate?.let { put("${prefix}maxBitrate", it.toString()) }
     demux.maxVideoHeight?.let { put("${prefix}maxVideoHeight", it.toString()) }
     demux.variant?.let { put("${prefix}variant", it.toString()) }
+    demux.program?.let { put("${prefix}program", it.toString()) }
 }
 
 /** Reads what [putDemux] wrote. A missing key is the default for its field. */
@@ -309,5 +311,6 @@ private fun demuxFrom(properties: Map<String, String>, prefix: String): DemuxPol
         maxBitrate = properties["${prefix}maxBitrate"]?.toLong(),
         maxVideoHeight = properties["${prefix}maxVideoHeight"]?.toInt(),
         variant = properties["${prefix}variant"]?.toInt(),
+        program = properties["${prefix}program"]?.toInt(),
     )
 }

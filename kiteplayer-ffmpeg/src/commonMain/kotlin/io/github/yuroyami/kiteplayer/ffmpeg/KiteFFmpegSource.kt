@@ -14,8 +14,10 @@ import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.KeyframeChoice
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.MediaProgram
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.Pts
+import io.github.yuroyami.kiteplayer.TrackId
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.AudioBuffer
@@ -179,6 +181,25 @@ public class KiteFFmpegSource internal constructor(
 
     /** Raw KiteFFmpeg descriptors only for indices actually exposed through [streams]. */
     private val byIndex: Map<Int, StreamInfo> = selectableStreams.associate { (raw, _) -> raw.index to raw }
+
+    /**
+     * The channels of a multiplex, read once at open (#505). Only a programme the container
+     * numbers is one, which leaves out those FFmpeg makes for the variants of an HLS master
+     * playlist and for a DASH presentation, and a programme keeps only the streams [streams]
+     * lists.
+     */
+    override val programs: List<MediaProgram> = source.programs
+        .mapNotNull { program ->
+            val number = program.number ?: return@mapNotNull null
+            MediaProgram(
+                number = number,
+                tracks = program.streamIndexes.filter { it in byIndex }.map(::TrackId),
+                name = program.serviceName,
+                provider = program.serviceProvider,
+                metadata = program.metadata,
+            )
+        }
+        .distinctBy { it.number }
 
     /** The length of the content, which is an interval and so carries no origin. */
     override val duration: Pts? = mapper.mapDuration(source.durationMicros)

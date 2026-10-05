@@ -81,6 +81,7 @@ internal sealed class Command(val member: String) {
     data class SelectTrack(val kind: TrackKind, val track: TrackId?) : Command("selectTrack")
     data class SelectSecondarySubtitle(val track: TrackId?) : Command("selectSecondarySubtitle")
     data class SelectVariant(val index: Int?) : Command("selectVariant")
+    data class SelectProgram(val number: Int?) : Command("selectProgram")
     data class AddExternalSubtitle(val source: SubtitleSource) : Command("addExternalSubtitle")
     data class ReloadExternalSubtitle(val track: TrackId, val encoding: String?) : Command("reloadExternalSubtitle")
     data object DiagnosticsDump : Command("diagnosticsDump")
@@ -315,6 +316,7 @@ private fun encodeCommand(command: Command): JsAny = record {
         }
         is Command.SelectSecondarySubtitle -> put("track", command.track?.value)
         is Command.SelectVariant -> put("index", command.index)
+        is Command.SelectProgram -> put("number", command.number)
         is Command.AddExternalSubtitle -> put("source", encodeSubtitle(command.source))
         is Command.ReloadExternalSubtitle -> {
             put("track", command.track.value)
@@ -485,6 +487,7 @@ private fun encodeDemux(demux: DemuxPolicy): JsAny = record {
     put("maxBitrate", demux.maxBitrate)
     put("maxVideoHeight", demux.maxVideoHeight)
     put("variant", demux.variant)
+    put("program", demux.program)
 }
 
 private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
@@ -549,6 +552,8 @@ private fun encodeTracks(tracks: Tracks): JsAny = record {
     put("secondarySubtitle", tracks.selectedSecondarySubtitle?.value)
     put("variants", tracks.variants.encodeEach(::encodeVariant))
     put("variant", tracks.selectedVariant)
+    put("programs", tracks.programs.encodeEach(::encodeProgram))
+    put("program", tracks.selectedProgram)
 }
 
 private fun encodeTrack(track: TrackInfo): JsAny = record {
@@ -584,6 +589,14 @@ private fun encodeVariant(variant: StreamVariant): JsAny = record {
     put("height", variant.height)
     put("frameRate", variant.frameRate)
     put("codecs", variant.codecs)
+}
+
+private fun encodeProgram(program: MediaProgram): JsAny = record {
+    put("number", program.number)
+    put("tracks", numbers(program.tracks.map { it.value.toDouble() }))
+    put("name", program.name)
+    put("provider", program.provider)
+    put("metadata", program.metadata.toJsObject())
 }
 
 private fun encodeChapter(chapter: Chapter): JsAny = record {
@@ -1109,6 +1122,7 @@ private fun decodeCommand(o: JsAny): Command? = when (o.str("t")) {
     "selectTrack" -> Command.SelectTrack(o.enum<TrackKind>("kind") ?: missing("kind"), o.int("track")?.let(::TrackId))
     "selectSecondarySubtitle" -> Command.SelectSecondarySubtitle(o.int("track")?.let(::TrackId))
     "selectVariant" -> Command.SelectVariant(o.int("index"))
+    "selectProgram" -> Command.SelectProgram(o.int("number"))
     "addExternalSubtitle" -> Command.AddExternalSubtitle(decodeSubtitle(o.child("source") ?: missing("source")))
     "reloadExternalSubtitle" -> Command.ReloadExternalSubtitle(TrackId(o.int("track") ?: missing("track")), o.str("encoding"))
     "diagnosticsDump" -> Command.DiagnosticsDump
@@ -1211,6 +1225,7 @@ private fun decodeDemux(o: JsAny): DemuxPolicy = DemuxPolicy(
     maxBitrate = o.long("maxBitrate"),
     maxVideoHeight = o.int("maxVideoHeight"),
     variant = o.int("variant"),
+    program = o.int("program"),
 )
 
 private fun decodeProbe(o: JsAny): ProbeDepth = when (o.str("t")) {
@@ -1286,6 +1301,8 @@ private fun decodeTracks(o: JsAny): Tracks = Tracks(
     selectedSecondarySubtitle = o.int("secondarySubtitle")?.let(::TrackId),
     variants = o.list("variants", ::decodeVariant).orEmpty(),
     selectedVariant = o.int("variant"),
+    programs = o.list("programs", ::decodeProgram).orEmpty(),
+    selectedProgram = o.int("program"),
 )
 
 private fun decodeTrack(o: JsAny): TrackInfo = TrackInfo(
@@ -1321,6 +1338,14 @@ private fun decodeVariant(o: JsAny): StreamVariant = StreamVariant(
     height = o.int("height"),
     frameRate = o.num("frameRate"),
     codecs = o.str("codecs"),
+)
+
+private fun decodeProgram(o: JsAny): MediaProgram = MediaProgram(
+    number = o.int("number") ?: missing("number"),
+    tracks = o.numbers("tracks").orEmpty().map { TrackId(it.toInt()) },
+    name = o.str("name"),
+    provider = o.str("provider"),
+    metadata = o.map("metadata"),
 )
 
 private fun decodeChapter(o: JsAny): Chapter = Chapter(

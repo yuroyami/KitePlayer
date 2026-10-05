@@ -133,6 +133,9 @@ public class KitePlayerJava(
     /** `KitePlayer.selectVariant`: the variant with [index], or the automatic choice for null. */
     public fun selectVariantAsync(index: Int?): CompletableFuture<Void?> = launchCall { player.selectVariant(index) }
 
+    /** `KitePlayer.selectProgram`: the channel numbered [number], or the automatic choice for null. */
+    public fun selectProgramAsync(number: Int?): CompletableFuture<Void?> = launchCall { player.selectProgram(number) }
+
     /**
      * `KitePlayer.addExternalSubtitle`. Completes once the file's track shows, selected; it is then
      * the subtitle track of `Tracks.selectedTrack`.

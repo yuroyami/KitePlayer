@@ -45,7 +45,9 @@ internal suspend fun scanMediaAudio(
             source.streams.firstOrNull { it.index == track.value && it.kind == TrackKind.Audio }
                 ?: throw IllegalArgumentException("track ${track.value} is not an audio track of this media")
         } else {
-            pickAudioStream(source.streams, preferredLanguages)
+            // The sound the player would play, so from the programme it would play (#505).
+            val program = chooseProgram(source.programs, source.streams, media.demux.program)
+            pickAudioStream(programCandidates(source.streams, source.programs, program), preferredLanguages)
                 ?: throw IllegalArgumentException("this media has no audio track to scan")
         }
         source.selectStreams(setOf(stream.index))

@@ -426,6 +426,19 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `VideoDecoder.skipNonReferenceFrames`, whose default skips nothing, so a platform codec decodes as
   before; the FFmpeg decoder honours it in software, and not while it decodes in hardware or runs a
   video filter.
+- A transport stream with several channels, such as a DVB recording or an IPTV multiplex, plays
+  one channel's picture, sound and subtitles together (#505). The player picks every track from one
+  channel, the first with a picture unless the item's new `DemuxPolicy.program` names another, so
+  a preferred language no longer pairs one channel's picture with another channel's sound.
+  `Tracks.programs` lists the channels as `MediaProgram`s, with their number, their name, their
+  provider and their tracks, `Tracks.selectedProgram` names the one that plays, and
+  `KitePlayer.selectProgram` switches channel, choosing every track again from the new one. Media
+  that can seek opens again at the same position, and a live sender, such as an IPTV multicast,
+  joins the new channel where it is now. Media with one channel or none chooses as before. A
+  `PlayerMediaSource` lists its channels through the new `programs`, empty by default, and a
+  memento carries the item's channel, which raises its format version to 7.
+- A `selectVariant` call that a stop or a failed recovery ended while the reopened stream refilled
+  now ends with `IllegalStateException` instead of never returning (#525).
 
 ### Removed
 

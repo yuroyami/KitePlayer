@@ -347,7 +347,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   through `Ended` and `Buffering`, seek back and refill. `PlayerEvent.Ended` still fires at each
   turn, `Opened` does not, and the external subtitle files are not read again. A repeat that
   cannot take this road warns `GaplessFallback` with the item's own queue position, or -1 outside
-  queue playback, and seeks back as before. `docs/gapless-queue.md` has the details.
+  queue playback, and seeks back as before. An A-B loop takes the same road: each turn opens at A
+  in the background and its first sample follows the last one before B in the ring, so the section
+  repeats with no silence, no `Buffering` and nothing heard or shown from past B, and `Ended` fires
+  only when a loop with no B wraps at the item's end. A seek inside the section, a new B or
+  clearing the loop drops the waiting turn quietly, a turn that starts too near B for its next pass
+  to open in time goes back to A by the seek once, and a loop that cannot take this road seeks back
+  to A as before. `docs/gapless-queue.md` has the details.
 
 ### Removed
 

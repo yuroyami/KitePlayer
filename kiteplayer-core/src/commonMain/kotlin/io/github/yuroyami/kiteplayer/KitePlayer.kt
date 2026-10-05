@@ -456,7 +456,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * [PlayerSnapshot.abLoopB], and they belong to the player, not the media: like [setSpeed]
      * they survive seeks and the next [open].
      *
-     * The jump back is an ordinary precise seek, so the loop needs a seekable source. Arming it
+     * Each turn of the section is opened at [a] in the background before the one that plays
+     * reaches [b], and its first sample follows the last one before [b] in the device's ring, the
+     * way a gapless queue item follows the one before it: the phrase repeats in time, with no
+     * silence and no [PlaybackStatus.Buffering] between turns, and nothing from past [b] is heard
+     * or shown. Where that cannot happen, a turn jumps back by an ordinary precise seek, as
+     * `docs/gapless-queue.md` describes. Either way the loop needs a seekable source. Arming it
      * while an unseekable one plays is refused, and the refusal is published as a
      * [PlaybackWarning.CommandRefused] on [events] and the warning history, because this member
      * does not wait for the engine. A loop armed earlier stays armed through the open of an

@@ -583,6 +583,9 @@ internal class ScriptedBackend(
     /** Completed by a test to let a suspended [open] finish. Null means open does not wait. */
     var openGate: CompletableDeferred<Unit>? = null
 
+    /** How long each [open] takes on the test's clock, as a source slow to open does. */
+    var openDelay: Duration = Duration.ZERO
+
     /** Thrown by [open] instead of returning a session. */
     var openFailure: Throwable? = null
 
@@ -660,6 +663,7 @@ internal class ScriptedBackend(
         openCalls++
         lastOpenedItem = media
         openGate?.await()
+        if (openDelay > Duration.ZERO) delay(openDelay)
         openFailure?.let { throw it }
         openFailureFor?.invoke(media)?.let { throw it }
         // A real demuxer reads bytes; this one is scripted and normally does not. When the item

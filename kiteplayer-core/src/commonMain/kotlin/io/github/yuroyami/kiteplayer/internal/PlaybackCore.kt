@@ -3020,6 +3020,11 @@ internal class PlaybackCore(
         pending: PendingBuild? = null,
         /** The item's external subtitle tracks, which an open weighs against the container's own (#514). */
         externalSubtitles: List<TrackInfo> = emptyList(),
+        /**
+         * Where a preloaded pass of an A-B loop starts (#467). The source is moved to the keyframe
+         * at or before it before anything is read, inside the build so its rollback covers the move.
+         */
+        startUs: Long = 0L,
     ): OpenSession {
         val report: (PlaybackWarning) -> Unit = pending?.report ?: ::warn
         fun stage(next: OpenStage) {
@@ -3252,6 +3257,7 @@ internal class PlaybackCore(
                         cachedSubtitleStreams.forEach { add(it.index) }
                     },
                 )
+                if (startUs > 0L) source.seekToKeyframe(Pts(startUs))
             }
 
             builtTracks = builtTracks
@@ -5132,6 +5138,8 @@ internal class PlaybackCore(
         // Playing only: a paused player may be seeked past B and inspected there. The wrap is an
         // ordinary precise seek, so an unseekable source cannot wrap; arming refused the live
         // case, and a loop armed before such an open never fires and was warned at the open.
+        // A next pass that follows B in the ring keeps the position short of B, so this wraps
+        // only a turn that no pass follows (#467).
         val loopA = abLoopA
         val loopB = abLoopB
         if (loopA != null && loopB != null && pendingSeek == null &&
@@ -6606,6 +6614,13 @@ internal class PlaybackCore(
          * playback.
          */
         val repeat: Boolean = false,
+        /** Where the pass starts: A for an A-B loop, else zero. */
+        val startUs: Long = 0L,
+        /**
+         * Where the current pass stops for this one, and where this one stops in its turn: B for
+         * an A-B loop whose B is inside the item, or null when the pass follows the item's end.
+         */
+        val wrapUs: Long? = null,
     ) {
         /** Set once the build has finished; the item's workers then run. */
         var prepared: PreparedNext? = null
@@ -6625,6 +6640,20 @@ internal class PlaybackCore(
         val session: OpenSession,
         val externals: List<ExternalSubtitleTrack>,
     )
+
+    /**
+     * Where one turn of an A-B loop stops (#467). The actor gives it at the start of the turn. The
+     * feeder stops at it only while nothing it wrote in this epoch reaches past [us], so the ring
+     * never holds a sample from past B ahead of the next pass: an end given too late is passed by,
+     * and the B crossing goes back by the seek. Stopped at, the feeder writes up to [us] exactly,
+     * keeps the rest of that buffer, and holds it, unwritten, until the next pass takes the ring or
+     * the end is lifted, when it carries on from [us] with nothing lost. A new end is a new object,
+     * so the feeder tells a lifted end from one given again for the same B.
+     */
+    private class PassEnd(val us: Long) {
+        /** True once every sample before [us] is written and the feeder holds the rest. */
+        val reached = atomic(false)
+    }
 
     /**
      * Selects the external file a prepared [item] opens with, as an open does: one flagged to show
@@ -6692,12 +6721,19 @@ internal class PlaybackCore(
      * next item's first sample.
      */
     private suspend fun handleQueueHandoff() {
-        val active = session ?: return
+        session?.let { resumeAfterTakeBack(it) }
         val next = pendingNext
-        if (next == null) {
-            maybeStartPreload(active)
-            return
-        }
+        if (next != null) session?.let { stepHandoff(it, next) }
+        // Straight after the step, so that a pass it dropped lets the sound held for it go on at
+        // once, and the item a swap made current gets its own turn and preload (#467).
+        val active = session ?: return
+        if (pendingNext != null) return
+        settleTurn(active)
+        maybeStartPreload(active)
+    }
+
+    /** One step of the handoff to [next]: adopt it, give it the ring, or swap the items. */
+    private suspend fun stepHandoff(active: OpenSession, next: PendingNext) {
         // Defensive: every path that replaces the session drops the preload first.
         if (next.follows != active.token) {
             dropPending(null)
@@ -6733,43 +6769,106 @@ internal class PlaybackCore(
     }
 
     /**
+     * Seeks to where the sound was once the ring was taken back from an A-B loop's next pass
+     * (#467), which cleared the sound before B along with it. A seek that the drop made way for
+     * owns the position already.
+     */
+    private fun resumeAfterTakeBack(active: OpenSession) {
+        val resumeUs = active.resumeAfterTakeBackUs
+        if (resumeUs == NO_POSITION) return
+        active.resumeAfterTakeBackUs = NO_POSITION
+        if (pendingSeek != null || seekPhase.isRunning) return
+        queueSeek(SeekRequest(SeekTarget.Absolute(Pts(resumeUs)), SeekMode.Precise), null)
+    }
+
+    /**
+     * The B that a turn of the armed A-B loop stops at for its next pass to follow (#467), or null
+     * when no pass can follow it: no B inside the item, or no pass the preload may open for it.
+     */
+    private fun loopEndFor(active: OpenSession): Long? =
+        loopWrapUs(active)?.takeIf { passMayFollow(active, queueIndex) }
+
+    /**
+     * The B of the armed A-B loop when it is inside [active], where the loop's next pass follows
+     * the turn that plays, or null when it follows the end of the item or no loop is armed.
+     */
+    private fun loopWrapUs(active: OpenSession): Long? {
+        if (abLoopA == null) return null
+        val bUs = abLoopB?.inWholeMicroseconds ?: return null
+        val durationUs = active.source.duration?.micros ?: return null
+        return bUs.takeIf { it < durationUs }
+    }
+
+    /**
+     * Whether the preload may open what follows [active], the queue item at [index] or the item's
+     * own next pass, as far as nothing but a setting or a fallback changes while the item plays.
+     * The turns of an A-B loop ask it too, so that none waits at B for a pass that never opens.
+     */
+    private fun passMayFollow(active: OpenSession, index: Int): Boolean {
+        val policy = config.queue
+        if (!policy.gapless || policy.preloadNext <= Duration.ZERO) return false
+        if (sleepTimer == SleepTimer.EndOfItem) return false
+        if (gaplessRefused == (active.token to index)) return false
+        if (active.source.duration == null) return false
+        return active.source.seekable && !active.isStillImage
+    }
+
+    /**
+     * Starts a turn of the A-B loop from [fromUs] (#467). Its sound stops at B for the next pass,
+     * unless the turn starts too near B for a pass to open in time: less than [MIN_PASS_LEAD]
+     * before it, or less than the whole section when that is shorter. Such a turn plays on past B
+     * to the seek back to A, as every turn did before passes, and the turns after it start at A.
+     * Given before the feeder writes a sample of the turn, so a section shorter than the ring
+     * stops at B too.
+     */
+    private fun startTurn(active: OpenSession, fromUs: Long) {
+        val bUs = loopEndFor(active)
+        active.turnDecided = true
+        active.turnEndUs = bUs
+        val aUs = abLoopA?.inWholeMicroseconds ?: 0L
+        val late = bUs != null && bUs - fromUs < minOf(MIN_PASS_LEAD.inWholeMicroseconds, bUs - aUs)
+        active.passEnd.value = if (bUs != null && !late) PassEnd(bUs) else null
+    }
+
+    /**
+     * Starts the turn again from where the sound is when what follows B changed: the loop armed,
+     * moved or cleared, or no pass possible any more, which lifts the end, so the feeder goes on
+     * past B with the sound it held. Not while a seek is due: the seek starts a turn of its own,
+     * and until it lands nothing past B may be written or shown.
+     */
+    private fun settleTurn(active: OpenSession) {
+        if (pendingSeek != null || seekPhase.isRunning) return
+        if (active.turnDecided && loopEndFor(active) == active.turnEndUs) return
+        startTurn(active, publishedPositionMicros.value)
+    }
+
+    /**
      * Starts the preload once the current item is within `QueueConfig.preloadNext` of its end: of
-     * the next queue item, or under a repeat of the current item's next pass (#467).
+     * the next queue item, or under a repeat of the current item's next pass (#467). An armed A-B
+     * loop owns the end as [handleLoop] has it: its next pass starts at A, and follows B when B is
+     * inside the item, or else the item's end.
      */
     private fun maybeStartPreload(active: OpenSession) {
-        val policy = config.queue
-        if (!policy.gapless || policy.preloadNext <= Duration.ZERO) return
         if (status != PlaybackStatus.Playing && status != PlaybackStatus.Paused) return
         if (pendingSeek != null || seekPhase.isRunning || pendingVideoRecovery != null) return
         if (pendingSelections.isNotEmpty()) return
-        if (abLoopA != null || sleepTimer == SleepTimer.EndOfItem) return
+        val loopA = abLoopA?.inWholeMicroseconds
         // The cases handleLoop repeats: the whole queue is the current item under LoopMode.All.
-        val repeat = loop == LoopMode.One || (loop == LoopMode.All && queueItems.size <= 1)
+        val repeat = loopA != null || loop == LoopMode.One || (loop == LoopMode.All && queueItems.size <= 1)
         if (!repeat && queueItems.size <= 1) return
         val index = if (repeat) queueIndex else neighbourInOrder(1) ?: return
-        if (gaplessRefused == (active.token to index)) return
+        if (!passMayFollow(active, index)) return
         val durationUs = active.source.duration?.micros ?: return
-        if (!active.source.seekable || active.isStillImage) return
-        // Too late: the current item's sound is all in the ring, and the old path is closer.
-        if (currentAudioFinished(active)) return
-        val leadUs = policy.preloadNext.inWholeMicroseconds
-        val leftUs = if (active.source.durationIsEstimate) {
-            // An estimated length cannot time the lead, so the demuxer reaching the end of the input
-            // does: what is left is then the queues and the ring, a few seconds at most (#422).
-            if (!demuxReachedEnd(active)) {
-                if (status == PlaybackStatus.Playing) wakeIn(WORKER_POLL)
-                return
-            }
-            0L
-        } else {
-            durationUs - publishedPositionMicros.value
-        }
-        if (leftUs > leadUs) {
-            // Woken when the lead begins rather than a whole pass later. Media distance over rate
-            // is wall distance.
-            if (status == PlaybackStatus.Playing) wakeIn(((leftUs - leadUs) / wakeRate()).toLong().microseconds)
+        val wrapUs = loopWrapUs(active)
+        val leadUs = config.queue.preloadNext.inWholeMicroseconds
+        if (wrapUs != null) {
+            if (!passBeforeBDue(active, wrapUs, leadUs)) return
+        } else if (!passAtEndDue(active, durationUs, leadUs)) {
             return
         }
+        // An A at or past the end would start the pass on the end itself, which handleLoop treats
+        // as an A that is not armed.
+        if (wrapUs == null && loopA != null && loopA >= durationUs) return
         val item = if (repeat) media ?: return else queueItems[index]
         val refusal = when {
             active.audioLane == null || active.audio == null -> "the current item has no selected audio track"
@@ -6784,7 +6883,9 @@ internal class PlaybackCore(
         }
         val build = PendingBuild(nextSessionToken++)
         if (repeat) {
-            pendingNext = PendingNext(index, item, active.token, build, startRepeatBuild(active, item, build), repeat = true)
+            val startUs = loopA ?: 0L
+            val job = startRepeatBuild(active, item, build, startUs, wrapUs)
+            pendingNext = PendingNext(index, item, active.token, build, job, repeat = true, startUs = startUs, wrapUs = wrapUs)
             wakeIn(WORKER_POLL)
             return
         }
@@ -6817,11 +6918,61 @@ internal class PlaybackCore(
     }
 
     /**
+     * Whether the next pass of an A-B loop whose B is inside the item should start opening now
+     * (#467): once the turn that plays has an end for it to follow, which [startTurn] gave it,
+     * and is within the lead of B. A turn with no end opens none, because the seek back to A that
+     * ends it drops every pass.
+     */
+    private fun passBeforeBDue(active: OpenSession, wrapUs: Long, leadUs: Long): Boolean {
+        if (active.passEnd.value == null) return false
+        val leftUs = wrapUs - publishedPositionMicros.value
+        if (leftUs > leadUs) {
+            // Woken when the lead begins rather than a whole pass later. Media distance over rate
+            // is wall distance.
+            if (status == PlaybackStatus.Playing) wakeIn(((leftUs - leadUs) / wakeRate()).toLong().microseconds)
+            return false
+        }
+        return true
+    }
+
+    /** Whether the next item, or the next pass, should start opening before the current item's end. */
+    private fun passAtEndDue(active: OpenSession, durationUs: Long, leadUs: Long): Boolean {
+        // Too late: the current item's sound is all in the ring, and the old path is closer.
+        if (currentAudioFinished(active)) return false
+        val leftUs = if (active.source.durationIsEstimate) {
+            // An estimated length cannot time the lead, so the demuxer reaching the end of the input
+            // does: what is left is then the queues and the ring, a few seconds at most (#422).
+            if (!demuxReachedEnd(active)) {
+                if (status == PlaybackStatus.Playing) wakeIn(WORKER_POLL)
+                return false
+            }
+            0L
+        } else {
+            durationUs - publishedPositionMicros.value
+        }
+        if (leftUs > leadUs) {
+            // Woken when the lead begins rather than a whole pass later. Media distance over rate
+            // is wall distance.
+            if (status == PlaybackStatus.Playing) wakeIn(((leftUs - leadUs) / wakeRate()).toLong().microseconds)
+            return false
+        }
+        return true
+    }
+
+    /**
      * The background build of the current item's next pass (#467). It opens the streams that play
      * now, with the decoder selection the item has come to, and reads no external subtitle file:
-     * the player keeps the ones it read, and the swap puts them back on the new pass.
+     * the player keeps the ones it read, and the swap puts them back on the new pass. A pass of an
+     * A-B loop starts at A as a precise seek lands there, from the keyframe before it with the
+     * lanes dropping what comes before A, and stops at [wrapUs] in its turn.
      */
-    private fun startRepeatBuild(active: OpenSession, item: MediaItem, build: PendingBuild): Deferred<Result<PreparedNext>> {
+    private fun startRepeatBuild(
+        active: OpenSession,
+        item: MediaItem,
+        build: PendingBuild,
+        startUs: Long,
+        wrapUs: Long?,
+    ): Deferred<Result<PreparedNext>> {
         val videoChoice = active.videoStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
         val audioChoice = active.audioStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
         // An external file timing the cues means no container stream, as in a rebuild.
@@ -6843,7 +6994,18 @@ internal class PlaybackCore(
                     subtitleChoice = subtitleChoice,
                     videoSelection = videoSelection,
                     pending = build,
+                    startUs = startUs,
                 )
+                // Left in place for the whole pass, where it drops nothing: a video decoder made at
+                // the swap still has the frames between the keyframe and A to throw away.
+                if (startUs > 0L) built.discardBeforeUs.value = startUs
+                // The pass's own turn, given before its feeder starts, so a section shorter than the
+                // ring stops at B too. It starts at A, so it is never too near B.
+                wrapUs?.let {
+                    built.turnDecided = true
+                    built.turnEndUs = it
+                    built.passEnd.value = PassEnd(it)
+                }
                 Result.success(PreparedNext(built, emptyList()))
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -6998,6 +7160,8 @@ internal class PlaybackCore(
         if (active.source.durationIsEstimate) active.furthestPositionUs.takeIf { it > 0L } else active.source.duration?.micros
 
     private fun currentAudioFinished(active: OpenSession): Boolean {
+        // An A-B loop's pass is finished at B, with the sound after it held back (#467).
+        if (active.passEnd.value?.reached?.value == true) return true
         val queue = active.audioQueue ?: return false
         return (active.audioDecoder?.isDrained ?: true) && queue.isEndOfStream && queue.count == 0 &&
             active.audioInFlight.value == 0
@@ -7209,12 +7373,13 @@ internal class PlaybackCore(
      * Makes the next pass of the current item the current session, once the device has played its
      * first sample (#467). As [swapToNext], except that the item stays: its queue position, its
      * external subtitle files, both subtitle selections and everything reported once per item carry
-     * on, and only [PlayerEvent.Ended] fires, as at each turn of a repeat that seeks back.
+     * on, and only [PlayerEvent.Ended] fires, as at each turn of a repeat that seeks back. A turn of
+     * an A-B loop at a B inside the item fires nothing, as the seek back to A fired nothing.
      */
     private suspend fun swapToRepeat(next: PendingNext, prepared: PreparedNext) {
         val incoming = prepared.session
         pendingNext = null
-        emitEvent(PlayerEvent.Ended)
+        if (next.wrapUs == null) emitEvent(PlayerEvent.Ended)
         // Read before the new pass's table replaces the one they live in.
         val secondaryBefore = tracks.selectedSecondarySubtitle
         // The real length of an item whose length was a guess is how far it played, which a new
@@ -7222,7 +7387,13 @@ internal class PlaybackCore(
         session?.let { ending ->
             incoming.furthestPositionUs = maxOf(incoming.furthestPositionUs, ending.furthestPositionUs)
             // A recording ends where the media jumps back, as it did at the seek a repeat used to be.
-            if (ending.recordingEnd != null) ending.recordingEnd = "the item repeated from its start"
+            if (ending.recordingEnd != null) {
+                ending.recordingEnd = if (next.wrapUs != null || next.startUs > 0L) {
+                    "the A-B loop went back to A"
+                } else {
+                    "the item repeated from its start"
+                }
+            }
         }
         detachSession(forHandoff = true)?.let { releaseSession(it) }
         // The markers behind the start are armed again, as the seek back to it armed them.
@@ -7337,7 +7508,7 @@ internal class PlaybackCore(
                 retiringBuilds.removeAll { it.isCompleted }
                 retiringBuilds += next.job
             }
-            next.handedOff && active != null -> takeRingBack(active, prepared.session)
+            next.handedOff && active != null -> takeRingBack(active, prepared.session, midItem = next.wrapUs != null)
             else -> releaseSession(prepared.session)
         }
     }
@@ -7346,9 +7517,12 @@ internal class PlaybackCore(
      * Takes the ring back from a next item whose feeder already writes into it. That feeder parks,
      * the device stops and the ring is cleared, which loses at most one ring depth of the current
      * item's end, and the next item is released. The current item then sits at its end with
-     * nothing left to drain.
+     * nothing left to drain, unless the next pass was an A-B loop's and the current one stopped at
+     * a B [midItem] the item: the pass then carries on from where the sound was heard, by a seek
+     * that brings back what the clearing lost, and its end stands until that seek lands, so
+     * nothing from past B is heard or shown before it (#467).
      */
-    private suspend fun takeRingBack(active: OpenSession, incoming: OpenSession) {
+    private suspend fun takeRingBack(active: OpenSession, incoming: OpenSession, midItem: Boolean = false) {
         val audio = active.audio
         val parked = incoming.audioFeedWorker?.quiesce(QUIESCE_DEADLINE) ?: true
         // Both producers are parked, so the flush may clear the ring.
@@ -7359,9 +7533,13 @@ internal class PlaybackCore(
         // Its feeder is joined by now, whatever the park answered.
         if (!parked) audio?.flush(requestedEpoch)
         active.ownsAudio = true
-        active.audioTailFlushed.value = true
-        endOfStream.draining = true
-        endOfStream.sinkDrained = true
+        if (midItem) {
+            active.resumeAfterTakeBackUs = publishedPositionMicros.value
+        } else {
+            active.audioTailFlushed.value = true
+            endOfStream.draining = true
+            endOfStream.sinkDrained = true
+        }
         // The taps heard the next item's first blocks, which will never play.
         tapsDiscontinuous(active = active)
         active.audioFeedWorker?.release(requestedEpoch)
@@ -8088,6 +8266,8 @@ internal class PlaybackCore(
             do {
                 val stale = session.landingArrived.tryReceive()
             } while (stale.isSuccess)
+            // Before the feeder writes a sample of the new position (#467).
+            startTurn(session, target.micros)
             releaseWorkers(session, epoch)
             landed = awaitLanding(session, epoch)
 
@@ -8300,6 +8480,8 @@ internal class PlaybackCore(
         session.audioEosRequested.value = false
         session.audioTailFlushed.value = false
         session.audioSwitchDiscardBeforeUs.value = Long.MIN_VALUE
+        // A seek owns the position, so a take-back's resume gives way to it (#467).
+        session.resumeAfterTakeBackUs = NO_POSITION
         endOfStream.tailRequestedNanos = 0
         endOfStream.tailAbandoned = false
         session.video?.flush(epoch)
@@ -9963,6 +10145,9 @@ internal class PlaybackCore(
                 }
                 return true
             }
+            // A picture at or after the A-B loop's end belongs to the pass after B, and waits here
+            // while the end stands, so the pass that plays never shows it (#467).
+            if (!awaitPassEnd(session, worker, frame)) return false
             // The first frame at or after a backward target: the held frame is the landing and goes
             // out first, and this one waits behind it at the head of the queue for a forward step.
             if (!handOverHeld(session, worker, video, epoch, held)) return false
@@ -9974,6 +10159,20 @@ internal class PlaybackCore(
         } finally {
             if (ownsFrame) frame.close()
             session.videoInFlight.decrementAndGet()
+        }
+    }
+
+    /**
+     * Waits while [frame] is at or after this pass's end (#467). The end is read before the park
+     * request, because the actor lifts it before it asks for one, so a lifted end lets the frame
+     * through. False when quiescence came first; the caller then closes the frame.
+     */
+    private suspend fun awaitPassEnd(session: OpenSession, worker: Worker, frame: VideoFrame): Boolean {
+        while (true) {
+            val end = session.passEnd.value ?: return true
+            if (frame.pts.micros < end.us) return true
+            if (worker.quiesceRequested) return false
+            worker.nap(HANDOFF_POLL)
         }
     }
 
@@ -10185,80 +10384,148 @@ internal class PlaybackCore(
         val interleaver = Interleaver()
         var epoch = worker.epoch
         var restarts = worker.releases
-        while (true) {
-            worker.checkpoint()
-            if (worker.releases != restarts) {
-                restarts = worker.releases
-                epoch = worker.epoch
-            }
-            val buffer = select<AudioBuffer?> {
-                session.decodedAudio.onReceive { it }
-                worker.onWake { null }
-                onTimeout(WORKER_POLL) { null }
-            }
-            if (buffer == null) {
-                // Nothing waiting. If the session has said the stream is over and the handoff is
-                // provably empty, push the DSP tail into the ring and answer. This worker owns the
-                // pipeline, so it is the only place that may.
-                val audio = session.audio
-                if (session.audioLane != null && audio != null && session.audioEosRequested.value &&
-                    !session.audioTailFlushed.value &&
-                    session.audioInFlight.value == 0
-                ) {
-                    audio.finishDecoded({ worker.quiesceRequested }, worker::nap)
-                    // Only after the tail is in the ring, so the terminal state cannot read this
-                    // as done while a quiesce abandoned the submit half way.
-                    if (!worker.quiesceRequested) session.audioTailFlushed.value = true
-                }
-                continue
-            }
-            try {
-                if (buffer.generation != epoch) continue
-                val audio = session.audio ?: continue
-                // Read before the landing below is signalled. The actor ends the seek and clears the
-                // boundary as soon as it sees the landing, and a trim that read it afterwards kept
-                // the samples before the target (#292).
-                val switchDiscard = session.audioSwitchDiscardBeforeUs.value
-                val discardBefore = maxOf(session.discardBeforeUs.value, switchDiscard)
-                var interleaved = interleaver.interleave(buffer)
-                var pts = buffer.pts
-                var frames = buffer.frameCount
-                // Sample-exact trim of the one buffer that straddles the seek target. The decode
-                // side drops whole buffers that END before the target; this slices the leading
-                // pre-target samples off the survivor, so a precise seek starts its sound AT the
-                // target instead of up to one buffer early. Runs at most once per
-                // seek, so the one copyOfRange is off any steady-state path.
-                if (discardBefore != Long.MIN_VALUE && pts.micros < discardBefore && buffer.format.sampleRate > 0) {
-                    val skipFrames = ((discardBefore - pts.micros) * buffer.format.sampleRate / 1_000_000L)
-                        .coerceIn(0L, frames.toLong()).toInt()
-                    if (skipFrames > 0) {
-                        val channels = buffer.format.channels
-                        interleaved = interleaved.copyOfRange(skipFrames * channels, frames * channels)
-                        pts = Pts(pts.micros + buffer.format.durationOf(skipFrames).micros)
-                        frames -= skipFrames
+        // How far this epoch's sound is written, which decides whether an A-B loop's end came in
+        // time to be taken (#467).
+        var fedUntilUs = Long.MIN_VALUE
+        // The buffer that reaches past a taken pass end, kept unwritten from the end on.
+        var held: AudioBuffer? = null
+        var heldAt: PassEnd? = null
+        try {
+            while (true) {
+                // Every park comes before the ring is cleared, by a seek or a track change, or before
+                // the next pass follows the end, so the kept buffer is never written after one. It
+                // goes now, as the decoded buffers waiting in the channel go.
+                if (worker.quiesceRequested) {
+                    held?.let { kept ->
+                        held = null
+                        heldAt = null
+                        kept.close()
+                        session.audioInFlight.decrementAndGet()
                     }
                 }
-                if (frames == 0) continue
-                // The landing is the first sample that will be heard, so it is recorded after the trim.
-                session.firstAudio.record(epoch, pts)
-                session.landingArrived.trySend(Unit)
-                // The trimmed block goes to the taps first, then to the device.
-                deliverToTaps(Generation(session.audioGeneration.value), pts, interleaved, frames, buffer.format)
-                // One call, no external timeout, no retry. The old shape cancelled submitDecoded
-                // mid-buffer on a deadline and called it again with the same input, which replayed
-                // samples the ring had already accepted and ran the stateful conversion twice
-                // The abort callback bounds the wait instead: while the ring is full
-                // the submit polls it, and a quiesce request abandons the unaccepted remainder,
-                // which the seek's flush was about to discard anyway. The wait on a full ring is
-                // the worker's nap, so the same request also ends that wait at once.
-                audio.submitDecoded(pts, interleaved, frames, buffer.format, { worker.quiesceRequested }, worker::nap)
-                if (switchDiscard != Long.MIN_VALUE) {
-                    session.audioSwitchDiscardBeforeUs.compareAndSet(switchDiscard, Long.MIN_VALUE)
+                worker.checkpoint()
+                if (worker.releases != restarts) {
+                    restarts = worker.releases
+                    if (worker.epoch != epoch) fedUntilUs = Long.MIN_VALUE
+                    epoch = worker.epoch
                 }
-            } finally {
-                buffer.close()
-                // Lowered only here, after the buffer is finished with on every path including the
-                // epoch skip above, so the count covers the conversion and not just the queue.
+                val waiting = held
+                var resumeFromUs = Long.MIN_VALUE
+                val buffer = if (waiting != null) {
+                    val end = heldAt ?: error("a held buffer has its end")
+                    // Kept while the end stands: the next pass takes the ring from here, or the
+                    // end is lifted and this pass carries on from it. A quiesce ends the nap, and
+                    // the buffer goes at the top of the loop.
+                    if (session.passEnd.value === end) {
+                        worker.nap(HANDOFF_POLL)
+                        continue
+                    }
+                    held = null
+                    heldAt = null
+                    resumeFromUs = end.us
+                    waiting
+                } else {
+                    select<AudioBuffer?> {
+                        session.decodedAudio.onReceive { it }
+                        worker.onWake { null }
+                        onTimeout(WORKER_POLL) { null }
+                    }
+                }
+                if (buffer == null) {
+                    // Nothing waiting. If the session has said the stream is over and the handoff is
+                    // provably empty, push the DSP tail into the ring and answer. This worker owns the
+                    // pipeline, so it is the only place that may.
+                    val audio = session.audio
+                    if (session.audioLane != null && audio != null && session.audioEosRequested.value &&
+                        !session.audioTailFlushed.value &&
+                        session.audioInFlight.value == 0
+                    ) {
+                        audio.finishDecoded({ worker.quiesceRequested }, worker::nap)
+                        // Only after the tail is in the ring, so the terminal state cannot read this
+                        // as done while a quiesce abandoned the submit half way.
+                        if (!worker.quiesceRequested) session.audioTailFlushed.value = true
+                    }
+                    continue
+                }
+                var keep = false
+                try {
+                    if (buffer.generation != epoch) continue
+                    val audio = session.audio ?: continue
+                    // Read before the landing below is signalled. The actor ends the seek and clears the
+                    // boundary as soon as it sees the landing, and a trim that read it afterwards kept
+                    // the samples before the target (#292).
+                    val switchDiscard = session.audioSwitchDiscardBeforeUs.value
+                    // A buffer kept at a pass end that was lifted resumes where its written half ended.
+                    val discardBefore = maxOf(session.discardBeforeUs.value, switchDiscard, resumeFromUs)
+                    var interleaved = interleaver.interleave(buffer)
+                    var pts = buffer.pts
+                    var frames = buffer.frameCount
+                    // Sample-exact trim of the one buffer that straddles the seek target. The decode
+                    // side drops whole buffers that END before the target; this slices the leading
+                    // pre-target samples off the survivor, so a precise seek starts its sound AT the
+                    // target instead of up to one buffer early. Runs at most once per
+                    // seek, so the one copyOfRange is off any steady-state path.
+                    if (discardBefore != Long.MIN_VALUE && pts.micros < discardBefore && buffer.format.sampleRate > 0) {
+                        val skipFrames = ((discardBefore - pts.micros) * buffer.format.sampleRate / 1_000_000L)
+                            .coerceIn(0L, frames.toLong()).toInt()
+                        if (skipFrames > 0) {
+                            val channels = buffer.format.channels
+                            interleaved = interleaved.copyOfRange(skipFrames * channels, frames * channels)
+                            pts = Pts(pts.micros + buffer.format.durationOf(skipFrames).micros)
+                            frames -= skipFrames
+                        }
+                    }
+                    // The A-B loop's end, the mirror of the trim above (#467): the samples before it
+                    // are written, and the buffer is kept from it on, so the next pass's first
+                    // sample follows the last one before B.
+                    val end = session.passEnd.value?.takeIf { fedUntilUs <= it.us }
+                    if (end != null && buffer.format.sampleRate > 0) {
+                        val before = ((end.us - pts.micros) * buffer.format.sampleRate / 1_000_000L)
+                            .coerceIn(0L, frames.toLong()).toInt()
+                        if (before < frames) {
+                            keep = true
+                            held = buffer
+                            heldAt = end
+                            if (before > 0) interleaved = interleaved.copyOfRange(0, before * buffer.format.channels)
+                            frames = before
+                        }
+                    }
+                    if (frames == 0) {
+                        if (keep) end?.reached?.value = true
+                        continue
+                    }
+                    // The landing is the first sample that will be heard, so it is recorded after the trim.
+                    session.firstAudio.record(epoch, pts)
+                    session.landingArrived.trySend(Unit)
+                    // The trimmed block goes to the taps first, then to the device.
+                    deliverToTaps(Generation(session.audioGeneration.value), pts, interleaved, frames, buffer.format)
+                    // One call, no external timeout, no retry. The old shape cancelled submitDecoded
+                    // mid-buffer on a deadline and called it again with the same input, which replayed
+                    // samples the ring had already accepted and ran the stateful conversion twice
+                    // The abort callback bounds the wait instead: while the ring is full
+                    // the submit polls it, and a quiesce request abandons the unaccepted remainder,
+                    // which the seek's flush was about to discard anyway. The wait on a full ring is
+                    // the worker's nap, so the same request also ends that wait at once.
+                    audio.submitDecoded(pts, interleaved, frames, buffer.format, { worker.quiesceRequested }, worker::nap)
+                    fedUntilUs = maxOf(fedUntilUs, pts.micros + buffer.format.durationOf(frames).micros)
+                    // Only once the samples before the end are in the ring, because the handoff that
+                    // this answer starts parks this worker, and a park abandons what is unwritten.
+                    if (keep) end?.reached?.value = true
+                    if (switchDiscard != Long.MIN_VALUE) {
+                        session.audioSwitchDiscardBeforeUs.compareAndSet(switchDiscard, Long.MIN_VALUE)
+                    }
+                } finally {
+                    if (!keep) {
+                        buffer.close()
+                        // Lowered only here, after the buffer is finished with on every path including the
+                        // epoch skip above, so the count covers the conversion and not just the queue.
+                        session.audioInFlight.decrementAndGet()
+                    }
+                }
+            }
+        } finally {
+            held?.let { kept ->
+                kept.close()
                 session.audioInFlight.decrementAndGet()
             }
         }
@@ -10536,6 +10803,26 @@ internal class PlaybackCore(
 
         /** Set by the feeder once the DSP tail is in the ring. The terminal state waits for it. */
         val audioTailFlushed = atomic(false)
+
+        /**
+         * Where this turn of the item stops, so that the next pass of an A-B loop follows its last
+         * sample before B in the ring (#467), or null. Given and lifted by the actor; the feeder
+         * and the video lane hold everything at or after it. See [PassEnd].
+         */
+        val passEnd = atomic<PassEnd?>(null)
+
+        /**
+         * Whether this turn of an A-B loop was given its end, or none, and the B it was given for.
+         * Actor-owned, but for a pass, whose build gives them before it is handed over.
+         */
+        var turnDecided: Boolean = false
+        var turnEndUs: Long? = null
+
+        /**
+         * Where to seek once the ring was taken back from an A-B loop's next pass, which loses the
+         * sound the ring held before B, or [NO_POSITION]. Actor-owned; a seek clears it.
+         */
+        var resumeAfterTakeBackUs: Long = NO_POSITION
 
         val decodedVideoFrames = atomic(0L)
 
@@ -10875,6 +11162,13 @@ internal class PlaybackCore(
 
         /** The least of the current item the ring must hold while the handoff waits for the next one. */
         val HANDOFF_MARGIN: Duration = 40.milliseconds
+
+        /**
+         * The least time before B that a turn of an A-B loop needs for its next pass to open,
+         * unless the section is shorter (#467). A turn that starts nearer B goes back by the seek.
+         */
+        val MIN_PASS_LEAD: Duration = 1.seconds
+
 
         /** How far playback runs past an estimated length before the snapshot's length follows it (#422). */
         const val DURATION_FOLLOW_STEP_US: Long = 1_000_000L

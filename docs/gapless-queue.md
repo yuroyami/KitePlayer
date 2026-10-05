@@ -52,11 +52,13 @@ queue playback a repeat publishes none. It is null at all other times.
 The player preloads the next item when all of these are true:
 
 - The current item plays or is paused, and no seek is in progress.
-- The position of the current item is within `preloadNext` of its duration.
-- A next item exists, or the current item repeats. No A-B loop is set, and the sleep timer is not
-  `SleepTimer.EndOfItem`.
+- The position of the current item is within `preloadNext` of its duration, or of B when an A-B
+  loop's B is inside the item.
+- A next item exists, or the current item repeats, which an armed A-B loop makes it do. The sleep
+  timer is not `SleepTimer.EndOfItem`.
 - The current item is seekable, its duration is known, and it is not a still image.
-- The current item still has decoded sound to write into the ring.
+- The current item still has decoded sound to write into the ring. Under an A-B loop whose B is
+  inside the item, the turn that plays was given its end at B instead, as below.
 
 The preload opens the source and the decoders of the next item on a coroutine that does not block
 the session actor. It creates no audio device. It aligns the queues and the decoders of the item
@@ -159,8 +161,46 @@ because the preload carries none of its external subtitle files.
 When the next pass cannot follow this way, the repeat falls back to the old path: the item ends,
 the status goes through `Ended` and `Buffering`, and the player seeks back to the start. It warns
 `GaplessFallback` for the reasons below, with the current item's own queue position, or -1 outside
-queue playback. A source that cannot seek repeats in neither way, and an A-B loop still seeks back
-to A.
+queue playback. A source that cannot seek repeats in neither way.
+
+### A-B loop
+
+An armed A-B loop owns the end of the item, as it did when it sought back: its next pass starts at
+A, and follows B when B is inside the item, or else the end of the item. The next pass takes the
+road of a repeat's, with these differences (#467):
+
+- The preload opens the item at A as a precise seek lands there. The source moves to the keyframe
+  at or before A, the video lane of the pass drops the pictures before A, and its feeder cuts the
+  sound at A to the sample.
+- Each turn of the loop is told where it stops before its first sample is written: at a seek, when
+  its pass opens, and when the loop is armed, moved or cleared. The turn that plays stops at B. Its
+  feeder writes the sound before B to the sample and holds the rest of the buffer that crosses B
+  unwritten, and its video lane holds the pictures at or after B, so nothing from past B is heard
+  or shown. Once the sound before B is all in the ring, the next pass takes the ring, and its first
+  sample at A follows the last one before B. A section shorter than the ring stops at B the same
+  way. The swap at such a B fires nothing, as the seek back to A fired nothing; at the end of the
+  item `Ended` fires, as before.
+- The preload starts when the turn that plays is within `preloadNext` of B. A turn that starts too
+  near B for a pass to open in time, less than a second before it or less than the whole section
+  when that is shorter, is given no end: it plays on past B and goes back by the seek, as every
+  turn did before passes, and the turns after it start at A with the whole section ahead of them.
+  So a seek that lands near B, or a B set just ahead of the position, costs that one turn. Such a
+  turn opens no pass, because the seek back to A drops every pass.
+- A turn whose sound already reached past B when it was given its end, which only a B set within a
+  ring's depth ahead of the position can cause, goes back by the seek the same way.
+- No turn is given an end when no pass can follow it: with the gapless handoff off, with the sleep
+  timer at `SleepTimer.EndOfItem`, after a fallback, and for a source that cannot seek. The turns
+  ask the same rule the preload follows, so none waits at B for a pass that never opens. Each turn
+  then goes back by the seek, and a source that cannot seek plays on past B.
+- Clearing the loop or a fallback lifts the end of the turn that plays, which carries on past B
+  from the sound its feeder held, with nothing lost. Moving B gives the turn the new B as its end in
+  the same way, unless the new B is too near or already behind its sound. When the next pass had
+  already taken the ring, the ring is cleared with it, and the turn carries on from where its sound
+  was heard, by a precise seek; its end stands until that seek lands, so nothing from past B is
+  heard or shown before it. An audio track chosen while the turn waits at B drops the pass, and the
+  turn's next pass opens with the new track.
+
+A fallback warns as a repeat's does, and the turns go back by the seek while the item stays open.
 
 ## Fallbacks
 
@@ -196,7 +236,9 @@ Every action that drops a preload also cancels a handoff that has started:
 2. The device stops and the ring is cleared. The current item loses at most one ring depth of its
    end.
 3. The preload is released.
-4. The action runs against the current item, which is at its end.
+4. The action runs against the current item, which is at its end. When the next pass was an A-B
+   loop's at a B inside the item, the current pass is not at its end: it carries on from where its
+   sound was heard, by a precise seek.
 
 ## How the tests check it
 
@@ -217,3 +259,16 @@ Every action that drops a preload also cancels a handoff that has started:
   sample of each pass is heard and the last pass ends as an item ends. The chosen audio track, a
   chosen container subtitle over the automatic one and an external subtitle file read once all
   carry on across the join.
+- The same item loops from 1 s to 3 s for 10 seconds. The device sees one open and one start and
+  nothing else, the status never leaves `Playing`, the position wraps four times and `Ended` never
+  fires. With the loop cleared during a pass, the device has heard each section once, cut at A and
+  B to within a few samples of what a precise seek to A plays. A loop from 1 s with no B, or with
+  a B past the end, wraps at the end of the item and fires `Ended`. With video, no picture at or
+  after B shows, and none before A after a wrap. Each of these has a test of its own: a seek
+  inside the section, a seek past B, a section of a quarter second, a B between two decoded
+  buffers, a seek inside a section shorter than the ring, a section set behind the sound already
+  written, a turn that starts too near B, a pass still opening when the sound reaches B, the loop
+  cleared while the sound waits at B and after the next pass took the ring, an audio track chosen
+  at B, the player's own seek while the sound waits at B, a B moved during a pass, the end-of-item
+  sleep timer, the gapless handoff turned off, and a loop armed before a source that cannot seek
+  opens.

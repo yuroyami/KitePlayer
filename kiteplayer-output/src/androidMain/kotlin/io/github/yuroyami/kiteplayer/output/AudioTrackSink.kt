@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.output
 
+import android.content.Context
+import android.media.AudioManager
 import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.MonotonicClock
@@ -622,8 +624,22 @@ public class AudioTrackSink internal constructor(
     }
 }
 
-/** Creates [AudioTrackSink]s for the engine. One sink per playback session. */
-public class AudioTrackSinkFactory() : AudioSinkFactory {
+/**
+ * Creates [AudioTrackSink]s for the engine. One sink per playback session.
+ *
+ * With a [context], it can also say how many channels the route media plays through carries, which
+ * [io.github.yuroyami.kiteplayer.AudioConfig.matchOutputChannels] needs (#466). Without one it cannot,
+ * because Android answers that only through a `Context`.
+ */
+public class AudioTrackSinkFactory(context: Context?) : AudioSinkFactory {
+    public constructor() : this(null)
+
+    private val audioManager: AudioManager? =
+        context?.applicationContext?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
     override suspend fun create(): AudioSink = AudioTrackSink()
     override val name: String get() = "AudioTrack"
+
+    override fun outputChannelCount(): Int? =
+        audioManager?.let { runCatching { mediaRouteChannelCount(it) }.getOrNull() }
 }

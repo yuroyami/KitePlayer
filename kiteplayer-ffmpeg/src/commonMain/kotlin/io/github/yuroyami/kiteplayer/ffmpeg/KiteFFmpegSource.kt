@@ -594,6 +594,7 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: 
         isDefault = disposition.default,
         isForced = disposition.forced,
         isAccessibility = disposition.hearingImpaired || disposition.visualImpaired,
+        isCommentary = disposition.comment,
         bitrate = bitrateBps,
         // Verbatim. `language` and `title` above are parsed readings of two of these keys; an
         // application that wants the rest, or wants the raw form, had no way to reach them.

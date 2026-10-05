@@ -66,6 +66,7 @@ public final class io/github/yuroyami/kiteplayer/output/DesktopAudioSinkFactory 
 	public fun <init> ()V
 	public fun create (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getName ()Ljava/lang/String;
+	public fun outputChannelCount ()Ljava/lang/Integer;
 }
 
 public final class io/github/yuroyami/kiteplayer/output/DesktopMonotonicClock : io/github/yuroyami/kiteplayer/MonotonicClock {

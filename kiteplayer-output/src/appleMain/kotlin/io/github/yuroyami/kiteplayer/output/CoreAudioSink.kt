@@ -698,4 +698,7 @@ public class CoreAudioSinkFactory private constructor(
 
     override val name: String = "CoreAudio"
     override suspend fun create(): AudioSink = CoreAudioSink(policy, clock, device)
+
+    /** The current route's count on iOS (#466); macOS does not say yet. */
+    override fun outputChannelCount(): Int? = runCatching { platformAppleOutputDevices().outputChannelCount() }.getOrNull()
 }

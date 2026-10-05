@@ -3718,7 +3718,15 @@ internal class PlaybackCore(
     ): PlayerStreamInfo? = pickSubtitleStream(streams, audio, config.subtitles)
 
     private fun pickAudio(streams: List<PlayerStreamInfo>): PlayerStreamInfo? =
-        pickAudioStream(streams, config.audio.preferredLanguages)
+        pickAudioStream(
+            streams,
+            config.audio.preferredLanguages,
+            outputChannels = if (config.audio.matchOutputChannels) {
+                runCatching { output.audioSink.outputChannelCount() }.getOrNull()?.takeIf { it > 0 }
+            } else {
+                null
+            },
+        )
 
     /**
      * Fills the queues with the device stopped, until every selected stream is at least Ready.
@@ -11741,9 +11749,43 @@ private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
  * still decides inside each rank, and an accessibility track remains reachable when it is the only
  * candidate. A language preference still outranks everything, ordinary-first within the language.
  */
-internal fun pickAudioStream(streams: List<PlayerStreamInfo>, preferredLanguages: List<String>): PlayerStreamInfo? {
+internal fun pickAudioStream(
+    streams: List<PlayerStreamInfo>,
+    preferredLanguages: List<String>,
+    outputChannels: Int? = null,
+): PlayerStreamInfo? {
     val audio = streams.filter { it.kind == TrackKind.Audio }
     if (audio.isEmpty()) return null
+    val chosen = pickAudioByLanguage(audio, preferredLanguages)
+    return if (outputChannels == null) chosen else closerMixOf(chosen, audio, outputChannels)
+}
+
+/**
+ * [chosen], or a track that is the same language and accessibility as it and whose channel count is
+ * closer to [outputChannels] (#466). The first closest in container order wins, and [chosen] wins any
+ * tie, so a file with one mix per language plays as before. A commentary never stands in for the
+ * main mix, and a track that does not say how many channels it has is never one.
+ */
+private fun closerMixOf(chosen: PlayerStreamInfo, audio: List<PlayerStreamInfo>, outputChannels: Int): PlayerStreamInfo {
+    val chosenChannels = chosen.channels ?: return chosen
+    fun distance(channels: Int) = kotlin.math.abs(channels - outputChannels)
+    fun isCommentary(stream: PlayerStreamInfo) =
+        stream.isCommentary || stream.title?.contains("comment", ignoreCase = true) == true
+    if (isCommentary(chosen)) return chosen
+    val sameLanguage: (PlayerStreamInfo) -> Boolean = if (chosen.language.isNullOrBlank()) {
+        { it.language.isNullOrBlank() }
+    } else {
+        { sameLanguage(it.language, chosen.language) }
+    }
+    return audio
+        .filter { it !== chosen && it.isAccessibility == chosen.isAccessibility && !isCommentary(it) && sameLanguage(it) }
+        .mapNotNull { stream -> stream.channels?.let { stream to distance(it) } }
+        .filter { it.second < distance(chosenChannels) }
+        .minByOrNull { it.second }
+        ?.first ?: chosen
+}
+
+private fun pickAudioByLanguage(audio: List<PlayerStreamInfo>, preferredLanguages: List<String>): PlayerStreamInfo {
     val ranked = audio.sortedBy { it.isAccessibility }
     // Codes are compared as languages, not as spellings, so `ja` finds a `jpn` track (#435). The
     // first preference that any track matches decides; ordinary tracks still come first inside it,

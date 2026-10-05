@@ -126,6 +126,16 @@ public interface AudioSinkFactory {
     public suspend fun create(): AudioSink
     /** For logs and diagnostics. */
     public val name: String
+
+    /**
+     * How many channels the output the next sink would play through carries, or null when the
+     * platform does not say (#466). Two for headphones, a phone speaker or a stereo device, six
+     * for a 5.1 receiver. This is the route's own count, not what a sink would accept: a sink may
+     * take six channels and fold them to two itself. The engine asks at an open when
+     * [io.github.yuroyami.kiteplayer.AudioConfig.matchOutputChannels] is on, so it must answer
+     * quickly and never throw. Null by default.
+     */
+    public fun outputChannelCount(): Int? = null
 }
 
 /**

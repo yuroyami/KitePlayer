@@ -143,6 +143,16 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   back the focus an item before it held. On iOS the audio session is active from the open but
   mixes with other apps until something first plays, so opening a paused video no longer stops
   the Music app; the first play does. An item with no audio track already opened no device there.
+- `AudioConfig.matchOutputChannels` chooses between two mixes of one language by the speakers
+  that play them (#466). Off by default. When it is on, the track the usual rules choose gives way
+  to one in the same language and of the same accessibility whose channel count is closer to the
+  output's, so headphones get a film's stereo mix rather than its 5.1 folded down, and a 5.1
+  receiver gets the 5.1. A commentary never takes the main mix's place. The output's count comes
+  from the new `AudioSinkFactory.outputChannelCount`, null by default: iOS reads the route, the
+  desktop the widest line its mixer opens, the web says stereo, and Android reads the media route
+  once its backend has a `Context`, through `AndroidOutputBackend.withContext` or
+  `AudioTrackSinkFactory(context)`. `PlayerStreamInfo.isCommentary` carries the container's
+  commentary flag.
 - `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
   page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third

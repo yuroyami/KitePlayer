@@ -219,6 +219,11 @@ public data class PlayerStreamInfo(
      * composed with its RPU, so a decoder whose frames do not carry the RPU cannot play the stream.
      */
     val dolbyVision: DolbyVisionInfo? = null,
+    /**
+     * The container marks this stream as commentary, such as a director talking over the film.
+     * Never chosen in place of the main mix for its channel count (#466).
+     */
+    val isCommentary: Boolean = false,
 ) {
     /**
      * By CONTENT, including [codecExtradata].
@@ -255,6 +260,7 @@ public data class PlayerStreamInfo(
             hdr == other.hdr &&
             mirrored == other.mirrored &&
             dolbyVision == other.dolbyVision &&
+            isCommentary == other.isCommentary &&
             (codecExtradata?.contentEquals(other.codecExtradata) ?: (other.codecExtradata == null))
     }
 
@@ -283,6 +289,7 @@ public data class PlayerStreamInfo(
         result = 31 * result + (hdr?.hashCode() ?: 0)
         result = 31 * result + mirrored.hashCode()
         result = 31 * result + (dolbyVision?.hashCode() ?: 0)
+        result = 31 * result + isCommentary.hashCode()
         result = 31 * result + (codecExtradata?.contentHashCode() ?: 0)
         return result
     }

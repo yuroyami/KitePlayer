@@ -42,6 +42,9 @@ internal interface AppleOutputDevices {
      * system already plays through, or null when no such device exists now.
      */
     fun deviceFor(id: String): UInt?
+
+    /** How many channels the current output route carries, or null when this platform does not say (#466). */
+    fun outputChannelCount(): Int? = null
 }
 
 /** The CoreAudio answers on macOS, and the empty ones on iOS. */

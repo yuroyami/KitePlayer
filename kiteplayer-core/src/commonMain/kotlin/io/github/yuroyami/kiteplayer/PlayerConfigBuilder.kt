@@ -171,6 +171,9 @@ public class AudioConfigBuilder(from: AudioConfig = AudioConfig()) {
     /** See [AudioConfig.upmix]. */
     public var upmix: UpmixMode = from.upmix
 
+    /** See [AudioConfig.matchOutputChannels]. */
+    public var matchOutputChannels: Boolean = from.matchOutputChannels
+
     /** The [AudioConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): AudioConfig = AudioConfig(
         preferredLanguages = preferredLanguages,
@@ -183,6 +186,7 @@ public class AudioConfigBuilder(from: AudioConfig = AudioConfig()) {
         replayGainFallbackDb = replayGainFallbackDb,
         resampler = resampler,
         upmix = upmix,
+        matchOutputChannels = matchOutputChannels,
     )
 }
 

@@ -339,6 +339,22 @@ public data class AudioConfig(
      * default, because widening a mix is a matter of taste. See [UpmixMode] for the matrix.
      */
     val upmix: UpmixMode = UpmixMode.Off,
+    /**
+     * Choose between two mixes of one language by the speakers that play them (#466). Off by default.
+     *
+     * Films often carry a language twice, as a 5.1 mix and a 2.0 mix the studio made for stereo.
+     * On headphones or a phone the stereo mix is the better choice, because its dialogue level was
+     * set by ear, while a fold-down of the 5.1 often leaves voices quiet under the music. When this
+     * is on, the track the usual rules choose gives way to one in the same language, of the same
+     * accessibility, whose channel count is closer to the output's: stereo on two speakers and 5.1
+     * on six. A commentary track never takes the main mix's place. Off by default because it can
+     * overrule the track a file flags as default.
+     *
+     * The output's channel count is what [io.github.yuroyami.kiteplayer.spi.AudioSinkFactory.outputChannelCount]
+     * answers. Where it answers null, which on Android is a backend built without a `Context`,
+     * nothing changes.
+     */
+    val matchOutputChannels: Boolean = false,
 ) {
     init {
         require(volumeCeiling.isFinite() && volumeCeiling >= 1f && volumeCeiling <= GAIN_MAX) {

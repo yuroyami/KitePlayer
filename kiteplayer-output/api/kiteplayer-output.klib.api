@@ -74,6 +74,7 @@ final class io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory : io.githu
     final val name // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.name|{}name[0]
         final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.name.<get-name>|<get-name>(){}[0]
 
+    final fun outputChannelCount(): kotlin/Int? // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.outputChannelCount|outputChannelCount(){}[0]
     final suspend fun create(): io.github.yuroyami.kiteplayer.spi/AudioSink // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.create|create(){}[0]
 }
 

@@ -1646,9 +1646,14 @@ internal class ScriptedOutput(
     /** Thrown by every raster call while set, after the call is recorded, as a broken font engine would. */
     var rasterizeFailure: Exception? = null
 
+    /** What the scripted output says it carries, and how often the engine asked (#466). */
+    var outputChannels: Int? = null
+    var outputChannelQuestions: Int = 0
+
     override val audioSink: AudioSinkFactory = object : AudioSinkFactory {
         override val name: String = "scripted"
         override suspend fun create(): AudioSink = sink
+        override fun outputChannelCount(): Int? = outputChannels.also { outputChannelQuestions++ }
     }
 
     /** One 1x1 image per cue: enough to prove the raster call and count what was drawn. */

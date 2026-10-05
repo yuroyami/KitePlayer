@@ -99,6 +99,9 @@ internal object WebAudioSinkFactory : AudioSinkFactory {
         return WebAudioSink(device, CoroutineScope(Dispatchers.Default), WebMonotonicClock)
     }
 
+    /** Stereo: the node is built with [DEFAULT_CHANNELS] before any media is open (#466). */
+    override fun outputChannelCount(): Int = DEFAULT_CHANNELS
+
     /**
      * Stereo, asked for before any media is open.
      *

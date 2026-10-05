@@ -11,6 +11,7 @@ import io.github.yuroyami.kiteplayer.subtitle.AssParser
 import io.github.yuroyami.kiteplayer.subtitle.AssTrackParser
 import io.github.yuroyami.kiteplayer.subtitle.SubRipParser
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
+import io.github.yuroyami.kiteplayer.subtitle.TeletextPageReader
 import io.github.yuroyami.kiteplayer.subtitle.WebVttParser
 import io.github.yuroyami.kiteplayer.subtitle.WebVttTrackParser
 
@@ -45,6 +46,8 @@ internal class KiteFFmpegSubtitleDecoderFactory : SubtitleDecoderFactory {
         "ass", "ssa" -> KiteFFmpegAssSubtitleDecoder(
             AssParser.trackParser(stream.codecExtradata?.decodeToString() ?: ""),
         )
+        // Each page track names its page in its two bytes of the stream's descriptor (#510).
+        TELETEXT -> KiteFFmpegTeletextDecoder(TeletextPageReader(teletextPageOf(stream), stream.language))
         else -> null
     }
 }

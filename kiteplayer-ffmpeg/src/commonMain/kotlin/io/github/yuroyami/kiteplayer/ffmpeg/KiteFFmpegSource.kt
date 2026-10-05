@@ -285,11 +285,37 @@ public class KiteFFmpegSource internal constructor(
             "no selectable stream at ${unknown.sorted()}; this source offers " +
                 "${byIndex.keys.sorted()}"
         }
-        val selected = indices.map { byIndex.getValue(it) }
+        // Several page tracks of one teletext stream are one stream to the reader (#510).
+        val selected = indices.map { byIndex.getValue(it) }.distinctBy { it.index }
         require(selected.isNotEmpty()) { "selectStreams needs at least one stream" }
         val open = reader
         if (open == null) reader = source.openPacketReader(selected) else open.reselect(selected)
         readStreams = selected
+        fanOut = indices.groupBy { byIndex.getValue(it).index }
+            .filter { (stream, tracks) -> tracks != listOf(stream) }
+            .mapValues { (_, tracks) -> tracks.sorted().toIntArray() }
+        dropCopies { it in indices }
+    }
+
+    /**
+     * The tracks each read stream's packets go to, for a stream whose packets do not simply go to
+     * its own index, which is a teletext stream with a page chosen that is not its first, or with
+     * more than one page chosen (#510).
+     */
+    private var fanOut: Map<Int, IntArray> = emptyMap()
+
+    /** Copies of the packet last read, still owed to the further pages [fanOut] chose from its stream. */
+    private val copies = ArrayDeque<KiteFFmpegPacket>()
+
+    /** Closes every owed copy except those for a track [keep] answers true for. */
+    private fun dropCopies(keep: (Int) -> Boolean = { false }) {
+        val iterator = copies.iterator()
+        while (iterator.hasNext()) {
+            val copy = iterator.next()
+            if (keep(copy.streamIndex)) continue
+            iterator.remove()
+            copy.close()
+        }
     }
 
     override val recordingPath: String? get() = recorder.path
@@ -319,6 +345,7 @@ public class KiteFFmpegSource internal constructor(
 
     override suspend fun readPacket(): PlayerPacket? {
         val reader = reader ?: error("selectStreams must be called before readPacket")
+        copies.removeFirstOrNull()?.let { return it }
         val packet = reader.read() ?: run {
             // FFmpeg skips what it cannot read, so a stream whose server stopped answering ends here too.
             hls?.failureAtEnd()?.let { throw it }
@@ -326,14 +353,18 @@ public class KiteFFmpegSource internal constructor(
         }
         recorder.copy(packet)
         absorbLayout(packet)
+        val tracks = fanOut[packet.streamIndex]
+        if (tracks != null) for (track in 1 until tracks.size) copies.addLast(KiteFFmpegPacket(packet.copy(), mapper, index = tracks[track]))
+        val track = tracks?.first()
         val before = announced
         val after = layout
-        if (after === before) return KiteFFmpegPacket(packet, mapper)
+        if (after === before) return KiteFFmpegPacket(packet, mapper, index = track)
         announced = after
         // Only what the engine sees: a change to a stream it is never shown is no change to it.
         return KiteFFmpegPacket(
             packet,
             mapper,
+            index = track,
             newStreams = after.streams.takeIf { it != before.streams },
             newPrograms = after.programs.takeIf { it != before.programs },
         )
@@ -355,6 +386,7 @@ public class KiteFFmpegSource internal constructor(
 
     override suspend fun seekToKeyframe(target: Pts): Pts? {
         val reader = reader ?: error("selectStreams must be called before seeking")
+        dropCopies()
         recorder.endForSeek()
         // [target] needs no conversion. KiteFFmpeg's seek already speaks the content-relative
         // timeline, and every timestamp this class produces is now on that same timeline.
@@ -377,6 +409,7 @@ public class KiteFFmpegSource internal constructor(
         val reader = reader ?: error("selectStreams must be called before seeking")
         val picture = readStreams.firstOrNull { it.type == MediaType.Video && !it.disposition.attachedPicture }
             ?: return seekToKeyframe(target)
+        dropCopies()
         recorder.endForSeek()
         val after = keyframeAfter(reader, picture.index, target.micros)
         val aim = when {
@@ -439,6 +472,7 @@ public class KiteFFmpegSource internal constructor(
     override fun close() {
         closeInOrder(
             recorder::close,
+            { dropCopies() },
             { reader?.close() },
             { reader = null },
             source::close,
@@ -796,7 +830,8 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: 
 
 /**
  * The source's selectable streams as the engine sees them, keyed back to KiteFFmpeg's own entries,
- * and the programmes over them.
+ * and the programmes over them. A teletext stream is one entry for each subtitle page it carries,
+ * all keyed back to the one stream (#510).
  */
 private class Layout(
     val streams: List<PlayerStreamInfo>,
@@ -805,16 +840,18 @@ private class Layout(
 ) {
     companion object {
         fun of(raw: List<StreamInfo>, rawPrograms: List<Program>, mapper: TimestampMapper, renditionNames: Boolean): Layout {
-            val selectable = raw.mapNotNull { stream ->
-                stream.toPlayerStream(mapper, renditionNames)?.let { exposed -> stream to exposed }
+            val selectable = raw.flatMap { stream ->
+                val exposed = stream.toPlayerStream(mapper, renditionNames) ?: return@flatMap emptyList()
+                if (exposed.codec == TELETEXT) teletextPages(exposed).map { stream to it } else listOf(stream to exposed)
             }
-            val byIndex = selectable.associate { (stream, _) -> stream.index to stream }
+            val byIndex = selectable.associate { (stream, exposed) -> exposed.index to stream }
+            val tracksOf = selectable.groupBy({ (stream, _) -> stream.index }, { (_, exposed) -> exposed.index })
             val programs = rawPrograms
                 .mapNotNull { program ->
                     val number = program.number ?: return@mapNotNull null
                     MediaProgram(
                         number = number,
-                        tracks = program.streamIndexes.filter { it in byIndex }.map(::TrackId),
+                        tracks = program.streamIndexes.flatMap { tracksOf[it].orEmpty() }.map(::TrackId),
                         name = program.serviceName,
                         provider = program.serviceProvider,
                         metadata = program.metadata,
@@ -831,8 +868,10 @@ internal class KiteFFmpegPacket(
     private val mapper: TimestampMapper,
     override val newStreams: List<PlayerStreamInfo>? = null,
     override val newPrograms: List<MediaProgram>? = null,
+    /** The track this packet goes to when that is not its stream, as for a teletext page (#510). */
+    private val index: Int? = null,
 ) : PlayerPacket {
-    override val streamIndex: Int get() = native.streamIndex
+    override val streamIndex: Int get() = index ?: native.streamIndex
     override val pts: Pts? get() = mapper.mapTimestamp(native.ptsMicros)
 
     /**
@@ -848,7 +887,7 @@ internal class KiteFFmpegPacket(
     override val sizeBytes: Int get() = native.sizeBytes
     override fun copyBytes(): ByteArray = native.copyBytes()
     override val bytePosition: Long? get() = native.bytePosition.takeIf { it >= 0 }
-    internal fun copyForReplay(): KiteFFmpegPacket = KiteFFmpegPacket(native.copy(), mapper)
+    internal fun copyForReplay(): KiteFFmpegPacket = KiteFFmpegPacket(native.copy(), mapper, index = index)
     override fun close() = native.close()
 }
 

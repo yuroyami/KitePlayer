@@ -88,7 +88,8 @@ public interface VideoFrame : AutoCloseable {
      * rectangle, so a hardware frame is cropped with no copy. The crop comes first, before the
      * mirror and the turn, and [visibleSize] is what the fit, the zoom and the overlay layout use.
      * A decoder never hands out a crop that does not [fit][PictureCrop.fits] its frame: it drops
-     * such a crop with [io.github.yuroyami.kiteplayer.PlaybackWarning.CropIgnored].
+     * such a crop, and the engine reports
+     * [io.github.yuroyami.kiteplayer.PlaybackWarning.CropIgnored].
      */
     public val crop: PictureCrop? get() = null
 

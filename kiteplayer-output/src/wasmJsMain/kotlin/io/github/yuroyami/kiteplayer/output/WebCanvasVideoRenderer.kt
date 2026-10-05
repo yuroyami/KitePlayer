@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.VideoTransform
@@ -85,6 +86,7 @@ public class WebCanvasVideoRenderer(
     private var retainedSize: VideoSize? = null
     private var retainedRotation: Int = 0
     private var retainedMirrored: Boolean = false
+    private var retainedCrop: PictureCrop? = null
 
     /** Diagnostics, in the same three counts the Android renderer keeps. */
     public var presentedFrames: Long = 0
@@ -149,6 +151,7 @@ public class WebCanvasVideoRenderer(
                 mode = scaleMode,
                 transform = transform,
                 mirrored = frame.mirrored,
+                crop = frame.crop,
             )
             if (layout == null) {
                 failedFrames++
@@ -158,6 +161,7 @@ public class WebCanvasVideoRenderer(
             retainedSize = size
             retainedRotation = frame.rotationDegrees
             retainedMirrored = frame.mirrored
+            retainedCrop = frame.crop
             drawStage(s, layout)
             drawOverlay(s)
             presentedFrames++
@@ -168,6 +172,10 @@ public class WebCanvasVideoRenderer(
     private fun drawStage(s: JsAny, layout: FrameLayout) {
         webDrawStage(
             state = s,
+            sourceLeft = layout.sourceLeft,
+            sourceTop = layout.sourceTop,
+            sourceWidth = layout.sourceWidth,
+            sourceHeight = layout.sourceHeight,
             drawLeft = layout.drawLeft,
             drawTop = layout.drawTop,
             drawWidth = layout.drawWidth,
@@ -196,6 +204,7 @@ public class WebCanvasVideoRenderer(
             mode = scaleMode,
             transform = transform,
             mirrored = retainedMirrored,
+            crop = retainedCrop,
         ) ?: return
         drawStage(s, layout)
         drawOverlay(s)
@@ -359,21 +368,26 @@ private external fun webCommitStage(state: JsAny)
  * The turn is applied about the layout's centre and the picture drawn into the pre-turn rectangle,
  * which is exactly what the Android renderer does with the same [FrameLayout], so the two cannot
  * disagree about where a rotated frame lands. A mirror is set after the turn, so it applies to the
- * picture first.
+ * picture first. Only the layout's source rectangle of the stage is drawn, which is how a crop
+ * comes off before both.
  */
 @JsFun(
-    """(s, dl, dt, dw, dh, cx, cy, rot, mirror) => {
+    """(s, sl, st, sw, sh, dl, dt, dw, dh, cx, cy, rot, mirror) => {
       const g = s.ctx, c = s.canvas;
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.clearRect(0, 0, c.width, c.height);
       if (rot !== 0) { g.translate(cx, cy); g.rotate(rot * Math.PI / 180); g.translate(-cx, -cy); }
       if (mirror) { g.translate(cx, cy); g.scale(-1, 1); g.translate(-cx, -cy); }
-      g.drawImage(s.stage, dl, dt, dw, dh);
+      g.drawImage(s.stage, sl, st, sw, sh, dl, dt, dw, dh);
       g.setTransform(1, 0, 0, 1, 0, 0);
     }""",
 )
 private external fun webDrawStage(
     state: JsAny,
+    sourceLeft: Int,
+    sourceTop: Int,
+    sourceWidth: Int,
+    sourceHeight: Int,
     drawLeft: Float,
     drawTop: Float,
     drawWidth: Float,

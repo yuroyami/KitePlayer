@@ -149,6 +149,7 @@ private class TestFrame(
     parDen: Int = 1,
     val onClose: (TestFrame) -> Unit = {},
     override val mirrored: Boolean = false,
+    override val crop: io.github.yuroyami.kiteplayer.PictureCrop? = null,
 ) : VideoFrame {
     override val pts: Pts = Pts(0)
     override val duration: Pts? = null
@@ -327,6 +328,29 @@ class AndroidSurfaceVideoRendererTest {
         }
         val layouts = synchronized(target.canvases) { target.canvases.flatMap { it.drawnLayouts } }
         assertEquals(listOf(90 to true, 0 to false), layouts.map { it.rotationDegrees to it.mirrored })
+    }
+
+    @Test
+    fun `a cropped frame is drawn from the part its crop leaves and the view hears that shape`() = runBlocking {
+        val target = FakeTarget(canvasWidth = 16, canvasHeight = 9)
+        val heard = mutableListOf<Triple<VideoSize, Int, io.github.yuroyami.kiteplayer.PictureCrop?>>()
+        val r = AndroidSurfaceVideoRenderer(
+            convert = exactConverter(),
+            target = target,
+            geometryConsumer = { size, turn, crop -> synchronized(heard) { heard += Triple(size, turn, crop) } },
+        )
+        try {
+            // 16 by 10 stored with one padding row at the bottom: 16 by 9, which fills the canvas.
+            assertTrue(r.present(TestFrame(width = 16, height = 10, crop = io.github.yuroyami.kiteplayer.PictureCrop(bottom = 1)), 0))
+            awaitPresented(r, 1)
+        } finally {
+            r.close()
+        }
+        val layout = synchronized(target.canvases) { target.canvases.flatMap { it.drawnLayouts } }.single()
+        assertEquals(listOf(0, 0, 16, 9), listOf(layout.left, layout.top, layout.right, layout.bottom))
+        assertEquals(listOf(0, 0, 16, 9), listOf(layout.sourceLeft, layout.sourceTop, layout.sourceRight, layout.sourceBottom))
+        // The renderer cuts the crop itself, so the view must not cut it again.
+        assertEquals(listOf(Triple(VideoSize(16, 9), 0, null)), synchronized(heard) { heard.toList() })
     }
 
     @Test

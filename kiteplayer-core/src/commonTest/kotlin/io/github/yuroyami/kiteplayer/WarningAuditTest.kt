@@ -164,10 +164,8 @@ class WarningAuditTest {
                 "BT.2020 constant luminance since 2026-08-25 and for ICtCp since 2026-09-23",
         )
         is PlaybackWarning.CropIgnored -> listOf(
-            "KiteFFmpegSource's video decoder in :kiteplayer-ffmpeg, once per stream, when the " +
-                "container's crop does not fit a decoded frame",
-            "MediaCodecVideoDecoder in :kiteplayer-output, once per stream, when the container's " +
-                "crop does not fit the codec's output",
+            "PlaybackCore.noteUnfittedCrop, once per open session, when the video stream's crop " +
+                "leaves nothing of a decoded frame, whichever decoder made it",
         )
         // DELIBERATELY NEVER EMITTED. Deprecated 2026-08-25: it conflated a true
         // BT.2020 CL claim with an HDR claim that was false on every built-in display path. Kept

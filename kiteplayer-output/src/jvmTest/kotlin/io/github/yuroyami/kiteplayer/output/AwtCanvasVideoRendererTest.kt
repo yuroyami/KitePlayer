@@ -33,6 +33,7 @@ class AwtCanvasVideoRendererTest {
         override val size: VideoSize = VideoSize(64, 32),
         override val rotationDegrees: Int = 0,
         private val color: ColorSpaceInfo = ColorSpaceInfo(),
+        override val crop: io.github.yuroyami.kiteplayer.PictureCrop? = null,
     ) : VideoFrame {
         var closes = 0
             private set
@@ -174,6 +175,19 @@ class AwtCanvasVideoRendererTest {
         r.setCanvas(java.awt.Canvas())
         r.present(CountingFrame(size = VideoSize(1920, 1080), rotationDegrees = 90), 0L)
         assertEquals(VideoSize(1920, 1080) to 90, reported)
+    }
+
+    @Test
+    fun `a cropped frame reports the shape of what its crop leaves`() = runTest {
+        var reported: Pair<VideoSize, Int>? = null
+        val r = AwtCanvasVideoRenderer(
+            painter = { _, _, _, _ -> true },
+            onVideoGeometry = { size, rotation -> reported = size to rotation },
+        )
+        r.setCanvas(java.awt.Canvas())
+        val crop = io.github.yuroyami.kiteplayer.PictureCrop(bottom = 8)
+        r.present(CountingFrame(size = VideoSize(1920, 1088), crop = crop), 0L)
+        assertEquals(VideoSize(1920, 1080) to 0, reported)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.compose
 
 import androidx.compose.ui.graphics.ImageBitmap
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
@@ -29,7 +30,8 @@ import kotlinx.coroutines.runBlocking
 
 /**
  * The frame published for [KiteVideo] to draw: an image plus the presentation facts the bitmap
- * itself cannot carry, the aspect-corrected display width, the quarter turn and the mirror.
+ * itself cannot carry, the aspect-corrected display width, the quarter turn, the mirror and the
+ * crop.
  */
 internal class KiteVideoFrame(
     val image: ImageBitmap,
@@ -39,7 +41,15 @@ internal class KiteVideoFrame(
     private val release: () -> Unit = {},
     /** Mirrored left to right before the turn. */
     val mirrored: Boolean = false,
+    /**
+     * The edges of [image] that are not part of the picture, taken off before the mirror and the
+     * turn (#497). Always one that fits [size]; null when the whole image is the picture.
+     */
+    val crop: PictureCrop? = null,
 ) : AutoCloseable {
+    /** The size of what is shown: [size] less [crop]. */
+    val shownSize: VideoSize get() = size.cropped(crop)
+
     private val closed = atomic(false)
 
     /** Set once when a converter refuses the backend's frame type; see [UnsupportedFrameType]. */
@@ -268,6 +278,7 @@ internal class KiteVideoRenderer(
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         val mirrored = frame.mirrored
+        val crop = frame.crop?.takeIf { !it.isEmpty && it.fits(size.width, size.height) }
         // The cost clock starts before the conversion and stops after the image build, because
         // that pair is exactly the CPU work this software path pays per published frame.
         val started = kotlin.time.TimeSource.Monotonic.markNow()
@@ -328,6 +339,7 @@ internal class KiteVideoRenderer(
                 requiresCommitFence = image.requiresCommitFence,
                 release = image.release,
                 mirrored = mirrored,
+                crop = crop,
             ),
         )
         presented.incrementAndGet()

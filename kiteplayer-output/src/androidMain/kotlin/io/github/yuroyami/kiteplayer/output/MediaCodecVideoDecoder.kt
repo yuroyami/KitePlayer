@@ -13,6 +13,7 @@ import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.KiteLog
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.VideoSize
@@ -99,6 +100,14 @@ internal fun directSurfaceOutputContract(
  * software there. A target that turns the picture itself, with [applyCodecRotation] false, mirrors
  * it too.
  */
+/**
+ * The crop the container states, when it leaves something of a [size] picture (#497). MediaCodec's
+ * own crop is the bitstream's and is already out of [size]; this is the one on top that nothing in
+ * the codec knows about. A crop that leaves nothing is dropped, and the engine says so.
+ */
+internal fun PlayerStreamInfo.cropFitting(size: VideoSize): PictureCrop? =
+    crop?.takeIf { !it.isEmpty && it.fits(size.width, size.height) }
+
 internal fun directSurfaceGeometryRefusal(stream: PlayerStreamInfo, applyCodecRotation: Boolean): String? =
     if (applyCodecRotation && stream.mirrored) "the direct Surface cannot mirror a mirrored stream" else null
 
@@ -201,7 +210,7 @@ internal class MediaCodecVideoDecoderFactory(
                     outputContract = outputContract,
                 )
                 return try {
-                    target.publishGeometry(size, normalizedQuarterTurn(stream.rotationDegrees))
+                    target.publishGeometry(size, normalizedQuarterTurn(stream.rotationDegrees), stream.cropFitting(size))
                     decoder
                 } catch (failure: Throwable) {
                     decoder.close()
@@ -757,6 +766,7 @@ private class MediaCodecVideoDecoder(
                             colorSpace = outputColor,
                             rotationDegrees = frameRotationDegrees,
                             mirrored = frameMirrored,
+                            crop = stream.cropFitting(outputSize),
                             toneMappedFrom = toneMappedFrom,
                         ),
                     )
@@ -950,7 +960,7 @@ private class MediaCodecVideoDecoder(
                 pixelAspectNumerator = configuredSize.pixelAspectNumerator,
                 pixelAspectDenominator = configuredSize.pixelAspectDenominator,
             )
-            target.publishGeometry(outputSize, normalizedQuarterTurn(stream.rotationDegrees))
+            target.publishGeometry(outputSize, normalizedQuarterTurn(stream.rotationDegrees), stream.cropFitting(outputSize))
         }
     }
 

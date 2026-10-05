@@ -21,6 +21,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
 import io.github.yuroyami.kiteplayer.KiteLog
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
@@ -192,7 +193,9 @@ public class AndroidGpuImageVideoRenderer(
         val accepted = direct.renderAt(
             targetNanos = targetNanos,
             beforeRender = { timestamp ->
-                bridge.prepareFrame(timestamp, direct.size, direct.rotationDegrees, direct.colorSpace, direct.mirrored)
+                bridge.prepareFrame(
+                    timestamp, direct.size, direct.rotationDegrees, direct.colorSpace, direct.mirrored, direct.crop,
+                )
             },
             onRenderFailed = bridge::cancelFrame,
             onReleased = releaseCompletion,
@@ -506,6 +509,7 @@ private class OesRgbaBridge(
         rotationDegrees: Int,
         colorSpace: ColorSpaceInfo,
         mirrored: Boolean = false,
+        crop: PictureCrop? = null,
     ) {
         if (closed) return
         check(size.width > 0 && size.height > 0) {
@@ -519,6 +523,7 @@ private class OesRgbaBridge(
                     normalizedGpuQuarterTurn(rotationDegrees),
                     androidRgbColorSpace(colorSpace),
                     mirrored,
+                    crop,
                 ),
             ),
         ) { "Android GPU image renderer stopped accepting frame configurations" }
@@ -634,7 +639,17 @@ internal class GlState private constructor(
     private val transform = FloatArray(16)
     private var outputQueue: OutputQueue? = null
     private var outputSurface: EGLSurface = EGL14.EGL_NO_SURFACE
+    /**
+     * The size of the picture this renderer outputs, which is what the crop leaves of the codec's
+     * buffer. Everything after the texture lookup works on it alone.
+     */
     private var configuredSourceSize: VideoSize? = null
+
+    /** The size of the codec's buffer, the stored picture before its crop. */
+    private var configuredBufferSize: VideoSize? = null
+
+    /** The container's crop of the buffer, applied to the texture lookup (#497). */
+    private var configuredCrop: PictureCrop? = null
     private var configuredOutputSize: VideoSize? = null
     private var configuredRotation = 0
     private var configuredMirrored = false
@@ -660,13 +675,21 @@ internal class GlState private constructor(
         rotationDegrees: Int,
         colorSpace: AndroidRgbColorSpace,
         mirrored: Boolean,
+        crop: PictureCrop?,
     ) {
         if (closed || size.width <= 0 || size.height <= 0) return
         val rotation = normalizedGpuQuarterTurn(rotationDegrees)
         val enlarge = bicubic.get() ||
             animationUpscaler.get() != io.github.yuroyami.kiteplayer.AnimationUpscaler.Off
-        val outputSize = fittedGpuOutputSize(size, rotation, requestedViewport.get(), enlarge)
-        val sourceChanged = size != configuredSourceSize
+        val applied = crop?.takeIf { !it.isEmpty && it.fits(size.width, size.height) }
+        val visible = size.cropped(applied)
+        val outputSize = fittedGpuOutputSize(visible, rotation, requestedViewport.get(), enlarge)
+        // A crop that moves without changing what is left needs no new output, only the next lookup.
+        configuredCrop = applied
+        val bufferChanged = size != configuredBufferSize
+        configuredBufferSize = size
+        if (bufferChanged) surfaceTexture.setDefaultBufferSize(size.width, size.height)
+        val sourceChanged = visible != configuredSourceSize
         val metadataChanged =
             sourceChanged || rotation != configuredRotation || colorSpace != configuredColorSpace ||
                 mirrored != configuredMirrored
@@ -677,12 +700,11 @@ internal class GlState private constructor(
             !outputChanged &&
             !queuePresenceChanged
         ) return
-        configuredSourceSize = size
+        configuredSourceSize = visible
         configuredOutputSize = outputSize
         configuredRotation = rotation
         configuredMirrored = mirrored
         configuredColorSpace = colorSpace
-        if (sourceChanged) surfaceTexture.setDefaultBufferSize(size.width, size.height)
         if (outputSize == null) {
             if (outputQueue != null) destroyOutput(force = false)
         } else {
@@ -692,8 +714,8 @@ internal class GlState private constructor(
 
     fun viewportChanged() {
         if (closed) return
-        val sourceSize = configuredSourceSize ?: return
-        configure(sourceSize, configuredRotation, configuredColorSpace, configuredMirrored)
+        val bufferSize = configuredBufferSize ?: return
+        configure(bufferSize, configuredRotation, configuredColorSpace, configuredMirrored, configuredCrop)
     }
 
     private fun drawNewestFrame() {
@@ -724,6 +746,7 @@ internal class GlState private constructor(
             frameConfiguration.rotationDegrees,
             frameConfiguration.androidColorSpace,
             frameConfiguration.mirrored,
+            frameConfiguration.crop,
         )
         val outputSize = configuredOutputSize
         val sourceSize = configuredSourceSize ?: frameConfiguration.size
@@ -741,6 +764,9 @@ internal class GlState private constructor(
         }
         try {
             surfaceTexture.getTransformMatrix(transform)
+            val crop = configuredCrop
+            val bufferSize = configuredBufferSize
+            if (crop != null && bufferSize != null) cropTextureTransform(transform, crop, bufferSize)
             makeCurrent(outputSurface)
             val seed = (debandSeed.getAndIncrement() % 1024).toFloat()
             val upscaler = upscalerFor(sourceSize, outputSize)
@@ -1815,7 +1841,32 @@ internal data class FrameConfiguration(
     val rotationDegrees: Int,
     val androidColorSpace: AndroidRgbColorSpace = AndroidRgbColorSpace.Srgb,
     val mirrored: Boolean = false,
+    val crop: PictureCrop? = null,
 )
+
+/**
+ * Narrows a SurfaceTexture lookup [transform] to the part of a [buffer] picture that [crop] leaves,
+ * in place, so the quad samples only that part and the blit's one-pixel steps stay one stored pixel
+ * once the source size it is given is the cropped one (#497).
+ *
+ * The lookup's own coordinates run from the bottom left of the picture as shown, so the bottom
+ * count moves the lower edge and the top count the upper one. The matrix is column major, as GL
+ * and `getTransformMatrix` keep it, and the crop goes before it: the result is the transform
+ * times a scale and offset, which changes only its first, second and last columns.
+ */
+internal fun cropTextureTransform(transform: FloatArray, crop: PictureCrop, buffer: VideoSize) {
+    val width = buffer.width.toFloat()
+    val height = buffer.height.toFloat()
+    val scaleX = (buffer.width - crop.left - crop.right) / width
+    val scaleY = (buffer.height - crop.top - crop.bottom) / height
+    val offsetX = crop.left / width
+    val offsetY = crop.bottom / height
+    for (row in 0 until 4) {
+        transform[12 + row] += offsetX * transform[row] + offsetY * transform[4 + row]
+        transform[row] *= scaleX
+        transform[4 + row] *= scaleY
+    }
+}
 
 internal data class GpuViewport(
     val width: Int,

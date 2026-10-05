@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import io.github.yuroyami.kiteplayer.PictureCrop
 import kotlin.math.roundToInt
 
 /**
@@ -73,7 +74,7 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                     val layout = videoLayout(
                         areaWidth = size.width.toInt(),
                         areaHeight = size.height.toInt(),
-                        size = frame.size,
+                        size = frame.shownSize,
                         rotationDegrees = frame.rotationDegrees,
                         mode = mode,
                         transform = framing,
@@ -83,7 +84,7 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                     val draw: DrawScope.() -> Unit = {
                         // The picture controls, on the VIDEO image only: subtitles below
                         // composite unfiltered, exactly like every platform renderer.
-                        drawVideoPicture(frame.image, layout, frame.mirrored, sampling, videoFilter)
+                        drawVideoPicture(frame.image, layout, frame.mirrored, sampling, videoFilter, frame.crop)
                     }
                     // Fill overhangs by design; zoom and pan can overhang under ANY mode. Both
                     // clip; the unzoomed Fit and Stretch keep the unclipped fast path.
@@ -130,8 +131,9 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOverlayItems(st
 }
 
 /**
- * Draws [image] where [layout] says: mirrored left to right first when [mirrored], then turned
- * about the footprint's centre. A function of its own so a test can draw it into a bitmap.
+ * Draws [image] where [layout] says: only the part [crop] leaves of it, mirrored left to right
+ * first when [mirrored], then turned about the footprint's centre. A function of its own so a test
+ * can draw it into a bitmap.
  */
 internal fun DrawScope.drawVideoPicture(
     image: ImageBitmap,
@@ -139,11 +141,20 @@ internal fun DrawScope.drawVideoPicture(
     mirrored: Boolean,
     filterQuality: FilterQuality,
     colorFilter: ColorFilter?,
+    crop: PictureCrop? = null,
 ) {
     val pivot = Offset(layout.centerX, layout.centerY)
+    val sourceOffset = if (crop == null) IntOffset.Zero else IntOffset(crop.left, crop.top)
+    val sourceSize = if (crop == null) {
+        IntSize(image.width, image.height)
+    } else {
+        IntSize(image.width - crop.left - crop.right, image.height - crop.top - crop.bottom)
+    }
     val paint: DrawScope.() -> Unit = {
         drawImage(
             image = image,
+            srcOffset = sourceOffset,
+            srcSize = sourceSize,
             dstOffset = IntOffset(layout.drawLeft.roundToInt(), layout.drawTop.roundToInt()),
             dstSize = IntSize(
                 layout.drawWidth.roundToInt().coerceAtLeast(1),

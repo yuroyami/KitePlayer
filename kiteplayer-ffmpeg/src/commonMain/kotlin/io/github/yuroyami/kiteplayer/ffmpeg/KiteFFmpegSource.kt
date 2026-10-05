@@ -630,8 +630,6 @@ internal class VideoDecoderContinuity {
     private var replaySeedPending: Boolean = false
     private var colorWarningClaimed: Boolean = false
     private var dolbyVisionWarningClaimed: Boolean = false
-    private var cropWarningClaimed: Boolean = false
-
     internal fun timestamp(
         real: Pts?,
         duration: Pts?,
@@ -679,11 +677,6 @@ internal class VideoDecoderContinuity {
     }
 
     /** The latch of the warning that the container's crop does not fit a decoded frame. */
-    internal fun claimCropWarning(): Boolean {
-        if (cropWarningClaimed) return false
-        cropWarningClaimed = true
-        return true
-    }
 }
 
 /** The media library's HDR metadata in the player's type, or null when it holds nothing usable. */
@@ -1233,23 +1226,11 @@ private class KiteFFmpegVideoDecoder(
      */
     /**
      * The stream's crop when it leaves something of a [width] by [height] frame, else null. A crop
-     * that leaves nothing is the file's mistake, and showing the whole picture beats showing none,
-     * so it is dropped with a warning, once for the stream.
+     * that leaves nothing is the file's mistake, and showing the whole picture beats showing none;
+     * the engine, which sees the stream's crop beside each frame, says so once.
      */
-    private fun cropFitting(width: Int, height: Int): PictureCrop? {
-        val crop = stream.crop ?: return null
-        if (crop.fits(width, height)) return crop
-        if (continuity.claimCropWarning()) {
-            warn(
-                PlaybackWarning.CropIgnored(
-                    stream.index,
-                    "top ${crop.top}, bottom ${crop.bottom}, left ${crop.left} and right ${crop.right} " +
-                        "leave nothing of a ${width}x$height picture",
-                ),
-            )
-        }
-        return null
-    }
+    private fun cropFitting(width: Int, height: Int): PictureCrop? =
+        stream.crop?.takeIf { it.fits(width, height) }
 
     private fun warnIfColorIsApproximated(color: ColorSpaceInfo) {
         val detail = when (color.matrix) {

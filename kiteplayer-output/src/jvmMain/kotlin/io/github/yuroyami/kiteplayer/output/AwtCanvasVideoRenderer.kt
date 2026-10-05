@@ -237,7 +237,15 @@ public class AwtCanvasVideoRenderer(
             failed.incrementAndGet()
             return false
         }
-        val size = frame.size
+        val crop = frame.crop?.takeIf { !it.isEmpty && it.fits(width, height) }
+        // The crop comes off first and shares the pixels, so everything after it, the fit, the
+        // turn, the overlay and the geometry the view hears, sees only what is left (#497).
+        val shown = if (crop == null) {
+            image
+        } else {
+            image.getSubimage(crop.left, crop.top, width - crop.left - crop.right, height - crop.top - crop.bottom)
+        }
+        val size = frame.size.cropped(crop)
         val rotation = frame.rotationDegrees
         val mirrored = frame.mirrored
         val pts = frame.pts
@@ -252,7 +260,7 @@ public class AwtCanvasVideoRenderer(
                 failed.incrementAndGet()
                 return false
             }
-            lastImage = image
+            lastImage = shown
             lastSize = size
             lastRotation = rotation
             lastMirrored = mirrored

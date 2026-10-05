@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
+import android.graphics.Rect
 import android.graphics.RectF
 import android.view.Display
 import android.view.Surface
@@ -434,7 +435,10 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         val mirrored = frame.mirrored
-        geometryConsumer?.invoke(size, rotation, null)
+        val crop = frame.crop
+        // This renderer cuts the crop itself, so the view hears the shape of what is left and no
+        // crop of its own to apply.
+        geometryConsumer?.invoke(size.cropped(crop), rotation, null)
         if (toneMapped(frame)) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
         val converted = try {
             convert(frame)
@@ -446,7 +450,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             frame.close()
         }
         val picture = converted?.let { swizzle(it, size) } ?: return
-        draw(picture, size, rotation, mirrored, framePts)
+        draw(picture, size, rotation, mirrored, framePts, crop)
     }
 
     /**
@@ -522,7 +526,14 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      * once as a transition, and then the worker carries on: the next lock that succeeds says so and
      * drawing resumes. Nothing here calls the player.
      */
-    private fun draw(picture: IntArray, size: VideoSize, rotationDegrees: Int, mirrored: Boolean, framePts: Pts) {
+    private fun draw(
+        picture: IntArray,
+        size: VideoSize,
+        rotationDegrees: Int,
+        mirrored: Boolean,
+        framePts: Pts,
+        crop: PictureCrop?,
+    ) {
         if (!targetIsValid()) {
             failWithLostSurface("the Surface went away before a canvas could be locked")
             return
@@ -549,7 +560,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             target.setVideoColorMatrix(videoColorMatrix.value)
             val layout = frameLayout(
                 canvas.width, canvas.height, size, rotationDegrees, scaleMode.value,
-                videoTransform.value, mirrored,
+                videoTransform.value, mirrored, crop,
             )
             if (layout == null) {
                 drawFailure = IllegalStateException(
@@ -986,7 +997,7 @@ internal interface TargetCanvas {
     /**
      * Draws [argb] ([sourceWidth] by [sourceHeight] pixels, row major) where [layout] says, turned by
      * [FrameLayout.rotationDegrees] about the destination centre, and mirrored first when
-     * [FrameLayout.mirrored] says so.
+     * [FrameLayout.mirrored] says so. Only the layout's source rectangle of the bitmap is drawn.
      */
     fun drawFrame(argb: IntArray, sourceWidth: Int, sourceHeight: Int, layout: FrameLayout)
 
@@ -1048,6 +1059,7 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
 
     /** Reused so that drawing a frame allocates nothing at all. */
     private val destination = RectF()
+    private val sourceRect = Rect()
 
     /** Uploaded overlay images, keyed by the overlay's contentHash, then by image index. */
     private var overlayHash: Long = Long.MIN_VALUE
@@ -1133,7 +1145,14 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
                 }
                 // Set after the turn, so it applies to the bitmap before the turn does.
                 if (layout.mirrored) canvas.scale(-1f, 1f, layout.centerX, layout.centerY)
-                canvas.drawBitmap(picture, null, destination, videoPaint)
+                val source = if (layout.cropsSource(sourceWidth, sourceHeight)) {
+                    sourceRect.apply {
+                        set(layout.sourceLeft, layout.sourceTop, layout.sourceRight, layout.sourceBottom)
+                    }
+                } else {
+                    null
+                }
+                canvas.drawBitmap(picture, source, destination, videoPaint)
             } finally {
                 canvas.restoreToCount(saved)
             }

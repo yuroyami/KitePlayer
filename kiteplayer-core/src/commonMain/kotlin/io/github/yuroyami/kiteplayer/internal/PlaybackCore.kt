@@ -10500,6 +10500,7 @@ internal class PlaybackCore(
         val startedNanos = clock.nanos()
         val frame = videoDecoderReceive(decoder)
         if (frame != null) {
+            noteUnfittedCrop(session, frame)
             val endedNanos = clock.nanos()
             session.decodeTimes.add(endedNanos - startedNanos)
             if (KiteTrace.perFrame) {
@@ -10507,6 +10508,25 @@ internal class PlaybackCore(
             }
         }
         return frame
+    }
+
+    /**
+     * Warns once per session when the video stream's crop leaves nothing of a decoded picture.
+     * Every decoder drops such a crop rather than hand it on, and only here are the stream's crop
+     * and the frame's size side by side, so this one place speaks for every decoder (#497).
+     */
+    private fun noteUnfittedCrop(session: OpenSession, frame: VideoFrame) {
+        val stream = session.videoStream ?: return
+        val crop = stream.crop?.takeUnless { it.isEmpty } ?: return
+        val size = frame.size
+        if (crop.fits(size.width, size.height) || !session.cropIgnoredWarned.compareAndSet(false, true)) return
+        warn(
+            PlaybackWarning.CropIgnored(
+                stream.index,
+                "top ${crop.top}, bottom ${crop.bottom}, left ${crop.left} and right ${crop.right} " +
+                    "leave nothing of a ${size.width}x${size.height} picture",
+            ),
+        )
     }
 
     private suspend fun videoDecoderReceive(decoder: VideoDecoder): VideoFrame? = try {
@@ -11357,6 +11377,9 @@ internal class PlaybackCore(
 
         /** Wall time each decoded frame took on the receive side; sorted only at the stats tick. */
         val decodeTimes = Percentiles(240)
+
+        /** Set once [PlaybackWarning.CropIgnored] has been said for this session's video stream. */
+        val cropIgnoredWarned = atomic(false)
 
         /** Packets thrown away before the decoder ever saw them. See FrameDropPolicy.LateAndDecode. */
         val droppedVideoBeforeDecode = atomic(0L)

@@ -410,7 +410,8 @@ public sealed class PlaybackWarning {
 
     /**
      * A crop the container states for stream [streamIndex] leaves nothing of its pictures, or has a
-     * negative count, so the pictures are shown whole (#497). Emitted once per stream. See
+     * negative count, so the pictures are shown whole (#497). Emitted once each time the stream is
+     * opened. See
      * [PictureCrop].
      */
     public data class CropIgnored(val streamIndex: Int, val detail: String) : PlaybackWarning() {

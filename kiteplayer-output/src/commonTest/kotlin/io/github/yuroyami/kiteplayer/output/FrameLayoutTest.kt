@@ -1,9 +1,12 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The geometry arms of frame layout: aspect fit both ways, non-square pixels, every quarter
@@ -152,5 +155,38 @@ class FrameLayoutTest {
                 transform = io.github.yuroyami.kiteplayer.VideoTransform.Identity,
             ),
         )
+    }
+
+    @Test
+    fun aCroppedPictureIsFittedByWhatIsLeftAndDrawnFromItsPart() {
+        // Eight padding rows under a 1080 line picture: the whole 16:9 canvas, from the top 1080 rows.
+        val layout = frameLayout(1920, 1080, VideoSize(1920, 1088), 0, crop = PictureCrop(bottom = 8))!!
+        assertEquals(0, layout.left)
+        assertEquals(0, layout.top)
+        assertEquals(1920, layout.width)
+        assertEquals(1080, layout.height, "uncropped it would letterbox to 1072 rows")
+        assertEquals(listOf(0, 0, 1920, 1080), listOf(layout.sourceLeft, layout.sourceTop, layout.sourceRight, layout.sourceBottom))
+        assertTrue(layout.cropsSource(1920, 1088))
+    }
+
+    @Test
+    fun theCropComesOffBeforeTheTurn() {
+        // 140 rows off the top and bottom of a 1920x1080 picture turned a quarter: 800 stored rows
+        // become 800 columns, so a 800 by 1920 canvas is filled exactly.
+        val layout = frameLayout(800, 1920, VideoSize(1920, 1080), 90, crop = PictureCrop(top = 140, bottom = 140))!!
+        assertEquals(800, layout.width)
+        assertEquals(1920, layout.height)
+        assertEquals(1920f, layout.drawWidth, "the bitmap is drawn unturned, as wide as its cropped part")
+        assertEquals(800f, layout.drawHeight)
+        assertEquals(listOf(0, 140, 1920, 940), listOf(layout.sourceLeft, layout.sourceTop, layout.sourceRight, layout.sourceBottom))
+    }
+
+    @Test
+    fun noCropOrACropThatDoesNotFitDrawsTheWholePicture() {
+        val whole = frameLayout(1920, 1080, VideoSize(640, 480), 0)!!
+        assertFalse(whole.cropsSource(640, 480))
+        assertEquals(listOf(0, 0, 640, 480), listOf(whole.sourceLeft, whole.sourceTop, whole.sourceRight, whole.sourceBottom))
+        assertEquals(whole, frameLayout(1920, 1080, VideoSize(640, 480), 0, crop = PictureCrop(top = 240, bottom = 240)))
+        assertEquals(whole, frameLayout(1920, 1080, VideoSize(640, 480), 0, crop = PictureCrop()))
     }
 }

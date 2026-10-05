@@ -51,6 +51,7 @@ import io.github.yuroyami.kiteplayer.TrackId
 import io.github.yuroyami.kiteplayer.TrackInfo
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.Tracks
+import io.github.yuroyami.kiteplayer.ShownSlot
 import io.github.yuroyami.kiteplayer.VideoPlayback
 import io.github.yuroyami.kiteplayer.VideoAdjustments
 import io.github.yuroyami.kiteplayer.VideoScale
@@ -6772,6 +6773,10 @@ internal class PlaybackCore(
         val prepared = next.prepared ?: adoptPreload(next, active) ?: return
         // The old path owns the end of the current item; handleQueueAdvance opens this one.
         if (next.coldOnly) return
+        if (active.audioLane == null) {
+            stepSilentHandoff(active, next, prepared)
+            return
+        }
         if (!next.handedOff) {
             if (!currentAudioFinished(active)) {
                 // With every packet decoded, the last sample is at most a ring depth and a few
@@ -6796,6 +6801,58 @@ internal class PlaybackCore(
         } else {
             wakeIn(HANDOFF_POLL)
         }
+    }
+
+    /**
+     * The handoff between two silent items (#524). There is no ring to give, so the picture times
+     * the join: once the current item has shown its last picture, or its last before B, the next
+     * one becomes current, and its first picture takes the slot after that last one, one frame
+     * period on, as the pictures of one item follow each other. Only while playing, because a
+     * paused schedule has no slot that ends.
+     */
+    private suspend fun stepSilentHandoff(active: OpenSession, next: PendingNext, prepared: PreparedNext) {
+        if (active.videoParked.value) {
+            dropPending("the current item has no selected audio track, and its picture was turned off")
+            return
+        }
+        val runsOutAt = pictureRunsOutAt(active)
+        if (runsOutAt == null) {
+            val near = active.passEnd.value?.reached?.value == true || active.videoQueue?.isEndOfStream == true
+            wakeIn(if (near) HANDOFF_POLL else WORKER_POLL)
+            return
+        }
+        if (status != PlaybackStatus.Playing) return
+        if (!pendingPrimed(prepared.session)) {
+            if (clock.nanos() >= runsOutAt) {
+                dropPending("the next item was not ready when the current one ran out of pictures")
+            } else {
+                wakeIn(HANDOFF_POLL)
+            }
+            return
+        }
+        // Before the swap starts its schedule, which reads it on its first step.
+        prepared.session.video?.startAt(runsOutAt)
+        if (next.repeat) swapToRepeat(next, prepared) else swapToNext(next, prepared)
+    }
+
+    /**
+     * When the slot of a silent item's last picture ends, once every picture of its pass is shown,
+     * or null while one is still to come (#524). The last is the last before B for a pass that stops
+     * there, which the video lane marks by holding the first picture at B, or the last of the item.
+     * The slot counts only when the scheduler published it for the picture on screen, so a slot of
+     * the picture before is never read as the last one's.
+     */
+    private fun pictureRunsOutAt(active: OpenSession): Long? {
+        val video = active.video ?: return null
+        if (video.queuedFrames > 0) return null
+        val atB = active.passEnd.value?.reached?.value == true
+        val queue = active.videoQueue ?: return null
+        val atEnd = queue.isEndOfStream && queue.count == 0 && (active.videoDecoder?.isDrained ?: true) &&
+            active.videoInFlight.value == 0
+        if (!atB && !atEnd) return null
+        val slot = active.shownSlot.value ?: return null
+        if (slot.ptsUs != video.shownPts()?.micros) return null
+        return slot.untilNanos
     }
 
     /**
@@ -6901,7 +6958,10 @@ internal class PlaybackCore(
         if (wrapUs == null && loopA != null && loopA >= durationUs) return
         val item = if (repeat) media ?: return else queueItems[index]
         val refusal = when {
-            active.audioLane == null || active.audio == null -> "the current item has no selected audio track"
+            // A silent item's join is timed by its picture (#524), so it needs one.
+            active.audioLane == null && (active.video == null || active.videoParked.value) ->
+                "the current item has no selected audio track and no picture"
+            active.audioLane != null && active.audio == null -> "the current item has no audio device open"
             // A repeat starts again from zero, as the seek it replaces does.
             !repeat && (item.startPosition ?: Duration.ZERO) > Duration.ZERO -> "the next item has a start position"
             else -> null
@@ -6967,8 +7027,10 @@ internal class PlaybackCore(
 
     /** Whether the next item, or the next pass, should start opening before the current item's end. */
     private fun passAtEndDue(active: OpenSession, durationUs: Long, leadUs: Long): Boolean {
-        // Too late: the current item's sound is all in the ring, and the old path is closer.
+        // Too late: the current item's sound is all in the ring, or its last picture is on
+        // screen, and the old path is closer.
         if (currentAudioFinished(active)) return false
+        if (active.audioLane == null && pictureRunsOutAt(active) != null) return false
         val leftUs = if (active.source.durationIsEstimate) {
             // An estimated length cannot time the lead, so the demuxer reaching the end of the input
             // does: what is left is then the queues and the ring, a few seconds at most (#422).
@@ -7052,7 +7114,14 @@ internal class PlaybackCore(
      */
     private suspend fun adoptPreload(next: PendingNext, active: OpenSession): PreparedNext? {
         if (!next.job.isCompleted) {
-            if (currentAudioFinished(active) && ringRunsDry(active)) {
+            if (active.audioLane == null) {
+                val runsOutAt = pictureRunsOutAt(active)
+                if (runsOutAt != null && status == PlaybackStatus.Playing && clock.nanos() >= runsOutAt) {
+                    dropPending("the next item was still opening when the current one ran out of pictures")
+                } else {
+                    wakeIn(WORKER_POLL)
+                }
+            } else if (currentAudioFinished(active) && ringRunsDry(active)) {
                 dropPending("the next item was still opening when the current one ran out of sound")
             } else {
                 wakeIn(WORKER_POLL)
@@ -7098,6 +7167,11 @@ internal class PlaybackCore(
 
     /** Why the preloaded item cannot take the current item's ring, or null when it can. */
     private fun handoffRefusal(active: OpenSession, incoming: OpenSession): String? {
+        // Two silent items join by their pictures, and one silent item cannot join one with sound,
+        // whose ring has nothing before it to follow or nothing after it to time the swap (#524).
+        if (active.audioLane == null) {
+            return if (incoming.audioLane == null) null else "the current item has no selected audio track"
+        }
         val format = incoming.audioDecoder?.outputFormat ?: return "the next item has no selected audio track"
         val device = active.deviceRequest ?: return "the current item has no audio device open"
         if (format.sampleRate != device.sampleRate || format.channels != device.channels) {
@@ -7382,7 +7456,9 @@ internal class PlaybackCore(
         incoming.preloading.value = false
         incoming.videoParked.value = !videoEnabled
         incoming.audio?.commitJoin()
-        publishedPositionMicros.value = currentPosition().micros
+        // A silent item reads no position until its first picture is shown, and starts where its
+        // pass starts (#524).
+        publishedPositionMicros.value = if (incoming.audioLane == null) next.startUs else currentPosition().micros
         progressState.value = Progress(position = publishedPositionMicros.value.microseconds, bufferedAhead = Duration.ZERO)
         next.build.warnings.release()
         next.build.events.forEach(::emitEvent)
@@ -7437,7 +7513,9 @@ internal class PlaybackCore(
         incoming.preloading.value = false
         incoming.videoParked.value = !videoEnabled
         incoming.audio?.commitJoin()
-        publishedPositionMicros.value = currentPosition().micros
+        // A silent item reads no position until its first picture is shown, and starts where its
+        // pass starts (#524).
+        publishedPositionMicros.value = if (incoming.audioLane == null) next.startUs else currentPosition().micros
         progressState.value = Progress(position = publishedPositionMicros.value.microseconds, bufferedAhead = Duration.ZERO)
         // The pass's own warnings are news; its events, the picture size, are what the item said.
         next.build.warnings.release()
@@ -10226,6 +10304,9 @@ internal class PlaybackCore(
         while (true) {
             val end = session.passEnd.value ?: return true
             if (frame.pts.micros < end.us) return true
+            // A silent pass has no feeder to say it reached B, and the first picture at B says
+            // that every picture before it is with the schedule (#524).
+            if (session.audioLane == null) end.reached.value = true
             if (worker.quiesceRequested) return false
             worker.nap(HANDOFF_POLL)
         }
@@ -10633,6 +10714,8 @@ internal class PlaybackCore(
                 }
                 else -> {
                     video.pauseSchedule()
+                    // A slot published before the pause ends at a time the pause has moved on.
+                    session.shownSlot.value = null
                     select<Unit> {
                         session.schedulerNudge.onReceive { }
                         worker.onWake { }
@@ -10682,6 +10765,7 @@ internal class PlaybackCore(
     /** Publishes what the scheduler alone may read, so the actor never touches the video clock. */
     private fun recordVideoClock(session: OpenSession, video: VideoPlayback) {
         session.lastVideoPtsUs.value = video.position()?.micros ?: NO_POSITION
+        session.shownSlot.value = video.shownSlot()
         session.driftUs.value = video.drift.inWholeMicroseconds
     }
 
@@ -10889,6 +10973,11 @@ internal class PlaybackCore(
         /** Packets thrown away before the decoder ever saw them. See FrameDropPolicy.LateAndDecode. */
         val droppedVideoBeforeDecode = atomic(0L)
         val lastVideoPtsUs = atomic(NO_POSITION)
+        /**
+         * The frame on screen and the end of its slot, as the scheduler last published them, or
+         * null while the schedule is idle. A silent item's next pass starts at that end (#524).
+         */
+        val shownSlot = atomic<ShownSlot?>(null)
         val driftUs = atomic(0L)
         val discardBeforeUs = atomic(Long.MIN_VALUE)
         /**

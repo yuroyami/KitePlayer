@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration
@@ -362,16 +363,106 @@ class GaplessRepeatTest {
         assertEquals(0, harness.ledger.liveCount, "nothing leaked")
     }
 
+    /** The presented timestamps in milliseconds, cut into passes wherever the media goes back. */
+    private fun CoreHarness.picturePasses(): List<List<Long>> {
+        val passes = mutableListOf<MutableList<Long>>()
+        for (ms in checkNotNull(renderer).timestamps.map { it.micros / 1_000 }) {
+            if (passes.isEmpty() || ms < passes.last().last()) passes += mutableListOf<Long>()
+            passes.last() += ms
+        }
+        return passes
+    }
+
+    /** The wall time between one picture's target and the next, after the one the open showed. */
+    private fun CoreHarness.pictureSteps(): List<Long> =
+        checkNotNull(renderer).targets.zipWithNext { a, b -> b - a }.drop(1)
+
     @Test
-    fun aRepeatedItemWithNoAudioSeeksBackAndSaysWhy() = runTest {
-        val harness = CoreHarness(this, script = MediaScript(durationUs = 2_000_000, hasAudio = false))
+    fun aRepeatedItemWithNoAudioFollowsItsOwnEndByItsPictures() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 4_000_000, hasAudio = false))
         harness.openWithRenderer()
         harness.core.setLoop(LoopMode.One)
         harness.core.play()
-        assertEquals(1, harness.wrapsOver(3.seconds), "the old path still repeats the item")
+
+        assertEquals(4, harness.wrapsOver(18.seconds), "a 4 s item wraps four times in 18 s")
+        assertTrue(harness.statusesAfterPlay().all { it == PlaybackStatus.Playing }, "the status stayed Playing: ${harness.core.statusHistory}")
+        assertEquals(emptyList(), harness.fallbacks())
+        assertEquals(4, harness.events.count { it is PlayerEvent.Ended }, "each pass ended, as a repeat that seeks says")
+        assertEquals(1, harness.events.count { it is PlayerEvent.Opened }, "and the item did not open again: ${harness.events}")
+        val passes = harness.picturePasses()
+        assertEquals(5, passes.size)
+        val whole = List(100) { it * 40L }
+        passes.dropLast(1).forEachIndexed { pass, pictures -> assertEquals(whole, pictures, "pass $pass shows every picture once") }
+        val steps = harness.pictureSteps()
+        assertEquals(List(steps.size) { 40_000_000L }, steps, "one frame period between pictures, across each join too")
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount, "nothing leaked")
+    }
+
+    @Test
+    fun aPauseOnTheLastPictureOfAnItemWithNoAudioJoinsOnResume() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 4_000_000, hasAudio = false))
+        harness.openWithRenderer()
+        harness.core.setLoop(LoopMode.One)
+        harness.core.play()
+        assertTrue(harness.runUntil(5.seconds) { checkNotNull(harness.renderer).timestamps.lastOrNull()?.micros == 3_960_000L })
+        harness.core.pause()
+        harness.run(1.seconds)
+        assertEquals(3_960_000L, checkNotNull(harness.renderer).timestamps.last().micros, "no join while paused")
+        // The resume's own pass makes the join, so it has happened by the time play returns.
+        harness.core.play()
+        harness.run(2.seconds)
+        assertEquals(1, harness.events.count { it is PlayerEvent.Ended }, "the pass ended once, at the join")
+        assertTrue(harness.core.position() in 1.9.seconds..2.1.seconds, "the next pass played on from its start: ${harness.core.position()}")
+        assertEquals(emptyList(), harness.fallbacks())
+        assertFalse(PlaybackStatus.Buffering in harness.statusesAfterPlay(), "no seek: ${harness.core.statusHistory}")
+        val passes = harness.picturePasses()
+        assertEquals(List(100) { it * 40L }, passes[0])
+        assertEquals(0L, passes[1].first(), "the next pass starts at its first picture")
+        assertEquals(passes[1].indices.map { it * 40L }, passes[1], "and shows each one once")
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount, "nothing leaked")
+    }
+
+    @Test
+    fun anAbLoopOverAnItemWithNoAudioRepeatsItsSectionByItsPictures() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 4_000_000, hasAudio = false))
+        harness.openWithRenderer()
+        harness.setAbLoop(1.seconds, 3.seconds)
+        harness.core.play()
+
+        assertEquals(3, harness.wrapsOver(8500.milliseconds), "B at 3 s, then a 2 s section, wraps three times in 8.5 s")
+        assertTrue(harness.statusesAfterPlay().all { it == PlaybackStatus.Playing }, "the status stayed Playing: ${harness.core.statusHistory}")
+        assertEquals(emptyList(), harness.fallbacks())
+        val passes = harness.picturePasses()
+        assertEquals(4, passes.size)
+        assertEquals(List(75) { it * 40L }, passes[0], "the first turn plays from the start to the last picture before B")
+        val section = List(50) { 1_000L + it * 40L }
+        passes.drop(1).dropLast(1).forEachIndexed { turn, pictures ->
+            assertEquals(section, pictures, "turn $turn shows every picture from A to B once")
+        }
+        assertTrue(passes.last().all { it in 1_000L until 3_000L }, "and the turn playing now has none outside it: ${passes.last()}")
+        val steps = harness.pictureSteps()
+        assertEquals(List(steps.size) { 40_000_000L }, steps, "one frame period between pictures, across each join too")
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount, "nothing leaked")
+    }
+
+    @Test
+    fun aRepeatedItemWithNoAudioAndItsPictureOffSeeksBackAndSaysWhy() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 2_000_000, hasAudio = false))
+        harness.openWithRenderer()
+        val reply = CompletableDeferred<Unit>()
+        harness.core.post(CoreCommand.SetVideoEnabled(false, reply))
+        reply.await()
+        harness.core.setLoop(LoopMode.One)
+        harness.core.play()
+        // Nothing times an item with neither sound nor picture, so it is counted by its ends.
+        harness.run(3.seconds)
+        assertTrue(harness.events.count { it is PlayerEvent.Ended } > 1, "the old path still repeats the item")
         val fallback = harness.fallbacks().single()
         assertEquals(-1, fallback.index, "a plain open has no queue position")
-        assertTrue("current item has no selected audio track" in fallback.reason, fallback.reason)
+        assertTrue("no selected audio track and no picture" in fallback.reason, fallback.reason)
         assertTrue(PlaybackStatus.Buffering in harness.statusesAfterPlay(), "by seeking back: ${harness.core.statusHistory}")
         harness.close()
         assertEquals(0, harness.ledger.liveCount, "nothing leaked")

@@ -154,6 +154,16 @@ public class VideoPlayback(
     private var frameTimerNanos: Long = 0
     private var started = false
 
+    /** The duration the last step gave the frame on screen, for the slot of a frame with none after it. */
+    private var lastNominalUs = 0L
+
+    /**
+     * The wall time the first frame of this generation is due, or [NO_START] for as soon as it
+     * comes. Set before the schedule starts, by a silent item's next pass, so that its first frame
+     * takes the slot after the last frame of the pass before it (#524).
+     */
+    private val startAtNanos = atomic(NO_START)
+
     private var submitted = 0L
     private var headless = 0L
     private var droppedLate = 0L
@@ -320,8 +330,14 @@ public class VideoPlayback(
         val now = clock.nanos()
         if (!started) {
             // The first frame of a generation establishes the schedule rather than being timed
-            // against a frame from before the seek.
-            frameTimerNanos = now
+            // against a frame from before the seek, unless it follows the last frame of another
+            // schedule, whose slot it then waits out. A wake a little late keeps the slot, so the
+            // join keeps the cadence; one later than that starts from now, as a first frame does,
+            // rather than making the frames behind it look late.
+            val due = startAtNanos.value
+            if (due != NO_START && now < due) return (due - now).nanosAsDuration()
+            startAtNanos.value = NO_START
+            frameTimerNanos = if (due != NO_START && now - due <= START_SLACK_NANOS) due else now
             started = true
             return present(frameTimerNanos, masterClock)
         }
@@ -335,6 +351,7 @@ public class VideoPlayback(
             null
         }
         val nominalUs = durations.estimate(measuredUs, previous?.duration?.micros ?: next.duration?.micros)
+        lastNominalUs = nominalUs
 
         val videoNow = videoClock.nowOrNull()
         val delayUs = SyncLaw.targetDelayUs(nominalUs, videoNow, masterClock, maxFrameDurationUs)
@@ -402,9 +419,36 @@ public class VideoPlayback(
             departures.trySend(Unit)
             return Duration.ZERO
         }
+        startAtNanos.value = NO_START
         frameTimerNanos = clock.nanos()
         started = true
         return present(frameTimerNanos, masterClock)
+    }
+
+    /**
+     * Makes the first frame of this generation wait for [nanos], the end of the slot of the last
+     * frame another schedule showed, so that a silent item's next pass follows that frame by one
+     * frame period, as its own frames follow each other (#524). Called before the schedule starts.
+     */
+    internal fun startAt(nanos: Long) {
+        startAtNanos.value = nanos
+    }
+
+    /**
+     * The frame on screen and the wall time its slot ends, which is when the frame after it is due,
+     * or null before the first frame of this generation and while the frame on screen is not the
+     * last one given a slot. A frame with nothing after it to measure against gets the duration it
+     * carries, after a rate the timestamps have settled on, or the one the last step used. Read by
+     * the scheduler, which publishes it for the actor (#524).
+     */
+    internal fun shownSlot(): ShownSlot? {
+        if (!started) return null
+        val shown = queue.shown ?: return null
+        val scheduled = queue.scheduled ?: return null
+        if (shown != scheduled || shown.generation != generation) return null
+        val carried = shown.duration?.micros
+        val durationUs = if (carried == null && lastNominalUs > 0) lastNominalUs else durations.estimate(null, carried)
+        return ShownSlot(shown.pts.micros, frameTimerNanos + (durationUs * 1_000L / appliedSpeed).toLong())
     }
 
     /**
@@ -496,6 +540,8 @@ public class VideoPlayback(
         durations.reset()
         generation = newGeneration
         started = false
+        lastNominalUs = 0L
+        startAtNanos.value = NO_START
         // The clock is invalid anyway, so the wanted rate can apply without re-anchoring anything.
         appliedSpeed = wantedSpeed.value
         videoClock.speed = appliedSpeed
@@ -512,5 +558,16 @@ public class VideoPlayback(
     private companion object {
         /** How long to wait when there is nothing queued. Short enough to stay responsive. */
         val IDLE_WAIT: Duration = 2_000.microseconds
+
+        const val NO_START: Long = Long.MIN_VALUE
+
+        /**
+         * How late a wake may be and still keep the slot a join gave the first frame. Under a frame
+         * period at 120 frames a second, so keeping it never makes the frame behind it late.
+         */
+        const val START_SLACK_NANOS: Long = 5_000_000
     }
 }
+
+/** The frame on screen, by its timestamp, and the wall time its slot ends (#524). */
+internal class ShownSlot(val ptsUs: Long, val untilNanos: Long)

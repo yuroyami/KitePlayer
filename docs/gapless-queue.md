@@ -202,6 +202,26 @@ road of a repeat's, with these differences (#467):
 
 A fallback warns as a repeat's does, and the turns go back by the seek while the item stays open.
 
+## Items with no sound
+
+An item with video and no selected audio track has no ring to join, so its picture times the join
+instead (#524). This covers a repeat, an A-B loop and a queue whose items are all silent:
+
+- The preload opens and primes the next item or pass as for an item with sound.
+- The video lane of a pass that stops at B holds the first picture at or after B, and that marks
+  every picture before B as handed to the schedule.
+- The video schedule publishes the picture on screen and the wall time its slot ends, which is
+  when the picture after it is due. A last picture has none after it to measure against, so its
+  slot is the duration it carries, or the one the schedule settled on.
+- Once the last picture of the item, or the last before B, is on screen, the next item becomes the
+  current one, as at a swap, while the player plays. Its schedule waits for the end of that slot
+  and shows its first picture there, so the pictures keep one frame period between them across the
+  join and the status stays `Playing`. The position is the start of the new pass until its first
+  picture shows.
+- While paused, nothing swaps, and the join happens when play resumes.
+- A renderer that decodes its own video gets the next item's decoder at the swap, as with sound,
+  so its last picture stays on screen until that decoder gives its first one.
+
 ## Fallbacks
 
 When the handoff cannot run, the player warns `PlaybackWarning.GaplessFallback` with the queue
@@ -211,7 +231,11 @@ stops, `Ended` fires, and the next item opens with a device of its own. These ar
 - The preload failed to open, or a worker of the preload failed.
 - The preload was still opening or priming when the current item had written all its sound and
   the ring held less than 40 ms of it. Until then the player waits for the next item.
-- The current item or the next item has no selected audio track.
+- One of the two items has a selected audio track and the other has none.
+- The current item has no selected audio track and no picture to time the join, or its picture
+  was turned off during the handoff.
+- The current item has no selected audio track, and the preload was still opening or priming
+  when the slot of its last picture ended.
 - The sample rate or the channel count of the next item differs from the format that the device
   was opened for.
 - The next item has a start position. A repeat starts from zero, so this never stops one.
@@ -272,3 +296,10 @@ Every action that drops a preload also cancels a handoff that has started:
   at B, the player's own seek while the sound waits at B, a B moved during a pass, the end-of-item
   sleep timer, the gapless handoff turned off, and a loop armed before a source that cannot seek
   opens.
+- A scripted item of four seconds with video and no audio plays for 18 seconds under
+  `LoopMode.One`: the status never leaves `Playing`, the position wraps four times, each pass shows
+  every picture once, and every picture's target time is one frame period after the one before,
+  across each join too. The same holds for a loop from 1 s to 3 s, with no picture at or after B
+  and none before A after a wrap, and for a queue of two silent items. A pause on the last picture
+  joins on resume, a silent item followed by one with sound falls back, and so do a preload still
+  opening when the pictures run out and a silent item whose picture is off.

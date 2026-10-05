@@ -411,6 +411,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   clearing the loop drops the waiting turn quietly, a turn that starts too near B for its next pass
   to open in time goes back to A by the seek once, and a loop that cannot take this road seeks back
   to A as before. `docs/gapless-queue.md` has the details.
+- An item with video and no sound repeats, loops from A to B and joins the next silent queue item
+  with no gap too (#524). With no ring to join, the picture times it: the next pass's first
+  picture shows one frame period after the last picture of the one before, so a looping background
+  video no longer stands still, passes through `Buffering` and seeks back at every turn. A silent
+  item next to one with sound still falls back with `GaplessFallback`, as does a preload not ready
+  when the pictures run out.
 
 ### Removed
 

@@ -2598,6 +2598,8 @@ internal class PlaybackCore(
         if (session == null) {
             pendingRenderer = renderer
             watchRendererEvents(renderer)
+            // Nothing plays, so whatever its surface still holds from before is not this player's.
+            if (renderer != null) clearRendererPicture()
             return true
         }
         val scheduler = session.videoScheduler
@@ -2615,6 +2617,7 @@ internal class PlaybackCore(
         session.video?.vsyncIntervalNanos = renderer?.vsyncIntervalNanos()
         pendingRenderer = renderer
         watchRendererEvents(renderer)
+        if (renderer != null && session.videoStream == null) clearRendererPicture()
         return true
     }
 
@@ -2681,6 +2684,29 @@ internal class PlaybackCore(
 
     /** A renderer attached before anything was open, kept for the session that follows. */
     private var pendingRenderer: VideoRenderer? = null
+
+    /**
+     * Tells the attached renderer that no picture plays, so the last one leaves the screen rather
+     * than staying there frozen (#530). Called on the actor once nothing can present any more: the
+     * lanes that drew the picture have parked or ended. A renderer that throws is warned about and
+     * kept, because a picture left on screen is what every renderer did before, not a failure of
+     * the playback.
+     */
+    private fun clearRendererPicture() {
+        val renderer = pendingRenderer ?: return
+        try {
+            renderer.clearPicture()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            warn(
+                PlaybackWarning.RendererFailed(
+                    "clearPicture threw ${failure::class.simpleName}: ${failure.message}; " +
+                        "the last picture may stay on screen",
+                ),
+            )
+        }
+    }
 
     /**
      * The attached audio taps. The actor adds and removes them and the feed worker drops one that
@@ -3042,6 +3068,8 @@ internal class PlaybackCore(
             if (startTargetUs != null) {
                 queueSeek(SeekRequest(SeekTarget.Absolute(Pts(startTargetUs)), SeekMode.Precise), null)
             }
+            // The item before it may have left a picture, and this one has none to replace it.
+            if (built.videoStream == null) clearRendererPicture()
             setStatus(PlaybackStatus.Paused)
             emitEvent(PlayerEvent.Opened(command.media, tracks))
             command.reply.complete(Unit)
@@ -3056,6 +3084,8 @@ internal class PlaybackCore(
             teardownSession()
             if (absorb?.invoke(error) == true) return
             fail(error)
+            // A picture still on screen belongs to the item before, which is no longer open.
+            clearRendererPicture()
             command.reply.completeExceptionally(PlaybackException(error))
         }
     }
@@ -4329,7 +4359,7 @@ internal class PlaybackCore(
      * waiting to be shown and the decoder go, and the sound and the subtitles play on untouched. The
      * picture's queue stays a cache the demux lane goes on filling, so choosing the picture again
      * plays it in place from its keyframe at the position, and the lanes start again then. The
-     * renderer keeps the last picture it was given, as it does when a reopen leaves no picture.
+     * renderer is told no picture plays, so the last one leaves the screen (#530).
      *
      * @return null when the picture is off, or why it is not.
      */
@@ -4365,6 +4395,8 @@ internal class PlaybackCore(
                 }
         }
         playback?.close()
+        // While both lanes are still parked, so no frame of the picture can follow it.
+        clearRendererPicture()
         // Released into nothing: each lane finds the session no longer runs it, and ends.
         decodeWorker?.release(decodeWorker.epoch)
         scheduler?.release(scheduler.epoch)
@@ -5145,6 +5177,8 @@ internal class PlaybackCore(
             // An audio change that rode the rebuild, beside a video change or on another variant,
             // takes the subtitle that goes with it as the in-place one does (#506).
             if (reopening || rebuilt.audioStream?.index != audioBefore) chooseSubtitleForAudio(rebuilt)
+            // A variant or a programme with no picture, or a picture no decoder took (#530).
+            if (rebuilt.videoStream == null) clearRendererPicture()
             setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
             // Published before the replies, as the in-place audio and subtitle changes do. The
             // status write above publishes only when the status moves, and a paused player's
@@ -7900,6 +7934,7 @@ internal class PlaybackCore(
             adoptExternalSubtitles(next.item, prepared.externals)
             applyPreparedSubtitle(next.item, prepared)
             refreshTypesetting()
+            if (incoming.videoStream == null) clearRendererPicture()
             setStatus(PlaybackStatus.Paused)
             emitEvent(PlayerEvent.Opened(next.item, tracks))
             reply.complete(Unit)
@@ -7910,6 +7945,7 @@ internal class PlaybackCore(
             teardownSession()
             if (absorb?.invoke(error) == true) return
             fail(error)
+            clearRendererPicture()
             reply.completeExceptionally(PlaybackException(error))
         }
     }
@@ -8002,6 +8038,8 @@ internal class PlaybackCore(
         incoming.video?.speed = effectiveSpeed
         startVideoSchedule(incoming)
         reportContainerDivergences(incoming)
+        // The item before has closed with its lanes, so its last picture is the one on screen.
+        if (incoming.videoStream == null) clearRendererPicture()
         emitEvent(PlayerEvent.Opened(next.item, tracks))
         snapshotDirty = true
     }
@@ -9217,6 +9255,7 @@ internal class PlaybackCore(
         progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
         setStatus(PlaybackStatus.Idle)
         publishSnapshot()
+        clearRendererPicture()
         // The stats too, and off the interval: the totals stay (they belong to the player, and the
         // stopped session was retired into them), while every gauge falls to its empty value
         // because there is no session to measure. Waiting for the next interval left a stopped

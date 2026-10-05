@@ -466,10 +466,19 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   item is not opened again, so the sound and the subtitles play on without a break, and a live
   source, which refused the choice because it cannot seek back to the position, takes it as well.
   The demux lane goes on reading the picture, so turning it back on also happens in place, from its
-  keyframe at the position. The renderer keeps the last picture it was given, as it did after the
-  reopen. A picture with no sound beside it carries the clock, so `selectTrack` now refuses to turn
-  it off with `UnsupportedOperationException`, as it refuses to turn off the sound of a song; the
+  keyframe at the position. The last picture leaves the screen (#530). A picture with no sound
+  beside it carries the clock, so `selectTrack` now refuses to turn it off with `UnsupportedOperationException`, as it refuses to turn off the sound of a song; the
   reopen it ran before failed the player for want of a stream.
+- The last picture leaves the screen when no picture plays any more (#530), as in mpv: when the
+  picture is turned off while the sound plays, when an item with no picture follows one with a
+  picture, when an open fails, when the player stops, and when a renderer is attached while no
+  picture plays. The screen shows its background with the subtitles still drawn over it until the
+  next picture arrives, and a picture that follows a picture replaces it with no blank between
+  them. An item that ended, or failed while it played, keeps its last picture, as mpv does when it
+  keeps a file open at its end. `VideoRenderer` gains `clearPicture`, which does nothing by
+  default, so a renderer of your own keeps compiling and keeps its last picture as before; a
+  renderer that throws from it is reported with `PlaybackWarning.RendererFailed` and stays
+  attached.
 - A file whose sound starts after its picture shows that picture, with silence, as mpv and VLC do
   (#526). Before, it opened on the picture and then jumped to the first sound sample on play, so a
   recording whose sound starts two seconds in lost its first two seconds of picture, and a seek into

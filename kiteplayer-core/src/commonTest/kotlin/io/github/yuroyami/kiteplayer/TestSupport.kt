@@ -240,6 +240,20 @@ internal class RecordingRenderer(
         overlays += overlay
     }
 
+    /** How many frames had been presented at each [clearPicture], in order. */
+    val clearedAt: MutableList<Int> = mutableListOf()
+
+    /** Thrown by every [clearPicture] while set, as a renderer with a bug in it would. */
+    var clearFailure: Exception? = null
+
+    override fun clearPicture() {
+        clearFailure?.let { throw it }
+        clearedAt += received.size
+    }
+
+    /** True while the last thing this renderer was told is a picture, not that none plays (#530). */
+    val showsPicture: Boolean get() = received.size > (clearedAt.lastOrNull() ?: 0)
+
     override val events: Flow<RendererEvent> = emptyFlow()
 
     override fun close() = Unit

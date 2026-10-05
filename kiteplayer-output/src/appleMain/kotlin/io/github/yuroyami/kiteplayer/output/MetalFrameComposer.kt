@@ -503,4 +503,4 @@ private const val KERNEL_FLAG = 4
 private const val LINEAR_LIGHT_FLAG = 8
 
 /** A quad over the whole target with the picture upright as stored: the light pass's geometry. */
-private val LIGHT_PASS_QUAD = floatArrayOf(1f, 1f, 1f, 0f, 0f, 1f, 0f, 0f)
+private val LIGHT_PASS_QUAD = floatArrayOf(1f, 1f, 1f, 0f, 0f, 1f, 0f, 0f, 0f, 0f)

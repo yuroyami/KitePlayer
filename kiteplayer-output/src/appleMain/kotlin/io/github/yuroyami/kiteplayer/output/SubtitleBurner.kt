@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
@@ -86,8 +87,10 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
     fun burn(pixels: CVPixelBufferRef, facts: PictureFacts, overlay: SubtitleOverlay?): CVPixelBufferRef? {
         val picture = MetalPicture.CorePixelBuffer(pixels)
         if (!composer.canEncode(picture)) return null
-        val storedWidth = facts.size.displayWidth.coerceAtLeast(1)
-        val storedHeight = facts.size.height.coerceAtLeast(1)
+        // The buffer takes the shape of what the crop leaves, and the composer reads only that.
+        val shown = facts.size.cropped(facts.crop)
+        val storedWidth = shown.displayWidth.coerceAtLeast(1)
+        val storedHeight = shown.height.coerceAtLeast(1)
         val quarterTurned = normalizedQuarterTurn(facts.rotationDegrees).let { it == 90 || it == 270 }
         val width = if (quarterTurned) storedHeight else storedWidth
         val height = if (quarterTurned) storedWidth else storedHeight
@@ -188,9 +191,15 @@ internal class PictureFacts(
     override val colorSpace: ColorSpaceInfo,
     override val rotationDegrees: Int = 0,
     override val mirrored: Boolean = false,
+    override val crop: PictureCrop? = null,
 ) : VideoFrame {
-    /** True when the stored picture is not the way it is meant to be seen. */
-    val needsTurn: Boolean get() = mirrored || normalizedQuarterTurn(rotationDegrees) != 0
+    /**
+     * True when the stored picture is not the way it is meant to be seen: it is turned, mirrored,
+     * or has edges its container hides (#497).
+     */
+    val needsRedraw: Boolean get() =
+        mirrored || normalizedQuarterTurn(rotationDegrees) != 0 ||
+            crop?.let { !it.isEmpty && it.fits(size.width, size.height) } == true
 
     override val pts: Pts = Pts.Zero
     override val duration: Pts? = null
@@ -201,7 +210,7 @@ internal class PictureFacts(
 
     companion object {
         fun of(frame: VideoFrame): PictureFacts =
-            PictureFacts(frame.size, frame.colorSpace, frame.rotationDegrees, frame.mirrored)
+            PictureFacts(frame.size, frame.colorSpace, frame.rotationDegrees, frame.mirrored, frame.crop)
     }
 }
 

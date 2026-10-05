@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
@@ -209,6 +210,7 @@ public class UIKitVideoRenderer internal constructor(
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         val mirrored = frame.mirrored
+        val crop = frame.crop
         val image = try {
             if (toneMapped(frame)) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
             val rgba = convert(frame)
@@ -219,7 +221,8 @@ public class UIKitVideoRenderer internal constructor(
             retainedSize = size
             retainedRotation = rotation
             retainedMirrored = mirrored
-            makeImage(rgba, size, rotation, mirrored)
+            retainedCrop = crop
+            makeImage(rgba, size, rotation, mirrored, crop)
         } catch (_: Throwable) {
             null
         } finally {
@@ -237,6 +240,7 @@ public class UIKitVideoRenderer internal constructor(
     private var retainedSize: VideoSize? = null
     private var retainedRotation: Int = 0
     private var retainedMirrored: Boolean = false
+    private var retainedCrop: PictureCrop? = null
     private val redrawWanted = kotlinx.atomicfu.atomic(false)
 
     /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
@@ -246,7 +250,7 @@ public class UIKitVideoRenderer internal constructor(
         val rgba = retainedRgba ?: return
         val size = retainedSize ?: return
         val image = try {
-            makeImage(rgba, size, retainedRotation, retainedMirrored)
+            makeImage(rgba, size, retainedRotation, retainedMirrored, retainedCrop)
         } catch (_: Throwable) {
             null
         } ?: return
@@ -314,10 +318,18 @@ public class UIKitVideoRenderer internal constructor(
         }
     }
 
-    private fun makeImage(rgba: ByteArray, size: VideoSize, rotationDegrees: Int, mirrored: Boolean): CGImageRef? {
+    private fun makeImage(
+        rgba: ByteArray,
+        size: VideoSize,
+        rotationDegrees: Int,
+        mirrored: Boolean,
+        crop: PictureCrop?,
+    ): CGImageRef? {
         val width = size.width
         val height = size.height
-        val displayWidth = displayWidth(size)
+        // The crop comes off first, so the picture is shaped by what it leaves (#497).
+        val shown = size.cropped(crop)
+        val displayWidth = displayWidth(shown)
         if (width <= 0 || height <= 0 || displayWidth <= 0) return null
 
         val rowBytes = width.toLong() * RGBA_BYTES
@@ -345,13 +357,14 @@ public class UIKitVideoRenderer internal constructor(
                 pixels.usePinned { pinned ->
                     memcpy(destination, pinned.addressOf(0), requiredBytes.convert())
                 }
-                val stored = CGBitmapContextCreateImage(context) ?: return null
+                val whole = CGBitmapContextCreateImage(context) ?: return null
+                val stored = cropStoredImage(whole, width, height, crop) ?: return null
                 // With identity geometry and nothing to composite, the stored image
                 // IS the finished picture, so the second bitmap pass was pure waste.
                 if (
                     rotationDegrees == 0 &&
                     !mirrored &&
-                    displayWidth == width &&
+                    displayWidth == shown.width &&
                     overlaySlot.value == null &&
                     videoTransform.isIdentity
                 ) {
@@ -359,7 +372,7 @@ public class UIKitVideoRenderer internal constructor(
                 }
                 try {
                     return transform(
-                        stored, displayWidth, height, rotationDegrees, mirrored, videoTransform, colorSpace,
+                        stored, displayWidth, shown.height, rotationDegrees, mirrored, videoTransform, colorSpace,
                     )
                 } finally {
                     CGImageRelease(stored)

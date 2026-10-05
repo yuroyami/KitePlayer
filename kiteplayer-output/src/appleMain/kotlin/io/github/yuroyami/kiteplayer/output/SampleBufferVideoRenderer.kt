@@ -206,7 +206,7 @@ public class SampleBufferVideoRenderer internal constructor(
      */
     private fun show(picture: PlainPicture): Boolean {
         val text = overlay?.takeIf { it.hasText() }
-        val burned = if (text != null || picture.facts.needsTurn) burn(picture, text) else null
+        val burned = if (text != null || picture.facts.needsRedraw) burn(picture, text) else null
         val sample = sampleBufferFor(burned ?: picture.buffer, picture.targetNanos)
         // The sample holds its own reference to the image, so the burned buffer's can go now.
         burned?.let { CVPixelBufferRelease(it) }

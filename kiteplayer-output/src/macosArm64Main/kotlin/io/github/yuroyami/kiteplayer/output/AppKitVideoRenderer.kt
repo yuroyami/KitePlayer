@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
@@ -273,7 +274,9 @@ public class AppKitVideoRenderer internal constructor(
         val ptsUs = frame.pts.micros
         val width = frame.size.width
         val height = frame.size.height
-        val displayWidth = frame.size.displayWidth
+        val crop = frame.crop
+        // The crop comes off before the aspect, so the shown width is that of what is left.
+        val displayWidth = frame.size.cropped(crop).displayWidth
         val rotation = quarterTurn(frame.rotationDegrees)
         val mirrored = frame.mirrored
         val image = try {
@@ -289,8 +292,9 @@ public class AppKitVideoRenderer internal constructor(
                 retainedDisplayWidth = displayWidth
                 retainedRotation = rotation
                 retainedMirrored = mirrored
+                retainedCrop = crop
                 retainedPtsUs = ptsUs
-                makeImage(rgba, width, height, displayWidth, rotation, mirrored)
+                makeImage(rgba, width, height, displayWidth, rotation, mirrored, crop)
             }
         } catch (failure: Throwable) {
             eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "conversion failed"))
@@ -382,6 +386,7 @@ public class AppKitVideoRenderer internal constructor(
         displayWidth: Int,
         rotationDegrees: Int,
         mirrored: Boolean,
+        crop: PictureCrop?,
     ): NSImage? {
         // The engine's one colour-matrix law, applied to bytes here instead of in
         // a shader. Identity hands back the same array, so an untouched picture copies nothing.
@@ -403,14 +408,17 @@ public class AppKitVideoRenderer internal constructor(
                 ) ?: return@usePinned null
 
                 try {
-                    val stored = CGBitmapContextCreateImage(context) ?: return@usePinned null
+                    val whole = CGBitmapContextCreateImage(context) ?: return@usePinned null
+                    // Everything below sees only what the crop leaves, [displayWidth] included.
+                    val stored = cropStoredImage(whole, width, height, crop) ?: return@usePinned null
+                    val shown = io.github.yuroyami.kiteplayer.VideoSize(width, height).cropped(crop)
                     try {
                         // Sizing by the display width applies a non-square pixel aspect, so anamorphic
                         // content is not stretched. A quarter turn moves that stretch onto the other
                         // axis, because the picture's own width is vertical afterwards.
                         val quarterTurned = rotationDegrees == 90 || rotationDegrees == 270
-                        val presentedWidth = if (quarterTurned) height else displayWidth
-                        val presentedHeight = if (quarterTurned) displayWidth else height
+                        val presentedWidth = if (quarterTurned) shown.height else displayWidth
+                        val presentedHeight = if (quarterTurned) displayWidth else shown.height
                         // An aspect override reshapes the picture AS PRESENTED,
                         // which for this path is only a different declared size and costs nothing.
                         val size = CGSizeMake(
@@ -426,7 +434,7 @@ public class AppKitVideoRenderer internal constructor(
                         ) {
                             NSImage(cGImage = stored, size = size)
                         } else {
-                            val turned = turn(stored, width, height, rotationDegrees, mirrored, transform, colorSpace)
+                            val turned = turn(stored, shown.width, shown.height, rotationDegrees, mirrored, transform, colorSpace)
                                 ?: return@usePinned null
                             try {
                                 NSImage(cGImage = turned, size = size)
@@ -619,6 +627,7 @@ public class AppKitVideoRenderer internal constructor(
     private var retainedDisplayWidth: Int = 0
     private var retainedRotation: Int = 0
     private var retainedMirrored: Boolean = false
+    private var retainedCrop: PictureCrop? = null
     private val redrawWanted = kotlinx.atomicfu.atomic(false)
 
     /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
@@ -627,7 +636,9 @@ public class AppKitVideoRenderer internal constructor(
         if (closed.value) return
         val rgba = retainedRgba ?: return
         val image = try {
-            makeImage(rgba, retainedWidth, retainedHeight, retainedDisplayWidth, retainedRotation, retainedMirrored)
+            makeImage(
+                rgba, retainedWidth, retainedHeight, retainedDisplayWidth, retainedRotation, retainedMirrored, retainedCrop,
+            )
         } catch (_: Throwable) {
             null
         } ?: return

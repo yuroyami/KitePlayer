@@ -15,6 +15,7 @@ import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.KeyframeChoice
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.MediaProgram
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackId
@@ -629,6 +630,7 @@ internal class VideoDecoderContinuity {
     private var replaySeedPending: Boolean = false
     private var colorWarningClaimed: Boolean = false
     private var dolbyVisionWarningClaimed: Boolean = false
+    private var cropWarningClaimed: Boolean = false
 
     internal fun timestamp(
         real: Pts?,
@@ -673,6 +675,13 @@ internal class VideoDecoderContinuity {
     internal fun claimDolbyVisionWarning(): Boolean {
         if (dolbyVisionWarningClaimed) return false
         dolbyVisionWarningClaimed = true
+        return true
+    }
+
+    /** The latch of the warning that the container's crop does not fit a decoded frame. */
+    internal fun claimCropWarning(): Boolean {
+        if (cropWarningClaimed) return false
+        cropWarningClaimed = true
         return true
     }
 }
@@ -785,6 +794,10 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: 
             )
         },
         codecExtradata = codecExtradata?.copyOf(),
+        // As the container states it. Whether it fits is a question for each decoded frame, whose
+        // size can differ from the one declared here (#497).
+        crop = video?.crop?.let { PictureCrop(top = it.top, bottom = it.bottom, left = it.left, right = it.right) }
+            ?.takeUnless { it.isEmpty },
     )
 }
 
@@ -1044,9 +1057,11 @@ private class KiteFFmpegVideoDecoder(
             isKeyframe = info.isKeyframe,
         )
         // The rotation is the stream's, taken from the container's display matrix once at open. Every
-        // frame of the stream carries it, because the renderer sees frames and nothing else.
+        // frame of the stream carries it, because the renderer sees frames and nothing else. So does
+        // the container's crop, which FFmpeg's decoder never applies (#497).
         val wrapped = KiteFFmpegVideoFrame(
             frame, pts, duration, generation, stream.rotationDegrees, stream.mirrored, stream.hdr, decoded.sceneMaxNits,
+            crop = cropFitting(info.width, info.height),
         )
         try {
             warnIfColorIsApproximated(wrapped.colorSpace)
@@ -1216,6 +1231,26 @@ private class KiteFFmpegVideoDecoder(
      * only ever have been right by accident. Tone mapping now announces itself where it ENGAGES,
      * as `RendererEvent.ToneMapEngaged` from the renderer that did it.
      */
+    /**
+     * The stream's crop when it leaves something of a [width] by [height] frame, else null. A crop
+     * that leaves nothing is the file's mistake, and showing the whole picture beats showing none,
+     * so it is dropped with a warning, once for the stream.
+     */
+    private fun cropFitting(width: Int, height: Int): PictureCrop? {
+        val crop = stream.crop ?: return null
+        if (crop.fits(width, height)) return crop
+        if (continuity.claimCropWarning()) {
+            warn(
+                PlaybackWarning.CropIgnored(
+                    stream.index,
+                    "top ${crop.top}, bottom ${crop.bottom}, left ${crop.left} and right ${crop.right} " +
+                        "leave nothing of a ${width}x$height picture",
+                ),
+            )
+        }
+        return null
+    }
+
     private fun warnIfColorIsApproximated(color: ColorSpaceInfo) {
         val detail = when (color.matrix) {
             ColorMatrix.Bt2020Cl ->
@@ -1493,6 +1528,8 @@ public class KiteFFmpegVideoFrame internal constructor(
     private val streamHdr: HdrStaticMetadata? = null,
     /** The peak of this frame's scene, from the Dolby Vision RPU the decoder read, in nits. */
     override val sceneMaxNits: Float? = null,
+    /** The container's crop, already checked to fit this frame. */
+    override val crop: PictureCrop? = null,
 ) : VideoFrame, SoftwareReadableFrame {
 
     private val info = frame.info

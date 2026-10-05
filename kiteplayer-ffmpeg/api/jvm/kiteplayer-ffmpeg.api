@@ -70,10 +70,11 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoDecoderFa
 }
 
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame, io/github/yuroyami/kiteplayer/spi/VideoFrame {
-	public synthetic fun <init> (Lio/github/yuroyami/kiteffmpeg/Frame;JLio/github/yuroyami/kiteplayer/Pts;JIZLio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;Ljava/lang/Float;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteffmpeg/Frame;JLio/github/yuroyami/kiteplayer/Pts;JIZLio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;Ljava/lang/Float;Lio/github/yuroyami/kiteplayer/PictureCrop;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
 	public fun copyPlane (I[BI)V
 	public fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
+	public fun getCrop ()Lio/github/yuroyami/kiteplayer/PictureCrop;
 	public fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public fun getGeneration-exH1Oj8 ()J
 	public fun getHardwareSurface ()Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;

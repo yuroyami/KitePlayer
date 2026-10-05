@@ -1379,8 +1379,10 @@ internal class PlaybackCore(
         val rasterizer = output.subtitleRasterizer ?: return null
         val cues = subtitleCues.value
         if (cues.isEmpty()) return null
-        val width = captured.size.displayWidth
-        val height = captured.size.height
+        // What the screen showed of the picture, so the text sits where it did once the caller crops.
+        val shown = captured.size.cropped(captured.crop)
+        val width = shown.displayWidth
+        val height = shown.height
         if (width <= 0 || height <= 0) return null
         val images = withContext(dispatchers.raster) {
             rasterizer.rasterizeWithinLimits(
@@ -3335,7 +3337,7 @@ internal class PlaybackCore(
                 .withSelection(TrackKind.Audio, audioStream?.let { TrackId(it.index) })
                 .withSelection(TrackKind.Subtitle, subtitleStream?.let { TrackId(it.index) })
             if (pending == null) tracks = builtTracks else pending.tracks = builtTracks
-            videoStream?.videoSize?.let { size ->
+            videoStream?.visibleVideoSize?.let { size ->
                 val event = PlayerEvent.VideoSizeChanged(size)
                 if (pending == null) emitEvent(event) else pending.events += event
             }
@@ -6183,7 +6185,7 @@ internal class PlaybackCore(
         session.renderer.outputSize?.let { output ->
             if (output.width > 0 && output.height > 0) return output.width to output.height
         }
-        val size = session.videoStream?.videoSize
+        val size = session.videoStream?.visibleVideoSize
         val width = size?.displayWidth?.takeIf { it > 0 }
         val height = size?.height?.takeIf { it > 0 }
         if (width == null || height == null) return DEFAULT_SUBTITLE_CANVAS_WIDTH to DEFAULT_SUBTITLE_CANVAS_HEIGHT
@@ -6193,7 +6195,7 @@ internal class PlaybackCore(
     /** The geometry the typesetter draws into, from the same canvas rule [publishOverlay] uses. */
     private fun typesetFrame(session: OpenSession): io.github.yuroyami.kiteplayer.spi.TypesetFrame {
         val (width, height) = subtitleCanvas(session)
-        val size = session.videoStream?.videoSize
+        val size = session.videoStream?.visibleVideoSize
         var videoWidth = size?.displayWidth?.takeIf { it > 0 } ?: width
         var videoHeight = size?.height?.takeIf { it > 0 } ?: height
         // The renderer turns a sideways recording upright, so the fitted picture is the turned one.
@@ -9549,7 +9551,7 @@ internal class PlaybackCore(
             duration = session?.let { publishedDuration(it) },
             durationIsEstimate = session?.let { durationStillEstimated(it) } ?: false,
             seekable = session?.source?.seekable ?: false,
-            videoSize = session?.videoStream?.videoSize,
+            videoSize = session?.videoStream?.visibleVideoSize,
             tracks = tracks,
             chapters = session?.source?.chapters ?: emptyList(),
             metadata = session?.source?.metadata ?: emptyMap(),
@@ -12306,7 +12308,7 @@ private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
             isForced = stream.isForced,
             isAccessibility = stream.isAccessibility,
             bitrate = stream.bitrate,
-            videoSize = stream.videoSize,
+            videoSize = stream.visibleVideoSize,
             frameRate = stream.frameRate,
             sampleRate = stream.sampleRate,
             channels = stream.channels,

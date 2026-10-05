@@ -243,7 +243,7 @@ public final class io/github/yuroyami/kiteplayer/BufferPolicyBuilder {
 }
 
 public final class io/github/yuroyami/kiteplayer/CapturedFrame : io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame {
-	public synthetic fun <init> (JLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;IZJ[I[I[[BLio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;IZJ[I[I[[BLio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;Lio/github/yuroyami/kiteplayer/PictureCrop;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
 	public fun copyPlane (I[BI)V
 	public fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;

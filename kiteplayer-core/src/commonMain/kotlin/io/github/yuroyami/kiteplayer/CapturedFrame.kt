@@ -36,7 +36,8 @@ public class CapturedFrame internal constructor(
     private val heights: IntArray,
     private val planes: Array<ByteArray>,
     /**
-     * The subtitles that were on screen, laid out for THIS frame's own size, or null.
+     * The subtitles that were on screen, laid out for THIS frame's own size after its [crop], or
+     * null.
      *
      * Null when the capture did not ask for them and when nothing was showing. Laid out for the
      * frame rather than for the screen because a screenshot is the frame's size, not the phone's:
@@ -44,6 +45,12 @@ public class CapturedFrame internal constructor(
      * a different shape.
      */
     public val overlay: io.github.yuroyami.kiteplayer.spi.SubtitleOverlay? = null,
+    /**
+     * The container's crop of the presented frame, or null (#497). The planes hold the whole
+     * stored picture, as they do for a turned one, so a caller that converts them shows only what
+     * the crop leaves, as the screen did.
+     */
+    override val crop: PictureCrop? = null,
 ) : SoftwareReadableFrame {
 
     init {
@@ -131,6 +138,7 @@ public class CapturedFrame internal constructor(
                 strides = strides,
                 heights = heights,
                 planes = planes,
+                crop = frame.crop,
             )
         }
     }
@@ -149,5 +157,6 @@ public class CapturedFrame internal constructor(
             heights = heights,
             planes = planes,
             overlay = overlay,
+            crop = crop,
         )
 }

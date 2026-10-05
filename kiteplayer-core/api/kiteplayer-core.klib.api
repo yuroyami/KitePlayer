@@ -2490,6 +2490,8 @@ final class io.github.yuroyami.kiteplayer/BufferPolicyBuilder { // io.github.yur
 final class io.github.yuroyami.kiteplayer/CapturedFrame : io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame { // io.github.yuroyami.kiteplayer/CapturedFrame|null[0]
     final val colorSpace // io.github.yuroyami.kiteplayer/CapturedFrame.colorSpace|{}colorSpace[0]
         final fun <get-colorSpace>(): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo // io.github.yuroyami.kiteplayer/CapturedFrame.colorSpace.<get-colorSpace>|<get-colorSpace>(){}[0]
+    final val crop // io.github.yuroyami.kiteplayer/CapturedFrame.crop|{}crop[0]
+        final fun <get-crop>(): io.github.yuroyami.kiteplayer/PictureCrop? // io.github.yuroyami.kiteplayer/CapturedFrame.crop.<get-crop>|<get-crop>(){}[0]
     final val duration // io.github.yuroyami.kiteplayer/CapturedFrame.duration|{}duration[0]
         final fun <get-duration>(): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer/CapturedFrame.duration.<get-duration>|<get-duration>(){}[0]
     final val generation // io.github.yuroyami.kiteplayer/CapturedFrame.generation|{}generation[0]

@@ -70,10 +70,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `description` are marked as accessibility tracks (#404). An encrypted manifest is refused with
   `DashUnsupportedException` instead of decoding to noise, and an encrypted set beside clear ones
   is left out.
-- KitePlayer builds on KiteFFmpeg 0.5.0. Its web module carries FFmpeg's HLS reader, which makes
-  `kite.wasm` and `kite.mjs` 38,170 bytes bigger after gzip than 0.4.0's, 1,525,527 bytes in all,
-  so the web size check's budget for them rises from 1.42 MiB to 1.46 MiB. KiteFFmpeg's own
-  changelog lists its changes.
+- KitePlayer builds on KiteFFmpeg 0.5.0. Its web module carries FFmpeg's HLS reader and the new
+  readers beside it, from the Dolby Vision RPU to Matroska editions, which makes `kite.wasm` and
+  `kite.mjs` 49,039 bytes bigger after gzip than 0.4.0's, 1,536,396 bytes in all, so the web size
+  check's budget for them rises from 1.42 MiB to 1.47 MiB (#523). KiteFFmpeg's own changelog lists
+  its changes.
 - A WebM DASH presentation that has been read to its end seeks again. FFmpeg's Matroska reader
   used to answer end of file for ever after, so a seek returned and no packet followed, with one
   Period or several. KiteFFmpeg 0.5.0 carries the FFmpeg fix.

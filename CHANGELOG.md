@@ -452,6 +452,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `newPrograms`, null by default, so media whose streams never change plays exactly as before. A
   sound whose rate FFmpeg does not know yet, such as AAC listed before its first packet, opens
   instead of failing, and plays at the rate its decoder finds.
+- A file whose sound starts after its picture shows that picture, with silence, as mpv and VLC do
+  (#526). Before, it opened on the picture and then jumped to the first sound sample on play, so a
+  recording whose sound starts two seconds in lost its first two seconds of picture, and a seek into
+  that stretch landed where the sound starts. The sound then plays in step with the picture. A sound
+  that starts later than the point an in-place track change switches to is padded the same way, so
+  the clock does not jump there either.
 
 ### Removed
 

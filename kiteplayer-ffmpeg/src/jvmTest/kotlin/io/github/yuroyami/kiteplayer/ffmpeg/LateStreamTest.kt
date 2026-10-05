@@ -85,12 +85,12 @@ class LateStreamTest {
             player.play()
             onPlay()
             assertTrue(
-                waitFor(12.seconds) { player.state.value.tracks.selectedAudio == TrackId(1) },
+                waitFor(15.seconds) { player.state.value.tracks.selectedAudio == TrackId(1) },
                 "the French sound plays: ${player.state.value.tracks}",
             )
             assertEquals("fre", player.state.value.tracks.find(TrackId(1))?.language)
             assertTrue(
-                waitFor(10.seconds) { player.state.value.tracks.selectedAudio == TrackId(2) },
+                waitFor(15.seconds) { player.state.value.tracks.selectedAudio == TrackId(2) },
                 "the moved sound plays: ${player.state.value.tracks}",
             )
             assertTrue(

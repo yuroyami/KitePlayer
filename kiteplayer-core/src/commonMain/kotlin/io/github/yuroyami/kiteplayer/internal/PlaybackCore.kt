@@ -10782,6 +10782,59 @@ internal class PlaybackCore(
     }
 
     /**
+     * The picture [epoch] starts on, for a sound that may start after it (#526), or null when the
+     * session shows no moving picture, as with none, one turned off, cover art or a sparse stream,
+     * whose sound carries the timeline, when it is a preload, which joins the ring where the item
+     * before it ends, or when its picture has not come within [LANDING_GRACE]. The decoder that
+     * records it never waits on this worker, and a quiesce ends the wait at once.
+     */
+    private suspend fun pictureStartUs(session: OpenSession, worker: Worker, epoch: Generation): Long? {
+        val picture = session.videoStream
+        if (session.video == null || picture == null || picture.isCoverArt || picture.isSparse) return null
+        if (session.videoParked.value || session.preloading.value) return null
+        val deadline = clock.nanos() + LANDING_GRACE.inWholeNanoseconds
+        while (true) {
+            session.firstVideo.of(epoch)?.let { return it.micros }
+            if (worker.quiesceRequested || clock.nanos() >= deadline) return null
+            worker.nap(HANDOFF_POLL)
+        }
+    }
+
+    /**
+     * Writes silence from [fromUs] to [untilUs] ahead of a sound that starts after where playing
+     * starts (#526), so the clock runs from the picture rather than jumping to the first sample, and
+     * the picture before the sound shows. mpv and VLC play such a file the same way. Written in
+     * slices through the same door as decoded sound, so the conversion and the clock see one
+     * stream, and the taps hear the silence too. False when a quiesce abandoned it part way.
+     */
+    private suspend fun feedSilence(
+        session: OpenSession,
+        worker: Worker,
+        audio: AudioPlayback,
+        fromUs: Long,
+        untilUs: Long,
+        format: AudioFormat,
+        epoch: Generation,
+    ): Boolean {
+        val totalFrames = (untilUs - fromUs) * format.sampleRate / 1_000_000L
+        if (totalFrames <= 0) return true
+        val slice = (format.sampleRate / 10).coerceAtLeast(1)
+        val silence = FloatArray(slice * format.channels)
+        session.firstAudio.record(epoch, Pts(fromUs))
+        session.landingArrived.trySend(Unit)
+        var written = 0L
+        while (written < totalFrames) {
+            if (worker.quiesceRequested) return false
+            val frames = minOf(slice.toLong(), totalFrames - written).toInt()
+            val pts = Pts(fromUs + written * 1_000_000L / format.sampleRate)
+            deliverToTaps(Generation(session.audioGeneration.value), pts, silence, frames, format)
+            audio.submitDecoded(pts, silence, frames, format, { worker.quiesceRequested }, worker::nap)
+            written += frames
+        }
+        return !worker.quiesceRequested
+    }
+
+    /**
      * Turns decoded buffers into what the device took, and hands them to the ring.
      *
      * The ring's single producer is this worker, which is why the conversion stage lives on it too. The
@@ -10866,6 +10919,17 @@ internal class PlaybackCore(
                     val switchDiscard = session.audioSwitchDiscardBeforeUs.value
                     // A buffer kept at a pass end that was lifted resumes where its written half ended.
                     val discardBefore = maxOf(session.discardBeforeUs.value, switchDiscard, resumeFromUs)
+                    // Where the sound must start when it starts later than this buffer says: at the
+                    // switch point after an in-place change, or at the picture the epoch starts on,
+                    // so the clock starts with the picture (#526).
+                    if (resumeFromUs == Long.MIN_VALUE && (switchDiscard != Long.MIN_VALUE || fedUntilUs == Long.MIN_VALUE)) {
+                        val from = if (switchDiscard != Long.MIN_VALUE) switchDiscard else pictureStartUs(session, worker, epoch)
+                        if (worker.quiesceRequested) continue
+                        if (from != null && buffer.pts.micros > from) {
+                            if (!feedSilence(session, worker, audio, from, buffer.pts.micros, buffer.format, epoch)) continue
+                            fedUntilUs = buffer.pts.micros
+                        }
+                    }
                     var interleaved = interleaver.interleave(buffer)
                     var pts = buffer.pts
                     var frames = buffer.frameCount

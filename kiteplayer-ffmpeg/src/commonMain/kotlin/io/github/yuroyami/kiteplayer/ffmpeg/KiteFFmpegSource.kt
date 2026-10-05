@@ -51,6 +51,7 @@ import io.github.yuroyami.kiteffmpeg.DecoderId
 import io.github.yuroyami.kiteffmpeg.DolbyVisionMetadata
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 import io.github.yuroyami.kiteffmpeg.dsl.DecoderOptions
+import io.github.yuroyami.kiteffmpeg.dsl.DecoderSkip
 import io.github.yuroyami.kiteffmpeg.MediaSource
 import io.github.yuroyami.kiteffmpeg.FFmpegError
 import io.github.yuroyami.kiteffmpeg.FFmpegException
@@ -474,6 +475,7 @@ public class KiteFFmpegSource internal constructor(
         warn = { onWarning(it) },
         // The graph runs on software frames only; the factory stands hardware down first.
         filterDescription = if (hardware == HwdecStatus.Software) filter else null,
+        openingSkip = openingSkip(videoDecoderOptions["skip_frame"]),
     )
 
     /**
@@ -862,6 +864,20 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
     }
 }
 
+/**
+ * The skip level the `skip_frame` decoder option names, by FFmpeg's own names for it, or
+ * [DecoderSkip.None] when there is none. FFmpeg's `default` skips only empty packets, which no
+ * decoder treats differently from `none`.
+ */
+internal fun openingSkip(option: String?): DecoderSkip = when (option?.trim()) {
+    "noref" -> DecoderSkip.NonReference
+    "bidir" -> DecoderSkip.Bidirectional
+    "nointra" -> DecoderSkip.NonIntra
+    "nokey" -> DecoderSkip.NonKey
+    "all" -> DecoderSkip.All
+    else -> DecoderSkip.None
+}
+
 /** The deinterlacer: FFmpeg's bwdif, which keeps the frame rate in send_frame mode. */
 private const val DEINTERLACER = "bwdif"
 
@@ -891,9 +907,12 @@ private class KiteFFmpegVideoDecoder(
     private val warn: (PlaybackWarning) -> Unit,
     /** The compiled filter chain every decoded frame runs through, or null for none. */
     private val filterDescription: String? = null,
+    /** The frames the decoder was opened to skip, which [skipNonReferenceFrames] goes back to. */
+    private val openingSkip: DecoderSkip = DecoderSkip.None,
 ) : VideoDecoder {
 
     private var generation: Generation = Generation.Initial
+    private var skippingNonReference = false
 
     /** The graph, built lazily from the FIRST decoded frame's own geometry and format. */
     private var filterGraph: io.github.yuroyami.kiteffmpeg.FilterGraph? = null
@@ -902,6 +921,21 @@ private class KiteFFmpegVideoDecoder(
 
     override suspend fun send(packet: PlayerPacket?): Boolean =
         decoder.send((packet as KiteFFmpegPacket?)?.native)
+
+    /**
+     * FFmpeg's `skip_frame` at its non-reference level, raised and lowered between packets (#468).
+     *
+     * A decoder opened to skip more, such as the scrubbing profile's keyframes only, already skips
+     * every frame this would and keeps its own level. A decoder with a filter graph decodes every
+     * frame, because a filter such as the deinterlacer reads the frames beside the one it gives,
+     * so the first picture kept would differ from the one an unskipped run gives.
+     */
+    override fun skipNonReferenceFrames(skip: Boolean) {
+        if (skip == skippingNonReference) return
+        skippingNonReference = skip
+        if (filterDescription != null || openingSkip >= DecoderSkip.NonReference) return
+        decoder.setSkipFrame(if (skip) DecoderSkip.NonReference else openingSkip)
+    }
 
     /** KiteFFmpeg's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
     override val isDrained: Boolean

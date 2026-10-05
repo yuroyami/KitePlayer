@@ -10070,6 +10070,9 @@ internal class PlaybackCore(
         var ending = false
         // Set when a late packet was thrown away and cleared by the next keyframe; see skipToKeyframe.
         var skippingToKeyframe = false
+        // What the decoder was last told to skip; see skipNonReferenceBeforeTarget. A flush leaves
+        // the decoder's setting as it was, so this carries across one too.
+        var skippingNonReference = false
         val held = HeldLanding()
         try {
             while (true) {
@@ -10136,6 +10139,21 @@ internal class PlaybackCore(
                     continue
                 }
                 skippingToKeyframe = false
+                val skipNonReference = skipNonReferenceBeforeTarget(
+                    packetPtsUs = packet.pts?.micros,
+                    packetDurationUs = packet.duration?.micros,
+                    discardBeforeUs = session.discardBeforeUs.value,
+                    landsBeforeTarget = session.landsBeforeTarget.value,
+                )
+                if (skipNonReference != skippingNonReference) {
+                    try {
+                        videoDecoderSkip(decoder, skipNonReference)
+                    } catch (failure: Throwable) {
+                        packet.close()
+                        throw failure
+                    }
+                    skippingNonReference = skipNonReference
+                }
                 try {
                     while (!videoDecoderSend(decoder, packet)) {
                         // False means the decoder did NOT take this packet. A synchronous codec usually
@@ -10218,6 +10236,14 @@ internal class PlaybackCore(
         throw cancellation
     } catch (failure: Throwable) {
         throw VideoDecoderRuntimeFailure("send", failure)
+    }
+
+    private fun videoDecoderSkip(decoder: VideoDecoder, skip: Boolean) = try {
+        decoder.skipNonReferenceFrames(skip)
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (failure: Throwable) {
+        throw VideoDecoderRuntimeFailure("skip", failure)
     }
 
     /** [videoDecoderReceive], timed: a frame that came out is one sample of decode time. */

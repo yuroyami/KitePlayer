@@ -225,7 +225,22 @@ internal class MediaScript(
      * stalls and then delivers.
      */
     val liveHolds: List<LongRange> = emptyList(),
+    /**
+     * True makes every other picture between keyframes one no other picture is built on, as the
+     * B-frames of a stream coded I, B, P, B, P are, and the scripted video decoder then skips those
+     * when the engine asks it to (#468).
+     */
+    val alternateFramesAreNonReference: Boolean = false,
+    /** What the scripted video decoder decoded and skipped, by packet time. */
+    val videoProbe: ScriptedVideoProbe = ScriptedVideoProbe(),
 ) {
+    /** Whether the picture at [ptsUs] is one nothing is built on, under [alternateFramesAreNonReference]. */
+    fun isNonReferenceVideo(ptsUs: Long, isKeyframe: Boolean): Boolean {
+        if (!alternateFramesAreNonReference || isKeyframe) return false
+        val index = videoTimestampsUs?.indexOf(ptsUs)?.toLong() ?: (ptsUs / videoFrameDurationUs)
+        return index % 2 == 1L
+    }
+
     val videoIndex: Int = 0
     val audioIndex: Int = if (hasVideo) 1 else 0
     val subtitleIndex: Int = (if (hasVideo) 1 else 0) + (if (hasAudio) 1 else 0)
@@ -355,6 +370,17 @@ internal class ScriptedSubtitlePacket(
  * [onPacketSent] also lets a test enqueue a real player command from inside the actor's subtitle
  * drain, reproducing a command that arrives concurrently on a device without thread races.
  */
+/** The packet times the scripted video decoder decoded and skipped, in microseconds, in order. */
+internal class ScriptedVideoProbe {
+    val decodedUs: MutableList<Long> = mutableListOf()
+    val skippedUs: MutableList<Long> = mutableListOf()
+
+    fun clear() {
+        decodedUs.clear()
+        skippedUs.clear()
+    }
+}
+
 internal class ScriptedSubtitleProbe {
     /** How many end-of-stream drains the scripted subtitle decoders took. */
     var drains: Int = 0
@@ -1212,6 +1238,11 @@ internal class ScriptedVideoDecoder(
         if (faults.videoDecodeSendDelay > Duration.ZERO) delay(faults.videoDecodeSendDelay)
         if (faults.emptyDecode() || faults.videoDecodeProducesNothing) return true
         val pts = packet.pts ?: Pts.Zero
+        if (skippingNonReference && script.isNonReferenceVideo(pts.micros, packet.isKeyframe)) {
+            script.videoProbe.skippedUs += pts.micros
+            return true
+        }
+        script.videoProbe.decodedUs += pts.micros
         pending.addLast(
             FakeVideoFrame(
                 pts = pts,
@@ -1235,6 +1266,14 @@ internal class ScriptedVideoDecoder(
             if (faults.videoDecodeReceiveDelay > Duration.ZERO) delay(faults.videoDecodeReceiveDelay)
         }
         return frame
+    }
+
+    /** What the engine last asked of [skipNonReferenceFrames]. A flush keeps it, as FFmpeg's does. */
+    var skippingNonReference: Boolean = false
+        private set
+
+    override fun skipNonReferenceFrames(skip: Boolean) {
+        skippingNonReference = skip
     }
 
     override suspend fun flush(newGeneration: Generation) {

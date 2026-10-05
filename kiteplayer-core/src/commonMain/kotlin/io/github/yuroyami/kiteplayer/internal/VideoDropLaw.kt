@@ -52,3 +52,32 @@ internal fun skipVideoPacketBeforeDecode(
     if (alreadySkipping) return true
     return pts < positionUs - lateThresholdUs
 }
+
+/**
+ * Whether the decoder may skip the frames nothing predicts from while it decodes this packet
+ * (#468), on the run up to a precise seek's target at [discardBeforeUs].
+ *
+ * A precise seek starts at the keyframe before the target and throws away every picture before
+ * it, so a frame no other frame is built on, below the target, does nothing but cost its decode.
+ * Skipping it leaves every frame others are built on decoded, so the first picture at the target
+ * and every one after it are exactly those a run that skipped nothing gives. mpv skips the same
+ * frames during its precise seeks by default.
+ *
+ * A backward step keeps the newest picture below its target as the landing, so the frames near
+ * the target have to be there to be compared. A packet is skipped there only when the frame after
+ * it, at its own time plus its duration, is still below the target with a frame to spare, and a
+ * packet that gives no duration is not skipped. A packet with no timestamp is never skipped,
+ * because nothing says which side of the target it falls.
+ */
+internal fun skipNonReferenceBeforeTarget(
+    packetPtsUs: Long?,
+    packetDurationUs: Long?,
+    discardBeforeUs: Long,
+    landsBeforeTarget: Boolean,
+): Boolean {
+    if (discardBeforeUs == Long.MIN_VALUE) return false
+    val pts = packetPtsUs ?: return false
+    if (!landsBeforeTarget) return pts < discardBeforeUs
+    val duration = packetDurationUs?.takeIf { it > 0 } ?: return false
+    return pts + 2 * duration < discardBeforeUs
+}

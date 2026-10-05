@@ -3621,10 +3621,12 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoDecoder :
 	public abstract fun isDrained ()Z
 	public abstract fun receive (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun send (Lio/github/yuroyami/kiteplayer/spi/PlayerPacket;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun skipNonReferenceFrames (Z)V
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/VideoDecoder$DefaultImpls {
 	public static fun getOutput (Lio/github/yuroyami/kiteplayer/spi/VideoDecoder;)Lio/github/yuroyami/kiteplayer/spi/FrameShape;
+	public static fun skipNonReferenceFrames (Lio/github/yuroyami/kiteplayer/spi/VideoDecoder;Z)V
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoDecoderFactory {

@@ -880,6 +880,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoDecoder : kotlin/AutoC
     abstract suspend fun flush(io.github.yuroyami.kiteplayer/Generation) // io.github.yuroyami.kiteplayer.spi/VideoDecoder.flush|flush(io.github.yuroyami.kiteplayer.Generation){}[0]
     abstract suspend fun receive(): io.github.yuroyami.kiteplayer.spi/VideoFrame? // io.github.yuroyami.kiteplayer.spi/VideoDecoder.receive|receive(){}[0]
     abstract suspend fun send(io.github.yuroyami.kiteplayer.spi/PlayerPacket?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/VideoDecoder.send|send(io.github.yuroyami.kiteplayer.spi.PlayerPacket?){}[0]
+    open fun skipNonReferenceFrames(kotlin/Boolean) // io.github.yuroyami.kiteplayer.spi/VideoDecoder.skipNonReferenceFrames|skipNonReferenceFrames(kotlin.Boolean){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/VideoDecoderFactory { // io.github.yuroyami.kiteplayer.spi/VideoDecoderFactory|null[0]

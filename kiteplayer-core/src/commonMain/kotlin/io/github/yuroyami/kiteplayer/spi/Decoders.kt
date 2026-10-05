@@ -88,6 +88,21 @@ public interface VideoDecoder : AutoCloseable {
      * a freshly flushed decoder.
      */
     public suspend fun flush(newGeneration: Generation)
+
+    /**
+     * Whether to skip the frames no other frame is predicted from, from the next packet [send]
+     * offers until the next call (#468).
+     *
+     * The engine turns it on while a precise seek decodes its way up to the target, for the packets
+     * whose pictures nothing will show, and off again before the pictures it keeps, so the landed
+     * picture and every one after it are the same as with no skipping at all. A frame others predict
+     * from is always decoded, which is what lets a decoder turn it off at any packet with no flush
+     * and carry on undamaged. A [flush] leaves it as it was.
+     *
+     * The default skips nothing, so a decoder that cannot skip, such as a platform codec, decodes
+     * every frame exactly as before. A skipped frame gives no output.
+     */
+    public fun skipNonReferenceFrames(skip: Boolean) {}
 }
 
 /** Creates audio decoders. The engine tries the factories in order and uses the first one that answers. */

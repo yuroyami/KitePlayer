@@ -318,6 +318,8 @@ private class ConsumerGuardedDecoder(
         session.check()
     }
 
+    override fun skipNonReferenceFrames(skip: Boolean) = delegate.skipNonReferenceFrames(skip)
+
     override fun close() = delegate.close()
 }
 

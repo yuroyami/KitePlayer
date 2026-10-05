@@ -375,6 +375,8 @@ private class BridgeGuardedVideoDecoder(
         checkBridge()
     }
 
+    override fun skipNonReferenceFrames(skip: Boolean) = delegate.skipNonReferenceFrames(skip)
+
     override fun close() = delegate.close()
 
     private fun checkBridge() {

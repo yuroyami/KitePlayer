@@ -417,6 +417,15 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   video no longer stands still, passes through `Buffering` and seeks back at every turn. A silent
   item next to one with sound still falls back with `GaplessFallback`, as does a preload not ready
   when the pictures run out.
+- A precise seek skips the frames nothing is predicted from on its way to the target, as mpv does
+  (#468). They are decoded only to be thrown away, and in a stream with B-frames they are most of
+  the run up from the keyframe: 12 s of H.264 with three B-frames between references decoded 78
+  frames instead of 285 to reach 9.5 s, in 28 ms instead of 58. The picture at the target and every one
+  after it are the same, byte for byte, and a backward step keeps decoding the frames near its
+  target so its landing is still the frame before. A decoder takes the request through the new
+  `VideoDecoder.skipNonReferenceFrames`, whose default skips nothing, so a platform codec decodes as
+  before; the FFmpeg decoder honours it in software, and not while it decodes in hardware or runs a
+  video filter.
 
 ### Removed
 

@@ -275,13 +275,15 @@ private external fun canvasHeightOf(canvas: JsAny): Int
 
 /**
  * A canvas whose 2d context records every picture drawn onto it: how many, and the size of the last.
+ * The drawn size is the last two numbers of a call, in both the five and the nine number forms, so
+ * a picture drawn from part of its stage records the size it lands at (#533).
  */
 @JsFun(
     """() => {
       const canvas = { width: 640, height: 360, draws: [] };
       const ctx = {
         setTransform() {}, clearRect() {}, translate() {}, rotate() {}, putImageData() {},
-        drawImage(image, x, y, w, h) { canvas.draws.push({ w: w, h: h }); },
+        drawImage(image, ...at) { canvas.draws.push({ w: at[at.length - 2], h: at[at.length - 1] }); },
         createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
       };
       canvas.getContext = () => ctx;

@@ -36,6 +36,7 @@ internal class PacketQueue(
     private var generation = Generation.Initial
     private var closed = false
     private var endOfStream = false
+    private var newestEnd: Long? = null
 
     /** Conflated, so a signal sent before the consumer waits is kept rather than lost. */
     private val notEmpty = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -91,6 +92,9 @@ internal class PacketQueue(
                 )
                 bytes += packet.sizeBytes
                 this.durationUs += durationUs
+                val end = startUs?.let { it + durationUs }
+                val newest = newestEnd
+                if (end != null && (newest == null || end > newest)) newestEnd = end
                 true
             }
         }
@@ -190,6 +194,7 @@ internal class PacketQueue(
             bytes = 0
             durationUs = 0
             endOfStream = false
+            newestEnd = null
             this.generation = generation
             pending
         }
@@ -235,7 +240,7 @@ internal class PacketQueue(
      * This is for inactive audio/subtitle switch caches only. A decoder consuming the queue must
      * never race it, and video must never use it: compressed video frames can reference packets
      * before the cutoff. A packet with no timestamp at all stops the trim so a fully opaque packet
-     * is never guessed away. The caller owns the single-consumer guarantee by parking or selecting
+     * is never guessed away, unless the caller says what bounds it. The caller owns the single-consumer guarantee by parking or selecting
      * another lane.
      *
      * @param assumedDurationUs stands in for a missing duration: a packet with a start but no
@@ -243,14 +248,20 @@ internal class PacketQueue(
      *        at zero routinely, and without a stand-in one such packet would stop this trim
      *        forever and let its lane grow until it owned the whole byte budget. Each caller
      *        states a bound generous for its lane kind rather than sharing one guess.
+     * @param untimedEndsByNext lets a packet with no timestamp at all go once the next packet that
+     *        has one starts at or before [cutoffUs], because it plays before that one. True only for
+     *        sound, whose packets play one after another: FFmpeg dates a late AAC sound only at the
+     *        start of each PES packet, so its cache would otherwise never trim (#509). A subtitle
+     *        before a later cue can still be showing, so subtitles keep the stop.
      */
-    fun dropBefore(cutoffUs: Long, assumedDurationUs: Long): Int {
+    fun dropBefore(cutoffUs: Long, assumedDurationUs: Long, untimedEndsByNext: Boolean = false): Int {
         val toClose = mutableListOf<PlayerPacket>()
         synchronized(lock) {
             while (items.isNotEmpty()) {
                 val entry = items.first()
                 val endUs = entry.endUs
                     ?: entry.startUs?.let { start -> start + assumedDurationUs }
+                    ?: items.takeIf { untimedEndsByNext }?.firstNotNullOfOrNull { it.startUs }
                     ?: break
                 if (endUs > cutoffUs) break
                 items.removeFirst()
@@ -264,13 +275,31 @@ internal class PacketQueue(
         return toClose.size
     }
 
-    /** Oldest timestamp still retained, for validating a current-position switch cache. */
+    /**
+     * The oldest timestamp still retained, for validating a current-position switch cache. A packet
+     * with none is skipped: it plays before the next one that has one, so that one is the earliest
+     * time the cache provably holds (#509).
+     */
     val firstTimestampUs: Long?
-        get() = synchronized(lock) { items.firstOrNull()?.startUs }
+        get() = synchronized(lock) { items.firstNotNullOfOrNull { it.startUs } }
 
-    /** Newest packet end still retained, for validating a current-position switch cache. */
+    /**
+     * The latest end of any packet this queue was given since its last flush, whether or not a
+     * decoder has taken it since, or null when it was given none. A stream whose newest end lies
+     * behind the position has run out (#509).
+     */
+    val newestEndUs: Long? get() = synchronized(lock) { newestEnd }
+
+    /**
+     * How far the retained packets provably reach, for validating a current-position switch cache:
+     * the end of the newest packet that has a timestamp, or its start when it carries no duration.
+     * FFmpeg dates the AAC sound of a transport stream it found after the open only at the start of
+     * each PES packet, which holds several frames, and gives no frame a duration, because only a
+     * decoder learns AAC's rate. Reading coverage from the newest packet alone refused every switch
+     * to such a sound (#509).
+     */
     val lastTimestampUs: Long?
-        get() = synchronized(lock) { items.lastOrNull()?.endUs }
+        get() = synchronized(lock) { items.asReversed().firstNotNullOfOrNull { it.endUs ?: it.startUs } }
 
     fun close() {
         val toClose = synchronized(lock) {

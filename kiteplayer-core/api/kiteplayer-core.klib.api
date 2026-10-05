@@ -796,6 +796,10 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerPacket : kotlin/AutoC
         abstract fun <get-sizeBytes>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PlayerPacket.sizeBytes.<get-sizeBytes>|<get-sizeBytes>(){}[0]
     abstract val streamIndex // io.github.yuroyami.kiteplayer.spi/PlayerPacket.streamIndex|{}streamIndex[0]
         abstract fun <get-streamIndex>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PlayerPacket.streamIndex.<get-streamIndex>|<get-streamIndex>(){}[0]
+    open val newPrograms // io.github.yuroyami.kiteplayer.spi/PlayerPacket.newPrograms|{}newPrograms[0]
+        open fun <get-newPrograms>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaProgram>? // io.github.yuroyami.kiteplayer.spi/PlayerPacket.newPrograms.<get-newPrograms>|<get-newPrograms>(){}[0]
+    open val newStreams // io.github.yuroyami.kiteplayer.spi/PlayerPacket.newStreams|{}newStreams[0]
+        open fun <get-newStreams>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo>? // io.github.yuroyami.kiteplayer.spi/PlayerPacket.newStreams.<get-newStreams>|<get-newStreams>(){}[0]
 
     abstract fun copyBytes(): kotlin/ByteArray // io.github.yuroyami.kiteplayer.spi/PlayerPacket.copyBytes|copyBytes(){}[0]
 }
@@ -1380,6 +1384,35 @@ sealed interface io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.SeekCompleted.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerEvent.SeekCompleted.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerEvent.SeekCompleted.toString|toString(){}[0]
+    }
+
+    final class TrackChosenByPlayer : io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer|null[0]
+        constructor <init>(io.github.yuroyami.kiteplayer/TrackKind, io.github.yuroyami.kiteplayer/TrackId?) // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.<init>|<init>(io.github.yuroyami.kiteplayer.TrackKind;io.github.yuroyami.kiteplayer.TrackId?){}[0]
+
+        final val kind // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.kind|{}kind[0]
+            final fun <get-kind>(): io.github.yuroyami.kiteplayer/TrackKind // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.kind.<get-kind>|<get-kind>(){}[0]
+        final val track // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.track|{}track[0]
+            final fun <get-track>(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.track.<get-track>|<get-track>(){}[0]
+
+        final fun component1(): io.github.yuroyami.kiteplayer/TrackKind // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.component1|component1(){}[0]
+        final fun component2(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.component2|component2(){}[0]
+        final fun copy(io.github.yuroyami.kiteplayer/TrackKind = ..., io.github.yuroyami.kiteplayer/TrackId? = ...): io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.copy|copy(io.github.yuroyami.kiteplayer.TrackKind;io.github.yuroyami.kiteplayer.TrackId?){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerEvent.TrackChosenByPlayer.toString|toString(){}[0]
+    }
+
+    final class TracksAdded : io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroyami.kiteplayer/PlayerEvent.TracksAdded|null[0]
+        constructor <init>(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo>) // io.github.yuroyami.kiteplayer/PlayerEvent.TracksAdded.<init>|<init>(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>){}[0]
+
+        final val tracks // io.github.yuroyami.kiteplayer/PlayerEvent.TracksAdded.tracks|{}tracks[0]
+            final fun <get-tracks>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> // io.github.yuroyami.kiteplayer/PlayerEvent.TracksAdded.tracks.<get-tracks>|<get-tracks>(){}[0]
+
+        final fun component1(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> // io.github.yuroyami.kiteplayer/PlayerEvent.TracksAdded.component1|component1(){}[0]
+        final fun copy(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> = ...): io.github.yuroyami.kiteplayer/PlayerEvent.TracksAdded // io.github.yuroyami.kiteplayer/PlayerEvent.TracksAdded.copy|copy(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.TracksAdded.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerEvent.TracksAdded.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerEvent.TracksAdded.toString|toString(){}[0]
     }
 
     final class VideoSizeChanged : io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroyami.kiteplayer/PlayerEvent.VideoSizeChanged|null[0]

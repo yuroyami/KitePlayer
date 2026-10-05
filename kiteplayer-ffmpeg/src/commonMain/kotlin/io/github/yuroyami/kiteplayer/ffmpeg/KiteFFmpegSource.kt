@@ -60,12 +60,14 @@ import io.github.yuroyami.kiteffmpeg.FFmpegException
 import io.github.yuroyami.kiteffmpeg.MediaType
 import io.github.yuroyami.kiteffmpeg.Packet
 import io.github.yuroyami.kiteffmpeg.PacketReader
+import io.github.yuroyami.kiteffmpeg.Program
 import io.github.yuroyami.kiteffmpeg.SeekDirection
 import io.github.yuroyami.kiteffmpeg.StreamDecoder
 import io.github.yuroyami.kiteffmpeg.StreamInfo
 import io.github.yuroyami.kiteffmpeg.durationMicros
 import io.github.yuroyami.kiteffmpeg.ptsMicros
 import io.github.yuroyami.kiteffmpeg.Frame as KiteFrame
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToLong
 
@@ -156,12 +158,16 @@ public class KiteFFmpegSource internal constructor(
      */
     private val mapper = TimestampMapper(source.startTimeMicros)
 
-    /** One canonical table for both the public track list and every reader selection. */
-    private val selectableStreams: List<Pair<StreamInfo, PlayerStreamInfo>> = source.streams.mapNotNull { stream ->
-        stream.toPlayerStream(mapper, renditionNames = source.formatName == "hls")?.let { exposed -> stream to exposed }
-    }
+    /**
+     * One canonical table for the public track list, every reader selection and every decoder, with
+     * the programmes over it. The demux lane replaces it whole when a read finds the container's
+     * streams or programmes changed (#509), and every other caller reads whichever table is current.
+     */
+    @Volatile
+    private var layout: Layout = Layout.of(source.streams, source.programs, mapper, renditionNames = source.formatName == "hls")
 
-    override val streams: List<PlayerStreamInfo> = selectableStreams.map { it.second }
+    /** What the container lists, as it stands after the latest read: a live stream can add to it (#509). */
+    override val streams: List<PlayerStreamInfo> get() = layout.streams
 
     /**
      * Matroska attachments, read once from the container's attachment streams. FFmpeg keeps an
@@ -180,26 +186,15 @@ public class KiteFFmpegSource internal constructor(
         }
 
     /** Raw KiteFFmpeg descriptors only for indices actually exposed through [streams]. */
-    private val byIndex: Map<Int, StreamInfo> = selectableStreams.associate { (raw, _) -> raw.index to raw }
+    private val byIndex: Map<Int, StreamInfo> get() = layout.byIndex
 
     /**
-     * The channels of a multiplex, read once at open (#505). Only a programme the container
-     * numbers is one, which leaves out those FFmpeg makes for the variants of an HLS master
-     * playlist and for a DASH presentation, and a programme keeps only the streams [streams]
-     * lists.
+     * The channels of a multiplex (#505), as they stand after the latest read, because a live
+     * transport stream can change them (#509). Only a programme the container numbers is one,
+     * which leaves out those FFmpeg makes for the variants of an HLS master playlist and for a DASH
+     * presentation, and a programme keeps only the streams [streams] lists.
      */
-    override val programs: List<MediaProgram> = source.programs
-        .mapNotNull { program ->
-            val number = program.number ?: return@mapNotNull null
-            MediaProgram(
-                number = number,
-                tracks = program.streamIndexes.filter { it in byIndex }.map(::TrackId),
-                name = program.serviceName,
-                provider = program.serviceProvider,
-                metadata = program.metadata,
-            )
-        }
-        .distinctBy { it.number }
+    override val programs: List<MediaProgram> get() = layout.programs
 
     /** The length of the content, which is an interval and so carries no origin. */
     override val duration: Pts? = mapper.mapDuration(source.durationMicros)
@@ -274,8 +269,12 @@ public class KiteFFmpegSource internal constructor(
      */
     override val realTime: Boolean = realTimeScheme && duration == null
 
+    /**
+     * The first call opens the reader. A later one, between reads, changes which streams it delivers
+     * without moving it, which is how the demux lane adds a stream that appeared after the open; the
+     * packets of it that FFmpeg read before then come first on the next read (#509).
+     */
     override fun selectStreams(indices: Set<Int>) {
-        check(reader == null) { "streams must be selected before the first read" }
         // Named one by one, not filtered. A mapNotNull here meant {0, 999} selected 0 and never
         // mentioned 999: the caller asked for two streams, got one, and nothing said which request
         // went nowhere. A missing index is a caller mistake and this library answers those with
@@ -287,7 +286,8 @@ public class KiteFFmpegSource internal constructor(
         }
         val selected = indices.map { byIndex.getValue(it) }
         require(selected.isNotEmpty()) { "selectStreams needs at least one stream" }
-        reader = source.openPacketReader(selected)
+        val open = reader
+        if (open == null) reader = source.openPacketReader(selected) else open.reselect(selected)
         readStreams = selected
     }
 
@@ -324,7 +324,32 @@ public class KiteFFmpegSource internal constructor(
             return null
         }
         recorder.copy(packet)
-        return KiteFFmpegPacket(packet, mapper)
+        absorbLayout(packet)
+        val before = announced
+        val after = layout
+        if (after === before) return KiteFFmpegPacket(packet, mapper)
+        announced = after
+        // Only what the engine sees: a change to a stream it is never shown is no change to it.
+        return KiteFFmpegPacket(
+            packet,
+            mapper,
+            newStreams = after.streams.takeIf { it != before.streams },
+            newPrograms = after.programs.takeIf { it != before.programs },
+        )
+    }
+
+    /** The table the engine last saw, which a keyframe search can leave behind [layout]. */
+    private var announced: Layout = layout
+
+    /** Takes in the streams and programmes [packet] says changed, before anything reads its stream. */
+    private fun absorbLayout(packet: Packet) {
+        if (packet.newStreams == null && packet.newPrograms == null) return
+        layout = Layout.of(
+            packet.newStreams ?: source.streams,
+            packet.newPrograms ?: source.programs,
+            mapper,
+            renditionNames = source.formatName == "hls",
+        )
     }
 
     override suspend fun seekToKeyframe(target: Pts): Pts? {
@@ -397,6 +422,8 @@ public class KiteFFmpegSource internal constructor(
         while (bytes < KEYFRAME_SEARCH_BYTES) {
             val packet = reader.read() ?: return null
             try {
+                // The change still reaches the engine, on the next packet it reads.
+                absorbLayout(packet)
                 bytes += packet.sizeBytes
                 if (packet.streamIndex != stream || !packet.isKeyframe) continue
                 val shows = mapper.mapTimestamp(packet.ptsMicros)?.micros ?: continue
@@ -722,8 +749,10 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: 
         // synchronisation. Treating it as normal video makes the player hang at the end of every
         // audio file that has album art.
         isCoverArt = disposition.attachedPicture,
-        sampleRate = audio?.sampleRate,
-        channels = audio?.channels,
+        // FFmpeg says 0 for what it does not know yet, as for a transport stream's sound listed from
+        // its programme table before any of its packets was parsed, and 0 is no rate (#509).
+        sampleRate = audio?.sampleRate?.takeIf { it > 0 },
+        channels = audio?.channels?.takeIf { it > 0 },
         hdr = video?.hdr?.toPlayerHdr(),
         dolbyVision = video?.dolbyVision?.let { config ->
             DolbyVisionInfo(
@@ -759,7 +788,44 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: 
     )
 }
 
-internal class KiteFFmpegPacket(val native: Packet, private val mapper: TimestampMapper) : PlayerPacket {
+/**
+ * The source's selectable streams as the engine sees them, keyed back to KiteFFmpeg's own entries,
+ * and the programmes over them.
+ */
+private class Layout(
+    val streams: List<PlayerStreamInfo>,
+    val byIndex: Map<Int, StreamInfo>,
+    val programs: List<MediaProgram>,
+) {
+    companion object {
+        fun of(raw: List<StreamInfo>, rawPrograms: List<Program>, mapper: TimestampMapper, renditionNames: Boolean): Layout {
+            val selectable = raw.mapNotNull { stream ->
+                stream.toPlayerStream(mapper, renditionNames)?.let { exposed -> stream to exposed }
+            }
+            val byIndex = selectable.associate { (stream, _) -> stream.index to stream }
+            val programs = rawPrograms
+                .mapNotNull { program ->
+                    val number = program.number ?: return@mapNotNull null
+                    MediaProgram(
+                        number = number,
+                        tracks = program.streamIndexes.filter { it in byIndex }.map(::TrackId),
+                        name = program.serviceName,
+                        provider = program.serviceProvider,
+                        metadata = program.metadata,
+                    )
+                }
+                .distinctBy { it.number }
+            return Layout(selectable.map { it.second }, byIndex, programs)
+        }
+    }
+}
+
+internal class KiteFFmpegPacket(
+    val native: Packet,
+    private val mapper: TimestampMapper,
+    override val newStreams: List<PlayerStreamInfo>? = null,
+    override val newPrograms: List<MediaProgram>? = null,
+) : PlayerPacket {
     override val streamIndex: Int get() = native.streamIndex
     override val pts: Pts? get() = mapper.mapTimestamp(native.ptsMicros)
 

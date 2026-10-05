@@ -1936,6 +1936,30 @@ public final class io/github/yuroyami/kiteplayer/PlayerEvent$SeekCompleted : io/
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/PlayerEvent$TrackChosenByPlayer : io/github/yuroyami/kiteplayer/PlayerEvent {
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/TrackKind;Lio/github/yuroyami/kiteplayer/TrackId;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lio/github/yuroyami/kiteplayer/TrackKind;
+	public final fun component2-Rudedvk ()Lio/github/yuroyami/kiteplayer/TrackId;
+	public final fun copy-pktmTbs (Lio/github/yuroyami/kiteplayer/TrackKind;Lio/github/yuroyami/kiteplayer/TrackId;)Lio/github/yuroyami/kiteplayer/PlayerEvent$TrackChosenByPlayer;
+	public static synthetic fun copy-pktmTbs$default (Lio/github/yuroyami/kiteplayer/PlayerEvent$TrackChosenByPlayer;Lio/github/yuroyami/kiteplayer/TrackKind;Lio/github/yuroyami/kiteplayer/TrackId;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlayerEvent$TrackChosenByPlayer;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getKind ()Lio/github/yuroyami/kiteplayer/TrackKind;
+	public final fun getTrack-Rudedvk ()Lio/github/yuroyami/kiteplayer/TrackId;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/PlayerEvent$TracksAdded : io/github/yuroyami/kiteplayer/PlayerEvent {
+	public fun <init> (Ljava/util/List;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun copy (Ljava/util/List;)Lio/github/yuroyami/kiteplayer/PlayerEvent$TracksAdded;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlayerEvent$TracksAdded;Ljava/util/List;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlayerEvent$TracksAdded;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getTracks ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/PlayerEvent$VideoSizeChanged : io/github/yuroyami/kiteplayer/PlayerEvent {
 	public fun <init> (Lio/github/yuroyami/kiteplayer/VideoSize;)V
 	public final fun component1 ()Lio/github/yuroyami/kiteplayer/VideoSize;
@@ -3285,10 +3309,17 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerPacket :
 	public abstract fun getBytePosition ()Ljava/lang/Long;
 	public abstract fun getDts-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public abstract fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
+	public fun getNewPrograms ()Ljava/util/List;
+	public fun getNewStreams ()Ljava/util/List;
 	public abstract fun getPts-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public abstract fun getSizeBytes ()I
 	public abstract fun getStreamIndex ()I
 	public abstract fun isKeyframe ()Z
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/PlayerPacket$DefaultImpls {
+	public static fun getNewPrograms (Lio/github/yuroyami/kiteplayer/spi/PlayerPacket;)Ljava/util/List;
+	public static fun getNewStreams (Lio/github/yuroyami/kiteplayer/spi/PlayerPacket;)Ljava/util/List;
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/PlayerPixelFormat : java/lang/Enum {

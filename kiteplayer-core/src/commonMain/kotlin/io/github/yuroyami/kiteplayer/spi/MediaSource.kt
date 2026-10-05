@@ -22,7 +22,16 @@ public interface MediaSourceFactory {
 
 /** A packet cursor over one opened item. The engine closes it with its session. */
 public interface PlayerMediaSource : AutoCloseable {
-    /** Every stream the container declares, including streams this build cannot decode. */
+    /**
+     * Every stream the container declares, including streams this build cannot decode.
+     *
+     * A container can add a stream while it plays, as a live transport stream does when its
+     * programme table names a sound that starts after the open (#509). A source that sees one lists
+     * it here from the read that found it on, at the end and under a new index, and hands the whole
+     * list out on the next packet as [PlayerPacket.newStreams]. A stream is never taken out and never
+     * changes its index. The engine reads this list from the actor while the demux lane reads, so a
+     * source replaces it whole rather than changing it in place.
+     */
     public val streams: List<PlayerStreamInfo>
 
     /** Null when unknown, for example a live stream. */
@@ -109,6 +118,11 @@ public interface PlayerMediaSource : AutoCloseable {
      * mistake and an implementation must refuse the whole call, never quietly select the subset it
      * recognised: a caller that asked for two streams and silently got one has no way to find out.
      *
+     * The engine calls this once before the first read, and again on the demux lane, between two
+     * reads, to add a stream that [PlayerPacket.newStreams] announced (#509). Called again before the
+     * read after the announcing packet, it should deliver the new stream from its first packet, as
+     * KiteFFmpeg does by holding that stream's packets until then. The cursor does not move.
+     *
      * @throws IllegalArgumentException when [indices] is empty or names a stream this source does
      *   not have.
      */
@@ -178,6 +192,10 @@ public interface PlayerMediaSource : AutoCloseable {
      * entry names one of [streams] by its index, and every number is one only that programme has.
      * The engine lists them in [io.github.yuroyami.kiteplayer.Tracks.programs] and, when there are
      * two or more, picks every track from one of them.
+     *
+     * A live transport stream can change them while it plays, as when a channel moves its sound to a
+     * new stream at a programme boundary. A source that sees a change lists it here from the read that
+     * found it on and hands it out on the next packet as [PlayerPacket.newPrograms] (#509).
      */
     public val programs: List<io.github.yuroyami.kiteplayer.MediaProgram> get() = emptyList()
 }
@@ -420,6 +438,22 @@ public interface PlayerPacket : AutoCloseable {
 
     /** Byte offset in the container, when known. Used for progress on streams with broken times. */
     public val bytePosition: Long?
+
+    /**
+     * The source's [PlayerMediaSource.streams] as they stand from this packet on, present only on the
+     * first packet a source hands out after its list changed, and null on every other packet (#509).
+     * It is the whole list: a stream is new when its index was not in the list before, and an entry
+     * that differs from the one before was corrected, as FFmpeg corrects a sound's sample rate at its
+     * first packet. Null for a source whose streams never change.
+     */
+    public val newStreams: List<PlayerStreamInfo>? get() = null
+
+    /**
+     * The source's [PlayerMediaSource.programs] as they stand from this packet on, present only on the
+     * first packet a source hands out after they changed, and null on every other packet (#509). A
+     * stream the container stopped carrying has left its programme here.
+     */
+    public val newPrograms: List<io.github.yuroyami.kiteplayer.MediaProgram>? get() = null
 }
 
 /**

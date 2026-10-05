@@ -785,6 +785,15 @@ private fun encodeEvent(event: PlayerEvent): JsAny = record {
             kind("MarkerReached")
             put("marker", encodeMarker(event.marker))
         }
+        is PlayerEvent.TracksAdded -> {
+            kind("TracksAdded")
+            put("tracks", event.tracks.encodeEach(::encodeTrack))
+        }
+        is PlayerEvent.TrackChosenByPlayer -> {
+            kind("TrackChosenByPlayer")
+            put("kind", event.kind)
+            put("track", event.track?.value)
+        }
     }
 }
 
@@ -1490,6 +1499,8 @@ private fun decodeEvent(o: JsAny): PlayerEvent? = when (o.str("t")) {
     "Failed" -> PlayerEvent.Failed(decodeError(o.child("error") ?: missing("error")) ?: return null)
     "ChapterChanged" -> PlayerEvent.ChapterChanged(o.child("chapter")?.let(::decodeChapter))
     "MarkerReached" -> PlayerEvent.MarkerReached(decodeMarker(o.child("marker") ?: missing("marker")))
+    "TracksAdded" -> PlayerEvent.TracksAdded(o.list("tracks", ::decodeTrack) ?: missing("tracks"))
+    "TrackChosenByPlayer" -> PlayerEvent.TrackChosenByPlayer(o.enum<TrackKind>("kind") ?: missing("kind"), o.int("track")?.let(::TrackId))
     else -> null
 }
 

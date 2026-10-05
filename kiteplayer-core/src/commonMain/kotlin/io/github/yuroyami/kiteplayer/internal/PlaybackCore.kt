@@ -1137,6 +1137,9 @@ internal class PlaybackCore(
      */
     private var subtitleChosenByPlayer = false
 
+    /** True when a caller's last sound choice for this item was none. Actor only. */
+    private var soundOffByViewer = false
+
     /** When playback began to wait for data while playing, or [NO_POSITION]. */
     private var starvedSinceNanos: Long = NO_POSITION
 
@@ -1316,6 +1319,7 @@ internal class PlaybackCore(
      */
     private val handlers: List<Handler> = listOf(
         Handler("drainCommands") { drainCommands() },
+        Handler("handleLateStreams") { handleLateStreams() },
         Handler("handleTrackChanges") { handleTrackChanges() },
         Handler("handleAudioFill") { handleAudioFill() },
         Handler("handleQueueHandoff") { handleQueueHandoff() },
@@ -2290,6 +2294,8 @@ internal class PlaybackCore(
                     }
                     subtitleChosenByPlayer = false
                 }
+                // A sound that appears after the open never overrides a viewer who turned it off (#509).
+                if (command.kind == TrackKind.Audio) soundOffByViewer = command.track == null
                 traceUntilReplied(command.reply, "track", "switch") {
                     mapOf("kind" to command.kind.name, "track" to (command.track?.value?.toString() ?: "none"))
                 }
@@ -2523,6 +2529,7 @@ internal class PlaybackCore(
             is CoreCommand.AddExternalSubtitle -> addExternalSubtitle(command)
             is CoreCommand.ReloadExternalSubtitle -> reloadExternalSubtitle(command)
             is CoreCommand.ExternalSubtitleRead -> command.adopt()
+            is CoreCommand.StreamsChanged -> command.adopt()
             is CoreCommand.SetLoop -> {
                 loop = command.mode
                 command.reply.complete(Unit)
@@ -2840,6 +2847,7 @@ internal class PlaybackCore(
         media = item
         variantChosenByPlayer = false
         subtitleChosenByPlayer = false
+        soundOffByViewer = false
         starvedSinceNanos = NO_POSITION
         stepUpNotBeforeNanos = NO_POSITION
         stepUpWait = VARIANT_STEP_UP_WAIT
@@ -3312,14 +3320,13 @@ internal class PlaybackCore(
             // alternate audio/subtitle stream and decode only the selected lanes.
             val cachedAudioStreams = source.streams.filter { it.kind == TrackKind.Audio }
             val cachedSubtitleStreams = source.streams.filter { it.kind == TrackKind.Subtitle }
+            val readStreams = buildSet {
+                videoStream?.index?.let(::add)
+                cachedAudioStreams.forEach { add(it.index) }
+                cachedSubtitleStreams.forEach { add(it.index) }
+            }
             withContext(dispatchers.demux) {
-                source.selectStreams(
-                    buildSet {
-                        videoStream?.index?.let(::add)
-                        cachedAudioStreams.forEach { add(it.index) }
-                        cachedSubtitleStreams.forEach { add(it.index) }
-                    },
-                )
+                source.selectStreams(readStreams)
                 if (startUs > 0L) source.seekToKeyframe(Pts(startUs))
             }
 
@@ -3360,6 +3367,7 @@ internal class PlaybackCore(
                 null
             }
             return OpenSession(
+                readStreams = readStreams,
                 preferredExternalSubtitle = preferredExternal,
                 audioContent = audioContent,
                 token = pending?.token ?: nextSessionToken++,
@@ -4054,6 +4062,7 @@ internal class PlaybackCore(
         publishSnapshot()
         pendingSelections.remove(TrackKind.Subtitle)
         request.reply.complete(TrackChange.Applied(TrackKind.Subtitle, request.track))
+        if (request.automatic) emitEvent(PlayerEvent.TrackChosenByPlayer(TrackKind.Subtitle, request.track))
 
         if (retiredDecoder != null && retiredDecoder !== preparedDecoder) {
             runCatching { retiredDecoder.close() }.exceptionOrNull()?.let { failure ->
@@ -4083,6 +4092,118 @@ internal class PlaybackCore(
         pendingSelections[TrackKind.Subtitle] =
             SelectionRequest(TrackKind.Subtitle, target, CompletableDeferred(), automatic = true)
         inPlaceContainerSubtitleChange(session)
+    }
+
+    /**
+     * Takes in what [target]'s demux lane saw change after the open (#509): a cache for each sound
+     * and subtitle stream the lane now reads in [reading], the source's streams and programmes as
+     * [listed] and [programs] give them, and an event naming the tracks that appeared. What plays
+     * changes later, in [handleLateStreams], once a new stream has reached the position. A preloaded
+     * item keeps its tracks and its event for the swap, as everything else of its open does.
+     */
+    private fun adoptLayout(
+        target: OpenSession,
+        listed: List<PlayerStreamInfo>?,
+        programs: List<MediaProgram>?,
+        reading: List<Int>,
+    ) {
+        val preloaded = pendingNext?.takeIf { it.prepared?.session === target }
+        if (target !== session && preloaded == null) return
+        // The lane offers under its own epoch, which a seek moves only while the lane is parked.
+        val epoch = target.demuxWorker?.epoch ?: requestedEpoch
+        val softLimitUs = config.buffer.softTarget.inWholeMicroseconds
+        for (index in reading) {
+            val stream = listed?.firstOrNull { it.index == index } ?: continue
+            target.addQueue(stream.kind, PacketQueue(index, softLimitUs).also { it.flushTo(epoch) })
+        }
+        target.layoutChanged = true
+        val before = preloaded?.build?.tracks ?: tracks
+        val after = before.withLayout(listed, programs)
+        val added = after.all.filter { row -> before.find(row.id) == null }
+        if (programs != null || added.any { it.kind == TrackKind.Subtitle }) target.subtitlesToChoose = true
+        if (preloaded != null) {
+            preloaded.build.tracks = after
+            if (added.isNotEmpty()) preloaded.build.events += PlayerEvent.TracksAdded(added)
+            return
+        }
+        tracks = after
+        if (added.isNotEmpty()) emitEvent(PlayerEvent.TracksAdded(added))
+        publishSnapshot()
+    }
+
+    /**
+     * Plays a sound or subtitles that appeared after the open (#509), by the open's own rules and from
+     * the tracks of the channel that plays. A sound is chosen when none plays, or when the one that
+     * plays ran out while another carries on, as when a channel moves its sound to a new stream at a
+     * programme boundary; the sound that ran out lends its language first, so a viewer who chose it
+     * keeps that language. The subtitles are chosen again while the open's choice of them stands. A
+     * caller who turned the sound off, or chose subtitles, keeps that. mpv chooses a stream that
+     * surfaces after the open the same way, when nothing of its kind plays.
+     *
+     * Only a source that announced a change gets here, so media whose streams never change plays
+     * exactly as before. A sound is chosen once its cache covers the position, because it starts
+     * where the position is, and the in-place change later in this pass makes the switch.
+     */
+    private suspend fun handleLateStreams() {
+        val session = session ?: return
+        if (!session.layoutChanged || session.preloading.value) return
+        if (seekPhase.isRunning || pendingSeek != null || pendingVideoRecovery != null || reopenPending) return
+        if (session.subtitlesToChoose && TrackKind.Subtitle !in pendingSelections) {
+            session.subtitlesToChoose = false
+            chooseSubtitleForAudio(session)
+        }
+        if (TrackKind.Audio in pendingSelections || soundOffByViewer) return
+        val lane = session.audioLane
+        val at = currentPosition().micros
+        if (lane != null && !ranOut(session, lane.queue, at)) return
+        val program = tracks.programs.firstOrNull { it.number == tracks.selectedProgram }
+        val live = programCandidates(session.source.streams, tracks.programs, program).filter { stream ->
+            stream.kind == TrackKind.Audio &&
+                stream.index != lane?.stream?.index &&
+                stream.index !in session.soundsTried &&
+                session.audioQueues[stream.index]?.let { audioCacheRefusal(it, at) == null } == true
+        }
+        val target = pickAudioStream(
+            live,
+            listOfNotNull(lane?.stream?.language) + config.audio.preferredLanguages,
+            outputChannels = if (config.audio.matchOutputChannels) {
+                runCatching { output.audioSink.outputChannelCount() }.getOrNull()?.takeIf { it > 0 }
+            } else {
+                null
+            },
+        ) ?: return
+        // Tried once: a sound no decoder takes must not be asked for again on every pass.
+        session.soundsTried += target.index
+        pendingSelections[TrackKind.Audio] =
+            SelectionRequest(TrackKind.Audio, TrackId(target.index), CompletableDeferred(), automatic = true)
+    }
+
+    /**
+     * Whether the sound that [queue] carries has run out at [atUs]: its decoder has taken every packet,
+     * every buffer it decoded is in the output, the output has played all of it, and the reads have
+     * gone [SOUND_RAN_OUT_US] past the end of its newest packet, so it is not a packet late in the
+     * interleaving. Waiting for the output to empty lets the old sound play to its last sample, so a
+     * switch to the stream that carries on cuts nothing and the clock does not jump. After a seek
+     * nothing has been read yet, so the position stands for the end.
+     */
+    private fun ranOut(session: OpenSession, queue: PacketQueue, atUs: Long): Boolean {
+        if (queue.count > 0 || session.audioInFlight.value > 0) return false
+        if ((session.audio?.buffered ?: Duration.ZERO) > Duration.ZERO) return false
+        val frontier = session.allPacketQueues.maxOfOrNull { it.newestEndUs ?: Long.MIN_VALUE } ?: return false
+        if (frontier == Long.MIN_VALUE) return false
+        return frontier - (queue.newestEndUs ?: atUs) >= SOUND_RAN_OUT_US
+    }
+
+    /**
+     * Starts the sound lanes of a session that opened with no sound, when one appears after the
+     * open (#509). A session that opened with one has them already, idle or not.
+     */
+    private fun startSoundLanes(session: OpenSession) {
+        val decode = Worker(AUDIO_DECODE_WORKER)
+        session.audioDecodeWorker = decode
+        decode.release(requestedEpoch)
+        session.jobs += launchWorker(session, decode, dispatchers.audioDecode) { runAudioDecode(session, decode) }
+        if (session.audioFeedWorker == null) launchFeeder(session)
     }
 
     /**
@@ -4514,6 +4635,7 @@ internal class PlaybackCore(
         targetQueue?.dropBefore(
             commitAt.micros - audioSwitchHistoryUs(),
             assumedDurationUs = AUDIO_PRUNE_ASSUMED_PACKET_DURATION_US,
+            untimedEndsByNext = true,
         )
         session.audioSwitchDiscardBeforeUs.value = if (targetStream == null) Long.MIN_VALUE else commitAt.micros
         val targetLane = if (targetStream != null && preparedDecoder != null && targetQueue != null) {
@@ -4533,6 +4655,8 @@ internal class PlaybackCore(
             }
         }
         audioWorkers.forEach { it.release(requestedEpoch) }
+        // A session that opened with no sound has no sound lanes until one appears (#509).
+        if (targetLane != null && session.audioDecodeWorker == null) startSoundLanes(session)
         if (preparedPath != null) {
             emitEvent(
                 PlayerEvent.AudioFormatChanged(
@@ -4550,6 +4674,7 @@ internal class PlaybackCore(
         publishSnapshot()
         pendingSelections.remove(TrackKind.Audio)
         request.reply.complete(TrackChange.Applied(TrackKind.Audio, request.track))
+        if (request.automatic) emitEvent(PlayerEvent.TrackChosenByPlayer(TrackKind.Audio, request.track))
         return true
     }
 
@@ -9963,9 +10088,19 @@ internal class PlaybackCore(
 
     /** Reads packets and hands them to the per-stream queues, stalling when the total is over budget. */
     private suspend fun runDemux(session: OpenSession, worker: Worker) {
+        val late = LateStreams(session.readStreams)
+        try {
+            demuxLoop(session, worker, late)
+        } finally {
+            late.close()
+        }
+    }
+
+    private suspend fun demuxLoop(session: OpenSession, worker: Worker, late: LateStreams) {
         var epoch = worker.epoch
         var restarts = worker.releases
         var ended = false
+        val queueOf = { index: Int -> session.audioQueues[index] ?: session.subtitleQueues[index] }
         while (true) {
             worker.checkpoint()
             pruneInactiveSwitchCaches(session)
@@ -9977,7 +10112,9 @@ internal class PlaybackCore(
                 ended = false
                 // A seek moved the reads, so the rate starts over from where they land.
                 session.readRate.restart()
+                late.dropHeld()
             }
+            if (!late.idle) late.deliver(queueOf, epoch, ended)
             if (ended) {
                 worker.nap(WORKER_POLL)
                 continue
@@ -10011,21 +10148,63 @@ internal class PlaybackCore(
                 packet?.takeIf { it.streamIndex == measured }?.pts?.micros,
             )
             if (packet == null) {
+                // Held packets go ahead of the end, which a queue keeps after what it holds.
+                if (!late.idle) late.deliver(queueOf, epoch, ended = true)
                 session.videoQueue?.signalEndOfStream(epoch)
                 session.audioQueues.values.forEach { it.signalEndOfStream(epoch) }
                 session.subtitleQueues.values.forEach { it.signalEndOfStream(epoch) }
                 ended = true
                 continue
             }
+            val listed = packet.newStreams
+            val programs = packet.newPrograms
+            if (listed != null || programs != null) announceLayout(session, late, listed, programs)
             when (packet.streamIndex) {
                 session.videoStream?.index -> session.videoQueue?.offer(packet, epoch) ?: packet.close()
                 else -> {
-                    val queue = session.audioQueues[packet.streamIndex]
-                        ?: session.subtitleQueues[packet.streamIndex]
-                    if (queue == null) packet.close() else queue.offer(packet, epoch)
+                    // A stream asked for since the open keeps its order behind what it already holds.
+                    if (late.waits(packet.streamIndex)) {
+                        late.hold(packet)
+                    } else {
+                        val queue = queueOf(packet.streamIndex)
+                        if (queue == null) packet.close() else queue.offer(packet, epoch)
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * The demux lane's answer to a packet that says the source's streams or programmes changed
+     * (#509). Every sound and subtitle stream the lane does not read yet is asked for now, before the
+     * next read, because the source skips a stream nobody asked for. The actor then makes their queues
+     * and updates the tracks. A picture is listed and not read: playing one the open did not choose
+     * needs a picture path this session does not have.
+     */
+    private fun announceLayout(
+        session: OpenSession,
+        late: LateStreams,
+        listed: List<PlayerStreamInfo>?,
+        programs: List<MediaProgram>?,
+    ) {
+        val fresh = listed.orEmpty()
+            .filter { (it.kind == TrackKind.Audio || it.kind == TrackKind.Subtitle) && it.index !in late.selection }
+            .map { it.index }
+        var reading = emptyList<Int>()
+        if (fresh.isNotEmpty()) {
+            try {
+                session.source.selectStreams(late.selection + fresh)
+                late.added(fresh)
+                reading = fresh
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                fresh.forEach { index ->
+                    warn(PlaybackWarning.TrackDeselected(TrackId(index), "the source would not read it${causeDetail(failure)}"))
+                }
+            }
+        }
+        commands.trySend(CoreCommand.StreamsChanged { adoptLayout(session, listed, programs, reading) })
     }
 
     /** Keeps alternate-track history near presentation time without making it backpressure video. */
@@ -10041,7 +10220,7 @@ internal class PlaybackCore(
         val activeAudio = session.audioQueue
         session.audioQueues.values.forEach { queue ->
             if (queue !== activeAudio) {
-                queue.dropBefore(audioCutoff, assumedDurationUs = AUDIO_PRUNE_ASSUMED_PACKET_DURATION_US)
+                queue.dropBefore(audioCutoff, assumedDurationUs = AUDIO_PRUNE_ASSUMED_PACKET_DURATION_US, untimedEndsByNext = true)
             }
         }
         val subtitleCutoff = positionUs - CUE_PRUNE_BEHIND_MICROS
@@ -10885,6 +11064,15 @@ internal class PlaybackCore(
         val selectedQueues: List<PacketQueue>,
     )
 
+    /** A session's per-stream caches, with every packet-owning queue listed once. */
+    private class QueueTable(
+        videoQueue: PacketQueue?,
+        val audio: Map<Int, PacketQueue>,
+        val subtitle: Map<Int, PacketQueue>,
+    ) {
+        val all: List<PacketQueue> = listOfNotNull(videoQueue) + audio.values + subtitle.values
+    }
+
     private class OpenSession(
         val token: Long,
         val backendSession: BackendSession,
@@ -10898,15 +11086,15 @@ internal class PlaybackCore(
         val videoQueue: PacketQueue?,
         audioLane: AudioLane?,
         /** One epoch-aligned compressed cache for every audio stream in the container. */
-        val audioQueues: Map<Int, PacketQueue>,
+        audioQueues: Map<Int, PacketQueue>,
         // The subtitle trio is mutable for exactly one writer: the actor. Demux never reads it;
-        // it routes through the immutable per-track map below, so a live swap needs no video or
-        // demux interruption.
+        // it routes through the per-track maps below, so a live swap needs no video or demux
+        // interruption.
         var subtitleStream: PlayerStreamInfo?,
         var subtitleDecoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder?,
         var subtitleQueue: PacketQueue?,
         /** One epoch-aligned compressed cache for every container subtitle stream. */
-        val subtitleQueues: Map<Int, PacketQueue>,
+        subtitleQueues: Map<Int, PacketQueue>,
         val video: VideoPlayback?,
         /** Actor-owned; created lazily when a session initially opened with audio deselected. */
         var audio: AudioPlayback?,
@@ -10928,6 +11116,11 @@ internal class PlaybackCore(
         val preferredExternalSubtitle: TrackId? = null,
         /** What this item's sound is, resolved at the build, for every device it opens (#446). */
         val audioContent: AudioContent = AudioContent.Music,
+        /**
+         * The streams the open asked the source for. The demux lane adds to its own copy of this as
+         * streams appear after the open (#509), because it is the lane that talks to the source.
+         */
+        val readStreams: Set<Int> = emptySet(),
     ) {
         /**
          * True once the source answered that it cannot interrupt a stalled read. The session then
@@ -10978,9 +11171,44 @@ internal class PlaybackCore(
             audioRouting.value = AudioRouting(lane, listOfNotNull(videoQueue, lane?.queue))
         }
 
+        /**
+         * The per-stream caches, replaced whole and only by the actor when a stream appears after
+         * the open (#509), so the demux lane reads one table or the next and never half of one.
+         */
+        private val queueTable = atomic(QueueTable(videoQueue, audioQueues, subtitleQueues))
+
+        val audioQueues: Map<Int, PacketQueue> get() = queueTable.value.audio
+
+        val subtitleQueues: Map<Int, PacketQueue> get() = queueTable.value.subtitle
+
         /** Every packet-owning queue, each exactly once, for byte accounting/flush/teardown. */
-        val allPacketQueues: List<PacketQueue> =
-            listOfNotNull(videoQueue) + audioQueues.values + subtitleQueues.values
+        val allPacketQueues: List<PacketQueue> get() = queueTable.value.all
+
+        /** Adds the cache of an audio or subtitle stream that appeared after the open. Actor only. */
+        fun addQueue(kind: TrackKind, queue: PacketQueue) {
+            val table = queueTable.value
+            queueTable.value = when (kind) {
+                TrackKind.Audio -> QueueTable(videoQueue, table.audio + (queue.streamIndex to queue), table.subtitle)
+                TrackKind.Subtitle -> {
+                    subtitleCueCaches[queue.streamIndex] = mutableListOf()
+                    QueueTable(videoQueue, table.audio, table.subtitle + (queue.streamIndex to queue))
+                }
+                TrackKind.Video -> error("a picture stream has no cache of its own")
+            }
+        }
+
+        /**
+         * True once the source announced a stream or a programme change after the open (#509). Only
+         * then does the engine look for a sound or subtitles to choose again, so media whose streams
+         * never change plays exactly as it did. Actor only.
+         */
+        var layoutChanged: Boolean = false
+
+        /** True when subtitles appeared or the programmes changed, until the choice runs again. Actor only. */
+        var subtitlesToChoose: Boolean = false
+
+        /** The sounds the player chose on its own after the open, each tried once. Actor only. */
+        val soundsTried: MutableSet<Int> = HashSet()
 
         /** Between the audio decoder and the feeder. Small, because the ring is the real buffer. */
         val decodedAudio: Channel<AudioBuffer> = Channel(capacity = 4)
@@ -11279,6 +11507,12 @@ internal class PlaybackCore(
 
         /** A target beginning farther ahead would violate the user-visible switch latency bound. */
         const val AUDIO_SWITCH_MAX_START_GAP_US = 250_000L
+
+        /**
+         * How far the reads must have gone past the end of a sound's last packet before that sound
+         * counts as run out (#509). Interleaving in a transport stream is well inside it.
+         */
+        const val SOUND_RAN_OUT_US = 1_000_000L
 
         /** Inline subtitle work yields the actor at these hard operation ceilings. */
         const val SUBTITLE_PACKETS_PER_PASS = 32
@@ -11863,6 +12097,13 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class ExternalSubtitleRead(val adopt: suspend () -> Unit) :
         CoreCommand("addExternalSubtitle", CompletableDeferred(Unit))
 
+    /**
+     * The demux lane saw the source's streams or programmes change after the open (#509). Sent by
+     * the lane, never by a caller, so its reply is a completed placeholder; [adopt] runs on the actor.
+     */
+    class StreamsChanged(val adopt: suspend () -> Unit) :
+        CoreCommand("streamsChanged", CompletableDeferred(Unit))
+
     class SelectSecondarySubtitle(
         val track: TrackId?,
         val reply: CompletableDeferred<TrackChange>,
@@ -11941,6 +12182,16 @@ private fun readInspection(session: BackendSession): MediaInspection {
         session.close()
     }
 }
+
+/**
+ * These tracks with the source's streams and programmes as they stand after the open (#509), when
+ * [listed] and [programs] give them. The rows of external files stay, after the container's, and so
+ * does every selection.
+ */
+private fun Tracks.withLayout(listed: List<PlayerStreamInfo>?, programs: List<MediaProgram>?): Tracks = copy(
+    all = if (listed == null) all else listed.toTracks().all + all.filter { it.id.value < 0 },
+    programs = programs ?: this.programs,
+)
 
 /** The track table of this source, with its variants and programmes. */
 private fun io.github.yuroyami.kiteplayer.spi.PlayerMediaSource.toTracks(): Tracks =

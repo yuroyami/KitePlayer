@@ -68,6 +68,9 @@ internal class FakePacket(
 ) : PlayerPacket {
     private var isClosed = false
 
+    override var newStreams: List<io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo>? = null
+    override var newPrograms: List<io.github.yuroyami.kiteplayer.MediaProgram>? = null
+
     init {
         ledger?.onOpen()
     }

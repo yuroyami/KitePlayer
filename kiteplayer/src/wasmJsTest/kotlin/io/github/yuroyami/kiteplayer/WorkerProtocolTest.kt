@@ -363,9 +363,12 @@ class WorkerProtocolTest {
             PlayerEvent.ChapterChanged(Chapter(2, 120.seconds, 180.seconds, "Middle")),
             PlayerEvent.ChapterChanged(null),
             PlayerEvent.MarkerReached(Marker(30.seconds, "intro-end")),
+            PlayerEvent.TracksAdded(tracks.all.takeLast(2)),
+            PlayerEvent.TrackChosenByPlayer(TrackKind.Audio, TrackId(3)),
+            PlayerEvent.TrackChosenByPlayer(TrackKind.Subtitle, null),
         )
         for (event in events) assertEquals(WorkerMessage.Event(event), WorkerMessage.Event(event).roundTrip())
-        assertEquals(11, events.map { it::class }.distinct().size, "every kind of event is here")
+        assertEquals(13, events.map { it::class }.distinct().size, "every kind of event is here")
     }
 
     @Test

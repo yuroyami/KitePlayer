@@ -68,6 +68,12 @@ internal data class ScriptedAudioTrack(
     val packetDurationKnown: Boolean = true,
     /** The stream's own tags, such as a ReplayGain gain that overrides the container's. */
     val metadata: Map<String, String> = emptyMap(),
+    /**
+     * When the stream first appears, as a live transport stream's sound can a few seconds in (#509).
+     * Null lists it at the open. A later one is listed by the first packet read at or past it, and
+     * its packets start there.
+     */
+    val appearsAtUs: Long? = null,
 ) {
     fun format(defaultSampleRate: Int, defaultChannels: Int): AudioFormat = AudioFormat(
         sampleRate = sampleRate ?: defaultSampleRate,
@@ -100,6 +106,8 @@ internal data class ScriptedSubtitleTrack(
     val holdsLastCue: Boolean = false,
     /** True makes this track's decoder refuse that null packet every time it is offered. */
     val refusesDrain: Boolean = false,
+    /** When the stream first appears, as [ScriptedAudioTrack.appearsAtUs] says for a sound (#509). */
+    val appearsAtUs: Long? = null,
 ) {
     val cuesByStart: Map<Long, List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
         cues.groupBy { it.startMicros }
@@ -235,6 +243,11 @@ internal class MediaScript(
     val videoProbe: ScriptedVideoProbe = ScriptedVideoProbe(),
     /** The channels the container declares, as a transport stream multiplex does (#505). */
     val programs: List<io.github.yuroyami.kiteplayer.MediaProgram> = emptyList(),
+    /**
+     * The channels from a time on, as a live multiplex announces them in a new programme table
+     * (#509). Each applies from the first packet read at or past its time.
+     */
+    val programChanges: List<Pair<Long, List<io.github.yuroyami.kiteplayer.MediaProgram>>> = emptyList(),
 ) {
     /** Whether the picture at [ptsUs] is one nothing is built on, under [alternateFramesAreNonReference]. */
     fun isNonReferenceVideo(ptsUs: Long, isKeyframe: Boolean): Boolean {
@@ -830,7 +843,19 @@ internal class ScriptedSource(
 
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
 
-    override val programs: List<io.github.yuroyami.kiteplayer.MediaProgram> get() = script.programs
+    override var programs: List<io.github.yuroyami.kiteplayer.MediaProgram> = script.programs
+        private set
+
+    /** The streams that appear after the open which the reads have reached, and so listed (#509). */
+    private val lateListed = HashSet<Int>()
+
+    /** How many of [MediaScript.programChanges] the reads have reached. */
+    private var programChangesApplied = 0
+
+    private val lateAt: Map<Int, Long> = buildMap {
+        script.audioTracks.forEach { track -> track.appearsAtUs?.let { put(track.index, it) } }
+        script.subtitleTracks.forEach { track -> track.appearsAtUs?.let { put(track.index, it) } }
+    }
 
     /** When the live sender began, on the test's clock. */
     val liveOriginNanos: Long = clock?.nanos() ?: 0L
@@ -854,7 +879,11 @@ internal class ScriptedSource(
         if (waitUs > 0) delay(waitUs.microseconds)
     }
 
-    override val streams: List<PlayerStreamInfo> = buildList {
+    /** What the container lists now: every stream, less those that appear later and have not yet. */
+    override val streams: List<PlayerStreamInfo>
+        get() = allStreams.filter { stream -> stream.index !in lateAt || stream.index in lateListed }
+
+    private val allStreams: List<PlayerStreamInfo> = buildList {
         if (script.hasVideo) {
             add(
                 PlayerStreamInfo(
@@ -929,7 +958,7 @@ internal class ScriptedSource(
     private var selected: Set<Int> = emptySet()
     private var videoCursorUs = script.firstVideoPtsUs
     private val audioCursorsUs: MutableMap<Int, Long> =
-        script.audioTracks.associate { it.index to 0L }.toMutableMap()
+        script.audioTracks.associate { it.index to (it.appearsAtUs ?: 0L) }.toMutableMap()
     private val subtitleCursors: MutableMap<Int, Int> =
         script.subtitleTracks.associate { it.index to 0 }.toMutableMap()
     private val subtitleSeekFloorsUs: MutableMap<Int, Long> =
@@ -988,9 +1017,9 @@ internal class ScriptedSource(
     var closed: Boolean = false
         private set
 
+    /** Selects before the first read, and again between reads to add a stream that appeared (#509). */
     override fun selectStreams(indices: Set<Int>) {
         if (faults.failSelectStreams) error("scripted selectStreams failure")
-        check(selectCalls == 0) { "streams must be selected before the first read" }
         require(indices.isNotEmpty()) { "no selectable stream among $indices" }
         require(indices.all { wanted -> streams.any { it.index == wanted } }) {
             "unknown scripted stream in $indices"
@@ -1048,6 +1077,18 @@ internal class ScriptedSource(
 
     private fun packetRead(packet: FakePacket): FakePacket {
         demuxFrontierUs = maxOf(demuxFrontierUs, packet.pts?.micros ?: demuxFrontierUs)
+        // A late stream and a new programme table are announced on the first packet that reaches them.
+        val at = packet.pts?.micros ?: return packet
+        val appeared = lateAt.filter { (index, from) -> index !in lateListed && from <= at }.keys
+        lateListed += appeared
+        var programsChanged = false
+        while (programChangesApplied < script.programChanges.size && script.programChanges[programChangesApplied].first <= at) {
+            programs = script.programChanges[programChangesApplied].second
+            programChangesApplied++
+            programsChanged = true
+        }
+        packet.newStreams = if (appeared.isNotEmpty()) streams else null
+        packet.newPrograms = if (programsChanged) programs else null
         return packet
     }
 
@@ -1160,7 +1201,7 @@ internal class ScriptedSource(
             }.takeIf { it >= 0 } ?: track.packets.size
         }
         videoCursorUs = landing
-        script.audioTracks.forEach { audioCursorsUs[it.index] = landing }
+        script.audioTracks.forEach { audioCursorsUs[it.index] = maxOf(landing, it.appearsAtUs ?: 0L) }
         demuxFrontierUs = landing
         // Like libavformat, this cursor does not report where it landed. The engine finds out from the
         // first decoded frame, which is also how it detects an overshoot.

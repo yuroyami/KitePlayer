@@ -52,6 +52,9 @@ class PlaybackCoreTest {
         val harness = CoreHarness(this)
         val expected = listOf(
             "drainCommands",
+            // Before the track changes, so a sound the player chose for a stream that appeared after
+            // the open switches in the same pass.
+            "handleLateStreams",
             "handleTrackChanges",
             "handleAudioFill",
             // Right after the clock is anchored for the pass, so a gapless swap happens before

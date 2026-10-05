@@ -8,6 +8,53 @@ import kotlin.test.assertSame
 class PacketQueueTest {
 
     @Test
+    fun aPacketWithNoDurationProvesCoverageToItsStart() {
+        // FFmpeg gives the AAC packets of a transport stream sound it found after the open no
+        // duration, and a switch to that sound must still see how far its cache reaches (#509).
+        val ledger = LeakLedger()
+        val queue = PacketQueue(streamIndex = 7, softLimitUs = 1_000_000)
+        queue.offer(FakePacket(7, Pts(0), duration = Pts(100_000), ledger = ledger), Generation.Initial)
+        assertEquals(100_000, queue.lastTimestampUs)
+        queue.offer(FakePacket(7, Pts(100_000), duration = null, ledger = ledger), Generation.Initial)
+        assertEquals(100_000, queue.lastTimestampUs, "the newest packet reaches at least its start")
+        queue.offer(FakePacket(7, Pts(300_000), duration = null, ledger = ledger), Generation.Initial)
+        assertEquals(300_000, queue.lastTimestampUs)
+        assertEquals(300_000, queue.newestEndUs)
+        queue.close()
+        assertEquals(0, ledger.liveCount)
+    }
+
+    @Test
+    fun soundDatedOnlyAtEachPesStartProvesCoverageFromItsDatedPackets() {
+        // FFmpeg dates a late AAC sound only at the start of each PES packet, which holds several
+        // frames, so the queue reads coverage past the frames that carry no timestamp (#509).
+        val ledger = LeakLedger()
+        val queue = PacketQueue(streamIndex = 7, softLimitUs = 1_000_000)
+        queue.offer(FakePacket(7, null, duration = null, ledger = ledger), Generation.Initial)
+        assertEquals(null, queue.firstTimestampUs)
+        assertEquals(null, queue.lastTimestampUs)
+        queue.offer(FakePacket(7, Pts(200_000), duration = null, ledger = ledger), Generation.Initial)
+        queue.offer(FakePacket(7, null, duration = null, ledger = ledger), Generation.Initial)
+        queue.offer(FakePacket(7, null, duration = null, ledger = ledger), Generation.Initial)
+        assertEquals(200_000, queue.firstTimestampUs)
+        assertEquals(200_000, queue.lastTimestampUs)
+        queue.offer(FakePacket(7, Pts(300_000), duration = null, ledger = ledger), Generation.Initial)
+        queue.offer(FakePacket(7, null, duration = null, ledger = ledger), Generation.Initial)
+        assertEquals(300_000, queue.lastTimestampUs)
+
+        // Subtitles keep the stop at a packet with no timestamp.
+        assertEquals(0, queue.dropBefore(1_000_000, assumedDurationUs = 50_000))
+        // Sound lets each such packet go once the next dated one starts by the cutoff.
+        assertEquals(4, queue.dropBefore(300_000, assumedDurationUs = 50_000, untimedEndsByNext = true))
+        assertEquals(300_000, queue.firstTimestampUs)
+        assertEquals(2, queue.count)
+        assertEquals(1, queue.dropBefore(1_000_000, assumedDurationUs = 50_000, untimedEndsByNext = true))
+        assertEquals(1, queue.count, "nothing dates the newest packet, so it stays")
+        queue.close()
+        assertEquals(0, ledger.liveCount)
+    }
+
+    @Test
     fun `inactive cache trimming drops only packets completed before the cutoff`() {
         val ledger = LeakLedger()
         val queue = PacketQueue(streamIndex = 7, softLimitUs = 1_000_000)

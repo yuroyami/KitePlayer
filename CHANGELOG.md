@@ -439,6 +439,19 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   memento carries the item's channel, which raises its format version to 7.
 - A `selectVariant` call that a stop or a failed recovery ended while the reopened stream refilled
   now ends with `IllegalStateException` instead of never returning (#525).
+- A sound or subtitles that a transport stream starts carrying after the open join the tracks and
+  play (#509), as on a UDP multicast, an IPTV channel joined between programmes or a tuner
+  recording, and a channel that moves its sound to a new stream at a programme boundary keeps
+  playing it. A picture that appears after the open is listed and does not play yet. The new
+  `PlayerEvent.TracksAdded` names the tracks that appeared. When nothing of its
+  kind plays, the player chooses one by the open's rules, as mpv does, and it follows a sound that
+  ran out to the stream that carries on, once the old one has played its last sample, so the
+  switch cuts nothing. A viewer who turned the sound or the subtitles off keeps them off. The new
+  `PlayerEvent.TrackChosenByPlayer` says each time the player chooses on its own. A
+  `PlayerMediaSource` announces such a change through the new `PlayerPacket.newStreams` and
+  `newPrograms`, null by default, so media whose streams never change plays exactly as before. A
+  sound whose rate FFmpeg does not know yet, such as AAC listed before its first packet, opens
+  instead of failing, and plays at the rate its decoder finds.
 
 ### Removed
 

@@ -111,16 +111,17 @@ static int64_t expected_deadline(uint64_t host_ticks, int32_t frames)
 
 /* The long case's sample values repeat with this period instead of rising forever, and the reason is
  * a measured limit of `float` rather than a preference. `kprt_test_frame_value` in ring_support.h is
- * `(float)frame`, which stops distinguishing consecutive integers above 16,777,216, and this case
- * moves more than a billion frames. Past that point a ramp cannot detect an off-by-one, so the value
- * wraps at a period eight times the ring's capacity: two frames close enough for the ring's wrap
- * arithmetic to confuse can never share a value, which is exactly the property the check needs, and
- * every value stays exactly representable. */
+ * frame / 2^24, which stops distinguishing consecutive frames at 2^24, and this case moves more than
+ * a billion frames. Past that point a ramp cannot detect an off-by-one, so the value wraps at a
+ * period eight times the ring's capacity: two frames close enough for the ring's wrap arithmetic to
+ * confuse can never share a value, which is exactly the property the check needs. Each value is the
+ * frame's place in the period over 2^24, the helper's own scale, so it is exact and stays inside
+ * full scale, where the render's peak limiter passes it bit for bit (#504, #528). */
 #define VALUE_PERIOD 65536
 
 static float periodic_frame_value(int64_t frame)
 {
-    return (float)(frame % VALUE_PERIOD);
+    return (float)(frame % VALUE_PERIOD) * (1.0f / 16777216.0f);
 }
 
 /* `kprt_test_feed` with the periodic value function. The reservation dance is repeated here rather

@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
+import io.github.yuroyami.kiteffmpeg.FFmpegError
+import io.github.yuroyami.kiteffmpeg.FFmpegException
 import io.github.yuroyami.kiteffmpeg.MediaSource
 import io.github.yuroyami.kiteffmpeg.OpenInterrupt
 import io.github.yuroyami.kiteplayer.MediaIo
@@ -229,6 +231,23 @@ private suspend fun openStreamList(item: MediaItem, list: MediaIo, entries: List
 }
 
 private const val MAX_STREAM_LIST_DEPTH = 3
+
+/**
+ * Runs [open], one of the player's two doors into [openItem], and types what FFmpeg refused, which
+ * the engine would otherwise report as `SourceUnavailable`, saying the bytes could not be reached.
+ * The FFmpeg runtime rejection becomes `ConfigurationInvalid`, as [mappingFFmpegRuntimeRejection]
+ * says. Invalid data becomes `NotMedia`: the bytes were reached and FFmpeg cannot read them as
+ * media, as with a file that is not media, a damaged header, or an HLS playlist that breaks its
+ * specification by using a variable it never defined (#452). The same bytes fail the same way every
+ * time, so a retry is pointless, and FFmpeg's reason, which names what it refused, is the detail.
+ * Thumbnails, waveforms and loudness keep FFmpeg's own exception, as their documentation says.
+ */
+internal inline fun <T> typingOpenFailures(item: MediaItem, open: () -> T): T = try {
+    mappingFFmpegRuntimeRejection(open)
+} catch (failure: FFmpegException) {
+    if (failure.error !is FFmpegError.InvalidData) throw failure
+    throw PlaybackException(PlaybackError.NotMedia(item.uri, failure.message))
+}
 
 /** [openItem] for the callers that need only the source: thumbnails, waveforms and loudness. */
 internal suspend fun openSource(item: MediaItem): MediaSource = openItem(item).source

@@ -62,7 +62,8 @@ public sealed class PlaybackError {
 
     /** The bytes were reached and are not media the demuxer recognises. */
     public data class NotMedia(val uri: String, val detail: String? = null) : PlaybackError() {
-        override val message: String get() = "not a recognised media format: ${redactUri(uri)}"
+        override val message: String
+            get() = "not a recognised media format: ${redactUri(uri)}" + (detail?.let { ": ${redactUrisIn(it)}" } ?: "")
     }
 
     /** The container was read and holds nothing this build can play. */

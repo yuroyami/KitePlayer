@@ -75,7 +75,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         // The same open KiteFFmpegMediaBackend.open runs. This factory once dropped headers,
         // openOptions, formatHint and videoFilter and skipped the FFmpeg identity mapping, so the
         // documented SPI door behaved differently from the backend door for the same MediaItem.
-        val source = mappingFFmpegRuntimeRejection {
+        val source = typingOpenFailures(media) {
             openItem(media).let {
                 KiteFFmpegSource(it.source, it.bridge, it.hls, it.variants, it.selectedVariant, it.realTimeScheme, it.listedTitle)
             }

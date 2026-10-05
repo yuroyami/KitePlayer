@@ -123,7 +123,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   playlist's addresses itself, which made a variable that holds a whole address resolve against
   the redirect too and left `QUERYPARAM` reading the address before the redirect. A redirected
   playlist therefore reaches FFmpeg exactly as its server sent it. A reference to a variable that
-  nothing defined fails the open, and the error names it.
+  nothing defined fails the open with `NotMedia`, and the error names it.
+- An open that FFmpeg refuses as invalid data fails with `PlaybackError.NotMedia`, carrying FFmpeg's
+  reason as its detail, instead of `SourceUnavailable`, which said the bytes could not be reached
+  and invited a retry that fails the same way (#452). `NotMedia`'s message now ends with its detail.
+  Thumbnails, waveforms and loudness still throw FFmpeg's own exception.
 - `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
   page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third

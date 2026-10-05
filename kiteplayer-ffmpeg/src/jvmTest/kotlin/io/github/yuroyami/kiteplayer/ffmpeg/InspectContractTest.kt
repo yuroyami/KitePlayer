@@ -26,6 +26,17 @@ class InspectContractTest {
         assertIs<PlaybackError.SourceUnavailable>(typed.error)
     }
 
+    @Test
+    fun bytesThatAreNotMediaFailAsNotMediaWithFFmpegsReason() = runBlocking<Unit> {
+        val text = "This is a shopping list and not a film.\n".repeat(200).encodeToByteArray()
+        val failure = runCatching { inspect(MediaItem("list.txt", io = { SlowIo(text, delayMs = 0) }), KiteFFmpegMediaBackend()) }
+            .exceptionOrNull()
+        val typed = assertIs<PlaybackException>(failure, "was $failure")
+        // The bytes were reached, so a retry is pointless; SourceUnavailable would say otherwise.
+        val error = assertIs<PlaybackError.NotMedia>(typed.error)
+        assertTrue("Invalid data" in error.detail.orEmpty(), "FFmpeg's reason is not the detail: $error")
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun aSlowReaderLeavesTheCallersThreadFree() = runBlocking<Unit> {
@@ -42,13 +53,13 @@ class InspectContractTest {
         assertTrue(ticks >= 20, "the caller's thread must stay free while the reader waits, ticked $ticks times")
     }
 
-    /** Every read waits 150 ms and hands over at most 1,024 bytes. */
-    private class SlowIo(private val bytes: ByteArray) : MediaIo {
+    /** Every read waits [delayMs] and hands over at most 1,024 bytes. */
+    private class SlowIo(private val bytes: ByteArray, private val delayMs: Long = 150) : MediaIo {
         private var position = 0
         override val size: Long = bytes.size.toLong()
         override val seekable: Boolean = true
         override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
-            delay(150)
+            delay(delayMs)
             if (position >= bytes.size) return -1
             val count = minOf(length, 1_024, bytes.size - position)
             bytes.copyInto(into, offset, position, position + count)

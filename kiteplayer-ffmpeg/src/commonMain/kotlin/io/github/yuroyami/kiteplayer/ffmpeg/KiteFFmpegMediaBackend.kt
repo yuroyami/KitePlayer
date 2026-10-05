@@ -70,8 +70,9 @@ public class KiteFFmpegMediaBackend(
         // A rejection there is not about this file and never will be: it means the linked FFmpeg does not
         // match the headers KiteFFmpeg was compiled against, so every open fails and retrying is pointless.
         // Mapping it here is what stops the engine from reporting it as SourceUnavailable, which would
-        // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
-        val source = mappingFFmpegRuntimeRejection { openItem(media).let { KiteFFmpegSource(it.source, it.bridge, it.hls, realTimeScheme = it.realTimeScheme, listedTitle = it.listedTitle) } }
+        // say the bytes could not be reached. See FFmpegRuntimeCheck.kt. Media FFmpeg cannot read
+        // becomes NotMedia there too, with FFmpeg's reason.
+        val source = typingOpenFailures(media) { openItem(media).let { KiteFFmpegSource(it.source, it.bridge, it.hls, realTimeScheme = it.realTimeScheme, listedTitle = it.listedTitle) } }
         source.onWarning = onWarning
         source.attachItemFilters(media)
         // The option echo's honest half: a key the demuxer never consumed did nothing,

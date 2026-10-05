@@ -10,7 +10,8 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
  * line or fills it, and every parenthesis with [HearingImpairedNotes.HideStrict], a speaker's name
  * in capitals before a colon at the start of a line, and a line of music marked with `♪`. Full-width
  * brackets and parentheses count too. A line left empty, or holding only a dash, goes, and a cue left
- * with no line is dropped. The spans keep their styles; only the removed characters leave them.
+ * with no line is dropped, unless it has no end of its own, when it stays to clear the screen. The
+ * spans keep their styles; only the removed characters leave them.
  *
  * A speaker's name must be written in capital letters that have a lower case, so a script without
  * case, such as Arabic or Hebrew, never matches a rule meant for Latin capitals.
@@ -27,6 +28,12 @@ internal fun hideHearingImpairedNotes(cues: List<SubtitleCue>, mode: HearingImpa
         val spans = filterSpans(cue.spans, mode)
         when {
             spans === cue.spans -> out += cue
+            // A cue with no end of its own, as a teletext page, ends the one before it, so it stays
+            // as a cue that draws nothing; dropped, it would leave the line before it on screen (#510).
+            spans.isEmpty() && cue.endMicros == SubtitleCue.OPEN_END -> {
+                changed = true
+                out += cue.copy(spans = emptyList())
+            }
             spans.isEmpty() -> changed = true
             else -> {
                 changed = true

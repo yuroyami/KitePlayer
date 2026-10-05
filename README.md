@@ -142,7 +142,7 @@ video decoder.
 
 - ASS and SSA drawn by libass as authored: signs, karaoke, animated transforms and the fonts the
   file carries.
-- SubRip and WebVTT, and Blu-ray (PGS), DVD, DVB and XSUB image subtitles.
+- SubRip and WebVTT, DVB teletext, and Blu-ray (PGS), DVD, DVB and XSUB image subtitles.
 - External subtitle files that load during playback, and a second subtitle track at the same time.
 - Delay, scale, position, style and a safe area that keeps text out of cutouts and controls.
 
@@ -616,6 +616,12 @@ and labels it.
   `SubtitleStyleOverride` still wins over the file's colours.
 - Blu-ray (PGS), DVB, DVD and XSUB image subtitles from the container, placed on the picture they
   were authored for.
+- DVB teletext subtitles from a broadcast recording or an IPTV stream, read in Kotlin with no
+  native library. Each subtitle page the channel lists is a track of its own, with its language
+  and its hearing impaired mark, as VLC lists them, and a page shows its colours, its boxed
+  backgrounds and its double height lines in the top or bottom half of the picture. The letters
+  follow the page's national character set, Latin, Cyrillic, Greek or Hebrew, as libzvbi reads
+  them ([#510](https://github.com/yuroyami/KitePlayer/issues/510)).
 - A disc's forced captions, the signs and foreign dialogue it marks forced among a Blu-ray or DVD
   track's pictures, can draw on their own. `setForcedPicturesOnly`, as mpv's
   `sub-forced-events-only`, draws only those of the chosen track, and

@@ -72,6 +72,20 @@ class HearingImpairedNotesTest {
         assertEquals(listOf(CueStyle(), bold), filtered.spans.map { it.style })
     }
 
+    @Test
+    fun aPageOfNotesStillClearsThePageBeforeIt() {
+        // Teletext pages have no end of their own: each ends the one before it (#510).
+        val open = SubtitleCue.OPEN_END
+        val pages = listOf(
+            SubtitleCue.Text(0, open, listOf(StyledSpan("Hello"))),
+            SubtitleCue.Text(2_000_000, open, listOf(StyledSpan("[DOOR SLAMS]"))),
+            SubtitleCue.Text(4_000_000, open, emptyList()),
+        )
+        val filtered = hideHearingImpairedNotes(pages, HearingImpairedNotes.Hide)
+        assertEquals(listOf(0L, 2_000_000L, 4_000_000L), filtered.map { it.startMicros })
+        assertEquals(listOf("Hello", "", ""), texts(filtered, HearingImpairedNotes.Keep))
+    }
+
     private val sdhSrt = "1\n00:00:00,500 --> 00:00:01,500\n[MUSIC]\n\n" +
         "2\n00:00:02,000 --> 00:00:03,000\nJOHN: Hi\n\n"
 

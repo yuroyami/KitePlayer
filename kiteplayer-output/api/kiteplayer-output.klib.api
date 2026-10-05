@@ -288,6 +288,7 @@ final class io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer : io.git
     final var presentedFrames // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.presentedFrames|{}presentedFrames[0]
         final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
 
+    final fun clearPicture() // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.clearPicture|clearPicture(){}[0]
     final fun close() // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.close|close(){}[0]
     final fun setScaleMode(io.github.yuroyami.kiteplayer/VideoScale) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.setScaleMode|setScaleMode(io.github.yuroyami.kiteplayer.VideoScale){}[0]
     final fun setTransform(io.github.yuroyami.kiteplayer/VideoTransform) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.setTransform|setTransform(io.github.yuroyami.kiteplayer.VideoTransform){}[0]

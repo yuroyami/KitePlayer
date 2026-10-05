@@ -88,6 +88,12 @@ public class WebCanvasVideoRenderer(
     private var retainedMirrored: Boolean = false
     private var retainedCrop: PictureCrop? = null
 
+    /**
+     * True from [clearPicture] until the next picture is drawn. The canvas then shows its background
+     * and the cues, and draws a change of cue at once, because no frame is coming to carry it.
+     */
+    private var pictureCleared: Boolean = false
+
     /** Diagnostics, in the same three counts the Android renderer keeps. */
     public var presentedFrames: Long = 0
         private set
@@ -164,6 +170,7 @@ public class WebCanvasVideoRenderer(
             retainedCrop = frame.crop
             drawStage(s, layout)
             drawOverlay(s)
+            pictureCleared = false
             presentedFrames++
             return true
         }
@@ -195,6 +202,7 @@ public class WebCanvasVideoRenderer(
      */
     private fun redrawRetained(s: JsAny) {
         if (closed) return
+        if (pictureCleared) return drawBackground(s)
         val size = retainedSize ?: return
         val layout = frameLayout(
             canvasWidth = viewportWidth,
@@ -207,6 +215,12 @@ public class WebCanvasVideoRenderer(
             crop = retainedCrop,
         ) ?: return
         drawStage(s, layout)
+        drawOverlay(s)
+    }
+
+    /** The canvas's background with the cues over it, for a picture taken off. */
+    private fun drawBackground(s: JsAny) {
+        webClearCanvas(s)
         drawOverlay(s)
     }
 
@@ -289,8 +303,24 @@ public class WebCanvasVideoRenderer(
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         this.overlay = overlay
-        // Not drawn here: the next present draws it above that frame. Drawing now would put
-        // subtitles over a picture that is about to be cleared and replaced.
+        // Not drawn here while a picture plays: the next present draws it above that frame, and
+        // drawing now would put subtitles over a picture that is about to be cleared and replaced.
+        // With the picture taken off, no frame is coming, so the cue is drawn now.
+        val s = state ?: return
+        if (pictureCleared && !closed) drawBackground(s)
+    }
+
+    /**
+     * Takes the picture off (#530): the canvas shows its background, transparent as between the
+     * bars, with the cues over it, until the next picture. The stage keeps its storage for that
+     * picture, but nothing draws from it again.
+     */
+    override fun clearPicture() {
+        val s = state ?: return
+        if (closed) return
+        pictureCleared = true
+        retainedSize = null
+        drawBackground(s)
     }
 
     override fun close() {
@@ -397,6 +427,9 @@ private external fun webDrawStage(
     rotation: Int,
     mirrored: Boolean,
 )
+
+@JsFun("(s) => { const g = s.ctx; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, s.canvas.width, s.canvas.height); }")
+private external fun webClearCanvas(state: JsAny)
 
 @JsFun("(s, w, h) => { if (s.canvas.width !== w) s.canvas.width = w; if (s.canvas.height !== h) s.canvas.height = h; }")
 private external fun webResizeCanvas(state: JsAny, width: Int, height: Int)

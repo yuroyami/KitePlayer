@@ -112,5 +112,6 @@ private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
     override fun setScaleMode(mode: VideoScale) = delegate.setScaleMode(mode)
     override fun setTransform(transform: VideoTransform) = delegate.setTransform(transform)
     override suspend fun setOverlay(overlay: SubtitleOverlay?) = delegate.setOverlay(overlay)
+    override fun clearPicture() = delegate.clearPicture()
     override val events: Flow<RendererEvent> get() = merge(delegate.events, limits)
 }

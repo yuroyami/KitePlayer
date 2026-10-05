@@ -221,6 +221,85 @@ class WebCanvasVideoRendererTest {
         renderer.close()
     }
 
+    /** One cue of [width] by [height] on a 640 by 360 layout, which is the recording canvas's size. */
+    private fun cue(width: Int, height: Int, hash: Long) = io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+        images = listOf(
+            io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                x = 10,
+                y = 300,
+                bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(width, height, ByteArray(width * height * 4)),
+            ),
+        ),
+        viewportWidth = 640,
+        viewportHeight = 360,
+        contentHash = hash,
+    )
+
+    /**
+     * The engine says no picture plays (#530): the canvas goes back to its background with the cue
+     * still over it, a cue that changes shows at once because no frame is coming to carry it, and a
+     * resize draws the background and the cue again rather than the old picture.
+     */
+    @Test
+    fun aClearedPictureLeavesTheBackgroundAndTheCues() = runTest {
+        val installed = installStageCanvasIfMissing()
+        try {
+            val canvas = recordingCanvas()
+            val renderer = WebCanvasVideoRenderer(canvas, painter)
+            renderer.setOverlay(cue(width = 40, height = 20, hash = 1))
+            assertTrue(renderer.present(CountingFrame(size = VideoSize(640, 360)), 0))
+            assertEquals(2, drawCount(canvas), "the picture and its cue")
+            val clears = clearCount(canvas)
+
+            renderer.clearPicture()
+            assertEquals(clears + 1, clearCount(canvas), "the picture was cleared away")
+            assertEquals(3, drawCount(canvas), "and only the cue drawn again")
+            assertEquals(40.0, lastDrawWidth(canvas))
+
+            renderer.setOverlay(cue(width = 60, height = 30, hash = 2))
+            assertEquals(4, drawCount(canvas), "a new cue shows at once")
+            assertEquals(60.0, lastDrawWidth(canvas))
+
+            renderer.setViewport(width = 1280, height = 720, scale = 1f)
+            assertEquals(5, drawCount(canvas), "a resize draws the cue again, not the old picture")
+            assertEquals(120.0, lastDrawWidth(canvas))
+
+            renderer.setOverlay(null)
+            assertEquals(5, drawCount(canvas), "a cue that ends goes at once")
+            renderer.close()
+        } finally {
+            if (installed) removeStageCanvas()
+        }
+    }
+
+    @Test
+    fun aPictureAfterAClearDrawsItsCuesWithItsFramesAgain() = runTest {
+        val installed = installStageCanvasIfMissing()
+        try {
+            val canvas = recordingCanvas()
+            val renderer = WebCanvasVideoRenderer(canvas, painter)
+            assertTrue(renderer.present(CountingFrame(size = VideoSize(640, 360)), 0))
+            renderer.clearPicture()
+            assertTrue(renderer.present(CountingFrame(size = VideoSize(640, 360)), 0))
+            val draws = drawCount(canvas)
+            renderer.setOverlay(cue(width = 40, height = 20, hash = 1))
+            assertEquals(draws, drawCount(canvas), "with a picture playing, the cue waits for its next frame")
+            renderer.close()
+        } finally {
+            if (installed) removeStageCanvas()
+        }
+    }
+
+    @Test
+    fun aClearWithNoContextOrAfterCloseDoesNothing() {
+        WebCanvasVideoRenderer(notACanvas(), painter).apply { clearPicture(); close() }
+        val canvas = recordingCanvas()
+        val renderer = WebCanvasVideoRenderer(canvas, painter)
+        renderer.close()
+        renderer.clearPicture()
+        assertEquals(0, clearCount(canvas))
+    }
+
     @Test
     fun aClosedRendererDrawsNothingOnResize() = runTest {
         val installed = installStageCanvasIfMissing()
@@ -274,15 +353,16 @@ private external fun canvasWidthOf(canvas: JsAny): Int
 private external fun canvasHeightOf(canvas: JsAny): Int
 
 /**
- * A canvas whose 2d context records every picture drawn onto it: how many, and the size of the last.
- * The drawn size is the last two numbers of a call, in both the five and the nine number forms, so
- * a picture drawn from part of its stage records the size it lands at (#533).
+ * A canvas whose 2d context records every picture drawn onto it, how many and the size of the last,
+ * and how many times it was cleared. The drawn size is the last two numbers of a call, in both the
+ * five and the nine number forms, so a picture drawn from part of its stage records the size it
+ * lands at (#533).
  */
 @JsFun(
     """() => {
-      const canvas = { width: 640, height: 360, draws: [] };
+      const canvas = { width: 640, height: 360, draws: [], clears: 0 };
       const ctx = {
-        setTransform() {}, clearRect() {}, translate() {}, rotate() {}, putImageData() {},
+        setTransform() {}, clearRect() { canvas.clears++; }, translate() {}, rotate() {}, putImageData() {},
         drawImage(image, ...at) { canvas.draws.push({ w: at[at.length - 2], h: at[at.length - 1] }); },
         createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
       };
@@ -294,6 +374,9 @@ private external fun recordingCanvas(): JsAny
 
 @JsFun("(c) => c.draws.length")
 private external fun drawCount(canvas: JsAny): Int
+
+@JsFun("(c) => c.clears")
+private external fun clearCount(canvas: JsAny): Int
 
 @JsFun("(c) => c.draws.length ? c.draws[c.draws.length - 1].w : -1")
 private external fun lastDrawWidth(canvas: JsAny): Double

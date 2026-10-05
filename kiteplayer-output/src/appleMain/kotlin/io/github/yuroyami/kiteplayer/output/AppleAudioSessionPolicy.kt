@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.AudioContent
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 
@@ -13,7 +14,11 @@ public enum class AppleAudioSessionPolicy {
 }
 
 internal interface AppleAudioSessionController {
-    fun setPlaybackCategory()
+    /**
+     * Sets the playback category with the mode [content] asks for: the default mode for music,
+     * `spokenAudio` for speech and `moviePlayback` for a film (#446).
+     */
+    fun setPlaybackCategory(content: AudioContent)
     fun setActive(active: Boolean, notifyOthers: Boolean)
 }
 
@@ -37,7 +42,8 @@ internal val sharedAppleAudioSessionLeaseManager: AppleAudioSessionLeaseManager 
  * Process-wide audio-session ownership shared by every Apple sink.
  *
  * Session calls are lifecycle work, never render-callback work. The first managed lease configures and
- * activates the session; the last one deactivates it. Application-managed leases deliberately do
+ * activates the session; the last one deactivates it. A lease taken for other content while the
+ * session is active sets the mode again, so the item that opened last decides it. Application-managed leases deliberately do
  * neither. Activation is part of the transaction: a refusal leaves the count at zero so the next open
  * retries rather than inheriting a session that was never activated.
  */
@@ -46,16 +52,22 @@ internal class AppleAudioSessionLeaseManager(
 ) {
     private val lock = SynchronizedObject()
     private var leases: Int = 0
+    private var mode: AudioContent? = null
 
     internal val activeLeaseCount: Int get() = synchronized(lock) { leases }
 
-    fun acquire(policy: AppleAudioSessionPolicy): AppleAudioSessionLease {
+    fun acquire(policy: AppleAudioSessionPolicy, content: AudioContent = AudioContent.Movie): AppleAudioSessionLease {
         if (policy == AppleAudioSessionPolicy.ApplicationManaged) return ApplicationManagedLease
 
         synchronized(lock) {
             if (leases == 0) {
-                controller.setPlaybackCategory()
+                controller.setPlaybackCategory(content)
                 controller.setActive(active = true, notifyOthers = false)
+                mode = content
+            } else if (mode != content) {
+                // The session is already playing, so a refused mode change leaves the one it had
+                // rather than refusing the open: the sound is right, only its processing is not.
+                if (runCatching { controller.setPlaybackCategory(content) }.isSuccess) mode = content
             }
             leases++
         }
@@ -78,6 +90,7 @@ internal class AppleAudioSessionLeaseManager(
             check(leases > 0) { "an Apple audio-session lease was released without being acquired" }
             leases--
             if (leases == 0) {
+                mode = null
                 controller.setActive(active = false, notifyOthers = true)
             }
         }

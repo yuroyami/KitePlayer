@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.spi
 
+import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.PlaybackError
 import kotlinx.coroutines.flow.Flow
@@ -40,6 +41,14 @@ public interface AudioSink : AutoCloseable {
      *         engine rebuilds its resampler to match.
      */
     public suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat
+
+    /**
+     * What the sound the next open plays is, for the platform's own sound processing (#446). The
+     * engine calls this before every open with the item's [AudioContent], never [AudioContent.Automatic],
+     * which it has already resolved. It takes effect at that open: a device already open keeps
+     * what it was opened with. A platform with no such setting ignores it, which is the default.
+     */
+    public fun setContent(content: AudioContent) {}
 
     /** Starts the device pulling samples through the render callback. */
     public suspend fun start()

@@ -102,7 +102,7 @@ class AudioTrackFloatFallbackTest {
 
     @Test
     fun theSinkSaysOnceThatItPlaysSixteenBit() = runBlocking {
-        val sink = AudioTrackSink({ Driver(DriverEncoding.Pcm16) }, Clock)
+        val sink = AudioTrackSink({ _, _ -> Driver(DriverEncoding.Pcm16) }, Clock)
         val seenEvents = java.util.Collections.synchronizedList(mutableListOf<AudioSinkEvent>())
         val events = async(start = CoroutineStart.UNDISPATCHED) {
             withTimeoutOrNull(1500) { sink.events.collect { seenEvents += it } }
@@ -124,7 +124,7 @@ class AudioTrackFloatFallbackTest {
 
     @Test
     fun aFloatSinkSaysNothing() = runBlocking {
-        val sink = AudioTrackSink({ Driver(DriverEncoding.Float) }, Clock)
+        val sink = AudioTrackSink({ _, _ -> Driver(DriverEncoding.Float) }, Clock)
         val seenEvents = java.util.Collections.synchronizedList(mutableListOf<AudioSinkEvent>())
         val events = async(start = CoroutineStart.UNDISPATCHED) {
             withTimeoutOrNull(500) { sink.events.collect { seenEvents += it } }

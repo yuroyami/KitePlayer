@@ -7,6 +7,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import cnames.structs.kprt_ring
 import cnames.structs.kprt_sink
+import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.PlaybackError
@@ -309,6 +310,13 @@ public class CoreAudioSink private constructor(
                 "want a Kotlin callback is a different sink.",
         )
 
+    /* What the next open's audio session mode declares, set by the engine before it opens (#446). */
+    private var content: AudioContent = AudioContent.Movie
+
+    override fun setContent(content: AudioContent) {
+        this.content = content
+    }
+
     override suspend fun openWithRing(
         request: AudioFormat,
         capacityFrames: (AudioFormat) -> Int,
@@ -326,7 +334,7 @@ public class CoreAudioSink private constructor(
         // On iOS the process audio session must be active before RemoteIO is created. Acquiring is the
         // first step in the same transaction as the C device and ring. A later failure hands the lease
         // back only after C destruction is confirmed; uncertain destruction retains it fail-closed.
-        val acquiredLease = leaseManager.acquire(policy)
+        val acquiredLease = leaseManager.acquire(policy, content)
         var ownedSink: CPointer<kprt_sink>? = null
 
         try {

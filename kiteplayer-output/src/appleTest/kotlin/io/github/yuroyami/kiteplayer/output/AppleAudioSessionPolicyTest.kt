@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.AudioContent
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.Dispatchers
@@ -59,11 +60,36 @@ class AppleAudioSessionPolicyTest {
     }
 
     @Test
+    fun theSessionModeFollowsTheContentOfTheItemThatOpenedLast() {
+        val controller = RecordingAppleAudioSessionController()
+        val manager = AppleAudioSessionLeaseManager(controller)
+
+        val speech = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Speech)
+        val alsoSpeech = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Speech)
+        val music = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Music)
+        listOf(speech, alsoSpeech, music).forEach { it.close() }
+        manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Music).close()
+
+        assertEquals(
+            listOf(
+                "category:playback:spokenAudio:none",
+                "active:true:none",
+                "category:playback:default:none",
+                "active:false:notifyOthers",
+                "category:playback:default:none",
+                "active:true:none",
+                "active:false:notifyOthers",
+            ),
+            controller.calls,
+        )
+    }
+
+    @Test
     fun aRefusedReactivationIsLeftForTheDeviceStartToReport() {
         // The first activation, at acquire, succeeds; the second, at resume, is refused.
         var activations = 0
         val controller = object : AppleAudioSessionController {
-            override fun setPlaybackCategory() = Unit
+            override fun setPlaybackCategory(content: AudioContent) = Unit
             override fun setActive(active: Boolean, notifyOthers: Boolean) {
                 if (active && ++activations == 2) throw PlannedAppleAudioSessionFailure()
             }
@@ -160,8 +186,13 @@ internal class RecordingAppleAudioSessionController(
 
     val calls: List<String> get() = synchronized(lock) { recorded.toList() }
 
-    override fun setPlaybackCategory() {
-        record("category:playback:moviePlayback:none")
+    override fun setPlaybackCategory(content: AudioContent) {
+        val mode = when (content) {
+            AudioContent.Music -> "default"
+            AudioContent.Speech -> "spokenAudio"
+            AudioContent.Movie, AudioContent.Automatic -> "moviePlayback"
+        }
+        record("category:playback:$mode:none")
     }
 
     override fun setActive(active: Boolean, notifyOthers: Boolean) {

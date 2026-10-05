@@ -53,14 +53,14 @@ class AudioTrackSinkSessionIdTest {
 
     @Test
     fun `a sink that has not opened a device has no session id`() {
-        val sink = AudioTrackSink({ SessionDriver(42) }, FixedClock())
+        val sink = AudioTrackSink({ _, _ -> SessionDriver(42) }, FixedClock())
         assertNull(sink.platformSessionId, "a sink with no device must not name a session")
         sink.close()
     }
 
     @Test
     fun `an open sink publishes the device's session id`() = runBlocking {
-        val sink = AudioTrackSink({ SessionDriver(42) }, FixedClock())
+        val sink = AudioTrackSink({ _, _ -> SessionDriver(42) }, FixedClock())
         try {
             sink.open(format) { _, _, _ -> 0 }
             assertEquals(42, sink.platformSessionId)
@@ -73,7 +73,7 @@ class AudioTrackSinkSessionIdTest {
     fun `a closed sink stops naming the session it used to have`() = runBlocking {
         // The number is the one thing about a released AudioTrack that still looks valid, and an
         // effect attached to it is silently inert. Null is the honest answer.
-        val sink = AudioTrackSink({ SessionDriver(7) }, FixedClock())
+        val sink = AudioTrackSink({ _, _ -> SessionDriver(7) }, FixedClock())
         sink.open(format) { _, _, _ -> 0 }
         assertEquals(7, sink.platformSessionId)
         sink.close()

@@ -1,6 +1,8 @@
 package io.github.yuroyami.kiteplayer.session
 
+import android.media.AudioAttributes
 import android.media.AudioManager
+import io.github.yuroyami.kiteplayer.AudioContent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -32,5 +34,12 @@ class AndroidInterruptionMappingTest {
         assertNull(interruptionEventFor(AudioManager.AUDIOFOCUS_NONE))
         assertNull(interruptionEventFor(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT))
         assertNull(interruptionEventFor(12345))
+    }
+
+    @Test
+    fun `the focus request declares the content the audio track declares`() {
+        assertEquals(AudioAttributes.CONTENT_TYPE_MUSIC, focusContentType(AudioContent.Music))
+        assertEquals(AudioAttributes.CONTENT_TYPE_SPEECH, focusContentType(AudioContent.Speech))
+        assertEquals(AudioAttributes.CONTENT_TYPE_MOVIE, focusContentType(AudioContent.Movie))
     }
 }

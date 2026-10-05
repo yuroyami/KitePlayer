@@ -128,6 +128,16 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   reason as its detail, instead of `SourceUnavailable`, which said the bytes could not be reached
   and invited a retry that fails the same way (#452). `NotMedia`'s message now ends with its detail.
   Thumbnails, waveforms and loudness still throw FFmpeg's own exception.
+- The player tells the platform whether an item is music, speech or a film (#446), which some
+  devices use to pick their equaliser, their virtual surround or their dialogue processing. Every
+  item used to say film. `MediaItem.audioContent` is `AudioContent.Automatic` by default, which
+  says film when the item shows a picture and music when it plays sound alone or under cover art,
+  and `Music`, `Speech` or `Movie` says what the item is whatever it shows. On Android it is the
+  content type of the audio track and of the audio focus request, and on iOS it is the audio
+  session's mode: the default mode for music, `spokenAudio` for speech and `moviePlayback` for a
+  film. It is fixed when the device opens, so it follows each item and a change of audio track.
+  `PlayerSnapshot.audioContent` gives the answer, for an application that sets up its own audio
+  session, and an `AudioSink` hears it through its new `setContent`, which does nothing by default.
 - `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
   page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third

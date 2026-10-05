@@ -57,6 +57,7 @@ final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroy
 
     final fun close() // io.github.yuroyami.kiteplayer.output/CoreAudioSink.close|close(){}[0]
     final fun latencyNanos(): kotlin/Long // io.github.yuroyami.kiteplayer.output/CoreAudioSink.latencyNanos|latencyNanos(){}[0]
+    final fun setContent(io.github.yuroyami.kiteplayer/AudioContent) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.setContent|setContent(io.github.yuroyami.kiteplayer.AudioContent){}[0]
     final suspend fun drain() // io.github.yuroyami.kiteplayer.output/CoreAudioSink.drain|drain(){}[0]
     final suspend fun open(io.github.yuroyami.kiteplayer.spi/AudioFormat, io.github.yuroyami.kiteplayer.spi/AudioRenderCallback): io.github.yuroyami.kiteplayer.spi/AudioFormat // io.github.yuroyami.kiteplayer.output/CoreAudioSink.open|open(io.github.yuroyami.kiteplayer.spi.AudioFormat;io.github.yuroyami.kiteplayer.spi.AudioRenderCallback){}[0]
     final suspend fun openWithRing(io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlin/Int>): io.github.yuroyami.kiteplayer.spi/NativeRingHandoff // io.github.yuroyami.kiteplayer.output/CoreAudioSink.openWithRing|openWithRing(io.github.yuroyami.kiteplayer.spi.AudioFormat;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.AudioFormat,kotlin.Int>){}[0]

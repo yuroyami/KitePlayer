@@ -449,6 +449,7 @@ private fun encodeItem(item: MediaItem): JsAny = record {
     put("artist", item.artist)
     put("album", item.album)
     put("audioFilter", item.audioFilter)
+    put("audioContent", item.audioContent.name)
 }
 
 private fun encodeSubtitle(source: SubtitleSource): JsAny = record {
@@ -1186,6 +1187,7 @@ private fun decodeItem(o: JsAny): MediaItem = MediaItem(
     artist = o.str("artist"),
     album = o.str("album"),
     audioFilter = o.str("audioFilter"),
+    audioContent = o.enum<AudioContent>("audioContent") ?: AudioContent.Automatic,
 )
 
 private fun decodeSubtitle(o: JsAny): SubtitleSource = SubtitleSource(

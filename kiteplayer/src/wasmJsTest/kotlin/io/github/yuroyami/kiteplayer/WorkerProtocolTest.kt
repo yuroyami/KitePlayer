@@ -56,6 +56,7 @@ class WorkerProtocolTest {
         artist = "Artist",
         album = "Album",
         audioFilter = "volume=0.5",
+        audioContent = AudioContent.Speech,
     )
 
     private val tracks = Tracks(

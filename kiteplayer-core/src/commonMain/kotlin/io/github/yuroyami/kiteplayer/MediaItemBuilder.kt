@@ -31,6 +31,7 @@ public class MediaItemBuilder(private val uri: String) {
     private var title: String? = null
     private var artist: String? = null
     private var album: String? = null
+    private var audioContent = AudioContent.Automatic
 
     /** Adds one request header. See [MediaItem.headers]. */
     public fun header(name: String, value: String): MediaItemBuilder = apply {
@@ -143,6 +144,11 @@ public class MediaItemBuilder(private val uri: String) {
         album = text
     }
 
+    /** See [MediaItem.audioContent]. */
+    public fun audioContent(content: AudioContent): MediaItemBuilder = apply {
+        audioContent = content
+    }
+
     /** The item these settings describe, checked as its constructor checks it. */
     @OptIn(KitePlayerLowLevelApi::class)
     public fun build(): MediaItem = MediaItem(
@@ -159,6 +165,7 @@ public class MediaItemBuilder(private val uri: String) {
         artist = artist,
         album = album,
         audioFilter = audioFilter,
+        audioContent = audioContent,
     )
 }
 

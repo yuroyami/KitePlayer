@@ -204,6 +204,7 @@ class MementoTest {
             title = "A title",
             artist = "An artist",
             album = "An album",
+            audioContent = AudioContent.Speech,
         )
         val memento = memento().copy(queue = listOf(item))
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))

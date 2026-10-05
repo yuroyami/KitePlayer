@@ -171,6 +171,16 @@ public data class PlayerSnapshot(
      * [Duration] (#394).
      */
     public val durationMillis: Long? get() = duration?.inWholeMilliseconds
+
+    /**
+     * What [media]'s sound is, as the audio device is told it (#446): the item's own
+     * [MediaItem.audioContent], with [AudioContent.Automatic] already answered from the selected
+     * video track, so never [AudioContent.Automatic] itself. [AudioContent.Music] when nothing is
+     * open. An application that asks for audio focus or sets up its audio session itself reads this.
+     */
+    public val audioContent: AudioContent
+        get() = (media?.audioContent ?: AudioContent.Automatic)
+            .resolve(hasPicture = tracks.selectedTrack(TrackKind.Video)?.isCoverArt == false)
 }
 
 /**

@@ -8,6 +8,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
+import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.KitePlayerPlatform
 import kotlinx.coroutines.CoroutineScope
@@ -66,13 +67,19 @@ private class AndroidInterruptionHandle(
         interruptionEventFor(change)?.let(::handle)
     }
 
-    // Left off deliberately: with it on the system converts a duckable loss into a plain one, and
-    // the policy is the thing that decides between ducking and pausing here.
-    private val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+    // Built for the content of the item that asks, so the focus request declares what the audio
+    // track declares (#446). Android abandons by the listener, so giving back the last one built
+    // gives back whatever is held.
+    @Volatile
+    private var focusRequest = focusRequestFor(AudioContent.Movie)
+
+    // setWillPauseWhenDucked is left off deliberately: with it on the system converts a duckable
+    // loss into a plain one, and the policy is the thing that decides between ducking and pausing here.
+    private fun focusRequestFor(content: AudioContent) = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                .setContentType(focusContentType(content))
                 .build(),
         )
         .setWillPauseWhenDucked(false)
@@ -101,14 +108,15 @@ private class AndroidInterruptionHandle(
                     true -> {
                         // A blocking platform call, which cancelling the scope does not stop, so the
                         // answer may come back after close (#415).
-                        val granted = audioManager.requestAudioFocus(focusRequest) ==
+                        val request = focusRequestFor(player.state.value.audioContent).also { focusRequest = it }
+                        val granted = audioManager.requestAudioFocus(request) ==
                             AudioManager.AUDIOFOCUS_REQUEST_GRANTED
                         when (synchronized(lifecycle) { lifecycle.answered(granted) }) {
                             FocusAnswer.Held -> Unit
                             // No focus, no sound: a denied request is a loss, and the policy pauses.
                             FocusAnswer.Denied -> handle(InterruptionEvent.Lost)
                             // Close gave back only what was held then; this grant has no other owner.
-                            FocusAnswer.AfterClose -> if (granted) audioManager.abandonAudioFocusRequest(focusRequest)
+                            FocusAnswer.AfterClose -> if (granted) audioManager.abandonAudioFocusRequest(request)
                         }
                     }
                     false -> audioManager.abandonAudioFocusRequest(focusRequest)
@@ -125,6 +133,13 @@ private class AndroidInterruptionHandle(
         if (synchronized(lifecycle) { lifecycle.release() }) audioManager.abandonAudioFocusRequest(focusRequest)
         synchronized(applier) { applier.release() }
     }
+}
+
+/** The `AudioAttributes` content type a focus request declares for [content], as the audio track does. */
+internal fun focusContentType(content: AudioContent): Int = when (content) {
+    AudioContent.Music -> AudioAttributes.CONTENT_TYPE_MUSIC
+    AudioContent.Speech -> AudioAttributes.CONTENT_TYPE_SPEECH
+    AudioContent.Movie, AudioContent.Automatic -> AudioAttributes.CONTENT_TYPE_MOVIE
 }
 
 /** Android's focus codes, as this player's events. Anything else is not ours to react to. */

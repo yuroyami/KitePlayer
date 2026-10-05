@@ -142,6 +142,12 @@ public data class MediaItem(
      */
     @property:KitePlayerLowLevelApi
     val audioFilter: String? = null,
+    /**
+     * What the item's sound is, for the platform's sound processing: see [AudioContent]. The
+     * default declares a film when the item shows a picture, cover art aside, and music when it
+     * shows none. Name [AudioContent.Speech] for a podcast or an audiobook.
+     */
+    val audioContent: AudioContent = AudioContent.Automatic,
 ) {
     public companion object {}
 

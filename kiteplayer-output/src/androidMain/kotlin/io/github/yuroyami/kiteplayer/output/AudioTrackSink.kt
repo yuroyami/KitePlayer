@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
@@ -40,8 +41,8 @@ public class AudioTrackSink internal constructor(
 ) : AudioSink {
 
     public constructor() : this(
-        AudioTrackDriverFactory { accepted ->
-            openWithFloatFallback { encoding -> PlatformAudioTrackDriver(accepted, encoding) }
+        AudioTrackDriverFactory { accepted, content ->
+            openWithFloatFallback { encoding -> PlatformAudioTrackDriver(accepted, encoding, content) }
         },
         AndroidMonotonicClock,
     )
@@ -54,6 +55,8 @@ public class AudioTrackSink internal constructor(
     private val headLock = Any()
 
     private var driver: AudioTrackDriver? = null
+    /* What the next open declares, set by the engine before it opens. A recovery reopens with it too. */
+    @Volatile private var content: AudioContent = AudioContent.Movie
     private var accepted: AudioFormat? = null
     private var render: AudioRenderCallback? = null
     private var blockFrames = 0
@@ -123,6 +126,10 @@ public class AudioTrackSink internal constructor(
     /** Which deadline source the writer last used: "timestamp", "head" or "none". Test seam. */
     internal val observedDeadlineSource: String get() = timestampSourceObserved
 
+    override fun setContent(content: AudioContent) {
+        this.content = content
+    }
+
     override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
         synchronized(lifecycle) {
             check(!closed) { "AudioTrackSink is closed" }
@@ -156,7 +163,7 @@ public class AudioTrackSink internal constructor(
                     },
                 )
             }
-            val opened = driverFactory.open(format)
+            val opened = driverFactory.open(format, content)
             /* Failed open releases the partially created driver and leaves no writer (step 7). */
             if (opened.bufferSizeInFrames <= 0) {
                 opened.release()
@@ -208,7 +215,7 @@ public class AudioTrackSink internal constructor(
             if (!writerFailed) return
             val format = accepted ?: return
             dead?.release()
-            driver = driverFactory.open(format)
+            driver = driverFactory.open(format, content)
             submittedFrames = 0L
             resetTimestampState()
             writerFailed = false

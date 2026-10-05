@@ -7,6 +7,7 @@ package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.AudioPlayback
 import io.github.yuroyami.kiteplayer.AudioClockSnapshot
+import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.chapterHolding
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecPolicy
@@ -3213,6 +3214,8 @@ internal class PlaybackCore(
             }
 
             stage(OpenStage.Output)
+            // Decided once per item, from the picture that plays: cover art is not a film (#446).
+            val audioContent = item.audioContent.resolve(hasPicture = videoStream != null && !videoStream.isCoverArt)
             var sink: AudioSink? = null
             var audioPlayback: AudioPlayback? = null
             var negotiated: AudioFormat? = null
@@ -3220,6 +3223,7 @@ internal class PlaybackCore(
             if (pending == null && audioStream != null && audioDecoder != null) {
                 val createdSink = output.audioSink.create()
                 sink = createdSink
+                createdSink.setContent(audioContent)
                 // Generalized from AudioPlayback's
                 // construction onward the playback owns the sink and its close covers both (it is
                 // idempotent). The window between the sink's creation and that construction is one
@@ -3298,6 +3302,7 @@ internal class PlaybackCore(
             }
             return OpenSession(
                 preferredExternalSubtitle = preferredExternal,
+                audioContent = audioContent,
                 token = pending?.token ?: nextSessionToken++,
                 backendSession = backendSession,
                 source = source,
@@ -4232,6 +4237,7 @@ internal class PlaybackCore(
     /** Builds a dormant device path; ownership transfers only when the lane transaction commits. */
     private suspend fun prepareAudioPath(decoder: AudioDecoder, stream: PlayerStreamInfo?): PreparedAudioPath {
         val createdSink = output.audioSink.create()
+        createdSink.setContent(session?.audioContent ?: AudioContent.Music)
         var createdPlayback: AudioPlayback? = null
         try {
             val playback = newAudioPlayback(createdSink)
@@ -7284,6 +7290,7 @@ internal class PlaybackCore(
     private suspend fun openAudioPathFor(target: OpenSession) {
         val lane = target.audioLane ?: return
         val createdSink = output.audioSink.create()
+        createdSink.setContent(target.audioContent)
         val playback = newAudioPlayback(createdSink)
         try {
             // Before open, which captures the wanted rate as the fresh path's epoch.
@@ -10693,6 +10700,8 @@ internal class PlaybackCore(
          * the open selects once the track exists, or null (#514).
          */
         val preferredExternalSubtitle: TrackId? = null,
+        /** What this item's sound is, resolved at the build, for every device it opens (#446). */
+        val audioContent: AudioContent = AudioContent.Music,
     ) {
         /**
          * True once the source answered that it cannot interrupt a stalled read. The session then

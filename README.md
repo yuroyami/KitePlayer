@@ -801,7 +801,9 @@ screen. A desktop app keeps playing without help, and a web page plays while its
 - Skip back and skip forward move 15 seconds. Pass `skipInterval` to `attachMediaSession` for
   another interval.
 - The session takes audio focus, so a call or another app pauses or ducks the player, and the
-  player pauses when the headphones come out. `interruptions = null` turns that off, and
+  player pauses when the headphones come out. The focus request and the audio track say whether
+  the item is music, speech or a film, from `MediaItem.audioContent`, which by default says film
+  for a picture and music for sound alone. `interruptions = null` turns that off, and
   `background = null` leaves the app's background behaviour alone.
 - While the player plays or buffers, the notification keeps the processor and Wi-Fi awake, so a
   stream keeps loading with the screen off. That needs `WAKE_LOCK`. Pick another `wakeLocks` policy

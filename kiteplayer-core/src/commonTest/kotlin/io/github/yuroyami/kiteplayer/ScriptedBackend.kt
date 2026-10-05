@@ -1434,6 +1434,13 @@ internal class ScriptedSink(
         private set
     val isRunning: Boolean get() = running
 
+    /** What the engine declared the sound to be before each open, in order (#446). */
+    val declaredContents: MutableList<io.github.yuroyami.kiteplayer.AudioContent> = mutableListOf()
+
+    override fun setContent(content: io.github.yuroyami.kiteplayer.AudioContent) {
+        declaredContents += content
+    }
+
     /** Every call the engine made on the device, in order: open, start, stop, pause, resume, drain, close. */
     val calls: MutableList<String> = mutableListOf()
 

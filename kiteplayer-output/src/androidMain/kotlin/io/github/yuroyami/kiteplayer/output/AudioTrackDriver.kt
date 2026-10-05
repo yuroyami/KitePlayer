@@ -5,6 +5,7 @@ import android.media.AudioFormat as PlatformAudioFormat
 import android.media.AudioTimestamp
 import android.media.AudioTrack
 import android.os.Process
+import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 
 /**
@@ -77,8 +78,11 @@ internal interface AudioTrackDriver {
 internal class DriverTimestamp(var framePosition: Long = 0L, var nanoTime: Long = 0L)
 
 internal fun interface AudioTrackDriverFactory {
-    /** Opens a device for [accepted]. Throwing here is the only failure shape open handles. */
-    fun open(accepted: AudioFormat): AudioTrackDriver
+    /**
+     * Opens a device for [accepted] whose sound is [content]. Throwing here is the only failure
+     * shape open handles.
+     */
+    fun open(accepted: AudioFormat, content: AudioContent): AudioTrackDriver
 }
 
 /** The sample encoding a device was opened with. */
@@ -135,8 +139,20 @@ internal class Pcm16Dither(private var state: Int = 0x2545F491) {
 }
 
 /**
+ * The `AudioAttributes` content type of [content] (#446). Some devices pick their equaliser, their
+ * virtual surround or their dialogue processing from it. [AudioContent.Automatic] never reaches a
+ * device, because the engine answers it first; it reads as a film, which every open declared
+ * before the item could say.
+ */
+internal fun contentType(content: AudioContent): Int = when (content) {
+    AudioContent.Music -> AudioAttributes.CONTENT_TYPE_MUSIC
+    AudioContent.Speech -> AudioAttributes.CONTENT_TYPE_SPEECH
+    AudioContent.Movie, AudioContent.Automatic -> AudioAttributes.CONTENT_TYPE_MOVIE
+}
+
+/**
  * The production driver: MODE_STREAM, PCM float or, on a device that refuses float, 16-bit PCM,
- * USAGE_MEDIA / CONTENT_TYPE_MOVIE, buffer at least `getMinBufferSize`. `AudioTimestamp` nanoTime is on the
+ * USAGE_MEDIA with the content type [contentType] gives for the item, buffer at least `getMinBufferSize`. `AudioTimestamp` nanoTime is on the
  * `System.nanoTime` (CLOCK_MONOTONIC) base, which is why [AndroidMonotonicClock] reads that exact clock and
  * why the internal sink constructor exists: production cannot accidentally pair the timestamp
  * with another time base.
@@ -144,6 +160,7 @@ internal class Pcm16Dither(private var state: Int = 0x2545F491) {
 internal class PlatformAudioTrackDriver(
     accepted: AudioFormat,
     override val encoding: DriverEncoding = DriverEncoding.Float,
+    content: AudioContent = AudioContent.Movie,
 ) : AudioTrackDriver {
 
     private val track: AudioTrack
@@ -177,7 +194,7 @@ internal class PlatformAudioTrackDriver(
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                    .setContentType(contentType(content))
                     .build(),
             )
             .setAudioFormat(

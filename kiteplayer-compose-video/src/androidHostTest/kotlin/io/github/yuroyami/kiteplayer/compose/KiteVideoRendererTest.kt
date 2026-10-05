@@ -357,7 +357,8 @@ class KiteVideoRendererTest {
             VideoSize(4, 2),
             0,
             requiresCommitFence = true,
-        ) { releases += 1 }
+            release = { releases += 1 },
+        )
         val replacement = KiteVideoFrame(FakeImage(4, 2), VideoSize(4, 2), 0)
         state.publishFrame(first)
 
@@ -389,7 +390,8 @@ class KiteVideoRendererTest {
             VideoSize(4, 2),
             0,
             requiresCommitFence = true,
-        ) { releases += 1 }
+            release = { releases += 1 },
+        )
         state.publishFrame(frame)
         val first = state.acquireFrameForDraw()!!
         state.frameDrawFinished(first, recorded = true)
@@ -421,7 +423,8 @@ class KiteVideoRendererTest {
             VideoSize(4, 2),
             0,
             requiresCommitFence = true,
-        ) { releases += 1 }
+            release = { releases += 1 },
+        )
         val replacement = KiteVideoFrame(
             FakeImage(4, 2),
             VideoSize(4, 2),
@@ -456,7 +459,8 @@ class KiteVideoRendererTest {
             VideoSize(4, 2),
             0,
             requiresCommitFence = true,
-        ) { releases += 1 }
+            release = { releases += 1 },
+        )
         val software = KiteVideoFrame(FakeImage(4, 2), VideoSize(4, 2), 0)
 
         state.publishFrame(hardware)
@@ -488,7 +492,8 @@ class KiteVideoRendererTest {
             VideoSize(4, 2),
             0,
             requiresCommitFence = true,
-        ) { releases += 1 }
+            release = { releases += 1 },
+        )
 
         state.publishFrame(hardware)
         repeat(2) {

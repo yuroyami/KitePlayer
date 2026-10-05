@@ -542,6 +542,7 @@ jobs:
             :kiteplayer-subtitles:testAndroidHostTest \
             :kiteplayer-io:testAndroidHostTest \
             :kiteplayer-output:testAndroidHostTest \
+            :kiteplayer-compose-video:testAndroidHostTest \
             :kiteplayer-view:testAndroidHostTest \
             :kiteplayer-network:testAndroidHostTest \
             :kiteplayer-audioviz:testAndroidHostTest \

@@ -32,6 +32,7 @@ public class MediaItemBuilder(private val uri: String) {
     private var artist: String? = null
     private var album: String? = null
     private var audioContent = AudioContent.Automatic
+    private var clip: MediaClip? = null
 
     /** Adds one request header. See [MediaItem.headers]. */
     public fun header(name: String, value: String): MediaItemBuilder = apply {
@@ -78,6 +79,20 @@ public class MediaItemBuilder(private val uri: String) {
     /** [MediaItem.startPosition] in milliseconds, for Java, which cannot make a [Duration]. */
     public fun startPositionMillis(millis: Long): MediaItemBuilder = apply {
         startPosition = millis.milliseconds
+    }
+
+    /** See [MediaItem.clip]. A null [end] runs to the end of the file. */
+    public fun clip(start: Duration, end: Duration? = null): MediaItemBuilder = apply {
+        clip = MediaClip(start, end)
+    }
+
+    /**
+     * [MediaItem.clip] in milliseconds, for Java, which cannot make a [Duration]. A null
+     * [endMillis] runs to the end of the file.
+     */
+    @kotlin.jvm.JvmOverloads
+    public fun clipMillis(startMillis: Long, endMillis: Long? = null): MediaItemBuilder = apply {
+        clip = MediaClip.ofMillis(startMillis, endMillis)
     }
 
     /** See [MediaItem.io]. */
@@ -166,6 +181,7 @@ public class MediaItemBuilder(private val uri: String) {
         album = album,
         audioFilter = audioFilter,
         audioContent = audioContent,
+        clip = clip,
     )
 }
 

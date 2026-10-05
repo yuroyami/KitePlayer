@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer
 import io.github.yuroyami.kiteplayer.internal.SubtitleEncodings
 import io.github.yuroyami.kiteplayer.internal.redactUri
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /** What to play. */
 public data class MediaItem(
@@ -64,7 +65,9 @@ public data class MediaItem(
     @property:KitePlayerLowLevelApi
     val videoFilter: String? = null,
     /**
-     * Where to start. Null means the beginning, or the container's own start time.
+     * Where to start. Null means the beginning, or the container's own start time. With a [clip]
+     * it counts from the clip's start, as every position of a clipped item does, and null means
+     * the clip's start.
      *
      * Honoured in two halves: the source is moved to the keyframe at or before this position
      * BEFORE the first frame is decoded, so nothing from the beginning of the media is ever
@@ -148,6 +151,13 @@ public data class MediaItem(
      * shows none. Name [AudioContent.Speech] for a podcast or an audiobook.
      */
     val audioContent: AudioContent = AudioContent.Automatic,
+    /**
+     * The part of the file this item is, or null for the whole file: a track of an album ripped
+     * to one file, a chapter played on its own, or any clip of a longer file (#456). The item is
+     * then an item of the clip's length, and every position and length the player reports for it
+     * counts from the clip's start. See [MediaClip].
+     */
+    val clip: MediaClip? = null,
 ) {
     public companion object {}
 
@@ -190,6 +200,7 @@ public data class MediaItem(
         if (externalSubtitles.isNotEmpty()) append(", externalSubtitles=").append(externalSubtitles.size)
         if (videoFilter != null) append(", videoFilter=").append(videoFilter)
         if (audioFilter != null) append(", audioFilter=").append(audioFilter)
+        if (clip != null) append(", clip=").append(clip)
         if (startPosition != null) append(", startPosition=").append(startPosition)
         if (io != null) append(", io")
         if (formatHint != null) append(", formatHint=").append(formatHint)
@@ -199,6 +210,65 @@ public data class MediaItem(
         if (artist != null) append(", artist=").append(artist)
         if (album != null) append(", album=").append(album)
         append(")")
+    }
+}
+
+/**
+ * The part of a file a [MediaItem] plays, from [start] to [end] (#456). Both are positions of the
+ * whole file, as the item would report them with no clip.
+ *
+ * A clipped item is an item of the clip's length. Every position and length the player reports for
+ * it counts from [start]: [KitePlayer.position], [KitePlayer.progress], [PlayerSnapshot.duration],
+ * [PlayerSnapshot.chapters], [PlayerSnapshot.abLoopA] and [PlayerSnapshot.abLoopB], the markers,
+ * [SleepTimer.At], [PlayerEvent.SeekCompleted], [PlayerMemento.position] and [MediaItem.startPosition],
+ * and every position the caller hands in is read the same way. A seek stays inside the clip. The
+ * item ends at [end] as an item ends at the end of its file, and the queue moves on. Nothing from
+ * before [start] or from [end] on is heard or shown, and a subtitle on screen at [end] leaves there.
+ * A clip whose [end] lies past the end of the media ends where the media does, and one that starts
+ * at or past the stated end of the media fails the open with [PlaybackError.ConfigurationInvalid].
+ *
+ * The timestamps of the media itself stay the file's: every [Pts], such as the audio clock, a
+ * presented or captured frame, the audio tap and a scan, and the times of a subtitle cue. Add
+ * [start] to a position to get the timestamp that plays there, and take it away to go back.
+ *
+ * Two items in a queue that are the same file, every field equal but the clip, the start position
+ * and the titles, where the second clip starts exactly where the first one ends, play as one
+ * stream: the player reads on through the boundary without opening the file again, so an album in
+ * one file plays its tracks with no gap and no seam, even in a lossy format. See
+ * `docs/gapless-queue.md`.
+ *
+ * @throws IllegalArgumentException when [start] is negative or not finite, or when [end] is not
+ *         finite or not after [start].
+ */
+public data class MediaClip(
+    /** Where the item starts in the file. */
+    val start: Duration = Duration.ZERO,
+    /** Where the item ends in the file, or null when it runs to the end of the file. */
+    val end: Duration? = null,
+) {
+    init {
+        require(start.isFinite() && start >= Duration.ZERO) { "a clip must start at a finite position from zero, was $start" }
+        require(end == null || (end.isFinite() && end > start)) { "a clip must end after it starts, was $start to $end" }
+    }
+
+    /** [start] in milliseconds. For Java, which cannot read a [Duration] (#394). */
+    public val startMillis: Long get() = start.inWholeMilliseconds
+
+    /** [end] in milliseconds, or null when the clip runs to the end of the file. For Java (#394). */
+    public val endMillis: Long? get() = end?.inWholeMilliseconds
+
+    /** How long the clip is, or null when it runs to the end of the file, whose length decides. */
+    public val length: Duration? get() = end?.minus(start)
+
+    public companion object {
+        /**
+         * A clip from [startMillis] to [endMillis], or to the end of the file when [endMillis] is
+         * null. For Java, which cannot make a [Duration] (#394).
+         */
+        @kotlin.jvm.JvmStatic
+        @kotlin.jvm.JvmOverloads
+        public fun ofMillis(startMillis: Long, endMillis: Long? = null): MediaClip =
+            MediaClip(startMillis.milliseconds, endMillis?.milliseconds)
     }
 }
 

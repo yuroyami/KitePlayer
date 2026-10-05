@@ -456,6 +456,10 @@ private fun encodeItem(item: MediaItem): JsAny = record {
     put("album", item.album)
     put("audioFilter", item.audioFilter)
     put("audioContent", item.audioContent.name)
+    item.clip?.let { clip ->
+        put("clipStart", clip.start)
+        put("clipEnd", clip.end)
+    }
 }
 
 private fun encodeSubtitle(source: SubtitleSource): JsAny = record {
@@ -1224,6 +1228,7 @@ private fun decodeItem(o: JsAny): MediaItem = MediaItem(
     album = o.str("album"),
     audioFilter = o.str("audioFilter"),
     audioContent = o.enum<AudioContent>("audioContent") ?: AudioContent.Automatic,
+    clip = o.micros("clipStart")?.let { start -> MediaClip(start, o.micros("clipEnd")) },
 )
 
 private fun decodeSubtitle(o: JsAny): SubtitleSource = SubtitleSource(

@@ -58,6 +58,7 @@ class WorkerProtocolTest {
         album = "Album",
         audioFilter = "volume=0.5",
         audioContent = AudioContent.Speech,
+        clip = MediaClip(start = 61.seconds, end = 3.minutes),
     )
 
     private val tracks = Tracks(
@@ -230,7 +231,7 @@ class WorkerProtocolTest {
         val commands = listOf(
             Command.Open(item),
             Command.Open(MediaItem("blob:https://example.com/0")),
-            Command.OpenQueue(listOf(item, MediaItem("https://example.com/b.mp4")), 1),
+            Command.OpenQueue(listOf(item, MediaItem("https://example.com/b.mp4", clip = MediaClip(start = 4.seconds))), 1),
             Command.Seek(9_007_199_254_740_991L.microseconds, SeekMode.Precise),
             Command.Seek(Duration.INFINITE, SeekMode.Keyframe),
             Command.Seek((-1).seconds, SeekMode.KeyframeThenRefine),

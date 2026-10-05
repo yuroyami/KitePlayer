@@ -773,6 +773,33 @@ public final class io/github/yuroyami/kiteplayer/MatchingAudioSubtitles : java/l
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;
 }
 
+public final class io/github/yuroyami/kiteplayer/MediaClip {
+	public static final field Companion Lio/github/yuroyami/kiteplayer/MediaClip$Companion;
+	public fun <init> ()V
+	public synthetic fun <init> (JLkotlin/time/Duration;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JLkotlin/time/Duration;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1-UwyO8pc ()J
+	public final fun component2-FghU774 ()Lkotlin/time/Duration;
+	public final fun copy-JKoRlfk (JLkotlin/time/Duration;)Lio/github/yuroyami/kiteplayer/MediaClip;
+	public static synthetic fun copy-JKoRlfk$default (Lio/github/yuroyami/kiteplayer/MediaClip;JLkotlin/time/Duration;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaClip;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEnd-FghU774 ()Lkotlin/time/Duration;
+	public final fun getEndMillis ()Ljava/lang/Long;
+	public final fun getLength-FghU774 ()Lkotlin/time/Duration;
+	public final fun getStart-UwyO8pc ()J
+	public final fun getStartMillis ()J
+	public fun hashCode ()I
+	public static final fun ofMillis (J)Lio/github/yuroyami/kiteplayer/MediaClip;
+	public static final fun ofMillis (JLjava/lang/Long;)Lio/github/yuroyami/kiteplayer/MediaClip;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/MediaClip$Companion {
+	public final fun ofMillis (J)Lio/github/yuroyami/kiteplayer/MediaClip;
+	public final fun ofMillis (JLjava/lang/Long;)Lio/github/yuroyami/kiteplayer/MediaClip;
+	public static synthetic fun ofMillis$default (Lio/github/yuroyami/kiteplayer/MediaClip$Companion;JLjava/lang/Long;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaClip;
+}
+
 public final class io/github/yuroyami/kiteplayer/MediaInspection {
 	public synthetic fun <init> (Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/Map;Ljava/util/List;ZLjava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/Map;Ljava/util/List;ZLjava/lang/Long;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -844,14 +871,15 @@ public final class io/github/yuroyami/kiteplayer/MediaIoResolver$DefaultImpls {
 
 public final class io/github/yuroyami/kiteplayer/MediaItem {
 	public static final field Companion Lio/github/yuroyami/kiteplayer/MediaItem$Companion;
-	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/AudioContent;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/AudioContent;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/AudioContent;Lio/github/yuroyami/kiteplayer/MediaClip;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/AudioContent;Lio/github/yuroyami/kiteplayer/MediaClip;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()Ljava/lang/String;
 	public final fun component11 ()Ljava/lang/String;
 	public final fun component12 ()Ljava/lang/String;
 	public final fun component13 ()Ljava/lang/String;
 	public final fun component14 ()Lio/github/yuroyami/kiteplayer/AudioContent;
+	public final fun component15 ()Lio/github/yuroyami/kiteplayer/MediaClip;
 	public final fun component2 ()Ljava/util/Map;
 	public final fun component3 ()Ljava/util/List;
 	public final fun component4 ()Ljava/lang/String;
@@ -860,13 +888,14 @@ public final class io/github/yuroyami/kiteplayer/MediaItem {
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Ljava/util/Map;
 	public final fun component9 ()Lio/github/yuroyami/kiteplayer/DemuxPolicy;
-	public final fun copy-eItmHrM (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/AudioContent;)Lio/github/yuroyami/kiteplayer/MediaItem;
-	public static synthetic fun copy-eItmHrM$default (Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/AudioContent;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaItem;
+	public final fun copy-5I5RfbU (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/AudioContent;Lio/github/yuroyami/kiteplayer/MediaClip;)Lio/github/yuroyami/kiteplayer/MediaItem;
+	public static synthetic fun copy-5I5RfbU$default (Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/AudioContent;Lio/github/yuroyami/kiteplayer/MediaClip;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaItem;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAlbum ()Ljava/lang/String;
 	public final fun getArtist ()Ljava/lang/String;
 	public final fun getAudioContent ()Lio/github/yuroyami/kiteplayer/AudioContent;
 	public final fun getAudioFilter ()Ljava/lang/String;
+	public final fun getClip ()Lio/github/yuroyami/kiteplayer/MediaClip;
 	public final fun getDemux ()Lio/github/yuroyami/kiteplayer/DemuxPolicy;
 	public final fun getExternalSubtitles ()Ljava/util/List;
 	public final fun getFormatHint ()Ljava/lang/String;
@@ -892,6 +921,11 @@ public final class io/github/yuroyami/kiteplayer/MediaItemBuilder {
 	public final fun audioContent (Lio/github/yuroyami/kiteplayer/AudioContent;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 	public final fun audioFilter (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 	public final fun build ()Lio/github/yuroyami/kiteplayer/MediaItem;
+	public final fun clip-JKoRlfk (JLkotlin/time/Duration;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public static synthetic fun clip-JKoRlfk$default (Lio/github/yuroyami/kiteplayer/MediaItemBuilder;JLkotlin/time/Duration;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun clipMillis (J)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun clipMillis (JLjava/lang/Long;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public static synthetic fun clipMillis$default (Lio/github/yuroyami/kiteplayer/MediaItemBuilder;JLjava/lang/Long;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 	public final fun corruptPackets (Lio/github/yuroyami/kiteplayer/CorruptPackets;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 	public final fun demux (Lio/github/yuroyami/kiteplayer/DemuxPolicy;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 	public final fun externalSubtitle (Lio/github/yuroyami/kiteplayer/SubtitleSource;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;

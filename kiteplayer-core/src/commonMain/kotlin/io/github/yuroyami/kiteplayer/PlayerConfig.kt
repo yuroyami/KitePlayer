@@ -223,7 +223,8 @@ public data class BufferPolicy(
  *
  * With the defaults the next item opens in the background five seconds before the current one
  * ends, and its sound follows the last sample of the current item on the same audio device, with
- * no silence between them. [PlaybackWarning.GaplessFallback] says when an item opened the old way.
+ * no silence between them. A repeat of the current item follows its own end the same way (#467).
+ * [PlaybackWarning.GaplessFallback] says when an item opened the old way.
  */
 public data class QueueConfig(
     /**

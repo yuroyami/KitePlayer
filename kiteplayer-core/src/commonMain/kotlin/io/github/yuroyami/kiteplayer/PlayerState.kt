@@ -146,7 +146,8 @@ public data class PlayerSnapshot(
     val playRequested: Boolean = false,
     /**
      * The position in [queue] of the next item while it is open in the background for the
-     * gapless handoff, or null. See [QueueConfig].
+     * gapless handoff, or null. Under a repeat it is the current item's own position, because its
+     * next pass is what opens, and null outside queue playback. See [QueueConfig].
      */
     val preloadedIndex: Int? = null,
     /** How HDR video reaches the screen. */
@@ -412,7 +413,10 @@ public enum class LoopMode {
     /** Play once and stop. */
     Off,
 
-    /** Repeat the current media item. */
+    /**
+     * Repeat the current media item. Its next pass follows its end with no gap and no change of
+     * status, as a gapless queue item follows the one before it (#467); see [QueueConfig].
+     */
     One,
 
     /**

@@ -2,7 +2,7 @@
 
 A queue plays its items one after another. This page describes how the player moves from one
 item to the next without a silence between them, and when it opens the next item from scratch
-instead.
+instead. A repeat of one item follows its own end the same way, as [Repeat](#repeat) describes.
 
 Terms used on this page:
 
@@ -11,7 +11,8 @@ Terms used on this page:
   follows shuffle, and it wraps from the last item to the first under `LoopMode.All`. With
   `QueueConfig.reshuffleEachLap`, the wrap goes to the first item of a freshly drawn order
   instead, which never begins with the item that ended the lap (#488). It is drawn once, when the
-  preload first asks, so the item preloaded is the item that plays.
+  preload first asks, so the item preloaded is the item that plays. Under a repeat of the current
+  item, the next item is the next pass of the current item.
 - The **ring** is the audio buffer between the engine and the audio device. It holds at least
   200 ms of sound.
 - A **feeder** is the engine worker that converts decoded audio and writes it into the ring.
@@ -43,7 +44,8 @@ public data class QueueConfig(
   play order runs out or every item has failed in a row (#487).
 
 `PlayerSnapshot.preloadedIndex` is the queue position of the next item once it is open and its
-queues fill in the background. It is null at all other times.
+queues fill in the background. Under a repeat it is the position of the current item, and outside
+queue playback a repeat publishes none. It is null at all other times.
 
 ## Preload
 
@@ -51,7 +53,7 @@ The player preloads the next item when all of these are true:
 
 - The current item plays or is paused, and no seek is in progress.
 - The position of the current item is within `preloadNext` of its duration.
-- A next item exists. `LoopMode` is not `One`, no A-B loop is set, and the sleep timer is not
+- A next item exists, or the current item repeats. No A-B loop is set, and the sleep timer is not
   `SleepTimer.EndOfItem`.
 - The current item is seekable, its duration is known, and it is not a still image.
 - The current item still has decoded sound to write into the ring.
@@ -131,6 +133,35 @@ The status does not change: a playing player stays Playing, and the play request
 position after the swap is the position of the new item, within one audio buffer of its start.
 Video frames of the old item that were still queued at the crossing are dropped.
 
+## Repeat
+
+`LoopMode.One` repeats the current item, and so does `LoopMode.All` with a queue of one item or
+with media opened on its own. The next pass of the item takes the road a next queue item takes
+(#467):
+
+- The preload opens the item again, at its start, with the tracks that play now: the video, audio
+  and subtitle streams the viewer chose and the video decoder the item came to. It reads none of
+  the item's external subtitle files again. A start position applies to the first pass only, as it
+  did when a repeat sought back to zero.
+- The handoff is the one above, and so is the swap, with these differences. `PlayerEvent.Ended`
+  fires, as at each turn of a repeat that seeks back, and `Opened` does not, because the item
+  stays the current one. `media` and `queueIndex` do not change. The external subtitle files, both
+  subtitle selections and the reports made once for each item, such as `FirstFrameRendered`,
+  carry on. `VideoSizeChanged` does not fire again.
+- The status stays `Playing` and the device never stops. The position falls back to the start
+  of the item at the swap, markers fire again on each pass, and a chapter change fires when the
+  position returns to an earlier chapter.
+
+`setLoop`, a seek and the other actions in the list above drop the next pass as they drop a next
+item. `next` on a repeating queue of one opens the item afresh rather than from the preload,
+because the preload carries none of its external subtitle files.
+
+When the next pass cannot follow this way, the repeat falls back to the old path: the item ends,
+the status goes through `Ended` and `Buffering`, and the player seeks back to the start. It warns
+`GaplessFallback` for the reasons below, with the current item's own queue position, or -1 outside
+queue playback. A source that cannot seek repeats in neither way, and an A-B loop still seeks back
+to A.
+
 ## Fallbacks
 
 When the handoff cannot run, the player warns `PlaybackWarning.GaplessFallback` with the queue
@@ -143,11 +174,12 @@ stops, `Ended` fires, and the next item opens with a device of its own. These ar
 - The current item or the next item has no selected audio track.
 - The sample rate or the channel count of the next item differs from the format that the device
   was opened for.
-- The next item has a start position.
+- The next item has a start position. A repeat starts from zero, so this never stops one.
 
 When the reason is the audio of the next item, its format or a missing track, the preload stays
 and the next item opens from it, without a second open of its source. For the other reasons the
-next item opens from scratch.
+next item opens from scratch. A repeat's next pass is released for every reason, because its old
+path seeks back rather than opening anything.
 
 After a fallback the player does not try the same two items again while the current item stays
 open.
@@ -179,3 +211,9 @@ Every action that drops a preload also cancels a handoff that has started:
   check: one open, and no stop, pause or drain between the items.
 - On the CI emulator, a video queue on the Compose GPU path plays on one AudioTrack, and the
   renderer shows the second item's pictures from its new decoder.
+- A scripted item of four seconds plays for 18 seconds under `LoopMode.One`. The device sees one
+  open and one start and nothing else, the status never leaves `Playing`, the position wraps four
+  times, `Ended` fires four times and `Opened` once. With the loop turned off during a pass, every
+  sample of each pass is heard and the last pass ends as an item ends. The chosen audio track, a
+  chosen container subtitle over the automatic one and an external subtitle file read once all
+  carry on across the join.

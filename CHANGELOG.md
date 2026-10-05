@@ -340,6 +340,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   again after a seek; the FFmpeg backend's caption and image decoders pass it to KiteFFmpeg's new
   `SubtitleDecoder.drain` (yuroyami/KiteFFmpeg#149). A decoder that refuses it eight times running
   counts as drained, so it cannot hold the end of the media.
+- A repeated item follows its own end with no gap (#467). Under `LoopMode.One`, or `LoopMode.All`
+  with a queue of one, the item's next pass opens in the background as a gapless queue item does,
+  with the tracks the viewer chose, and its first sample follows the last one on the same device.
+  The status stays `Playing` and the device never stops, where each turn used to drain it, pass
+  through `Ended` and `Buffering`, seek back and refill. `PlayerEvent.Ended` still fires at each
+  turn, `Opened` does not, and the external subtitle files are not read again. A repeat that
+  cannot take this road warns `GaplessFallback` with the item's own queue position, or -1 outside
+  queue playback, and seeks back as before. `docs/gapless-queue.md` has the details.
 
 ### Removed
 

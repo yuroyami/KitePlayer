@@ -6298,7 +6298,9 @@ internal class PlaybackCore(
             return
         }
         // One media item repeating is a seek to zero and nothing else. LoopMode.All with a queue
-        // of one or none means the same thing: the whole queue IS the current item.
+        // of one or none means the same thing: the whole queue IS the current item. This is the
+        // old path: a repeat normally never ends the item, because its next pass was preloaded
+        // and follows it in the ring (#467).
         val repeatsCurrent = loop == LoopMode.One || (loop == LoopMode.All && queueItems.size <= 1)
         if (!repeatsCurrent) return
         // The same guard the A-B branch above has: the repeat is a precise seek,
@@ -6598,6 +6600,12 @@ internal class PlaybackCore(
         val follows: Long,
         val build: PendingBuild,
         val job: Deferred<Result<PreparedNext>>,
+        /**
+         * True when this is the next pass of the current item, under a repeat, rather than the next
+         * queue item (#467). [index] is then the current item's own queue position, -1 outside queue
+         * playback.
+         */
+        val repeat: Boolean = false,
     ) {
         /** Set once the build has finished; the item's workers then run. */
         var prepared: PreparedNext? = null
@@ -6718,22 +6726,27 @@ internal class PlaybackCore(
             if (!handOffRing(active, next, prepared)) return
         }
         if (active.audio?.joinCrossed == true) {
-            swapToNext(next, prepared)
+            if (next.repeat) swapToRepeat(next, prepared) else swapToNext(next, prepared)
         } else {
             wakeIn(HANDOFF_POLL)
         }
     }
 
-    /** Starts the preload once the current item is within `QueueConfig.preloadNext` of its end. */
+    /**
+     * Starts the preload once the current item is within `QueueConfig.preloadNext` of its end: of
+     * the next queue item, or under a repeat of the current item's next pass (#467).
+     */
     private fun maybeStartPreload(active: OpenSession) {
         val policy = config.queue
         if (!policy.gapless || policy.preloadNext <= Duration.ZERO) return
         if (status != PlaybackStatus.Playing && status != PlaybackStatus.Paused) return
         if (pendingSeek != null || seekPhase.isRunning || pendingVideoRecovery != null) return
         if (pendingSelections.isNotEmpty()) return
-        if (loop == LoopMode.One || abLoopA != null || sleepTimer == SleepTimer.EndOfItem) return
-        if (queueItems.size <= 1) return
-        val index = neighbourInOrder(1) ?: return
+        if (abLoopA != null || sleepTimer == SleepTimer.EndOfItem) return
+        // The cases handleLoop repeats: the whole queue is the current item under LoopMode.All.
+        val repeat = loop == LoopMode.One || (loop == LoopMode.All && queueItems.size <= 1)
+        if (!repeat && queueItems.size <= 1) return
+        val index = if (repeat) queueIndex else neighbourInOrder(1) ?: return
         if (gaplessRefused == (active.token to index)) return
         val durationUs = active.source.duration?.micros ?: return
         if (!active.source.seekable || active.isStillImage) return
@@ -6757,10 +6770,11 @@ internal class PlaybackCore(
             if (status == PlaybackStatus.Playing) wakeIn(((leftUs - leadUs) / wakeRate()).toLong().microseconds)
             return
         }
-        val item = queueItems[index]
+        val item = if (repeat) media ?: return else queueItems[index]
         val refusal = when {
             active.audioLane == null || active.audio == null -> "the current item has no selected audio track"
-            (item.startPosition ?: Duration.ZERO) > Duration.ZERO -> "the next item has a start position"
+            // A repeat starts again from zero, as the seek it replaces does.
+            !repeat && (item.startPosition ?: Duration.ZERO) > Duration.ZERO -> "the next item has a start position"
             else -> null
         }
         if (refusal != null) {
@@ -6769,6 +6783,11 @@ internal class PlaybackCore(
             return
         }
         val build = PendingBuild(nextSessionToken++)
+        if (repeat) {
+            pendingNext = PendingNext(index, item, active.token, build, startRepeatBuild(active, item, build), repeat = true)
+            wakeIn(WORKER_POLL)
+            return
+        }
         // On the session lane, so it reads the player where the actor does. It writes nothing of
         // the player's: see PendingBuild.
         val job = scope.async(dispatchers.session) {
@@ -6798,6 +6817,43 @@ internal class PlaybackCore(
     }
 
     /**
+     * The background build of the current item's next pass (#467). It opens the streams that play
+     * now, with the decoder selection the item has come to, and reads no external subtitle file:
+     * the player keeps the ones it read, and the swap puts them back on the new pass.
+     */
+    private fun startRepeatBuild(active: OpenSession, item: MediaItem, build: PendingBuild): Deferred<Result<PreparedNext>> {
+        val videoChoice = active.videoStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
+        val audioChoice = active.audioStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
+        // An external file timing the cues means no container stream, as in a rebuild.
+        val subtitleChoice = active.subtitleStream
+            ?.takeIf { selectedExternalSubtitle == null }
+            ?.let { StreamChoice.At(it.index) }
+            ?: StreamChoice.None
+        val videoSelection = if (forceBackendSoftwareForMedia) {
+            VideoDecoderSelection.BackendSoftwareOnly
+        } else {
+            VideoDecoderSelection.Configured
+        }
+        return scope.async(dispatchers.session) {
+            try {
+                val built = buildSession(
+                    item = item,
+                    videoChoice = videoChoice,
+                    audioChoice = audioChoice,
+                    subtitleChoice = subtitleChoice,
+                    videoSelection = videoSelection,
+                    pending = build,
+                )
+                Result.success(PreparedNext(built, emptyList()))
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                Result.failure(failure)
+            }
+        }
+    }
+
+    /**
      * Takes the finished build, answers what only the opened item can answer, aligns the item to
      * the epoch the player is at, and starts its demux and decode workers. Null while the build
      * still runs, and when the preload was dropped.
@@ -6819,6 +6875,11 @@ internal class PlaybackCore(
         next.prepared = prepared
         val incoming = prepared.session
         handoffRefusal(active, incoming)?.let { refusal ->
+            // A repeat's old path seeks back rather than opening anything, so the pass goes.
+            if (next.repeat) {
+                dropPending(refusal)
+                return null
+            }
             // The item is fine and only the ring does not fit it, so the old path plays it from
             // here rather than opening it again (#306).
             gaplessRefused = active.token to next.index
@@ -6990,9 +7051,13 @@ internal class PlaybackCore(
         incoming.jobs += launchWorker(incoming, worker, dispatchers.audioFeed) { runAudioFeed(incoming, worker) }
     }
 
-    /** The preload of queue position [index] when its workers run and no handoff has started, or null. */
+    /**
+     * The preload of queue position [index] when its workers run and no handoff has started, or
+     * null. A repeat's next pass is never one, because it carries none of the item's external
+     * subtitle files, so `next` opens the item afresh.
+     */
     private fun primedFor(index: Int?): PendingNext? =
-        pendingNext?.takeIf { index != null && it.index == index && it.prepared != null && !it.handedOff }
+        pendingNext?.takeIf { index != null && it.index == index && it.prepared != null && !it.handedOff && !it.repeat }
 
     /**
      * Opens a primed preload as the current item without opening it again (#306). The item before
@@ -7137,6 +7202,49 @@ internal class PlaybackCore(
         startVideoSchedule(incoming)
         reportContainerDivergences(incoming)
         emitEvent(PlayerEvent.Opened(next.item, tracks))
+        snapshotDirty = true
+    }
+
+    /**
+     * Makes the next pass of the current item the current session, once the device has played its
+     * first sample (#467). As [swapToNext], except that the item stays: its queue position, its
+     * external subtitle files, both subtitle selections and everything reported once per item carry
+     * on, and only [PlayerEvent.Ended] fires, as at each turn of a repeat that seeks back.
+     */
+    private suspend fun swapToRepeat(next: PendingNext, prepared: PreparedNext) {
+        val incoming = prepared.session
+        pendingNext = null
+        emitEvent(PlayerEvent.Ended)
+        // Read before the new pass's table replaces the one they live in.
+        val secondaryBefore = tracks.selectedSecondarySubtitle
+        // The real length of an item whose length was a guess is how far it played, which a new
+        // pass would otherwise forget until it got there again (#422).
+        session?.let { ending ->
+            incoming.furthestPositionUs = maxOf(incoming.furthestPositionUs, ending.furthestPositionUs)
+            // A recording ends where the media jumps back, as it did at the seek a repeat used to be.
+            if (ending.recordingEnd != null) ending.recordingEnd = "the item repeated from its start"
+        }
+        detachSession(forHandoff = true)?.let { releaseSession(it) }
+        // The markers behind the start are armed again, as the seek back to it armed them.
+        markerCursorUs = NO_POSITION
+        markerCursorEpoch = null
+        endOfStream.reset()
+        demuxUnderrunSeen = false
+        tracks = next.build.tracks
+        session = incoming
+        incoming.preloading.value = false
+        incoming.videoParked.value = !videoEnabled
+        incoming.audio?.commitJoin()
+        publishedPositionMicros.value = currentPosition().micros
+        progressState.value = Progress(position = publishedPositionMicros.value.microseconds, bufferedAhead = Duration.ZERO)
+        // The pass's own warnings are news; its events, the picture size, are what the item said.
+        next.build.warnings.release()
+        restoreSubtitleState(secondaryBefore)
+        refreshTypesetting()
+        startAudioEventCollector(incoming)
+        if (incoming.videoDecoderDeferred) startDeferredVideo(incoming)
+        incoming.video?.speed = effectiveSpeed
+        startVideoSchedule(incoming)
         snapshotDirty = true
     }
 
@@ -8980,7 +9088,7 @@ internal class PlaybackCore(
             failedQueueItems = failedQueueIndices,
             markers = markers,
             playRequested = publishedPlayIntent(),
-            preloadedIndex = pendingNext?.takeIf { it.prepared != null }?.index,
+            preloadedIndex = pendingNext?.takeIf { it.prepared != null && it.index >= 0 }?.index,
         )
         publishProgressAndStats()
     }

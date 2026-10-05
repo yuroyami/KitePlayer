@@ -603,9 +603,18 @@ public sealed class PlaybackWarning {
      * The queue item at [index] did not follow the one before it without a gap. The device
      * stopped at the end of that item, and this one opened from scratch, as it does with
      * [QueueConfig.gapless] off. [reason] names what stopped the gapless handoff.
+     *
+     * Under a repeat of the current item, what did not follow is the item's next pass (#467).
+     * [index] is then the current item's own queue position, or -1 outside queue playback, which
+     * no next queue item can have, and the old path seeks back to the item's start.
      */
     public data class GaplessFallback(val index: Int, val reason: String) : PlaybackWarning() {
-        override val message: String get() = "queue item $index opened without the gapless handoff: $reason"
+        override val message: String
+            get() = if (index < 0) {
+                "the repeat of the item played without the gapless handoff: $reason"
+            } else {
+                "queue item $index played without the gapless handoff: $reason"
+            }
     }
 
     /**

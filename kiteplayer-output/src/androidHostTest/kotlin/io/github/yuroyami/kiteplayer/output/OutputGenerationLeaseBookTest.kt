@@ -74,6 +74,34 @@ class OutputGenerationLeaseBookTest {
     }
 
     @Test
+    fun aClearDiscardsTheFramesAcceptedBeforeItAndNoLaterOne() {
+        val book = FrameConfigurationBook()
+        val film = FrameConfiguration(VideoSize(1920, 1080), 0)
+        val next = FrameConfiguration(VideoSize(1280, 720), 0)
+        book.register(10L, film)
+        book.register(20L, film)
+
+        book.discardPending()
+        book.register(30L, next)
+
+        assertEquals(MatchedFrameConfiguration(film.copy(discarded = true), 0L), book.takeExact(10L))
+        assertEquals(MatchedFrameConfiguration(film.copy(discarded = true), 0L), book.takeExact(20L))
+        assertEquals(MatchedFrameConfiguration(next, 0L), book.takeExact(30L), "the next picture is drawn")
+    }
+
+    @Test
+    fun aRetiredOutputRefusesToPublishWhatItAlreadyDrew() {
+        val book = OutputGenerationLeaseBook<String, String>(capacity = 4)
+        assertTrue(book.beginOutput())
+        assertTrue(book.register("drawn"))
+        assertTrue(book.promote("drawn", "lease"))
+
+        assertEquals(OutputGenerationResolution(false, 1L), book.retire())
+        assertFalse(book.markPublished("lease"), "a picture drawn before the clear is never published")
+        assertEquals(OutputGenerationResolution(true, 0L), book.removeLease("lease"))
+    }
+
+    @Test
     fun staleCallbackIdentitySurvivesAnInterveningLatch() {
         val book = FrameConfigurationBook()
         val configuration = FrameConfiguration(VideoSize(640, 360), 0)

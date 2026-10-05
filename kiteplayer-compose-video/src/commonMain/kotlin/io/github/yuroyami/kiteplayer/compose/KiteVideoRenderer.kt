@@ -181,6 +181,16 @@ internal class KiteVideoRenderer(
     /** The single frame waiting to be converted. Newest wins; the displaced one is closed here. */
     private val pending = atomic<VideoFrame?>(null)
 
+    /**
+     * Orders a conversion's take and publication against [clearPicture]. The worker takes the
+     * waiting frame and reads [pictureEpoch] in one hold, and publishes in another only if the
+     * epoch has not moved, so a frame accepted before a clear never reaches the screen after it.
+     */
+    private val pictureLock = kotlinx.atomicfu.locks.SynchronizedObject()
+
+    /** Moved on by each [clearPicture]. Read and written only under [pictureLock]. */
+    private var pictureEpoch = 0L
+
     /** Wakes the worker. Conflated, so a signal sent before it waits is kept rather than lost. */
     private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
@@ -222,7 +232,10 @@ internal class KiteVideoRenderer(
     /** Frames whose picture was published for drawing. */
     val presentedFrames: Long get() = presented.value + (hardwareRenderer?.presentedFrames ?: 0L)
 
-    /** Frames replaced in the waiting slot by a newer one before they could be converted. */
+    /**
+     * Frames replaced in the waiting slot by a newer one before they could be converted, or let go
+     * because the picture was taken off before they were published.
+     */
     val supersededFrames: Long get() = superseded.value + (hardwareRenderer?.supersededFrames ?: 0L)
 
     /** Frames that published nothing: a bad conversion, a failed image build, a close in flight. */
@@ -274,7 +287,11 @@ internal class KiteVideoRenderer(
 
     /** Converts and publishes whatever is waiting, if anything. Worker thread only. */
     private fun convertPending() {
-        val frame = pending.getAndSet(null) ?: return
+        var epoch = 0L
+        val frame = kotlinx.atomicfu.locks.synchronized(pictureLock) {
+            epoch = pictureEpoch
+            pending.getAndSet(null)
+        } ?: return
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         val mirrored = frame.mirrored
@@ -331,18 +348,46 @@ internal class KiteVideoRenderer(
             return
         }
         cost.record(started.elapsedNow().inWholeNanoseconds)
-        publish(
-            KiteVideoFrame(
-                image = image.image,
-                size = size,
-                rotationDegrees = rotation,
-                requiresCommitFence = image.requiresCommitFence,
-                release = image.release,
-                mirrored = mirrored,
-                crop = crop,
-            ),
+        val finished = KiteVideoFrame(
+            image = image.image,
+            size = size,
+            rotationDegrees = rotation,
+            requiresCommitFence = image.requiresCommitFence,
+            release = image.release,
+            mirrored = mirrored,
+            crop = crop,
         )
+        val current = kotlinx.atomicfu.locks.synchronized(pictureLock) {
+            if (pictureEpoch == epoch) publish(finished)
+            pictureEpoch == epoch
+        }
+        if (!current) {
+            // The picture was taken off while this frame was converted (#530).
+            finished.close()
+            superseded.incrementAndGet()
+            return
+        }
         presented.incrementAndGet()
+    }
+
+    /**
+     * Takes the picture off (#530). The GPU tier first makes sure nothing it accepted can still
+     * arrive, then the frame waiting for the worker goes, a conversion in flight is told its
+     * picture is gone, and null is published, so [KiteVideo] draws the subtitles alone over
+     * whatever lies behind it until the next frame.
+     */
+    override fun clearPicture() {
+        if (closed.value) return
+        hardwareRenderer?.clearPicture()
+        kotlinx.atomicfu.locks.synchronized(pictureLock) {
+            if (closed.value) return
+            pending.getAndSet(null)?.let { waiting ->
+                waiting.close()
+                superseded.incrementAndGet()
+            }
+            pictureEpoch += 1
+            publish(null)
+        }
     }
 
     /** Counts the frame and reports why. */

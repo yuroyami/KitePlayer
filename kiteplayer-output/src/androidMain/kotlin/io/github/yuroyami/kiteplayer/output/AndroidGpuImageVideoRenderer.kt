@@ -222,6 +222,16 @@ public class AndroidGpuImageVideoRenderer(
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?): Unit = Unit
 
+    /**
+     * Lets no frame accepted so far reach [onImage] (#530): the bridge drops the frames still on
+     * their way through it, and returns once none of them can be published any more. The image
+     * already handed to [onImage] is the client's to take off the screen, as the subtitles are.
+     */
+    override fun clearPicture() {
+        if (closed.value) return
+        bridge.clearPictures()
+    }
+
     override fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
         var failure: Throwable? = null
@@ -537,6 +547,12 @@ private class OesRgbaBridge(
 
     fun supports(size: VideoSize): Boolean = size.width > 0 && size.height > 0
 
+    /** Runs [GlState.clearPictures] and waits for it, so nothing older is published afterwards. */
+    fun clearPictures() {
+        if (closed) return
+        runOnGlThread(GlState::clearPictures)
+    }
+
     fun setViewport(width: Int, height: Int, scale: Float) {
         if (closed) return
         val viewport = physicalGpuViewport(width, height, scale)
@@ -712,6 +728,19 @@ internal class GlState private constructor(
         }
     }
 
+    /**
+     * Lets no frame accepted so far reach the client (#530). The frames still waiting in the
+     * SurfaceTexture are marked so that their latch draws nothing, and the output queue retires,
+     * which refuses to publish the images already drawn into it and keeps the client's leases until
+     * they come back. The next frame builds a fresh queue, because configure finds none. Run on
+     * this handler, so every publication posted before it has already run.
+     */
+    fun clearPictures() {
+        if (closed) return
+        frameConfigurations.discardPending()
+        if (outputQueue != null) destroyOutput(force = false)
+    }
+
     fun viewportChanged() {
         if (closed) return
         val bufferSize = configuredBufferSize ?: return
@@ -741,6 +770,11 @@ internal class GlState private constructor(
         lastLatchedTimestamp = timestamp
         recordSuperseded(matched.skippedFrames)
         val frameConfiguration = matched.configuration
+        if (frameConfiguration.discarded) {
+            // Accepted before the renderer was told that no picture plays (#530).
+            recordSuperseded(1L)
+            return
+        }
         configure(
             frameConfiguration.size,
             frameConfiguration.rotationDegrees,
@@ -1842,6 +1876,8 @@ internal data class FrameConfiguration(
     val androidColorSpace: AndroidRgbColorSpace = AndroidRgbColorSpace.Srgb,
     val mirrored: Boolean = false,
     val crop: PictureCrop? = null,
+    /** Accepted before a clear (#530): its latch draws nothing. */
+    val discarded: Boolean = false,
 )
 
 /**
@@ -1990,6 +2026,14 @@ internal class FrameConfigurationBook(
         rememberResolved(resolved)
         prunedFrames = 0L
         MatchedFrameConfiguration(exact, skippedFrames)
+    }
+
+    /**
+     * Marks every configuration registered so far as discarded, so its frame is latched and then
+     * dropped rather than drawn (#530). A frame registered afterwards is drawn as usual.
+     */
+    fun discardPending(): Unit = synchronized(fence) {
+        configurations.replaceAll { _, configuration -> configuration.copy(discarded = true) }
     }
 
     /** Removes a configuration whose matching MediaCodec release failed before reaching Surface. */

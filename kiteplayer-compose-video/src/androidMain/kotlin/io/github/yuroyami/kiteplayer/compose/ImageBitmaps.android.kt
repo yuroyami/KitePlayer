@@ -182,6 +182,7 @@ private class AndroidKiteVideoHardwareRenderer(
     override fun setViewport(width: Int, height: Int, scale: Float) = delegate.setViewport(width, height, scale)
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) = delegate.setScaleMode(mode)
     override suspend fun setOverlay(overlay: SubtitleOverlay?) = delegate.setOverlay(overlay)
+    override fun clearPicture() = delegate.clearPicture()
     override val events get() = delegate.events
 
     override fun close() {

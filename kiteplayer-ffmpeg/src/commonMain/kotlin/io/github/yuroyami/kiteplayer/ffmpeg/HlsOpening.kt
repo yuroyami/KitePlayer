@@ -80,8 +80,10 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
 }
 
 /**
- * Opens [address] through [io] for FFmpeg, on the demux thread. A playlist read after a redirect
- * gets its addresses made absolute, because FFmpeg would resolve them against [address].
+ * Opens [address] through [io] for FFmpeg, on the demux thread. A reader that was redirected
+ * hands FFmpeg its new address as the bridge's location, and FFmpeg resolves a playlist's
+ * addresses against it after it has put in the playlist's variables, exactly as it does after a
+ * redirect its own `http` follows. The playlist reaches FFmpeg as the server sent it.
  */
 private fun openRelatedBridge(io: MediaIo, address: String, lifetime: Job, ledger: HlsLedger): MediaByteSource? =
     blockingIn(lifetime) {
@@ -96,26 +98,7 @@ private fun openRelatedBridge(io: MediaIo, address: String, lifetime: Job, ledge
             ledger.failed(address, "the reader refused the address")
             return@blockingIn null
         }
-        val redirected = related.location?.takeIf { it != address }
-        val readable = if (redirected == null) {
-            related
-        } else {
-            try {
-                // A playlist that nothing marks is recognised by its first bytes, as the item's own is (#400).
-                val marked = looksLikeHls(null, related.contentType, address)
-                val reader = if (marked || !mayBeAPlaylist(related.contentType)) related else SniffedMediaIo.sniff(related, HLS_SNIFF_BYTES)
-                if (marked || (reader is SniffedMediaIo && startsLikeHls(reader.head))) {
-                    val text = readPlaylist(reader, address).decodeToString()
-                    PlaylistMediaIo(absoluteHlsAddresses(text, redirected).encodeToByteArray(), owner = reader)
-                } else {
-                    reader
-                }
-            } catch (failure: Throwable) {
-                related.close()
-                throw failure
-            }
-        }
-        BlockingMediaIo(LedgeredMediaIo(readable, address, ledger), lifetime)
+        BlockingMediaIo(LedgeredMediaIo(related, address, ledger), lifetime)
     }
 
 /** Reads [io] to its end, refusing a playlist larger than [MAX_PLAYLIST_BYTES]. */

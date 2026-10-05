@@ -673,6 +673,11 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
 - MPEG-TS and fMP4 segments, byte ranges, AES-128 keys, separate audio and subtitle renditions, and
   live playlists play. A finished playlist can seek. A rendition's `NAME` is its track's title,
   and its `DEFAULT`, `FORCED` and accessibility `CHARACTERISTICS` set the track's flags.
+- Playlist variables play: `EXT-X-DEFINE` by `NAME` and `VALUE`, by `IMPORT` from the master
+  playlist, and by `QUERYPARAM` from the playlist's own address, so a token in the master
+  playlist's address reaches every variant, segment and key that names it. A playlist that was
+  redirected takes its `QUERYPARAM` and its relative addresses from where it was redirected to. A
+  reference to a variable that nothing defined fails the open, and the error names it.
 - A segment that cannot be read is skipped, and `PlaybackWarning.SegmentSkipped` says so. A stream
   that ends while its last segments fail ends with `PlaybackError.SourceUnavailable`.
 - `MediaItem.headers` go only to the scheme, host and port of the item's own address, because a

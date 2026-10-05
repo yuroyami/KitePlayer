@@ -27,6 +27,7 @@ internal actual class BlockingMediaIo actual constructor(
 
     actual override val size: Long? get() = io.size
     actual override val seekable: Boolean get() = io.seekable
+    actual override val location: String? get() = io.location
 
     actual override fun read(into: ByteArray, offset: Int, length: Int): Int = runBlocking(lifetime) {
         var r = io.read(into, offset, length)

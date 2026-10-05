@@ -164,21 +164,6 @@ class HlsPlaylistsTest {
         }
     }
 
-    @Test
-    fun aRedirectedPlaylistNamesItsSegmentsAbsolutely() {
-        val playlist = "#EXTM3U\r\n#EXT-X-KEY:METHOD=AES-128,URI=\"../keys/k1\",IV=0x01\r\n" +
-            "#EXT-X-MAP:URI=\"init.mp4\"\r\n#EXTINF:2.0,\r\nseg-0.m4s?sig=1\r\n" +
-            "#EXTINF:2.0,\r\nhttps://other.test/seg-1.m4s\r\n#EXT-X-ENDLIST\r\n"
-        val rewritten = absoluteHlsAddresses(playlist, "https://edge.test/moved/v1/index.m3u8")
-        assertEquals(
-            "#EXTM3U\r\n#EXT-X-KEY:METHOD=AES-128,URI=\"https://edge.test/moved/keys/k1\",IV=0x01\r\n" +
-                "#EXT-X-MAP:URI=\"https://edge.test/moved/v1/init.mp4\"\r\n#EXTINF:2.0,\r\n" +
-                "https://edge.test/moved/v1/seg-0.m4s?sig=1\r\n#EXTINF:2.0,\r\nhttps://other.test/seg-1.m4s\r\n" +
-                "#EXT-X-ENDLIST\r\n",
-            rewritten,
-        )
-    }
-
     private companion object {
         val MASTER = listOf(
             "#EXTM3U",

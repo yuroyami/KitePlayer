@@ -116,6 +116,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   start with `#EXTM3U` plays through the HLS path when no format hint, HLS content type or `.m3u8`
   address says so, which an address with no extension sent as text or bytes never did. A format
   hint still wins.
+- An HLS playlist's variables play (#452). KiteFFmpeg 0.5.0 puts in what `EXT-X-DEFINE` gives by
+  `NAME` and `VALUE`, by `IMPORT` from the master playlist and by `QUERYPARAM` from the playlist's
+  own address, so a token in the master playlist's address reaches every address that names it.
+  The player now tells FFmpeg where a redirected playlist came from instead of rewriting the
+  playlist's addresses itself, which made a variable that holds a whole address resolve against
+  the redirect too and left `QUERYPARAM` reading the address before the redirect. A redirected
+  playlist therefore reaches FFmpeg exactly as its server sent it. A reference to a variable that
+  nothing defined fails the open, and the error names it.
 - `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
   page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third

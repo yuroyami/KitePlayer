@@ -204,29 +204,6 @@ internal fun keepOneHlsVariant(text: String, maxBitrate: Long?, maxVideoHeight: 
 }
 
 /**
- * [text] with every relative address made absolute against [base]: the address lines, and the
- * `URI` attribute of every tag that has one. A playlist that was read after a redirect needs this,
- * because FFmpeg resolves its addresses against the address it asked for, not the one that
- * answered.
- */
-internal fun absoluteHlsAddresses(text: String, base: String): String =
-    text.split('\n').joinToString("\n") { raw ->
-        val line = raw.removeSuffix("\r")
-        val ending = raw.substring(line.length)
-        val rewritten = when {
-            line.isBlank() -> line
-            !line.startsWith("#") -> resolveUriReference(base, line.trim())
-            line.startsWith("#EXT") && "URI=\"" in line -> {
-                val start = line.indexOf("URI=\"") + 5
-                val end = line.indexOf('"', start)
-                if (end < 0) line else line.substring(0, start) + resolveUriReference(base, line.substring(start, end)) + line.substring(end)
-            }
-            else -> line
-        }
-        rewritten + ending
-    }
-
-/**
  * Resolves [reference] against [base] as RFC 3986, section 5.2, defines it. A reference with a
  * scheme of its own, such as `https:` or `data:`, comes back with its dot segments removed.
  */

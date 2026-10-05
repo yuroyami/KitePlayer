@@ -50,6 +50,7 @@ import platform.CoreVideo.kCVPixelBufferPixelFormatTypeKey
 import platform.CoreVideo.kCVPixelBufferWidthKey
 import platform.CoreVideo.kCVPixelFormatType_32BGRA
 import platform.CoreVideo.kCVReturnSuccess
+import platform.Metal.MTLCommandBufferProtocol
 import platform.Metal.MTLCreateSystemDefaultDevice
 import platform.Metal.MTLDeviceProtocol
 import platform.Metal.MTLPixelFormatBGRA8Unorm
@@ -103,6 +104,28 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
         return target
     }
 
+    /**
+     * A new buffer the size of [overlay]'s viewport with [overlay] drawn on black, for a layer
+     * whose picture was taken off while its text stays. The caller owns one reference to it.
+     *
+     * Null when any step refuses, and the caller then shows nothing.
+     */
+    fun burnBackground(overlay: SubtitleOverlay): CVPixelBufferRef? {
+        val width = overlay.viewportWidth.coerceAtLeast(1)
+        val height = overlay.viewportHeight.coerceAtLeast(1)
+        val target = pooledBuffer(width, height) ?: return null
+        val drawn = runCatching {
+            drawInto(target, width, height) { texture ->
+                composer.encodeBackground(texture, overlay, width, height)
+            }
+        }.getOrDefault(false)
+        if (!drawn) {
+            CVPixelBufferRelease(target)
+            return null
+        }
+        return target
+    }
+
     /** Gives back the GPU objects, the texture cache and the pool. */
     fun close() {
         composer.close()
@@ -119,6 +142,29 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
         overlay: SubtitleOverlay?,
         width: Int,
         height: Int,
+    ): Boolean = drawInto(target, width, height) { texture ->
+        composer.encode(
+            target = texture,
+            frame = facts,
+            picture = picture,
+            overlay = overlay,
+            viewportWidth = width,
+            viewportHeight = height,
+            // Stretch fills the buffer edge to edge, and the buffer already has the turned shape.
+            scaleMode = VideoScale.Stretch,
+            toneMapped = true,
+        )
+    }
+
+    /**
+     * Wraps [target] as a texture and lets [encode] draw into it. Waited for, because the layer
+     * reads the buffer as soon as it has the sample.
+     */
+    private fun drawInto(
+        target: CVPixelBufferRef,
+        width: Int,
+        height: Int,
+        encode: (MTLTextureProtocol) -> MTLCommandBufferProtocol,
     ): Boolean = memScoped {
         val wrapped = alloc<CVMetalTextureRefVar>()
         val status = CVMetalTextureCacheCreateTextureFromImage(
@@ -139,18 +185,7 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
         }
         try {
             val texture = CVMetalTextureGetTexture(textureRef) as? MTLTextureProtocol ?: return@memScoped false
-            // Waited for, because the layer reads the buffer as soon as it has the sample.
-            composer.encode(
-                target = texture,
-                frame = facts,
-                picture = picture,
-                overlay = overlay,
-                viewportWidth = width,
-                viewportHeight = height,
-                // Stretch fills the buffer edge to edge, and the buffer already has the turned shape.
-                scaleMode = VideoScale.Stretch,
-                toneMapped = true,
-            ).waitUntilCompleted()
+            encode(texture).waitUntilCompleted()
             true
         } finally {
             CFRelease(textureRef)

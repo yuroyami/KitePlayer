@@ -34,6 +34,7 @@ import platform.CoreGraphics.CGBitmapContextCreateImage
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
 import platform.CoreGraphics.CGColorSpaceRef
 import platform.CoreGraphics.CGColorSpaceRelease
+import platform.CoreGraphics.CGContextClearRect
 import platform.CoreGraphics.CGContextDrawImage
 import platform.CoreGraphics.CGContextRelease
 import platform.CoreGraphics.CGContextRestoreGState
@@ -148,13 +149,19 @@ public class AppKitVideoRenderer internal constructor(
     /** The single frame waiting to be converted. Newest wins, and the displaced one is closed here. */
     private val pending = atomic<VideoFrame?>(null)
 
-    /** The single finished image waiting for the main thread. Newest wins. */
-    private class PendingDelivery(val image: NSImage, val ptsUs: Long)
+    /**
+     * The single finished image waiting for the main thread. Newest wins. [picture] is false for
+     * the background a clear shows, which no frame counter counts and no event reports.
+     */
+    private class PendingDelivery(val image: NSImage, val ptsUs: Long, val picture: Boolean = true)
 
     private val pendingImage = atomic<PendingDelivery?>(null)
 
     /** True from the moment a delivery block is queued until that block starts running. */
     private val deliveryQueued = atomic(false)
+
+    /** Set by [clearPicture] and consumed by the worker, which owns the retained picture. */
+    private val clearWanted = atomic(false)
 
     /** Wakes the worker. Conflated, so a signal sent before it waits is kept rather than lost. */
     private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -197,6 +204,9 @@ public class AppKitVideoRenderer internal constructor(
         try {
             while (!closed.value) {
                 signal.receive()
+                // The clear comes first, so a frame presented after it is drawn over the
+                // background rather than under it.
+                if (clearWanted.getAndSet(false)) takeOffPicture()
                 convertPending()
                 // An overlay change during a pause re-composites the retained pixels;
                 // a converted frame above already baked the new overlay in.
@@ -294,6 +304,7 @@ public class AppKitVideoRenderer internal constructor(
                 retainedMirrored = mirrored
                 retainedCrop = crop
                 retainedPtsUs = ptsUs
+                pictureCleared = false
                 makeImage(rgba, width, height, displayWidth, rotation, mirrored, crop)
             }
         } catch (failure: Throwable) {
@@ -317,8 +328,9 @@ public class AppKitVideoRenderer internal constructor(
      * The flag is what bounds the work: it is set when a block is queued and cleared when that block
      * starts, so while one is waiting every further image just replaces the one in the slot.
      */
-    private fun deliver(image: NSImage, ptsUs: Long) {
-        if (pendingImage.getAndSet(PendingDelivery(image, ptsUs)) != null) superseded.incrementAndGet()
+    private fun deliver(image: NSImage, ptsUs: Long, picture: Boolean = true) {
+        val displaced = pendingImage.getAndSet(PendingDelivery(image, ptsUs, picture))
+        if (displaced != null && displaced.picture) superseded.incrementAndGet()
         if (deliveryQueued.compareAndSet(expect = false, update = true)) {
             enqueueOnMain { drawPendingImage() }
         }
@@ -332,10 +344,11 @@ public class AppKitVideoRenderer internal constructor(
         val delivery = pendingImage.getAndSet(null) ?: return
         if (closed.value) {
             // The renderer is closed, so the window is no longer this renderer's to draw into.
-            failed.incrementAndGet()
+            if (delivery.picture) failed.incrementAndGet()
             return
         }
         showImage(delivery.image)
+        if (!delivery.picture) return
         presented.incrementAndGet()
         // Best effort by design: the image reached the view on the main thread, which is the
         // closest this CPU path can observe to pixels on glass.
@@ -630,10 +643,14 @@ public class AppKitVideoRenderer internal constructor(
     private var retainedCrop: PictureCrop? = null
     private val redrawWanted = kotlinx.atomicfu.atomic(false)
 
+    /** True from a clear until the next frame converts, so a redraw shows the background. */
+    private var pictureCleared: Boolean = false
+
     /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
     private fun redrawRetained() {
         // Nobody will ever see a picture drawn after the close began.
         if (closed.value) return
+        if (pictureCleared) return deliverBackground()
         val rgba = retainedRgba ?: return
         val image = try {
             makeImage(
@@ -643,6 +660,83 @@ public class AppKitVideoRenderer internal constructor(
             null
         } ?: return
         deliver(image, retainedPtsUs)
+    }
+
+    /**
+     * Forgets the retained picture and shows the background, with the cues still drawn over it,
+     * until the next frame converts. Worker thread only.
+     */
+    private fun takeOffPicture() {
+        retainedRgba = null
+        retainedCrop = null
+        pictureCleared = true
+        deliverBackground()
+    }
+
+    /**
+     * Delivers a transparent image with only the cues on it, so the window shows its own
+     * background where the picture was. A picture still waiting for the main thread is displaced
+     * by it and counted superseded, like the frame [clearPicture] lets go of.
+     */
+    private fun deliverBackground() {
+        if (closed.value) return
+        val image = try {
+            makeBackground()
+        } catch (_: Throwable) {
+            null
+        } ?: return
+        deliver(image, retainedPtsUs, picture = false)
+    }
+
+    /**
+     * A transparent image with the active cues drawn on it, the size of the overlay's own
+     * viewport so the image view places them where they sat over the picture, or one pixel when
+     * no cue shows.
+     */
+    private fun makeBackground(): NSImage? {
+        val active = overlaySlot.value?.takeIf { it.images.isNotEmpty() }
+        val width = active?.viewportWidth?.coerceAtLeast(1) ?: 1
+        val height = active?.viewportHeight?.coerceAtLeast(1) ?: 1
+        val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
+        try {
+            val context = CGBitmapContextCreate(
+                data = null,
+                width = width.toULong(),
+                height = height.toULong(),
+                bitsPerComponent = 8u,
+                bytesPerRow = 0u,
+                space = colorSpace,
+                bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value,
+            ) ?: return null
+            try {
+                CGContextClearRect(context, CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()))
+                drawOverlayInto(context, width, height)
+                val drawn = CGBitmapContextCreateImage(context) ?: return null
+                try {
+                    return NSImage(cGImage = drawn, size = CGSizeMake(width.toDouble(), height.toDouble()))
+                } finally {
+                    CGImageRelease(drawn)
+                }
+            } finally {
+                CGContextRelease(context)
+            }
+        } finally {
+            CGColorSpaceRelease(colorSpace)
+        }
+    }
+
+    /**
+     * Lets go of a frame waiting to convert, counted superseded, and has the worker forget the
+     * retained picture and show the background with the cues over it.
+     */
+    override fun clearPicture() {
+        if (closed.value) return
+        pending.getAndSet(null)?.let { frame ->
+            frame.close()
+            superseded.incrementAndGet()
+        }
+        clearWanted.value = true
+        signal.trySend(Unit)
     }
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
@@ -667,7 +761,7 @@ public class AppKitVideoRenderer internal constructor(
         worker.cancel()
         runBlocking { workerJob.join() }
         drainPending()
-        if (pendingImage.getAndSet(null) != null) failed.incrementAndGet()
+        if (pendingImage.getAndSet(null)?.picture == true) failed.incrementAndGet()
         // The worker is out, so the overlay cache has no other owner left.
         overlayImages.release()
         dispatcher.close()

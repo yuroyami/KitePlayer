@@ -89,6 +89,33 @@ class SampleBufferSubtitleTest {
     }
 
     @Test
+    fun aClearKeepsTheTextOnBlackUntilTheTextGoes() = runBlocking {
+        val sink = RecordingSampleSink()
+        val renderer = SampleBufferVideoRenderer(resolve = { redNv12(64, 64) }, sink = sink)
+        try {
+            renderer.setOverlay(whiteSquare())
+            assertTrue(renderer.present(SampleTestFrame(64, 64, limited709), targetNanos = 0L))
+            renderer.clearPicture()
+            assertEquals(2, sink.samples.size, "the text stays on the layer without the picture")
+            val image = imageOf(sink.samples[1])
+            assertEquals(kCVPixelFormatType_32BGRA, CVPixelBufferGetPixelFormatType(image))
+            assertEquals(64uL, CVPixelBufferGetWidth(image), "the buffer takes the overlay's viewport")
+            val text = bgraAt(image, 32, 32)
+            assertTrue(text.take(3).all { it > 200 }, "the text pixel must be white, got ${text.toList()}")
+            val background = bgraAt(image, 8, 8)
+            assertTrue(background.take(3).all { it == 0 }, "the picture must be gone, got ${background.toList()}")
+
+            renderer.setOverlay(noText())
+            assertEquals(1, sink.flushes, "with the text gone there is nothing left to show")
+            assertEquals(2, sink.samples.size)
+            assertTrue(sink.samples.all { displaysImmediately(it) }, "the text on black must show at once too")
+        } finally {
+            renderer.close()
+            sink.release()
+        }
+    }
+
+    @Test
     fun aSubtitleChangeRedrawsThePausedPicture() = runBlocking {
         val sink = RecordingSampleSink()
         val renderer = SampleBufferVideoRenderer(resolve = { redNv12(64, 64) }, sink = sink)

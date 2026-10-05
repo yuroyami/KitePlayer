@@ -134,6 +134,9 @@ public class MetalVideoRenderer internal constructor(
 
     private val closed = atomic(false)
 
+    /** Set by [clearPicture] and consumed by the render thread, which owns the retained picture. */
+    private val clearWanted = atomic(false)
+
     private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private val eventFlow = MutableSharedFlow<RendererEvent>(
@@ -221,6 +224,9 @@ public class MetalVideoRenderer internal constructor(
         try {
             while (!closed.value) {
                 signal.receive()
+                // The clear comes first, so a frame presented after it is drawn over the
+                // background rather than under it.
+                if (clearWanted.getAndSet(false)) takeOffPicture()
                 drawPending()
                 // Overlay and picture-control changes reach a PAUSED frame by
                 // re-encoding the retained picture. A frame drawn above already carried them.
@@ -333,6 +339,7 @@ public class MetalVideoRenderer internal constructor(
             )
             announceRange(frame, target)
             presented.incrementAndGet()
+            pictureCleared = false
             retainForRedraw(frame, picture)
         } catch (failure: Throwable) {
             failed.incrementAndGet()
@@ -347,6 +354,9 @@ public class MetalVideoRenderer internal constructor(
     private var retainedPicture: MetalPicture? = null
     private var retainedMeta: RetainedFrameMeta? = null
     private val redrawWanted = kotlinx.atomicfu.atomic(false)
+
+    /** True from a clear until the next frame draws, so a redraw draws the background. */
+    private var pictureCleared: Boolean = false
 
     /** The frame facts encode() reads, kept past the frame's close. Never closed itself. */
     private class RetainedFrameMeta(
@@ -392,6 +402,7 @@ public class MetalVideoRenderer internal constructor(
     private fun drawRetained() {
         // Nobody will ever see a picture drawn after the close began.
         if (closed.value) return
+        if (pictureCleared) return drawBackground()
         val picture = retainedPicture ?: return
         val meta = retainedMeta ?: return
         try {
@@ -420,6 +431,58 @@ public class MetalVideoRenderer internal constructor(
         } catch (failure: Throwable) {
             eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "Metal redraw failed"))
         }
+    }
+
+    /**
+     * Gives back the retained picture and draws the background, with the cues still over it,
+     * until the next frame draws. Render thread only.
+     */
+    private fun takeOffPicture() {
+        releaseRetained()
+        pictureCleared = true
+        drawBackground()
+    }
+
+    /**
+     * Clears the layer to the black the bars are drawn in and draws the cues over it, in standard
+     * range because nothing on it is HDR. A failure here is not reported as the renderer failing:
+     * the engine would detach a renderer that can still draw the next picture. Render thread only.
+     */
+    private fun drawBackground() {
+        if (closed.value) return
+        try {
+            configureLayer(false)
+            val drawable = layer.nextDrawable() ?: return
+            val width = viewportWidth.value.takeIf { it > 0 }
+                ?: layer.drawableSize.useContents { width }.toInt().coerceAtLeast(1)
+            val height = viewportHeight.value.takeIf { it > 0 }
+                ?: layer.drawableSize.useContents { height }.toInt().coerceAtLeast(1)
+            val target = drawable.texture as platform.Metal.MTLTextureProtocol
+            composerFor(target).encodeBackground(
+                target = target,
+                overlay = overlay.value,
+                viewportWidth = width,
+                viewportHeight = height,
+                presentDrawable = drawable,
+                extendedRangeHeadroom = headroomFor(target),
+            )
+        } catch (_: Throwable) {
+            // The layer keeps what it showed; the next picture draws over it.
+        }
+    }
+
+    /**
+     * Lets go of a frame waiting to draw, counted superseded, and has the render thread give back
+     * the retained picture and draw the background with the cues over it.
+     */
+    override fun clearPicture() {
+        if (closed.value) return
+        pending.getAndSet(null)?.let { frame ->
+            frame.close()
+            superseded.incrementAndGet()
+        }
+        clearWanted.value = true
+        signal.trySend(Unit)
     }
 
     override fun vsyncIntervalNanos(): Long? = null

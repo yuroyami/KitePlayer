@@ -297,6 +297,29 @@ class SampleBufferVideoRendererTest {
     }
 
     @Test
+    fun aClearTakesThePictureOffTheLayerUntilTheNextFrame() = runBlocking {
+        val sink = RecordingSampleSink()
+        val renderer = SampleBufferVideoRenderer(resolve = { redNv12(64, 64) }, sink = sink, makeBurner = { null })
+        try {
+            assertTrue(renderer.present(SampleTestFrame(64, 64, limited709), targetNanos = 0L))
+            renderer.clearPicture()
+            assertEquals(1, sink.flushes, "the picture left the layer")
+            renderer.setOverlay(noText())
+            renderer.setOverlay(null)
+            assertEquals(1, sink.samples.size, "no subtitle change brings the old picture back")
+
+            assertTrue(renderer.present(SampleTestFrame(64, 64, limited709), targetNanos = 40_000_000L))
+            assertEquals(2, sink.samples.size, "the next frame shows")
+            renderer.close()
+            renderer.clearPicture()
+            assertEquals(2, sink.flushes, "close flushes once more and a clear after it does nothing")
+        } finally {
+            renderer.close()
+            sink.release()
+        }
+    }
+
+    @Test
     fun closeTakesThePictureOffTheLayerAndRefusesLaterFrames() = runBlocking {
         val sink = RecordingSampleSink()
         val picture = planarPicture()

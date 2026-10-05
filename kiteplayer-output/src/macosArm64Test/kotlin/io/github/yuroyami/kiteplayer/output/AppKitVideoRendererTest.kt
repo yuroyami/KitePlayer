@@ -819,6 +819,87 @@ class AppKitVideoRendererTest {
         }
     }
 
+    @Test
+    fun `a clear shows a transparent picture that keeps the cues until a frame comes back`() = runBlocking {
+        val storedWidth = 4
+        val storedHeight = 2
+        val red = ByteArray(storedWidth * storedHeight * 4)
+        for (index in red.indices step 4) {
+            red[index] = -1
+            red[index + 3] = -1
+        }
+        val ledger = LeakLedger()
+        val drawn = atomic<NSImage?>(null)
+        val renderer = AppKitVideoRenderer(
+            convert = { red },
+            enqueueOnMain = { block -> block() },
+            showImage = { image -> drawn.value = image },
+        )
+        try {
+            assertTrue(renderer.present(FakeVideoFrame(pts = Pts(0), size = VideoSize(storedWidth, storedHeight), ledger = ledger), 0L))
+            awaitTrue("the picture") { drawn.value?.let(::readBack)?.redAndGreenAt(0, 1) == (255 to 0) }
+            renderer.setOverlay(
+                io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+                    images = listOf(
+                        io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                            x = 1,
+                            y = 0,
+                            bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(
+                                2, 1, ByteArray(2 * 1 * 4) { 0xFF.toByte() },
+                            ),
+                        ),
+                    ),
+                    viewportWidth = storedWidth,
+                    viewportHeight = storedHeight,
+                    contentHash = 8L,
+                ),
+            )
+            awaitTrue("the cue over the picture") { drawn.value?.let(::readBack)?.redAndGreenAt(1, 0) == (255 to 255) }
+            val presented = renderer.presentedFrames
+
+            renderer.clearPicture()
+            awaitTrue("the background") { drawn.value?.let(::readBack)?.redAndGreenAt(0, 1) == (0 to 0) }
+            val cleared = readBack(assertNotNull(drawn.value))
+            assertEquals(storedWidth, cleared.width, "the background takes the overlay's viewport")
+            assertEquals(255 to 255, cleared.redAndGreenAt(1, 0), "the cue stays where it was")
+            assertEquals(presented, renderer.presentedFrames, "a background is not a presented frame")
+
+            assertTrue(renderer.present(FakeVideoFrame(pts = Pts(40_000), size = VideoSize(storedWidth, storedHeight), ledger = ledger), 0L))
+            awaitTrue("the picture back") { drawn.value?.let(::readBack)?.redAndGreenAt(0, 1) == (255 to 0) }
+        } finally {
+            renderer.close()
+        }
+        assertEquals(2, ledger.closeCount)
+        assertEquals(0, ledger.doubleCloseCount)
+    }
+
+    @Test
+    fun `a clear lets go of a waiting picture and a clear after close does nothing`() = runBlocking {
+        val ledger = LeakLedger()
+        val queue = DeferredMainQueue()
+        val shown = atomic(0)
+        val renderer = AppKitVideoRenderer(
+            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
+            enqueueOnMain = queue::enqueue,
+            showImage = { shown.incrementAndGet() },
+        )
+        renderer.present(FakeVideoFrame(pts = Pts(0), ledger = ledger), 0L)
+        awaitTrue("one queued delivery") { queue.enqueued == 1 }
+
+        renderer.clearPicture()
+        awaitTrue("the waiting picture displaced by the background") { renderer.supersededFrames == 1L }
+        assertTrue(queue.runNext())
+        assertEquals(1, shown.value, "only the background reached the window")
+        assertEquals(0L, renderer.presentedFrames)
+        assertEquals(0L, renderer.failedFrames)
+
+        renderer.close()
+        renderer.clearPicture()
+        assertFalse(queue.runNext())
+        assertEquals(1, ledger.closeCount)
+        assertEquals(0, ledger.doubleCloseCount)
+    }
+
     private fun readBack(image: NSImage): DrawnPixels {
         val cgImage = image.CGImageForProposedRect(null, null, null) ?: fail("the drawn image has no bitmap")
         val pixelWidth = CGImageGetWidth(cgImage).toInt()

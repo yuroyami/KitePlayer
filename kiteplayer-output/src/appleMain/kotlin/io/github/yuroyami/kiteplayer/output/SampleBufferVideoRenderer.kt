@@ -138,6 +138,9 @@ public class SampleBufferVideoRenderer internal constructor(
     /** True when the sample on screen carries burned-in text. */
     private var showingText = false
 
+    /** True from a clear until the next frame, while the layer shows the text on black or nothing. */
+    private var pictureCleared = false
+
     /** Frames this renderer handed to the layer. */
     public val presentedFrames: Long get() = presented.value
 
@@ -164,6 +167,7 @@ public class SampleBufferVideoRenderer internal constructor(
             } else {
                 lastPicture?.let { CVPixelBufferRelease(it.buffer) }
                 lastPicture = picture
+                pictureCleared = false
                 show(picture)
             }
         }
@@ -184,8 +188,27 @@ public class SampleBufferVideoRenderer internal constructor(
         synchronized(lock) {
             this.overlay = overlay
             if (closed.value) return
+            if (pictureCleared) {
+                if (showingText || overlay.hasText()) showBackground()
+                return
+            }
             val last = lastPicture ?: return
             if (showingText || overlay.hasText()) show(last)
+        }
+    }
+
+    /**
+     * Gives back the picture on screen and shows the text on black while there is text, or takes
+     * the picture off the layer when there is none, until the next frame. A subtitle change in
+     * between draws the new text the same way.
+     */
+    override fun clearPicture() {
+        synchronized(lock) {
+            if (closed.value) return
+            lastPicture?.let { CVPixelBufferRelease(it.buffer) }
+            lastPicture = null
+            pictureCleared = true
+            showBackground()
         }
     }
 
@@ -215,6 +238,36 @@ public class SampleBufferVideoRenderer internal constructor(
         sink.enqueue(sample)
         showingText = burned != null && text != null
         return true
+    }
+
+    /**
+     * Shows the text on black while the overlay has text, and takes the picture off the layer
+     * otherwise. Without a Metal device the text is left out, as it is from a picture. Called
+     * under [lock].
+     */
+    private fun showBackground() {
+        val text = overlay?.takeIf { it.hasText() }
+        val burned = text?.let { burnBackground(it) }
+        val sample = burned?.let { sampleBufferFor(it, AppleHostClock.nanos()) }
+        // The sample holds its own reference to the image, so the burned buffer's can go now.
+        burned?.let { CVPixelBufferRelease(it) }
+        if (sample == null) {
+            sink.flushAndRemoveImage()
+            showingText = false
+            return
+        }
+        markDisplayImmediately(sample)
+        sink.enqueue(sample)
+        showingText = true
+    }
+
+    /** The text drawn on black, or null when it cannot be. Called under [lock]. */
+    private fun burnBackground(text: SubtitleOverlay): CVPixelBufferRef? {
+        if (!burnerTried) {
+            burnerTried = true
+            burner = makeBurner()
+        }
+        return burner?.burnBackground(text)
     }
 
     /** The composed picture, or null to show it as stored. Called under [lock]. */

@@ -38,6 +38,7 @@ import platform.CoreGraphics.CGBitmapContextGetData
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
 import platform.CoreGraphics.CGColorSpaceRef
 import platform.CoreGraphics.CGColorSpaceRelease
+import platform.CoreGraphics.CGContextClearRect
 import platform.CoreGraphics.CGContextDrawImage
 import platform.CoreGraphics.CGContextRelease
 import platform.CoreGraphics.CGContextRestoreGState
@@ -131,11 +132,17 @@ public class UIKitVideoRenderer internal constructor(
     private val transformSlot = atomic(io.github.yuroyami.kiteplayer.VideoTransform.Identity)
 
     private val pendingFrame = atomic<VideoFrame?>(null)
+
+    /** Set by [clearPicture] and consumed by the worker, which owns the retained picture. */
+    private val clearWanted = atomic(false)
     private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     /** All image ownership and delivery state is changed while holding this one lock. */
     private val deliveryLock = SynchronizedObject()
     private var pendingImage: CGImageRef? = null
+
+    /** False when [pendingImage] is the background a clear shows, which no frame counter counts. */
+    private var pendingIsPicture: Boolean = true
     private var deliveryQueued: Boolean = false
     private var lastDeliveredImage: CGImageRef? = null
 
@@ -145,6 +152,9 @@ public class UIKitVideoRenderer internal constructor(
         try {
             while (!closed.value) {
                 signal.receive()
+                // The clear comes first, so a frame presented after it is drawn over the
+                // background rather than under it.
+                if (clearWanted.getAndSet(false)) takeOffPicture()
                 convertPending()
                 // An overlay change during a pause re-composites the retained pixels.
                 // When a frame DID convert above, the new overlay is already baked into it and
@@ -222,6 +232,7 @@ public class UIKitVideoRenderer internal constructor(
             retainedRotation = rotation
             retainedMirrored = mirrored
             retainedCrop = crop
+            pictureCleared = false
             makeImage(rgba, size, rotation, mirrored, crop)
         } catch (_: Throwable) {
             null
@@ -243,10 +254,14 @@ public class UIKitVideoRenderer internal constructor(
     private var retainedCrop: PictureCrop? = null
     private val redrawWanted = kotlinx.atomicfu.atomic(false)
 
+    /** True from a clear until the next frame converts, so a redraw shows the background. */
+    private var pictureCleared: Boolean = false
+
     /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
     private fun redrawRetained() {
         // Nobody will ever see a picture drawn after the close began.
         if (closed.value) return
+        if (pictureCleared) return deliverBackground()
         val rgba = retainedRgba ?: return
         val size = retainedSize ?: return
         val image = try {
@@ -257,18 +272,46 @@ public class UIKitVideoRenderer internal constructor(
         deliver(image)
     }
 
-    private fun deliver(image: CGImageRef) {
+    /**
+     * Forgets the retained picture and shows the background, with the cues still drawn over it,
+     * until the next frame converts. Worker thread only.
+     */
+    private fun takeOffPicture() {
+        retainedRgba = null
+        retainedSize = null
+        retainedCrop = null
+        pictureCleared = true
+        deliverBackground()
+    }
+
+    /**
+     * Delivers a transparent image with only the cues on it, so the caller's layer shows its own
+     * background where the picture was. A picture image still waiting for the main thread is
+     * displaced by it and counted superseded, like the frame [clearPicture] lets go of.
+     */
+    private fun deliverBackground() {
+        if (closed.value) return
+        val image = try {
+            makeBackground()
+        } catch (_: Throwable) {
+            null
+        } ?: return
+        deliver(image, picture = false)
+    }
+
+    private fun deliver(image: CGImageRef, picture: Boolean = true) {
         var displaced: CGImageRef? = null
         var rejected = false
         var shouldEnqueue = false
         synchronized(deliveryLock) {
             if (closed.value) {
                 rejected = true
-                failed.incrementAndGet()
+                if (picture) failed.incrementAndGet()
             } else {
                 displaced = pendingImage
+                if (displaced != null && pendingIsPicture) superseded.incrementAndGet()
                 pendingImage = image
-                if (displaced != null) superseded.incrementAndGet()
+                pendingIsPicture = picture
                 if (!deliveryQueued) {
                     deliveryQueued = true
                     shouldEnqueue = true
@@ -289,7 +332,7 @@ public class UIKitVideoRenderer internal constructor(
                 deliveryQueued = false
                 stranded = pendingImage
                 pendingImage = null
-                if (stranded != null) failed.incrementAndGet()
+                if (stranded != null && pendingIsPicture) failed.incrementAndGet()
             }
             stranded?.let(::CGImageRelease)
         }
@@ -299,20 +342,21 @@ public class UIKitVideoRenderer internal constructor(
         synchronized(deliveryLock) {
             deliveryQueued = false
             val image = pendingImage
+            val picture = pendingIsPicture
             pendingImage = null
             if (image == null) return@synchronized
             if (closed.value) {
-                failed.incrementAndGet()
+                if (picture) failed.incrementAndGet()
                 CGImageRelease(image)
                 return@synchronized
             }
             try {
                 deliverImage(image)
-                presented.incrementAndGet()
+                if (picture) presented.incrementAndGet()
                 lastDeliveredImage?.let(::CGImageRelease)
                 lastDeliveredImage = image
             } catch (_: Throwable) {
-                failed.incrementAndGet()
+                if (picture) failed.incrementAndGet()
                 CGImageRelease(image)
             }
         }
@@ -377,6 +421,40 @@ public class UIKitVideoRenderer internal constructor(
                 } finally {
                     CGImageRelease(stored)
                 }
+            } finally {
+                CGContextRelease(context)
+            }
+        } finally {
+            CGColorSpaceRelease(colorSpace)
+        }
+    }
+
+    /**
+     * A transparent image with the active cues drawn on it, the size of the overlay's own
+     * viewport so the layer's gravity places them where they sat over the picture, or one pixel
+     * when no cue shows.
+     */
+    private fun makeBackground(): CGImageRef? {
+        val active = overlaySlot.value?.takeIf { it.images.isNotEmpty() }
+        val width = active?.viewportWidth?.coerceAtLeast(1) ?: 1
+        val height = active?.viewportHeight?.coerceAtLeast(1) ?: 1
+        val rowBytes = width.toLong() * RGBA_BYTES
+        if (rowBytes > Int.MAX_VALUE || height.toLong() > Int.MAX_VALUE.toLong() / rowBytes) return null
+        val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
+        try {
+            val context = CGBitmapContextCreate(
+                data = null,
+                width = width.toULong(),
+                height = height.toULong(),
+                bitsPerComponent = 8u,
+                bytesPerRow = rowBytes.toULong(),
+                space = colorSpace,
+                bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value,
+            ) ?: return null
+            try {
+                CGContextClearRect(context, CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()))
+                drawOverlayInto(context, width, height)
+                return CGBitmapContextCreateImage(context)
             } finally {
                 CGContextRelease(context)
             }
@@ -585,6 +663,21 @@ public class UIKitVideoRenderer internal constructor(
         signal.trySend(Unit)
     }
 
+    /**
+     * Lets go of a frame waiting to convert, counted superseded, and has the worker forget the
+     * retained picture and deliver the background with the cues over it. The layer's contents
+     * become a transparent image, so whatever the caller put behind the picture shows.
+     */
+    override fun clearPicture() {
+        if (closed.value) return
+        pendingFrame.getAndSet(null)?.let { frame ->
+            frame.close()
+            superseded.incrementAndGet()
+        }
+        clearWanted.value = true
+        signal.trySend(Unit)
+    }
+
     override fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
         signal.close()
@@ -597,7 +690,7 @@ public class UIKitVideoRenderer internal constructor(
         synchronized(deliveryLock) {
             pending = pendingImage
             pendingImage = null
-            if (pending != null) failed.incrementAndGet()
+            if (pending != null && pendingIsPicture) failed.incrementAndGet()
             delivered = lastDeliveredImage
             lastDeliveredImage = null
             deliveryQueued = false

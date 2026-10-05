@@ -73,8 +73,7 @@ class WarningAuditTest {
         )
         is PlaybackWarning.GaplessFallback -> listOf(
             "PlaybackCore's queue handoff, when the next item cannot follow the current one without a " +
-                "gap: its preload failed or was not ready, an item has no audio, its audio format differs, " +
-                "or it has a start position",
+                "gap: its preload failed or was not ready, an item has no audio, or its audio format differs",
         )
         is PlaybackWarning.SourceReconnecting -> listOf(
             "KtorMediaIo.read in :kiteplayer-network, before each reconnect after a failed read, a read " +

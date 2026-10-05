@@ -66,6 +66,10 @@ to the epoch the player is at, and then starts the demux and decode workers of t
 decoded audio buffers and the first video frames wait in the queues of the item. The feeder and
 the video schedule of the next item do not run yet.
 
+A next item with a clip or a start position starts where it asks to (#456). The preload moves its
+source to the keyframe at or before that place, and its lanes drop what comes before it, so its
+first sample and its first picture are the ones there, as on a precise seek.
+
 A renderer can supply its own video decoders, as the Android renderers do. Such a decoder draws
 into the renderer's surface, which the current item holds until the swap. So for a next item with
 a video stream that is not cover art, the preload leaves that decoder for the swap.
@@ -141,7 +145,8 @@ Video frames of the old item that were still queued at the crossing are dropped.
 with media opened on its own. The next pass of the item takes the road a next queue item takes
 (#467):
 
-- The preload opens the item again, at its start, with the tracks that play now: the video, audio
+- The preload opens the item again, at its start, which for an item with a clip is the clip's
+  start, with the tracks that play now: the video, audio
   and subtitle streams the viewer chose and the video decoder the item came to. It reads none of
   the item's external subtitle files again. A start position applies to the first pass only, as it
   did when a repeat sought back to zero.
@@ -238,7 +243,6 @@ stops, `Ended` fires, and the next item opens with a device of its own. These ar
   when the slot of its last picture ended.
 - The sample rate or the channel count of the next item differs from the format that the device
   was opened for.
-- The next item has a start position. A repeat starts from zero, so this never stops one.
 
 When the reason is the audio of the next item, its format or a missing track, the preload stays
 and the next item opens from it, without a second open of its source. For the other reasons the

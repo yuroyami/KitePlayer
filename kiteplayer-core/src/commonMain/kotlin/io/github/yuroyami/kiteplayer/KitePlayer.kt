@@ -1204,7 +1204,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * It reads the container, so it costs what reaching and parsing a header costs. That is far
      * less than an open, and it is not free. It reaches the media as [open] does, through the same
-     * reader resolution, and the reading runs off the caller's thread.
+     * reader resolution, and the reading runs off the caller's thread. An item with a
+     * [MediaItem.clip] reports the clip's length and chapters, as [open] does.
      *
      * @throws PlaybackException when the media cannot be reached or is not media.
      */

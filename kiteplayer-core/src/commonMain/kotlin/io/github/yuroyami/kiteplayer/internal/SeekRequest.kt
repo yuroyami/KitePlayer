@@ -47,19 +47,20 @@ internal data class SeekRequest(
 
     /**
      * Resolves this request against the current position and duration. A fraction is taken of
-     * [duration]; the target is cut at [ceiling], which is the duration unless the duration is only
-     * an estimate, which cuts nothing (#422).
+     * the span from [floor] to [duration]; the target is cut at [floor], where the item starts in
+     * its file (#456), and at [ceiling], which is the duration unless the duration is only an
+     * estimate, which cuts nothing (#422).
      */
-    fun resolve(position: Pts, duration: Pts?, ceiling: Pts? = duration): Pts {
+    fun resolve(position: Pts, duration: Pts?, ceiling: Pts? = duration, floor: Pts = Pts.Zero): Pts {
         val raw = when (target) {
             is SeekTarget.Absolute -> target.position
             is SeekTarget.Relative -> Pts(position.micros + target.offset.inWholeMicroseconds)
             is SeekTarget.Factor -> {
-                val total = duration?.micros ?: return position
-                Pts((total * target.fraction).toLong())
+                val end = duration?.micros ?: return position
+                Pts(floor.micros + ((end - floor.micros) * target.fraction).toLong())
             }
         }
-        val clampedLow = if (raw.micros < 0) Pts.Zero else raw
+        val clampedLow = if (raw < floor) floor else raw
         val total = ceiling ?: return clampedLow
         return if (clampedLow > total) total else clampedLow
     }

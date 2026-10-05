@@ -62,15 +62,23 @@ internal suspend fun scanMediaAudio(
             var frames = 0L
             var first: Pts? = null
             var end: Pts? = null
-            val untilMicros = range?.until?.micros
+            // An item with a clip is scanned over its clip only, in the file's own times (#456).
+            val clip = media.clip
+            val clipFrom = clip?.start?.takeIf { it.isPositive() }?.let { Pts(it.inWholeMicroseconds) }
+            val from = listOfNotNull(range?.from, clipFrom).maxOrNull()
+            val untilMicros = listOfNotNull(range?.until?.micros, clip?.end?.inWholeMicroseconds).minOrNull()
+            // A source that cannot seek reaches the clip by decoding forward, and what ends before
+            // it is not handed on.
+            val skipUntilMicros = if (range?.from == null && from != null && !source.seekable) from.micros else Long.MIN_VALUE
             var stoppedAtLimit = false
             suspend fun deliver(buffer: AudioBuffer) {
                 try {
                     val count = buffer.frameCount
                     if (count <= 0) return
+                    val finish = Pts(buffer.pts.micros + buffer.format.durationOf(count).micros)
+                    if (finish.micros <= skipUntilMicros) return
                     val samples = interleaver.interleave(buffer)
                     if (first == null) first = buffer.pts
-                    val finish = Pts(buffer.pts.micros + buffer.format.durationOf(count).micros)
                     end = finish
                     if (untilMicros != null && finish.micros >= untilMicros) stoppedAtLimit = true
                     frames += count
@@ -79,7 +87,7 @@ internal suspend fun scanMediaAudio(
                     buffer.close()
                 }
             }
-            range?.from?.let { source.seekToKeyframe(it) }
+            if (from != null && skipUntilMicros == Long.MIN_VALUE) source.seekToKeyframe(from)
             while (!stoppedAtLimit) {
                 currentCoroutineContext().ensureActive()
                 val packet = source.readPacket() ?: break

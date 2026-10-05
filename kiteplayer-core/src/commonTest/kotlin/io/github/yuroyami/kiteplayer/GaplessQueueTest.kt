@@ -250,12 +250,15 @@ class GaplessQueueTest {
     }
 
     @Test
-    fun aNextItemWithAStartPositionFallsBack() = runTest {
+    fun aNextItemWithAStartPositionJoinsAtThatPositionWithNoGap() = runTest {
         val harness = CoreHarness(this, script = threeSeconds)
         harness.core.openQueue(listOf(items[0], MediaItem("scripted://second", startPosition = 1.seconds)), 0)
         harness.core.play()
         assertTrue(harness.runUntil(5.seconds) { harness.core.snapshots.value.queueIndex == 1 })
-        assertTrue("start position" in harness.fallbacks().single().reason, harness.fallbacks().single().reason)
+        assertEquals(emptyList(), harness.fallbacks())
+        assertEquals(1, harness.sink.openCount, "the sound followed without a gap")
+        val position = harness.core.position()
+        assertTrue(position in 1.seconds..1_300.milliseconds, "the next item began at its start position, not at $position")
         harness.close()
     }
 

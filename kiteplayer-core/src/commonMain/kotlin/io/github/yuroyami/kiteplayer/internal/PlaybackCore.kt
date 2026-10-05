@@ -8,6 +8,7 @@ package io.github.yuroyami.kiteplayer.internal
 import io.github.yuroyami.kiteplayer.AudioPlayback
 import io.github.yuroyami.kiteplayer.AudioClockSnapshot
 import io.github.yuroyami.kiteplayer.AudioContent
+import io.github.yuroyami.kiteplayer.Chapter
 import io.github.yuroyami.kiteplayer.chapterHolding
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecPolicy
@@ -16,6 +17,7 @@ import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MasterClock
 import io.github.yuroyami.kiteplayer.MatchingAudioSubtitles
+import io.github.yuroyami.kiteplayer.MediaClip
 import io.github.yuroyami.kiteplayer.MediaInspection
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -263,6 +265,10 @@ internal class PlaybackCore(
     // the one terminal snapshot exclusively; every other field is immutable to it.
     private var status: PlaybackStatus = PlaybackStatus.Idle
     private var media: MediaItem? = null
+        set(value) {
+            field = value
+            itemOriginMicros.value = value?.clip?.start?.inWholeMicroseconds ?: 0L
+        }
 
     /** Told once per open: the same disagreement does not become a warning per seek. */
     private var divergencesReported: Boolean = false
@@ -1220,6 +1226,22 @@ internal class PlaybackCore(
     /** Read from any thread, so it is published rather than computed on demand. */
     private val publishedPositionMicros = atomic(0L)
 
+    /**
+     * Where the current item starts in its file, in microseconds: its clip's start, or zero (#456).
+     * The engine works in the file's time, and every position the caller reads or hands in counts
+     * from here, so this is taken away on the way out and added on the way in. Follows [media].
+     */
+    private val itemOriginMicros = atomic(0L)
+
+    /** A position of the file as the current item reports it: from its clip's start, never before it. */
+    private fun itemTime(fileUs: Long): Long {
+        val origin = itemOriginMicros.value
+        return if (origin == 0L) fileUs else (fileUs - origin).coerceAtLeast(0L)
+    }
+
+    /** A position the caller gave for the current item, as a position of its file. */
+    private fun fileTime(itemUs: Long): Long = itemUs + itemOriginMicros.value
+
     /** Independent of the video epoch: an in-place audio switch retires analysis too. */
     private var audioGeneration = Generation.Initial
     private val publishedAudioClock = atomic(AudioClockSnapshot.unavailable(audioGeneration))
@@ -1564,7 +1586,9 @@ internal class PlaybackCore(
     suspend fun seek(to: Pts, mode: SeekMode): SeekResult {
         val reply = CompletableDeferred<SeekResult>()
         maskedSeekTargetMicros.value = maskFor(to)
-        send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(to), mode, keyframe = keyframeChoice.value), reply))
+        // The caller names a position of the item, and the engine seeks in its file (#456).
+        val target = Pts(fileTime(to.micros))
+        send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(target), mode, keyframe = keyframeChoice.value), reply))
         return awaitReply(reply)
     }
 
@@ -1575,7 +1599,8 @@ internal class PlaybackCore(
         // caller polls position() in the gap before the command is drained, and an absolute target
         // needs no session state to name it. A request the drain drops withdraws the mask there.
         maskedSeekTargetMicros.value = maskFor(to)
-        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(to), mode, keyframe = keyframeChoice.value)))
+        val target = Pts(fileTime(to.micros))
+        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(target), mode, keyframe = keyframeChoice.value)))
     }
 
     /**
@@ -1588,10 +1613,12 @@ internal class PlaybackCore(
      * (owner report 2026-08-23, a shared playlist seeking a short file to a long file's position).
      */
     private fun maskFor(to: Pts): Long {
+        // Both sides are the item's, and the mask is kept in the file's time like the position it
+        // masks (#456).
         // An estimated length is no end to cut at (#422).
-        if (snapshotState.value.durationIsEstimate) return to.micros
-        val durationUs = snapshotState.value.duration?.inWholeMicroseconds ?: return to.micros
-        return to.micros.coerceAtMost(durationUs)
+        if (snapshotState.value.durationIsEstimate) return fileTime(to.micros)
+        val durationUs = snapshotState.value.duration?.inWholeMicroseconds ?: return fileTime(to.micros)
+        return fileTime(to.micros.coerceAtMost(durationUs))
     }
 
     /**
@@ -1735,7 +1762,7 @@ internal class PlaybackCore(
      * request is in flight, the newest requested target, which is the timeline the caller asked for. */
     fun position(): Duration {
         val masked = maskedSeekTargetMicros.value
-        return (if (masked != NO_SEEK_MASK) masked else publishedPositionMicros.value).microseconds
+        return itemTime(if (masked != NO_SEEK_MASK) masked else publishedPositionMicros.value).microseconds
     }
 
     /** One atomic mapping read, projected to the host instant of this call. */
@@ -2873,24 +2900,34 @@ internal class PlaybackCore(
     // ---------------------------------------------------------------------------------------------
 
     /**
-     * Where the item asks to start, in microseconds, or null when the open starts where the
-     * container does. An unhonourable request (unseekable source, position past the end) is
-     * warned typed here rather than ignored silently or failed loudly: the media still plays,
-     * from its own start, and the caller is told why.
+     * Where the item asks to start, in microseconds of its file, or null when the open starts where
+     * the container does: its clip's start, moved on by its start position (#456). An unhonourable
+     * start position (unseekable source, position past the end) is warned typed here rather than
+     * ignored silently or failed loudly: the item still plays, from its own start, and the caller
+     * is told why. A clip's start is always honoured, on a source that cannot seek by decoding
+     * forward to it.
      */
-    private fun startPositionTargetUs(media: MediaItem, built: OpenSession): Long? {
-        val requested = media.startPosition ?: return null
-        if (requested <= Duration.ZERO) return null
-        if (!built.source.seekable) {
-            warn(PlaybackWarning.StartPositionIgnored(requested, "this source is not seekable"))
-            return null
+    private fun startPositionTargetUs(
+        media: MediaItem,
+        source: PlayerMediaSource,
+        report: (PlaybackWarning) -> Unit = ::warn,
+    ): Long? {
+        val requested = media.startPosition?.takeIf { it > Duration.ZERO }
+        val clipStartUs = media.clip.startUs
+        val ceilingUs = itemSeekCeilingUs(media.clip.endUs, source)
+        val honoured = when {
+            requested == null -> null
+            !source.seekable -> {
+                report(PlaybackWarning.StartPositionIgnored(requested, "this source is not seekable"))
+                null
+            }
+            ceilingUs != null && clipStartUs + requested.inWholeMicroseconds >= ceilingUs -> {
+                report(PlaybackWarning.StartPositionIgnored(requested, "past the end of the media"))
+                null
+            }
+            else -> requested.inWholeMicroseconds
         }
-        val durationUs = built.source.seekCeiling?.micros
-        if (durationUs != null && requested.inWholeMicroseconds >= durationUs) {
-            warn(PlaybackWarning.StartPositionIgnored(requested, "past the end of the media"))
-            return null
-        }
-        return requested.inWholeMicroseconds
+        return (clipStartUs + (honoured ?: 0L)).takeIf { it > 0L }
     }
 
     /**
@@ -3002,7 +3039,7 @@ internal class PlaybackCore(
             // keyframe at or before the target and nothing from the beginning of the media is
             // decoded, presented or heard. The exact landing is the second half below, made
             // cheap by this half: the refine walks forward within one group of pictures.
-            val startTargetUs = startPositionTargetUs(command.media, built)
+            val startTargetUs = startPositionTargetUs(command.media, built.source)
             // A loop armed before this open survives it, but cannot jump back on this source.
             if (abLoopA != null && !built.source.seekable) {
                 warn(
@@ -3014,8 +3051,15 @@ internal class PlaybackCore(
                 )
             }
             if (startTargetUs != null) {
-                withContext(dispatchers.demux) { built.source.seekToKeyframe(Pts(startTargetUs)) }
+                // A clipped item starts as a pass of an A-B loop does, with the lanes dropping what
+                // comes before the target, so nothing before the clip is ever shown or heard, even
+                // for a moment, and a source that cannot seek decodes forward to it (#456).
+                if (built.clipStartUs > 0L) built.discardBeforeUs.value = startTargetUs
+                if (built.source.seekable) {
+                    withContext(dispatchers.demux) { built.source.seekToKeyframe(Pts(startTargetUs)) }
+                }
                 publishedPositionMicros.value = startTargetUs
+                built.startUs = startTargetUs
             }
             startWorkers(built)
             var recoveredAndPresented = false
@@ -3076,7 +3120,7 @@ internal class PlaybackCore(
             // The start position's second half: the exact landing, as an ordinary precise seek
             // through the ordinary machine, so the masked position report, generation fencing
             // and pause preservation all hold without a special case.
-            if (startTargetUs != null) {
+            if (startTargetUs != null && built.clipStartUs == 0L) {
                 queueSeek(SeekRequest(SeekTarget.Absolute(Pts(startTargetUs)), SeekMode.Precise), null)
             }
             // The item before it may have left a picture, and this one has none to replace it.
@@ -3149,6 +3193,11 @@ internal class PlaybackCore(
          * at or before it before anything is read, inside the build so its rollback covers the move.
          */
         startUs: Long = 0L,
+        /**
+         * True when the preloaded next item starts where it asks to, at its clip's start moved on by
+         * its start position (#456), in place of [startUs]. Moved like a pass's A.
+         */
+        startAtItem: Boolean = false,
     ): OpenSession {
         val report: (PlaybackWarning) -> Unit = pending?.report ?: ::warn
         fun stage(next: OpenStage) {
@@ -3373,6 +3422,7 @@ internal class PlaybackCore(
                 emitEvent(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
             stage(OpenStage.Assembly)
+            item.clip?.let { refuseClipPastTheEnd(it, source.duration?.micros, source.durationIsEstimate) }
 
             // The demux frontier can run seconds ahead of the presentation clock. A
             // stream enabled only at switch time would therefore begin at that frontier, not at
@@ -3385,9 +3435,10 @@ internal class PlaybackCore(
                 cachedAudioStreams.forEach { add(it.index) }
                 cachedSubtitleStreams.forEach { add(it.index) }
             }
+            val readFromUs = if (startAtItem) startPositionTargetUs(item, source, report) ?: 0L else startUs
             withContext(dispatchers.demux) {
                 source.selectStreams(readStreams)
-                if (startUs > 0L) source.seekToKeyframe(Pts(startUs))
+                if (readFromUs > 0L && source.seekable) source.seekToKeyframe(Pts(readFromUs))
             }
 
             builtTracks = builtTracks
@@ -3458,6 +3509,8 @@ internal class PlaybackCore(
                 stallWatch = stallWatch,
                 networkIo = suppliedIo,
             ).also { built ->
+                built.applyClip(item)
+                built.startUs = readFromUs
                 // What the device was opened for, which a gapless handoff compares the next item against.
                 built.deviceRequest = if (audioPlayback != null) audioDecoder?.outputFormat else null
                 built.videoDecoderDeferred = deferVideoDecoder && videoStream != null
@@ -5402,6 +5455,8 @@ internal class PlaybackCore(
         val subtitle: StreamChoice,
         val position: Pts,
         val duration: Pts?,
+        /** Where the item starts in its file (#456), which no seek goes before. */
+        val start: Pts,
         val codec: String,
         val subtitleSelectionAvailable: Boolean,
         val failure: VideoDecoderRuntimeFailure,
@@ -5444,7 +5499,8 @@ internal class PlaybackCore(
             audio = active.audioStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None,
             subtitle = active.selectedSubtitleStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None,
             position = position,
-            duration = active.source.seekCeiling,
+            duration = active.seekCeilingUs?.let(::Pts),
+            start = Pts(active.clipStartUs),
             codec = stream.codec,
             subtitleSelectionAvailable = active.backendSession.subtitleDecoders.isNotEmpty(),
             failure = decoderFailure,
@@ -5467,7 +5523,7 @@ internal class PlaybackCore(
             )
         }
         val userSeek = pendingSeek
-        val target = userSeek?.resolve(requestedRecovery.position, requestedRecovery.duration)
+        val target = userSeek?.resolve(requestedRecovery.position, requestedRecovery.duration, requestedRecovery.duration, requestedRecovery.start)
             ?: requestedRecovery.position
         if (userSeek != null) {
             pendingSeek = null
@@ -5490,7 +5546,7 @@ internal class PlaybackCore(
             publishSnapshot()
             requested.forEach { it.reply.complete(TrackChange.Applied(it.kind, it.track)) }
             if (userSeek != null) {
-                emitEvent(PlayerEvent.SeekCompleted(result.epoch, result.landedAt.asDuration))
+                emitEvent(PlayerEvent.SeekCompleted(result.epoch, itemTime(result.landedAt.micros).microseconds))
                 resolveSeekReplies(SeekResult.Applied(result.landedAt))
             }
             setStatus(if (playRequested) PlaybackStatus.Buffering else PlaybackStatus.Paused)
@@ -5833,9 +5889,11 @@ internal class PlaybackCore(
         }
         // Chapter crossings: compared on the published reading, so a seek and ordinary
         // playback announce a boundary the same way. Media with no table emits nothing.
-        val chapters = session.source.chapters
+        // In the item's time, as the chapters and the markers are (#456).
+        val itemPositionUs = (publishedPositionMicros.value - session.clipStartUs).coerceAtLeast(0L)
+        val chapters = session.chapters
         if (chapters.isNotEmpty()) {
-            val positionUs = publishedPositionMicros.value
+            val positionUs = itemPositionUs
             // The same shared reading the facade uses, so an event and a query can never disagree
             // about which chapter is playing. A position in a gap belongs to no chapter, which is
             // reported as one: null.
@@ -5850,7 +5908,7 @@ internal class PlaybackCore(
         // previous pass; a seek moves it to the landing without announcing anything, which is what
         // lets a backward seek or a loop re-arm the markers behind the new position.
         if (markers.isNotEmpty() && pendingSeek == null) {
-            val positionUs = publishedPositionMicros.value
+            val positionUs = itemPositionUs
             if (markerCursorEpoch != requestedEpoch || markerCursorUs == NO_POSITION) {
                 markerCursorEpoch = requestedEpoch
                 markerCursorUs = positionUs
@@ -5890,10 +5948,10 @@ internal class PlaybackCore(
             status == PlaybackStatus.Playing && session.source.seekable
         ) {
             val positionUs = publishedPositionMicros.value
-            val bUs = loopB.inWholeMicroseconds
+            val bUs = session.clipStartUs + loopB.inWholeMicroseconds
             if (positionUs >= bUs) {
                 queueSeek(
-                    SeekRequest(SeekTarget.Absolute(Pts(loopA.inWholeMicroseconds)), SeekMode.Precise),
+                    SeekRequest(SeekTarget.Absolute(Pts(session.clipStartUs + loopA.inWholeMicroseconds)), SeekMode.Precise),
                     null,
                 )
             } else {
@@ -6327,7 +6385,8 @@ internal class PlaybackCore(
         val positionUs = currentPosition().micros - subtitleDelay.inWholeMicroseconds
         val primary = session.subtitleCues.maxOfOrNull { it.endMicros }
         val secondary = session.subtitle2Cues.maxOfOrNull { it.endMicros }
-        val latestEnd = maxOf(primary ?: Long.MIN_VALUE, secondary ?: Long.MIN_VALUE)
+        // A cue that runs past the item's clip end is cut there (#456).
+        val latestEnd = minOf(maxOf(primary ?: Long.MIN_VALUE, secondary ?: Long.MIN_VALUE), session.clipEndUs)
         if (latestEnd == Long.MIN_VALUE) return Duration.ZERO
         val remainingUs = latestEnd - positionUs
         return if (remainingUs <= 0) Duration.ZERO else remainingUs.microseconds
@@ -6347,6 +6406,11 @@ internal class PlaybackCore(
 
     /** The timing half of handleSubtitles, shared by container and external cue tables. */
     private suspend fun timeAndPublishCues(session: OpenSession) {
+        // Nothing is on screen from the item's clip end on, whatever cue runs past it (#456).
+        if (session.clipEndUs != NO_CLIP_END && currentPosition().micros >= session.clipEndUs) {
+            if (session.publishedCueKey != null || session.typeset?.published?.value == true) withdrawSubtitleOverlay(session)
+            return
+        }
         val positionUs = currentPosition().micros - subtitleDelay.inWholeMicroseconds
         // The index is a derived cache over the very same list; it extends on an append and
         // rebuilds after a prune, a merge or a clear. Syncing here rather than at every mutation
@@ -7055,12 +7119,14 @@ internal class PlaybackCore(
         // end and restart every pass for ever, so such an A is treated as unarmed rather than
         // spun on; an unseekable source cannot make the jump at all.
         val loopA = abLoopA
+        // Where the item starts in its file, which A and a repeat count from (#456).
+        val originUs = session?.clipStartUs ?: 0L
         // The item just ended, so how far it played is its real length, whatever it declared.
-        val durationUs = session?.let { endedLengthUs(it) }
+        val endUs = session?.let { endedAtUs(it) }
         if (loopA != null && session?.source?.seekable == true &&
-            durationUs != null && loopA.inWholeMicroseconds < durationUs
+            endUs != null && originUs + loopA.inWholeMicroseconds < endUs
         ) {
-            restartFrom(Pts(loopA.inWholeMicroseconds))
+            restartFrom(Pts(originUs + loopA.inWholeMicroseconds))
             return
         }
         // One media item repeating is a seek to zero and nothing else. LoopMode.All with a queue
@@ -7084,7 +7150,7 @@ internal class PlaybackCore(
             }
             return
         }
-        restartFrom(Pts.Zero)
+        restartFrom(Pts(originUs))
     }
 
     /** The Ended-to-Buffering turnover both loop kinds share: reset EOF, keep intent, seek to [target]. */
@@ -7143,7 +7209,8 @@ internal class PlaybackCore(
         } catch (failure: Throwable) {
             null
         }
-        val answerUs = answer?.inWholeMicroseconds
+        // The clock answers in the item's time, which starts at its clip's start (#456).
+        val answerUs = answer?.inWholeMicroseconds?.let { it + active.clipStartUs }
         // Only an answer that moved since the last question is followed. A clock that stopped
         // would otherwise pull playback back with a seek before anything could tell it stopped.
         val moved = answerUs != null && externalLastAnswerUs != NO_POSITION &&
@@ -7165,7 +7232,7 @@ internal class PlaybackCore(
         val errorUs = answerUs - currentPosition().micros
         val maxTrim = config.externalClock.maxTrim
         when {
-            abs(errorUs) >= EXTERNAL_SEEK_US && active.source.seekable && active.source.seekCeiling?.let { answerUs <= it.micros } != false -> {
+            abs(errorUs) >= EXTERNAL_SEEK_US && active.source.seekable && active.seekCeilingUs?.let { answerUs <= it } != false -> {
                 val askedRecently = externalSeekAtNanos != NO_POSITION && now - externalSeekAtNanos < EXTERNAL_SEEK_COOLDOWN_NANOS
                 if (askedRecently) {
                     // A second jump this soon is likely the last seek's own delay: lean on the trim.
@@ -7174,7 +7241,7 @@ internal class PlaybackCore(
                     externalSeekAtNanos = now
                     externalSeekInFlight = true
                     applyExternalTrim(1.0)
-                    val targetUs = (answerUs + externalSeekLatencyNanos / 1_000L).coerceAtLeast(0L)
+                    val targetUs = (answerUs + externalSeekLatencyNanos / 1_000L).coerceAtLeast(active.clipStartUs)
                     queueSeek(SeekRequest(SeekTarget.Absolute(Pts(targetUs)), SeekMode.Precise), null)
                 }
             }
@@ -7290,7 +7357,7 @@ internal class PlaybackCore(
 
         val remaining: Duration = when (timer) {
             is SleepTimer.After -> sleepRemainingNanos.nanoseconds
-            is SleepTimer.At -> timer.position - currentPosition().asDuration
+            is SleepTimer.At -> timer.position - itemTime(currentPosition().micros).microseconds
             // Handled by the end-of-stream path, which knows when an item is genuinely over.
             SleepTimer.EndOfItem -> return
         }
@@ -7608,8 +7675,8 @@ internal class PlaybackCore(
      */
     private fun loopWrapUs(active: OpenSession): Long? {
         if (abLoopA == null) return null
-        val bUs = abLoopB?.inWholeMicroseconds ?: return null
-        val durationUs = active.source.duration?.micros ?: return null
+        val bUs = active.clipStartUs + (abLoopB?.inWholeMicroseconds ?: return null)
+        val durationUs = active.itemEndUs ?: return null
         return bUs.takeIf { it < durationUs }
     }
 
@@ -7623,7 +7690,7 @@ internal class PlaybackCore(
         if (!policy.gapless || policy.preloadNext <= Duration.ZERO) return false
         if (sleepTimer == SleepTimer.EndOfItem) return false
         if (gaplessRefused == (active.token to index)) return false
-        if (active.source.duration == null) return false
+        if (active.itemEndUs == null) return false
         return active.source.seekable && !active.isStillImage
     }
 
@@ -7639,7 +7706,7 @@ internal class PlaybackCore(
         val bUs = loopEndFor(active)
         active.turnDecided = true
         active.turnEndUs = bUs
-        val aUs = abLoopA?.inWholeMicroseconds ?: 0L
+        val aUs = active.clipStartUs + (abLoopA?.inWholeMicroseconds ?: 0L)
         val late = bUs != null && bUs - fromUs < minOf(MIN_PASS_LEAD.inWholeMicroseconds, bUs - aUs)
         active.passEnd.value = if (bUs != null && !late) PassEnd(bUs) else null
     }
@@ -7672,7 +7739,7 @@ internal class PlaybackCore(
         if (!repeat && queueItems.size <= 1) return
         val index = if (repeat) queueIndex else neighbourInOrder(1) ?: return
         if (!passMayFollow(active, index)) return
-        val durationUs = active.source.duration?.micros ?: return
+        val durationUs = active.itemEndUs ?: return
         val wrapUs = loopWrapUs(active)
         val leadUs = config.queue.preloadNext.inWholeMicroseconds
         if (wrapUs != null) {
@@ -7682,15 +7749,13 @@ internal class PlaybackCore(
         }
         // An A at or past the end would start the pass on the end itself, which handleLoop treats
         // as an A that is not armed.
-        if (wrapUs == null && loopA != null && loopA >= durationUs) return
+        if (wrapUs == null && loopA != null && active.clipStartUs + loopA >= durationUs) return
         val item = if (repeat) media ?: return else queueItems[index]
         val refusal = when {
             // A silent item's join is timed by its picture (#524), so it needs one.
             active.audioLane == null && (active.video == null || active.videoParked.value) ->
                 "the current item has no selected audio track and no picture"
             active.audioLane != null && active.audio == null -> "the current item has no audio device open"
-            // A repeat starts again from zero, as the seek it replaces does.
-            !repeat && (item.startPosition ?: Duration.ZERO) > Duration.ZERO -> "the next item has a start position"
             else -> null
         }
         if (refusal != null) {
@@ -7700,7 +7765,9 @@ internal class PlaybackCore(
         }
         val build = PendingBuild(nextSessionToken++)
         if (repeat) {
-            val startUs = loopA ?: 0L
+            // A repeat starts again from the item's start, as the seek it replaces does, and an A-B
+            // loop's pass from A.
+            val startUs = active.clipStartUs + (loopA ?: 0L)
             val job = startRepeatBuild(active, item, build, startUs, wrapUs)
             pendingNext = PendingNext(index, item, active.token, build, job, repeat = true, startUs = startUs, wrapUs = wrapUs)
             wakeIn(WORKER_POLL)
@@ -7722,7 +7789,11 @@ internal class PlaybackCore(
                     videoSelection = VideoDecoderSelection.Configured,
                     pending = build,
                     externalSubtitles = externals.map { it.info },
+                    startAtItem = true,
                 )
+                // Where the item asks to start, as a pass starts at A: the lanes drop what comes
+                // before it, so its first sample and picture are the ones there (#456).
+                if (built.startUs > 0L) built.discardBeforeUs.value = built.startUs
                 Result.success(PreparedNext(built, externals))
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -7758,7 +7829,7 @@ internal class PlaybackCore(
         // screen, and the old path is closer.
         if (currentAudioFinished(active)) return false
         if (active.audioLane == null && pictureRunsOutAt(active) != null) return false
-        val leftUs = if (active.source.durationIsEstimate) {
+        val leftUs = if (active.itemEndIsEstimate) {
             // An estimated length cannot time the lead, so the demuxer reaching the end of the input
             // does: what is left is then the queues and the ring, a few seconds at most (#422).
             if (!demuxReachedEnd(active)) {
@@ -7956,9 +8027,9 @@ internal class PlaybackCore(
         val here = currentPosition().micros
         if (here <= active.furthestPositionUs) return
         active.furthestPositionUs = here
-        if (!active.source.durationIsEstimate) return
+        if (!active.itemEndIsEstimate) return
         val shownUs = snapshotState.value.duration?.inWholeMicroseconds ?: return
-        if (here - shownUs >= DURATION_FOLLOW_STEP_US) publishSnapshot()
+        if (here - active.clipStartUs - shownUs >= DURATION_FOLLOW_STEP_US) publishSnapshot()
     }
 
     /** True once the demuxer has read to the end of the input for every selected stream it feeds. */
@@ -7973,22 +8044,29 @@ internal class PlaybackCore(
      * ended at, which is the real length however wrong the estimate was.
      */
     private fun publishedDuration(active: OpenSession): Duration? {
-        val stated = active.source.duration ?: return null
-        if (!active.source.durationIsEstimate) return stated.asDuration
-        if (status == PlaybackStatus.Ended) return active.furthestPositionUs.coerceAtLeast(0L).microseconds
-        return maxOf(stated.micros, active.furthestPositionUs).microseconds
+        val endUs = active.itemEndUs ?: return null
+        val lengthEndUs = when {
+            !active.itemEndIsEstimate -> endUs
+            status == PlaybackStatus.Ended -> active.furthestPositionUs
+            else -> maxOf(endUs, active.furthestPositionUs)
+        }
+        // Counted from the item's start, which is its clip's (#456).
+        return (lengthEndUs - active.clipStartUs).coerceAtLeast(0L).microseconds
     }
 
     /** Whether [publishedDuration] is still FFmpeg's guess rather than the length really played. */
     private fun durationStillEstimated(active: OpenSession): Boolean {
-        if (!active.source.durationIsEstimate || active.source.duration == null) return false
+        if (!active.itemEndIsEstimate) return false
         if (status == PlaybackStatus.Ended) return false
-        return active.furthestPositionUs <= (active.source.duration?.micros ?: 0L)
+        return active.furthestPositionUs <= (active.itemEndUs ?: 0L)
     }
 
-    /** How long [active] really is once it has ended: its stated length, or how far it played (#422). */
-    private fun endedLengthUs(active: OpenSession): Long? =
-        if (active.source.durationIsEstimate) active.furthestPositionUs.takeIf { it > 0L } else active.source.duration?.micros
+    /**
+     * Where [active] really ends in its file once it has ended (#422): its stated end, or how far
+     * it played.
+     */
+    private fun endedAtUs(active: OpenSession): Long? =
+        if (active.itemEndIsEstimate) active.furthestPositionUs.takeIf { it > active.clipStartUs } else active.itemEndUs
 
     private fun currentAudioFinished(active: OpenSession): Boolean {
         // An A-B loop's pass is finished at B, with the sound after it held back (#467).
@@ -8187,8 +8265,8 @@ internal class PlaybackCore(
         incoming.audio?.commitJoin()
         // A silent item reads no position until its first picture is shown, and starts where its
         // pass starts (#524).
-        publishedPositionMicros.value = if (incoming.audioLane == null) next.startUs else currentPosition().micros
-        progressState.value = Progress(position = publishedPositionMicros.value.microseconds, bufferedAhead = Duration.ZERO)
+        publishedPositionMicros.value = if (incoming.audioLane == null) incoming.startUs else currentPosition().micros
+        progressState.value = Progress(position = itemTime(publishedPositionMicros.value).microseconds, bufferedAhead = Duration.ZERO)
         next.build.warnings.release()
         next.build.events.forEach(::emitEvent)
         adoptExternalSubtitles(next.item, prepared.externals)
@@ -8226,7 +8304,7 @@ internal class PlaybackCore(
             incoming.furthestPositionUs = maxOf(incoming.furthestPositionUs, ending.furthestPositionUs)
             // A recording ends where the media jumps back, as it did at the seek a repeat used to be.
             if (ending.recordingEnd != null) {
-                ending.recordingEnd = if (next.wrapUs != null || next.startUs > 0L) {
+                ending.recordingEnd = if (next.wrapUs != null || next.startUs > incoming.clipStartUs) {
                     "the A-B loop went back to A"
                 } else {
                     "the item repeated from its start"
@@ -8246,8 +8324,8 @@ internal class PlaybackCore(
         incoming.audio?.commitJoin()
         // A silent item reads no position until its first picture is shown, and starts where its
         // pass starts (#524).
-        publishedPositionMicros.value = if (incoming.audioLane == null) next.startUs else currentPosition().micros
-        progressState.value = Progress(position = publishedPositionMicros.value.microseconds, bufferedAhead = Duration.ZERO)
+        publishedPositionMicros.value = if (incoming.audioLane == null) incoming.startUs else currentPosition().micros
+        progressState.value = Progress(position = itemTime(publishedPositionMicros.value).microseconds, bufferedAhead = Duration.ZERO)
         // The pass's own warnings are news; its events, the picture size, are what the item said.
         next.build.warnings.release()
         restoreSubtitleState(secondaryBefore)
@@ -8863,7 +8941,7 @@ internal class PlaybackCore(
         pendingSeek = null
         val activeBeforeSeek = session
         val requestedTarget = activeBeforeSeek?.let {
-            request.resolve(currentPosition(), it.source.duration, it.source.seekCeiling)
+            request.resolve(currentPosition(), it.itemEndUs?.let(::Pts), it.seekCeilingUs?.let(::Pts), Pts(it.clipStartUs))
         }
         try {
             runSeek(request)
@@ -8881,7 +8959,7 @@ internal class PlaybackCore(
                     if (observed != null) {
                         val recovered = observed.result ?: return
                         emitEvent(
-                            PlayerEvent.SeekCompleted(recovered.epoch, recovered.landedAt.asDuration),
+                            PlayerEvent.SeekCompleted(recovered.epoch, itemTime(recovered.landedAt.micros).microseconds),
                         )
                         resolveSeekReplies(SeekResult.Applied(recovered.landedAt))
                         setStatus(if (playRequested) PlaybackStatus.Buffering else PlaybackStatus.Paused)
@@ -8946,12 +9024,14 @@ internal class PlaybackCore(
             val basis = maskedSeekTargetMicros.value.takeIf { it != NO_SEEK_MASK }
                 ?: publishedPositionMicros.value
             maskedSeekTargetMicros.value =
-                accepted.resolve(Pts(basis), active.source.duration, active.source.seekCeiling).micros
+                accepted.resolve(Pts(basis), active.itemEndUs?.let(::Pts), active.seekCeilingUs?.let(::Pts), Pts(active.clipStartUs)).micros
         }
     }
 
     private fun resolveSeekReplies(result: SeekResult) {
-        pendingSeekReplies.forEach { it.complete(result) }
+        // Where the seek landed, in the item's time like the position the caller asked for (#456).
+        val reported = if (result is SeekResult.Applied) SeekResult.Applied(Pts(itemTime(result.landedAt.micros))) else result
+        pendingSeekReplies.forEach { it.complete(reported) }
         pendingSeekReplies.clear()
     }
 
@@ -8983,7 +9063,7 @@ internal class PlaybackCore(
         val tracing = KiteTrace.enabled
         var phaseBegin = if (tracing) clock.nanos() else 0L
         val origin = currentPosition()
-        val target = request.resolve(origin, session.source.duration, session.source.seekCeiling)
+        val target = request.resolve(origin, session.itemEndUs?.let(::Pts), session.seekCeilingUs?.let(::Pts), Pts(session.clipStartUs))
         val landsBefore = request.landing == SeekLanding.Before
         // Only a plain keyframe seek takes the choice (#496). The precise modes decode forward from
         // the keyframe before the target, and a backward landing needs the frame before the one on
@@ -9226,7 +9306,7 @@ internal class PlaybackCore(
         // A landing that ran off the end of the stream has no frame to show by definition, so it
         // takes the silent form: warning there would fire on every seek to the end of a file.
         if (landed != null) reportFirstFrame(session, "seek") else presentFirstFrame(session)
-        emitEvent(PlayerEvent.SeekCompleted(epoch, (landed ?: target).asDuration))
+        emitEvent(PlayerEvent.SeekCompleted(epoch, itemTime((landed ?: target).micros).microseconds))
         resolveSeekReplies(SeekResult.Applied(landed ?: target))
         // An applied seek is the one legal exit from Ended besides open and stop: the position
         // moved, so "playback reached the end" is no longer true. A landing that itself ran off
@@ -10096,7 +10176,7 @@ internal class PlaybackCore(
             seekable = session?.source?.seekable ?: false,
             videoSize = session?.videoStream?.visibleVideoSize,
             tracks = tracks,
-            chapters = session?.source?.chapters ?: emptyList(),
+            chapters = session?.chapters ?: emptyList(),
             metadata = session?.source?.metadata ?: emptyMap(),
             speed = speed,
             volume = volume,
@@ -10285,8 +10365,12 @@ internal class PlaybackCore(
         val start = window.start
         val end = window.end.coerceAtMost(sizeBytes)
         if (end <= start) return emptyList()
-        fun toTime(byte: Long): Duration = (byte.toDouble() / sizeBytes * durationUs).toLong().microseconds
-        return listOf(toTime(start)..toTime(end))
+        fun toFileUs(byte: Long): Long = (byte.toDouble() / sizeBytes * durationUs).toLong()
+        // Cut to the item and counted from its start (#456).
+        val fromUs = maxOf(toFileUs(start), session.clipStartUs)
+        val untilUs = minOf(toFileUs(end), session.itemEndUs ?: Long.MAX_VALUE)
+        if (untilUs <= fromUs) return emptyList()
+        return listOf((fromUs - session.clipStartUs).microseconds..(untilUs - session.clipStartUs).microseconds)
     }
 
     private fun bufferedAhead(session: OpenSession?): Duration {
@@ -10650,6 +10734,8 @@ internal class PlaybackCore(
         var epoch = worker.epoch
         var restarts = worker.releases
         var ended = false
+        // The streams that have read past the item's clip end since the reads last moved (#456).
+        val pastClipEnd = HashSet<Int>()
         val queueOf = { index: Int ->
             session.audioQueues[index] ?: session.subtitleQueues[index] ?: session.pictureQueues[index]
         }
@@ -10662,6 +10748,7 @@ internal class PlaybackCore(
                 restarts = worker.releases
                 epoch = worker.epoch
                 ended = false
+                pastClipEnd.clear()
                 // A seek moved the reads, so the rate starts over from where they land.
                 session.readRate.restart()
                 late.dropHeld()
@@ -10709,6 +10796,9 @@ internal class PlaybackCore(
             val listed = packet.newStreams
             val programs = packet.newPrograms
             if (listed != null || programs != null) announceLayout(session, late, listed, programs)
+            // Read before the packet is handed on, which gives it away.
+            val readIndex = packet.streamIndex
+            val readAtUs = (packet.dts ?: packet.pts)?.micros
             when (packet.streamIndex) {
                 session.videoStream?.index -> session.videoQueue?.offer(packet, epoch) ?: packet.close()
                 else -> {
@@ -10721,7 +10811,32 @@ internal class PlaybackCore(
                     }
                 }
             }
+            // The item's clip end ends the reads as the end of the input would (#456). The packets
+            // past it are queued all the same, and the lanes drop what they decode past it.
+            val clipEndUs = session.lanesEndUs.value
+            if (clipEndUs != NO_CLIP_END && readPastClipEnd(session, readIndex, readAtUs, clipEndUs, pastClipEnd)) {
+                if (!late.idle) late.deliver(queueOf, epoch, ended = true)
+                session.allPacketQueues.forEach { it.signalEndOfStream(epoch) }
+                ended = true
+            }
         }
+    }
+
+    /**
+     * Whether the reads have passed the item's clip end at [endUs] (#456): every stream that plays has
+     * read a packet that decodes there or later, so everything shown or heard before it has been
+     * read. Decode order is what counts, because a picture shown before the end can come after one
+     * shown past it in the file, but never after one that decodes past it. Demux lane only.
+     */
+    private fun readPastClipEnd(session: OpenSession, index: Int, atUs: Long?, endUs: Long, passed: MutableSet<Int>): Boolean {
+        if (atUs == null || atUs < endUs) return false
+        passed += index
+        val audio = session.audioStream?.index
+        val picture = session.videoStream
+            ?.takeIf { !it.isCoverArt && !it.isSparse && !session.videoParked.value }
+            ?.index
+        if (audio == null && picture == null) return true
+        return (audio == null || audio in passed) && (picture == null || picture in passed)
     }
 
     /**
@@ -11152,6 +11267,8 @@ internal class PlaybackCore(
             // A picture at or after the A-B loop's end belongs to the pass after B, and waits here
             // while the end stands, so the pass that plays never shows it (#467).
             if (!awaitPassEnd(session, worker, frame)) return false
+            // A picture at or past the item's clip end is never shown (#456).
+            if (frame.pts.micros >= session.lanesEndUs.value) return true
             // The first frame at or after a backward target: the held frame is the landing and goes
             // out first, and this one waits behind it at the head of the queue for a forward step.
             if (!handOverHeld(session, worker, video, epoch, held)) return false
@@ -11561,6 +11678,17 @@ internal class PlaybackCore(
                             frames = before
                         }
                     }
+                    // The item's clip end (#456): nothing at or past it is heard, and the rest of the
+                    // buffer goes with it.
+                    val clipEndUs = session.lanesEndUs.value
+                    if (!keep && clipEndUs != NO_CLIP_END && buffer.format.sampleRate > 0) {
+                        val before = ((clipEndUs - pts.micros) * buffer.format.sampleRate / 1_000_000L)
+                            .coerceIn(0L, frames.toLong()).toInt()
+                        if (before < frames) {
+                            if (before > 0) interleaved = interleaved.copyOfRange(0, before * buffer.format.channels)
+                            frames = before
+                        }
+                    }
                     if (frames == 0) {
                         if (keep) end?.reached?.value = true
                         continue
@@ -11815,6 +11943,64 @@ internal class PlaybackCore(
          * keeps waiting, because a teardown around a read that never returns would hang. Actor only.
          */
         var stallInterruptRefused: Boolean = false
+
+        /**
+         * Where the item this session plays starts in its file, in microseconds: its clip's start,
+         * or zero (#456). Actor only.
+         */
+        var clipStartUs: Long = 0L
+
+        /** Where the item ends in its file, in microseconds, or [NO_CLIP_END]. Actor only. */
+        var clipEndUs: Long = NO_CLIP_END
+
+        /**
+         * Where the lanes stop, in microseconds of the file, or [NO_CLIP_END] (#456). The demux lane
+         * ends the queues once every playing stream has read a packet that decodes there or later,
+         * the feeder cuts the sound there to the sample, and the video lane drops every picture from
+         * there on. The item's own end, read by the workers.
+         */
+        val lanesEndUs = atomic(NO_CLIP_END)
+
+        /** Takes [item]'s clip as this session's start and end. */
+        fun applyClip(item: MediaItem) {
+            clipStartUs = item.clip.startUs
+            clipEndUs = item.clip.endUs
+            lanesEndUs.value = clipEndUs
+        }
+
+        /**
+         * The item's chapters as the caller sees them: the file's, cut to the clip and counted from
+         * its start, or the file's own for an item with no clip (#456).
+         */
+        val chapters: List<Chapter>
+            get() {
+                val file = source.chapters
+                if (clipStartUs == 0L && clipEndUs == NO_CLIP_END) return file
+                clippedChapters?.takeIf { clippedFrom === file && clippedAt == clipStartUs to clipEndUs }?.let { return it }
+                return file.inClip(clipStartUs, clipEndUs.takeIf { it != NO_CLIP_END }).also {
+                    clippedChapters = it
+                    clippedFrom = file
+                    clippedAt = clipStartUs to clipEndUs
+                }
+            }
+        private var clippedChapters: List<Chapter>? = null
+        private var clippedFrom: List<Chapter>? = null
+        private var clippedAt: Pair<Long, Long>? = null
+
+        /**
+         * Where the item ends in its file, in microseconds (#456): its clip's end, or the media's
+         * length when that comes first or the clip has no end, or null when neither is known.
+         */
+        val itemEndUs: Long? get() = itemEndUs(clipEndUs, source)
+
+        /** Whether [itemEndUs] is the media's estimated length (#422) rather than a clip end or a stated length. */
+        val itemEndIsEstimate: Boolean get() = itemEndIsEstimate(clipEndUs, source)
+
+        /** How far a seek may go, in microseconds of the file: the item's end, unless that is an estimate. */
+        val seekCeilingUs: Long? get() = itemSeekCeilingUs(clipEndUs, source)
+
+        /** Where this session started reading, in microseconds of its file: a pass's A, or the item's start. Actor only. */
+        var startUs: Long = 0L
 
         /**
          * False once a gapless handoff gave [audio] and [sink] to the next item: this session's
@@ -12940,17 +13126,19 @@ internal suspend fun inspectMedia(backend: MediaBackend, media: MediaItem): Medi
             // Typed as open types a failure while the source opens, never the backend's own type.
             throw PlaybackException(PlaybackError.SourceUnavailable(media.uri, failure, failure.message))
         }
-        readInspection(session)
+        readInspection(session, media.clip)
     }
 
-private fun readInspection(session: BackendSession): MediaInspection {
+private fun readInspection(session: BackendSession, clip: MediaClip?): MediaInspection {
     try {
         val source = session.source
+        // The item's own length and chapters, counted from its clip's start (#456).
+        val startUs = clip.startUs
         return MediaInspection(
-            duration = source.duration?.let { it.micros.microseconds },
+            duration = itemEndUs(clip.endUs, source)?.let { (it - startUs).coerceAtLeast(0L).microseconds },
             tracks = source.toTracks(),
             metadata = source.metadata,
-            chapters = source.chapters,
+            chapters = if (clip == null) source.chapters else source.chapters.inClip(startUs, clip.end?.inWholeMicroseconds),
             seekable = source.seekable,
             containerBitrateBps = source.containerBitrateBps,
         )

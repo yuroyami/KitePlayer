@@ -265,7 +265,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Call(id, command)
             assertEquals(message, message.roundTrip(), "the call ${command.member} changed on the way")
         }
-        assertEquals(22, commands.map { it.member }.distinct().size, "every command is here")
+        assertEquals(23, commands.map { it.member }.distinct().size, "every command is here")
     }
 
     @Test
@@ -378,7 +378,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(37, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(38, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test

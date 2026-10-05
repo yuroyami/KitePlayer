@@ -344,6 +344,10 @@ internal class AttachableRenderer : VideoRenderer {
         delegate?.setOverlay(overlay)
     }
 
+    override fun clearPicture() {
+        delegate?.clearPicture()
+    }
+
     override val events: Flow<RendererEvent> = emptyFlow()
 
     /** Closes nothing: the application owns what it attached, and the engine never took it over. */

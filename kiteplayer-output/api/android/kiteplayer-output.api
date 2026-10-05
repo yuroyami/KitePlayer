@@ -9,6 +9,7 @@ public final class io/github/yuroyami/kiteplayer/output/AndroidGpuImageFrame : j
 public final class io/github/yuroyami/kiteplayer/output/AndroidGpuImageVideoRenderer : io/github/yuroyami/kiteplayer/spi/VideoRenderer {
 	public fun <init> (Lkotlin/jvm/functions/Function1;)V
 	public fun accepts (Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
+	public fun clearPicture ()V
 	public fun close ()V
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getFailedFrames ()J
@@ -48,6 +49,7 @@ public final class io/github/yuroyami/kiteplayer/output/AndroidSurfaceVideoRende
 	public fun <init> (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function1;)V
 	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function3;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun accepts (Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
+	public fun clearPicture ()V
 	public fun close ()V
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getFailedFrames ()J

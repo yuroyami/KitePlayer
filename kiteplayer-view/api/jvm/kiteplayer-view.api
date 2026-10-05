@@ -9,6 +9,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/view/AwtPlayerView
 
 public final class io/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer$DefaultImpls {
 	public static fun accepts (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
+	public static fun clearPicture (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;)V
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public static fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
@@ -125,6 +126,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/view/PlayerViewRen
 
 public final class io/github/yuroyami/kiteplayer/view/PlayerViewRenderer$DefaultImpls {
 	public static fun accepts (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
+	public static fun clearPicture (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)V
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public static fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/HdrPolicy;)V

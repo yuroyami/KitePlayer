@@ -114,6 +114,22 @@ public interface VideoRenderer : AutoCloseable {
     public suspend fun setOverlay(overlay: SubtitleOverlay?)
 
     /**
+     * No picture plays any more, so the one on screen must go.
+     *
+     * The engine calls this when a picture stops and nothing takes its place: the picture is
+     * turned off while the sound plays, an item with no picture opens, the player stops, or this
+     * renderer is attached while no picture plays. The renderer forgets the frame it shows and any
+     * frame it accepted but has not drawn yet, and shows its background from then on, with the
+     * subtitle overlay still drawn over it, until the next [present] brings a picture back. An
+     * item that ended or failed is not told, so its last picture stays, as in other players.
+     *
+     * Never called while a [present] is running. Defaulted so an existing renderer keeps
+     * compiling; such a renderer keeps its last picture on screen, which is what every renderer
+     * did before this existed.
+     */
+    public fun clearPicture() {}
+
+    /**
      * Surface loss, surface return, refresh changes, colour limits, hard failure.
      *
      * The engine collects this feed. [RendererEvent.SurfaceLost] and [RendererEvent.Failed] become

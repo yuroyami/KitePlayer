@@ -937,6 +937,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoRenderer : kotlin/Auto
     abstract suspend fun present(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Long): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/VideoRenderer.present|present(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.Long){}[0]
     abstract suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
     open fun accepts(io.github.yuroyami.kiteplayer.spi/FrameShape): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/VideoRenderer.accepts|accepts(io.github.yuroyami.kiteplayer.spi.FrameShape){}[0]
+    open fun clearPicture() // io.github.yuroyami.kiteplayer.spi/VideoRenderer.clearPicture|clearPicture(){}[0]
     open fun setAdjustments(io.github.yuroyami.kiteplayer/VideoAdjustments) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setAdjustments|setAdjustments(io.github.yuroyami.kiteplayer.VideoAdjustments){}[0]
     open fun setHdrPolicy(io.github.yuroyami.kiteplayer/HdrPolicy) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setHdrPolicy|setHdrPolicy(io.github.yuroyami.kiteplayer.HdrPolicy){}[0]
     open fun setRenderQuality(io.github.yuroyami.kiteplayer/RenderQuality) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setRenderQuality|setRenderQuality(io.github.yuroyami.kiteplayer.RenderQuality){}[0]

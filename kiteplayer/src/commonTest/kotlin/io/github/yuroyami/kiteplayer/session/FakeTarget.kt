@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.session
 
+import kotlin.math.roundToInt
+
 /**
  * A player that records what was asked of it.
  *
@@ -58,7 +60,9 @@ internal class FakeTarget(
 
     override fun setDuckLevel(level: Float) {
         duckLevel = level
-        calls += "duck $level"
+        // In tenths written out, because JavaScript prints 1.0f as "1" (#537).
+        val tenths = (level * 10).roundToInt()
+        calls += "duck ${tenths / 10}.${tenths % 10}"
     }
 
     override fun setVideoEnabled(enabled: Boolean) {

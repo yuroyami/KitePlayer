@@ -325,7 +325,9 @@ internal class VttStyleSheet private constructor(private val rules: List<Rule>) 
         private const val HEX_DIGITS = "0123456789abcdef"
         private val NAME = Regex("""[A-Za-z_][A-Za-z0-9_-]*""")
         private val ID = Regex("""[^\s.#\[\]()]+""")
-        private val VOICE = Regex("""\[\s*voice\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+))\s*]""")
+        // The closing bracket is escaped, because Kotlin/JS compiles every pattern in JavaScript's
+        // unicode mode, which refuses a bare one (#537).
+        private val VOICE = Regex("""\[\s*voice\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+))\s*\]""")
 
         /** The CSS colour names subtitles use: the sixteen of HTML, and a few more. */
         private val NAMED_COLOURS = mapOf(

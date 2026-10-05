@@ -401,6 +401,12 @@ Each line is something that bit someone. Delete a line when it stops being true.
   sees it. Moving two files out of the common test set here would have dropped 32 tests from the
   Android host run with nothing going red to say so. Count tests per target before and after any
   source-set move.
+- Kotlin/JS builds every `Regex` in JavaScript's unicode mode, which refuses a `]` or `}` that
+  closes nothing, so a pattern the JVM, native and Wasm all accept throws on JS, and inside an
+  object it takes the whole object down. Escape them. A `Float` there is a 64-bit number, so a value
+  read back from a `FloatArray` misses its literal by the float's rounding and 1.0f prints as "1";
+  compare floats within a tolerance and never by their text. The Wasm run proves nothing about any
+  of this, which is why the JS half has its own CI job (#537).
 
 ### Platform truths, measured on real hardware
 

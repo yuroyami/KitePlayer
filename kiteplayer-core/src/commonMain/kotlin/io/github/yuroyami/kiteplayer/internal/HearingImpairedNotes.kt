@@ -168,7 +168,9 @@ private fun tidy(line: List<StyledSpan>): List<StyledSpan> {
 }
 
 private const val MUSIC = "♪♫♬"
-private val SQUARE = Regex("""\[[^\[\]\n]*]|［[^［］\n]*］|【[^【】\n]*】""")
+// A closing bracket outside a class is escaped: Kotlin/JS compiles every pattern in JavaScript's
+// unicode mode, which refuses a bare one, and this object failed to load there (#537).
+private val SQUARE = Regex("""\[[^\[\]\n]*\]|［[^［］\n]*］|【[^【】\n]*】""")
 private val PARENTHESES = Regex("""\([^()\n]*\)|（[^（）\n]*）""")
 private const val DASHES = "-–\u2014"
 private const val SPEAKER_MARKS = " .'#&-"

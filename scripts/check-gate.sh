@@ -125,6 +125,10 @@ web() {
         :kiteplayer-output:wasmJsNodeTest :kiteplayer-ffmpeg:wasmJsNodeTest \
         :kiteplayer-network:wasmJsNodeTest :kiteplayer-libass:wasmJsNodeTest \
         :kiteplayer:wasmJsNodeTest
+    # The Kotlin/JS half compiles the same code to a different engine, with JavaScript's own regular
+    # expressions and numbers, so the wasm run above says nothing about it (#537).
+    gradle :kiteplayer-core:jsNodeTest :kiteplayer-subtitles:jsNodeTest :kiteplayer-io:jsNodeTest \
+        :kiteplayer-network:jsNodeTest :kiteplayer:jsNodeTest :kiteplayer-libass:jsNodeTest
 }
 linux() {
     run ./scripts/linux-tests.sh

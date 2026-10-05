@@ -108,6 +108,8 @@ internal data class ScriptedSubtitleTrack(
     val refusesDrain: Boolean = false,
     /** When the stream first appears, as [ScriptedAudioTrack.appearsAtUs] says for a sound (#509). */
     val appearsAtUs: Long? = null,
+    /** The codec name this stream declares, in place of [MediaScript.subtitleCodec]. */
+    val codec: String? = null,
 ) {
     val cuesByStart: Map<Long, List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
         cues.groupBy { it.startMicros }
@@ -943,7 +945,7 @@ internal class ScriptedSource(
                 PlayerStreamInfo(
                     index = track.index,
                     kind = TrackKind.Subtitle,
-                    codec = script.subtitleCodec,
+                    codec = track.codec ?: script.subtitleCodec,
                     codecExtradata = script.subtitleHeader,
                     language = track.language,
                     title = track.title,

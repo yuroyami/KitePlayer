@@ -20,44 +20,9 @@ import kotlin.test.assertTrue
  */
 class ImageSubtitleDecodeTest {
 
-    /** The PGS elementary stream, written out as test_subtitle.c in KiteFFmpeg writes it. */
-    private fun bluRaySubtitles(): ByteArray {
-        val out = ArrayList<Byte>()
-        fun put8(v: Int) { out += v.toByte() }
-        fun put16(v: Int) { put8(v shr 8); put8(v) }
-        fun put24(v: Int) { put8(v shr 16); put16(v and 0xFFFF) }
-        fun put32(v: Int) { put16(v ushr 16); put16(v and 0xFFFF) }
-        fun segment(pts: Int, type: Int, size: Int) { put8('P'.code); put8('G'.code); put32(pts); put32(0); put8(type); put16(size) }
-        val rle = intArrayOf(0x01, 0x01, 0x02, 0x02, 0x00, 0x00, 0x02, 0x02, 0x01, 0x01, 0x00, 0x00)
-
-        segment(90_000, 0x16, 19)
-        put16(1920); put16(1080); put8(0x10)
-        put16(0); put8(0x80); put8(0x00); put8(0)
-        put8(1)
-        put16(0); put8(0); put8(0x40); put16(100); put16(200)
-        segment(90_000, 0x17, 10)
-        put8(1); put8(0); put16(100); put16(200); put16(4); put16(2)
-        segment(90_000, 0x14, 12)
-        put8(0); put8(0)
-        put8(1); put8(235); put8(128); put8(128); put8(255)
-        put8(2); put8(16); put8(128); put8(128); put8(128)
-        segment(90_000, 0x15, 11 + rle.size)
-        put16(0); put8(0); put8(0xC0)
-        put24(4 + rle.size)
-        put16(4); put16(2)
-        rle.forEach(::put8)
-        segment(90_000, 0x80, 0)
-        segment(180_000, 0x16, 11)
-        put16(1920); put16(1080); put8(0x10)
-        put16(1); put8(0x00); put8(0x00); put8(0)
-        put8(0)
-        segment(180_000, 0x80, 0)
-        return out.toByteArray()
-    }
-
-    @Test
-    fun aBluRayDisplaySetDecodesToAPositionedImageThenAClear() = runBlocking {
-        val item = MediaItem.from(MediaIo.ofBytes(bluRaySubtitles()), label = "subtitles.sup")
+    /** Every cue [bytes] decodes to, read through the real source and decoder. */
+    private fun decode(bytes: ByteArray): List<SubtitleCue> = runBlocking {
+        val item = MediaItem.from(MediaIo.ofBytes(bytes), label = "subtitles.sup")
         val source = KiteFFmpegSourceFactory().open(item) as KiteFFmpegSource
         try {
             val stream = assertNotNull(source.streams.firstOrNull { it.kind == TrackKind.Subtitle }, "no subtitle stream")
@@ -78,27 +43,61 @@ class ImageSubtitleDecodeTest {
             } finally {
                 decoder.close()
             }
-
-            assertEquals(2, cues.size, "one cue for the image and one for the clear: $cues")
-            val shown = cues[0] as SubtitleCue.Bitmap
-            val cleared = cues[1] as SubtitleCue.Bitmap
-            assertEquals(1_000_000L, cleared.startMicros - shown.startMicros, "the clear comes one second later")
-            assertEquals(SubtitleCue.OPEN_END, shown.endMicros, "a Blu-ray image states no end")
-            assertEquals(SubtitleCue.OPEN_END, cleared.endMicros)
-            assertTrue(cleared.regions.isEmpty(), "the clear draws nothing")
-
-            val region = shown.regions.single()
-            assertEquals(listOf(100, 200, 4, 2), listOf(region.x, region.y, region.width, region.height))
-            assertEquals(1920 to 1080, region.canvasWidth to region.canvasHeight)
-            // Opaque white and half-transparent black from the stream's palette, premultiplied.
-            val white = listOf(255, 255, 255, 255)
-            val shade = listOf(0, 0, 0, 128)
-            assertContentEquals(
-                (white + white + shade + shade + shade + shade + white + white).map { it.toByte() }.toByteArray(),
-                region.bitmap.pixels.copyOf(4 * 2 * 4),
-            )
+            cues
         } finally {
             source.close()
         }
+    }
+
+    @Test
+    fun aBluRayDisplaySetDecodesToAPositionedImageThenAClear() {
+        val cues = decode(bluRaySubtitles(1 to listOf(PgsCaption(100, 200, forced = true)), 2 to emptyList()))
+
+        assertEquals(2, cues.size, "one cue for the image and one for the clear: $cues")
+        val shown = cues[0] as SubtitleCue.Bitmap
+        val cleared = cues[1] as SubtitleCue.Bitmap
+        assertEquals(1_000_000L, cleared.startMicros - shown.startMicros, "the clear comes one second later")
+        assertEquals(SubtitleCue.OPEN_END, shown.endMicros, "a Blu-ray image states no end")
+        assertEquals(SubtitleCue.OPEN_END, cleared.endMicros)
+        assertTrue(cleared.regions.isEmpty(), "the clear draws nothing")
+
+        val region = shown.regions.single()
+        assertEquals(listOf(100, 200, 4, 2), listOf(region.x, region.y, region.width, region.height))
+        assertEquals(1920 to 1080, region.canvasWidth to region.canvasHeight)
+        assertTrue(region.forced, "the stream marks its picture forced")
+        // Opaque white and half-transparent black from the stream's palette, premultiplied.
+        val white = listOf(255, 255, 255, 255)
+        val shade = listOf(0, 0, 0, 128)
+        assertContentEquals(
+            (white + white + shade + shade + shade + shade + white + white).map { it.toByte() }.toByteArray(),
+            region.bitmap.pixels.copyOf(4 * 2 * 4),
+        )
+    }
+
+    /**
+     * A disc's forced captions sit among its full subtitles in one track, told apart only by a
+     * mark on each picture, and one display set can hold a forced picture beside an ordinary one
+     * (#513). Each picture's mark reaches its region.
+     */
+    @Test
+    fun theForcedMarkOfEachPictureReachesItsRegion() {
+        val cues = decode(
+            bluRaySubtitles(
+                1 to listOf(PgsCaption(100, 900, forced = false)),
+                2 to listOf(PgsCaption(100, 900, forced = true)),
+                3 to listOf(PgsCaption(100, 100, forced = true), PgsCaption(600, 900, forced = false)),
+                4 to emptyList(),
+            ),
+        ).map { it as SubtitleCue.Bitmap }
+
+        assertEquals(listOf(0L, 1_000_000L, 2_000_000L, 3_000_000L), cues.map { it.startMicros - cues[0].startMicros }, "one cue a second")
+        assertEquals(listOf(false), cues[0].regions.map { it.forced }, "an ordinary picture read as forced")
+        assertEquals(listOf(true), cues[1].regions.map { it.forced }, "a forced picture lost its mark")
+        assertEquals(
+            mapOf(100 to true, 600 to false),
+            cues[2].regions.associate { it.x to it.forced },
+            "the two pictures of one display set kept their own marks",
+        )
+        assertTrue(cues[3].regions.isEmpty())
     }
 }

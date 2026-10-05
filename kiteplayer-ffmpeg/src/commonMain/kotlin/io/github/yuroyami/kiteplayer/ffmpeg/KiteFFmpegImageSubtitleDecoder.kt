@@ -15,7 +15,8 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 /**
  * Image subtitles over FFmpeg's own decoders: Blu-ray (PGS), DVB, DVD and XSUB. Each decoded
  * subtitle becomes one bitmap cue whose regions are the subtitle's images, already premultiplied,
- * placed on the canvas the stream was authored for.
+ * placed on the canvas the stream was authored for, each carrying the forced mark FFmpeg read for
+ * it (#513).
  */
 internal class KiteFFmpegImageSubtitleDecoderFactory(
     private val source: KiteFFmpegSource,
@@ -81,6 +82,7 @@ internal class KiteFFmpegImageSubtitleDecoder(
                         canvasWidth = canvasWidth,
                         canvasHeight = canvasHeight,
                         bitmap = RgbaBitmap(image.width, image.height, image.rgba),
+                        forced = image.forced,
                     )
                 },
             ),

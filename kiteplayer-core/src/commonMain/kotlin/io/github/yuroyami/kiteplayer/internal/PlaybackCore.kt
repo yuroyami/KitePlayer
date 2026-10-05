@@ -726,7 +726,7 @@ internal class PlaybackCore(
                 externalSubtitleTracks = externalSubtitleTracks + parsed.track
                 tracks = tracks.copy(all = tracks.all + parsed.track.info)
                 subtitleChosenByPlayer = false
-                if (active.subtitleStream != null) {
+                if (active.selectedSubtitleStream != null) {
                     // A container stream is timing cues: route through the same rebuild the
                     // ordinary selection path takes, so one selection owner survives. The caller
                     // is deliberately NOT answered here. It asked for a subtitle to be SHOWING,
@@ -927,6 +927,8 @@ internal class PlaybackCore(
     /** Swaps the timed cue table in place: no container reopen, one publish. */
     private suspend fun applyExternalSubtitle(target: TrackId?) {
         val active = session ?: return
+        // A file takes the primary lane's cue table, so a lane drawing forced pictures goes first.
+        if (target != null) releaseForcedPictures(active)
         selectedExternalSubtitle = target
         active.subtitleCues = target
             ?.let { id -> externalSubtitleTracks.firstOrNull { it.id == id } }
@@ -2154,7 +2156,7 @@ internal class PlaybackCore(
     /** True when a subtitle change swaps cue tables in place, needing no container reopen. */
     private fun inPlaceExternalSubtitleChange(command: CoreCommand.SelectTrack): Boolean =
         command.kind == TrackKind.Subtitle &&
-            session?.subtitleStream == null &&
+            session?.selectedSubtitleStream == null &&
             (isExternalSubtitle(command.track) || (command.track == null && selectedExternalSubtitle != null))
 
     private fun seekRejection(): Throwable? = when {
@@ -2325,7 +2327,7 @@ internal class PlaybackCore(
                 if (command.kind == TrackKind.Subtitle &&
                     (externalTarget != null || (command.track == null && externalActive))
                 ) {
-                    if (session?.subtitleStream != null) {
+                    if (session?.selectedSubtitleStream != null) {
                         // A container stream is timing cues: the ordinary rebuild deselects it,
                         // and the external table applies once the new graph stands.
                         pendingExternalSubtitle = externalTarget
@@ -4050,47 +4052,116 @@ internal class PlaybackCore(
         val targetStream = request.track
             ?.takeUnless(::isExternalSubtitle)
             ?.let { id -> session.source.streams.firstOrNull { it.index == id.value && it.kind == TrackKind.Subtitle } }
+        // Subtitles off may still draw the forced pictures of the audio's language (#513).
+        var forced = if (request.track == null) forcedPictureTrack(session) else null
+        val laneStream = targetStream ?: forced
 
-        if (targetExternal == null && targetStream?.index == session.subtitleStream?.index &&
+        if (targetExternal == null && laneStream?.index == session.subtitleStream?.index &&
             selectedExternalSubtitle == null
         ) {
+            // The lane already reads this track; only what it is to the viewer can change, and with
+            // it which of its pictures draw.
+            if (session.subtitleFallback != (forced != null)) {
+                session.subtitleFallback = forced != null
+                session.publishedCueKey = null
+            }
+            val changed = tracks.selectedSubtitle != request.track
+            if (changed) {
+                tracks = tracks.withSelection(TrackKind.Subtitle, request.track)
+                publishSnapshot()
+            }
             pendingSelections.remove(TrackKind.Subtitle)
             request.reply.complete(TrackChange.Applied(TrackKind.Subtitle, request.track))
+            if (changed && request.automatic) emitEvent(PlayerEvent.TrackChosenByPlayer(TrackKind.Subtitle, request.track))
             return true
         }
 
         var preparedDecoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder? = null
         if (targetStream != null) {
-            preparedDecoder = try {
-                session.backendSession.subtitleDecoders.firstNotNullOfOrNull { it.create(targetStream) }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (failure: Throwable) {
-                discardSelection(
-                    TrackKind.Subtitle,
-                    "the target subtitle decoder could not be created${causeDetail(failure)}",
-                )
-                return true
+            when (val outcome = alignedSubtitleDecoder(session, targetStream)) {
+                is SubtitleDecoderOutcome.Ready -> preparedDecoder = outcome.decoder
+                is SubtitleDecoderOutcome.Refused -> {
+                    discardSelection(TrackKind.Subtitle, outcome.reason)
+                    return true
+                }
             }
-            if (preparedDecoder == null) {
-                discardSelection(TrackKind.Subtitle, "no decoder accepted subtitle stream ${targetStream.index}")
-                return true
-            }
-            try {
-                preparedDecoder.flush(requestedEpoch)
-            } catch (cancellation: CancellationException) {
-                preparedDecoder.close()
-                throw cancellation
-            } catch (failure: Throwable) {
-                runCatching { preparedDecoder.close() }
-                discardSelection(
-                    TrackKind.Subtitle,
-                    "the target subtitle decoder could not align to the live epoch${causeDetail(failure)}",
-                )
-                return true
+        } else if (forced != null) {
+            // Subtitles off is what was asked, and it is answered whether or not the forced
+            // pictures can be drawn.
+            when (val outcome = alignedSubtitleDecoder(session, forced)) {
+                is SubtitleDecoderOutcome.Ready -> preparedDecoder = outcome.decoder
+                is SubtitleDecoderOutcome.Refused -> {
+                    session.forcedPicturesRefused += forced.index
+                    forced = null
+                }
             }
         }
 
+        installPrimaryLane(
+            session,
+            stream = targetStream ?: forced,
+            decoder = preparedDecoder,
+            cues = when {
+                targetExternal != null -> externalSubtitleTracks.firstOrNull { it.id == targetExternal }
+                    ?.cues?.toMutableList() ?: mutableListOf()
+                else -> null
+            },
+            fallback = forced != null,
+        )
+        selectedExternalSubtitle = targetExternal
+        pendingExternalSubtitle = null
+        refreshTypesetting()
+        tracks = tracks.withSelection(TrackKind.Subtitle, request.track)
+        publishSnapshot()
+        pendingSelections.remove(TrackKind.Subtitle)
+        request.reply.complete(TrackChange.Applied(TrackKind.Subtitle, request.track))
+        if (request.automatic) emitEvent(PlayerEvent.TrackChosenByPlayer(TrackKind.Subtitle, request.track))
+        return true
+    }
+
+    /** What [alignedSubtitleDecoder] made: a decoder ready at the live epoch, or why there is none. */
+    private sealed interface SubtitleDecoderOutcome {
+        class Ready(val decoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder) : SubtitleDecoderOutcome
+        class Refused(val reason: String) : SubtitleDecoderOutcome
+    }
+
+    /** A decoder for [stream] from the backend, flushed to the epoch the world is at. */
+    private suspend fun alignedSubtitleDecoder(session: OpenSession, stream: PlayerStreamInfo): SubtitleDecoderOutcome {
+        val decoder = try {
+            session.backendSession.subtitleDecoders.firstNotNullOfOrNull { it.create(stream) }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            return SubtitleDecoderOutcome.Refused("the target subtitle decoder could not be created${causeDetail(failure)}")
+        } ?: return SubtitleDecoderOutcome.Refused("no decoder accepted subtitle stream ${stream.index}")
+        try {
+            decoder.flush(requestedEpoch)
+        } catch (cancellation: CancellationException) {
+            decoder.close()
+            throw cancellation
+        } catch (failure: Throwable) {
+            runCatching { decoder.close() }
+            return SubtitleDecoderOutcome.Refused(
+                "the target subtitle decoder could not align to the live epoch${causeDetail(failure)}",
+            )
+        }
+        return SubtitleDecoderOutcome.Ready(decoder)
+    }
+
+    /**
+     * Points the primary lane at [stream] with [decoder], or at nothing, and retires the decoder it
+     * had. The cue table is the stream's own cache, or [cues] when given, as an external file's
+     * table is. [fallback] marks a lane that only draws forced pictures with subtitles off (#513).
+     * What the track is to the viewer, the external file fields and the typesetter are the
+     * caller's to set.
+     */
+    private suspend fun installPrimaryLane(
+        session: OpenSession,
+        stream: PlayerStreamInfo?,
+        decoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder?,
+        cues: MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>?,
+        fallback: Boolean,
+    ) {
         session.pendingSubtitlePacket?.close()
         session.pendingSubtitlePacket = null
         session.subtitleDecoderMayHaveOutput = false
@@ -4100,34 +4171,100 @@ internal class PlaybackCore(
         withdrawSubtitleOverlay(session)
 
         val retiredDecoder = session.subtitleDecoder
-        session.subtitleStream = targetStream
-        session.subtitleDecoder = preparedDecoder
-        session.subtitleQueue = targetStream?.let { session.subtitleQueues[it.index] }
+        session.subtitleStream = stream
+        session.subtitleFallback = fallback && stream != null
+        session.subtitleDecoder = decoder
+        session.subtitleQueue = stream?.let { session.subtitleQueues[it.index] }
         session.subtitleQueue?.dropBefore(
             currentPosition().micros - CUE_PRUNE_BEHIND_MICROS,
             assumedDurationUs = CUE_PRUNE_BEHIND_MICROS,
         )
-        session.subtitleCues = when {
-            targetStream != null -> session.subtitleCueCaches.getValue(targetStream.index)
-            targetExternal != null -> externalSubtitleTracks.firstOrNull { it.id == targetExternal }
-                ?.cues?.toMutableList() ?: mutableListOf()
-            else -> mutableListOf()
-        }
-        selectedExternalSubtitle = targetExternal
-        pendingExternalSubtitle = null
-        refreshTypesetting()
-        tracks = tracks.withSelection(TrackKind.Subtitle, request.track)
-        publishSnapshot()
-        pendingSelections.remove(TrackKind.Subtitle)
-        request.reply.complete(TrackChange.Applied(TrackKind.Subtitle, request.track))
-        if (request.automatic) emitEvent(PlayerEvent.TrackChosenByPlayer(TrackKind.Subtitle, request.track))
+        session.subtitleCues = cues
+            ?: stream?.let { session.subtitleCueCaches.getValue(it.index) }
+            ?: mutableListOf()
 
-        if (retiredDecoder != null && retiredDecoder !== preparedDecoder) {
+        if (retiredDecoder != null && retiredDecoder !== decoder) {
             runCatching { retiredDecoder.close() }.exceptionOrNull()?.let { failure ->
                 warn(PlaybackWarning.ResourcesNotReleased("retired subtitle decoder: ${failure.message}"))
             }
         }
-        return true
+    }
+
+    /**
+     * The Blu-ray or DVD subtitle track whose forced pictures draw while no subtitle is selected,
+     * per [SubtitleConfig.forcedPicturesWhenOff] (#513), or null. It is a track in the audio's
+     * language, of the channel that plays, that the lane can read: a track the container flags as
+     * forced first, because all of it is the forced captions, then the default-flagged one. A
+     * secondary subtitle is a subtitle selected, so it ends this. Whether a primary one is selected
+     * is the caller's to know, because a selection on its way in changes that.
+     */
+    private fun forcedPictureTrack(session: OpenSession): PlayerStreamInfo? {
+        if (!config.subtitles.forcedPicturesWhenOff || tracks.selectedSecondarySubtitle != null) return null
+        val language = session.audioStream?.language?.takeUnless { it.isBlank() } ?: return null
+        val source = session.source
+        val program = source.programs.firstOrNull { it.number == tracks.selectedProgram }
+        return programCandidates(source.streams, source.programs, program)
+            .filter { stream ->
+                stream.kind == TrackKind.Subtitle && stream.codec.lowercase() in FORCED_PICTURE_CODECS &&
+                    stream.index in session.subtitleQueues && stream.index !in session.forcedPicturesRefused &&
+                    sameLanguage(stream.language, language)
+            }
+            .sortedWith(compareBy({ !it.isForced }, { !it.isDefault }))
+            .firstOrNull()
+    }
+
+    /**
+     * Keeps the forced-picture lane on the track [forcedPictureTrack] names while no subtitle is
+     * selected (#513): it follows the audio, comes with subtitles off, and goes when a subtitle is
+     * selected or the setting finds no track. Run at the top of each subtitle pass, after the
+     * selections of the pass, and costs a flag read when the setting is off.
+     */
+    private suspend fun followForcedPictures(session: OpenSession) {
+        if (!config.subtitles.forcedPicturesWhenOff && !session.subtitleFallback) return
+        if (pendingVideoRecovery != null || reopenPending || pendingSelections.isNotEmpty()) return
+        if (tracks.selectedSubtitle != null || selectedExternalSubtitle != null || pendingExternalSubtitle != null) return
+        // A lane on a track nobody selected and not drawing forced pictures is not this one's to move.
+        if (session.subtitleStream != null && !session.subtitleFallback) return
+        val wanted = forcedPictureTrack(session)
+        if (wanted?.index == session.subtitleStream?.index) return
+        var decoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder? = null
+        if (wanted != null) {
+            when (val outcome = alignedSubtitleDecoder(session, wanted)) {
+                is SubtitleDecoderOutcome.Ready -> decoder = outcome.decoder
+                is SubtitleDecoderOutcome.Refused -> {
+                    session.forcedPicturesRefused += wanted.index
+                    if (session.subtitleStream == null) return
+                }
+            }
+        }
+        installPrimaryLane(session, stream = wanted.takeIf { decoder != null }, decoder = decoder, cues = null, fallback = true)
+        refreshTypesetting()
+    }
+
+    /** Lets go of the forced-picture lane before something else takes the primary lane or its track. */
+    private suspend fun releaseForcedPictures(session: OpenSession) {
+        if (!session.subtitleFallback) return
+        installPrimaryLane(session, stream = null, decoder = null, cues = null, fallback = false)
+    }
+
+    /**
+     * [active] as it is drawn: with [forcedOnly] an image cue keeps only its forced pictures, and one
+     * left with none is not shown (#513). A text cue has no such mark and stays.
+     */
+    private fun forcedPicturesOf(
+        active: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+        forcedOnly: Boolean,
+    ): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> {
+        if (!forcedOnly) return active
+        return active.mapNotNull { cue ->
+            when (cue) {
+                is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text -> cue
+                is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Bitmap -> when {
+                    cue.regions.all { it.forced } -> cue
+                    else -> cue.regions.filter { it.forced }.takeIf { it.isNotEmpty() }?.let { cue.copy(regions = it) }
+                }
+            }
+        }
     }
 
     /**
@@ -4610,6 +4747,9 @@ internal class PlaybackCore(
             )
             return
         }
+        // A secondary subtitle is a subtitle selected, and it may be the very track the forced
+        // pictures were drawn from, so that lane lets go before this one reads it (#513).
+        if (track != null) releaseForcedPictures(session)
         var preparedDecoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder? = null
         if (targetStream != null) {
             preparedDecoder = try {
@@ -5126,7 +5266,7 @@ internal class PlaybackCore(
         val subtitle = if (subtitleRequest != null && isExternalSubtitle(subtitleRequest.track)) {
             StreamChoice.None
         } else {
-            keptOrChosen(TrackKind.Subtitle, current.subtitleStream?.index)
+            keptOrChosen(TrackKind.Subtitle, current.selectedSubtitleStream?.index)
         }
         try {
             teardownSession()
@@ -5302,7 +5442,7 @@ internal class PlaybackCore(
             item = item,
             video = StreamChoice.At(stream.index),
             audio = active.audioStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None,
-            subtitle = active.subtitleStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None,
+            subtitle = active.selectedSubtitleStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None,
             position = position,
             duration = active.source.seekCeiling,
             codec = stream.codec,
@@ -5942,6 +6082,7 @@ internal class PlaybackCore(
      */
     private suspend fun handleSubtitles() {
         val session = this.session ?: return
+        followForcedPictures(session)
         val decoder = session.subtitleDecoder
         val queue = session.subtitleQueue
 
@@ -6211,14 +6352,22 @@ internal class PlaybackCore(
         // rebuilds after a prune, a merge or a clear. Syncing here rather than at every mutation
         // site keeps the cue table's own code unchanged and costs one size compare per pass.
         session.cueIndex.syncTo(session.subtitleCues)
-        val primaryActive = session.cueIndex.activeAt(positionUs)
+        // Only the forced pictures, when asked or when the lane only draws those, unless the
+        // container says the whole track is forced captions (#513).
+        val primaryActive = forcedPicturesOf(
+            session.cueIndex.activeAt(positionUs),
+            forcedOnly = (forcedPicturesOnly || session.subtitleFallback) && session.subtitleStream?.isForced != true,
+        )
         // The secondary lane rides the same clock and the same delay, forced to the top of the
         // picture on the way out so the two tracks can never sit on each other.
         session.cue2Index.syncTo(session.subtitle2Cues)
         val secondaryActive = if (session.subtitle2Cues.isEmpty()) {
             emptyList()
         } else {
-            session.cue2Index.activeAt(positionUs).map { cue ->
+            forcedPicturesOf(
+                session.cue2Index.activeAt(positionUs),
+                forcedOnly = forcedPicturesOnly && session.subtitle2Stream?.isForced != true,
+            ).map { cue ->
                 when (cue) {
                     is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text -> cue.copy(
                         layout = cue.layout.copy(
@@ -7646,7 +7795,7 @@ internal class PlaybackCore(
         val videoChoice = active.videoStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
         val audioChoice = active.audioStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
         // An external file timing the cues means no container stream, as in a rebuild.
-        val subtitleChoice = active.subtitleStream
+        val subtitleChoice = active.selectedSubtitleStream
             ?.takeIf { selectedExternalSubtitle == null }
             ?.let { StreamChoice.At(it.index) }
             ?: StreamChoice.None
@@ -11988,6 +12137,19 @@ internal class PlaybackCore(
         var subtitleCues: MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> =
             subtitleStream?.let { subtitleCueCaches.getValue(it.index) } ?: mutableListOf()
 
+        /**
+         * True while the primary lane reads a track nobody selected, only to draw its forced
+         * pictures with subtitles off (#513). [Tracks.selectedSubtitle] then says null, and every
+         * path that carries the selection into a new session reads [selectedSubtitleStream].
+         */
+        var subtitleFallback: Boolean = false
+
+        /** The primary lane's track as the viewer knows it: none while it only draws forced pictures. */
+        val selectedSubtitleStream: PlayerStreamInfo? get() = subtitleStream.takeUnless { subtitleFallback }
+
+        /** Streams no decoder would take for the forced pictures, so they are not asked again each pass. */
+        val forcedPicturesRefused: MutableSet<Int> = mutableSetOf()
+
         // The secondary subtitle lane: the same shape as the primary fields above, driven by
         // its own budgeted pass and timed by its own index; its cues are forced to the top before
         // rasterising. One slot per direction, exactly mpv's secondary-sid.
@@ -12980,6 +13142,9 @@ internal fun pickSubtitleStream(
     }
     return null
 }
+
+/** The subtitle formats whose pictures each carry a forced mark: Blu-ray (PGS) and DVD (#513). */
+private val FORCED_PICTURE_CODECS: Set<String> = setOf("hdmv_pgs_subtitle", "dvd_subtitle")
 
 /**
  * The external subtitle track to select at open over [container], the container's own choice, or

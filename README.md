@@ -554,7 +554,7 @@ can read it back.
 | **Surround** | Multichannel audio folds into the speakers the device has. `PlayerConfig.audio.upmix = UpmixMode.Surround` also plays mono and stereo from the other speakers of a surround device, off by default |
 | **Picture** | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan) |
 | **HDR** | `setHdrPolicy`. HDR10 and HLG show as HDR on a display that can: through Metal on a Mac or an iPhone with extended range, and through `KitePlayerView` on an Android HDR display. Elsewhere they are tone mapped, and `PlaybackWarning.HdrToneMapped` says so. `HdrPolicy.ToneMap` tone maps everywhere, and `videoDynamicRange` says what the screen shows. `TrackInfo.dolbyVision` names a Dolby Vision track's profile, and a profile 5 or 10.0 track is composed into HDR10 on the processor |
-| **Subtitles** | `selectTrack`, `selectSecondarySubtitle`, `addExternalSubtitle`, `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, `setSubtitleStyle`, `setSubtitleSafeArea`, and `subtitleCues` to draw the lines yourself |
+| **Subtitles** | `selectTrack`, `selectSecondarySubtitle`, `addExternalSubtitle`, `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, `setSubtitleStyle`, `setSubtitleSafeArea`, `setForcedPicturesOnly`, and `subtitleCues` to draw the lines yourself |
 | **Sections** | `setAbLoop` repeats between two points. `setMarkers` fires an event when playback crosses a position |
 | **Chapters** | `chapterAt`, `seekToChapter`, `nextChapter`, `previousChapter` |
 | **Resume** | `memento()` saves the item, position, tracks and speed. `restore(memento)` puts them back |
@@ -616,6 +616,12 @@ and labels it.
   `SubtitleStyleOverride` still wins over the file's colours.
 - Blu-ray (PGS), DVB, DVD and XSUB image subtitles from the container, placed on the picture they
   were authored for.
+- A disc's forced captions, the signs and foreign dialogue it marks forced among a Blu-ray or DVD
+  track's pictures, can draw on their own. `setForcedPicturesOnly`, as mpv's
+  `sub-forced-events-only`, draws only those of the chosen track, and
+  `SubtitleConfig.forcedPicturesWhenOff` draws those of the track in the audio's language while no
+  subtitle is chosen, following the audio, as Kodi does
+  ([#513](https://github.com/yuroyami/KitePlayer/issues/513)).
 - ASS and SSA tracks are drawn by libass as authored: moving signs, animated transforms, karaoke
   fills, clips and vector drawings. They re-render every video frame while they move.
 - Fonts attached to a Matroska file load for the track, and `SubtitleConfig.fonts` adds your own.

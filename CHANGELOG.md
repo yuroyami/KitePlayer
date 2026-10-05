@@ -458,6 +458,25 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   that stretch landed where the sound starts. The sound then plays in step with the picture. A sound
   that starts later than the point an in-place track change switches to is padded the same way, so
   the clock does not jump there either.
+- A picture whose file says that some of its edges are not part of the image shows only the part
+  that is left (#497). Matroska states this with its `PixelCrop` elements, most often to hide the
+  eight padding rows of a 1088-line coded picture, and FFmpeg leaves applying it to the player, so
+  such a file used to show those rows and report itself as 1920 by 1088 rather than 16:9. The
+  snapshot's `videoSize`, the size event and the track list now report the size that is left, and
+  every renderer draws only that part: the Android canvas, MediaCodec straight into the view's
+  Surface, the GPU image path, the desktop, the web canvas, Compose, Metal, the sample buffer layer
+  and the AppKit and UIKit images. The new `PictureCrop` names the hidden edges in stored pixels.
+  `PlayerStreamInfo` gains `crop` and `visibleVideoSize`, so a constructor or `copy` call compiled
+  against 0.2.0 must be compiled again, and `VideoFrame` gains `crop`, null by default, with
+  `visibleSize` beside it, so a frame of your own keeps compiling and its picture is shown whole.
+  A frame keeps its stored `size`. `KiteFFmpegVideoFrame` and `CapturedFrame` carry the crop, and a
+  captured frame lays its burned-in text out for the part that was on screen. A crop that leaves
+  nothing of the decoded picture is ignored with the new `PlaybackWarning.CropIgnored`, once each
+  time the stream is opened. `AndroidPlayerViewRendererFactory.create` and the
+  `AndroidSurfaceVideoRenderer` constructor take a geometry callback with a third parameter, the
+  crop, because a decoder that writes into the Surface leaves only the view able to hide the edges,
+  so a factory or callback of your own needs that parameter. This needs KiteFFmpeg 0.5.0, which
+  reads the crop (yuroyami/KiteFFmpeg#147).
 
 ### Removed
 

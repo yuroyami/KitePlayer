@@ -136,7 +136,11 @@ public class AwtCanvasVideoRenderer(
         }
     }
 
-    /** The last frame converted, kept so an overlay or control change can redraw without a frame. */
+    /**
+     * The last frame converted, kept so an overlay or control change can redraw without a frame.
+     * Null before the first frame and after [clearPicture], when a repaint draws the background and
+     * the cues alone.
+     */
     private var lastImage: BufferedImage? = null
     private var lastSize: VideoSize? = null
     private var lastRotation: Int = 0
@@ -288,18 +292,32 @@ public class AwtCanvasVideoRenderer(
     }
 
     /**
-     * Redraws the picture already on screen.
-     *
-     * A paused player still changes what should be visible: a subtitle cue arrives or leaves, the
-     * scale mode changes, the picture controls move. Without this the screen would keep the old
-     * composition until the next frame, which for a paused player is forever.
+     * Forgets the retained picture and paints the background with the cues over it (#530). There is
+     * no queue here, so the retained picture is the only frame there is to forget.
      */
-    private fun repaintRetained() {
-        val hasPicture = synchronized(lock) { lastImage != null && !closed }
-        if (hasPicture) paintNow()
+    override fun clearPicture() {
+        synchronized(lock) {
+            if (closed) return
+            lastImage = null
+            lastSize = null
+        }
+        paintNow()
     }
 
-    /** Paints the retained picture, and answers true only when it reached the screen. */
+    /**
+     * Redraws what is already on screen, the picture or, with none, the background.
+     *
+     * A paused player still changes what should be visible: a subtitle cue arrives or leaves, the
+     * scale mode changes, the picture controls move, and a sound with no picture can carry cues
+     * too. Without this the screen would keep the old composition until the next frame, which for
+     * a paused player is forever.
+     */
+    private fun repaintRetained() {
+        val open = synchronized(lock) { !closed }
+        if (open) paintNow()
+    }
+
+    /** Paints the retained picture, or the background with none, and answers true only when it reached the screen. */
     private fun paintNow(): Boolean {
         paintLock.lock()
         try {
@@ -312,8 +330,8 @@ public class AwtCanvasVideoRenderer(
     /** Only with [paintLock] held. */
     private fun paintHeld(): Boolean {
         val target: Canvas
-        val image: BufferedImage
-        val size: VideoSize
+        val image: BufferedImage?
+        val size: VideoSize?
         val rotation: Int
         val mirrored: Boolean
         val mode: VideoScale
@@ -321,14 +339,15 @@ public class AwtCanvasVideoRenderer(
         synchronized(lock) {
             if (closed) return false
             target = canvas ?: return false
-            image = lastImage ?: return false
-            size = lastSize ?: return false
+            image = lastImage
+            size = lastSize
             rotation = lastRotation
             mirrored = lastMirrored
             mode = scaleMode
             currentTransform = transform
         }
         if (!target.isDisplayable) return false
+        if (image == null || size == null) return presenter.present(target, null, null, overlaySnapshot())
         val layout = frameLayout(
             canvasWidth = target.width,
             canvasHeight = target.height,

@@ -22,8 +22,12 @@ import kotlin.math.roundToInt
  * underneath it.
  */
 internal interface CanvasPresenter {
-    /** Draws and shows one composed frame, and answers true only when the strategy showed it. */
-    fun present(canvas: Canvas, image: BufferedImage, layout: FrameLayout, overlay: SubtitleOverlay?): Boolean
+    /**
+     * Draws and shows one composed frame, and answers true only when the strategy showed it. A null
+     * [image] or [layout] composes the background and the cues alone, for a renderer whose
+     * picture was taken off the screen (#530).
+     */
+    fun present(canvas: Canvas, image: BufferedImage?, layout: FrameLayout?, overlay: SubtitleOverlay?): Boolean
 }
 
 internal class AwtCanvasPresenter : CanvasPresenter {
@@ -34,8 +38,8 @@ internal class AwtCanvasPresenter : CanvasPresenter {
 
     override fun present(
         canvas: Canvas,
-        image: BufferedImage,
-        layout: FrameLayout,
+        image: BufferedImage?,
+        layout: FrameLayout?,
         overlay: SubtitleOverlay?,
     ): Boolean {
         if (canvas.width <= 0 || canvas.height <= 0) return false
@@ -83,7 +87,8 @@ internal class AwtCanvasPresenter : CanvasPresenter {
     ): Boolean = !hasStrategy || builtWidth != canvasWidth || builtHeight != canvasHeight
 
     /**
-     * Draws one composed frame: the letterbox, the picture, then the cues on top.
+     * Draws one composed frame: the letterbox, the picture, then the cues on top. With no [image]
+     * or no [layout] the whole canvas is the letterbox, under the cues.
      *
      * Visible for testing, and tested against a plain image rather than a canvas, because the
      * geometry and the overlay placement are the parts worth pinning and neither needs a window.
@@ -92,14 +97,18 @@ internal class AwtCanvasPresenter : CanvasPresenter {
         g: Graphics2D,
         canvasWidth: Int,
         canvasHeight: Int,
-        image: BufferedImage,
-        layout: FrameLayout,
+        image: BufferedImage?,
+        layout: FrameLayout?,
         overlay: SubtitleOverlay?,
     ) {
         // The letterbox is painted every time rather than only when the geometry changes: a
         // narrower frame after a wider one would otherwise leave the old picture's edges on screen.
         g.color = Color.BLACK
         g.fillRect(0, 0, canvasWidth, canvasHeight)
+        if (image == null || layout == null) {
+            drawOverlay(g, overlay, canvasWidth, canvasHeight)
+            return
+        }
         g.setRenderingHint(
             RenderingHints.KEY_INTERPOLATION,
             RenderingHints.VALUE_INTERPOLATION_BILINEAR,

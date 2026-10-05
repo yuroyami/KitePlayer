@@ -4588,6 +4588,8 @@ internal class PlaybackCore(
                         requested.forEach {
                             it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION))
                         }
+                        // Taken out of its slot above, so nothing later can answer it (#525).
+                        variantRequest?.reply?.completeExceptionally(IllegalStateException(PREEMPTED_SELECTION))
                         return
                     }
                     rebuilt = recovered.session
@@ -4603,6 +4605,7 @@ internal class PlaybackCore(
                 FillOutcome.Preempted -> {
                     teardownSession()
                     requested.forEach { it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION)) }
+                    variantRequest?.reply?.completeExceptionally(IllegalStateException(PREEMPTED_SELECTION))
                     return
                 }
             }

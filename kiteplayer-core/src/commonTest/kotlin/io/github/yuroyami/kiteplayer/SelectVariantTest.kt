@@ -1,10 +1,12 @@
 package io.github.yuroyami.kiteplayer
 
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -91,6 +93,28 @@ class SelectVariantTest {
         assertFailsWith<IllegalArgumentException> { plain.core.selectVariant(0) }
         harness.close()
         plain.close()
+    }
+
+    @Test
+    fun aStopWhileTheVariantRefillsAnswersTheChange() = runTest {
+        // The chosen variant reads far slower than real time, so its refill is still waiting when
+        // the stop arrives (#525).
+        val script = MediaScript(durationUs = 30_000_000, variants = variants, readDelayUsByVariant = mapOf(1 to 200_000L))
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+
+        val change = async { runCatching { harness.core.selectVariant(1) } }
+        harness.run(300.milliseconds)
+        assertEquals(1, harness.backend.lastOpenedItem?.demux?.variant, "the reopen on the variant is under way")
+        assertTrue(!change.isCompleted, "the change waits for its refill")
+        harness.core.stop()
+        harness.run(500.milliseconds)
+
+        assertTrue(change.isCompleted, "the stop answered the variant change")
+        assertIs<IllegalStateException>(change.await().exceptionOrNull(), "as not applied")
+        harness.close()
     }
 
     /** A link that runs at [slow] bits per second until [until] of the test's clock has passed, then at [fast]. */

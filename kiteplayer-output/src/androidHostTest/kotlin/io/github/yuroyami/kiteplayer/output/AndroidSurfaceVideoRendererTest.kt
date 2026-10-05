@@ -548,7 +548,7 @@ class AndroidSurfaceSetSurfaceTest {
         val screen = FakeTarget()
         val renderer = AndroidSurfaceVideoRenderer(
             convert = convert,
-            target = SwitchingSurfaceCanvasTarget(codec) { screen },
+            target = SwitchingSurfaceCanvasTarget(codec, createDelegate = { screen }),
             codecTarget = codec,
         )
     }
@@ -682,7 +682,7 @@ class AndroidSurfaceAdjustmentsTest {
         val screens = mutableListOf<FakeTarget>()
         val renderer = AndroidSurfaceVideoRenderer(
             convert = exactConverter(),
-            target = SwitchingSurfaceCanvasTarget(codec) { FakeTarget().also { synchronized(screens) { screens += it } } },
+            target = SwitchingSurfaceCanvasTarget(codec, createDelegate = { FakeTarget().also { synchronized(screens) { screens += it } } }),
             codecTarget = codec,
         )
         try {
@@ -724,5 +724,165 @@ class AndroidSurfaceAdjustmentsTest {
         } finally {
             renderer.close()
         }
+    }
+}
+
+/**
+ * The engine says no picture plays (#530), and the renderer takes the last one off: the frames it
+ * still holds are let go unseen, and the Surface shows black with the cues over it, or, where a
+ * decoder may take the Surface again, is blanked through EGL so the decoder still can.
+ */
+class AndroidSurfacePictureClearTest {
+
+    private fun cue(hash: Long) = io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+        images = listOf(
+            io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                x = 2,
+                y = 6,
+                bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(4, 2, ByteArray(4 * 2 * 4)),
+            ),
+        ),
+        viewportWidth = 16,
+        viewportHeight = 9,
+        contentHash = hash,
+    )
+
+    private fun awaitPosts(target: FakeTarget, atLeast: Int, timeoutMs: Long = 5_000) {
+        val startedAt = System.nanoTime()
+        while (target.posts.get() < atLeast) {
+            if (System.nanoTime() - startedAt > timeoutMs * 1_000_000L) {
+                throw AssertionError("posts=${target.posts.get()}, wanted $atLeast")
+            }
+            Thread.sleep(1)
+        }
+    }
+
+    private fun canvases(target: FakeTarget): List<FakeCanvas> = synchronized(target.canvases) { target.canvases.toList() }
+
+    @Test
+    fun aClearLetsGoOfEveryFrameItHoldsAndDrawsNoneOfThem() {
+        val target = FakeTarget()
+        val converting = CountDownLatch(1)
+        val finishConverting = CountDownLatch(1)
+        val renderer = AndroidSurfaceVideoRenderer(
+            convert = { frame ->
+                converting.countDown()
+                finishConverting.await(10, TimeUnit.SECONDS)
+                exactConverter()(frame)
+            },
+            target = target,
+        )
+        val beingConverted = TestFrame()
+        val waiting = TestFrame()
+        try {
+            assertTrue(runBlocking { renderer.present(beingConverted, 0) })
+            assertTrue(converting.await(5, TimeUnit.SECONDS), "the drawing thread never took the frame")
+            assertTrue(runBlocking { renderer.present(waiting, 0) })
+
+            renderer.clearPicture()
+            assertEquals(1, waiting.closes, "the waiting frame was let go at the clear")
+            finishConverting.countDown()
+            awaitPosts(target, 1)
+            assertEquals(1, beingConverted.closes)
+            assertEquals(0L, renderer.presentedFrames, "the frame converted across the clear was not drawn")
+            assertEquals(2L, renderer.supersededFrames)
+            val blank = canvases(target).single()
+            assertEquals(1, blank.cleared)
+            assertTrue(blank.drawnPictures.isEmpty())
+        } finally {
+            finishConverting.countDown()
+            renderer.close()
+        }
+    }
+
+    @Test
+    fun aClearedSurfaceShowsItsCuesUntilThePictureComesBack() {
+        val target = FakeTarget()
+        val renderer = renderer(target)
+        try {
+            runBlocking {
+                renderer.setOverlay(cue(hash = 1))
+                renderer.present(TestFrame(), 0)
+            }
+            awaitPresented(renderer, 1)
+            val drawn = target.posts.get()
+
+            renderer.clearPicture()
+            awaitPosts(target, drawn + 1)
+            val blank = canvases(target).last()
+            assertEquals(1, blank.cleared)
+            assertTrue(blank.drawnPictures.isEmpty(), "black, not the last picture")
+            assertEquals(listOf(1L), blank.drawnOverlays.map { it.contentHash }, "the cue stays over the black")
+
+            runBlocking { renderer.setOverlay(cue(hash = 2)) }
+            awaitPosts(target, drawn + 2)
+            assertEquals(listOf(2L), canvases(target).last().drawnOverlays.map { it.contentHash }, "a new cue shows at once")
+            runBlocking { renderer.setOverlay(null) }
+            awaitPosts(target, drawn + 3)
+            assertTrue(canvases(target).last().drawnOverlays.isEmpty(), "and a cue that ends goes at once")
+
+            runBlocking { renderer.present(TestFrame(), 0) }
+            awaitPresented(renderer, 2)
+            val withPicture = target.posts.get()
+            runBlocking { renderer.setOverlay(cue(hash = 3)) }
+            Thread.sleep(200)
+            assertEquals(withPicture, target.posts.get(), "once a picture plays, a cue waits for its next frame again")
+        } finally {
+            renderer.close()
+        }
+    }
+
+    @Test
+    fun aSurfaceADecoderMayTakeAgainIsBlankedWithoutACanvas() {
+        val codec = MediaCodecSurfaceTarget()
+        val screen = FakeTarget()
+        val blanked = java.util.concurrent.LinkedBlockingQueue<Surface>()
+        val renderer = AndroidSurfaceVideoRenderer(
+            convert = exactConverter(),
+            target = SwitchingSurfaceCanvasTarget(codec, createDelegate = { screen }, blankSurface = { blanked += it; true }),
+            codecTarget = codec,
+            overlayConsumer = {},
+        )
+        val surface = liveSurface()
+        try {
+            renderer.setSurface(surface)
+            renderer.clearPicture()
+            assertTrue(blanked.poll(5, TimeUnit.SECONDS) === surface, "the Surface was blanked through EGL")
+            Thread.sleep(100)
+            assertEquals(0, screen.posts.get(), "no canvas took the Surface from the next decoder")
+        } finally {
+            renderer.close()
+        }
+    }
+
+    @Test
+    fun aSurfaceThatEglCannotTakeIsBlankedWithACanvas() {
+        val codec = MediaCodecSurfaceTarget()
+        val screen = FakeTarget()
+        val renderer = AndroidSurfaceVideoRenderer(
+            convert = exactConverter(),
+            target = SwitchingSurfaceCanvasTarget(codec, createDelegate = { screen }, blankSurface = { false }),
+            codecTarget = codec,
+            overlayConsumer = {},
+        )
+        try {
+            renderer.setSurface(liveSurface())
+            renderer.clearPicture()
+            awaitPosts(screen, 1)
+            val blank = canvases(screen).single()
+            assertEquals(1, blank.cleared)
+            assertTrue(blank.drawnPictures.isEmpty())
+        } finally {
+            renderer.close()
+        }
+    }
+
+    @Test
+    fun aClearAfterCloseDoesNothing() {
+        val target = FakeTarget()
+        val renderer = renderer(target)
+        renderer.close()
+        renderer.clearPicture()
+        assertEquals(0, target.posts.get())
     }
 }

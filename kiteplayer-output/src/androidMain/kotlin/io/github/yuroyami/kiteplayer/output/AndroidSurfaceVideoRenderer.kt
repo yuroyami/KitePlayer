@@ -175,6 +175,28 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     /** The single frame waiting to be drawn. Newest wins, and the displaced one is closed here. */
     private val pending = atomic<VideoFrame?>(null)
 
+    /**
+     * Orders the worker's take of a frame and its last look before drawing against [clearPicture]:
+     * a frame taken under one [pictureEpoch] is not drawn once the epoch has moved on.
+     */
+    private val pictureLock = Any()
+
+    /** Moved on by each [clearPicture]. Read and written only under [pictureLock]. */
+    private var pictureEpoch = 0L
+
+    /**
+     * True from a clear until a picture of the current [pictureEpoch] is drawn. While it holds, a
+     * subtitle change redraws the black canvas with the new cues, because no frame is coming to
+     * carry them. Read and written only under [pictureLock].
+     */
+    private var pictureCleared = false
+
+    /** The [pictureEpoch] whose clear the worker has shown. Worker thread only. */
+    private var blankedEpoch = 0L
+
+    /** The cues the worker last drew over the background, or null for none. Worker thread only. */
+    private var blankedCues: SubtitleOverlay? = null
+
     /** The overlay to composite above the picture. Written by the engine, read by the worker. */
     private val overlay = atomic<SubtitleOverlay?>(null)
 
@@ -243,6 +265,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             while (!closed.value) {
                 signal.receive()
                 drawPending()
+                blankIfCleared()
             }
         } catch (_: ClosedReceiveChannelException) {
             // close() closed the signal channel. That is the ordinary way out of this loop, not a fault.
@@ -257,7 +280,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     public val presentedFrames: Long get() = presented.value
 
     /**
-     * Frames replaced in the waiting slot by a newer one before they could be drawn.
+     * Frames replaced in the waiting slot by a newer one before they could be drawn, or let go
+     * because the picture was taken off before they were drawn.
      *
      * A non-zero count here means this renderer is the bottleneck, not the decoder and not the clock.
      * At 1080p it will be, because both the conversion and the draw are on the CPU. That is what a
@@ -430,7 +454,11 @@ public class AndroidSurfaceVideoRenderer internal constructor(
 
     /** Draws whatever is waiting, if anything. Worker thread only. */
     private fun drawPending() {
-        val frame = pending.getAndSet(null) ?: return
+        var epoch = 0L
+        val frame = synchronized(pictureLock) {
+            epoch = pictureEpoch
+            pending.getAndSet(null)
+        } ?: return
         val framePts = frame.pts
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
@@ -450,7 +478,74 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             frame.close()
         }
         val picture = converted?.let { swizzle(it, size) } ?: return
-        draw(picture, size, rotation, mirrored, framePts, crop)
+        if (synchronized(pictureLock) { pictureEpoch != epoch }) {
+            // The picture was taken off while this frame was converted (#530).
+            superseded.incrementAndGet()
+            return
+        }
+        draw(picture, size, rotation, mirrored, framePts, crop, epoch)
+    }
+
+    /**
+     * Takes the picture off (#530): the frame waiting for the worker goes, a frame the worker is
+     * converting is not drawn, and the worker blanks the Surface. Nothing here waits, because the
+     * engine calls this from its own loop.
+     */
+    override fun clearPicture() {
+        if (closed.value) return
+        synchronized(pictureLock) {
+            pending.getAndSet(null)?.let { waiting ->
+                waiting.close()
+                superseded.incrementAndGet()
+            }
+            pictureEpoch += 1
+            pictureCleared = true
+        }
+        signal.trySend(Unit)
+    }
+
+    /**
+     * Shows the background while the picture is off: once for each clear, and again for each change
+     * of the cues this renderer draws itself. Worker thread only.
+     */
+    private fun blankIfCleared() {
+        var epoch = 0L
+        val cleared = synchronized(pictureLock) {
+            epoch = pictureEpoch
+            pictureCleared
+        }
+        if (!cleared) return
+        val cues = if (overlayConsumer == null) overlay.value?.takeIf { it.images.isNotEmpty() } else null
+        val fresh = epoch != blankedEpoch
+        if (!fresh && cues === blankedCues) return
+        blankedEpoch = epoch
+        blankedCues = cues
+        drawBlank(fresh, cues)
+    }
+
+    /**
+     * Shows the background in place of a picture taken off. Worker thread only.
+     *
+     * A Surface that a MediaCodec decoder may write into again, with the cues drawn in a view of
+     * their own, is blanked through EGL at a [fresh] clear, because EGL lets go of the Surface
+     * afterwards and a canvas never does: a decoder can never take a Surface a canvas has held. When
+     * EGL cannot take it, which is what happens once a canvas holds it already, and on every other
+     * Surface, this draws a black canvas with [cues] over it. A Surface that will not lock is left
+     * as it is: no frame was lost, and the next one says so.
+     */
+    private fun drawBlank(fresh: Boolean, cues: SubtitleOverlay?) {
+        if (!targetIsValid()) return
+        if (fresh && codecTarget != null && overlayConsumer != null && blankTarget()) return
+        val canvas = runCatching { target.lock() }.getOrNull() ?: return
+        try {
+            canvas.clearToBlack()
+            noteCanvasSize(canvas.width, canvas.height)
+            cues?.let { drawOverlay(canvas, it) }
+        } catch (_: Throwable) {
+            // Nothing to count: no frame was being drawn.
+        } finally {
+            runCatching { target.post(canvas) }
+        }
     }
 
     /**
@@ -533,6 +628,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         mirrored: Boolean,
         framePts: Pts,
         crop: PictureCrop?,
+        epoch: Long,
     ) {
         if (!targetIsValid()) {
             failWithLostSurface("the Surface went away before a canvas could be locked")
@@ -593,6 +689,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             return
         }
         presented.incrementAndGet()
+        // A clear that came while this was drawn keeps the cleared state for the blank that follows.
+        synchronized(pictureLock) { if (pictureEpoch == epoch) pictureCleared = false }
         noteSurfaceAvailable()
         // Best effort by design: the canvas was posted, the closest this CPU path can observe.
         eventFlow.tryEmit(
@@ -637,6 +735,13 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     /** [CanvasTarget.isValid] must never be the reason a frame is lost, so a throwing one reads false. */
     private fun targetIsValid(): Boolean = try {
         target.isValid()
+    } catch (_: Throwable) {
+        false
+    }
+
+    /** [CanvasTarget.blank], where a throw reads as false and the caller draws a black canvas instead. */
+    private fun blankTarget(): Boolean = try {
+        target.blank(SURFACE_FENCE_TIMEOUT_MS)
     } catch (_: Throwable) {
         false
     }
@@ -869,6 +974,8 @@ internal class SwitchingSurfaceCanvasTarget(
     private val source: MediaCodecSurfaceTarget,
     /** Production wraps the real Surface; a host test passes a scripted target. */
     private val createDelegate: (Surface) -> CanvasTarget = ::SurfaceCanvasTarget,
+    /** Production blanks through EGL; a host test records the call. */
+    private val blankSurface: (Surface) -> Boolean = ::blankThroughEgl,
 ) : CanvasTarget {
     /** Fair, so a waiting [fence] goes next instead of being overtaken by the next frame's lock. */
     private val inUse = ReentrantLock(true)
@@ -929,6 +1036,26 @@ internal class SwitchingSurfaceCanvasTarget(
         return true
     }
 
+    /**
+     * Fills the published Surface with opaque black through EGL and lets go of it again (#530),
+     * once no canvas is locked, waiting up to [timeoutMillis] for that. A canvas stays connected to
+     * a Surface after its post, and a decoder can then never write into it, so a Surface shared with
+     * a MediaCodec decoder is cleared this way. False when a draw still holds a canvas, when no
+     * Surface is displayable, or when EGL cannot take it, as when a canvas already holds it; the
+     * caller then draws a black canvas.
+     */
+    override fun blank(timeoutMillis: Long): Boolean {
+        if (!inUse.tryLock(timeoutMillis, TimeUnit.MILLISECONDS)) return false
+        try {
+            refresh()
+            val snapshot = source.snapshot()
+            val surface = snapshot.surface?.takeIf { snapshot.isDisplayable } ?: return false
+            return blankSurface(surface)
+        } finally {
+            inUse.unlock()
+        }
+    }
+
     /** Only with [inUse] held. */
     private fun refresh() {
         check(lockedDelegate == null) { "cannot replace a Surface while its Canvas is locked" }
@@ -979,6 +1106,13 @@ internal interface CanvasTarget {
 
     /** Posts whatever was drawn into [canvas] and gives the lock back. */
     fun post(canvas: TargetCanvas)
+
+    /**
+     * Fills the Surface with black without a canvas, so a decoder can still write into it
+     * afterwards (#530), waiting up to [timeoutMillis] for a draw in flight. False when this target
+     * cannot, and the caller draws a black canvas instead.
+     */
+    fun blank(timeoutMillis: Long): Boolean = false
 
     /** Releases the drawing storage this target owns. Never the Surface, which belongs to the caller. */
     fun release()
@@ -1173,5 +1307,69 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
             destination.set(left, top, left + drawWidth, top + drawHeight)
             canvas.drawBitmap(bitmap, null, destination, paint)
         }
+    }
+}
+
+/**
+ * Fills [surface] with opaque black through a throwaway EGL context and lets go of it again (#530),
+ * on the calling thread, leaving nothing current there. Destroying the window surface disconnects it
+ * from [surface], which a canvas post never does, so a MediaCodec decoder can still take [surface]
+ * afterwards. False when EGL refuses any step, as it does while a decoder or a canvas holds the
+ * Surface.
+ */
+internal fun blankThroughEgl(surface: Surface): Boolean {
+    val display = android.opengl.EGL14.eglGetDisplay(android.opengl.EGL14.EGL_DEFAULT_DISPLAY)
+    if (display == android.opengl.EGL14.EGL_NO_DISPLAY) return false
+    val version = IntArray(2)
+    if (!android.opengl.EGL14.eglInitialize(display, version, 0, version, 1)) return false
+    var context = android.opengl.EGL14.EGL_NO_CONTEXT
+    var window = android.opengl.EGL14.EGL_NO_SURFACE
+    try {
+        val configs = arrayOfNulls<android.opengl.EGLConfig>(1)
+        val found = IntArray(1)
+        val wanted = intArrayOf(
+            android.opengl.EGL14.EGL_RED_SIZE, 8,
+            android.opengl.EGL14.EGL_GREEN_SIZE, 8,
+            android.opengl.EGL14.EGL_BLUE_SIZE, 8,
+            android.opengl.EGL14.EGL_RENDERABLE_TYPE, android.opengl.EGL14.EGL_OPENGL_ES2_BIT,
+            android.opengl.EGL14.EGL_SURFACE_TYPE, android.opengl.EGL14.EGL_WINDOW_BIT,
+            android.opengl.EGL14.EGL_NONE,
+        )
+        if (!android.opengl.EGL14.eglChooseConfig(display, wanted, 0, configs, 0, 1, found, 0) || found[0] == 0) {
+            return false
+        }
+        val config = configs[0] ?: return false
+        context = android.opengl.EGL14.eglCreateContext(
+            display,
+            config,
+            android.opengl.EGL14.EGL_NO_CONTEXT,
+            intArrayOf(android.opengl.EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, android.opengl.EGL14.EGL_NONE),
+            0,
+        )
+        if (context == android.opengl.EGL14.EGL_NO_CONTEXT) return false
+        window = android.opengl.EGL14.eglCreateWindowSurface(
+            display,
+            config,
+            surface,
+            intArrayOf(android.opengl.EGL14.EGL_NONE),
+            0,
+        )
+        if (window == android.opengl.EGL14.EGL_NO_SURFACE) return false
+        if (!android.opengl.EGL14.eglMakeCurrent(display, window, window, context)) return false
+        android.opengl.GLES20.glClearColor(0f, 0f, 0f, 1f)
+        android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
+        return android.opengl.EGL14.eglSwapBuffers(display, window)
+    } finally {
+        android.opengl.EGL14.eglMakeCurrent(
+            display,
+            android.opengl.EGL14.EGL_NO_SURFACE,
+            android.opengl.EGL14.EGL_NO_SURFACE,
+            android.opengl.EGL14.EGL_NO_CONTEXT,
+        )
+        if (window != android.opengl.EGL14.EGL_NO_SURFACE) android.opengl.EGL14.eglDestroySurface(display, window)
+        if (context != android.opengl.EGL14.EGL_NO_CONTEXT) android.opengl.EGL14.eglDestroyContext(display, context)
+        // Android counts initialisations, so this ends only this one and leaves other users' EGL alone.
+        android.opengl.EGL14.eglTerminate(display)
+        android.opengl.EGL14.eglReleaseThread()
     }
 }

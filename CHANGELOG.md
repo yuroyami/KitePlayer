@@ -442,7 +442,7 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - A sound or subtitles that a transport stream starts carrying after the open join the tracks and
   play (#509), as on a UDP multicast, an IPTV channel joined between programmes or a tuner
   recording, and a channel that moves its sound to a new stream at a programme boundary keeps
-  playing it. A picture that appears after the open is listed and does not play yet. The new
+  playing it. A picture does the same, as the next entry says. The new
   `PlayerEvent.TracksAdded` names the tracks that appeared. When nothing of its
   kind plays, the player chooses one by the open's rules, as mpv does, and it follows a sound that
   ran out to the stream that carries on, once the old one has played its last sample, so the
@@ -452,6 +452,16 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `newPrograms`, null by default, so media whose streams never change plays exactly as before. A
   sound whose rate FFmpeg does not know yet, such as AAC listed before its first packet, opens
   instead of failing, and plays at the rate its decoder finds.
+- A picture that a transport stream starts carrying after the open plays (#527), as when a radio
+  service adds a slideshow or a channel joined during a break with no picture starts its programme,
+  and a channel that moves its picture to a new stream at a programme boundary keeps showing it, as
+  mpv does. The player chooses a picture by the open's rules when none plays, or when the one that
+  plays has shown its last frame while another carries on, and plays it in place from its keyframe
+  at the position, without opening the item again, so the sound and the subtitles play on untouched.
+  A seek either way across such a move shows the picture that played there. A viewer who turned the
+  picture off keeps it off, and choosing a picture that appeared after the open switches in place
+  too. Turning the picture off while none plays now answers at once instead of opening the item
+  again, so a live source, which refused it before, takes it as well.
 - A file whose sound starts after its picture shows that picture, with silence, as mpv and VLC do
   (#526). Before, it opened on the picture and then jumped to the first sound sample on play, so a
   recording whose sound starts two seconds in lost its first two seconds of picture, and a seek into

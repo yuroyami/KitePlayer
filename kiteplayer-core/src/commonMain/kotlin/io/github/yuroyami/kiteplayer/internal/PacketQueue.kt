@@ -276,6 +276,39 @@ internal class PacketQueue(
     }
 
     /**
+     * Drops what a decoder starting from this cache could not use, for an inactive picture cache
+     * that no decoder reads (#527): every packet before the newest keyframe that starts at or before
+     * [cutoffUs], or, when none does, every packet before the first keyframe, which nothing can
+     * decode. What stays always starts on a keyframe, at or before the position when the cache
+     * reaches back that far, so a switch to it shows the picture at the position.
+     *
+     * @return how many packets were dropped.
+     */
+    fun dropBeforeKeyframe(cutoffUs: Long): Int {
+        val toClose = mutableListOf<PlayerPacket>()
+        synchronized(lock) {
+            val keepFrom = items.indexOfLast { entry ->
+                val start = entry.startUs
+                entry.packet.isKeyframe && start != null && start <= cutoffUs
+            }.takeIf { it >= 0 }
+                ?: items.indexOfFirst { it.packet.isKeyframe }.takeIf { it >= 0 }
+                ?: items.size
+            repeat(keepFrom) {
+                val entry = items.removeFirst()
+                bytes -= entry.bytes
+                durationUs -= entry.durationUs
+                toClose += entry.packet
+            }
+        }
+        if (toClose.isNotEmpty()) drained.trySend(Unit)
+        toClose.forEach { it.close() }
+        return toClose.size
+    }
+
+    /** True when a keyframe is among the retained packets, so a decoder can start from them (#527). */
+    val holdsKeyframe: Boolean get() = synchronized(lock) { items.any { it.packet.isKeyframe } }
+
+    /**
      * The oldest timestamp still retained, for validating a current-position switch cache. A packet
      * with none is skipped: it plays before the next one that has one, so that one is the earliest
      * time the cache provably holds (#509).

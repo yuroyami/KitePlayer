@@ -1140,6 +1140,9 @@ internal class PlaybackCore(
     /** True when a caller's last sound choice for this item was none. Actor only. */
     private var soundOffByViewer = false
 
+    /** True when a caller's last picture choice for this item was none (#527). Actor only. */
+    private var pictureOffByViewer = false
+
     /** When playback began to wait for data while playing, or [NO_POSITION]. */
     private var starvedSinceNanos: Long = NO_POSITION
 
@@ -2065,7 +2068,8 @@ internal class PlaybackCore(
                     )
                 session == null && pendingVideoRecovery == null ->
                     IllegalStateException("selectTrack needs an open media item")
-                session != null && session?.source?.seekable != true && command.kind == TrackKind.Video ->
+                session != null && session?.source?.seekable != true && command.kind == TrackKind.Video &&
+                    !pictureChangesInPlace(command.track) ->
                     UnsupportedOperationException(
                         "this source is not seekable, so a video-track switch cannot rebuild and seek " +
                             "back to where playback was; audio and subtitle tracks switch from live caches",
@@ -2298,6 +2302,8 @@ internal class PlaybackCore(
                 }
                 // A sound that appears after the open never overrides a viewer who turned it off (#509).
                 if (command.kind == TrackKind.Audio) soundOffByViewer = command.track == null
+                // Nor does a picture override one who turned the picture off (#527).
+                if (command.kind == TrackKind.Video) pictureOffByViewer = command.track == null
                 traceUntilReplied(command.reply, "track", "switch") {
                     mapOf("kind" to command.kind.name, "track" to (command.track?.value?.toString() ?: "none"))
                 }
@@ -2850,6 +2856,7 @@ internal class PlaybackCore(
         variantChosenByPlayer = false
         subtitleChosenByPlayer = false
         soundOffByViewer = false
+        pictureOffByViewer = false
         starvedSinceNanos = NO_POSITION
         stepUpNotBeforeNanos = NO_POSITION
         stepUpWait = VARIANT_STEP_UP_WAIT
@@ -4134,13 +4141,14 @@ internal class PlaybackCore(
     }
 
     /**
-     * Plays a sound or subtitles that appeared after the open (#509), by the open's own rules and from
-     * the tracks of the channel that plays. A sound is chosen when none plays, or when the one that
-     * plays ran out while another carries on, as when a channel moves its sound to a new stream at a
-     * programme boundary; the sound that ran out lends its language first, so a viewer who chose it
-     * keeps that language. The subtitles are chosen again while the open's choice of them stands. A
-     * caller who turned the sound off, or chose subtitles, keeps that. mpv chooses a stream that
-     * surfaces after the open the same way, when nothing of its kind plays.
+     * Plays a sound, a picture or subtitles that appeared after the open (#509, #527), by the open's
+     * own rules and from the tracks of the channel that plays. A sound is chosen when none plays, or
+     * when the one that plays ran out while another carries on, as when a channel moves its sound to
+     * a new stream at a programme boundary; the sound that ran out lends its language first, so a
+     * viewer who chose it keeps that language. A picture is chosen the same way, in
+     * [choosePicture]. The subtitles are chosen again while the open's choice of them stands. A
+     * caller who turned the sound or the picture off, or chose subtitles, keeps that. mpv chooses a
+     * stream that surfaces after the open the same way, when nothing of its kind plays.
      *
      * Only a source that announced a change gets here, so media whose streams never change plays
      * exactly as before. A sound is chosen once its cache covers the position, because it starts
@@ -4154,9 +4162,10 @@ internal class PlaybackCore(
             session.subtitlesToChoose = false
             chooseSubtitleForAudio(session)
         }
+        val at = currentPosition().micros
+        choosePicture(session, at)
         if (TrackKind.Audio in pendingSelections || soundOffByViewer) return
         val lane = session.audioLane
-        val at = currentPosition().micros
         if (lane != null && !ranOut(session, lane.queue, at)) return
         val program = tracks.programs.firstOrNull { it.number == tracks.selectedProgram }
         val live = programCandidates(session.source.streams, tracks.programs, program).filter { stream ->
@@ -4194,6 +4203,260 @@ internal class PlaybackCore(
         val frontier = session.allPacketQueues.maxOfOrNull { it.newestEndUs ?: Long.MIN_VALUE } ?: return false
         if (frontier == Long.MIN_VALUE) return false
         return frontier - (queue.newestEndUs ?: atUs) >= SOUND_RAN_OUT_US
+    }
+
+    /**
+     * Plays a picture that appeared after the open (#527), by the open's own rule, the first of the
+     * playing channel's pictures that is not cover art: when none plays, as for a radio service that
+     * adds a slideshow or a channel joined during a break with no picture, or when the one that plays
+     * ran out while another carries on, as when a channel moves its picture to a new stream at a
+     * programme boundary. A picture is chosen once its cache holds a keyframe and reaches the
+     * position, and plays in place from there.
+     */
+    private suspend fun choosePicture(session: OpenSession, atUs: Long) {
+        if (TrackKind.Video in pendingSelections || pictureOffByViewer) return
+        val playing = session.videoStream
+        if (playing != null && !pictureRanOut(session, atUs)) return
+        val program = tracks.programs.firstOrNull { it.number == tracks.selectedProgram }
+        val target = programCandidates(session.source.streams, tracks.programs, program).firstOrNull { stream ->
+            stream.kind == TrackKind.Video && !stream.isCoverArt &&
+                stream.index != playing?.index &&
+                stream.index !in session.picturesRefused &&
+                session.pictureQueues[stream.index]?.let { pictureCacheRefusal(it, atUs) == null } == true
+        } ?: return
+        val refusal = playPictureInPlace(session, target, byViewer = false)
+        if (refusal != null) {
+            session.picturesRefused += target.index
+            warn(PlaybackWarning.TrackDeselected(TrackId(target.index), refusal))
+            return
+        }
+        emitEvent(PlayerEvent.TrackChosenByPlayer(TrackKind.Video, TrackId(target.index)))
+    }
+
+    /**
+     * Whether the picture that plays has run out at [atUs], as [ranOut] says for a sound: its decoder
+     * has taken every packet, the schedule has let every frame go, and the reads have gone
+     * [SOUND_RAN_OUT_US] past the end of its newest packet. The few frames a decoder holds back to put
+     * pictures in order go with it, as they do at a seek, because the picture after it starts where
+     * they would have shown.
+     */
+    private fun pictureRanOut(session: OpenSession, atUs: Long): Boolean {
+        val queue = session.videoQueue ?: return false
+        if (queue.count > 0 || session.videoInFlight.value > 0) return false
+        if ((session.video?.queuedFrames ?: 0) > 0) return false
+        val frontier = session.allPacketQueues.maxOfOrNull { it.newestEndUs ?: Long.MIN_VALUE } ?: return false
+        if (frontier == Long.MIN_VALUE) return false
+        return frontier - (queue.newestEndUs ?: atUs) >= SOUND_RAN_OUT_US
+    }
+
+    /**
+     * Why the cache [queue] of a picture cannot take over at [atUs], or null when it can (#527): it
+     * needs a keyframe to start from, and packets that reach the position, so it carries on.
+     */
+    private fun pictureCacheRefusal(queue: PacketQueue, atUs: Long): String? {
+        if (!queue.holdsKeyframe) return "picture stream ${queue.streamIndex} has no keyframe to start from yet"
+        val last = queue.lastTimestampUs
+            ?: return "picture stream ${queue.streamIndex} has no provable timestamp coverage"
+        if (last < atUs) return "picture stream ${queue.streamIndex} ends ${atUs - last}us before the current position"
+        return null
+    }
+
+    /**
+     * A viewer's choice of a picture the demux lane reads into a cache, made in place (#527): a reopen
+     * would not list a picture that appeared after the open, and a source that cannot seek could not
+     * come back to the position. Turning the picture off while none plays changes nothing that
+     * plays, and only keeps off a picture that appears later. The picture that plays now, or one with
+     * no cache, is left to the rebuild, which is what a renderer that needs a new decoder asks for.
+     */
+    private suspend fun inPlacePictureChange(session: OpenSession) {
+        val request = pendingSelections[TrackKind.Video] ?: return
+        if (request.track == null && session.videoStream == null) {
+            pendingSelections.remove(TrackKind.Video)
+            request.reply.complete(TrackChange.Applied(TrackKind.Video, null))
+            return
+        }
+        val index = request.track?.value ?: return
+        val queue = session.pictureQueues[index] ?: return
+        if (index == session.videoStream?.index) return
+        pendingSelections.remove(TrackKind.Video)
+        val stream = session.source.streams.firstOrNull { it.index == index && it.kind == TrackKind.Video }
+        val refusal = if (stream == null) {
+            "no picture stream has index $index"
+        } else {
+            pictureCacheRefusal(queue, currentPosition().micros)
+                ?: playPictureInPlace(session, stream, byViewer = !request.automatic)
+        }
+        request.reply.complete(
+            if (refusal == null) TrackChange.Applied(TrackKind.Video, request.track) else TrackChange.Discarded(refusal),
+        )
+        if (refusal == null && request.automatic) {
+            emitEvent(PlayerEvent.TrackChosenByPlayer(TrackKind.Video, request.track))
+        }
+    }
+
+    /**
+     * Whether choosing [track] as the picture needs no rebuild (#527), so a source that cannot seek
+     * can take it: a picture read into a cache that does not play now, or no picture while none
+     * plays.
+     */
+    private fun pictureChangesInPlace(track: TrackId?): Boolean {
+        val open = session ?: return false
+        val playing = open.videoStream?.index
+        return if (track == null) playing == null else track.value != playing && track.value in open.pictureQueues
+    }
+
+    /**
+     * Plays [stream] as the session's picture from its cache, in place (#527): no reopen and no seek,
+     * so the sound and the subtitles go on untouched. A session with no picture gets the lanes an
+     * open would have built for one. A session with a picture keeps its schedule, and changes its
+     * decoder and its queue with both video lanes parked. The picture starts at the position, and a
+     * seek back to before it plays the picture that played there; a [byViewer] choice stands for the
+     * whole item instead.
+     *
+     * @return null when the picture plays, or why it does not.
+     */
+    private suspend fun playPictureInPlace(session: OpenSession, stream: PlayerStreamInfo, byViewer: Boolean): String? {
+        val queue = session.pictureQueues[stream.index]
+            ?: return "the demux lane does not read picture stream ${stream.index}"
+        val before = session.videoStream?.index
+        val startUs = currentPosition().micros
+        val decodeWorker = session.videoDecodeWorker
+        val scheduler = session.videoScheduler
+        decodeWorker?.requestQuiesce()
+        scheduler?.requestQuiesce()
+        try {
+            val decodeParked = decodeWorker?.awaitQuiesced(QUIESCE_DEADLINE) ?: true
+            val scheduleParked = scheduler?.awaitQuiesced(QUIESCE_DEADLINE) ?: true
+            if (!decodeParked || !scheduleParked) return "the video lanes did not stop within $QUIESCE_DEADLINE"
+            swapPicture(session, stream, queue, startUs)?.let { return it }
+        } finally {
+            decodeWorker?.release(decodeWorker.epoch)
+            scheduler?.release(scheduler.epoch)
+        }
+        if (decodeWorker == null) {
+            val worker = Worker(VIDEO_DECODE_WORKER)
+            session.videoDecodeWorker = worker
+            worker.release(requestedEpoch)
+            session.jobs += launchWorker(session, worker, dispatchers.videoDecode) { runVideoDecode(session, worker) }
+        }
+        if (scheduler == null) startVideoSchedule(session)
+        val timeline = session.pictureTimeline
+        if (byViewer || before == null) {
+            timeline.clear()
+            timeline += PictureSpan(Long.MIN_VALUE, stream.index)
+        } else {
+            if (timeline.isEmpty()) timeline += PictureSpan(Long.MIN_VALUE, before)
+            recordPicture(timeline, startUs, stream.index)
+        }
+        pictureChanged(session, stream)
+        return null
+    }
+
+    /**
+     * Records in [timeline] that the picture at [index] plays from [fromUs] on, in order. A span that
+     * names the picture of the span before it says nothing new and goes, so a move found again after
+     * a seek back leaves one span, wherever in the move's stretch of reads it was found.
+     */
+    private fun recordPicture(timeline: MutableList<PictureSpan>, fromUs: Long, index: Int) {
+        val at = timeline.indexOfFirst { it.fromUs > fromUs }.let { if (it < 0) timeline.size else it }
+        timeline.add(at, PictureSpan(fromUs, index))
+        var span = 1
+        while (span < timeline.size) {
+            if (timeline[span].index == timeline[span - 1].index) timeline.removeAt(span) else span++
+        }
+    }
+
+    /**
+     * Brings back the picture that played at [targetUs] before a seek there (#527), with every lane
+     * parked by the seek, which then flushes and realigns all of it. A channel that moved its picture
+     * to a new stream carries nothing of the new one before the move, so a seek back to before it
+     * plays the old one again, and a seek forward past the move, or playing on, plays the new one.
+     */
+    private suspend fun restorePictureForSeek(session: OpenSession, targetUs: Long) {
+        val timeline = session.pictureTimeline
+        if (timeline.size < 2) return
+        val wanted = timeline.lastOrNull { it.fromUs <= targetUs }?.index ?: return
+        if (wanted == session.videoStream?.index) return
+        val queue = session.pictureQueues[wanted] ?: return
+        val stream = session.source.streams.firstOrNull { it.index == wanted && it.kind == TrackKind.Video } ?: return
+        val refusal = swapPicture(session, stream, queue, startUs = null)
+        if (refusal != null) {
+            warn(PlaybackWarning.TrackDeselected(TrackId(wanted), refusal))
+            return
+        }
+        pictureChanged(session, stream)
+        emitEvent(PlayerEvent.TrackChosenByPlayer(TrackKind.Video, TrackId(wanted)))
+    }
+
+    /** What a picture taken in place tells the caller: the selection and the picture's size. */
+    private fun pictureChanged(session: OpenSession, stream: PlayerStreamInfo) {
+        tracks = tracks.withSelection(TrackKind.Video, TrackId(stream.index))
+        stream.visibleVideoSize?.let { emitEvent(PlayerEvent.VideoSizeChanged(it)) }
+        publishSnapshot()
+    }
+
+    /**
+     * Makes [stream] the picture, read from [queue], with the video lanes parked or not started
+     * (#527). The decoder is made before the old one goes, so a picture no decoder takes leaves the
+     * old one playing. The cache starts at the keyframe before the position, and the frames before
+     * [startUs] are decoded and not shown, as a precise seek does; null leaves that to a seek.
+     *
+     * @return null when the picture is in place, or why it is not.
+     */
+    private suspend fun swapPicture(
+        session: OpenSession,
+        stream: PlayerStreamInfo,
+        queue: PacketQueue,
+        startUs: Long?,
+    ): String? {
+        val selected = createVideoDecoder(
+            session = session.backendSession,
+            stream = stream,
+            sourceSeekable = session.source.seekable,
+            selection = if (forceBackendSoftwareForMedia) {
+                VideoDecoderSelection.BackendSoftwareOnly
+            } else {
+                VideoDecoderSelection.Configured
+            },
+        ) ?: return deselectionDetail("no decoder accepted this video stream")
+        val decoder = selected.decoder
+        try {
+            withContext(dispatchers.videoDecode) { decoder.flush(requestedEpoch) }
+        } catch (failure: Throwable) {
+            withContext(NonCancellable + dispatchers.videoDecode) { runCatching { decoder.close() } }
+            if (failure is CancellationException) throw failure
+            return "the video decoder could not align to the live epoch${causeDetail(failure)}"
+        }
+        val playback = session.video ?: VideoPlayback(
+            renderer = session.renderer,
+            clock = clock,
+            containerFrameRate = stream.frameRate,
+            timestampsMayJump = session.source.timestampsMayJump,
+            queueCapacity = config.buffer.videoFrameQueue,
+            dropPolicy = config.frameDrop,
+        ).also { created ->
+            created.vsyncIntervalNanos = pendingRenderer?.vsyncIntervalNanos()
+            created.speed = effectiveSpeed
+        }
+        // The lanes are parked, so the frames of the picture before can go, and the schedule starts
+        // over from the first frame of this one.
+        playback.flush(requestedEpoch)
+        val retired = session.videoDecoder
+        session.installPicture(stream, queue, playback)
+        session.videoDecoder = decoder
+        session.videoDecoderOrigin = selected.origin
+        session.coupledRenderer = if (selected.origin == VideoDecoderOrigin.Renderer) pendingRenderer else null
+        session.rendererDecodersAsked = selected.rendererAsked
+        // The cache may start inside a group of pictures, which decodes to nothing usable.
+        session.videoWaitingForKeyframe.value = true
+        session.pictureSwitchDiscardBeforeUs.value = startUs ?: Long.MIN_VALUE
+        if (retired != null) {
+            withContext(NonCancellable + dispatchers.videoDecode) { runCatching { retired.close() } }
+                .exceptionOrNull()?.let { failure ->
+                    warn(PlaybackWarning.ResourcesNotReleased("retired video decoder: ${failure.message}"))
+                }
+        }
+        return null
     }
 
     /**
@@ -4686,6 +4949,8 @@ internal class PlaybackCore(
         // choices into its one replacement graph so nothing is lost and no second open happens.
         if (pendingVideoRecovery != null) return
         if (pendingSelections.isEmpty() && !reopenPending) return
+        // A picture the demux lane reads into a cache plays in place, as a sound does (#527).
+        if (!reopenPending) session?.let { inPlacePictureChange(it) }
         // Owner report 2026-08-26: a subtitle-only change must not ride the full
         // reopen below, which was built for video and audio switches and visibly interrupts
         // playback. Container subtitle tracks get the same in-place treatment external subtitles
@@ -6392,7 +6657,7 @@ internal class PlaybackCore(
         if (!endOfStream.demuxerEnded) return
         if (!endOfStream.audioDecoderDrained || !endOfStream.videoDecoderDrained) return
         if (session.selectedQueues().any { it.count > 0 }) return
-        if (session.video != null && session.video.queuedFrames > 0 && !stillImageFinished) return
+        if ((session.video?.queuedFrames ?: 0) > 0 && !stillImageFinished) return
 
         // The audio lane's own end, which the four conditions above cannot see. A drained decoder
         // and an empty packet queue say demuxing and decoding finished; the decoded samples then
@@ -8502,6 +8767,8 @@ internal class PlaybackCore(
         // After the quiesce, so an aborted seek keeps the recording, and before the container seek,
         // so no packet from the new position reaches the file.
         endRecording(session, reason = "a seek moved the playback position")
+        // Every lane is parked, and the flush below aligns whatever picture plays (#527).
+        restorePictureForSeek(session, target.micros)
 
         var attempt = 0
         var landed: Pts? = null
@@ -8739,9 +9006,7 @@ internal class PlaybackCore(
     }
 
     private suspend fun clearBuffers(session: OpenSession, epoch: Generation) {
-        session.videoQueue?.flushTo(epoch)
-        session.audioQueues.values.forEach { it.flushTo(epoch) }
-        session.subtitleQueues.values.forEach { it.flushTo(epoch) }
+        session.allPacketQueues.forEach { it.flushTo(epoch) }
         session.lastSwitchCachePrunePositionUs = Long.MIN_VALUE
         // A retained subtitle packet belongs to the flushed position and is owned here alone.
         session.pendingSubtitlePacket?.close()
@@ -8796,6 +9061,7 @@ internal class PlaybackCore(
         session.audioEosRequested.value = false
         session.audioTailFlushed.value = false
         session.audioSwitchDiscardBeforeUs.value = Long.MIN_VALUE
+        session.pictureSwitchDiscardBeforeUs.value = Long.MIN_VALUE
         // A seek owns the position, so a take-back's resume gives way to it (#467).
         session.resumeAfterTakeBackUs = NO_POSITION
         endOfStream.tailRequestedNanos = 0
@@ -9409,6 +9675,10 @@ internal class PlaybackCore(
                 session.audioInFlight.decrementAndGet()
             }
             release("video queue") { session.videoQueue?.close() }
+            // The pictures the demux lane reads beside the one that plays hold packets too (#527).
+            session.pictureQueues.values.forEach { queue ->
+                if (queue !== session.videoQueue) release("picture cache ${queue.streamIndex}") { queue.close() }
+            }
             session.audioQueues.values.forEach { queue ->
                 release("audio queue ${queue.streamIndex}") { queue.close() }
             }
@@ -9936,9 +10206,10 @@ internal class PlaybackCore(
         // that is producing nothing, and declaring readiness on packets alone started playback
         // into an underrun or a blank first frame. A stream that already ended is
         // exempt, because no more output can ever arrive for it.
-        val videoReady = session.video == null ||
+        val video = session.video
+        val videoReady = video == null ||
             session.videoParked.value ||
-            session.video.queuedFrames > 0 ||
+            video.queuedFrames > 0 ||
             session.videoQueue?.isEndOfStream == true
         val audio = session.audio
         val audioReady = session.audioLane == null ||
@@ -9953,10 +10224,13 @@ internal class PlaybackCore(
     private fun wellBuffered(session: OpenSession): Boolean =
         session.selectedQueues().all { it.isWellBuffered }
 
-    private fun outputStarved(session: OpenSession): Boolean = when {
-        session.audioLane != null -> (session.audio?.buffered ?: Duration.ZERO) <= Duration.ZERO
-        session.video != null -> session.video.queuedFrames == 0
-        else -> false
+    private fun outputStarved(session: OpenSession): Boolean {
+        val video = session.video
+        return when {
+            session.audioLane != null -> (session.audio?.buffered ?: Duration.ZERO) <= Duration.ZERO
+            video != null -> video.queuedFrames == 0
+            else -> false
+        }
     }
 
     private fun updateStreamStatuses(session: OpenSession) {
@@ -10102,7 +10376,9 @@ internal class PlaybackCore(
         var epoch = worker.epoch
         var restarts = worker.releases
         var ended = false
-        val queueOf = { index: Int -> session.audioQueues[index] ?: session.subtitleQueues[index] }
+        val queueOf = { index: Int ->
+            session.audioQueues[index] ?: session.subtitleQueues[index] ?: session.pictureQueues[index]
+        }
         while (true) {
             worker.checkpoint()
             pruneInactiveSwitchCaches(session)
@@ -10152,9 +10428,7 @@ internal class PlaybackCore(
             if (packet == null) {
                 // Held packets go ahead of the end, which a queue keeps after what it holds.
                 if (!late.idle) late.deliver(queueOf, epoch, ended = true)
-                session.videoQueue?.signalEndOfStream(epoch)
-                session.audioQueues.values.forEach { it.signalEndOfStream(epoch) }
-                session.subtitleQueues.values.forEach { it.signalEndOfStream(epoch) }
+                session.allPacketQueues.forEach { it.signalEndOfStream(epoch) }
                 ended = true
                 continue
             }
@@ -10178,10 +10452,10 @@ internal class PlaybackCore(
 
     /**
      * The demux lane's answer to a packet that says the source's streams or programmes changed
-     * (#509). Every sound and subtitle stream the lane does not read yet is asked for now, before the
-     * next read, because the source skips a stream nobody asked for. The actor then makes their queues
-     * and updates the tracks. A picture is listed and not read: playing one the open did not choose
-     * needs a picture path this session does not have.
+     * (#509). Every stream the lane does not read yet is asked for now, before the next read, because
+     * the source skips a stream nobody asked for. The actor then makes their caches and updates the
+     * tracks. A picture is read into a cache like a sound, so that one the player turns to shows at
+     * the position rather than from wherever the reads had got to by then (#527).
      */
     private fun announceLayout(
         session: OpenSession,
@@ -10190,7 +10464,7 @@ internal class PlaybackCore(
         programs: List<MediaProgram>?,
     ) {
         val fresh = listed.orEmpty()
-            .filter { (it.kind == TrackKind.Audio || it.kind == TrackKind.Subtitle) && it.index !in late.selection }
+            .filter { it.index !in late.selection && !(it.kind == TrackKind.Video && it.isCoverArt) }
             .map { it.index }
         var reading = emptyList<Int>()
         if (fresh.isNotEmpty()) {
@@ -10231,6 +10505,11 @@ internal class PlaybackCore(
             if (queue !== activeSubtitle) {
                 queue.dropBefore(subtitleCutoff, assumedDurationUs = CUE_PRUNE_BEHIND_MICROS)
             }
+        }
+        // A picture keeps only from the keyframe a switch at the position would start on (#527).
+        val activePicture = session.videoQueue
+        session.pictureQueues.values.forEach { queue ->
+            if (queue !== activePicture) queue.dropBeforeKeyframe(positionUs)
         }
     }
 
@@ -10287,9 +10566,14 @@ internal class PlaybackCore(
         val inactiveHoarder = session.allPacketQueues
             .filter { queue -> queues.none { it === queue } }
             .maxByOrNull { it.bytesBuffered }
-        if (inactiveHoarder != null && inactiveHoarder.count > 0 &&
-            inactiveHoarder.dropFromTail(inactiveHoarder.bytesBuffered / 2) > 0
-        ) {
+        // A picture cache goes whole: a cut in the middle of its run would leave every picture after
+        // the cut built on ones that are gone, and the reads refill it from the next keyframe (#527).
+        val keepBytes = when {
+            inactiveHoarder == null -> 0L
+            session.pictureQueues.values.any { it === inactiveHoarder } -> 0L
+            else -> inactiveHoarder.bytesBuffered / 2
+        }
+        if (inactiveHoarder != null && inactiveHoarder.count > 0 && inactiveHoarder.dropFromTail(keepBytes) > 0) {
             return true
         }
         // Cutting the media being played needs true starvation, not mere unreadiness.
@@ -10311,8 +10595,8 @@ internal class PlaybackCore(
     }
 
     private suspend fun runVideoDecode(session: OpenSession, worker: Worker) {
-        val queue = session.videoQueue ?: return
-        val decoder = session.videoDecoder ?: return
+        var queue = session.videoQueue ?: return
+        var decoder = session.videoDecoder ?: return
         val video = session.video ?: return
         var epoch = worker.epoch
         var restarts = worker.releases
@@ -10336,6 +10620,12 @@ internal class PlaybackCore(
                     skippingToKeyframe = false
                     // A frame held for a backward landing belongs to the timeline the flush ended.
                     held.drop(session)
+                    // A picture that gave way to another changed the queue and the decoder while this
+                    // lane was parked (#527). A new decoder skips nothing until it is told to.
+                    queue = session.videoQueue ?: return
+                    val current = session.videoDecoder ?: return
+                    if (current !== decoder) skippingNonReference = false
+                    decoder = current
                 }
                 if (drainFrames(session, worker, decoder, video, epoch, held)) continue
                 if (queue.isEndOfStream && queue.count == 0) {
@@ -10572,6 +10862,12 @@ internal class PlaybackCore(
                     ownsFrame = false
                 }
                 return true
+            }
+            // A picture taken in place starts at the position, from the keyframe before it (#527).
+            val switchDiscard = session.pictureSwitchDiscardBeforeUs.value
+            if (switchDiscard != Long.MIN_VALUE) {
+                if (frame.pts.micros < switchDiscard) return true
+                session.pictureSwitchDiscardBeforeUs.compareAndSet(switchDiscard, Long.MIN_VALUE)
             }
             // A picture at or after the A-B loop's end belongs to the pass after B, and waits here
             // while the end stands, so the pass that plays never shows it (#467).
@@ -11152,24 +11448,48 @@ internal class PlaybackCore(
 
     /** A session's per-stream caches, with every packet-owning queue listed once. */
     private class QueueTable(
-        videoQueue: PacketQueue?,
+        val video: PacketQueue?,
         val audio: Map<Int, PacketQueue>,
         val subtitle: Map<Int, PacketQueue>,
+        /**
+         * One cache for each picture the demux lane reads besides the one the open chose: each that
+         * appeared after the open, and the open's own once another took its place (#527). The
+         * picture that plays may be one of them, and is then [video] too.
+         */
+        val pictures: Map<Int, PacketQueue> = emptyMap(),
     ) {
-        val all: List<PacketQueue> = listOfNotNull(videoQueue) + audio.values + subtitle.values
+        val all: List<PacketQueue> =
+            listOfNotNull(video) + audio.values + subtitle.values + pictures.values.filter { it !== video }
     }
+
+    /** The picture stream at [index] played from [fromUs] on (#527). */
+    private class PictureSpan(val fromUs: Long, val index: Int)
+
+    /**
+     * The picture a session plays: its stream, its packet queue and its schedule, replaced together
+     * and only by the actor, when a picture appears after the open or the one that played gives way
+     * to another (#527). Null throughout is a session with no picture.
+     */
+    private class PictureLane(
+        val stream: PlayerStreamInfo?,
+        val queue: PacketQueue?,
+        val playback: VideoPlayback?,
+    )
 
     private class OpenSession(
         val token: Long,
         val backendSession: BackendSession,
         val source: PlayerMediaSource,
-        val videoStream: PlayerStreamInfo?,
-        /** Set once, before the video decode worker starts: at build, or at the swap for a preload. */
+        videoStream: PlayerStreamInfo?,
+        /**
+         * Set before the video decode worker starts: at build, at the swap for a preload, or with
+         * the worker parked when a picture appears after the open (#527).
+         */
         var videoDecoder: VideoDecoder?,
         var videoDecoderOrigin: VideoDecoderOrigin?,
         /** The renderer whose factory made [videoDecoder], null for a backend decoder. */
         var coupledRenderer: VideoRenderer?,
-        val videoQueue: PacketQueue?,
+        videoQueue: PacketQueue?,
         audioLane: AudioLane?,
         /** One epoch-aligned compressed cache for every audio stream in the container. */
         audioQueues: Map<Int, PacketQueue>,
@@ -11181,7 +11501,7 @@ internal class PlaybackCore(
         var subtitleQueue: PacketQueue?,
         /** One epoch-aligned compressed cache for every container subtitle stream. */
         subtitleQueues: Map<Int, PacketQueue>,
-        val video: VideoPlayback?,
+        video: VideoPlayback?,
         /** Actor-owned; created lazily when a session initially opened with audio deselected. */
         var audio: AudioPlayback?,
         var sink: AudioSink?,
@@ -11244,6 +11564,18 @@ internal class PlaybackCore(
          * judge nothing by the published position, which belongs to the item still playing.
          */
         val preloading = atomic(false)
+
+        private val pictureLane = atomic(PictureLane(videoStream, videoQueue, video))
+
+        /** The picture that plays, or null. */
+        val videoStream: PlayerStreamInfo? get() = pictureLane.value.stream
+
+        /** The picture's packets. */
+        val videoQueue: PacketQueue? get() = pictureLane.value.queue
+
+        /** The picture's schedule, which hands its frames to [renderer]. */
+        val video: VideoPlayback? get() = pictureLane.value.playback
+
         private val audioRouting = atomic(
             AudioRouting(audioLane, listOfNotNull(videoQueue, audioLane?.queue)),
         )
@@ -11258,6 +11590,27 @@ internal class PlaybackCore(
         }
 
         /**
+         * Makes [stream] the picture, read from its cache [queue] and shown through [playback]
+         * (#527). Every table changes at once, so the demux lane routes the stream's next packet to
+         * the same queue it filled before. The picture that played stays a cache of its own, because
+         * the lane goes on reading it: a seek back can find it again. Actor only, with the video
+         * lanes parked or not started.
+         */
+        fun installPicture(stream: PlayerStreamInfo, queue: PacketQueue, playback: VideoPlayback) {
+            val before = pictureLane.value
+            pictureLane.value = PictureLane(stream, queue, playback)
+            val table = queueTable.value
+            val left = before.stream?.index
+            val pictures = if (left != null && before.queue != null && left !in table.pictures) {
+                table.pictures + (left to before.queue)
+            } else {
+                table.pictures
+            }
+            queueTable.value = QueueTable(queue, table.audio, table.subtitle, pictures)
+            audioRouting.value = AudioRouting(audioLane, listOfNotNull(queue, audioLane?.queue))
+        }
+
+        /**
          * The per-stream caches, replaced whole and only by the actor when a stream appears after
          * the open (#509), so the demux lane reads one table or the next and never half of one.
          */
@@ -11267,19 +11620,23 @@ internal class PlaybackCore(
 
         val subtitleQueues: Map<Int, PacketQueue> get() = queueTable.value.subtitle
 
+        /** The picture caches, by stream; see [QueueTable.pictures]. */
+        val pictureQueues: Map<Int, PacketQueue> get() = queueTable.value.pictures
+
         /** Every packet-owning queue, each exactly once, for byte accounting/flush/teardown. */
         val allPacketQueues: List<PacketQueue> get() = queueTable.value.all
 
-        /** Adds the cache of an audio or subtitle stream that appeared after the open. Actor only. */
+        /** Adds the cache of a stream that appeared after the open. Actor only. */
         fun addQueue(kind: TrackKind, queue: PacketQueue) {
             val table = queueTable.value
+            val index = queue.streamIndex
             queueTable.value = when (kind) {
-                TrackKind.Audio -> QueueTable(videoQueue, table.audio + (queue.streamIndex to queue), table.subtitle)
+                TrackKind.Audio -> QueueTable(table.video, table.audio + (index to queue), table.subtitle, table.pictures)
                 TrackKind.Subtitle -> {
-                    subtitleCueCaches[queue.streamIndex] = mutableListOf()
-                    QueueTable(videoQueue, table.audio, table.subtitle + (queue.streamIndex to queue))
+                    subtitleCueCaches[index] = mutableListOf()
+                    QueueTable(table.video, table.audio, table.subtitle + (index to queue), table.pictures)
                 }
-                TrackKind.Video -> error("a picture stream has no cache of its own")
+                TrackKind.Video -> QueueTable(table.video, table.audio, table.subtitle, table.pictures + (index to queue))
             }
         }
 
@@ -11295,6 +11652,18 @@ internal class PlaybackCore(
 
         /** The sounds the player chose on its own after the open, each tried once. Actor only. */
         val soundsTried: MutableSet<Int> = HashSet()
+
+        /**
+         * The pictures that could not take over in place, each refused once (#527), so one no decoder
+         * takes is not asked for again on every pass. Actor only.
+         */
+        val picturesRefused: MutableSet<Int> = HashSet()
+
+        /**
+         * Which picture played from where, once the player moved the picture in place (#527), so a
+         * seek plays the picture that played at its target. Empty until then. Actor only.
+         */
+        val pictureTimeline: MutableList<PictureSpan> = ArrayList()
 
         /** Between the audio decoder and the feeder. Small, because the ring is the real buffer. */
         val decodedAudio: Channel<AudioBuffer> = Channel(capacity = 4)
@@ -11409,6 +11778,14 @@ internal class PlaybackCore(
         val videoWaitingForKeyframe = atomic(false)
         /** Audio-only precise boundary for a lane swap; video remains on the current epoch. */
         val audioSwitchDiscardBeforeUs = atomic(Long.MIN_VALUE)
+
+        /**
+         * Where a picture taken in place starts (#527). Its cache starts at the keyframe before the
+         * position, so the frames before this are decoded and not shown, as a precise seek does.
+         * Set by the actor with the video lanes parked, and cleared by the decode lane at the first
+         * frame past it, or by a seek.
+         */
+        val pictureSwitchDiscardBeforeUs = atomic(Long.MIN_VALUE)
         val schedulerMode = atomic(SCHEDULER_IDLE)
         val firstVideo = FirstTimestamp()
 
@@ -11564,7 +11941,7 @@ internal class PlaybackCore(
         fun framesReleased(video: VideoPlayback?): Long = video?.releasedFrames ?: 0
 
         val isStillImage: Boolean
-            get() = videoStream != null && audioStream == null && (videoStream.isCoverArt || videoStream.isSparse)
+            get() = videoStream.let { it != null && audioStream == null && (it.isCoverArt || it.isSparse) }
     }
 
     private companion object {

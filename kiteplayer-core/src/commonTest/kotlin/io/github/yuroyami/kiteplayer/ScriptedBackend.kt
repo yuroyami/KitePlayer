@@ -248,6 +248,19 @@ internal class MediaScript(
      * (#509). Each applies from the first packet read at or past its time.
      */
     val programChanges: List<Pair<Long, List<io.github.yuroyami.kiteplayer.MediaProgram>>> = emptyList(),
+    /**
+     * When the picture first appears, as [ScriptedAudioTrack.appearsAtUs] says for a sound (#527): a
+     * slideshow a radio service adds, or a channel joined during a break with no picture. Its first
+     * packet is the first frame on the grid at or past this time, which need not be a keyframe.
+     */
+    val videoAppearsAtUs: Long? = null,
+    /** Where the picture stops being carried, as a channel that moves it to a new stream does (#527). */
+    val videoEndUs: Long? = null,
+    /**
+     * The stream a channel's picture moves to at [videoEndUs] (#527), on the same grid and with the
+     * same keyframes from there on. Null is no second picture.
+     */
+    val movedVideoIndex: Int? = null,
 ) {
     /** Whether the picture at [ptsUs] is one nothing is built on, under [alternateFramesAreNonReference]. */
     fun isNonReferenceVideo(ptsUs: Long, isKeyframe: Boolean): Boolean {
@@ -318,6 +331,11 @@ internal class MediaScript(
     /** The first video timestamp: zero on the grid, the first listed one otherwise. */
     val firstVideoPtsUs: Long get() = videoTimestampsUs?.first() ?: 0L
 
+    /** The first video timestamp at or past [atUs]. */
+    fun firstVideoAtOrAfter(atUs: Long): Long =
+        videoTimestampsUs?.firstOrNull { it >= atUs }
+            ?: if (atUs <= firstVideoPtsUs) firstVideoPtsUs else (atUs + videoFrameDurationUs - 1) / videoFrameDurationUs * videoFrameDurationUs
+
     /** The video timestamp after [pts], or [durationUs] when [pts] is the last one. */
     fun videoPtsAfter(pts: Long): Long =
         videoTimestampsUs?.let { list -> list.firstOrNull { it > pts } ?: durationUs }
@@ -348,8 +366,12 @@ internal class MediaScript(
                 "the keyframes $keys must be among the timestamps $list and include the first"
             }
         }
+        require(movedVideoIndex == null || (hasVideo && videoEndUs != null)) {
+            "a picture moves to a new stream only from one that ends"
+        }
         val streamIndices = buildList {
             if (hasVideo) add(videoIndex)
+            movedVideoIndex?.let(::add)
             addAll(audioTracks.map { it.index })
             addAll(subtitleTracks.map { it.index })
         }
@@ -853,6 +875,8 @@ internal class ScriptedSource(
     private var programChangesApplied = 0
 
     private val lateAt: Map<Int, Long> = buildMap {
+        script.videoAppearsAtUs?.let { put(script.videoIndex, it) }
+        script.movedVideoIndex?.let { put(it, requireNotNull(script.videoEndUs)) }
         script.audioTracks.forEach { track -> track.appearsAtUs?.let { put(track.index, it) } }
         script.subtitleTracks.forEach { track -> track.appearsAtUs?.let { put(track.index, it) } }
     }
@@ -899,6 +923,18 @@ internal class ScriptedSource(
                     // A key with no TrackInfo field of its own, so a test can prove the raw tags
                     // travel and not just the two the type happens to parse.
                     metadata = mapOf("handler_name" to "scripted video handler"),
+                ),
+            )
+        }
+        script.movedVideoIndex?.let { index ->
+            add(
+                PlayerStreamInfo(
+                    index = index,
+                    kind = TrackKind.Video,
+                    codec = "scripted-video",
+                    startTime = Pts.Zero,
+                    videoSize = VideoSize(1920, 1080),
+                    frameRate = 1_000_000.0 / script.videoFrameDurationUs,
                 ),
             )
         }
@@ -956,7 +992,8 @@ internal class ScriptedSource(
     override val timestampsMayJump: Boolean = false
 
     private var selected: Set<Int> = emptySet()
-    private var videoCursorUs = script.firstVideoPtsUs
+    private var videoCursorUs = script.firstVideoAtOrAfter(script.videoAppearsAtUs ?: script.firstVideoPtsUs)
+    private var movedVideoCursorUs = script.videoEndUs?.let(script::firstVideoAtOrAfter) ?: Long.MAX_VALUE
     private val audioCursorsUs: MutableMap<Int, Long> =
         script.audioTracks.associate { it.index to (it.appearsAtUs ?: 0L) }.toMutableMap()
     private val subtitleCursors: MutableMap<Int, Int> =
@@ -1109,12 +1146,19 @@ internal class ScriptedSource(
         val readDelayUs = selectedVariant?.let { script.readDelayUsByVariant[it] } ?: script.readDelayUs
         if (readDelayUs > 0) delay(readDelayUs / 1_000)
 
-        val video = script.videoIndex.takeIf {
-            script.hasVideo && it in selected && videoCursorUs < script.durationUs
+        val primaryVideo = script.hasVideo && script.videoIndex in selected &&
+            videoCursorUs < minOf(script.durationUs, script.videoEndUs ?: Long.MAX_VALUE)
+        val movedVideo = script.movedVideoIndex?.takeIf { it in selected && movedVideoCursorUs < script.durationUs }
+        // The picture that is due first, when two are read.
+        val video = when {
+            movedVideo != null && (!primaryVideo || movedVideoCursorUs < videoCursorUs) -> movedVideo
+            primaryVideo -> script.videoIndex
+            else -> null
         }
+        val videoAtUs = if (video == script.videoIndex) videoCursorUs else movedVideoCursorUs
         val audio = audioCandidate()
         val mediaCursor = minOf(
-            if (video != null) videoCursorUs else Long.MAX_VALUE,
+            if (video != null) videoAtUs else Long.MAX_VALUE,
             audio?.let { audioCursorsUs.getValue(it.index) } ?: Long.MAX_VALUE,
         )
         subtitleCandidate(mediaCursor)?.let { candidate ->
@@ -1135,19 +1179,20 @@ internal class ScriptedSource(
             video == null -> false
             audio == null -> true
             script.badlyInterleaved -> true
-            else -> videoCursorUs <= audioCursorsUs.getValue(audio.index)
+            else -> videoAtUs <= audioCursorsUs.getValue(audio.index)
         }
         return when {
             pickVideo -> {
-                val pts = videoCursorUs
-                videoCursorUs = script.videoPtsAfter(pts)
-                waitForLink(videoCursorUs - pts)
+                val pts = videoAtUs
+                val next = script.videoPtsAfter(pts)
+                if (video == script.videoIndex) videoCursorUs = next else movedVideoCursorUs = next
+                waitForLink(next - pts)
                 waitForArrival(pts)
                 packetRead(
                     FakePacket(
-                        streamIndex = script.videoIndex,
+                        streamIndex = checkNotNull(video),
                         pts = Pts(pts),
-                        duration = Pts(videoCursorUs - pts),
+                        duration = Pts(next - pts),
                         isKeyframe = script.isVideoKeyframe(pts),
                         ledger = ledger,
                     ),
@@ -1200,7 +1245,8 @@ internal class ScriptedSource(
                 it.startMicros >= landing
             }.takeIf { it >= 0 } ?: track.packets.size
         }
-        videoCursorUs = landing
+        videoCursorUs = maxOf(landing, script.videoAppearsAtUs?.let(script::firstVideoAtOrAfter) ?: Long.MIN_VALUE)
+        movedVideoCursorUs = script.videoEndUs?.let { maxOf(landing, script.firstVideoAtOrAfter(it)) } ?: Long.MAX_VALUE
         script.audioTracks.forEach { audioCursorsUs[it.index] = maxOf(landing, it.appearsAtUs ?: 0L) }
         demuxFrontierUs = landing
         // Like libavformat, this cursor does not report where it landed. The engine finds out from the

@@ -110,6 +110,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoDecoderFactory :
 }
 
 final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame : io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame, io.github.yuroyami.kiteplayer.spi/VideoFrame { // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame|null[0]
+    final val closedCaptions // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.closedCaptions|{}closedCaptions[0]
+        final fun <get-closedCaptions>(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.closedCaptions.<get-closedCaptions>|<get-closedCaptions>(){}[0]
     final val colorSpace // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.colorSpace|{}colorSpace[0]
         final fun <get-colorSpace>(): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.colorSpace.<get-colorSpace>|<get-colorSpace>(){}[0]
     final val crop // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.crop|{}crop[0]

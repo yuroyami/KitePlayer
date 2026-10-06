@@ -649,6 +649,11 @@ and labels it.
   backgrounds and its double height lines in the top or bottom half of the picture. The letters
   follow the page's national character set, Latin, Cyrillic, Greek or Hebrew, as libzvbi reads
   them ([#510](https://github.com/yuroyami/KitePlayer/issues/510)).
+- The closed captions broadcast H.264, HEVC and MPEG-2 carry inside the picture, which have no
+  subtitle stream of their own, become a track, CC1, from the first picture that carries any. Each
+  screen shows as it is sent, as mpv shows them, and like a television the player shows them when
+  the viewer's preferences or the viewer ask, not by default. Pictures a platform decoder draws
+  straight to a surface carry none ([#236](https://github.com/yuroyami/KitePlayer/issues/236)).
 - A disc's forced captions, the signs and foreign dialogue it marks forced among a Blu-ray or DVD
   track's pictures, can draw on their own. `setForcedPicturesOnly`, as mpv's
   `sub-forced-events-only`, draws only those of the chosen track, and

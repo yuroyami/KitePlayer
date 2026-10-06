@@ -95,6 +95,7 @@ internal class FakeVideoFrame(
     override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(1080),
     override val hardwareSurface: Nothing? = null,
     private val ledger: LeakLedger? = null,
+    override val closedCaptions: ByteArray? = null,
 ) : io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame {
     private var isClosed = false
 

@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.spi.CLOSED_CAPTIONS_CODEC
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.SubtitleDecoder
@@ -15,7 +16,7 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
  * The text formats FFmpeg decodes into ASS events: closed captions stored as a track of their own,
  * such as a MOV `c608` track, whose CEA-608 byte pairs FFmpeg's caption decoder turns into timed
  * text, and SAMI, MicroDVD, SubViewer, MPL2, JACOsub, VPlayer, PJS, RealText and Spruce STL tracks
- * (#492). Captions carried inside the video stream are a different path.
+ * (#492). Captions carried inside the video stream decode through [InVideoCaptionDecoder] (#236).
  */
 internal class KiteFFmpegCaptionDecoderFactory(
     private val source: KiteFFmpegSource,
@@ -23,8 +24,19 @@ internal class KiteFFmpegCaptionDecoderFactory(
 
     override val name: String = "kiteffmpeg-caption"
 
-    override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? =
-        if (stream.codec in CAPTION_CODECS) source.newCaptionDecoder(stream) else null
+    override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? = when {
+        // The captions inside a video stream have no stream of the container to decode (#236).
+        stream.codec == CLOSED_CAPTIONS_CODEC -> openInVideoCaptions()
+        stream.codec in CAPTION_CODECS -> source.newCaptionDecoder(stream)
+        else -> null
+    }
+
+    /** Null for a KiteFFmpeg build without FFmpeg's caption decoder, which leaves the track to another factory. */
+    private fun openInVideoCaptions(): SubtitleDecoder? = try {
+        InVideoCaptionDecoder(io.github.yuroyami.kiteffmpeg.ClosedCaptionDecoder.open(realTime = true))
+    } catch (missing: io.github.yuroyami.kiteffmpeg.FFmpegException) {
+        null
+    }
 
     private companion object {
         val CAPTION_CODECS = setOf(

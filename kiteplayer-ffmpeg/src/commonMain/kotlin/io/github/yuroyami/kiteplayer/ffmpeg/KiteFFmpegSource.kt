@@ -1684,6 +1684,18 @@ public class KiteFFmpegVideoFrame internal constructor(
     internal val isKeyframe: Boolean = info.isKeyframe
 
     /**
+     * The A/53 caption bytes FFmpeg's decoder attached to this picture (#236). Unreadable side
+     * data costs this picture's captions and nothing more.
+     */
+    override val closedCaptions: ByteArray? by lazy {
+        try {
+            frame.closedCaptions()
+        } catch (unreadable: io.github.yuroyami.kiteffmpeg.FFmpegException) {
+            null
+        }
+    }
+
+    /**
      * The software twin of a VideoToolbox frame, downloaded ONCE on first need and owned by this
      * wrapper. Lazy on purpose: a newest-wins renderer supersedes most frames without ever
      * reading pixels, and an eager download would pay 3 to 25 MB of copying for every one of

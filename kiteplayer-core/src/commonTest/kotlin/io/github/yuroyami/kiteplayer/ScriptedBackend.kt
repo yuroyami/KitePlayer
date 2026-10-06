@@ -143,6 +143,12 @@ internal class MediaScript(
     val declaredDurationNowUs: (() -> Long)? = null,
     /** True models an HLS master whose sounds are renditions downloaded on their own (#455). */
     val separateAudioRenditions: Boolean = false,
+    /**
+     * The closed captions each decoded picture carries, by its time, or null for none (#236). The
+     * scripted caption decoder reads the bytes as text: a cue that holds until the next, and
+     * [SCRIPTED_CAPTION_CLEAR] an empty one that clears the screen.
+     */
+    val videoCaptions: ((ptsUs: Long) -> String?)? = null,
     val hasVideo: Boolean = true,
     val hasAudio: Boolean = true,
     /** The chapter table the scripted container declares. */
@@ -672,6 +678,44 @@ internal class ScriptedSubtitleDecoder(
     }
 }
 
+/** What a scripted picture's captions say to clear the screen (#236). */
+internal const val SCRIPTED_CAPTION_CLEAR: String = "<clear>"
+
+/**
+ * The decoder of the captions inside a scripted picture (#236), answering in real time as the
+ * FFmpeg backend's does: each packet's text is the screen from the packet's time, until the next.
+ */
+internal object ScriptedCaptionDecoderFactory : SubtitleDecoderFactory {
+    override val name: String = "scripted-captions"
+
+    override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? {
+        if (stream.codec != io.github.yuroyami.kiteplayer.spi.CLOSED_CAPTIONS_CODEC) return null
+        return object : SubtitleDecoder {
+            private val pending = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
+
+            override suspend fun send(packet: PlayerPacket?): Boolean {
+                val pts = packet?.pts?.micros ?: return true
+                val text = packet.copyBytes().decodeToString()
+                val spans = if (text == SCRIPTED_CAPTION_CLEAR) emptyList() else listOf(io.github.yuroyami.kiteplayer.subtitle.StyledSpan(text))
+                pending.addLast(io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(pts, io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.OPEN_END, spans))
+                return true
+            }
+
+            override suspend fun receive(): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> {
+                val out = pending.toList()
+                pending.clear()
+                return out
+            }
+
+            override suspend fun flush(newGeneration: Generation) {
+                pending.clear()
+            }
+
+            override fun close() = Unit
+        }
+    }
+}
+
 /** The scripted backend. One session per [open]. */
 internal class ScriptedBackend(
     private val script: MediaScript = MediaScript(),
@@ -875,7 +919,10 @@ internal class ScriptedSession(
         )
 
     override val subtitleDecoders: List<SubtitleDecoderFactory> =
-        if (script.hasSubtitles) listOf(ScriptedSubtitleDecoderFactory(script, faults)) else emptyList()
+        listOfNotNull(
+            ScriptedSubtitleDecoderFactory(script, faults).takeIf { script.hasSubtitles },
+            ScriptedCaptionDecoderFactory.takeIf { script.videoCaptions != null },
+        )
 
     var closeCount: Int = 0
         private set
@@ -1477,6 +1524,7 @@ internal class ScriptedVideoDecoder(
                 generation = generation,
                 duration = packet.duration ?: Pts(script.videoFrameDurationUs),
                 ledger = ledger,
+                closedCaptions = script.videoCaptions?.invoke(pts.micros)?.encodeToByteArray(),
             ),
         )
         return true

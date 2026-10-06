@@ -3730,8 +3730,11 @@ internal class PlaybackCore(
                     pickAudio(candidates)
                 }
             var preferredExternal: TrackId? = null
+            // A caption track inside the picture is made again once the pictures are decoded, and
+            // chosen then (#236), so the open selects no subtitle meanwhile and says nothing of it.
+            val wantedCaptions = (subtitleChoice as? StreamChoice.At)?.index?.takeIf(::isCaptionTrack)
             val subtitleCandidate =
-                resolveStreamChoice(subtitleChoice, source.streams, TrackKind.Subtitle, report) {
+                resolveStreamChoice(if (wantedCaptions != null) StreamChoice.None else subtitleChoice, source.streams, TrackKind.Subtitle, report) {
                     val container = pickSubtitle(candidates, audioCandidate)
                     // An external file that matches the preferences better leaves the container's unselected,
                     // and the open selects the file once its track exists (#514).
@@ -3975,6 +3978,7 @@ internal class PlaybackCore(
                 networkIo = suppliedIo,
             ).also { built ->
                 built.applyClip(item)
+                built.wantedCaptions = wantedCaptions
                 built.startUs = readFromUs
                 // What the device was opened for, which a gapless handoff compares the next item against.
                 built.deviceRequest = if (audioPlayback != null) audioDecoder?.outputFormat else null
@@ -4569,7 +4573,7 @@ internal class PlaybackCore(
         val targetExternal = request.track?.takeIf(::isExternalSubtitle)
         val targetStream = request.track
             ?.takeUnless(::isExternalSubtitle)
-            ?.let { id -> session.source.streams.firstOrNull { it.index == id.value && it.kind == TrackKind.Subtitle } }
+            ?.let { id -> session.streams.firstOrNull { it.index == id.value && it.kind == TrackKind.Subtitle } }
         // Subtitles off may still draw the forced pictures of the audio's language (#513).
         var forced = if (request.track == null) forcedPictureTrack(session) else null
         val laneStream = targetStream ?: forced
@@ -4796,7 +4800,7 @@ internal class PlaybackCore(
         if (!subtitleChosenByPlayer || TrackKind.Subtitle in pendingSelections) return
         val source = session.source
         val program = source.programs.firstOrNull { it.number == tracks.selectedProgram }
-        val container = pickSubtitle(programCandidates(source.streams, source.programs, program), session.audioStream)
+        val container = pickSubtitle(programCandidates(session.streams, source.programs, program), session.audioStream)
         val target = preferredExternalSubtitle(container, externalSubtitleTracks.map { it.info }, session.audioStream, config.subtitles)?.id
             ?: container?.let { TrackId(it.index) }
         if (target == tracks.selectedSubtitle) return
@@ -4831,7 +4835,8 @@ internal class PlaybackCore(
         }
         target.layoutChanged = true
         val before = preloaded?.build?.tracks ?: tracks
-        val after = before.withLayout(listed, programs)
+        // The tracks the engine made of the captions inside the picture stay listed (#236).
+        val after = before.withLayout(listed?.let { it + target.madeStreams }, programs)
         val added = after.all.filter { row -> before.find(row.id) == null }
         if (programs != null || added.any { it.kind == TrackKind.Subtitle }) target.subtitlesToChoose = true
         if (preloaded != null) {
@@ -4842,6 +4847,29 @@ internal class PlaybackCore(
         tracks = after
         if (added.isNotEmpty()) emitEvent(PlayerEvent.TracksAdded(added))
         publishSnapshot()
+    }
+
+    /**
+     * Lists [stream], the caption track the video lane found inside [target]'s picture and already
+     * reads into its cache (#236), as [adoptLayout] lists a stream the source found after the open:
+     * its cue table, the track and the event naming it, and the choice of subtitles again. A track a
+     * rebuild carried in selected is chosen again here, as the viewer left it.
+     */
+    private fun adoptCaptions(target: OpenSession, stream: PlayerStreamInfo) {
+        val preloaded = pendingNext?.takeIf { it.prepared?.session === target }
+        if (target !== session && preloaded == null) return
+        if (target.madeStreams.any { it.index == stream.index }) return
+        target.subtitleCueCaches[stream.index] = mutableListOf()
+        target.madeStreams += stream
+        adoptLayout(target, target.source.streams, null, emptyList())
+        if (target.wantedCaptions == stream.index) {
+            target.wantedCaptions = null
+            if (TrackKind.Subtitle !in pendingSelections) {
+                target.subtitlesToChoose = false
+                pendingSelections[TrackKind.Subtitle] =
+                    SelectionRequest(TrackKind.Subtitle, TrackId(stream.index), CompletableDeferred())
+            }
+        }
     }
 
     /**
@@ -4872,7 +4900,7 @@ internal class PlaybackCore(
         val lane = session.audioLane
         if (lane != null && !ranOut(session, lane.queue, at)) return
         val program = tracks.programs.firstOrNull { it.number == tracks.selectedProgram }
-        val live = programCandidates(session.source.streams, tracks.programs, program).filter { stream ->
+        val live = programCandidates(session.streams, tracks.programs, program).filter { stream ->
             stream.kind == TrackKind.Audio &&
                 stream.index != lane?.stream?.index &&
                 stream.index !in session.soundsTried &&
@@ -4922,7 +4950,7 @@ internal class PlaybackCore(
         val playing = session.videoStream
         if (playing != null && !pictureRanOut(session, atUs)) return
         val program = tracks.programs.firstOrNull { it.number == tracks.selectedProgram }
-        val target = programCandidates(session.source.streams, tracks.programs, program).firstOrNull { stream ->
+        val target = programCandidates(session.streams, tracks.programs, program).firstOrNull { stream ->
             stream.kind == TrackKind.Video && !stream.isCoverArt &&
                 stream.index != playing?.index &&
                 stream.index !in session.picturesRefused &&
@@ -4988,7 +5016,7 @@ internal class PlaybackCore(
         val queue = session.pictureQueues[index] ?: return
         if (index == session.videoStream?.index) return
         pendingSelections.remove(TrackKind.Video)
-        val stream = session.source.streams.firstOrNull { it.index == index && it.kind == TrackKind.Video }
+        val stream = session.streams.firstOrNull { it.index == index && it.kind == TrackKind.Video }
         val refusal = if (stream == null) {
             "no picture stream has index $index"
         } else {
@@ -5144,7 +5172,7 @@ internal class PlaybackCore(
         val wanted = timeline.lastOrNull { it.fromUs <= targetUs }?.index ?: return
         if (wanted == session.videoStream?.index) return
         val queue = session.pictureQueues[wanted] ?: return
-        val stream = session.source.streams.firstOrNull { it.index == wanted && it.kind == TrackKind.Video } ?: return
+        val stream = session.streams.firstOrNull { it.index == wanted && it.kind == TrackKind.Video } ?: return
         val refusal = swapPicture(session, stream, queue, startUs = null)
         if (refusal != null) {
             warn(PlaybackWarning.TrackDeselected(TrackId(wanted), refusal))
@@ -5382,7 +5410,7 @@ internal class PlaybackCore(
         val targetExternal = track?.takeIf(::isExternalSubtitle)
         val targetStream = track
             ?.takeUnless(::isExternalSubtitle)
-            ?.let { id -> session.source.streams.firstOrNull { it.index == id.value && it.kind == TrackKind.Subtitle } }
+            ?.let { id -> session.streams.firstOrNull { it.index == id.value && it.kind == TrackKind.Subtitle } }
         if (track != null && targetExternal == null && targetStream == null) {
             command.reply.completeExceptionally(
                 IllegalArgumentException("no subtitle stream has index ${track.value}"),
@@ -5716,7 +5744,7 @@ internal class PlaybackCore(
         val request = pendingSelections[TrackKind.Audio] ?: return false
         val currentLane = session.audioLane
         val targetStream = request.track?.let { id ->
-            session.source.streams.firstOrNull { it.index == id.value && it.kind == TrackKind.Audio }
+            session.streams.firstOrNull { it.index == id.value && it.kind == TrackKind.Audio }
         }
         // A sound fetched for a switch that was then asked away from is not read on for nobody.
         session.arrivingSound?.let { arriving ->
@@ -6340,7 +6368,9 @@ internal class PlaybackCore(
         }
         check(restored(recovery.video, rebuilt.videoStream?.index)) { "the software decoder refused the selected video track" }
         check(restored(recovery.audio, rebuilt.audioStream?.index)) { "the recovered session lost the selected audio track" }
-        check(restored(recovery.subtitle, rebuilt.subtitleStream?.index)) { "the recovered session lost the selected subtitle track" }
+        // The caption track inside the picture comes back with the pictures (#236).
+        val subtitle = rebuilt.subtitleStream?.index ?: rebuilt.wantedCaptions
+        check(restored(recovery.subtitle, subtitle)) { "the recovered session lost the selected subtitle track" }
         if (recovery.video != StreamChoice.None) {
             check(rebuilt.videoDecoderOrigin == VideoDecoderOrigin.Backend) {
                 "software recovery selected a renderer-coupled decoder"
@@ -7256,12 +7286,18 @@ internal class PlaybackCore(
      *
      * Both lanes, because a second subtitle track can outlast the first. Zero for every file whose
      * subtitles end before its pictures do, which is almost all of them, so this costs one pass
-     * over a small list at the very end of a session and nothing at all during playback.
+     * over a small list at the very end of a session and nothing at all during playback. A cue with
+     * no end of its own lasts until the next one, and none comes after the last, so it ends with
+     * the media: as the closed captions inside a picture do, which never say when their last screen
+     * ends (#236).
      */
     private fun subtitleTailOverrun(session: OpenSession): Duration {
         val positionUs = currentPosition().micros - subtitleDelay.inWholeMicroseconds
-        val primary = session.subtitleCues.maxOfOrNull { it.endMicros }
-        val secondary = session.subtitle2Cues.maxOfOrNull { it.endMicros }
+        val stated = { cue: io.github.yuroyami.kiteplayer.subtitle.SubtitleCue ->
+            cue.endMicros.takeUnless { it == io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.OPEN_END } ?: Long.MIN_VALUE
+        }
+        val primary = session.subtitleCues.maxOfOrNull(stated)
+        val secondary = session.subtitle2Cues.maxOfOrNull(stated)
         // A cue that runs past the item's clip end is cut there (#456).
         val latestEnd = minOf(maxOf(primary ?: Long.MIN_VALUE, secondary ?: Long.MIN_VALUE), session.clipEndUs)
         if (latestEnd == Long.MIN_VALUE) return Duration.ZERO
@@ -11727,7 +11763,7 @@ internal class PlaybackCore(
             if (packet == null) {
                 // Held packets go ahead of the end, which a queue keeps after what it holds.
                 if (!late.idle) late.deliver(queueOf, epoch, ended = true)
-                session.allPacketQueues.forEach { it.signalEndOfStream(epoch) }
+                session.demuxQueues.forEach { it.signalEndOfStream(epoch) }
                 ended = true
                 continue
             }
@@ -11775,7 +11811,7 @@ internal class PlaybackCore(
             val clipEndUs = session.lanesEndUs.value
             if (clipEndUs != NO_CLIP_END && readPastClipEnd(session, readIndex, readAtUs, clipEndUs, pastClipEnd)) {
                 if (!late.idle) late.deliver(queueOf, epoch, ended = true)
-                session.allPacketQueues.forEach { it.signalEndOfStream(epoch) }
+                session.demuxQueues.forEach { it.signalEndOfStream(epoch) }
                 ended = true
             }
         }
@@ -12083,6 +12119,11 @@ internal class PlaybackCore(
                         handOverHeld(session, worker, video, epoch, held)
                         continue
                     }
+                    // Every picture is out, so its captions are too (#236).
+                    if (decoder.isDrained) {
+                        session.videoStream?.let { session.subtitleQueues[captionTrackIndex(it.index)] }
+                            ?.signalEndOfStream(epoch)
+                    }
                     // The last frames still leave the schedule, and each may owe its decoder a release.
                     worker.napUntil(WORKER_POLL) { video.awaitDeparture() }
                     continue
@@ -12268,6 +12309,28 @@ internal class PlaybackCore(
     }
 
     /**
+     * Queues [bytes], the captions of the picture shown at [pts], as a packet of the caption track
+     * inside the picture (#236). The first picture that carries any makes the track's cache here, so
+     * no caption waits for the actor, and asks the actor to list the track. Video lane.
+     */
+    private fun takeCaptions(session: OpenSession, bytes: ByteArray, pts: Pts, epoch: Generation) {
+        if (bytes.isEmpty()) return
+        val video = session.videoStream ?: return
+        val index = captionTrackIndex(video.index)
+        val queue = session.subtitleQueues[index] ?: run {
+            val made = PacketQueue(index, config.buffer.softTarget.inWholeMicroseconds).also { it.flushTo(epoch) }
+            if (session.addCaptionQueue(made)) {
+                val stream = captionStreamOf(video)
+                commands.trySend(CoreCommand.StreamsChanged { adoptCaptions(session, stream) })
+                made
+            } else {
+                session.subtitleQueues.getValue(index)
+            }
+        }
+        queue.offer(CaptionPacket(index, pts, bytes), epoch)
+    }
+
+    /**
      * Hands a frame to the schedule, giving it up when the actor asks for quiescence.
      *
      * The queue is deliberately small and the handover suspends while it is full, which is the
@@ -12288,6 +12351,9 @@ internal class PlaybackCore(
         var ownsFrame = true
         try {
             if (frame.generation != epoch) return true
+            // Every picture of the epoch gives its captions, those before a precise seek's target
+            // too, because a caption is built over the pictures before the one that shows it (#236).
+            frame.closedCaptions?.let { takeCaptions(session, it, frame.pts, epoch) }
             // Recorded before the discard, because this is where the seek actually landed and that is what
             // the overshoot ladder has to judge. A precise seek that landed correctly still throws away up to
             // a whole group of pictures, so judging the landing by the first frame that survived the discard
@@ -13142,14 +13208,15 @@ internal class PlaybackCore(
         private fun replacePicture(next: PictureLane) {
             val before = pictureLane.value
             pictureLane.value = next
-            val table = queueTable.value
             val left = before.stream?.index
-            val pictures = if (left != null && before.queue != null && left !in table.pictures) {
-                table.pictures + (left to before.queue)
-            } else {
-                table.pictures
+            queueTable.update { table ->
+                val pictures = if (left != null && before.queue != null && left !in table.pictures) {
+                    table.pictures + (left to before.queue)
+                } else {
+                    table.pictures
+                }
+                QueueTable(next.queue, table.audio, table.subtitle, pictures)
             }
-            queueTable.value = QueueTable(next.queue, table.audio, table.subtitle, pictures)
             audioRouting.value = AudioRouting(audioLane, listOfNotNull(next.queue, audioLane?.queue))
         }
 
@@ -13169,19 +13236,58 @@ internal class PlaybackCore(
         /** Every packet-owning queue, each exactly once, for byte accounting/flush/teardown. */
         val allPacketQueues: List<PacketQueue> get() = queueTable.value.all
 
-        /** Adds the cache of a stream that appeared after the open. Actor only. */
+        /**
+         * Adds the cache of a stream that appeared after the open. Actor only. The table is changed
+         * by a compare and set, because the video lane adds the cache of a caption track to it.
+         */
         fun addQueue(kind: TrackKind, queue: PacketQueue) {
-            val table = queueTable.value
             val index = queue.streamIndex
-            queueTable.value = when (kind) {
-                TrackKind.Audio -> QueueTable(table.video, table.audio + (index to queue), table.subtitle, table.pictures)
-                TrackKind.Subtitle -> {
-                    subtitleCueCaches[index] = mutableListOf()
-                    QueueTable(table.video, table.audio, table.subtitle + (index to queue), table.pictures)
+            if (kind == TrackKind.Subtitle) subtitleCueCaches[index] = mutableListOf()
+            queueTable.update { table ->
+                when (kind) {
+                    TrackKind.Audio -> QueueTable(table.video, table.audio + (index to queue), table.subtitle, table.pictures)
+                    TrackKind.Subtitle -> QueueTable(table.video, table.audio, table.subtitle + (index to queue), table.pictures)
+                    TrackKind.Video -> QueueTable(table.video, table.audio, table.subtitle, table.pictures + (index to queue))
                 }
-                TrackKind.Video -> QueueTable(table.video, table.audio, table.subtitle, table.pictures + (index to queue))
             }
         }
+
+        /**
+         * Adds [queue], the cache of the caption track inside the picture (#236), unless the track has
+         * one already. Video lane, which is the only one that writes such a queue. False when it was
+         * there before.
+         */
+        fun addCaptionQueue(queue: PacketQueue): Boolean {
+            val index = queue.streamIndex
+            while (true) {
+                val table = queueTable.value
+                if (index in table.subtitle) return false
+                val next = QueueTable(table.video, table.audio, table.subtitle + (index to queue), table.pictures)
+                if (queueTable.compareAndSet(table, next)) return true
+            }
+        }
+
+        /**
+         * Every queue the demux lane fills, which is every queue but those of the caption tracks
+         * inside the picture: the video lane fills those, and ends them when the picture ends (#236).
+         */
+        val demuxQueues: List<PacketQueue> get() = allPacketQueues.filterNot { isCaptionTrack(it.streamIndex) }
+
+        /**
+         * The tracks the engine made of the captions inside the picture (#236), each listed from the
+         * first picture that carried captions. Actor only.
+         */
+        var madeStreams: List<PlayerStreamInfo> = emptyList()
+
+        /** The source's streams and the tracks the engine made, which every lookup of a track reads. */
+        val streams: List<PlayerStreamInfo>
+            get() = if (madeStreams.isEmpty()) source.streams else source.streams + madeStreams
+
+        /**
+         * The caption track a rebuild carried in selected (#236), which this session has not made
+         * yet: chosen as soon as its picture's captions make it. Actor only.
+         */
+        var wantedCaptions: Int? = null
 
         /**
          * True once the source announced a stream or a programme change after the open (#509). Only
@@ -14526,7 +14632,9 @@ internal fun pickSubtitleStream(
     // forced-only track never wins here, because forced tracks exist for foreign lines
     // inside otherwise-understood audio, not as the default face of the media.
     if (config.autoSelect) {
-        subtitles.filter { !it.isForced }.sortedByDescending { it.isDefault }.firstOrNull()
+        // The captions inside a picture are not the container's (#236): like a television, the
+        // player shows them when the viewer's preferences ask, not by default.
+        subtitles.filter { !it.isForced && !isCaptionTrack(it.index) }.sortedByDescending { it.isDefault }.firstOrNull()
             ?.let { return it }
     }
     return null

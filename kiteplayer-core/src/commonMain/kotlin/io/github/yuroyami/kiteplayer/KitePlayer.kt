@@ -1011,6 +1011,38 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Seeks to the start of a subtitle line and returns it once the line's first frame is on screen,
+     * with [seek]'s contract (#491). [offset] 0 is the line showing, or the last line before now
+     * when none shows, so a learner who missed a line hears it again; -1 and +1 are the previous
+     * and the next line. Lines are the selected subtitle track's cues as far as the player has read
+     * them, every cue of an external file and those an embedded track has delivered, at the times
+     * they show with the subtitle delay. Repeated calls move one line each, a paused player
+     * included, because each counts from where the last one went.
+     *
+     * @return where the line starts, in the item's time.
+     * @throws IllegalStateException when no subtitle track is selected, or there is no such line,
+     *         for example past the last one read so far, besides [seek]'s own refusals.
+     */
+    @Throws(Exception::class)
+    public suspend fun seekToSubtitleLine(offset: Int = 0): Duration {
+        val start = core.subtitleLineStart(offset)
+        seek(start)
+        return start
+    }
+
+    /**
+     * Shifts the subtitle delay so the line [offset] lines away starts now (#491), for subtitles
+     * that are out of sync by a line or so: +1 brings the next line forward to now, -1 holds the
+     * previous one back to now, and 0 starts the line showing now. The result is the new delay,
+     * published as [PlayerSnapshot.subtitleDelay] like a [setSubtitleDelay].
+     *
+     * @throws IllegalStateException when no subtitle track is selected, when there is no such line,
+     *         or when the delay it needs is more than [DELAY_MAX] either way.
+     */
+    @Throws(IllegalStateException::class)
+    public suspend fun stepSubtitleDelay(offset: Int): Duration = core.stepSubtitleDelay(offset)
+
+    /**
      * The chapter whose span holds [position], or null before the first chapter or in media with
      * no chapter table. Pure over the published snapshot; pair it with [position] for the
      * chapter now playing.

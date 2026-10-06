@@ -663,6 +663,8 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun seekLater-VtjQ1oo (JLio/github/yuroyami/kiteplayer/SeekMode;)V
 	public static synthetic fun seekLater-VtjQ1oo$default (Lio/github/yuroyami/kiteplayer/KitePlayer;JLio/github/yuroyami/kiteplayer/SeekMode;ILjava/lang/Object;)V
 	public final fun seekToChapter (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun seekToSubtitleLine-3nIYWDw (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun seekToSubtitleLine-3nIYWDw$default (Lio/github/yuroyami/kiteplayer/KitePlayer;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun selectProgram (Ljava/lang/Integer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun selectSecondarySubtitle-Cr4VdJg (Lio/github/yuroyami/kiteplayer/TrackId;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun selectTrack-rt36JlU (Lio/github/yuroyami/kiteplayer/TrackKind;Lio/github/yuroyami/kiteplayer/TrackId;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -701,6 +703,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun startRecording (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun stepFrame (Lio/github/yuroyami/kiteplayer/StepDirection;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun stepFrame$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/StepDirection;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun stepSubtitleDelay-3nIYWDw (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun stop (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun stopRecording (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun supportBundle ()Ljava/lang/String;

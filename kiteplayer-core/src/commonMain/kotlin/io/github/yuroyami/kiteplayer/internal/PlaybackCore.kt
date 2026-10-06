@@ -1605,6 +1605,14 @@ internal class PlaybackCore(
         return awaitReply(reply)
     }
 
+    /** Where the subtitle line [offset] lines from now starts, in the item's time (#491). */
+    suspend fun subtitleLineStart(offset: Int): kotlin.time.Duration =
+        throw IllegalStateException("subtitle lines are not read yet")
+
+    /** Shifts the subtitle delay so the line [offset] lines from now starts now, and answers it (#491). */
+    suspend fun stepSubtitleDelay(offset: Int): kotlin.time.Duration =
+        throw IllegalStateException("subtitle lines are not read yet")
+
     /** Fire and forget, coalescing by contract. What a seek bar drag calls sixty times a second. */
     fun seekLater(to: Pts, mode: SeekMode) {
         checkOpenFor("requestSeek")

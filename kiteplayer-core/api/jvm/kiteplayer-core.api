@@ -2299,6 +2299,7 @@ public final class io/github/yuroyami/kiteplayer/PlaylistException : java/lang/E
 public final class io/github/yuroyami/kiteplayer/Playlists {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/Playlists;
 	public final fun parse (Ljava/lang/String;Ljava/lang/String;)Ljava/util/List;
+	public final fun resolve (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/ProbeDepth {

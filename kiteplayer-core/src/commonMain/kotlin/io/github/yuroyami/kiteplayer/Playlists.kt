@@ -29,6 +29,16 @@ public object Playlists {
      */
     public fun parse(text: String, base: String): List<MediaItem>? =
         io.github.yuroyami.kiteplayer.internal.PlaylistText.parse(text, base)
+
+    /**
+     * Where [entry], an address a playlist at [base] names, points: an address beside a list on a
+     * server resolved as RFC 3986 says, and a path beside a list on disk, as [parse] resolves every
+     * entry. An address with a scheme of its own stands, except a `file://` one, which becomes the
+     * path it names. For a caller that reads a playlist [parse] does not, such as an HLS master
+     * playlist whose backup variants it wants to open (#440).
+     */
+    public fun resolve(base: String, entry: String): String =
+        io.github.yuroyami.kiteplayer.internal.playlistAddress(base, entry)
 }
 
 /**

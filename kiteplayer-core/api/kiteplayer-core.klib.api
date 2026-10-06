@@ -5298,6 +5298,7 @@ final object io.github.yuroyami.kiteplayer/KiteTrace { // io.github.yuroyami.kit
 
 final object io.github.yuroyami.kiteplayer/Playlists { // io.github.yuroyami.kiteplayer/Playlists|null[0]
     final fun parse(kotlin/String, kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem>? // io.github.yuroyami.kiteplayer/Playlists.parse|parse(kotlin.String;kotlin.String){}[0]
+    final fun resolve(kotlin/String, kotlin/String): kotlin/String // io.github.yuroyami.kiteplayer/Playlists.resolve|resolve(kotlin.String;kotlin.String){}[0]
 }
 
 final object io.github.yuroyami.kiteplayer/TextEncodings { // io.github.yuroyami.kiteplayer/TextEncodings|null[0]

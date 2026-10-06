@@ -305,6 +305,13 @@ public class KiteFFmpegSource internal constructor(
     override val realTime: Boolean = realTimeScheme && duration == null
 
     /**
+     * FFmpeg's HLS reader downloads each rendition of a master playlist on its own, and a DASH
+     * presentation reaches it as one, so a sound nobody hears there costs its download (#455).
+     */
+    override val separateAudioRenditions: Boolean =
+        source.formatName == "hls" && streams.count { it.kind == io.github.yuroyami.kiteplayer.TrackKind.Audio } > 1
+
+    /**
      * The first call opens the reader. A later one, between reads, changes which streams it delivers
      * without moving it, which is how the demux lane adds a stream that appeared after the open; the
      * packets of it that FFmpeg read before then come first on the next read (#509).

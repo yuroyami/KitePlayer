@@ -66,6 +66,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
         final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.seekable.<get-seekable>|<get-seekable>(){}[0]
     final val selectedVariant // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.selectedVariant|{}selectedVariant[0]
         final fun <get-selectedVariant>(): kotlin/Int? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.selectedVariant.<get-selectedVariant>|<get-selectedVariant>(){}[0]
+    final val separateAudioRenditions // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.separateAudioRenditions|{}separateAudioRenditions[0]
+        final fun <get-separateAudioRenditions>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.separateAudioRenditions.<get-separateAudioRenditions>|<get-separateAudioRenditions>(){}[0]
     final val streamDivergences // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streamDivergences|{}streamDivergences[0]
         final fun <get-streamDivergences>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/StreamDivergence> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streamDivergences.<get-streamDivergences>|<get-streamDivergences>(){}[0]
     final val streams // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streams|{}streams[0]

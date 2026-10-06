@@ -141,6 +141,8 @@ internal class MediaScript(
     val durationIsEstimate: Boolean = false,
     /** The declared length as it stands at each read, for a file still being written (#430). Overrides [declaredDurationUs]. */
     val declaredDurationNowUs: (() -> Long)? = null,
+    /** True models an HLS master whose sounds are renditions downloaded on their own (#455). */
+    val separateAudioRenditions: Boolean = false,
     val hasVideo: Boolean = true,
     val hasAudio: Boolean = true,
     /** The chapter table the scripted container declares. */
@@ -1103,6 +1105,7 @@ internal class ScriptedSource(
 
     override val duration: Pts? get() = if (script.live) null else Pts(script.declaredDurationNowUs?.invoke() ?: script.declaredDurationUs ?: script.durationUs)
     override val durationIsEstimate: Boolean get() = script.durationIsEstimate
+    override val separateAudioRenditions: Boolean get() = script.separateAudioRenditions
     override val seekable: Boolean = script.seekable
     override val realTime: Boolean = script.live
     override val metadata: Map<String, String> =

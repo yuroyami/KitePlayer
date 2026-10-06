@@ -37,6 +37,15 @@ internal class LateStreams(
         waiting += indexes
     }
 
+    /**
+     * The source reads exactly [indexes] from now on, as a switch to a sound that is a download of
+     * its own asks (#455). Those streams' queues exist already, so none of them waits.
+     */
+    fun reselect(indexes: Set<Int>) {
+        selection = indexes
+        waiting.retainAll(indexes)
+    }
+
     /** Whether a packet of the stream at [index] must wait, because its queue was not there when it was last asked. */
     fun waits(index: Int): Boolean = index in waiting
 

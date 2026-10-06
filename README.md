@@ -729,6 +729,10 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
 - MPEG-TS and fMP4 segments, byte ranges, AES-128 keys, separate audio and subtitle renditions, and
   live playlists play. A finished playlist can seek. A rendition's `NAME` is its track's title,
   and its `DEFAULT`, `FORCED` and accessibility `CHARACTERISTICS` set the track's flags.
+- Only the audio rendition being heard is downloaded, so a stream with six languages does not pay
+  for five that nobody hears. A switch to another language reads it from the moment playing: the
+  picture and the old language go on until the new one is there, usually within a second, and the
+  reads go back once over what they had read ahead. A file switches instantly, as before.
 - Playlist variables play: `EXT-X-DEFINE` by `NAME` and `VALUE`, by `IMPORT` from the master
   playlist, and by `QUERYPARAM` from the playlist's own address, so a token in the master
   playlist's address reaches every variant, segment and key that names it. A playlist that was

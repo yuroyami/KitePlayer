@@ -3887,9 +3887,16 @@ internal class PlaybackCore(
             // alternate audio/subtitle stream and decode only the selected lanes.
             val cachedAudioStreams = source.streams.filter { it.kind == TrackKind.Audio }
             val cachedSubtitleStreams = source.streams.filter { it.kind == TrackKind.Subtitle }
+            // A sound that is a download of its own is read only while it is heard (#455). Its
+            // queue is made all the same, empty, so a switch has somewhere to read it into.
+            val unreadSounds = if (source.separateAudioRenditions) {
+                cachedAudioStreams.map { it.index }.filter { it != audioStream?.index }.toSet()
+            } else {
+                emptySet()
+            }
             val readStreams = buildSet {
                 videoStream?.index?.let(::add)
-                cachedAudioStreams.forEach { add(it.index) }
+                cachedAudioStreams.forEach { if (it.index !in unreadSounds) add(it.index) }
                 cachedSubtitleStreams.forEach { add(it.index) }
             }
             val readFromUs = if (startAtItem) startPositionTargetUs(item, source, report) ?: 0L else startUs
@@ -3936,6 +3943,7 @@ internal class PlaybackCore(
             }
             return OpenSession(
                 readStreams = readStreams,
+                unreadSounds = unreadSounds,
                 preferredExternalSubtitle = preferredExternal,
                 audioContent = audioContent,
                 token = pending?.token ?: nextSessionToken++,
@@ -5664,15 +5672,58 @@ internal class PlaybackCore(
         demuxUnderrunSeen = false
     }
 
+    /** Asks the demux lane for [change] to what the source reads, after any change it has not made yet (#455). */
+    private fun askToRead(session: OpenSession, change: ReadChange) {
+        session.readChange.update { waiting -> waiting?.then(change) ?: change }
+    }
+
+    /**
+     * Stops reading the sound at [index], a download of its own that nobody hears any more (#455).
+     * The demux lane empties its queue when it makes the change.
+     */
+    private fun stopReadingSound(session: OpenSession, index: Int) {
+        session.unreadSounds.update { it + index }
+        askToRead(session, ReadChange(add = emptySet(), remove = setOf(index), readFromUs = null))
+    }
+
+    /**
+     * Starts reading the sound at [index] for a switch to it (#455), from a little before the
+     * position, and gives it [AUDIO_RENDITION_WAIT] to cover the position.
+     */
+    private fun fetchSound(session: OpenSession, index: Int) {
+        session.arrivingSound?.let { other -> if (other.index != index) stopReadingSound(session, other.index) }
+        session.unreadSounds.update { it - index }
+        session.readChangeFailure.value = null
+        val from = (currentPosition().micros - AUDIO_REFETCH_LEAD_US).coerceAtLeast(0L)
+        askToRead(session, ReadChange(add = setOf(index), remove = emptySet(), readFromUs = from))
+        session.arrivingSound = ArrivingSound(index, clock.nanos() + AUDIO_RENDITION_WAIT.inWholeNanoseconds)
+    }
+
+    /** True while the pending audio switch waits for a sound being fetched (#455). */
+    private fun soundArriving(session: OpenSession): Boolean {
+        val arriving = session.arrivingSound ?: return false
+        return pendingSelections[TrackKind.Audio]?.track?.value == arriving.index
+    }
+
     /**
      * The audio transaction. Only audio decode/feed park; demux continues filling every
      * alternate cache and video continues decoding/scheduling on the unchanged epoch.
+     *
+     * A sound that is a download of its own is fetched first (#455): the switch waits, with the
+     * sound heard going on, until the fetched one covers the position, and then commits as any other.
      */
     private suspend fun inPlaceAudioChange(session: OpenSession): Boolean {
         val request = pendingSelections[TrackKind.Audio] ?: return false
         val currentLane = session.audioLane
         val targetStream = request.track?.let { id ->
             session.source.streams.firstOrNull { it.index == id.value && it.kind == TrackKind.Audio }
+        }
+        // A sound fetched for a switch that was then asked away from is not read on for nobody.
+        session.arrivingSound?.let { arriving ->
+            if (arriving.index != targetStream?.index) {
+                stopReadingSound(session, arriving.index)
+                session.arrivingSound = null
+            }
         }
 
         if (targetStream?.index == currentLane?.stream?.index || targetStream == null && currentLane == null) {
@@ -5687,6 +5738,26 @@ internal class PlaybackCore(
         if (targetStream != null && targetQueue == null) {
             discardSelection(TrackKind.Audio, "audio stream ${targetStream.index} has no live packet cache")
             return true
+        }
+        if (targetStream != null && targetStream.index in session.unreadSounds.value) {
+            fetchSound(session, targetStream.index)
+            wakeIn(AUDIO_ARRIVAL_POLL)
+            return true
+        }
+        val arriving = session.arrivingSound?.takeIf { it.index == targetStream?.index }
+        if (arriving != null && targetQueue != null) {
+            val failure = session.readChangeFailure.value
+            val refusal = failure ?: audioCacheRefusal(targetQueue, preflightAt.micros)
+            if (refusal != null) {
+                if (failure == null && clock.nanos() < arriving.deadlineNanos) {
+                    wakeIn(AUDIO_ARRIVAL_POLL)
+                    return true
+                }
+                session.arrivingSound = null
+                stopReadingSound(session, arriving.index)
+                discardSelection(TrackKind.Audio, "the sound did not arrive within $AUDIO_RENDITION_WAIT: $refusal")
+                return true
+            }
         }
         if (targetQueue != null) {
             audioCacheRefusal(targetQueue, preflightAt.micros)?.let { reason ->
@@ -5799,6 +5870,12 @@ internal class PlaybackCore(
         }
         session.installAudioLane(targetLane)
         resetAudioAfterTrackChange(session, targetLane != null)
+        session.arrivingSound = null
+        // The sound left behind is a download of its own that nobody hears now (#455).
+        val leftBehind = currentLane?.stream?.index
+        if (session.source.separateAudioRenditions && leftBehind != null && leftBehind != targetStream?.index) {
+            stopReadingSound(session, leftBehind)
+        }
 
         val retiredDecoder = currentLane?.decoder
         if (retiredDecoder != null && retiredDecoder !== preparedDecoder) {
@@ -5852,6 +5929,8 @@ internal class PlaybackCore(
                 if (TrackKind.Subtitle in pendingSelections) inPlaceContainerSubtitleChange(active)
                 if (TrackKind.Audio in pendingSelections) inPlaceAudioChange(active)
                 if (pendingSelections.isEmpty()) return
+                // The switch waits for a sound being fetched, with the one heard going on (#455).
+                if (pendingSelections.keys == setOf(TrackKind.Audio) && soundArriving(active)) return
             }
         }
         // Taken and cleared together: everything asked for so far rides ONE rebuild, and a request
@@ -11583,6 +11662,11 @@ internal class PlaybackCore(
         var ended = false
         // The streams that have read past the item's clip end since the reads last moved (#456).
         val pastClipEnd = HashSet<Int>()
+        // The decode time of the last packet each stream was given since the reads last moved, and,
+        // after a seek back for a sound being fetched, the time up to which each stream's packets are
+        // ones it already has (#455).
+        val lastRead = HashMap<Int, Long>()
+        val readAgainUpTo = HashMap<Int, Long>()
         val queueOf = { index: Int ->
             session.audioQueues[index] ?: session.subtitleQueues[index] ?: session.pictureQueues[index]
         }
@@ -11596,9 +11680,14 @@ internal class PlaybackCore(
                 epoch = worker.epoch
                 ended = false
                 pastClipEnd.clear()
+                lastRead.clear()
+                readAgainUpTo.clear()
                 // A seek moved the reads, so the rate starts over from where they land.
                 session.readRate.restart()
                 late.dropHeld()
+            }
+            session.readChange.getAndSet(null)?.let { change ->
+                if (changeReading(session, late, change, epoch, queueOf, lastRead, readAgainUpTo, ended)) ended = false
             }
             if (!late.idle) late.deliver(queueOf, epoch, ended)
             if (ended) {
@@ -11659,6 +11748,16 @@ internal class PlaybackCore(
                 val atUs = packet.pts?.micros ?: readAtUs ?: Long.MIN_VALUE
                 session.tagChanges.update { it + (atUs to tags) }
             }
+            // After a seek back for a sound being fetched, what a stream already has is read again
+            // and dropped, so the picture and the sound heard go on as they were (#455).
+            readAgainUpTo[readIndex]?.let { upTo ->
+                if (readAtUs == null || readAtUs <= upTo) {
+                    packet.close()
+                    continue
+                }
+                readAgainUpTo.remove(readIndex)
+            }
+            if (readAtUs != null) lastRead[readIndex] = readAtUs
             when (packet.streamIndex) {
                 session.videoStream?.index -> session.videoQueue?.offer(packet, epoch) ?: packet.close()
                 else -> {
@@ -11680,6 +11779,61 @@ internal class PlaybackCore(
                 ended = true
             }
         }
+    }
+
+    /**
+     * The demux lane's half of a change to what the source reads (#455): asks the source for the
+     * new set, empties the queues of the streams it starts or stops reading, so a stream fetched
+     * again holds nothing from before, and, for a source that can seek, seeks the reads back to
+     * [ReadChange.readFromUs] with every other stream's packets up to where it had read marked as
+     * ones it already has. A live source cannot seek, and a fetched sound starts where the reads are.
+     *
+     * @return true when the reads moved, so an end the lane saw no longer stands.
+     */
+    private suspend fun changeReading(
+        session: OpenSession,
+        late: LateStreams,
+        change: ReadChange,
+        epoch: Generation,
+        queueOf: (Int) -> PacketQueue?,
+        lastRead: HashMap<Int, Long>,
+        readAgainUpTo: HashMap<Int, Long>,
+        ended: Boolean,
+    ): Boolean {
+        // Read to its end and unable to go back, the source has nothing more of a new sound to give.
+        if (ended && change.add.isNotEmpty() && !session.source.seekable) {
+            session.readChangeFailure.value = "the source cannot seek and was read to its end, so the sound cannot be read for what is left"
+            return false
+        }
+        val next = late.selection + change.add - change.remove
+        try {
+            session.source.selectStreams(next)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            session.readChangeFailure.value = "the source would not read the new set${causeDetail(failure)}"
+            return false
+        }
+        late.reselect(next)
+        (change.add + change.remove).forEach { index ->
+            queueOf(index)?.flushTo(epoch)
+            lastRead.remove(index)
+            readAgainUpTo.remove(index)
+        }
+        val from = change.readFromUs ?: return false
+        if (!session.source.seekable || change.add.isEmpty()) return false
+        readAgainUpTo.clear()
+        lastRead.forEach { (index, at) -> if (index in next) readAgainUpTo[index] = at }
+        try {
+            session.source.seekToKeyframe(Pts(from))
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            // The reads stay where they were: the fetched sound starts there, as on a live source.
+            readAgainUpTo.clear()
+            warn(PlaybackWarning.CommandRefused("selectTrack", "the reads could not go back for the new sound${causeDetail(failure)}"))
+        }
+        return true
     }
 
     /**
@@ -11742,8 +11896,9 @@ internal class PlaybackCore(
         listed: List<PlayerStreamInfo>?,
         programs: List<MediaProgram>?,
     ) {
+        val unread = session.unreadSounds.value
         val fresh = listed.orEmpty()
-            .filter { it.index !in late.selection && !(it.kind == TrackKind.Video && it.isCoverArt) }
+            .filter { it.index !in late.selection && it.index !in unread && !(it.kind == TrackKind.Video && it.isCoverArt) }
             .map { it.index }
         var reading = emptyList<Int>()
         if (fresh.isNotEmpty()) {
@@ -12827,7 +12982,24 @@ internal class PlaybackCore(
          * streams appear after the open (#509), because it is the lane that talks to the source.
          */
         val readStreams: Set<Int> = emptySet(),
+        unreadSounds: Set<Int> = emptySet(),
     ) {
+        /**
+         * The sounds the source does not read, because each is a download of its own and nobody
+         * hears it (#455). The actor changes it and the demux lane reads it, so a stream that
+         * appears in a new list is not taken for one to read.
+         */
+        val unreadSounds = atomic(unreadSounds)
+
+        /** The change to what the source reads that the actor wants, which the demux lane makes before its next read (#455). */
+        val readChange = atomic<ReadChange?>(null)
+
+        /** Why the demux lane could not make the last change, for the switch that waits on it (#455). */
+        val readChangeFailure = atomic<String?>(null)
+
+        /** The sound a switch is fetching, and the clock reading by which it must cover the position (#455). Actor only. */
+        var arrivingSound: ArrivingSound? = null
+
         /**
          * True once the source answered that it cannot interrupt a stalled read. The session then
          * keeps waiting, because a teardown around a read that never returns would hang. Actor only.
@@ -13532,6 +13704,15 @@ internal class PlaybackCore(
         /** How far playback runs past an estimated length before the snapshot's length follows it (#422). */
         const val DURATION_FOLLOW_STEP_US: Long = 1_000_000L
 
+        /** How long a switch waits for a sound that is a download of its own to cover the position (#455). */
+        val AUDIO_RENDITION_WAIT: Duration = 10.seconds
+
+        /** How often a switch looks again at a sound being fetched (#455). */
+        val AUDIO_ARRIVAL_POLL: Duration = 50.milliseconds
+
+        /** How far before the position a fetched sound is read from, so it covers the position at once (#455). */
+        const val AUDIO_REFETCH_LEAD_US: Long = 1_000_000L
+
         /** How much longer than a growing file's own wait the stall limit lets its reader wait (#430). */
         val GROWTH_STALL_MARGIN: Duration = 5.seconds
 
@@ -13823,6 +14004,23 @@ internal class FirstTimestamp {
 
 /** How a worker ended. Null means it simply stopped; anything else is a failure the actor turns typed. */
 internal class WorkerOutcome(val sessionToken: Long, val name: String, val cause: Throwable?)
+
+/**
+ * A change to what the source reads, which the actor asks for and the demux lane makes before its
+ * next read (#455): the streams to [add] and to [remove], and, for a sound being fetched, where to
+ * read back from, in the file's time.
+ */
+internal class ReadChange(val add: Set<Int>, val remove: Set<Int>, val readFromUs: Long?) {
+    /** This change followed by [later], as one: the lane may make both at once. */
+    fun then(later: ReadChange): ReadChange = ReadChange(
+        add = (add - later.remove) + later.add,
+        remove = (remove - later.add) + later.remove,
+        readFromUs = later.readFromUs ?: readFromUs,
+    )
+}
+
+/** A sound a switch is fetching, which must cover the position by [deadlineNanos] on the player's clock (#455). */
+internal class ArrivingSound(val index: Int, val deadlineNanos: Long)
 
 /**
  * Interleaves a decoded buffer into what the ring wants, into one array reused across buffers.

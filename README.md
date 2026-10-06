@@ -158,7 +158,9 @@ video decoder.
 - HTTP and HTTPS with your headers, through OkHttp on Android and the JVM and NSURLSession on
   Apple.
 - HLS: master playlists, a choice of variant, automatic steps down and up with the network rate,
-  MPEG-TS and fMP4 segments, AES-128, separate audio and subtitle renditions, and live playlists.
+  MPEG-TS and fMP4 segments, AES-128, separate audio and subtitle renditions, IMSC (TTML)
+  subtitle renditions, served to FFmpeg as WebVTT, backup variants tried when a server fails, and
+  live playlists. A DASH manifest's backup `BaseURL`s are tried the same way.
 - DASH through the HLS path, for fMP4, MPEG-TS and WebM segments: separate video, audio and
   subtitle sets, seeking, a variant for each video representation, segment indexes of single
   files, live manifests, and manifests of several Periods, joined into one presentation. TTML and

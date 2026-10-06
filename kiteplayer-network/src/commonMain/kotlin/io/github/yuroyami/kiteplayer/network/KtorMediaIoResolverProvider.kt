@@ -24,10 +24,16 @@ internal class KtorMediaIoResolverProvider : MediaIoResolverProvider {
 
 /**
  * What the automatic transport hands the player for [io]: the reader of a DASH presentation when
- * [io] answers with a manifest (#400), otherwise [io] itself. [io] is closed when this fails.
+ * [io] answers with a manifest (#400), the reader that serves TTML subtitles as WebVTT when it
+ * answers with an HLS master that has them (#439), otherwise [io] itself. A response that says it
+ * is HLS is never taken for a manifest. [io] is closed when this fails.
  */
 internal suspend fun playableReader(io: KtorMediaIo): MediaIo = try {
-    Dash.readerIfManifest(io) ?: io
+    if (HlsTtmlMediaIo.declaredHls(io.contentType, io.location)) {
+        HlsTtmlMediaIo.readerIfTtml(io) ?: io
+    } else {
+        Dash.readerIfManifest(io) ?: io
+    }
 } catch (failure: Throwable) {
     io.close()
     throw failure

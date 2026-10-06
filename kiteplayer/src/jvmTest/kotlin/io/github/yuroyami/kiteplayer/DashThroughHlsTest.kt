@@ -115,6 +115,19 @@ class DashThroughHlsTest {
     }
 
     @Test
+    fun thePlayersBackendListsTheVariantsToo() = runBlocking {
+        // The player opens through the backend rather than the source factory, and the variants
+        // must reach the track table that way too, or nothing can choose or step one.
+        val session = io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend().open(Dash.mediaItemFor("$root/separate.mpd", client))
+        try {
+            assertEquals(listOf(180, 360), session.source.variants.map { it.height }, "each video representation is a variant")
+            assertEquals(1, session.source.selectedVariant, "the larger variant plays")
+        } finally {
+            session.close()
+        }
+    }
+
+    @Test
     fun separateVideoAndAudioSetsPlayTogetherAndSeekToSixtySeconds() = withSource("separate.mpd") { source ->
         assertEquals(listOf(180, 360), source.variants.map { it.height }, "each video representation is a variant")
         assertEquals(1, source.selectedVariant, "the larger variant plays")

@@ -80,7 +80,7 @@ public class KiteFFmpegMediaBackend(
         // Mapping it here is what stops the engine from reporting it as SourceUnavailable, which would
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt. Media FFmpeg cannot read
         // becomes NotMedia there too, with FFmpeg's reason.
-        val source = typingOpenFailures(media) { openItem(media).let { KiteFFmpegSource(it.source, it.bridge, it.hls, realTimeScheme = it.realTimeScheme, listedTitle = it.listedTitle, growing = it.growing) } }
+        val source = typingOpenFailures(media) { openItem(media).toSource() }
         source.onWarning = onWarning
         source.attachItemFilters(media)
         // The option echo's honest half: a key the demuxer never consumed did nothing,

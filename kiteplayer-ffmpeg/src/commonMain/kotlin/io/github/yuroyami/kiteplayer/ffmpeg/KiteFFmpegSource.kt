@@ -85,14 +85,20 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         // openOptions, formatHint and videoFilter and skipped the FFmpeg identity mapping, so the
         // documented SPI door behaved differently from the backend door for the same MediaItem.
         val source = typingOpenFailures(media) {
-            openItem(media).let {
-                KiteFFmpegSource(it.source, it.bridge, it.hls, it.variants, it.selectedVariant, it.realTimeScheme, it.listedTitle, it.growing)
-            }
+            openItem(media).toSource()
         }
         source.attachItemFilters(media)
         return source
     }
 }
+
+/**
+ * The source of this opened item, with everything the open learned. The backend's open and the
+ * source factory both build it here, so neither can leave a part out: the backend once built its
+ * own and left out the variants, so the player listed no quality to choose or step to (#543).
+ */
+internal fun OpenedItem.toSource(): KiteFFmpegSource =
+    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing)
 
 /**
  * Applies [media]'s filter chains to this source. An audio chain on a build without filter graphs,

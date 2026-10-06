@@ -2504,6 +2504,9 @@ internal class PlaybackCore(
                 session?.audio?.setDuckLevel(command.level)
                 command.reply.complete(Unit)
             }
+            is CoreCommand.RedrawPicture -> {
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetVideoScale -> {
                 videoScale = command.mode
                 // Whichever renderer is live learns immediately; the pending one learns so the
@@ -13196,6 +13199,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetAbLoop(val a: Duration?, val b: Duration?, val reply: CompletableDeferred<Unit>) : CoreCommand("setAbLoop", reply)
     class SetPreservePitch(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setPreservePitch", reply)
     class SetVideoScale(val mode: VideoScale, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoScale", reply)
+    class RedrawPicture(val reply: CompletableDeferred<Unit>) : CoreCommand("redrawPicture", reply)
     class SetRenderQuality(val value: io.github.yuroyami.kiteplayer.RenderQuality, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setRenderQuality", reply)
     class SetHdrPolicy(val value: io.github.yuroyami.kiteplayer.HdrPolicy, val reply: CompletableDeferred<Unit>) :

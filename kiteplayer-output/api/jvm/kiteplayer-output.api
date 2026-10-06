@@ -16,6 +16,7 @@ public final class io/github/yuroyami/kiteplayer/output/AwtCanvasVideoRenderer :
 	public final fun getFailedFrames ()J
 	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
 	public final fun getPresentedFrames ()J
+	public fun getRedrawsHeldPicture ()Z
 	public fun getShowsHdr ()Z
 	public final fun getSupersededFrames ()J
 	public fun present (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;

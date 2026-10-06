@@ -172,6 +172,16 @@ public interface VideoRenderer : AutoCloseable {
      * tone maps.
      */
     public val showsHdr: Boolean get() = false
+
+    /**
+     * True when this renderer draws the picture it holds again by itself after a change of its
+     * look: scale mode, adjustments, framing, render quality or the subtitle overlay. False makes
+     * the engine decode the held picture once more after such a change while the player is paused
+     * or ended, so the change shows at once rather than with the next frame (#463). Android's
+     * renderers answer false, because a MediaCodec frame goes to the Surface and leaves no copy.
+     * Defaulted to true, for a renderer that keeps its picture.
+     */
+    public val redrawsHeldPicture: Boolean get() = true
 }
 
 /** What a renderer reports about itself on [VideoRenderer.events]. */

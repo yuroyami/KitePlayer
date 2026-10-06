@@ -502,6 +502,22 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * renderer is told it on attach. Pixel aspect and container rotation are honoured in every
      * mode. The current mode is published as [PlayerSnapshot.videoScale].
      */
+    /**
+     * Draws the picture on screen again (#438), for a surface that was replaced and came back
+     * empty, as an Android view's does when its application returns to the foreground. A paused or
+     * ended player decodes the picture it shows once more and presents it, and its position and its
+     * status stay as they are, so an ended player stays [PlaybackStatus.Ended] and [play] still
+     * starts it from the beginning. A playing player needs nothing, because its next frame comes on
+     * its own, and a source that cannot seek cannot decode a past picture again. Fire and forget.
+     *
+     * A change of the picture's look while paused redraws by itself on a renderer that cannot redraw
+     * from a copy, so this is only for a surface the engine cannot know came back.
+     */
+    @Throws(IllegalStateException::class)
+    public fun redrawPicture() {
+        core.post(CoreCommand.RedrawPicture(CompletableDeferred()))
+    }
+
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoScale(mode: VideoScale) {
         core.post(CoreCommand.SetVideoScale(mode, CompletableDeferred()))

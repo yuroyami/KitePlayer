@@ -647,6 +647,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun position-UwyO8pc ()J
 	public final fun previous (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun previousChapter (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun redrawPicture ()V
 	public final fun reloadExternalSubtitle-EKZIWLs (ILjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun reloadExternalSubtitle-EKZIWLs$default (Lio/github/yuroyami/kiteplayer/KitePlayer;ILjava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun removeFromQueue (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -3852,6 +3853,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoRenderer 
 	public fun clearPicture ()V
 	public abstract fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
+	public fun getRedrawsHeldPicture ()Z
 	public fun getShowsHdr ()Z
 	public abstract fun present (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setAdjustments (Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
@@ -3871,6 +3873,7 @@ public final class io/github/yuroyami/kiteplayer/spi/VideoRenderer$DefaultImpls 
 	public static fun accepts (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public static fun clearPicture (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
+	public static fun getRedrawsHeldPicture (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Z
 	public static fun getShowsHdr (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Z
 	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public static fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/HdrPolicy;)V

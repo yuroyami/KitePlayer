@@ -13,6 +13,13 @@ public final class io/github/yuroyami/kiteplayer/subtitle/EastAsianText {
 	public final fun decode ([BLjava/lang/String;)Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/subtitle/LrcParser {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/LrcParser;
+	public static final field LAST_LINE_MICROS J
+	public final fun isLrc (Ljava/lang/String;)Z
+	public final fun parse (Ljava/lang/String;)Ljava/util/List;
+}
+
 public final class io/github/yuroyami/kiteplayer/subtitle/SubRipParser {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/SubRipParser;
 	public static final field OPEN_CUE_DEFAULT_MICROS J

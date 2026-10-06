@@ -31,6 +31,14 @@ final object io.github.yuroyami.kiteplayer.subtitle/EastAsianText { // io.github
     final fun decode(kotlin/ByteArray, kotlin/String): kotlin/String? // io.github.yuroyami.kiteplayer.subtitle/EastAsianText.decode|decode(kotlin.ByteArray;kotlin.String){}[0]
 }
 
+final object io.github.yuroyami.kiteplayer.subtitle/LrcParser { // io.github.yuroyami.kiteplayer.subtitle/LrcParser|null[0]
+    final const val LAST_LINE_MICROS // io.github.yuroyami.kiteplayer.subtitle/LrcParser.LAST_LINE_MICROS|{}LAST_LINE_MICROS[0]
+        final fun <get-LAST_LINE_MICROS>(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/LrcParser.LAST_LINE_MICROS.<get-LAST_LINE_MICROS>|<get-LAST_LINE_MICROS>(){}[0]
+
+    final fun isLrc(kotlin/String): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/LrcParser.isLrc|isLrc(kotlin.String){}[0]
+    final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/LrcParser.parse|parse(kotlin.String){}[0]
+}
+
 final object io.github.yuroyami.kiteplayer.subtitle/SubRipParser { // io.github.yuroyami.kiteplayer.subtitle/SubRipParser|null[0]
     final const val OPEN_CUE_DEFAULT_MICROS // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.OPEN_CUE_DEFAULT_MICROS|{}OPEN_CUE_DEFAULT_MICROS[0]
         final fun <get-OPEN_CUE_DEFAULT_MICROS>(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.OPEN_CUE_DEFAULT_MICROS.<get-OPEN_CUE_DEFAULT_MICROS>|<get-OPEN_CUE_DEFAULT_MICROS>(){}[0]

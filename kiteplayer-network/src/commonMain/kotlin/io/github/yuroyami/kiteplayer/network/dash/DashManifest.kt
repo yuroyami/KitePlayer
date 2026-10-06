@@ -110,6 +110,12 @@ public data class DashRepresentation(
      * or else its set, in the schemes that state a count, or null.
      */
     val audioChannels: Int? = null,
+    /**
+     * The picture's dynamic range as HLS names it, `PQ` or `HLG`, from the
+     * `urn:mpeg:mpegB:cicp:TransferCharacteristics` property of the representation or else its set
+     * (#447), or null for standard range and for a manifest that states nothing.
+     */
+    val videoRange: String? = null,
 )
 
 /** A `SegmentTemplate`, merged from every level that declares one, the lowest level winning each attribute. */

@@ -23,6 +23,9 @@ import kotlin.time.Duration
  * 3. [TempoStage] plays the sound at `speed`, keeping its pitch or not. After the resampler, so
  *    it works at the device's rate, and before the equaliser and the trim.
  *
+ * After them, [SilenceStage] shortens the pauses when skip silence is on (#429), on the sound as it
+ * will be heard, and then the stereo mode, the equaliser, the night mode and the trim scale it.
+ *
  * The gain is NOT here. Volume and mute moved to the ring's read side on 2026-08-31, because a gain
  * applied on the way INTO the ring cannot reach audio already buffered and a change stayed inaudible
  * for the ring's whole depth. See AudioRingHandle.setGain.
@@ -216,26 +219,31 @@ internal class AudioPipeline(
     // [reset]: [pieceCount] runs, each from [pieceStart] in the output, reading the source from
     // [pieceSource] at [pieceSlope] source frames per output frame. The audio clock is dated from
     // these, so it follows every change of rate exactly where the output changes.
-    private val pieceStarts = IntArray(MAX_PIECES)
-    private val pieceSources = DoubleArray(MAX_PIECES)
-    private val pieceSlopes = DoubleArray(MAX_PIECES)
-    private val pieceRates = DoubleArray(MAX_PIECES)
+    private val chainRuns = OutputRuns()
+
+    /** The runs the last call reports: the chain's own, or the silence stage's when it ran. */
+    private var reported: OutputRuns = chainRuns
 
     /** Runs of output the last [process] or [finish] made. */
-    var pieceCount: Int = 0
-        private set
+    val pieceCount: Int get() = reported.count
 
-    fun pieceStart(index: Int): Int = pieceStarts[index]
+    fun pieceStart(index: Int): Int = reported.start(index)
 
-    fun pieceSource(index: Int): Double = pieceSources[index]
+    fun pieceSource(index: Int): Double = reported.source(index)
 
-    fun pieceSlope(index: Int): Double = pieceSlopes[index]
+    fun pieceSlope(index: Int): Double = reported.slope(index)
 
     /**
      * Media seconds per output second across piece [index]: the speed it plays at. Taken from the
      * tempo stage as it is, so a speed of 1.5 reads 1.5 exactly whatever the two sample rates.
      */
-    fun pieceRate(index: Int): Double = pieceRates[index]
+    fun pieceRate(index: Int): Double = reported.rate(index)
+
+    /** Starts a call's runs afresh. */
+    private fun clearPieces() {
+        chainRuns.clear()
+        reported = chainRuns
+    }
 
     // The tempo stage's runs in its own output frames since the last [reset], kept while the pitch
     // stage may still read the frames they made: the pitch stage's runs point into them (#465).
@@ -312,13 +320,7 @@ internal class AudioPipeline(
     }
 
     private fun addPiece(start: Int, source: Double, rate: Double) {
-        if (pieceCount == MAX_PIECES) return
-        if (pieceCount > 0 && pieceStarts[pieceCount - 1] == start) pieceCount--
-        pieceStarts[pieceCount] = start
-        pieceSources[pieceCount] = source * sourcePerTarget
-        pieceSlopes[pieceCount] = rate * sourcePerTarget
-        pieceRates[pieceCount] = rate
-        pieceCount++
+        chainRuns.add(start, source * sourcePerTarget, rate * sourcePerTarget, rate)
     }
 
     /**
@@ -380,7 +382,7 @@ internal class AudioPipeline(
      *         input frame carry to the next call, so the conversion stays continuous across it.
      */
     fun process(input: FloatArray, frames: Int): Int {
-        pieceCount = 0
+        clearPieces()
         if (frames <= 0) return 0
 
         /* An identity mixer used to copy the whole buffer anyway. Skipping it means
@@ -421,6 +423,13 @@ internal class AudioPipeline(
         }
         produced = pitchRun(result, produced, tempoBefore, 0)
         result = chainOutput
+        // Skip silence (#429), on what will be heard, before the stages that only scale it. Skipped
+        // while off with nothing held, so an ordinary item pays nothing for it.
+        if (!silence.isIdentity) {
+            produced = silence.process(result, produced, chainRuns, ending = false)
+            result = silence.output
+            reported = silence.runs
+        }
 
         /* Last, so it scales exactly what reaches the ring, and skipped entirely at unity so a file
          * with no ReplayGain tags pays nothing for the feature. In place: `result` is either our own
@@ -467,10 +476,14 @@ internal class AudioPipeline(
     /** The night mode (#442), skipped while off. See [NightStage]. */
     val night: NightStage = NightStage(targetFormat.channels, targetFormat.sampleRate)
 
+    /** Skip silence (#429), skipped while off with nothing held. See [SilenceStage]. */
+    val silence: SilenceStage = SilenceStage(targetFormat.channels, targetFormat.sampleRate)
+
     /**
      * Pushes out what the stages are still holding, for the end of the stream.
      *
-     * TWO stages hold something now. The tempo stage keeps up to two pitch periods of lookahead
+     * Three stages hold something. The silence stage holds the pause it has not decided on yet, which
+     * plays now, as it is. The tempo stage keeps up to two pitch periods of lookahead
      * that no further input will ever trigger, and dropping them loses the end of the media. The
      * rate conversion holds half a kernel, which is 0.36 ms at 44.1 kHz: small, but it
      * is real audio and the old interpolator's excuse for skipping it (it held under one frame, and
@@ -488,7 +501,7 @@ internal class AudioPipeline(
      * @return sample frames written to [output], zero when no stage was holding anything.
      */
     fun finish(): Int {
-        pieceCount = 0
+        clearPieces()
         var total = 0
         // 1. The rate conversion's tail, through the tempo stage like any other buffer.
         val conversion = resampler
@@ -525,13 +538,21 @@ internal class AudioPipeline(
             total = appendFinished(pitchStage.output, held, total)
         }
 
+        // The silence stage hands on what it holds, the kept half of a cut included, so the last
+        // frame out is the stream's last (#429).
+        var tail = finished
+        if (!silence.isIdentity) {
+            total = silence.process(finished, total, chainRuns, ending = true)
+            tail = silence.output
+            reported = silence.runs
+        }
         if (total <= 0) return 0
-        // The same last three stages as process, in the same order (#257, #462).
-        stereo.apply(finished, total)
-        equalizer.apply(finished, total)
-        night.apply(finished, total)
-        trim.apply(finished, total)
-        output = finished
+        // The same last stages as process, in the same order (#257, #462).
+        stereo.apply(tail, total)
+        equalizer.apply(tail, total)
+        night.apply(tail, total)
+        trim.apply(tail, total)
+        output = tail
         return total
     }
 
@@ -553,12 +574,14 @@ internal class AudioPipeline(
      * flush. The gain keeps its position: the volume did not change because the position did.
      */
     fun reset() {
-        pieceCount = 0
+        clearPieces()
         mixer.reset()
         resampler?.reset()
         tempo.reset()
         pitchStage.reset()
         lineCount = 0
+        // What it held is of the position that was abandoned.
+        silence.reset()
         // The filters ring for a few dozen samples, so a seek that kept their history would splice
         // the tail of the old position onto the head of the new one.
         equalizer.reset()
@@ -614,9 +637,6 @@ internal class AudioPipeline(
          * 65,535 frames of 7.1 audio converted from 44.1 kHz to 192 kHz needs about 2.3 Mi.
          */
         const val MAX_STAGE_VALUES: Int = 4 * 1024 * 1024
-
-        /** More than any call makes: a pitch-law change and its settling come to three runs. */
-        private const val MAX_PIECES = 16
 
         /** The pitch ratios [pitch] takes: an octave either way. */
         const val MIN_PITCH: Double = 0.5

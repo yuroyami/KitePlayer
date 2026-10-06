@@ -219,6 +219,8 @@ internal class MediaScript(
     val audioMetadata: Map<String, String> = emptyMap(),
     /** The default audio track's multiplier per channel, so a test can tell the sides apart (#462). */
     val audioChannelMarkers: List<Float>? = null,
+    /** Stretches, in microseconds, whose audio buffers are digital silence, as a podcast's pauses are (#429). */
+    val audioSilentUs: List<LongRange> = emptyList(),
     /** The variants the source offers, as an HLS master playlist would. The item's choice picks one. */
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
     /** A read delay for one variant, in place of [readDelayUs]: a link too slow for that variant. */
@@ -1577,6 +1579,7 @@ internal class ScriptedAudioDecoder(
                 trackMarker = track.marker,
                 ledger = ledger,
                 channelMarkers = track.channelMarkers,
+                silent = (packet.pts?.micros ?: 0L).let { at -> script.audioSilentUs.any { at in it } },
             ),
         )
         return true
@@ -1630,10 +1633,11 @@ internal class ScriptedAudioBuffer(
     private val trackMarker: Float = 1f,
     private val ledger: LeakLedger? = null,
     private val channelMarkers: List<Float>? = null,
+    private val silent: Boolean = false,
 ) : AudioBuffer {
 
     private var isClosed = false
-    private val value: Float = trackSample(generation, trackMarker)
+    private val value: Float = if (silent) 0f else trackSample(generation, trackMarker)
 
     init {
         ledger?.onOpen()

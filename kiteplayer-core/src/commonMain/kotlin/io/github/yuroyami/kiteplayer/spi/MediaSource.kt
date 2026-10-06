@@ -113,6 +113,38 @@ public interface PlayerMediaSource : AutoCloseable {
     public val realTime: Boolean get() = false
 
     /**
+     * Tells the sender of a [realTime] stream that the player has stopped reading because it is
+     * paused (#441), and says whether the source has any notion of that: true when it has and is
+     * now paused, false when it has none, in which case nothing was sent and the source reads on.
+     *
+     * An RTSP camera ends a session it has not heard from within its timeout, usually 60 seconds,
+     * and a paused player reads nothing. So while paused the engine calls this again about every
+     * second, and the source sends whatever keeps the session alive when it is due: KiteFFmpeg
+     * sends RTSP's PAUSE once and then the keepalive, GET_PARAMETER or OPTIONS, at half the
+     * session timeout. [resumeReading] asks the sender to play on.
+     *
+     * The engine calls it on the demux lane, between two reads, and reads nothing until
+     * [resumeReading] succeeds. Defaulted to false, so an existing source keeps compiling and keeps
+     * reading through a pause as it always did.
+     *
+     * @throws Exception when the sender or the connection refuses, for example because the
+     *   server already ended the session. The engine then opens the stream again on play.
+     */
+    public fun pauseReading(): Boolean = false
+
+    /**
+     * Lifts a [pauseReading]: the sender plays on, which for a live stream is the live edge, so the
+     * engine drops what it had buffered before the pause and plays what arrives from here (#441).
+     * Called on the demux lane, only after a [pauseReading] that answered true.
+     *
+     * @return true when a pause was lifted, false when there was none
+     * @throws Exception when the sender or the connection refuses, for example because the server
+     *   ended the session while the player was paused. The engine then opens the stream again, at
+     *   the live edge. Defaulted to false, as [pauseReading] is.
+     */
+    public fun resumeReading(): Boolean = false
+
+    /**
      * Packets for streams outside this set are read and discarded by the source.
      *
      * Every index must be one this source offers. A set naming one it does not is a caller

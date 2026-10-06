@@ -3372,7 +3372,9 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerMediaSou
 	public abstract fun getTimestampsMayJump ()Z
 	public fun getVariants ()Ljava/util/List;
 	public fun interrupt ()Z
+	public fun pauseReading ()Z
 	public abstract fun readPacket (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun resumeReading ()Z
 	public abstract fun seekToKeyframe-HwpeAyI (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seekToKeyframe-h5-aQVI (JLio/github/yuroyami/kiteplayer/KeyframeChoice;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun selectStreams (Ljava/util/Set;)V
@@ -3388,6 +3390,8 @@ public final class io/github/yuroyami/kiteplayer/spi/PlayerMediaSource$DefaultIm
 	public static fun getStreamDivergences (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Ljava/util/List;
 	public static fun getVariants (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Ljava/util/List;
 	public static fun interrupt (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Z
+	public static fun pauseReading (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Z
+	public static fun resumeReading (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Z
 	public static fun seekToKeyframe-h5-aQVI (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;JLio/github/yuroyami/kiteplayer/KeyframeChoice;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 

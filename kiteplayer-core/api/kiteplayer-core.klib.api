@@ -4015,6 +4015,7 @@ final class io.github.yuroyami.kiteplayer/VariantFit { // io.github.yuroyami.kit
     final fun copy(kotlin/Int? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/VariantFit // io.github.yuroyami.kiteplayer/VariantFit.copy|copy(kotlin.Int?;kotlin.Boolean){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/VariantFit.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/VariantFit.hashCode|hashCode(){}[0]
+    final fun heightCap(kotlin.collections/Collection<kotlin/Int>): kotlin/Int? // io.github.yuroyami.kiteplayer/VariantFit.heightCap|heightCap(kotlin.collections.Collection<kotlin.Int>){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/VariantFit.toString|toString(){}[0]
 }
 

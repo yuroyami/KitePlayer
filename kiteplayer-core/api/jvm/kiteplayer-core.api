@@ -2768,6 +2768,7 @@ public final class io/github/yuroyami/kiteplayer/VariantFit {
 	public final fun getDrawnHeight ()Ljava/lang/Integer;
 	public final fun getShowsHdr ()Z
 	public fun hashCode ()I
+	public final fun heightCap (Ljava/util/Collection;)Ljava/lang/Integer;
 	public fun toString ()Ljava/lang/String;
 }
 

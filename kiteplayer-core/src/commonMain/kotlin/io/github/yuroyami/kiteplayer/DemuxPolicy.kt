@@ -49,6 +49,16 @@ public data class VariantFit(
     init {
         require(drawnHeight == null || drawnHeight > 0) { "drawnHeight must be positive, was $drawnHeight" }
     }
+
+    /**
+     * The tallest picture this fit lets play among variants of [heights], or null for no cap: the
+     * first height at least [drawnHeight], and null when [drawnHeight] is null or taller than
+     * every one of them. The source's first choice and the player's later steps both read it.
+     */
+    public fun heightCap(heights: Collection<Int>): Int? {
+        val drawn = drawnHeight ?: return null
+        return heights.filter { it >= drawn }.minOrNull()
+    }
 }
 
 /**

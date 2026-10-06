@@ -174,6 +174,7 @@ internal actual class LibassEngine private constructor(
             frame.marginTop, frame.marginBottom, frame.marginLeft, frame.marginRight,
             frame.fontScale.toDouble(), frame.linePosition.toDouble(),
         )
+        kassSetVideoColor(module!!, self, frame.videoMatrixCode, if (frame.videoFullRange) 1 else 0)
     }
 
     actual fun render(timeMillis: Long): ByteArray? {
@@ -279,6 +280,9 @@ private external fun kassSetFrame(
     marginTop: Int, marginBottom: Int, marginLeft: Int, marginRight: Int,
     fontScale: Double, linePosition: Double,
 )
+
+@JsFun("(m, s, matrix, full) => m._kass_set_video_color(s, matrix, full)")
+private external fun kassSetVideoColor(module: JsAny, self: Int, matrix: Int, full: Int)
 
 @JsFun("(m, s, now) => m._kass_render(s, now)")
 private external fun kassRender(module: JsAny, self: Int, nowMillis: Double): Int

@@ -41,6 +41,7 @@ internal object LibassNative {
         marginTop: Int, marginBottom: Int, marginLeft: Int, marginRight: Int,
         fontScale: Double, linePosition: Double,
     )
+    @JvmStatic external fun setVideoColor(handle: Long, matrix: Int, fullRange: Boolean)
     @JvmStatic external fun render(handle: Long, nowMillis: Long): ByteArray?
     @JvmStatic external fun libraryVersion(): Int
 }

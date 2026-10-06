@@ -18,7 +18,8 @@
  * unconverted. libass colour is RRGGBBAA with AA as TRANSPARENCY (0 opaque), inverted once here,
  * and each channel is scaled by the pixel's own alpha at emit. The size arithmetic goes through
  * libass_pack_limits.h, whose ceiling keeps a hostile script from wrapping a 32-bit size_t. The
- * family name of a font added from memory comes from kite_font_name.h.
+ * family name of a font added from memory comes from kite_font_name.h, and each image's colour is
+ * matched to the video through the script's YCbCr Matrix header by kite_ass_color.h (#499).
  */
 
 #ifndef KITE_ASS_H
@@ -30,8 +31,18 @@
 #include <string.h>
 #include <ass/ass.h>
 
+#include "kite_ass_color.h"
 #include "kite_font_name.h"
 #include "libass_pack_limits.h"
+
+/* kite_ass_color.h takes libass's own header codes, so they must be the ones libass declares. */
+_Static_assert(YCBCR_DEFAULT == KITE_HEADER_DEFAULT && YCBCR_UNKNOWN == KITE_HEADER_UNKNOWN &&
+               YCBCR_NONE == KITE_HEADER_NONE && YCBCR_BT601_TV == KITE_HEADER_BT601_TV &&
+               YCBCR_BT601_PC == KITE_HEADER_BT601_PC && YCBCR_BT709_TV == KITE_HEADER_BT709_TV &&
+               YCBCR_BT709_PC == KITE_HEADER_BT709_PC && YCBCR_SMPTE240M_TV == KITE_HEADER_SMPTE240M_TV &&
+               YCBCR_SMPTE240M_PC == KITE_HEADER_SMPTE240M_PC && YCBCR_FCC_TV == KITE_HEADER_FCC_TV &&
+               YCBCR_FCC_PC == KITE_HEADER_FCC_PC,
+               "libass's ASS_YCbCrMatrix values moved");
 
 typedef struct kite_ass {
     ASS_Library *library;
@@ -47,6 +58,8 @@ typedef struct kite_ass {
     int frame_w, frame_h, storage_w, storage_h;
     int margin_t, margin_b, margin_l, margin_r;
     double font_scale, line_position;
+    /* The video's matrix as kite_ass_color.h names it, and its range, which colours are matched to. */
+    int video_matrix, video_full;
 
     /* Fonts arrived since the font selector was built; the next render rebuilds it. */
     int fonts_dirty;
@@ -217,6 +230,20 @@ static inline void kite_ass_set_frame(kite_ass *self, int frame_w, int frame_h,
     }
 }
 
+/*
+ * The colour of the video the next render is drawn over (#499): a KITE_VIDEO_ matrix and whether
+ * its range is full. KITE_VIDEO_NONE draws every colour as authored. A change redraws, because
+ * libass's "unchanged" verdict knows nothing of it.
+ */
+static inline void kite_ass_set_video_color(kite_ass *self, int matrix, int full) {
+    if (!self) return;
+    full = full != 0;
+    if (self->video_matrix == matrix && self->video_full == full) return;
+    self->video_matrix = matrix;
+    self->video_full = full;
+    self->force_next = 1;
+}
+
 static inline void kite_ass_put_int(unsigned char *at, int32_t value) {
     memcpy(at, &value, sizeof(int32_t));
 }
@@ -246,13 +273,14 @@ static inline int kite_ass_pack(kite_ass *self, ASS_Image *image) {
         self->packed_capacity = total;
     }
     unsigned char *packed = self->packed;
+    int header = self->track ? (int) self->track->YCbCrMatrix : KITE_HEADER_DEFAULT;
     kite_ass_put_int(packed, count);
     size_t header_at = sizeof(int32_t);
     size_t pixel_at = header_bytes;
     for (ASS_Image *at = image; at; at = at->next) {
         if (at->w <= 0 || at->h <= 0 || !at->bitmap) continue;
         int width = at->w, height = at->h, stride = at->stride;
-        uint32_t color = at->color;
+        uint32_t color = kite_ass_match_color(at->color, header, self->video_matrix, self->video_full);
         int red = (int) ((color >> 24) & 0xFF);
         int green = (int) ((color >> 16) & 0xFF);
         int blue = (int) ((color >> 8) & 0xFF);

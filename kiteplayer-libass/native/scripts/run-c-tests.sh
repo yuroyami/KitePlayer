@@ -54,7 +54,7 @@ if [ "$VARIANT" = wasm32 ]; then
     NODE="${KPLA_NODE:-node}"
     command -v "$EMCC" >/dev/null || { echo "run-c-tests.sh: no emcc at '$EMCC' (brew install emscripten)" >&2; exit 1; }
     command -v "$NODE" >/dev/null || { echo "run-c-tests.sh: no node at '$NODE'" >&2; exit 1; }
-    SUITES="test_pack_limits test_font_names"
+    SUITES="test_pack_limits test_font_names test_ass_color"
 
     echo "run-c-tests.sh: variant $VARIANT"
     echo "  compiler   $EMCC ($("$EMCC" --version | head -1))"
@@ -86,7 +86,7 @@ else
         asan)  VARIANT_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1" ;;
     esac
 
-    SUITES="test_pack_limits test_font_names"
+    SUITES="test_pack_limits test_font_names test_ass_color"
     LIBASS_PREFIX="${KPLA_LIBASS_PREFIX:-/opt/homebrew}"
     if [ -f "$LIBASS_PREFIX/include/ass/ass.h" ] && [ -e "$LIBASS_PREFIX/lib/libass.dylib" ]; then
         SUITES="$SUITES test_kite_ass"

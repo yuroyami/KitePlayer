@@ -23,12 +23,16 @@ internal actual class LibassEngine private constructor(
 
     actual fun addFont(name: String, data: ByteArray) = LibassNative.addFont(live(), name, data)
 
-    actual fun setFrame(frame: TypesetFrame) = LibassNative.setFrame(
-        live(),
-        frame.width, frame.height, frame.videoWidth, frame.videoHeight,
-        frame.marginTop, frame.marginBottom, frame.marginLeft, frame.marginRight,
-        frame.fontScale.toDouble(), frame.linePosition.toDouble(),
-    )
+    actual fun setFrame(frame: TypesetFrame) {
+        val handle = live()
+        LibassNative.setFrame(
+            handle,
+            frame.width, frame.height, frame.videoWidth, frame.videoHeight,
+            frame.marginTop, frame.marginBottom, frame.marginLeft, frame.marginRight,
+            frame.fontScale.toDouble(), frame.linePosition.toDouble(),
+        )
+        LibassNative.setVideoColor(handle, frame.videoMatrixCode, frame.videoFullRange)
+    }
 
     actual fun render(timeMillis: Long): ByteArray? = LibassNative.render(live(), timeMillis)
 

@@ -6812,6 +6812,11 @@ internal class PlaybackCore(
             marginRight = margins[3],
             fontScale = subtitleScale,
             linePosition = subtitlePosition,
+            videoColor = if (config.subtitles.assColorMatching) {
+                assColorTarget(session.videoStream, size?.height ?: videoHeight)
+            } else {
+                null
+            },
         )
     }
 

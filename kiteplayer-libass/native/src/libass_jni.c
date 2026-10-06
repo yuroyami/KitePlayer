@@ -116,6 +116,12 @@ JNIEXPORT void JNICALL KITE_JNI(setFrame)(
                        marginTop, marginBottom, marginLeft, marginRight, fontScale, linePosition);
 }
 
+JNIEXPORT void JNICALL KITE_JNI(setVideoColor)(
+        JNIEnv *env, jclass clazz, jlong handle, jint matrix, jboolean fullRange) {
+    (void) env; (void) clazz;
+    kite_ass_set_video_color((kite_ass *) (intptr_t) handle, matrix, fullRange == JNI_TRUE);
+}
+
 JNIEXPORT jbyteArray JNICALL KITE_JNI(render)(JNIEnv *env, jclass clazz, jlong handle, jlong nowMillis) {
     (void) clazz;
     kite_ass *self = (kite_ass *) (intptr_t) handle;

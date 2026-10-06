@@ -2,6 +2,8 @@
 
 package io.github.yuroyami.kiteplayer.libass
 
+import io.github.yuroyami.kiteplayer.spi.ColorMatrix
+import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
 import io.github.yuroyami.kiteplayer.spi.SubtitleTypesetters
 import io.github.yuroyami.kiteplayer.spi.TypesetFrame
@@ -121,6 +123,42 @@ class LibassWebTest {
             }
         }
         if (font != null) assertTrue(visibleSomewhere, "a font was loaded and nothing ever drew a visible pixel")
+    }
+
+    /**
+     * The web module matches a script's colours to the video as the hosts do (#499): a solid box in
+     * 0x3080c0 under no header comes out 0x287dc4 over BT.709 video, the ffmpeg command line's answer
+     * that `AssColorMatchingTest` and the C suite `test_ass_color` check too, and as authored with no
+     * video colour. A drawing needs no font, so this holds in a browser as well.
+     */
+    @Test
+    fun theWebModuleMatchesAScriptsColoursToTheVideo() = runTest {
+        loadModule()
+        val script = """
+            [Script Info]
+            ScriptType: v4.00+
+            PlayResX: 640
+            PlayResY: 360
+
+            [V4+ Styles]
+            Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+            Style: Default,Arial,20,&H00C08030,&H00C08030,&H00C08030,&H00C08030,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
+
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+            Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\pos(100,100)\p1}m 0 0 l 100 0 100 100 0 100{\p0}
+        """.trimIndent() + "\n"
+        fun middle(video: ColorSpaceInfo?): Int = LibassTypesetter().use { typesetter ->
+            typesetter.openDocument(script.encodeToByteArray())
+            val images = assertNotNull(typesetter.render(1_000, frame.copy(videoColor = video)), "the first render answered unchanged")
+            val box = assertNotNull(images.maxByOrNull { it.bitmap.width * it.bitmap.height }, "the box drew nothing")
+            val at = ((box.bitmap.height / 2) * box.bitmap.width + box.bitmap.width / 2) * 4
+            val px = box.bitmap.pixels
+            assertEquals(255, px[at + 3].toInt() and 0xFF, "the middle of the box is not opaque")
+            ((px[at].toInt() and 0xFF) shl 16) or ((px[at + 1].toInt() and 0xFF) shl 8) or (px[at + 2].toInt() and 0xFF)
+        }
+        assertEquals("287dc4", middle(ColorSpaceInfo(matrix = ColorMatrix.Bt709)).toString(16).padStart(6, '0'))
+        assertEquals("3080c0", middle(null).toString(16).padStart(6, '0'))
     }
 
     @Test

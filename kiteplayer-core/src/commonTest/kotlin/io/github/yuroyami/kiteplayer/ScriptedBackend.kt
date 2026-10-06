@@ -160,6 +160,8 @@ internal class MediaScript(
     val videoIsCoverArt: Boolean = false,
     /** The quarter turn the scripted video stream declares, as a phone recording on its side does. */
     val videoRotationDegrees: Int = 0,
+    /** The video stream's colour as the container states it, or null for none stated (#499). */
+    val videoColor: io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo? = null,
     val seekable: Boolean = true,
     /** Extra container tags, for the suites that read them. Merged over the harness's own three. */
     val containerTags: Map<String, String> = emptyMap(),
@@ -922,6 +924,7 @@ internal class ScriptedSource(
                     frameRate = 1_000_000.0 / script.videoFrameDurationUs,
                     isCoverArt = script.videoIsCoverArt,
                     rotationDegrees = script.videoRotationDegrees,
+                    colorSpace = script.videoColor,
                     // A key with no TrackInfo field of its own, so a test can prove the raw tags
                     // travel and not just the two the type happens to parse.
                     metadata = mapOf("handler_name" to "scripted video handler"),

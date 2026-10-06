@@ -1331,7 +1331,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.selectTrack(kind, track)
 
     /**
-     * Shows a second subtitle track at the top of the picture, or clears it with null.
+     * Shows a second subtitle track where [SubtitleConfig.secondaryPlacement] puts it, at the top of
+     * the picture by default, or clears it with null. [SubtitleConfig.secondaryLanguages] can choose
+     * one at each open instead.
      *
      * The secondary track's cues are forced to the top, so the two tracks never sit on each
      * other; the primary stays where its author put it. External tracks (negative ids) are

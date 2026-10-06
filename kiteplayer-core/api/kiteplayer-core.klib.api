@@ -524,6 +524,18 @@ final enum class io.github.yuroyami.kiteplayer/ReplayGainMode : kotlin/Enum<io.g
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/ReplayGainMode> // io.github.yuroyami.kiteplayer/ReplayGainMode.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement : kotlin/Enum<io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement> { // io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement|null[0]
+    enum entry AbovePrimary // io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement.AbovePrimary|null[0]
+    enum entry BelowPrimary // io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement.BelowPrimary|null[0]
+    enum entry Top // io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement.Top|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement> // io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement // io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement> // io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer/SeekMode : kotlin/Enum<io.github.yuroyami.kiteplayer/SeekMode> { // io.github.yuroyami.kiteplayer/SeekMode|null[0]
     enum entry Keyframe // io.github.yuroyami.kiteplayer/SeekMode.Keyframe|null[0]
     enum entry KeyframeThenRefine // io.github.yuroyami.kiteplayer/SeekMode.KeyframeThenRefine|null[0]
@@ -3770,7 +3782,7 @@ final class io.github.yuroyami.kiteplayer/StreamVariant { // io.github.yuroyami.
 }
 
 final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami.kiteplayer/SubtitleConfig|null[0]
-    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ..., io.github.yuroyami.kiteplayer/HearingImpairedNotes = ..., kotlin/String? = ..., io.github.yuroyami.kiteplayer/MatchingAudioSubtitles = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/SubtitleConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>;io.github.yuroyami.kiteplayer.HearingImpairedNotes;kotlin.String?;io.github.yuroyami.kiteplayer.MatchingAudioSubtitles;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
+    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ..., io.github.yuroyami.kiteplayer/HearingImpairedNotes = ..., kotlin/String? = ..., io.github.yuroyami.kiteplayer/MatchingAudioSubtitles = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.collections/List<kotlin/String> = ..., io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement = ...) // io.github.yuroyami.kiteplayer/SubtitleConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>;io.github.yuroyami.kiteplayer.HearingImpairedNotes;kotlin.String?;io.github.yuroyami.kiteplayer.MatchingAudioSubtitles;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.collections.List<kotlin.String>;io.github.yuroyami.kiteplayer.SecondarySubtitlePlacement){}[0]
 
     final val assColorMatching // io.github.yuroyami.kiteplayer/SubtitleConfig.assColorMatching|{}assColorMatching[0]
         final fun <get-assColorMatching>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.assColorMatching.<get-assColorMatching>|<get-assColorMatching>(){}[0]
@@ -3794,6 +3806,10 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami
         final fun <get-hearingImpairedNotes>(): io.github.yuroyami.kiteplayer/HearingImpairedNotes // io.github.yuroyami.kiteplayer/SubtitleConfig.hearingImpairedNotes.<get-hearingImpairedNotes>|<get-hearingImpairedNotes>(){}[0]
     final val preferredLanguages // io.github.yuroyami.kiteplayer/SubtitleConfig.preferredLanguages|{}preferredLanguages[0]
         final fun <get-preferredLanguages>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/SubtitleConfig.preferredLanguages.<get-preferredLanguages>|<get-preferredLanguages>(){}[0]
+    final val secondaryLanguages // io.github.yuroyami.kiteplayer/SubtitleConfig.secondaryLanguages|{}secondaryLanguages[0]
+        final fun <get-secondaryLanguages>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/SubtitleConfig.secondaryLanguages.<get-secondaryLanguages>|<get-secondaryLanguages>(){}[0]
+    final val secondaryPlacement // io.github.yuroyami.kiteplayer/SubtitleConfig.secondaryPlacement|{}secondaryPlacement[0]
+        final fun <get-secondaryPlacement>(): io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement // io.github.yuroyami.kiteplayer/SubtitleConfig.secondaryPlacement.<get-secondaryPlacement>|<get-secondaryPlacement>(){}[0]
     final val style // io.github.yuroyami.kiteplayer/SubtitleConfig.style|{}style[0]
         final fun <get-style>(): io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? // io.github.yuroyami.kiteplayer/SubtitleConfig.style.<get-style>|<get-style>(){}[0]
     final val typesetting // io.github.yuroyami.kiteplayer/SubtitleConfig.typesetting|{}typesetting[0]
@@ -3807,6 +3823,8 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami
     final fun component12(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component12|component12(){}[0]
     final fun component13(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component13|component13(){}[0]
     final fun component14(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component14|component14(){}[0]
+    final fun component15(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/SubtitleConfig.component15|component15(){}[0]
+    final fun component16(): io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement // io.github.yuroyami.kiteplayer/SubtitleConfig.component16|component16(){}[0]
     final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component2|component2(){}[0]
     final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component3|component3(){}[0]
     final fun component4(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/SubtitleConfig.component4|component4(){}[0]
@@ -3815,7 +3833,7 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami
     final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component7|component7(){}[0]
     final fun component8(): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> // io.github.yuroyami.kiteplayer/SubtitleConfig.component8|component8(){}[0]
     final fun component9(): io.github.yuroyami.kiteplayer/HearingImpairedNotes // io.github.yuroyami.kiteplayer/SubtitleConfig.component9|component9(){}[0]
-    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ..., io.github.yuroyami.kiteplayer/HearingImpairedNotes = ..., kotlin/String? = ..., io.github.yuroyami.kiteplayer/MatchingAudioSubtitles = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/SubtitleConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>;io.github.yuroyami.kiteplayer.HearingImpairedNotes;kotlin.String?;io.github.yuroyami.kiteplayer.MatchingAudioSubtitles;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean){}[0]
+    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? = ..., kotlin/Boolean = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleFont> = ..., io.github.yuroyami.kiteplayer/HearingImpairedNotes = ..., kotlin/String? = ..., io.github.yuroyami.kiteplayer/MatchingAudioSubtitles = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.collections/List<kotlin/String> = ..., io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement = ...): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/SubtitleConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?;kotlin.Boolean;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont>;io.github.yuroyami.kiteplayer.HearingImpairedNotes;kotlin.String?;io.github.yuroyami.kiteplayer.MatchingAudioSubtitles;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.collections.List<kotlin.String>;io.github.yuroyami.kiteplayer.SecondarySubtitlePlacement){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/SubtitleConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/SubtitleConfig.toString|toString(){}[0]
@@ -3857,6 +3875,12 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfigBuilder { // io.github.y
     final var preferredLanguages // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.preferredLanguages|{}preferredLanguages[0]
         final fun <get-preferredLanguages>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.preferredLanguages.<get-preferredLanguages>|<get-preferredLanguages>(){}[0]
         final fun <set-preferredLanguages>(kotlin.collections/List<kotlin/String>) // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.preferredLanguages.<set-preferredLanguages>|<set-preferredLanguages>(kotlin.collections.List<kotlin.String>){}[0]
+    final var secondaryLanguages // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.secondaryLanguages|{}secondaryLanguages[0]
+        final fun <get-secondaryLanguages>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.secondaryLanguages.<get-secondaryLanguages>|<get-secondaryLanguages>(){}[0]
+        final fun <set-secondaryLanguages>(kotlin.collections/List<kotlin/String>) // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.secondaryLanguages.<set-secondaryLanguages>|<set-secondaryLanguages>(kotlin.collections.List<kotlin.String>){}[0]
+    final var secondaryPlacement // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.secondaryPlacement|{}secondaryPlacement[0]
+        final fun <get-secondaryPlacement>(): io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.secondaryPlacement.<get-secondaryPlacement>|<get-secondaryPlacement>(){}[0]
+        final fun <set-secondaryPlacement>(io.github.yuroyami.kiteplayer/SecondarySubtitlePlacement) // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.secondaryPlacement.<set-secondaryPlacement>|<set-secondaryPlacement>(io.github.yuroyami.kiteplayer.SecondarySubtitlePlacement){}[0]
     final var style // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.style|{}style[0]
         final fun <get-style>(): io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.style.<get-style>|<get-style>(){}[0]
         final fun <set-style>(io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride?) // io.github.yuroyami.kiteplayer/SubtitleConfigBuilder.style.<set-style>|<set-style>(io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?){}[0]

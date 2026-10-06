@@ -2410,6 +2410,15 @@ public final class io/github/yuroyami/kiteplayer/ReplayGainMode : java/lang/Enum
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/ReplayGainMode;
 }
 
+public final class io/github/yuroyami/kiteplayer/SecondarySubtitlePlacement : java/lang/Enum {
+	public static final field AbovePrimary Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;
+	public static final field BelowPrimary Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;
+	public static final field Top Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;
+}
+
 public final class io/github/yuroyami/kiteplayer/SeekMode : java/lang/Enum {
 	public static final field Keyframe Lio/github/yuroyami/kiteplayer/SeekMode;
 	public static final field KeyframeThenRefine Lio/github/yuroyami/kiteplayer/SeekMode;
@@ -2500,14 +2509,16 @@ public final class io/github/yuroyami/kiteplayer/SubtitleCompositorKt {
 
 public final class io/github/yuroyami/kiteplayer/SubtitleConfig {
 	public fun <init> ()V
-	public synthetic fun <init> (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;ZZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;ZZZLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;ZZZLjava/util/List;Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;ZZZLjava/util/List;Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/util/List;
 	public final fun component10 ()Ljava/lang/String;
 	public final fun component11 ()Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;
 	public final fun component12 ()Z
 	public final fun component13 ()Z
 	public final fun component14 ()Z
+	public final fun component15 ()Ljava/util/List;
+	public final fun component16 ()Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;
 	public final fun component2 ()Z
 	public final fun component3 ()Z
 	public final fun component4-UwyO8pc ()J
@@ -2516,8 +2527,8 @@ public final class io/github/yuroyami/kiteplayer/SubtitleConfig {
 	public final fun component7 ()Z
 	public final fun component8 ()Ljava/util/List;
 	public final fun component9 ()Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
-	public final fun copy-Qzj5mUk (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;ZZZ)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
-	public static synthetic fun copy-Qzj5mUk$default (Lio/github/yuroyami/kiteplayer/SubtitleConfig;Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;ZZZILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
+	public final fun copy-ibMJvkU (Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;ZZZLjava/util/List;Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
+	public static synthetic fun copy-ibMJvkU$default (Lio/github/yuroyami/kiteplayer/SubtitleConfig;Ljava/util/List;ZZJFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;ZZZLjava/util/List;Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAssColorMatching ()Z
 	public final fun getAutoSelect ()Z
@@ -2530,6 +2541,8 @@ public final class io/github/yuroyami/kiteplayer/SubtitleConfig {
 	public final fun getForcedPicturesWhenOff ()Z
 	public final fun getHearingImpairedNotes ()Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
 	public final fun getPreferredLanguages ()Ljava/util/List;
+	public final fun getSecondaryLanguages ()Ljava/util/List;
+	public final fun getSecondaryPlacement ()Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;
 	public final fun getStyle ()Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;
 	public final fun getTypesetting ()Z
 	public final fun getWithMatchingAudio ()Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;
@@ -2553,6 +2566,8 @@ public final class io/github/yuroyami/kiteplayer/SubtitleConfigBuilder {
 	public final fun getForcedPicturesWhenOff ()Z
 	public final fun getHearingImpairedNotes ()Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;
 	public final fun getPreferredLanguages ()Ljava/util/List;
+	public final fun getSecondaryLanguages ()Ljava/util/List;
+	public final fun getSecondaryPlacement ()Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;
 	public final fun getStyle ()Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;
 	public final fun getTypesetting ()Z
 	public final fun getWithMatchingAudio ()Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;
@@ -2567,6 +2582,8 @@ public final class io/github/yuroyami/kiteplayer/SubtitleConfigBuilder {
 	public final fun setForcedPicturesWhenOff (Z)V
 	public final fun setHearingImpairedNotes (Lio/github/yuroyami/kiteplayer/HearingImpairedNotes;)V
 	public final fun setPreferredLanguages (Ljava/util/List;)V
+	public final fun setSecondaryLanguages (Ljava/util/List;)V
+	public final fun setSecondaryPlacement (Lio/github/yuroyami/kiteplayer/SecondarySubtitlePlacement;)V
 	public final fun setStyle (Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;)V
 	public final fun setTypesetting (Z)V
 	public final fun setWithMatchingAudio (Lio/github/yuroyami/kiteplayer/MatchingAudioSubtitles;)V

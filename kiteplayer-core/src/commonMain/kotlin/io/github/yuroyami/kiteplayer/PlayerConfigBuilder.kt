@@ -239,6 +239,12 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
     /** See [SubtitleConfig.forcedPicturesWhenOff]. */
     public var forcedPicturesWhenOff: Boolean = from.forcedPicturesWhenOff
 
+    /** See [SubtitleConfig.secondaryLanguages]. */
+    public var secondaryLanguages: List<String> = from.secondaryLanguages
+
+    /** See [SubtitleConfig.secondaryPlacement]. */
+    public var secondaryPlacement: SecondarySubtitlePlacement = from.secondaryPlacement
+
     /** The [SubtitleConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): SubtitleConfig = SubtitleConfig(
         preferredLanguages = preferredLanguages,
@@ -255,6 +261,8 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
         withMatchingAudio = withMatchingAudio,
         forcedPicturesOnly = forcedPicturesOnly,
         forcedPicturesWhenOff = forcedPicturesWhenOff,
+        secondaryLanguages = secondaryLanguages,
+        secondaryPlacement = secondaryPlacement,
     )
 }
 

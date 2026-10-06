@@ -539,6 +539,21 @@ public data class DownmixConfig(
  * cue timing applies [delay], and the platform rasterizer receives [fontScale]. Decoded cues are
  * held for the session and pruned on flush.
  */
+/** Where the second subtitle track sits on the picture (#494). */
+public enum class SecondarySubtitlePlacement {
+    /** At the top of the picture, apart from the primary track, so the two can never overlap. */
+    Top,
+
+    /**
+     * Directly above the primary track at the bottom, so the two read together and both follow
+     * the subtitle position.
+     */
+    AbovePrimary,
+
+    /** Directly below the primary track, the primary standing on it. */
+    BelowPrimary,
+}
+
 public data class SubtitleConfig(
     /**
      * Select a subtitle track automatically when one matches these languages, best first, given as
@@ -638,6 +653,15 @@ public data class SubtitleConfig(
      * authored, for an application that wants exactly those.
      */
     val assColorMatching: Boolean = true,
+    /**
+     * A second subtitle track to select at each open, for a viewer who reads two (#494): a text
+     * track in the first of these languages that has one, other than the primary track, as mpv's
+     * `secondary-slang` picks it. Languages match as [preferredLanguages] do. Empty, the default,
+     * selects none, and an application can still choose one with `selectSecondarySubtitle`.
+     */
+    val secondaryLanguages: List<String> = emptyList(),
+    /** Where the second subtitle track sits. See [SecondarySubtitlePlacement]. */
+    val secondaryPlacement: SecondarySubtitlePlacement = SecondarySubtitlePlacement.Top,
 ) {
     init {
         require(fallbackEncoding == null || SubtitleEncodings.canonical(fallbackEncoding) != null) {

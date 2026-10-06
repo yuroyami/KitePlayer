@@ -91,7 +91,10 @@ public data class Tracks(
      * is still refused with a typed error rather than selected and left silent.
      */
     val selectedSubtitle: TrackId? = null,
-    /** The secondary subtitle track, drawn at the top of the picture, or null when off. */
+    /**
+     * The secondary subtitle track, drawn where [SubtitleConfig.secondaryPlacement] says, at the top
+     * of the picture by default, or null when off.
+     */
     val selectedSecondarySubtitle: TrackId? = null,
     /**
      * The versions of the media at other qualities, such as the variants of an HLS master

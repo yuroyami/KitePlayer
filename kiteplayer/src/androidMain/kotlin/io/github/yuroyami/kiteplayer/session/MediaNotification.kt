@@ -62,6 +62,15 @@ public data class MediaNotificationOptions(
     val wakeLocks: WakeLockPolicy = WakeLockPolicy.Network,
     /** What a screen reader says for each transport button. Pass translated ones. */
     val labels: MediaNotificationLabels = MediaNotificationLabels(),
+    /**
+     * Called on the main thread when the user puts the notification away (#427): a swipe, or
+     * removing the application from the recent apps screen while the player is not playing. The
+     * library has already paused the player and removed the notification, as it does without a
+     * callback; the reason tells a swipe from a press of pause, which also ends at Paused, so an
+     * application that reads a swipe as "I am done" can close the player and free what it holds.
+     * Removing the application while it plays leaves the sound going and calls nothing.
+     */
+    val onDismissed: ((MediaNotificationDismissal) -> Unit)? = null,
 ) {
     init {
         require(smallIcon != 0) { "the notification needs a small icon" }
@@ -69,6 +78,15 @@ public data class MediaNotificationOptions(
         require(notificationId != 0) { "Android refuses notification id 0 for a foreground service" }
         require(!pausedForegroundTimeout.isNegative()) { "the paused foreground timeout cannot be negative" }
     }
+}
+
+/** How the user put the media notification away. See [MediaNotificationOptions.onDismissed]. */
+public enum class MediaNotificationDismissal {
+    /** The notification was swiped away. */
+    Swiped,
+
+    /** The application was removed from the recent apps screen while the player was not playing. */
+    TaskRemoved,
 }
 
 /** The names of the notification's transport buttons, which a screen reader says. English by default. */

@@ -46,7 +46,7 @@ class SeekRunUpSkipTest {
 
     @Test
     fun theDecoderSkipsTheRunUpAndGivesTheSamePicturesFromTheTarget() = runBlocking {
-        val ffmpeg = ffmpegCli ?: return@runBlocking println("SKIP: no ffmpeg on PATH")
+        val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         withFixture(ffmpeg) { file ->
             val full = runUp(file, skip = false)
             val skipped = runUp(file, skip = true)
@@ -68,7 +68,7 @@ class SeekRunUpSkipTest {
 
     @Test
     fun thePlayerLandsOnTheSamePictureAndAStepBackStillLands() = runBlocking {
-        val ffmpeg = ffmpegCli ?: return@runBlocking println("SKIP: no ffmpeg on PATH")
+        val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         withFixture(ffmpeg) { file ->
             val reference = runUp(file, skip = false, keepFrom = TARGET_US - 100_000)
             val atTarget = reference.kept.first { it.first >= TARGET_US }

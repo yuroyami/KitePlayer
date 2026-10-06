@@ -42,7 +42,7 @@ class LateStreamTest {
 
     @Test
     fun aSoundThatStartsAfterTheOpenPlaysAndFollowsItsChannelToANewStream() = runBlocking {
-        val ffmpeg = ffmpegCli ?: return@runBlocking println("SKIP: no ffmpeg on PATH")
+        val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         withFixture(ffmpeg) { file, pictureAlone ->
             // Read forward only, as from a multicast, and sent live: what follows the picture alone
             // arrives only once playing starts, so the open finds the picture alone.
@@ -53,7 +53,7 @@ class LateStreamTest {
 
     @Test
     fun aRecordingWhoseSoundIsListedBeforeItsFormatIsKnownPlaysIt() = runBlocking {
-        val ffmpeg = ffmpegCli ?: return@runBlocking println("SKIP: no ffmpeg on PATH")
+        val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         withFixture(ffmpeg) { file, _ ->
             // A file FFmpeg can seek in is scanned 5 MB ahead for programme tables at the open, so
             // both sounds are listed then, before any of their packets said a rate or a channel count.

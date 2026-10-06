@@ -71,7 +71,7 @@ class ForcedPicturesPlaybackTest {
      * that drew sat. Null when there is no `ffmpeg` to make the film.
      */
     private suspend fun drawnPictures(subtitles: SubtitleConfig, select: Boolean): Set<Int>? {
-        val ffmpeg = ffmpegCli ?: return null.also { println("SKIP: no ffmpeg on PATH") }
+        val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         val directory = Files.createTempDirectory("forcedpictures").toFile()
         try {
             val film = makeFilm(ffmpeg, directory)

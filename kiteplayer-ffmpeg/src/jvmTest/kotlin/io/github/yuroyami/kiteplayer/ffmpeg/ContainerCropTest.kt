@@ -26,6 +26,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import org.junit.Assume.assumeTrue
 
 /**
  * A crop that a Matroska track states with its `PixelCrop` elements reaches every frame, and the
@@ -139,10 +140,10 @@ class ContainerCropTest {
 
     /** A one second Matroska picture of [width] by [height], with [crop] set on its track by `mkvpropedit`. */
     private fun withCroppedFixture(width: Int, height: Int, vararg crop: String, block: (File) -> Unit) {
-        val ffmpeg = ffmpegCli ?: return println("SKIP: no ffmpeg on PATH")
+        val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         val propedit = listOf("/usr/bin/mkvpropedit", "/opt/homebrew/bin/mkvpropedit", "/usr/local/bin/mkvpropedit")
             .firstOrNull { File(it).canExecute() }
-        if (crop.isNotEmpty() && propedit == null) return println("SKIP: no mkvpropedit")
+        assumeTrue("no mkvpropedit on this host", crop.isEmpty() || propedit != null)
         val directory = Files.createTempDirectory("containercrop").toFile()
         try {
             val file = File(directory, "crop.mkv")

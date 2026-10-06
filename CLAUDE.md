@@ -57,6 +57,12 @@ Each line is something that bit someone. Delete a line when it stops being true.
   files in one module does the same in a second shape: the run fails with `NoClassDefFoundError`
   for one of our own classes, usually a companion, because that class file was never written.
   Delete `build/kotlin` and `build/classes/kotlin/jvm`.
+- A test task's environment is stored in the configuration cache with the rest of the task, so a
+  variable set for one run, such as `KITEPLAYER_REQUIRE_TESTMEDIA=1`, is silently missing when the
+  entry from a run without it is reused, and the run passes as if it were not set. The test results
+  come from the build cache the same way, because neither the variable nor the clips are task
+  inputs. Pass `--no-configuration-cache` and `--rerun` to the test task when the run depends on
+  either. CI starts fresh, so it is not affected.
 - A Gradle test run that is killed part way leaves its results directory unusable, and the next run
   fails before any test with `NoSuchFileException ... in-progress-results-generic.bin`. Delete
   `build/test-results/<task>` and run again.

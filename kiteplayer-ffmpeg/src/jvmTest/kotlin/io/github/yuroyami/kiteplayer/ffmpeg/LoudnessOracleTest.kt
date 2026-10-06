@@ -19,8 +19,8 @@ class LoudnessOracleTest {
     fun `a real file measures within half an LU of ffmpeg's ebur128`() = runBlocking {
         val dir = System.getenv("KITEPLAYER_TESTMEDIA") ?: "testmedia"
         val file = File(dir, "audio-flac.flac")
-        if (!file.isFile) return@runBlocking println("SKIP: no ${file.path}; run scripts/testmedia.sh")
-        val oracle = ffmpegIntegratedLufs(file) ?: return@runBlocking println("SKIP: no ffmpeg on PATH")
+        requireTestMedia(file.isFile, "no ${file.path}; run scripts/testmedia.sh")
+        val oracle = requireTestMedia(ffmpegIntegratedLufs(file), "no ffmpeg on PATH")
 
         val measured = AudioAnalysis.measureLoudness(MediaItem(file.absolutePath))
 

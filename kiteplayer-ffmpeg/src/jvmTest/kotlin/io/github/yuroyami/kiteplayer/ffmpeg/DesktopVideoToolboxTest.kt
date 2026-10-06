@@ -14,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.junit.Assume.assumeTrue
 
 /**
  * The desktop JVM on macOS decodes H.264 with VideoToolbox (#237), and the software renderers read
@@ -59,9 +60,7 @@ class DesktopVideoToolboxTest {
 
     @Test
     fun autoDecodesH264WithVideoToolboxAndShowsTheSoftwarePicture() = runBlocking {
-        if (!System.getProperty("os.name").orEmpty().startsWith("Mac")) {
-            return@runBlocking println("SKIP: VideoToolbox exists only on macOS")
-        }
+        assumeTrue("VideoToolbox exists only on macOS", System.getProperty("os.name").orEmpty().startsWith("Mac"))
         val clip = "${formatMatrixMediaDir() ?: error("testmedia missing; run scripts/testmedia.sh")}/colors-bt709.mp4"
         val hardware = firstFrame(clip, HwdecPolicy.Auto)
         val software = firstFrame(clip, HwdecPolicy.Off)
@@ -87,7 +86,7 @@ class DesktopVideoToolboxTest {
             // Inside a virtual machine, such as a CI runner, VideoToolbox has no decode hardware,
             // and its picture was measured to differ, so there only readable planes are asserted.
             if (inVirtualMachine()) {
-                println("SKIP: the picture comparison, because this Mac is a virtual machine")
+                println("The picture comparison is left out, because this Mac is a virtual machine")
                 assertTrue(hardware.frame.planeFormat != PlayerPixelFormat.Opaque, "the planes are not readable")
             } else {
                 assertTrue(largest <= 2, "the VideoToolbox picture differs from the software picture by up to $largest")

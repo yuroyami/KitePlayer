@@ -41,7 +41,7 @@ class ProgramSelectionTest {
 
     @Test
     fun theFirstChannelPlaysWithItsOwnSoundAndASwitchChangesBoth() = runBlocking {
-        val ffmpeg = ffmpegCli ?: return@runBlocking println("SKIP: no ffmpeg on PATH")
+        val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         withFixture(ffmpeg) { file ->
             withPlayer { player, screen ->
                 withTimeout(30.seconds) { player.open(MediaItem(file.absolutePath)) }
@@ -72,7 +72,7 @@ class ProgramSelectionTest {
 
     @Test
     fun anItemThatNamesTheSecondChannelOpensOnIt() = runBlocking {
-        val ffmpeg = ffmpegCli ?: return@runBlocking println("SKIP: no ffmpeg on PATH")
+        val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         withFixture(ffmpeg) { file ->
             withPlayer { player, _ ->
                 withTimeout(30.seconds) { player.open(MediaItem(file.absolutePath, demux = DemuxPolicy(program = 202))) }

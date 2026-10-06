@@ -7,6 +7,7 @@ import javax.sound.sampled.AudioSystem
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import org.junit.Assume.assumeTrue
 
 /**
  * Two players in one process, proven rather than assumed. A preview beside the main
@@ -23,9 +24,9 @@ class TwoPlayersTest {
 
     @Test
     fun twoPlayersPlayAtOnceAndClosingOneLeavesTheOther() = runBlocking {
-        val first = media("sync1080p30.mp4") ?: return@runBlocking println("SKIP: no sync1080p30.mp4")
-        val second = media("truevfr720.mp4") ?: return@runBlocking println("SKIP: no truevfr720.mp4")
-        if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
+        val first = requireTestMedia(media("sync1080p30.mp4"), "no sync1080p30.mp4; run scripts/testmedia.sh")
+        val second = requireTestMedia(media("truevfr720.mp4"), "no truevfr720.mp4; run scripts/testmedia.sh")
+        assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
 
         val a = KitePlayer()
         val b = KitePlayer()

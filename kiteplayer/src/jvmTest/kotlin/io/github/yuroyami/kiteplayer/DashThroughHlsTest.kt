@@ -12,7 +12,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.math.abs
 import java.net.InetSocketAddress
@@ -682,15 +681,15 @@ class DashThroughHlsTest {
 
     /**
      * Skips the test, with the generator's own reason, when `scripts/testmedia.sh` listed [fixture]
-     * in its MANIFEST as one the ffmpeg on that machine cannot make (#418). A fixture missing for
-     * any other reason fails the test instead.
+     * in its MANIFEST as one the ffmpeg on that machine cannot make (#418), or fails it where the
+     * job says it generated every clip (#419). A fixture missing for any other reason fails the test.
      */
     private fun assumeMade(fixture: String) {
         val testmedia = media.parentFile
         val skipped = File(testmedia, "MANIFEST.txt").takeIf { it.isFile }?.readLines().orEmpty()
             .map { it.removePrefix("skipped:").trim() to it.startsWith("skipped:") }
             .firstOrNull { (entry, isSkip) -> isSkip && entry.startsWith("$fixture:") }?.first
-        assumeTrue("testmedia.sh skipped $skipped", skipped == null)
+        requireTestMedia(skipped == null, "testmedia.sh skipped $skipped")
         check(File(testmedia, fixture).isFile) { "$fixture is missing; run scripts/testmedia.sh" }
     }
 

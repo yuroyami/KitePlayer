@@ -34,6 +34,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
+import org.junit.Assume.assumeTrue
 
 /**
  * The whole player on each live protocol over the loopback, against the `ffmpeg` command line as
@@ -78,7 +79,9 @@ class LivePlaybackTest {
     /** A multicast group on an interface that loops multicast back to this host, where there is one. */
     @Test
     fun aUdpMulticastStreamPlaysInSync() = live { clip ->
-        val local = multicastLoopAddress() ?: return@live println("SKIP: no interface here loops multicast back to this host")
+        val local = multicastLoopAddress()
+        assumeTrue("no interface here loops multicast back to this host", local != null)
+        checkNotNull(local)
         val port = freePort()
         playsInSync("udp multicast on $local", MediaItem("udp://$GROUP:$port?localaddr=$local")) {
             sender(clip, "multicast", listOf("-f", "mpegts", "udp://$GROUP:$port?localaddr=$local&ttl=1&pkt_size=1316"))
@@ -425,7 +428,7 @@ class LivePlaybackTest {
 
     /** Runs [test] with a marker clip of [seconds], or skips it when there is no `ffmpeg`. */
     private fun live(seconds: Int = 14, test: suspend CoroutineScope.(File) -> Unit) = runBlocking {
-        if (ffmpegCli == null) return@runBlocking println("SKIP: no ffmpeg on PATH")
+        requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         withTimeout((seconds + 76).seconds) { test(MarkerClip.make(seconds)) }
     }
 

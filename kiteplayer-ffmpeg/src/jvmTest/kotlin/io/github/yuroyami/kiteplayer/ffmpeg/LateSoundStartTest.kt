@@ -35,7 +35,7 @@ class LateSoundStartTest {
 
     @Test
     fun aSeekBeforeTheSoundLandsWhereItWasAsked() = runBlocking {
-        val ffmpeg = ffmpegCli ?: return@runBlocking println("SKIP: no ffmpeg on PATH")
+        val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         withFixture(ffmpeg, "mkv") { file ->
             val player = KitePlayer.create(PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), PacedOutput())))
             try {
@@ -53,7 +53,7 @@ class LateSoundStartTest {
     }
 
     private fun playsFromThePicture(extension: String) = runBlocking {
-        val ffmpeg = ffmpegCli ?: return@runBlocking println("SKIP: no ffmpeg on PATH")
+        val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
         withFixture(ffmpeg, extension) { file ->
             val output = PacedOutput()
             val recorder = FlashRecorder()

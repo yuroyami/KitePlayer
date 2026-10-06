@@ -209,7 +209,12 @@ jobs:
       #
       # A module with a jvmTest task and no test sources reports NO-SOURCE, which makes the job
       # look broader than it is, so only modules with tests are named.
+      #
+      # This job generated the clips above, so a test that finds one missing, or finds no ffmpeg,
+      # fails here rather than skipping (#419). A missing device, such as an audio mixer, still skips.
       - name: JVM tests, every module that has them
+        env:
+          KITEPLAYER_REQUIRE_TESTMEDIA: "1"
         run: |
           ./gradlew --stacktrace \
             :kiteplayer-core:jvmTest \

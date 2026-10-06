@@ -28,7 +28,8 @@ class MacosPlaybackTest {
 
     @Test
     fun theDefaultMacosStackPlaysARealFileAndTheClockMoves() = runBlocking<Unit> {
-        val path = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
+        // Kotlin/Native has no assumption to skip with, so a missing clip fails and names itself (#419).
+        val path = assertNotNull(media, "no $MEDIA to play; run scripts/testmedia.sh")
         val player = KitePlayer()
         try {
             player.open(MediaItem(path))

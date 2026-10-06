@@ -1606,12 +1606,18 @@ internal class PlaybackCore(
     }
 
     /** Where the subtitle line [offset] lines from now starts, in the item's time (#491). */
-    suspend fun subtitleLineStart(offset: Int): kotlin.time.Duration =
-        throw IllegalStateException("subtitle lines are not read yet")
+    suspend fun subtitleLineStart(offset: Int): kotlin.time.Duration {
+        val reply = CompletableDeferred<Long>()
+        send(CoreCommand.SubtitleLine(offset, moveDelay = false, reply))
+        return awaitReply(reply).microseconds
+    }
 
     /** Shifts the subtitle delay so the line [offset] lines from now starts now, and answers it (#491). */
-    suspend fun stepSubtitleDelay(offset: Int): kotlin.time.Duration =
-        throw IllegalStateException("subtitle lines are not read yet")
+    suspend fun stepSubtitleDelay(offset: Int): kotlin.time.Duration {
+        val reply = CompletableDeferred<Long>()
+        send(CoreCommand.SubtitleLine(offset, moveDelay = true, reply))
+        return awaitReply(reply).microseconds
+    }
 
     /** Fire and forget, coalescing by contract. What a seek bar drag calls sixty times a second. */
     fun seekLater(to: Pts, mode: SeekMode) {
@@ -2587,6 +2593,7 @@ internal class PlaybackCore(
                 redrawOnOverlay = status == PlaybackStatus.Paused || status == PlaybackStatus.Ended
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SubtitleLine -> answerSubtitleLine(command)
             is CoreCommand.SetSubtitleScale -> {
                 subtitleScale = command.value
                 session?.publishedCueKey = null
@@ -5981,6 +5988,53 @@ internal class PlaybackCore(
     }
 
     /**
+     * Finds the subtitle line [CoreCommand.SubtitleLine.offset] lines from now (#491). A line is a
+     * distinct start among the selected track's cues, at the time it shows with the delay, so two
+     * cues that start together, a sign and a line of dialogue, are one line. Now is where a seek on
+     * its way is going, when one is, so repeated presses count from where the last one went and
+     * skip nothing. The line showing is the last one started at now or up to a millisecond after,
+     * which a precise landing on its first frame can be.
+     */
+    private fun answerSubtitleLine(command: CoreCommand.SubtitleLine) {
+        val reply = command.reply
+        val active = session ?: return refuseLine(reply, "nothing is open")
+        if (active.subtitleStream == null && selectedExternalSubtitle == null) {
+            return refuseLine(reply, "no subtitle track is selected")
+        }
+        val delayUs = subtitleDelay.inWholeMicroseconds
+        val remembered = active.subtitleStream?.let { active.subtitleLineStarts[it.index] }.orEmpty()
+        val starts = (active.subtitleCues.map { it.startMicros } + remembered).distinct().map { it + delayUs }.sorted()
+        val nowUs = maskedSeekTargetMicros.value.takeIf { it != NO_SEEK_MASK } ?: currentPosition().micros
+        val showing = starts.indexOfLast { it <= nowUs + LINE_LANDING_SLACK_US }
+        val wanted = showing + command.offset
+        if (starts.isEmpty() || wanted !in starts.indices || (command.offset == 0 && showing < 0)) {
+            return refuseLine(
+                reply,
+                if (command.offset > 0) "there is no later subtitle line read yet" else "there is no subtitle line there",
+            )
+        }
+        val shownAtUs = starts[wanted]
+        if (!command.moveDelay) {
+            reply.complete(itemTime(shownAtUs))
+            return
+        }
+        // The delay that shows that line's cue now: its own start, before any delay, moved to now.
+        val delay = (nowUs - (shownAtUs - delayUs)).microseconds
+        if (delay.absoluteValue > io.github.yuroyami.kiteplayer.KitePlayer.DELAY_MAX) {
+            return refuseLine(reply, "starting that line now needs a delay of $delay, more than ${io.github.yuroyami.kiteplayer.KitePlayer.DELAY_MAX}")
+        }
+        subtitleDelay = delay
+        active.publishedCueKey = null
+        redrawOnOverlay = status == PlaybackStatus.Paused || status == PlaybackStatus.Ended
+        publishSnapshot()
+        reply.complete(delay.inWholeMicroseconds)
+    }
+
+    private fun refuseLine(reply: CompletableDeferred<Long>, reason: String) {
+        reply.completeExceptionally(IllegalStateException(reason))
+    }
+
+    /**
      * Decodes the held picture once more and presents it, keeping the position and the status
      * (#438, #463). [forced] is the application's own [KitePlayer.redrawPicture], which every renderer
      * gets; otherwise only one that cannot redraw from a copy is redrawn. Only a paused or ended
@@ -6393,7 +6447,14 @@ internal class PlaybackCore(
                 }
                 receiveBatches++
                 cuesInserted = true
-                insertCues(session.subtitleCues, withoutNotes(decoded, session.subtitleStream))
+                val shown = withoutNotes(decoded, session.subtitleStream)
+                insertCues(session.subtitleCues, shown)
+                // A seek re-reads an embedded track from its landing and clears the table, and a
+                // line's start stays true after it, so the lines keep a record of their own (#491).
+                session.subtitleStream?.let { stream ->
+                    val record = session.subtitleLineStarts.getOrPut(stream.index) { HashSet() }
+                    if (record.size < MAX_REMEMBERED_LINES) shown.forEach { record += it.startMicros }
+                }
                 if (actorWorkWaiting()) {
                     interrupted = true
                     return
@@ -12523,6 +12584,8 @@ internal class PlaybackCore(
          * performance bug report.
          */
         val videoParked = atomic(false)
+        /** The start of every line each subtitle stream has delivered, which no seek clears (#491). Actor only. */
+        val subtitleLineStarts: MutableMap<Int, MutableSet<Long>> = HashMap()
         /** The position a redraw of the held picture keeps, or [NO_POSITION] (#438). Actor only. */
         var heldPositionUs: Long = NO_POSITION
         /** What a paused player told the sender of a real-time stream (#441). */
@@ -12713,6 +12776,15 @@ internal class PlaybackCore(
     private companion object {
         /** How far behind the position container cues survive before pruning. */
         const val CUE_PRUNE_BEHIND_MICROS = 30_000_000L
+
+        /** How far after a line's start a landing on it may read and still be on it (#491). */
+        const val LINE_LANDING_SLACK_US = 1_000L
+
+        /**
+         * The most line starts a subtitle stream keeps a record of (#491): a dense track of 70,000
+         * cues stays well inside it, at eight bytes or so a line.
+         */
+        const val MAX_REMEMBERED_LINES = 200_000
 
         /** Alternate packet caches follow playback at this cadence, never the demux frontier. */
         const val SWITCH_CACHE_PRUNE_STEP_US = 250_000L
@@ -13315,6 +13387,13 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetVideoTransform(val value: VideoTransform, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setVideoTransform", reply)
     class SetSubtitleDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleDelay", reply)
+
+    /**
+     * The subtitle line [offset] lines from now (#491): where it starts in the item's time, or with
+     * [moveDelay] the subtitle delay that starts it now, which is then set.
+     */
+    class SubtitleLine(val offset: Int, val moveDelay: Boolean, val reply: CompletableDeferred<Long>) :
+        CoreCommand(if (moveDelay) "stepSubtitleDelay" else "seekToSubtitleLine", reply)
     class SetSubtitleScale(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleScale", reply)
     class SetSubtitleStyle(
         val value: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?,

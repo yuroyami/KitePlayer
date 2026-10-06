@@ -1,8 +1,12 @@
 package io.github.yuroyami.kiteplayer.session
 
+import io.github.yuroyami.kiteplayer.CoverArt
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture
+import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -10,7 +14,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import platform.Foundation.NSData
 import platform.Foundation.NSNumber
+import platform.Foundation.create
 import platform.Foundation.numberWithBool
 import platform.Foundation.numberWithDouble
 import platform.Foundation.numberWithUnsignedLong
@@ -72,6 +78,9 @@ public class KitePlayerMediaSession(
     private val handlers = mutableListOf<Pair<MPRemoteCommand, Any>>()
     private val artwork = MutableStateFlow<MPMediaItemArtwork?>(null)
 
+    /** The item's own cover, decoded, shown while the application gives no picture of its own (#425). */
+    private val fileArtwork = MutableStateFlow<MPMediaItemArtwork?>(null)
+
     /** The dictionary the card reads. Both halves live in it, so every write sends it whole. */
     private val info = mutableMapOf<Any?, Any?>()
 
@@ -88,22 +97,37 @@ public class KitePlayerMediaSession(
     init {
         wireCommands()
         scope.launch {
-            combine(player.state, player.progress, artwork) { snapshot, progress, picture ->
-                snapshot.toMediaSessionState(progress) to picture
+            combine(player.state, player.progress, artwork, fileArtwork) { snapshot, progress, own, file ->
+                snapshot.toMediaSessionState(progress) to (own ?: file)
             }.collect { (state, picture) ->
                 latest = state
                 mirror.update(state, picture)
             }
         }
+        scope.launch {
+            player.coverArt.collect { cover -> fileArtwork.value = cover?.let(::coverArtwork) }
+        }
     }
 
     /**
-     * The picture the card shows. The application supplies it: the engine reads a file's cover art
-     * but does not decode it, so there is nothing here to hand over on its own.
+     * The picture the card shows. Without one the card shows the item's own cover, the picture a
+     * music file carries, when it has one; a picture set here wins over it, and null goes back to it.
      */
-    @OptIn(ExperimentalForeignApi::class)
     public fun setArtwork(image: UIImage?) {
-        artwork.value = image?.let { picture -> MPMediaItemArtwork(boundsSize = picture.size) { _ -> picture } }
+        artwork.value = image?.let(::imageArtwork)
+    }
+
+    @OptIn(ExperimentalForeignApi::class)
+    private fun imageArtwork(picture: UIImage): MPMediaItemArtwork =
+        MPMediaItemArtwork(boundsSize = picture.size) { _ -> picture }
+
+    /** The cover's picture, or null when UIKit cannot read its bytes. */
+    @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+    private fun coverArtwork(cover: CoverArt): MPMediaItemArtwork? {
+        val bytes = cover.bytes
+        if (bytes.isEmpty()) return null
+        val data = bytes.usePinned { pinned -> NSData.create(bytes = pinned.addressOf(0), length = bytes.size.toULong()) }
+        return UIImage.imageWithData(data)?.let(::imageArtwork)
     }
 
     /** The slow half: title, artist, album, length, kind and picture. */

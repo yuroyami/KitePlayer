@@ -5106,6 +5106,17 @@ internal class PlaybackCore(
         }
     }
 
+    /** The media type of a cover picture in [codec], as FFmpeg names its picture decoders. */
+    private fun coverMimeType(codec: String): String? = when (codec.lowercase()) {
+        "mjpeg", "jpeg", "jpegls" -> "image/jpeg"
+        "png", "apng" -> "image/png"
+        "bmp" -> "image/bmp"
+        "gif" -> "image/gif"
+        "webp" -> "image/webp"
+        "tiff" -> "image/tiff"
+        else -> null
+    }
+
     /**
      * Shows the tag changes the listener has now heard (#423): each one the demux lane read whose
      * packet the published position has reached, the last of them standing. A change still ahead
@@ -6421,6 +6432,9 @@ internal class PlaybackCore(
             publishedPositionMicros.value = currentPosition().micros
         }
         showHeardTags(session)
+        // The cover the demux lane copied, published by the actor, so a lane of a session already
+        // gone can never show its picture over the next item's (#425).
+        session.coverArt.value.let { cover -> if (coverArtState.value != cover) coverArtState.value = cover }
         // Chapter crossings: compared on the published reading, so a seek and ordinary
         // playback announce a boundary the same way. Media with no table emits nothing.
         // In the item's time, as the chapters and the markers are (#456).
@@ -10491,6 +10505,7 @@ internal class PlaybackCore(
     }
 
     private suspend fun teardownSession() {
+        coverArtState.value = null
         dropPending(null)
         releaseSession(detachSession() ?: return)
     }
@@ -11422,6 +11437,12 @@ internal class PlaybackCore(
             // Read before the packet is handed on, which gives it away.
             val readIndex = packet.streamIndex
             val readAtUs = (packet.dts ?: packet.pts)?.micros
+            // The cover's one packet is the picture as the file holds it: copied once, before the
+            // lane decodes it or, with the picture parked, throws it away (#425).
+            val cover = session.videoStream
+            if (cover != null && cover.isCoverArt && readIndex == cover.index && session.coverArt.value == null) {
+                session.coverArt.value = io.github.yuroyami.kiteplayer.CoverArt(packet.copyBytes(), coverMimeType(cover.codec))
+            }
             // A song's new tags show when this packet is heard, which the actor watches for (#423).
             packet.newContainerTags?.let { tags ->
                 val atUs = packet.pts?.micros ?: readAtUs ?: Long.MIN_VALUE
@@ -12929,6 +12950,9 @@ internal class PlaybackCore(
 
         /** Tag changes the demux lane read, each with the media time it belongs at, until they are heard. */
         val tagChanges = atomic(emptyList<Pair<Long, Map<String, String>>>())
+
+        /** The item's cover picture, copied by the demux lane from the cover's one packet (#425). */
+        val coverArt = atomic<io.github.yuroyami.kiteplayer.CoverArt?>(null)
         /** Set when the lane un-parks: packets are discarded until a keyframe the decoder can start from. */
         val videoWaitingForKeyframe = atomic(false)
         /** Audio-only precise boundary for a lane swap; video remains on the current epoch. */

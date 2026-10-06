@@ -848,8 +848,9 @@ screen. A desktop app keeps playing without help, and a web page plays while its
 
 - It shows the title, the artist, previous, play or pause, and next. Set `title`, `artist` and
   `album` on the `MediaItem` to choose them; otherwise they come from the file's tags, then its
-  file name. `session.setCustomActions` adds your own buttons, and `session.setArtworkLoader`
-  supplies the picture.
+  file name. `session.setCustomActions` adds your own buttons. The picture is the file's own
+  cover when it carries one, and `session.setArtworkLoader` supplies another that wins over it.
+  `player.coverArt` hands the cover's bytes to your own screens too.
 - Skip back and skip forward move 15 seconds. Pass `skipInterval` to `attachMediaSession` for
   another interval.
 - The session takes audio focus, so a call or another app pauses or ducks the player, and the

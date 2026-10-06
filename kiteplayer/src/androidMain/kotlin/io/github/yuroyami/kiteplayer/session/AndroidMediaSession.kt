@@ -20,10 +20,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -59,6 +61,19 @@ public class KitePlayerMediaSession(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val artwork = MutableStateFlow<Bitmap?>(null)
     private val artworkLoader = MutableStateFlow<(suspend (PlayerSnapshot) -> Bitmap?)?>(null)
+
+    /** The item's own cover, decoded off the main thread at the size the session draws (#425). */
+    private val fileArtwork = MutableStateFlow<Bitmap?>(null)
+
+    private val artworkSide = mediaArtworkSidePx(context)
+
+    /**
+     * The picture the session and the notification show: the application's own or its loader's,
+     * else the item's own cover, held once per picture to the size they draw (#425).
+     */
+    private val shownArtwork: StateFlow<Bitmap?> =
+        combine(artwork, fileArtwork) { own, file -> (own ?: file)?.let { fittedArtwork(it, artworkSide) } }
+            .stateIn(scope, SharingStarted.Eagerly, null)
     private val customActions = MutableStateFlow<List<MediaNotificationAction>>(emptyList())
     private val mirror = MediaSessionMirror<Bitmap>(::pushMetadata, ::pushPlaybackState)
     private val callback = Callback()
@@ -76,7 +91,7 @@ public class KitePlayerMediaSession(
     public val isAvailable: Boolean = true
 
     /** The picture the session shows, for the media notification. */
-    internal val artworkState: StateFlow<Bitmap?> get() = artwork
+    internal val artworkState: StateFlow<Bitmap?> get() = shownArtwork
 
     /** The activity set with [setSessionActivity], or null. */
     internal val sessionActivityIntent: PendingIntent? get() = sessionActivity
@@ -97,7 +112,7 @@ public class KitePlayerMediaSession(
             combine(
                 player.state,
                 player.progress,
-                artwork,
+                shownArtwork,
                 customActions,
             ) { snapshot, progress, image, actions ->
                 Triple(snapshot.toMediaSessionState(progress), image, actions)
@@ -112,12 +127,17 @@ public class KitePlayerMediaSession(
             }
         }
         scope.launch { loadArtwork() }
+        scope.launch {
+            player.coverArt.collectLatest { cover ->
+                fileArtwork.value = cover?.let { runCatching { decodeCover(it.bytes, artworkSide) }.getOrNull() }
+            }
+        }
     }
 
     /**
-     * The picture the session shows. The application supplies it: the engine reads a file's cover
-     * art but does not decode it, so there is nothing here to hand over on its own. A loader set
-     * with [setArtworkLoader] replaces it when the media item changes.
+     * The picture the session shows, over the item's own cover, which shows when this is null and
+     * no loader gives one (#425). A loader set with [setArtworkLoader] replaces it when the media
+     * item changes. A picture larger than the system draws it is scaled down once to that size.
      */
     public fun setArtwork(image: Bitmap?) {
         artwork.value = image
@@ -128,9 +148,9 @@ public class KitePlayerMediaSession(
      *
      * [loader] runs on a background thread when the item changes, and again when its tags arrive
      * after the item opens. A newer item cancels an older load, and the picture is cleared while the
-     * new one loads. A loader that throws or returns null shows no picture. Decode at a sensible
-     * size: the platform scales a large picture down but still carries it. Null stops loading and
-     * keeps the picture shown.
+     * new one loads. A loader that throws or returns null shows the item's own cover, when it has
+     * one. A picture larger than the system draws it is scaled down once to that size. Null stops
+     * loading and keeps the picture shown.
      */
     public fun setArtworkLoader(loader: (suspend (PlayerSnapshot) -> Bitmap?)?) {
         artworkLoader.value = loader

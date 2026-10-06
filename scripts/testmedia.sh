@@ -482,6 +482,12 @@ ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=6"
   -metadata "LYRICS=$(printf 'A plain first line\nA plain second line')" \
   -c:a flac audio-lyrics.flac
 
+echo "A song with its album cover, a JPEG of 600 by 600 attached to an MP3 as ID3 tags hold it"
+ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=4" \
+  -f lavfi -i "testsrc2=size=600x600:rate=1:duration=1" -map 0:a -map 1:v -frames:v 1 \
+  -c:a libmp3lame -b:a 128k -c:v mjpeg -disposition:v attached_pic -id3v2_version 3 \
+  -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" audio-cover.mp3
+
 echo "A chained Ogg, two songs one after the other as a station plays them, each with its own comments"
 ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=3" \
   -metadata title="First Song" -metadata artist="The Band" -c:a libvorbis chain-1.ogg

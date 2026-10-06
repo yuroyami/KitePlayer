@@ -20,6 +20,7 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 public class MediaItemBuilder(private val uri: String) {
     private val headers = LinkedHashMap<String, String>()
+    private var thumbnails: ThumbnailSource? = null
     private val externalSubtitles = ArrayList<SubtitleSource>()
     private var videoFilter: String? = null
     private var audioFilter: String? = null
@@ -164,6 +165,11 @@ public class MediaItemBuilder(private val uri: String) {
         audioContent = content
     }
 
+    /** A WebVTT thumbnail file for a seek bar's preview. See [MediaItem.thumbnails]. */
+    public fun thumbnails(source: ThumbnailSource?): MediaItemBuilder = apply {
+        thumbnails = source
+    }
+
     /** The item these settings describe, checked as its constructor checks it. */
     @OptIn(KitePlayerLowLevelApi::class)
     public fun build(): MediaItem = MediaItem(
@@ -182,6 +188,7 @@ public class MediaItemBuilder(private val uri: String) {
         audioFilter = audioFilter,
         audioContent = audioContent,
         clip = clip,
+        thumbnails = thumbnails,
     )
 }
 

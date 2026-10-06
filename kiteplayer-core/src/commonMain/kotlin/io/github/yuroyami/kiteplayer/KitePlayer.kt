@@ -1109,6 +1109,16 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.captureFrame(withSubtitles)
 
     /**
+     * The seek bar picture for [position] of the item that plays, or null when the item carries
+     * no pictures or none stands for that position (#433). The pictures come from the item's
+     * [MediaItem.thumbnails] file, or else from the stream itself, a DASH thumbnail set or an HLS
+     * image playlist, which [Tracks.thumbnails] lists. An image downloads only when it is asked
+     * for, and a few recent ones are kept, so asking at every step of a scrub costs one download
+     * for each image. The picture's times count from the item's start, as [position] does.
+     */
+    public suspend fun thumbnailAt(position: Duration): StreamThumbnail? = core.thumbnailAt(position)
+
+    /**
      * Starts copying what plays into a Matroska file at [path], with no re-encode.
      *
      * The file holds the selected video track and every audio and subtitle track, because the

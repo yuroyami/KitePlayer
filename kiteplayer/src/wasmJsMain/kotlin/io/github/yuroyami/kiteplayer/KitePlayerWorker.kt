@@ -59,9 +59,9 @@ import kotlin.time.Duration
  * - `subtitleCues`: the worker draws the subtitles on the canvas itself.
  * - `coverArt`: the media session of the page's own player shows it, and a worker has none.
  * - `position()` and `audioClock()`: read [progress] instead. `transportMark` and `awaitClose`.
- * - `inspect`, `scanAudio`, `captureFrame`, recording, `memento` and `restore`.
+ * - `inspect`, `scanAudio`, `captureFrame`, `thumbnailAt`, recording, `memento` and `restore`.
  * - Attaching or detaching a renderer or an audio tap, and `setExternalClock`.
- * - An item, or an external subtitle, with its own reader: it is refused with
+ * - An item, or an external subtitle or a thumbnail file, with its own reader: it is refused with
  *   [PlaybackError.ConfigurationInvalid]. Give it an address instead.
  * - A `PlayerConfig`: the worker builds its player on the default one.
  *

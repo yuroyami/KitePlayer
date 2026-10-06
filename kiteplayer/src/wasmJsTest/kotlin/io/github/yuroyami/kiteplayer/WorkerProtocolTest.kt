@@ -60,6 +60,7 @@ class WorkerProtocolTest {
         audioContent = AudioContent.Speech,
         clip = MediaClip(start = 61.seconds, end = 3.minutes),
         growth = FileGrowth(endsAfter = 5.seconds),
+        thumbnails = ThumbnailSource("https://example.com/thumbs.vtt"),
     )
 
     private val tracks = Tracks(
@@ -88,6 +89,7 @@ class WorkerProtocolTest {
             MediaProgram(202, listOf(TrackId(2))),
         ),
         selectedProgram = 202,
+        thumbnails = ThumbnailSet(width = 160, height = 90, interval = 10.seconds),
     )
 
     private val style = SubtitleStyleOverride(

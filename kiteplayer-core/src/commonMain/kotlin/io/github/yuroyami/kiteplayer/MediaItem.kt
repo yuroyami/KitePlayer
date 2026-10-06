@@ -165,6 +165,12 @@ public data class MediaItem(
      * complete. See [FileGrowth].
      */
     val growth: FileGrowth? = null,
+    /**
+     * A WebVTT thumbnail file whose pictures a seek bar shows for this item, or null (#433). A
+     * stream that carries thumbnails of its own needs none: [KitePlayer.thumbnailAt] answers from
+     * this file when it is set, and from the stream otherwise. See [ThumbnailSource].
+     */
+    val thumbnails: ThumbnailSource? = null,
 ) {
     public companion object {}
 

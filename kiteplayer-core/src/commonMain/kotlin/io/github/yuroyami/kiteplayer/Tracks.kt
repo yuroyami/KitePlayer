@@ -114,6 +114,11 @@ public data class Tracks(
      * media declares no programme.
      */
     val selectedProgram: Int? = null,
+    /**
+     * The pictures the item carries for a seek bar's preview, or null when it carries none (#433).
+     * [KitePlayer.thumbnailAt] gives the one for a position. See [ThumbnailSet].
+     */
+    val thumbnails: ThumbnailSet? = null,
 ) {
     public val video: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Video }
     public val audio: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Audio }

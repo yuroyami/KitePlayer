@@ -236,6 +236,13 @@ public interface PlayerMediaSource : AutoCloseable {
     public val selectedVariant: Int? get() = null
 
     /**
+     * The seek bar pictures the media carries, such as a DASH thumbnail set or an HLS image
+     * playlist, or null when it carries none (#433). The engine lists them in
+     * [io.github.yuroyami.kiteplayer.Tracks.thumbnails].
+     */
+    public val thumbnails: PlayerThumbnails? get() = null
+
+    /**
      * The channels of a multiplex, each a set of [streams] that play together, or empty when the
      * container declares none (#505). Every [io.github.yuroyami.kiteplayer.MediaProgram.tracks]
      * entry names one of [streams] by its index, and every number is one only that programme has.
@@ -578,3 +585,19 @@ public data class StreamDivergence(
     /** What the decoder actually produced. */
     val decoded: String,
 )
+
+/**
+ * The seek bar pictures of a source (#433). [at] reads an image only when it is asked for, through
+ * the source's own transport, and keeps a few recent ones, so a finger that scrubs back and forth
+ * over one image downloads it once. Safe to call from any coroutine while the source is read.
+ */
+public interface PlayerThumbnails {
+    /** What the pictures are: the size of a tile and the time one stands for. */
+    public val set: io.github.yuroyami.kiteplayer.ThumbnailSet
+
+    /**
+     * The picture for [position], on the source's own timeline, with its start and end on that
+     * timeline too, or null where no picture stands for it.
+     */
+    public suspend fun at(position: io.github.yuroyami.kiteplayer.Pts): io.github.yuroyami.kiteplayer.StreamThumbnail?
+}

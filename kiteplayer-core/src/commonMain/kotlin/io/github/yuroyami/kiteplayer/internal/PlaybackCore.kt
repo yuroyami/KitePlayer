@@ -1711,6 +1711,9 @@ internal class PlaybackCore(
         awaitReply(reply)
     }
 
+    /** The seek bar picture for [position] of the item that plays (#433). The next commit wires it. */
+    suspend fun thumbnailAt(position: Duration): io.github.yuroyami.kiteplayer.StreamThumbnail? = null
+
     suspend fun captureFrame(withSubtitles: Boolean = false): io.github.yuroyami.kiteplayer.CapturedFrame {
         val reply = CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>()
         send(CoreCommand.CaptureFrame(reply))

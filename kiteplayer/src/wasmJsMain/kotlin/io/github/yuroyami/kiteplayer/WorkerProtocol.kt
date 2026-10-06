@@ -211,6 +211,7 @@ internal fun crossingRefusal(item: MediaItem): PlaybackException? = refusal(
     listOfNotNull(
         "a reader of its own".takeIf { item.io != null },
         "an external subtitle with a reader of its own".takeIf { item.externalSubtitles.any { it.io != null } },
+        "a thumbnail file with a reader of its own".takeIf { item.thumbnails?.io != null },
     ),
 )
 
@@ -471,6 +472,7 @@ private fun encodeItem(item: MediaItem): JsAny = record {
         put("clipEnd", clip.end)
     }
     item.growth?.let { growth -> put("growthEndsAfter", growth.endsAfter) }
+    item.thumbnails?.let { put("thumbnails", it.uri) }
 }
 
 private fun encodeSubtitle(source: SubtitleSource): JsAny = record {
@@ -578,6 +580,13 @@ private fun encodeTracks(tracks: Tracks): JsAny = record {
     put("variant", tracks.selectedVariant)
     put("programs", tracks.programs.encodeEach(::encodeProgram))
     put("program", tracks.selectedProgram)
+    tracks.thumbnails?.let { set ->
+        put("thumbnails", record {
+            put("width", set.width)
+            put("height", set.height)
+            put("interval", set.interval)
+        })
+    }
 }
 
 private fun encodeTrack(track: TrackInfo): JsAny = record {
@@ -1264,6 +1273,7 @@ private fun decodeItem(o: JsAny): MediaItem = MediaItem(
     audioContent = o.enum<AudioContent>("audioContent") ?: AudioContent.Automatic,
     clip = o.micros("clipStart")?.let { start -> MediaClip(start, o.micros("clipEnd")) },
     growth = o.micros("growthEndsAfter")?.let(::FileGrowth),
+    thumbnails = o.str("thumbnails")?.let { ThumbnailSource(it) },
 )
 
 private fun decodeSubtitle(o: JsAny): SubtitleSource = SubtitleSource(
@@ -1368,6 +1378,7 @@ private fun decodeTracks(o: JsAny): Tracks = Tracks(
     selectedVariant = o.int("variant"),
     programs = o.list("programs", ::decodeProgram).orEmpty(),
     selectedProgram = o.int("program"),
+    thumbnails = o.child("thumbnails")?.let { set -> ThumbnailSet(set.int("width"), set.int("height"), set.micros("interval")) },
 )
 
 private fun decodeTrack(o: JsAny): TrackInfo = TrackInfo(

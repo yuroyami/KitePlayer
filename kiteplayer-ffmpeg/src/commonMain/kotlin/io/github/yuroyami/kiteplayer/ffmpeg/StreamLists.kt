@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
+import io.github.yuroyami.kiteplayer.Playlists
 
 /**
  * The text work of a list of stream addresses, with no FFmpeg and no network (#450): the Shoutcast
@@ -39,64 +40,21 @@ private const val PLS_TAG = "[playlist]"
 
 /**
  * The entries of a PLS file, in the order its `FileN` keys number them, with their `TitleN`, each
- * address resolved against [base]. Keys are read without regard to case, as players do.
+ * address resolved against [base], as [Playlists] reads them. A server that sends the keys without
+ * the `[playlist]` line still means a PLS file.
  */
 internal fun parsePls(text: String, base: String): List<StreamEntry> {
-    val files = mutableMapOf<Int, String>()
-    val titles = mutableMapOf<Int, String>()
-    for (raw in text.lineSequence()) {
-        val line = raw.trim()
-        val equals = line.indexOf('=')
-        if (equals <= 0) continue
-        val key = line.substring(0, equals).trim().lowercase()
-        val value = line.substring(equals + 1).trim()
-        if (value.isEmpty()) continue
-        when {
-            key.startsWith("file") -> key.removePrefix("file").toIntOrNull()?.let { files[it] = value }
-            key.startsWith("title") -> key.removePrefix("title").toIntOrNull()?.let { titles[it] = value }
-        }
-    }
-    return files.keys.sorted().map { n -> StreamEntry(resolveUriReference(base, files.getValue(n)), titles[n]) }
+    val body = text.removePrefix("\uFEFF")
+    val pls = if (body.trimStart().startsWith(PLS_TAG, ignoreCase = true)) body else "$PLS_TAG\n$body"
+    return Playlists.parse(pls, base).orEmpty().map { StreamEntry(it.uri, it.title) }
 }
 
 /**
  * The entries of [text] when it is a plain M3U list of streams, or null when it is not: an HLS
- * playlist, or no list at all, such as a page of markup. An HLS playlist always carries `#EXT-X-`
- * tags, RFC 8216 asks every media playlist for `#EXT-X-TARGETDURATION`, and a plain list carries
- * none. An `#EXTINF` line names the title of the address after it, after the first comma that no
- * quoted attribute holds, as IPTV lists write `#EXTINF:-1 tvg-name="A, B",Title`.
+ * playlist, or no list at all, such as a page of markup, as [Playlists] reads them (#490).
  */
-internal fun plainStreamList(text: String, base: String): List<StreamEntry>? {
-    val entries = mutableListOf<StreamEntry>()
-    var title: String? = null
-    for (raw in text.lineSequence()) {
-        val line = raw.trim().removePrefix("\uFEFF")
-        when {
-            line.isEmpty() -> Unit
-            line.startsWith("#EXT-X-", ignoreCase = true) -> return null
-            line.startsWith("#EXTINF:", ignoreCase = true) -> title = extinfTitle(line)
-            line.startsWith("#") -> Unit
-            line.startsWith("<") -> return null
-            else -> {
-                entries += StreamEntry(resolveUriReference(base, line), title)
-                title = null
-            }
-        }
-    }
-    return entries.takeIf { it.isNotEmpty() }
-}
-
-/** The title of an `#EXTINF` line: what follows its first comma outside quotes, or null. */
-private fun extinfTitle(line: String): String? {
-    var quoted = false
-    for (at in line.indices) {
-        when (line[at]) {
-            '"' -> quoted = !quoted
-            ',' -> if (!quoted) return line.substring(at + 1).trim().ifEmpty { null }
-        }
-    }
-    return null
-}
+internal fun plainStreamList(text: String, base: String): List<StreamEntry>? =
+    Playlists.parse(text, base)?.takeIf { it.isNotEmpty() }?.map { StreamEntry(it.uri, it.title) }
 
 /**
  * [stream], which comes to own [list] as well: the reader of the list the stream was named in. The

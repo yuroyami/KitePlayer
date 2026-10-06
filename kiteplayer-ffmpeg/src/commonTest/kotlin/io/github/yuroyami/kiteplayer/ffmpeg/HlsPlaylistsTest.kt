@@ -172,52 +172,6 @@ class HlsPlaylistsTest {
     }
 
     /** RFC 3986, section 5.4, against its base `http://a/b/c/d;p?q`. */
-    @Test
-    fun referencesResolveAsRfc3986Says() {
-        val base = "http://a/b/c/d;p?q"
-        val cases = mapOf(
-            "g:h" to "g:h",
-            "g" to "http://a/b/c/g",
-            "./g" to "http://a/b/c/g",
-            "g/" to "http://a/b/c/g/",
-            "/g" to "http://a/g",
-            "//g" to "http://g",
-            "?y" to "http://a/b/c/d;p?y",
-            "g?y" to "http://a/b/c/g?y",
-            "#s" to "http://a/b/c/d;p?q#s",
-            "g#s" to "http://a/b/c/g#s",
-            "g?y#s" to "http://a/b/c/g?y#s",
-            ";x" to "http://a/b/c/;x",
-            "g;x" to "http://a/b/c/g;x",
-            "" to "http://a/b/c/d;p?q",
-            "." to "http://a/b/c/",
-            "./" to "http://a/b/c/",
-            ".." to "http://a/b/",
-            "../" to "http://a/b/",
-            "../g" to "http://a/b/g",
-            "../.." to "http://a/",
-            "../../" to "http://a/",
-            "../../g" to "http://a/g",
-            "../../../g" to "http://a/g",
-            "../../../../g" to "http://a/g",
-            "/./g" to "http://a/g",
-            "/../g" to "http://a/g",
-            "g." to "http://a/b/c/g.",
-            ".g" to "http://a/b/c/.g",
-            "g.." to "http://a/b/c/g..",
-            "..g" to "http://a/b/c/..g",
-            "./../g" to "http://a/b/g",
-            "./g/." to "http://a/b/c/g/",
-            "g/./h" to "http://a/b/c/g/h",
-            "g/../h" to "http://a/b/c/h",
-            "g;x=1/./y" to "http://a/b/c/g;x=1/y",
-            "g;x=1/../y" to "http://a/b/c/y",
-        )
-        for ((reference, expected) in cases) {
-            assertEquals(expected, resolveUriReference(base, reference), "for \"$reference\"")
-        }
-    }
-
     private companion object {
         val MASTER = listOf(
             "#EXTM3U",

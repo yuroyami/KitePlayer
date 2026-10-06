@@ -1872,9 +1872,67 @@ internal class PlaybackCore(
         }
     }
 
-    /** See [io.github.yuroyami.kiteplayer.KitePlayer.readPlaylist]. */
-    suspend fun readPlaylist(uri: String, headers: Map<String, String>): List<MediaItem> =
-        throw io.github.yuroyami.kiteplayer.PlaylistException("playlists are not read yet", uri)
+    /**
+     * See [io.github.yuroyami.kiteplayer.KitePlayer.readPlaylist] (#490). Off the actor: it is
+     * reading, as an external subtitle's bytes are, and touches no player state.
+     */
+    suspend fun readPlaylist(uri: String, headers: Map<String, String>): List<MediaItem> {
+        val items = mutableListOf<MediaItem>()
+        for (item in readPlaylistItems(uri, headers)) {
+            if (!namesPlaylist(item.uri)) {
+                items += item
+                continue
+            }
+            if (item.uri == uri) throw io.github.yuroyami.kiteplayer.PlaylistException("the playlist names itself", uri)
+            // One level deep. A list that cannot be read is kept as an item, which FFmpeg may still open.
+            val nested = try {
+                readPlaylistItems(item.uri, item.headers)
+            } catch (_: io.github.yuroyami.kiteplayer.PlaylistException) {
+                null
+            }
+            if (nested == null) {
+                items += item
+                continue
+            }
+            if (nested.any { it.uri == uri || it.uri == item.uri }) {
+                throw io.github.yuroyami.kiteplayer.PlaylistException("the playlist ${redactUri(item.uri)} names a list it is in", uri)
+            }
+            items += nested
+        }
+        if (items.isEmpty()) throw io.github.yuroyami.kiteplayer.PlaylistException("the playlist names nothing", uri)
+        return items
+    }
+
+    /** The items of the one list at [uri], its own server's entries carrying [headers]. */
+    private suspend fun readPlaylistItems(uri: String, headers: Map<String, String>): List<MediaItem> {
+        val parent = MediaItem(uri, headers = headers)
+        val bytes = when (val read = readSubtitleBytes(SubtitleSource(uri = uri), parent)) {
+            is SubtitleBytes.Read -> read.bytes
+            is SubtitleBytes.Refused ->
+                throw io.github.yuroyami.kiteplayer.PlaylistException("the playlist could not be read: ${read.reason}", uri)
+        }
+        val parser = backend.subtitleFileParser()
+        val text = decodeSubtitleBytes(
+            bytes,
+            fallback = config.subtitles.fallbackEncoding,
+            eastAsian = { data, encoding -> parser?.decode(data, encoding) },
+        ).text
+        val parsed = io.github.yuroyami.kiteplayer.Playlists.parse(text, uri)
+            ?: throw io.github.yuroyami.kiteplayer.PlaylistException(
+                "it is no playlist this player reads; an HLS playlist plays as one item, through open",
+                uri,
+            )
+        if (headers.isEmpty()) return parsed
+        return parsed.map { item ->
+            if (sameHttpOrigin(item.uri, uri)) item.copy(headers = headers + item.headers) else item
+        }
+    }
+
+    /** Whether [uri] names a playlist file by its name: `.m3u`, `.pls` or `.xspf`, and never `.m3u8`, which is HLS. */
+    private fun namesPlaylist(uri: String): Boolean {
+        val path = uri.substringBefore('#').substringBefore('?').lowercase()
+        return path.endsWith(".m3u") || path.endsWith(".pls") || path.endsWith(".xspf")
+    }
 
     suspend fun reloadExternalSubtitle(track: TrackId, encoding: String?) {
         val reply = CompletableDeferred<Unit>()

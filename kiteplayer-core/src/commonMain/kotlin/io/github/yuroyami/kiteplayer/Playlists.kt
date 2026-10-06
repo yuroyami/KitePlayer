@@ -23,7 +23,8 @@ public object Playlists {
      * address. Null when [text] is no playlist this reads, an HLS playlist included, which plays as
      * one item. An empty PLS or XSPF list is an empty list.
      */
-    public fun parse(text: String, base: String): List<MediaItem>? = null
+    public fun parse(text: String, base: String): List<MediaItem>? =
+        io.github.yuroyami.kiteplayer.internal.PlaylistText.parse(text, base)
 }
 
 /**

@@ -12,9 +12,10 @@ import io.github.yuroyami.kiteplayer.subtitle.AssTrackParser
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 
 /**
- * Closed captions stored as a track of their own, such as a MOV `c608` track: CEA-608 byte pairs
- * that FFmpeg's caption decoder turns into timed text. Captions carried inside the video stream
- * are a different path.
+ * The text formats FFmpeg decodes into ASS events: closed captions stored as a track of their own,
+ * such as a MOV `c608` track, whose CEA-608 byte pairs FFmpeg's caption decoder turns into timed
+ * text, and SAMI, MicroDVD, SubViewer, MPL2, JACOsub, VPlayer, PJS, RealText and Spruce STL tracks
+ * (#492). Captions carried inside the video stream are a different path.
  */
 internal class KiteFFmpegCaptionDecoderFactory(
     private val source: KiteFFmpegSource,
@@ -26,7 +27,10 @@ internal class KiteFFmpegCaptionDecoderFactory(
         if (stream.codec in CAPTION_CODECS) source.newCaptionDecoder(stream) else null
 
     private companion object {
-        val CAPTION_CODECS = setOf("eia_608")
+        val CAPTION_CODECS = setOf(
+            "eia_608", "sami", "microdvd", "subviewer", "subviewer1", "mpl2", "jacosub", "vplayer", "pjs",
+            "realtext", "stl",
+        )
     }
 }
 

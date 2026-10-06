@@ -72,6 +72,7 @@ import io.github.yuroyami.kiteplayer.spi.MediaBackend
 import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.math.round
+import kotlin.math.roundToLong
 import kotlin.math.sign
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
@@ -338,6 +339,11 @@ internal class PlaybackCore(
         val revision: Int = 0,
         /** True for the lyrics of the media's own tags (#443), which have no file to read again. */
         val fromTags: Boolean = false,
+        /**
+         * The frame rate the cue times were counted at by assumption, until the video's own rate
+         * replaces it (#492). Null once it has, and for a file whose times are times.
+         */
+        val assumedFrameRate: Double? = null,
     )
 
     /** The media item's parsed external subtitle files, in declaration order. */
@@ -418,7 +424,8 @@ internal class PlaybackCore(
         externalSubtitleIdsMinted = item.externalSubtitles.size
         tagLyricsText = null
         val lyricsTrack = tagLyricsTrack(item)
-        val adopted = if (lyricsTrack == null) parsed else parsed + lyricsTrack
+        val files = parsed.map(::onVideoFrameRate)
+        val adopted = if (lyricsTrack == null) files else files + lyricsTrack
         externalSubtitleTracks = adopted
         if (adopted.isNotEmpty()) {
             tracks = tracks.copy(all = tracks.all + adopted.map { it.info })
@@ -678,12 +685,32 @@ internal class PlaybackCore(
                 "the external subtitle file failed to parse: ${redactUri(sourceFile.uri)}${causeDetail(failure)}",
             )
         }
+        // A format the text readers do not know is the parser's other readers' to read (#492).
+        val other = if (parsed.isNotEmpty() || isAss || isVtt || isLrc) {
+            null
+        } else {
+            try {
+                parser.parseOther(bytes, trimmed, sourceFile.uri)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                return ExternalSubtitleParse.Failed(
+                    "the external subtitle file failed to parse: ${redactUri(sourceFile.uri)}${causeDetail(failure)}",
+                )
+            }
+        }
         // The notes of hearing-impaired subtitles go as the file is read, but never an ASS script's
         // (#493), nor a song's lyrics, whose brackets are sung (#443).
-        val cues = if (isAss || isLrc) parsed else hideHearingImpairedNotes(parsed, config.subtitles.hearingImpairedNotes)
+        val read = other?.cues ?: parsed
+        val cues = if (isAss || isLrc) read else hideHearingImpairedNotes(read, config.subtitles.hearingImpairedNotes)
         if (cues.isEmpty()) {
+            val named = subtitleFormatNamed(sourceFile.uri)
             return ExternalSubtitleParse.Failed(
-                "the external subtitle file parsed to no cues: ${redactUri(sourceFile.uri)}",
+                if (named != null && read.isEmpty()) {
+                    "the external subtitle file is $named, which this build cannot read: ${redactUri(sourceFile.uri)}"
+                } else {
+                    "the external subtitle file parsed to no cues: ${redactUri(sourceFile.uri)}"
+                },
             )
         }
         return ExternalSubtitleParse.Loaded(
@@ -693,6 +720,7 @@ internal class PlaybackCore(
                     id = id,
                     kind = TrackKind.Subtitle,
                     codec = when {
+                        other != null -> "external/${other.format}"
                         isVtt -> "external/webvtt"
                         isAss -> "external/ass"
                         isLrc -> "external/lrc"
@@ -706,7 +734,42 @@ internal class PlaybackCore(
                 cues = cues.sortedBy { cue -> cue.startMicros },
                 script = if (isAss) trimmed else null,
                 source = sourceFile,
+                assumedFrameRate = other?.assumedFrameRate?.takeIf { it.isFinite() && it > 0.0 },
             ),
+        )
+    }
+
+    /**
+     * [track] with its cue times moved from the frame rate they were counted at by assumption onto
+     * the open video's own (#492), as a MicroDVD file without its rate line needs: frame 240 is ten
+     * seconds into a 24 frame video, not the reader's guess. The track as it is when nothing was
+     * assumed or the video names no rate, which the reader's guess then stands for.
+     */
+    private fun onVideoFrameRate(track: ExternalSubtitleTrack): ExternalSubtitleTrack {
+        val assumed = track.assumedFrameRate ?: return track
+        val actual = session?.videoStream?.frameRate?.takeIf { it.isFinite() && it > 0.0 } ?: return track
+        val scale = assumed / actual
+        val cues = track.cues.map { cue ->
+            val start = (cue.startMicros * scale).roundToLong()
+            val end = if (cue.endMicros == io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.OPEN_END) {
+                cue.endMicros
+            } else {
+                (cue.endMicros * scale).roundToLong()
+            }
+            when (cue) {
+                is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text -> cue.copy(startMicros = start, endMicros = end)
+                is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Bitmap -> cue.copy(startMicros = start, endMicros = end)
+            }
+        }
+        return ExternalSubtitleTrack(
+            id = track.id,
+            info = track.info,
+            cues = cues,
+            script = track.script,
+            source = track.source,
+            revision = track.revision,
+            fromTags = track.fromTags,
+            assumedFrameRate = null,
         )
     }
 
@@ -795,8 +858,9 @@ internal class PlaybackCore(
                 IllegalArgumentException(parsed.reason),
             )
             is ExternalSubtitleParse.Loaded -> {
-                externalSubtitleTracks = externalSubtitleTracks + parsed.track
-                tracks = tracks.copy(all = tracks.all + parsed.track.info)
+                val added = onVideoFrameRate(parsed.track)
+                externalSubtitleTracks = externalSubtitleTracks + added
+                tracks = tracks.copy(all = tracks.all + added.info)
                 subtitleChosenByPlayer = false
                 if (active.selectedSubtitleStream != null) {
                     // A container stream is timing cues: route through the same rebuild the
@@ -896,7 +960,7 @@ internal class PlaybackCore(
                 acquisition.reply.completeExceptionally(IllegalArgumentException(parsed.reason))
                 return
             }
-            is ExternalSubtitleParse.Loaded -> parsed.track
+            is ExternalSubtitleParse.Loaded -> onVideoFrameRate(parsed.track)
         }
         val old = externalSubtitleTracks[at]
         val track = ExternalSubtitleTrack(

@@ -60,3 +60,29 @@ private val FLAGS = HEARING_IMPAIRED + "forced"
 
 /** How many dotted parts before the extension are read at most. */
 private const val MAX_HINT_PARTS = 4
+
+/**
+ * The subtitle format a file's name says it is in, for the refusal of one no reader here could read
+ * (#492), or null when its name says nothing a reader would not have tried.
+ */
+internal fun subtitleFormatNamed(uri: String): String? {
+    val name = uri.substringBefore('?').substringBefore('#').substringAfterLast('/')
+    return NAMED_SUBTITLE_FORMATS[name.substringAfterLast('.', "").lowercase()]
+}
+
+private val NAMED_SUBTITLE_FORMATS = mapOf(
+    "smi" to "SAMI",
+    "sami" to "SAMI",
+    "sub" to "MicroDVD or VobSub",
+    "idx" to "VobSub",
+    "sup" to "Blu-ray PGS",
+    "sbv" to "SubViewer",
+    "mpl" to "MPL2",
+    "jss" to "JACOsub",
+    "pjs" to "Phoenix Japanimation Society",
+    "rt" to "RealText",
+    "stl" to "Spruce STL",
+    "scc" to "Scenarist Closed Captions",
+    "ttml" to "TTML",
+    "dfxp" to "TTML",
+)

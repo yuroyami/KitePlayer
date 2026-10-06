@@ -47,8 +47,9 @@ public class KiteFFmpegMediaBackend(
         "KiteFFmpegMediaBackend(decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
 
     /**
-     * External subtitle files, ASS and LRC lyrics included: the pure parsers this module ships.
-     * East Asian files are read with the tables of kiteplayer-subtitles, the same on every target.
+     * External subtitle files, ASS and LRC lyrics included: the pure parsers this module ships, and
+     * FFmpeg's own readers for every other format (#492). East Asian files are read with the tables
+     * of kiteplayer-subtitles, the same on every target.
      */
     override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
         object : io.github.yuroyami.kiteplayer.spi.SubtitleFileParser {
@@ -66,6 +67,10 @@ public class KiteFFmpegMediaBackend(
 
             override fun decode(bytes: ByteArray, encoding: String): String? =
                 io.github.yuroyami.kiteplayer.subtitle.EastAsianText.decode(bytes, encoding)
+
+            // Every other format is FFmpeg's to read (#492).
+            override suspend fun parseOther(bytes: ByteArray, text: String, uri: String) =
+                SubtitleFiles.read(bytes, text, uri)
         }
 
     override suspend fun open(media: MediaItem): BackendSession {

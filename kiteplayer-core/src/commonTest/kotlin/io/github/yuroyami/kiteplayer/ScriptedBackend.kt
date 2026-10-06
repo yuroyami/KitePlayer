@@ -708,6 +708,9 @@ internal class ScriptedBackend(
      */
     var textDecoder: ((ByteArray, String) -> String?)? = null
 
+    /** The parser's reader of the other formats (#492), as the FFmpeg backend's asks FFmpeg. */
+    var otherSubtitleReader: (suspend (bytes: ByteArray, text: String, uri: String) -> io.github.yuroyami.kiteplayer.spi.SubtitleFileReading?)? = null
+
     /**
      * A ten-line SRT-only parser for the external-subtitle tests. The real WebVTT and
      * SubRip parsers live in kiteplayer-subtitles, above this module's dependency arrow; the
@@ -768,6 +771,9 @@ internal class ScriptedBackend(
         return object : io.github.yuroyami.kiteplayer.spi.SubtitleFileParser by parse {
             override fun decode(bytes: ByteArray, encoding: String): String? =
                 textDecoder?.invoke(bytes, encoding)
+
+            override suspend fun parseOther(bytes: ByteArray, text: String, uri: String) =
+                otherSubtitleReader?.invoke(bytes, text, uri)
         }
     }
 

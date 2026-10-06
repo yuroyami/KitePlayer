@@ -533,13 +533,14 @@ public data class DownmixConfig(
 )
 
 /**
- * Which subtitle track to pick, when to show its cues, and how large to draw them.
+ * Where the second subtitle track sits on the picture (#494).
  *
- * Read by the session core: track selection uses the language preferences and the forced rule,
- * cue timing applies [delay], and the platform rasterizer receives [fontScale]. Decoded cues are
- * held for the session and pruned on flush.
+ * Above or below the primary, the two tracks share one bottom stack, so the secondary moves down
+ * to the bottom while the primary shows nothing, as a second speaker's line does. A primary line its
+ * author placed elsewhere keeps its place. While the libass typesetter draws the primary, the
+ * secondary keeps to the top, because the stack cannot see the typeset lines. Picture subtitles keep
+ * the place their pictures carry.
  */
-/** Where the second subtitle track sits on the picture (#494). */
 public enum class SecondarySubtitlePlacement {
     /** At the top of the picture, apart from the primary track, so the two can never overlap. */
     Top,
@@ -554,6 +555,13 @@ public enum class SecondarySubtitlePlacement {
     BelowPrimary,
 }
 
+/**
+ * Which subtitle track to pick, when to show its cues, and how large to draw them.
+ *
+ * Read by the session core: track selection uses the language preferences and the forced rule,
+ * cue timing applies [delay], and the platform rasterizer receives [fontScale]. Decoded cues are
+ * held for the session and pruned on flush.
+ */
 public data class SubtitleConfig(
     /**
      * Select a subtitle track automatically when one matches these languages, best first, given as

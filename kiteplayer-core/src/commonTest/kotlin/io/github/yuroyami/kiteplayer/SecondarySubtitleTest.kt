@@ -13,8 +13,8 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Two subtitle tracks at once: the primary where the author put it, the secondary forced to the
- * top of the picture. Learners watch with two languages; one slot existed.
+ * Two subtitle tracks at once: the primary where the author put it, the secondary at the top of
+ * the picture by default. Learners watch with two languages; one slot existed.
  */
 class SecondarySubtitleTest {
 

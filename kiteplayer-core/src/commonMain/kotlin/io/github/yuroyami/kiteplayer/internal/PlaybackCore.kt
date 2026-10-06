@@ -24,6 +24,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.MediaProgram
 import io.github.yuroyami.kiteplayer.Marker
 import io.github.yuroyami.kiteplayer.SubtitleConfig
+import io.github.yuroyami.kiteplayer.SecondarySubtitlePlacement
 import io.github.yuroyami.kiteplayer.SubtitleSource
 import io.github.yuroyami.kiteplayer.HearingImpairedNotes
 import io.github.yuroyami.kiteplayer.PlaybackError
@@ -3175,6 +3176,7 @@ internal class PlaybackCore(
             // unselected above, so there is never a competing selection to defer to.
             (immediateExternal ?: preferredExternal)?.let { applyExternalSubtitle(it.id) }
             subtitleChosenByPlayer = immediateExternal == null
+            selectPreferredSecondarySubtitle()
             refreshTypesetting()
             // The start position's second half: the exact landing, as an ordinary precise seek
             // through the ordinary machine, so the masked position report, generation fencing
@@ -4843,6 +4845,27 @@ internal class PlaybackCore(
      * every subtitle stream to its own live queue, so a second stream needs a decoder and a cue
      * table, never a reopen. The spec predated that and said reopen; the tree is better.
      */
+    /**
+     * Selects the second subtitle track [SubtitleConfig.secondaryLanguages] asks for, at the end of
+     * an open (#494), through the command's own path so it is exactly what a caller's selection is.
+     * A track whose decoder is refused gives way to the next one; none at all leaves the slot empty,
+     * as it was, and says nothing, because a file without the second language is not a fault.
+     */
+    private suspend fun selectPreferredSecondarySubtitle() {
+        if (tracks.selectedSecondarySubtitle != null) return
+        val candidates = secondarySubtitleCandidates(
+            tracks.all,
+            tracks.selectedSubtitle,
+            config.subtitles.secondaryLanguages,
+        )
+        for (candidate in candidates) {
+            val reply = CompletableDeferred<TrackChange>()
+            applySecondarySubtitle(CoreCommand.SelectSecondarySubtitle(candidate.id, reply))
+            val change = if (reply.isCompleted) runCatching { reply.await() }.getOrNull() else null
+            if (change is TrackChange.Applied) return
+        }
+    }
+
     private suspend fun applySecondarySubtitle(command: CoreCommand.SelectSecondarySubtitle) {
         val session = this.session
         if (session == null) {
@@ -6690,29 +6713,30 @@ internal class PlaybackCore(
             session.cueIndex.activeAt(positionUs),
             forcedOnly = (forcedPicturesOnly || session.subtitleFallback) && session.subtitleStream?.isForced != true,
         )
-        // The secondary lane rides the same clock and the same delay, forced to the top of the
-        // picture on the way out so the two tracks can never sit on each other.
+        // The secondary lane rides the same clock and the same delay. Its text leaves where its
+        // author put it for the place the configuration gives it, so the two tracks can never sit
+        // on each other (#494).
         session.cue2Index.syncTo(session.subtitle2Cues)
+        // The typesetter draws the primary's text where the rasterizer cannot see it, so nothing
+        // can stack beside it, and the secondary keeps to the top.
+        val placement = if (session.typeset != null) SecondarySubtitlePlacement.Top else config.subtitles.secondaryPlacement
         val secondaryActive = if (session.subtitle2Cues.isEmpty()) {
             emptyList()
         } else {
-            forcedPicturesOf(
-                session.cue2Index.activeAt(positionUs),
-                forcedOnly = forcedPicturesOnly && session.subtitle2Stream?.isForced != true,
-            ).map { cue ->
-                when (cue) {
-                    is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text -> cue.copy(
-                        layout = cue.layout.copy(
-                            alignment = io.github.yuroyami.kiteplayer.subtitle.CueAlignment.TopCenter,
-                            positionX = null,
-                            positionY = null,
-                        ),
-                    )
-                    is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Bitmap -> cue
-                }
-            }
+            placeSecondaryCues(
+                forcedPicturesOf(
+                    session.cue2Index.activeAt(positionUs),
+                    forcedOnly = forcedPicturesOnly && session.subtitle2Stream?.isForced != true,
+                ),
+                primaryActive,
+                placement,
+            )
         }
-        val active = if (secondaryActive.isEmpty()) primaryActive else primaryActive + secondaryActive
+        val active = when {
+            secondaryActive.isEmpty() -> primaryActive
+            secondaryFirst(primaryActive, placement) -> secondaryActive + primaryActive
+            else -> primaryActive + secondaryActive
+        }
         // A typesetter that threw on its lane is abandoned here, on the actor, and the Kotlin tier
         // takes the track over on this very pass.
         var lane = session.typeset
@@ -8455,6 +8479,7 @@ internal class PlaybackCore(
             }
             adoptExternalSubtitles(next.item, prepared.externals)
             applyPreparedSubtitle(next.item, prepared)
+            selectPreferredSecondarySubtitle()
             refreshTypesetting()
             if (incoming.videoStream == null) clearRendererPicture()
             setStatus(PlaybackStatus.Paused)
@@ -8553,6 +8578,7 @@ internal class PlaybackCore(
         next.build.events.forEach(::emitEvent)
         adoptExternalSubtitles(next.item, prepared.externals)
         applyPreparedSubtitle(next.item, prepared)
+        selectPreferredSecondarySubtitle()
         refreshTypesetting()
         startAudioEventCollector(incoming)
         if (incoming.videoDecoderDeferred) startDeferredVideo(incoming)

@@ -1335,10 +1335,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * the picture by default, or clears it with null. [SubtitleConfig.secondaryLanguages] can choose
      * one at each open instead.
      *
-     * The secondary track's cues are forced to the top, so the two tracks never sit on each
-     * other; the primary stays where its author put it. External tracks (negative ids) are
-     * allowed on either slot. Selecting the track that already fills the other slot throws
-     * [IllegalArgumentException]. [Tracks.selectedSecondarySubtitle] reports the selection.
+     * The secondary track's text leaves where its author put it for that place, so the two tracks
+     * never sit on each other; the primary stays where its author put it. External tracks
+     * (negative ids) are allowed on either slot. Selecting the track that already fills the other
+     * slot throws [IllegalArgumentException]. [Tracks.selectedSecondarySubtitle] reports the
+     * selection.
      */
     @Throws(Exception::class)
     public suspend fun selectSecondarySubtitle(track: TrackId?): TrackChange =

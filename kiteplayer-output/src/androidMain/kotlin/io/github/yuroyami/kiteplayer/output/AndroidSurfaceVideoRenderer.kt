@@ -250,6 +250,27 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     private var argb: IntArray = EMPTY_ARGB
 
     /**
+     * How the software picture in [argb] was last drawn, so a change of its look draws it again from
+     * those pixels (#541), or null when no software picture is on screen. Worker thread only.
+     */
+    private var held: HeldPicture? = null
+
+    private class HeldPicture(
+        val size: VideoSize,
+        val rotationDegrees: Int,
+        val mirrored: Boolean,
+        val framePts: Pts,
+        val crop: PictureCrop?,
+        val epoch: Long,
+    )
+
+    /** A change of the overlay, the adjustments, the scale or the framing waits to be drawn. */
+    private val redrawWanted = atomic(false)
+
+    /** False from a MediaCodec frame until the next software picture is drawn. */
+    private val softwareShowing = atomic(codecTarget == null)
+
+    /**
      * The drawing thread, held so [close] can end it.
      *
      * `newSingleThreadContext` starts a real thread, and closing the dispatcher is the only thing that
@@ -265,6 +286,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             while (!closed.value) {
                 signal.receive()
                 drawPending()
+                redrawHeld()
                 blankIfCleared()
             }
         } catch (_: ClosedReceiveChannelException) {
@@ -347,10 +369,12 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         get() = hdrPolicy.value == HdrPolicy.Auto && codecTarget != null && displayShowsHdr(displayHdr.value?.types)
 
     /**
-     * False: a MediaCodec frame goes to the Surface and leaves no copy, so a paused picture takes a
-     * change of its look only from the engine decoding it again (#463).
+     * True while the picture on screen came through the software path, whose pixels this renderer
+     * keeps and draws again at a change of its look, playing or not (#541). False after a MediaCodec
+     * frame, which goes to the Surface and leaves no copy, so a paused picture takes a change of its
+     * look only from the engine decoding it again (#463).
      */
-    override val redrawsHeldPicture: Boolean get() = false
+    override val redrawsHeldPicture: Boolean get() = softwareShowing.value
 
     /**
      * Says what happened to an HDR frame the codec sent to the Surface: tone mapped on request,
@@ -440,6 +464,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             if (!accepted) {
                 failWithLostSurface("there is no live Surface for the MediaCodec frame")
             } else {
+                softwareShowing.value = false
                 announceDirectRange(frame)
             }
             return accepted
@@ -493,12 +518,46 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             frame.close()
         }
         val picture = converted?.let { swizzle(it, size) } ?: return
+        // The pixels of the held picture are gone now, whether or not this frame is drawn.
+        held = null
         if (synchronized(pictureLock) { pictureEpoch != epoch }) {
             // The picture was taken off while this frame was converted (#530).
             superseded.incrementAndGet()
             return
         }
-        draw(picture, size, rotation, mirrored, framePts, crop, epoch)
+        // Taken before the draw reads the overlay and the settings, so a change that comes after
+        // that read still asks for its own redraw.
+        val wanted = redrawWanted.getAndSet(false)
+        if (draw(picture, size, rotation, mirrored, framePts, crop, epoch, redraw = false)) {
+            held = HeldPicture(size, rotation, mirrored, framePts, crop, epoch)
+            softwareShowing.value = true
+        } else if (wanted) {
+            redrawWanted.value = true
+        }
+    }
+
+    /**
+     * Draws the held software picture again when its look changed and no newer frame drew the change
+     * first (#541), so a picture held for seconds, as cover art or a slideshow is, shows a new subtitle
+     * line on time. Not a frame: it counts in none of the frame counters and reports no presentation.
+     * Worker thread only.
+     */
+    private fun redrawHeld() {
+        if (!redrawWanted.getAndSet(false)) return
+        val picture = held ?: return
+        if (!softwareShowing.value) return
+        val current = synchronized(pictureLock) { pictureEpoch == picture.epoch && !pictureCleared }
+        if (!current) return
+        draw(
+            argb, picture.size, picture.rotationDegrees, picture.mirrored, picture.framePts, picture.crop,
+            picture.epoch, redraw = true,
+        )
+    }
+
+    /** Asks the worker to draw the held picture again with its new look. */
+    private fun requestRedraw() {
+        redrawWanted.value = true
+        signal.trySend(Unit)
     }
 
     /**
@@ -635,6 +694,9 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      * Losing the Surface is not a failure of the renderer. It is counted against the frame, reported
      * once as a transition, and then the worker carries on: the next lock that succeeds says so and
      * drawing resumes. Nothing here calls the player.
+     *
+     * A [redraw] of the held picture is not a frame, so it counts nothing and reports only a loss.
+     * Returns true when the picture was posted.
      */
     private fun draw(
         picture: IntArray,
@@ -644,21 +706,18 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         framePts: Pts,
         crop: PictureCrop?,
         epoch: Long,
-    ) {
-        if (!targetIsValid()) {
-            failWithLostSurface("the Surface went away before a canvas could be locked")
-            return
+        redraw: Boolean,
+    ): Boolean {
+        fun lost(detail: String): Boolean {
+            if (redraw) reportSurfaceLost(detail) else failWithLostSurface(detail)
+            return false
         }
+        if (!targetIsValid()) return lost("the Surface went away before a canvas could be locked")
         val canvas = try {
             target.lock()
         } catch (refusal: Throwable) {
-            failWithLostSurface(refusal.message ?: "the Surface refused a canvas")
-            return
-        }
-        if (canvas == null) {
-            failWithLostSurface("the Surface refused a canvas")
-            return
-        }
+            return lost(refusal.message ?: "the Surface refused a canvas")
+        } ?: return lost("the Surface refused a canvas")
 
         var drawFailure: Throwable? = null
         var postFailure: Throwable? = null
@@ -695,13 +754,15 @@ public class AndroidSurfaceVideoRenderer internal constructor(
 
         // A post that throws is the Surface going away underneath a draw that had already started, so it
         // is reported as the loss it is rather than as a fault of this renderer.
-        if (postFailure != null) {
-            failWithLostSurface(postFailure.message ?: "the Surface refused the finished picture")
-            return
-        }
+        if (postFailure != null) return lost(postFailure.message ?: "the Surface refused the finished picture")
         if (drawFailure != null) {
-            failFrame(drawFailure.message ?: "drawing the picture failed")
-            return
+            val detail = drawFailure.message ?: "drawing the picture failed"
+            if (redraw) eventFlow.tryEmit(RendererEvent.Failed(detail)) else failFrame(detail)
+            return false
+        }
+        if (redraw) {
+            noteSurfaceAvailable()
+            return true
         }
         presented.incrementAndGet()
         // A clear that came while this was drawn keeps the cleared state for the blank that follows.
@@ -711,6 +772,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         eventFlow.tryEmit(
             RendererEvent.FramePresented(framePts, atNanos = System.nanoTime(), exact = false),
         )
+        return true
     }
 
     /**
@@ -850,7 +912,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         get() = if (overlayConsumer != null) hostViewport.value else lastCanvasSize.value ?: hostViewport.value
 
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
-        scaleMode.value = mode
+        if (scaleMode.getAndSet(mode) != mode) requestRedraw()
     }
 
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
@@ -866,20 +928,20 @@ public class AndroidSurfaceVideoRenderer internal constructor(
                 values[19] *= 255f
             }
         }
-        // Applied when the next frame draws. A paused picture is decoded again by the engine to
-        // show it (#463), because this renderer holds no drawn-frame copy to repaint, the same as its
-        // paused-overlay behaviour. KiteVideo repaints immediately.
+        // A software picture is drawn again with them at once (#541). A MediaCodec picture takes
+        // them with its next frame, and the engine decodes a paused one again to show it (#463).
+        requestRedraw()
     }
 
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
-        videoTransform.value = transform
-        // Applied at the next drawn frame, the same recorded paused-picture limit as above.
+        // The same as the adjustments.
+        if (videoTransform.getAndSet(transform) != transform) requestRedraw()
     }
 
     /**
-     * Stores the overlay for the worker to composite above every following picture. The engine
-     * publishes on cue edges, so a cue appears with the next frame drawn after it, at most one
-     * frame interval late, which at 30 fps is inside anyone's reading reaction.
+     * Stores the overlay for the worker to composite above every following picture. A software
+     * picture is drawn again with it at once, however long the picture is held (#541); a MediaCodec
+     * picture's cues are drawn by the layer above it.
      */
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         val external = overlayConsumer
@@ -891,7 +953,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             external(overlay)
         } else {
             this.overlay.value = overlay
-            signal.trySend(Unit)
+            requestRedraw()
         }
     }
 
@@ -953,6 +1015,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         worker.cancel()
         runBlocking { workerJob.join() }
         drainPending()
+        held = null
         argb = EMPTY_ARGB
         target.release()
         dispatcher.close()

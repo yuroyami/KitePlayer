@@ -846,8 +846,10 @@ class AndroidSurfacePictureClearTest {
             awaitPresented(renderer, 2)
             val withPicture = target.posts.get()
             runBlocking { renderer.setOverlay(cue(hash = 3)) }
-            Thread.sleep(200)
-            assertEquals(withPicture, target.posts.get(), "once a picture plays, a cue waits for its next frame again")
+            awaitPosts(target, withPicture + 1)
+            val again = canvases(target).last()
+            assertEquals(1, again.drawnPictures.size, "once a picture is back, a cue draws over it and not over black")
+            assertEquals(listOf(3L), again.drawnOverlays.map { it.contentHash })
         } finally {
             renderer.close()
         }
@@ -905,5 +907,147 @@ class AndroidSurfacePictureClearTest {
         renderer.close()
         renderer.clearPicture()
         assertEquals(0, target.posts.get())
+    }
+}
+
+/**
+ * A software picture held for seconds, as cover art or a slideshow is, takes a change of its look at
+ * once (#541): the renderer keeps its pixels and draws them again, playing or not, so the engine has
+ * nothing to decode for it.
+ */
+class AndroidSurfaceHeldPictureTest {
+
+    private fun cue(hash: Long) = io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+        images = listOf(
+            io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                x = 2,
+                y = 6,
+                bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(4, 2, ByteArray(4 * 2 * 4)),
+            ),
+        ),
+        viewportWidth = 16,
+        viewportHeight = 9,
+        contentHash = hash,
+    )
+
+    private fun awaitPosts(target: FakeTarget, atLeast: Int, timeoutMs: Long = 5_000) {
+        val startedAt = System.nanoTime()
+        while (target.posts.get() < atLeast) {
+            if (System.nanoTime() - startedAt > timeoutMs * 1_000_000L) {
+                throw AssertionError("posts=${target.posts.get()}, wanted $atLeast")
+            }
+            Thread.sleep(1)
+        }
+    }
+
+    private fun canvases(target: FakeTarget): List<FakeCanvas> = synchronized(target.canvases) { target.canvases.toList() }
+
+    private val stripes: (VideoFrame) -> ByteArray = { frame ->
+        rgbaBytes(frame.size.width, frame.size.height) { x -> if (x % 2 == 0) Triple(0xFF, 0, 0) else Triple(0, 0, 0xFF) }
+    }
+
+    @Test
+    fun aNewCueRedrawsTheHeldPictureWithItsOwnPixels() {
+        val target = FakeTarget()
+        val renderer = renderer(target, stripes)
+        try {
+            runBlocking { renderer.present(TestFrame(), 0) }
+            awaitPresented(renderer, 1)
+            val first = canvases(target).single()
+            assertTrue(first.drawnOverlays.isEmpty())
+
+            runBlocking { renderer.setOverlay(cue(hash = 7)) }
+            awaitPosts(target, 2)
+            val again = canvases(target).last()
+            assertEquals(1, again.drawnPictures.size, "the held picture was not drawn under the new cue")
+            assertTrue(first.drawnPictures.single().contentEquals(again.drawnPictures.single()), "the redraw drew other pixels")
+            assertEquals(first.drawnLayouts.single(), again.drawnLayouts.single())
+            assertEquals(listOf(7L), again.drawnOverlays.map { it.contentHash })
+            assertEquals(1L, renderer.presentedFrames, "a redraw is not a frame")
+            assertEquals(0L, renderer.failedFrames)
+
+            runBlocking { renderer.setOverlay(null) }
+            awaitPosts(target, 3)
+            assertTrue(canvases(target).last().drawnOverlays.isEmpty(), "a cue that ends stayed on the held picture")
+        } finally {
+            renderer.close()
+        }
+    }
+
+    @Test
+    fun aChangeOfScaleFramingOrAdjustmentsRedrawsTheHeldPicture() {
+        val target = FakeTarget(canvasWidth = 16, canvasHeight = 16)
+        val renderer = renderer(target, stripes)
+        try {
+            runBlocking { renderer.present(TestFrame(width = 4, height = 2), 0) }
+            awaitPresented(renderer, 1)
+            val fitted = canvases(target).single().drawnLayouts.single()
+
+            renderer.setScaleMode(io.github.yuroyami.kiteplayer.VideoScale.Stretch)
+            awaitPosts(target, 2)
+            assertTrue(fitted != canvases(target).last().drawnLayouts.single(), "the new scale was not drawn")
+
+            renderer.setTransform(io.github.yuroyami.kiteplayer.VideoTransform(zoom = 2f))
+            awaitPosts(target, 3)
+
+            renderer.setAdjustments(VideoAdjustments(brightness = 0.2f))
+            awaitPosts(target, 4)
+            assertNotNull(target.drawnColorMatrix, "the adjustments were not drawn")
+            assertEquals(1L, renderer.presentedFrames)
+        } finally {
+            renderer.close()
+        }
+    }
+
+    @Test
+    fun theSameScaleAgainDrawsNothing() {
+        val target = FakeTarget()
+        val renderer = renderer(target)
+        try {
+            runBlocking { renderer.present(TestFrame(), 0) }
+            awaitPresented(renderer, 1)
+            renderer.setScaleMode(io.github.yuroyami.kiteplayer.VideoScale.Fit)
+            Thread.sleep(200)
+            assertEquals(1, target.posts.get())
+        } finally {
+            renderer.close()
+        }
+    }
+
+    @Test
+    fun nothingIsRedrawnBeforeTheFirstPicture() {
+        val target = FakeTarget()
+        val renderer = renderer(target)
+        try {
+            runBlocking { renderer.setOverlay(cue(hash = 1)) }
+            renderer.setScaleMode(io.github.yuroyami.kiteplayer.VideoScale.Fill)
+            Thread.sleep(200)
+            assertEquals(0, target.posts.get())
+        } finally {
+            renderer.close()
+        }
+    }
+
+    @Test
+    fun theRendererSaysItRedrawsOnlyWhileASoftwarePictureShows() {
+        val software = renderer(FakeTarget())
+        val codec = MediaCodecSurfaceTarget()
+        val direct = AndroidSurfaceVideoRenderer(
+            convert = exactConverter(),
+            target = SwitchingSurfaceCanvasTarget(codec, createDelegate = { FakeTarget() }),
+            codecTarget = codec,
+            overlayConsumer = {},
+        )
+        try {
+            assertTrue(software.redrawsHeldPicture, "a renderer that only draws software pictures keeps each one")
+            assertFalse(direct.redrawsHeldPicture, "nothing has shown that the picture will be a software one")
+            direct.setSurface(liveSurface())
+            assertTrue(runBlocking { direct.present(TestFrame(), 0) })
+            awaitPresented(direct, 1)
+            assertTrue(direct.redrawsHeldPicture, "the software picture on screen is kept")
+        } finally {
+            software.close()
+            direct.close()
+        }
     }
 }

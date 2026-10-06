@@ -285,6 +285,9 @@ public class KitePlayerWorker private constructor(
     /** Sets the stereo balance. */
     public fun setBalance(value: Float): Unit = send(Control.SetBalance(value))
 
+    /** Sets what the two front speakers play (#462). */
+    public fun setStereoMode(mode: StereoMode): Unit = send(Control.SetStereoMode(mode))
+
     /** Silences the sound without losing the volume. */
     public fun setMuted(value: Boolean): Unit = send(Control.SetMuted(value))
 

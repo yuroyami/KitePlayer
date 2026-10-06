@@ -260,6 +260,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final fun setShuffle(kotlin/Boolean, kotlin/Long? = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setShuffle|setShuffle(kotlin.Boolean;kotlin.Long?){}[0]
     final fun setSleepTimer(io.github.yuroyami.kiteplayer/SleepTimer?, kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSleepTimer|setSleepTimer(io.github.yuroyami.kiteplayer.SleepTimer?;kotlin.time.Duration){}[0]
     final fun setSpeed(kotlin/Double) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSpeed|setSpeed(kotlin.Double){}[0]
+    final fun setStereoMode(io.github.yuroyami.kiteplayer/StereoMode) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setStereoMode|setStereoMode(io.github.yuroyami.kiteplayer.StereoMode){}[0]
     final fun setSubtitleDelay(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSubtitleDelay|setSubtitleDelay(kotlin.time.Duration){}[0]
     final fun setSubtitlePosition(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSubtitlePosition|setSubtitlePosition(kotlin.Float){}[0]
     final fun setSubtitleSafeArea(io.github.yuroyami.kiteplayer.subtitle/SubtitleSafeArea) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSubtitleSafeArea|setSubtitleSafeArea(io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea){}[0]

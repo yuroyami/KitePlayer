@@ -355,6 +355,18 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.SetBalance(value, CompletableDeferred()))
     }
 
+    /**
+     * Sets what the two front speakers play (#462): each its own side, both the average of the two,
+     * both the left or both the right, or the two swapped. It acts after the downmix, so a surround
+     * film folded to two speakers obeys it too. A change crossfades, so it never clicks, and is
+     * heard once the audio already buffered has played, as a [setBalance] change is. Published as
+     * [PlayerSnapshot.stereoMode].
+     */
+    @Throws(IllegalStateException::class)
+    public fun setStereoMode(mode: StereoMode) {
+        core.post(CoreCommand.SetStereoMode(mode, CompletableDeferred()))
+    }
+
     private fun checkDelay(name: String, value: Duration) =
         require(value.isFinite() && value.absoluteValue <= DELAY_MAX) {
             "$name must be finite and at most $DELAY_MAX either way, was $value"
@@ -1092,6 +1104,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             subtitlesOff = tracks.selectedSubtitle == null && tracks.subtitles.isNotEmpty(),
             secondarySubtitleLanguage = tracks.selectedSecondarySubtitle?.let { tracks.find(it) }?.language,
             balance = snapshot.balance,
+            stereoMode = snapshot.stereoMode,
             equalizer = snapshot.equalizer,
             subtitleScale = snapshot.subtitleScale,
             subtitlePosition = snapshot.subtitlePosition,
@@ -1157,6 +1170,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setSubtitleDelay(memento.subtitleDelay)
         setAudioDelay(memento.audioDelay)
         setBalance(memento.balance)
+        setStereoMode(memento.stereoMode)
         setEqualizer(memento.equalizer)
         setSubtitleScale(memento.subtitleScale)
         setSubtitlePosition(memento.subtitlePosition)

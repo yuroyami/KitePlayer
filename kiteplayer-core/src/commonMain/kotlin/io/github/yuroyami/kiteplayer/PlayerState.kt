@@ -171,6 +171,8 @@ public data class PlayerSnapshot(
      * length and this goes false.
      */
     val durationIsEstimate: Boolean = false,
+    /** What the two front speakers play. See [KitePlayer.setStereoMode]. */
+    val stereoMode: StereoMode = StereoMode.Stereo,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

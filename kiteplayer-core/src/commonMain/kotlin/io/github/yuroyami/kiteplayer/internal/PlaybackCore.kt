@@ -59,6 +59,7 @@ import io.github.yuroyami.kiteplayer.VideoPlayback
 import io.github.yuroyami.kiteplayer.VideoAdjustments
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoTransform
+import io.github.yuroyami.kiteplayer.StereoMode
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.VariantFit
 import io.github.yuroyami.kiteplayer.spi.AudioBuffer
@@ -1028,6 +1029,9 @@ internal class PlaybackCore(
     private var duckLevel: Float = 1f
     private var muted: Boolean = false
     private var balance: Float = 0f
+
+    /** What the two front speakers play (#462). A player property, like the balance. */
+    private var stereoMode: StereoMode = StereoMode.Stereo
     private var equalizer: EqualizerSettings = config.audio.equalizer
     private var videoEnabled: Boolean = config.videoEnabled
 
@@ -2456,6 +2460,11 @@ internal class PlaybackCore(
                 session?.audio?.balance = command.value
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetStereoMode -> {
+                stereoMode = command.mode
+                session?.audio?.stereoMode = command.mode
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetSleepTimer -> {
                 sleepTimer = command.timer
                 sleepFade = command.fade
@@ -3459,6 +3468,7 @@ internal class PlaybackCore(
                 createdPlayback.muted = muted
                 createdPlayback.replayGain = replayGainFor(audioStream, source.metadata)
                 createdPlayback.balance = balance
+                createdPlayback.stereoMode = stereoMode
                 createdPlayback.equalizer = equalizer
                 emitEvent(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
@@ -5052,6 +5062,7 @@ internal class PlaybackCore(
             playback.muted = muted
             playback.replayGain = replayGainFor(stream, session?.source?.metadata ?: emptyMap())
             playback.balance = balance
+            playback.stereoMode = stereoMode
             playback.equalizer = equalizer
             playback.flush(requestedEpoch)
             return PreparedAudioPath(playback, createdSink, negotiated, decoder.outputFormat)
@@ -8408,6 +8419,7 @@ internal class PlaybackCore(
             playback.muted = muted
             playback.replayGain = replayGainFor(lane.stream, target.source.metadata)
             playback.balance = balance
+            playback.stereoMode = stereoMode
             playback.equalizer = equalizer
             target.audio = playback
             target.sink = createdSink
@@ -10398,6 +10410,7 @@ internal class PlaybackCore(
              * teardown projection above leaves it at its null default for the same reason. */
             audioSessionId = session?.audio?.platformSessionId,
             balance = balance,
+            stereoMode = stereoMode,
             videoEnabled = videoEnabled,
             equalizer = equalizer,
             sleepTimer = sleepTimer,
@@ -13263,6 +13276,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetSpeed(val value: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setSpeed", reply)
     class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply)
     class SetBalance(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setBalance", reply)
+    class SetStereoMode(val mode: StereoMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setStereoMode", reply)
     class SetVideoEnabled(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoEnabled", reply)
     class SetEqualizer(val settings: EqualizerSettings, val reply: CompletableDeferred<Unit>) : CoreCommand("setEqualizer", reply)
     class SetSleepTimer(

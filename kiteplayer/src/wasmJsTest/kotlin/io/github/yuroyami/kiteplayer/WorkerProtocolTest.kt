@@ -149,6 +149,7 @@ class WorkerProtocolTest {
         videoDynamicRange = VideoDynamicRange.ToneMapped,
         failedQueueItems = setOf(1),
         durationIsEstimate = true,
+        stereoMode = StereoMode.Swapped,
     )
 
     private val stats = PlaybackStats(
@@ -284,6 +285,7 @@ class WorkerProtocolTest {
             Control.SetVolume(0.5f),
             Control.SetDuckLevel(0.2f),
             Control.SetBalance(-0.75f),
+            Control.SetStereoMode(StereoMode.LeftOnly),
             Control.SetMuted(true),
             Control.SetVideoEnabled(false),
             Control.SetLoop(LoopMode.One),

@@ -148,6 +148,9 @@ public class AudioPlayback(
     /** Stereo balance, -1 hard left to 1 hard right. Combined with the replay gain in one stage. */
     private val wantedBalance = atomic(0f)
 
+    /** What the two front speakers play (#462). */
+    private val wantedStereoMode = atomic(StereoMode.Stereo)
+
     /** The equaliser the feeder applies. Held here so a pipeline rebuild cannot lose it. */
     private val wantedEqualizer = atomic(EqualizerSettings.Flat)
 
@@ -982,6 +985,16 @@ public class AudioPlayback(
                 "balance must be between -1 and 1, was $value"
             }
             wantedBalance.value = value
+        }
+
+    /**
+     * What the two front speakers play: see [StereoMode]. Applied as audio is written, after the
+     * downmix and before the balance, so it is heard after the ring's depth, as the balance is.
+     */
+    public var stereoMode: StereoMode
+        get() = wantedStereoMode.value
+        set(value) {
+            wantedStereoMode.value = value
         }
 
     /** The settings last written into the current pipeline, so an unchanged one is not rebuilt. */

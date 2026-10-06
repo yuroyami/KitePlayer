@@ -25,7 +25,7 @@ internal object TeletextCharacters {
     /** The Latin first set's positions that each national option replaces, in the order of the tables below. */
     private val NATIONAL_POSITIONS = intArrayOf(0x23, 0x24, 0x40, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F, 0x60, 0x7B, 0x7C, 0x7D, 0x7E)
 
-    private const val ENGLISH = "£\$@←½→↑#—¼‖¾÷"
+    private const val ENGLISH = "£\$@←½→↑#\u2014¼‖¾÷"
     private const val GERMAN = "#\$§ÄÖÜ^_°äöüß"
     private const val SWEDISH_FINNISH_HUNGARIAN = "#¤ÉÄÖÅÜ_éäöåü"
     private const val ITALIAN = "£\$é°ç→↑#ùàòèì"
@@ -52,9 +52,9 @@ internal object TeletextCharacters {
         " !\"#\$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ←½→↑#אבגדהוזחטיךכלםמןנסעףפץצקרשת₪‖¾÷■"
 
     private const val LATIN_G2 =
-        " ¡¢£\$¥#§¤‘“«←↑→↓°±²³×µ¶·÷’”»¼½¾¿ ˋˊˆ˜ˉ˘˙¨.˚ˏˍ˝˛ˇ—¹®©™♪₠‰ɑ   ⅛⅜⅝⅞ΩÆĐªĦ ĲĿŁØŒºÞŦŊŉĸæđðħıĳŀłøœßþŧŋ■"
+        " ¡¢£\$¥#§¤‘“«←↑→↓°±²³×µ¶·÷’”»¼½¾¿ ˋˊˆ˜ˉ˘˙¨.˚ˏˍ˝˛ˇ\u2014¹®©™♪₠‰ɑ   ⅛⅜⅝⅞ΩÆĐªĦ ĲĿŁØŒºÞŦŊŉĸæđðħıĳŀłøœßþŧŋ■"
     private const val CYRILLIC_G2 =
-        " ¡¢£ ¥#§ ‘“«←↑→↓°±²³×µ¶·÷’”»¼½¾¿ ˋˊˆ˜ˉ˘˙¨.˚ˏˍ˝˛ˇ—¹®©™♪₠‰ɑŁłß⅛⅜⅝⅞DEFGIJKLNQRSUVWZdefgijklnqrsuvwz"
+        " ¡¢£ ¥#§ ‘“«←↑→↓°±²³×µ¶·÷’”»¼½¾¿ ˋˊˆ˜ˉ˘˙¨.˚ˏˍ˝˛ˇ\u2014¹®©™♪₠‰ɑŁłß⅛⅜⅝⅞DEFGIJKLNQRSUVWZdefgijklnqrsuvwz"
     private const val GREEK_G2 =
         " ab£ehi§:‘“k←↑→↓°±²³xmnp÷’”t¼½¾x ˋˊˆ˜ˉ˘˙¨.˚ˏˍ˝˛ˇ?¹®©™♪₠‰ɑΊΎΏ⅛⅜⅝⅞CDFGJLQRSUVWYZΆΉcdfgjlqrsuvwyzΈ■"
 

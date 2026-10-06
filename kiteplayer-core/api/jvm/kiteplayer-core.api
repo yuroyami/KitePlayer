@@ -2669,6 +2669,12 @@ public final class io/github/yuroyami/kiteplayer/SyncMode : java/lang/Enum {
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/SyncMode;
 }
 
+public final class io/github/yuroyami/kiteplayer/TextEncodings {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/TextEncodings;
+	public final fun decode ([BLjava/lang/String;)Ljava/lang/String;
+	public static synthetic fun decode$default (Lio/github/yuroyami/kiteplayer/TextEncodings;[BLjava/lang/String;ILjava/lang/Object;)Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/TimedWarning {
 	public fun <init> (JLio/github/yuroyami/kiteplayer/PlaybackWarning;)V
 	public final fun component1 ()J

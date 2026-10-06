@@ -5275,6 +5275,10 @@ final object io.github.yuroyami.kiteplayer/Playlists { // io.github.yuroyami.kit
     final fun parse(kotlin/String, kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem>? // io.github.yuroyami.kiteplayer/Playlists.parse|parse(kotlin.String;kotlin.String){}[0]
 }
 
+final object io.github.yuroyami.kiteplayer/TextEncodings { // io.github.yuroyami.kiteplayer/TextEncodings|null[0]
+    final fun decode(kotlin/ByteArray, kotlin/String? = ...): kotlin/String // io.github.yuroyami.kiteplayer/TextEncodings.decode|decode(kotlin.ByteArray;kotlin.String?){}[0]
+}
+
 final val io.github.yuroyami.kiteplayer.spi/toneMapPeakNits // io.github.yuroyami.kiteplayer.spi/toneMapPeakNits|@io.github.yuroyami.kiteplayer.spi.VideoFrame{}toneMapPeakNits[0]
     final fun (io.github.yuroyami.kiteplayer.spi/VideoFrame).<get-toneMapPeakNits>(): kotlin/Float? // io.github.yuroyami.kiteplayer.spi/toneMapPeakNits.<get-toneMapPeakNits>|<get-toneMapPeakNits>@io.github.yuroyami.kiteplayer.spi.VideoFrame(){}[0]
 final val io.github.yuroyami.kiteplayer.spi/visibleSize // io.github.yuroyami.kiteplayer.spi/visibleSize|@io.github.yuroyami.kiteplayer.spi.VideoFrame{}visibleSize[0]

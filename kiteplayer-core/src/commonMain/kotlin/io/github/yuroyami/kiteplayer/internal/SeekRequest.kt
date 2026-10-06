@@ -18,6 +18,11 @@ internal data class SeekRequest(
     val landing: SeekLanding = SeekLanding.AtOrAfter,
     /** Which keyframe a plain [SeekMode.Keyframe] seek lands on (#496); the precise modes ignore it. */
     val keyframe: KeyframeChoice = KeyframeChoice.Before,
+    /**
+     * True for the engine's own redraw of a held picture (#438, #463): it lands like a precise
+     * seek, and moves neither the position nor the status, and answers and announces nothing.
+     */
+    val redraw: Boolean = false,
 ) {
     /**
      * Folds [next] into this pending request.
@@ -42,7 +47,8 @@ internal data class SeekRequest(
                 SeekTarget.Relative(target.offset + next.target.offset)
             else -> next.target
         }
-        return SeekRequest(mergedTarget, strictest(mode, next.mode), next.landing, next.keyframe)
+        // A seek of the caller's draws the picture anyway, so a redraw folded into one is no more.
+        return SeekRequest(mergedTarget, strictest(mode, next.mode), next.landing, next.keyframe, redraw && next.redraw)
     }
 
     /**

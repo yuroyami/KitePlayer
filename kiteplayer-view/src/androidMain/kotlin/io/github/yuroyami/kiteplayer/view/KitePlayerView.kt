@@ -17,7 +17,6 @@ import android.widget.FrameLayout
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.PlaybackStatus
-import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
@@ -283,15 +282,14 @@ public open class KitePlayerView @JvmOverloads constructor(
     private var surfaceLost = false
 
     /**
-     * Draws the paused picture again on a new surface. The frames that made it went to the old
-     * surface, and a paused player makes no next frame, so a precise seek to where it stands
-     * presents it once more. A playing player needs nothing: its next frame arrives on its own.
+     * Draws the held picture again on a new surface. The frames that made it went to the old
+     * surface, and a paused or ended player makes no next frame, so the player decodes the one on
+     * screen once more, keeping its position and its status (#438). A playing player needs
+     * nothing, and the player itself tells the two apart.
      */
-    private fun repaintIfPaused() {
-        val bound = player ?: return
-        if (bound.state.value.status != PlaybackStatus.Paused) return
+    private fun redrawHeldPicture() {
         // A closed player refuses; there is then no picture to bring back.
-        runCatching { bound.requestSeek(bound.position(), SeekMode.Precise) }
+        runCatching { player?.redrawPicture() }
     }
 
     /**
@@ -383,7 +381,7 @@ public open class KitePlayerView @JvmOverloads constructor(
                 binding.surfaceReady()
                 if (surfaceLost) {
                     surfaceLost = false
-                    repaintIfPaused()
+                    redrawHeldPicture()
                 }
             }
 

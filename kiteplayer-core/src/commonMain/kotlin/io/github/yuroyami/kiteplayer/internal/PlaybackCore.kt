@@ -2505,14 +2505,18 @@ internal class PlaybackCore(
                 command.reply.complete(Unit)
             }
             is CoreCommand.RedrawPicture -> {
+                requestRedraw(forced = true)
                 command.reply.complete(Unit)
             }
+            is CoreCommand.OverlayReached -> overlayReachedRenderer()
             is CoreCommand.SetVideoScale -> {
                 videoScale = command.mode
                 // Whichever renderer is live learns immediately; the pending one learns so the
                 // session that adopts it starts right; setRenderer re-tells any future one.
                 session?.renderer?.setScaleMode(command.mode)
                 if (session == null) pendingRenderer?.setScaleMode(command.mode)
+                // A held picture shows the change now, not with a frame that is not coming (#463).
+                requestRedraw(forced = false)
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetVideoAdjustments -> {
@@ -2521,12 +2525,16 @@ internal class PlaybackCore(
                 // the engine's, honoured by whichever renderer is or becomes attached.
                 session?.renderer?.setAdjustments(command.value)
                 if (session == null) pendingRenderer?.setAdjustments(command.value)
+                // A held picture shows the change now, not with a frame that is not coming (#463).
+                requestRedraw(forced = false)
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetRenderQuality -> {
                 renderQuality = command.value
                 session?.renderer?.setRenderQuality(command.value)
                 if (session == null) pendingRenderer?.setRenderQuality(command.value)
+                // A held picture shows the change now, not with a frame that is not coming (#463).
+                requestRedraw(forced = false)
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetExternalClock -> {
@@ -2550,6 +2558,8 @@ internal class PlaybackCore(
                 videoTransform = command.value
                 session?.renderer?.setTransform(command.value)
                 if (session == null) pendingRenderer?.setTransform(command.value)
+                // A held picture shows the change now, not with a frame that is not coming (#463).
+                requestRedraw(forced = false)
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetSubtitleDelay -> {
@@ -2557,35 +2567,41 @@ internal class PlaybackCore(
                 // Retimed on the very next pass: dropping the published key forces the selector
                 // to answer again and the overlay to republish at the shifted timing.
                 session?.publishedCueKey = null
+                redrawOnOverlay = status == PlaybackStatus.Paused || status == PlaybackStatus.Ended
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetSubtitleScale -> {
                 subtitleScale = command.value
                 session?.publishedCueKey = null
+                redrawOnOverlay = status == PlaybackStatus.Paused || status == PlaybackStatus.Ended
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetSubtitleStyle -> {
                 subtitleStyle = command.value
                 // Re-rasterised on the very next pass, the same key-drop as a scale change.
                 session?.publishedCueKey = null
+                redrawOnOverlay = status == PlaybackStatus.Paused || status == PlaybackStatus.Ended
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetSubtitlePosition -> {
                 subtitlePosition = command.value
                 // Re-rasterised on the very next pass, the same key-drop as a scale change.
                 session?.publishedCueKey = null
+                redrawOnOverlay = status == PlaybackStatus.Paused || status == PlaybackStatus.Ended
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetForcedPicturesOnly -> {
                 forcedPicturesOnly = command.value
                 // Drawn again on the very next pass, the same key-drop as a scale change.
                 session?.publishedCueKey = null
+                redrawOnOverlay = status == PlaybackStatus.Paused || status == PlaybackStatus.Ended
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetSubtitleSafeArea -> {
                 subtitleSafeArea = command.value
                 // Re-rasterised on the very next pass, the same key-drop as a scale change.
                 session?.publishedCueKey = null
+                redrawOnOverlay = status == PlaybackStatus.Paused || status == PlaybackStatus.Ended
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetAudioDelay -> {
@@ -2734,6 +2750,13 @@ internal class PlaybackCore(
 
     /** A renderer attached before anything was open, kept for the session that follows. */
     private var pendingRenderer: VideoRenderer? = null
+
+    /**
+     * True when a subtitle setting changed and the overlay it gives has not reached the renderer
+     * yet, so its arrival redraws a held picture (#463). An overlay that changes for any other
+     * reason, such as a seek, redraws nothing.
+     */
+    private var redrawOnOverlay = false
 
     /**
      * Tells the attached renderer that no picture plays, so the last one leaves the screen rather
@@ -3383,7 +3406,11 @@ internal class PlaybackCore(
                 )
             }
 
-            val renderer = AttachableRenderer().also { it.delegate = pendingRenderer }
+            val renderer = AttachableRenderer().also {
+                it.delegate = pendingRenderer
+                // Any lane may publish, so the actor hears of it through its mailbox (#463).
+                it.onOverlay = { commands.trySend(CoreCommand.OverlayReached()) }
+            }
             val videoPlayback = videoStream?.let {
                 VideoPlayback(
                     renderer = renderer,
@@ -5867,6 +5894,7 @@ internal class PlaybackCore(
         }
         // The clocks run again, so they carry the position from here.
         session.pictureHoldsPosition = false
+        session.heldPositionUs = NO_POSITION
         session.schedulerMode.value = SCHEDULER_RUNNING
     }
 
@@ -5931,6 +5959,39 @@ internal class PlaybackCore(
         warn(PlaybackWarning.SourceReconnecting(position = 0, attempt = 1, detail = "$reason; opening the stream again"))
         pendingRejoin = true
         wakeIn(WORKER_POLL)
+    }
+
+    /**
+     * Decodes the held picture once more and presents it, keeping the position and the status
+     * (#438, #463). [forced] is the application's own [KitePlayer.redrawPicture], which every renderer
+     * gets; otherwise only one that cannot redraw from a copy is redrawn. Only a paused or ended
+     * player needs it, since a playing one's next frame comes by itself, and only a source that can
+     * seek can decode a past picture again. A recording would be cut by the seek, so it waits.
+     *
+     * A request waiting to run draws the newest settings when it runs, so a slider dragged through
+     * many values costs one redraw running and one waiting.
+     */
+    private fun requestRedraw(forced: Boolean) {
+        val active = session ?: return
+        if (active.videoStream == null || active.videoParked.value) return
+        if (!forced && pendingRenderer?.redrawsHeldPicture != false) return
+        if (status != PlaybackStatus.Paused && status != PlaybackStatus.Ended) return
+        if (playRequested && status != PlaybackStatus.Ended) return
+        if (!active.source.seekable) return
+        if ((active.source as? io.github.yuroyami.kiteplayer.spi.RecordingCapable)?.recordingPath != null) return
+        if (pendingSeek != null) return
+        // The picture on screen, which for an ended player is the last frame and not the position,
+        // the end of the media, where a seek would land past every frame.
+        val target = active.video?.shownPts() ?: currentPosition()
+        pendingSeek = SeekRequest(SeekTarget.Absolute(target), SeekMode.Precise, redraw = true)
+        wakeIn(Duration.ZERO)
+    }
+
+    /** The renderer took an overlay; one that a subtitle setting asked for redraws a held picture (#463). */
+    private fun overlayReachedRenderer() {
+        if (!redrawOnOverlay) return
+        redrawOnOverlay = false
+        requestRedraw(forced = false)
     }
 
     /**
@@ -9214,7 +9275,13 @@ internal class PlaybackCore(
                 if (target > origin) KeyframeChoice.After else KeyframeChoice.Before
             else -> request.keyframe
         }
-        session.pictureHoldsPosition = false
+        if (request.redraw) {
+            // The position the viewer sees stays where it is while the picture is decoded again.
+            if (session.heldPositionUs == NO_POSITION) session.heldPositionUs = publishedPositionMicros.value
+        } else {
+            session.pictureHoldsPosition = false
+            session.heldPositionUs = NO_POSITION
+        }
 
         // 1
         val previousEpoch = requestedEpoch
@@ -9434,6 +9501,12 @@ internal class PlaybackCore(
                 SeekResult.Rejected("the pipeline produced no frame for the seek target within $SEEK_DEADLINE"),
             )
             if (!playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Paused)
+            return
+        }
+        if (request.redraw) {
+            // The picture is back. Nothing about the position or the status moved, so nothing is
+            // published, answered or announced (#438).
+            if (landed != null) presentFirstFrame(session)
             return
         }
         publishedPositionMicros.value = (landed ?: target).micros
@@ -10683,6 +10756,8 @@ internal class PlaybackCore(
         val session = session ?: return Pts(publishedPositionMicros.value)
         // Paused after a frame step, the clocks still read where playback stopped.
         if (session.pictureHoldsPosition) session.video?.shownPts()?.let { return it }
+        // A redraw decoded the picture again and moved no clock the viewer can see (#438).
+        if (session.heldPositionUs != NO_POSITION) return Pts(session.heldPositionUs)
         // The same selector scheduling uses decides whose reading IS the position: under
         // VideoMaster the picture carries the timeline, and preferring audio here anyway made
         // position, relative seeks and subtitles follow a clock scheduling ignores.
@@ -12427,6 +12502,8 @@ internal class PlaybackCore(
          * performance bug report.
          */
         val videoParked = atomic(false)
+        /** The position a redraw of the held picture keeps, or [NO_POSITION] (#438). Actor only. */
+        var heldPositionUs: Long = NO_POSITION
         /** What a paused player told the sender of a real-time stream (#441). */
         val liveHold = LiveHold()
         /** Set when the lane un-parks: packets are discarded until a keyframe the decoder can start from. */
@@ -13200,6 +13277,9 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetPreservePitch(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setPreservePitch", reply)
     class SetVideoScale(val mode: VideoScale, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoScale", reply)
     class RedrawPicture(val reply: CompletableDeferred<Unit>) : CoreCommand("redrawPicture", reply)
+
+    /** The renderer took an overlay, which a subtitle setting may have asked to be seen at once (#463). */
+    class OverlayReached : CoreCommand("overlayReached", CompletableDeferred(Unit))
     class SetRenderQuality(val value: io.github.yuroyami.kiteplayer.RenderQuality, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setRenderQuality", reply)
     class SetHdrPolicy(val value: io.github.yuroyami.kiteplayer.HdrPolicy, val reply: CompletableDeferred<Unit>) :

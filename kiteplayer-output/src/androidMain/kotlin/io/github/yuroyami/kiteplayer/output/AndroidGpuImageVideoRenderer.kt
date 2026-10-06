@@ -127,9 +127,12 @@ public class AndroidGpuImageVideoRenderer(
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         // The Android half: the OES-to-RGBA blit is the ONE hook this tier has, and it
         // now applies the same unit-domain law every other renderer does. A paused picture
-        // keeps its old colours until the next latch; that narrower limit stays recorded.
+        // takes the new colours at the next latch, which the engine's redraw brings (#463).
         bridge.adjust.set(GlState.packGlAdjust(adjustments))
     }
+
+    /** False: the blit runs at each latch only, so a held picture shows a change from a redraw (#463). */
+    override val redrawsHeldPicture: Boolean get() = false
     private val codecTarget = MediaCodecSurfaceTarget(initialSurface = bridge.surface)
     private val directFactory = MediaCodecVideoDecoderFactory(
         target = codecTarget,

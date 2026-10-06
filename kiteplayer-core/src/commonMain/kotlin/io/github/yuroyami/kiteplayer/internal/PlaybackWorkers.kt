@@ -341,8 +341,13 @@ internal class AttachableRenderer : VideoRenderer {
     }
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
-        delegate?.setOverlay(overlay)
+        val target = delegate ?: return
+        target.setOverlay(overlay)
+        onOverlay?.invoke()
     }
+
+    /** Told after a renderer took an overlay, from whichever lane published it (#463). */
+    var onOverlay: (() -> Unit)? = null
 
     override fun clearPicture() {
         delegate?.clearPicture()

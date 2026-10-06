@@ -347,6 +347,12 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         get() = hdrPolicy.value == HdrPolicy.Auto && codecTarget != null && displayShowsHdr(displayHdr.value?.types)
 
     /**
+     * False: a MediaCodec frame goes to the Surface and leaves no copy, so a paused picture takes a
+     * change of its look only from the engine decoding it again (#463).
+     */
+    override val redrawsHeldPicture: Boolean get() = false
+
+    /**
      * Says what happened to an HDR frame the codec sent to the Surface: tone mapped on request,
      * shown as HDR by a display that supports its transfer, or tone mapped by the system for one
      * that does not.
@@ -860,8 +866,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
                 values[19] *= 255f
             }
         }
-        // Applied when the next frame draws. A PAUSED picture keeps its old colours until then:
-        // this renderer holds no drawn-frame copy to repaint, the same recorded limit as its
+        // Applied when the next frame draws. A paused picture is decoded again by the engine to
+        // show it (#463), because this renderer holds no drawn-frame copy to repaint, the same as its
         // paused-overlay behaviour. KiteVideo repaints immediately.
     }
 

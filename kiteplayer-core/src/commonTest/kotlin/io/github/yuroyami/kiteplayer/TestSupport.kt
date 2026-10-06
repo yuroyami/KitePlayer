@@ -175,6 +175,12 @@ internal class RecordingRenderer(
     override val showsHdr: Boolean
         get() = showsHdrOverride
 
+    /** False plays a renderer that cannot redraw its held picture, as Android's cannot (#463). */
+    var redrawsHeldPictureOverride: Boolean = true
+
+    override val redrawsHeldPicture: Boolean
+        get() = redrawsHeldPictureOverride
+
     override fun setScaleMode(mode: VideoScale) {
         scaleMode = mode
     }

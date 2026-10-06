@@ -40,13 +40,7 @@ internal class InVideoCaptionDecoder(
         } catch (damaged: io.github.yuroyami.kiteffmpeg.FFmpegException) {
             null
         } ?: return true
-        val start = subtitle.startMicros ?: pts.micros
-        val cues = subtitle.texts.mapNotNull { event -> track.parseEvent(event, start, SubtitleCue.OPEN_END) }
-        if (cues.isEmpty()) {
-            pending.addLast(SubtitleCue.Text(start, SubtitleCue.OPEN_END, emptyList()))
-        } else {
-            cues.forEach(pending::addLast)
-        }
+        pending.addLast(track.captionScreen(subtitle.texts, subtitle.startMicros ?: pts.micros))
         return true
     }
 
@@ -68,3 +62,12 @@ internal class InVideoCaptionDecoder(
         decoder.close()
     }
 }
+
+/**
+ * The screen a real-time caption answer stands for (#236, #542): its last event, because one answer
+ * holds each change a packet made in turn and the last is the screen as it stands, shown from
+ * [startMicros] until the next answer, or an empty cue that clears the screen.
+ */
+internal fun AssTrackParser.captionScreen(texts: List<String>, startMicros: Long): SubtitleCue =
+    texts.lastOrNull()?.let { parseEvent(it, startMicros, SubtitleCue.OPEN_END) }
+        ?: SubtitleCue.Text(startMicros, SubtitleCue.OPEN_END, emptyList())

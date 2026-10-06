@@ -49,12 +49,18 @@ internal class KiteFFmpegCaptionDecoderFactory(
 /**
  * One caption track. FFmpeg's decoder answers with ASS events, `{\an7}HELLO` and the like, each
  * with a start and a duration, so every event goes through the same ASS event parser as an
- * embedded ASS track. The caption decoder emits a caption when the screen next changes, which is
- * when its end is known, so the last one comes out of the drain at the end of the stream.
+ * embedded ASS track.
+ *
+ * A CEA-608 track, [realTime], answers as the captions inside a video do (#542): each answer is the
+ * screen from the packet that changed it until the next, as mpv shows every caption stream, because
+ * buffered the decoder gives a caption only once it leaves the screen, and the reads run too little
+ * ahead for it to be seen. The other formats give each event with its start and its duration, and a
+ * buffered decoder's last one comes out of the drain at the end of the stream (#480).
  */
 internal class KiteFFmpegCaptionDecoder(
     private val decoder: io.github.yuroyami.kiteffmpeg.SubtitleDecoder,
     private val mapper: TimestampMapper,
+    private val realTime: Boolean = false,
 ) : SubtitleDecoder {
 
     /** The caption decoder writes its own ASS header, so an empty one gives its default style. */
@@ -64,6 +70,8 @@ internal class KiteFFmpegCaptionDecoder(
 
     override suspend fun send(packet: PlayerPacket?): Boolean {
         check(!closed) { "the caption decoder is closed" }
+        // In real time the screen holds until its next answer, so the end has nothing to give.
+        if (realTime && packet == null) return true
         // A damaged packet costs its own caption and nothing more. The null packet at the end of
         // the stream drains the caption still on screen, which no packet completes (#480).
         val subtitle = try {
@@ -72,6 +80,10 @@ internal class KiteFFmpegCaptionDecoder(
             null
         } ?: return true
         val start = mapper.mapTimestamp(subtitle.startMicros)?.micros ?: packet?.pts?.micros ?: return true
+        if (realTime) {
+            pending.addLast(track.captionScreen(subtitle.texts, start))
+            return true
+        }
         val end = mapper.mapTimestamp(subtitle.endMicros)?.micros?.takeIf { it > start } ?: SubtitleCue.OPEN_END
         subtitle.texts.forEach { event -> track.parseEvent(event, start, end)?.let(pending::addLast) }
         return true

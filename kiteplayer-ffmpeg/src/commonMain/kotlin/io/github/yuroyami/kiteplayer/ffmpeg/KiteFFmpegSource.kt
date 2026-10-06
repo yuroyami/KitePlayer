@@ -657,7 +657,10 @@ public class KiteFFmpegSource internal constructor(
 
     /** A decoder for the caption stream [stream], such as a MOV `c608` track. */
     internal fun newCaptionDecoder(stream: PlayerStreamInfo): io.github.yuroyami.kiteplayer.spi.SubtitleDecoder =
-        KiteFFmpegCaptionDecoder(decoder = source.openSubtitleDecoder(kiteStream(stream.index)), mapper = mapper)
+        // CEA-608 captions show as they are sent (#542); the other formats carry their own times.
+        (stream.codec == "eia_608").let { realTime ->
+            KiteFFmpegCaptionDecoder(decoder = source.openSubtitleDecoder(kiteStream(stream.index), realTime), mapper = mapper, realTime = realTime)
+        }
 
     /** Video decoders for this source. The factory applies the caller's platform policy at open. */
     public fun videoDecoderFactories(): List<VideoDecoderFactory> =

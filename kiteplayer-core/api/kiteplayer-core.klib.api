@@ -818,6 +818,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/
         open fun <get-realTime>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.realTime.<get-realTime>|<get-realTime>(){}[0]
     open val selectedVariant // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectedVariant|{}selectedVariant[0]
         open fun <get-selectedVariant>(): kotlin/Int? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectedVariant.<get-selectedVariant>|<get-selectedVariant>(){}[0]
+    open val separateAudioRenditions // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.separateAudioRenditions|{}separateAudioRenditions[0]
+        open fun <get-separateAudioRenditions>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.separateAudioRenditions.<get-separateAudioRenditions>|<get-separateAudioRenditions>(){}[0]
     open val streamDivergences // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.streamDivergences|{}streamDivergences[0]
         open fun <get-streamDivergences>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/StreamDivergence> // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.streamDivergences.<get-streamDivergences>|<get-streamDivergences>(){}[0]
     open val variants // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.variants|{}variants[0]

@@ -116,6 +116,19 @@ public interface PlayerMediaSource : AutoCloseable {
     public val realTime: Boolean get() = false
 
     /**
+     * True when each alternate sound arrives by a download of its own, as an HLS or a DASH audio
+     * rendition does (#455), rather than in the same bytes as the picture, as every track of a file
+     * does. Reading such a sound costs bandwidth whether anyone hears it or not, so the engine then
+     * reads only the sound being heard. A switch to another one reads it from the moment playing,
+     * by a seek of the reads that keeps what the other streams already hold when the source can
+     * seek, and the sound being heard goes on until the new one covers that moment.
+     *
+     * False, the default, keeps every sound read into a cache, which is what makes a switch on a
+     * file instant.
+     */
+    public val separateAudioRenditions: Boolean get() = false
+
+    /**
      * Tells the sender of a [realTime] stream that the player has stopped reading because it is
      * paused (#441), and says whether the source has any notion of that: true when it has and is
      * now paused, false when it has none, in which case nothing was sent and the source reads on.

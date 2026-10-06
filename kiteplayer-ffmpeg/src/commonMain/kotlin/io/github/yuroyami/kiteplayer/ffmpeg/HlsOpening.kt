@@ -61,8 +61,10 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
     val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant, item.demux.fit)
     val playlist = master?.playlist ?: text
     val ledger = HlsLedger(item.uri)
+    // The kept variant's backups stand in for it when an address fails (#440).
+    val failover = HlsFailover(master?.backups.orEmpty(), base)
     val opener = if (io.location != null && nestedOpensSupported) {
-        MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger) }
+        MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger, failover) }
     } else {
         null
     }
@@ -86,10 +88,10 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
  * addresses against it after it has put in the playlist's variables, exactly as it does after a
  * redirect its own `http` follows. The playlist reaches FFmpeg as the server sent it.
  */
-private fun openRelatedBridge(io: MediaIo, address: String, lifetime: Job, ledger: HlsLedger): MediaByteSource? =
+private fun openRelatedBridge(io: MediaIo, address: String, lifetime: Job, ledger: HlsLedger, failover: HlsFailover): MediaByteSource? =
     blockingIn(lifetime) {
         val related = try {
-            io.openRelated(address)
+            if (failover.isEmpty) io.openRelated(address) else failover.open(address) { target -> io.openRelated(target) }
         } catch (failure: Throwable) {
             if (failure is CancellationException) throw failure
             ledger.failed(address, failure.message ?: failure.toString())

@@ -160,9 +160,51 @@ internal fun chooseHlsVariant(
 
 /**
  * A master playlist with one variant kept: the playlist FFmpeg reads, every variant it offered in
- * playlist order, and the place of the kept one in that list.
+ * playlist order, the place of the kept one in that list, and the [backups] of what it kept.
  */
-internal class HlsMaster(val playlist: String, val variants: List<HlsVariant>, val chosen: Int)
+internal class HlsMaster(
+    val playlist: String,
+    val variants: List<HlsVariant>,
+    val chosen: Int,
+    val backups: List<HlsBackup> = emptyList(),
+)
+
+/**
+ * A playlist the kept master names, by its address as written, and the playlists of its backup
+ * variants that stand in for it, in the master's order (#440).
+ */
+internal class HlsBackup(val primary: String, val alternatives: List<String>)
+
+/**
+ * The backups of [chosen] among [variants] (#440): the variants that RFC 8216 calls redundant,
+ * every attribute the same but the address. The rendition groups they name may
+ * differ, as a backup on another network names its own, and each rendition of [chosen]'s groups
+ * then has for backup the rendition of the same type, language and name in theirs. Content
+ * steering's `PATHWAY-ID` names the network, so it differs between backups too.
+ */
+private fun backupsOf(chosen: HlsVariant, variants: List<HlsVariant>, lines: List<String>): List<HlsBackup> {
+    val groupTypes = listOf("AUDIO", "VIDEO", "SUBTITLES")
+    val ignored = groupTypes.toSet() + "CLOSED-CAPTIONS" + "PATHWAY-ID"
+    fun identity(variant: HlsVariant) = variant.attributes.filterKeys { it !in ignored }
+    val backups = variants.filter { it !== chosen && identity(it) == identity(chosen) && lines[it.uriLine].trim() != lines[chosen.uriLine].trim() }
+    if (backups.isEmpty()) return emptyList()
+    val out = mutableListOf(HlsBackup(lines[chosen.uriLine].trim(), backups.map { lines[it.uriLine].trim() }))
+    val renditions = lines.filter { it.startsWith("#EXT-X-MEDIA:") }.map { parseHlsAttributes(it.substringAfter(':')) }
+    for (type in groupTypes) {
+        val group = chosen.attributes[type] ?: continue
+        for (rendition in renditions.filter { it["TYPE"] == type && it["GROUP-ID"] == group }) {
+            val uri = rendition["URI"] ?: continue
+            val alternatives = backups.mapNotNull { backup ->
+                val theirs = backup.attributes[type]?.takeIf { it != group } ?: return@mapNotNull null
+                renditions.firstOrNull {
+                    it["TYPE"] == type && it["GROUP-ID"] == theirs && it["LANGUAGE"] == rendition["LANGUAGE"] && it["NAME"] == rendition["NAME"]
+                }?.get("URI")
+            }.distinct()
+            if (alternatives.isNotEmpty()) out += HlsBackup(uri, alternatives)
+        }
+    }
+    return out
+}
 
 /**
  * [text] with only the chosen variant left, or null when [text] is not a master playlist. The
@@ -174,7 +216,8 @@ internal class HlsMaster(val playlist: String, val variants: List<HlsVariant>, v
  * the media. This keeps the header tags, the chosen `EXT-X-STREAM-INF` tag and its address, and
  * the `EXT-X-MEDIA` renditions of the groups that the chosen variant names. It drops the other
  * variants, every `EXT-X-I-FRAME-STREAM-INF` tag, and the renditions of other groups. Relative
- * addresses stay as they are, so the playlist must be read against its own address.
+ * addresses stay as they are, so the playlist must be read against its own address. The chosen
+ * variant's backups are kept apart, in [HlsMaster.backups], for the opener to fail over to (#440).
  */
 internal fun keepOneHlsVariant(
     text: String,
@@ -221,5 +264,10 @@ internal fun keepOneHlsVariant(
             }
         }
     }
-    return HlsMaster(lines.filterIndexed { at, _ -> at !in dropped }.joinToString("\n"), variants, variants.indexOf(chosen))
+    return HlsMaster(
+        lines.filterIndexed { at, _ -> at !in dropped }.joinToString("\n"),
+        variants,
+        variants.indexOf(chosen),
+        backupsOf(chosen, variants, lines),
+    )
 }

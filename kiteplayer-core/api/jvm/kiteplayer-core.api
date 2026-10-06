@@ -642,6 +642,8 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun next (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun nextChapter (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun open (Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun openPlaylist (Ljava/lang/String;ILjava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun openPlaylist$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Ljava/lang/String;ILjava/util/Map;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun openQueue (Ljava/util/List;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun openQueue$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Ljava/util/List;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun pause ()V
@@ -649,6 +651,8 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun position-UwyO8pc ()J
 	public final fun previous (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun previousChapter (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun readPlaylist (Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun readPlaylist$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun redrawPicture ()V
 	public final fun reloadExternalSubtitle-EKZIWLs (ILjava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun reloadExternalSubtitle-EKZIWLs$default (Lio/github/yuroyami/kiteplayer/KitePlayer;ILjava/lang/String;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
@@ -2241,6 +2245,16 @@ public final class io/github/yuroyami/kiteplayer/PlayerSnapshot {
 	public final fun getVolume ()F
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/PlaylistException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun getUri ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/Playlists {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/Playlists;
+	public final fun parse (Ljava/lang/String;Ljava/lang/String;)Ljava/util/List;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/ProbeDepth {

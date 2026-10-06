@@ -1872,6 +1872,10 @@ internal class PlaybackCore(
         }
     }
 
+    /** See [io.github.yuroyami.kiteplayer.KitePlayer.readPlaylist]. */
+    suspend fun readPlaylist(uri: String, headers: Map<String, String>): List<MediaItem> =
+        throw io.github.yuroyami.kiteplayer.PlaylistException("playlists are not read yet", uri)
+
     suspend fun reloadExternalSubtitle(track: TrackId, encoding: String?) {
         val reply = CompletableDeferred<Unit>()
         send(CoreCommand.ReloadExternalSubtitle(track, encoding, reply))

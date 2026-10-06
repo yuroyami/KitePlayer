@@ -2856,9 +2856,11 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final suspend fun next() // io.github.yuroyami.kiteplayer/KitePlayer.next|next(){}[0]
     final suspend fun nextChapter() // io.github.yuroyami.kiteplayer/KitePlayer.nextChapter|nextChapter(){}[0]
     final suspend fun open(io.github.yuroyami.kiteplayer/MediaItem) // io.github.yuroyami.kiteplayer/KitePlayer.open|open(io.github.yuroyami.kiteplayer.MediaItem){}[0]
+    final suspend fun openPlaylist(kotlin/String, kotlin/Int = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // io.github.yuroyami.kiteplayer/KitePlayer.openPlaylist|openPlaylist(kotlin.String;kotlin.Int;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
     final suspend fun openQueue(kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem>, kotlin/Int = ...) // io.github.yuroyami.kiteplayer/KitePlayer.openQueue|openQueue(kotlin.collections.List<io.github.yuroyami.kiteplayer.MediaItem>;kotlin.Int){}[0]
     final suspend fun previous() // io.github.yuroyami.kiteplayer/KitePlayer.previous|previous(){}[0]
     final suspend fun previousChapter() // io.github.yuroyami.kiteplayer/KitePlayer.previousChapter|previousChapter(){}[0]
+    final suspend fun readPlaylist(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ...): kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem> // io.github.yuroyami.kiteplayer/KitePlayer.readPlaylist|readPlaylist(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
     final suspend fun reloadExternalSubtitle(io.github.yuroyami.kiteplayer/TrackId, kotlin/String? = ...) // io.github.yuroyami.kiteplayer/KitePlayer.reloadExternalSubtitle|reloadExternalSubtitle(io.github.yuroyami.kiteplayer.TrackId;kotlin.String?){}[0]
     final suspend fun removeFromQueue(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayer.removeFromQueue|removeFromQueue(kotlin.Int){}[0]
     final suspend fun restore(io.github.yuroyami.kiteplayer/PlayerMemento) // io.github.yuroyami.kiteplayer/KitePlayer.restore|restore(io.github.yuroyami.kiteplayer.PlayerMemento){}[0]
@@ -3656,6 +3658,13 @@ final class io.github.yuroyami.kiteplayer/PlayerSnapshot { // io.github.yuroyami
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerSnapshot.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerSnapshot.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerSnapshot.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer/PlaylistException : kotlin/Exception { // io.github.yuroyami.kiteplayer/PlaylistException|null[0]
+    constructor <init>(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/PlaylistException.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+    final val uri // io.github.yuroyami.kiteplayer/PlaylistException.uri|{}uri[0]
+        final fun <get-uri>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaylistException.uri.<get-uri>|<get-uri>(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer/Progress { // io.github.yuroyami.kiteplayer/Progress|null[0]
@@ -5222,6 +5231,10 @@ final object io.github.yuroyami.kiteplayer/KiteTrace { // io.github.yuroyami.kit
         abstract fun instant(kotlin/String, kotlin/String, kotlin/Long, kotlin.collections/Map<kotlin/String, kotlin/String>) // io.github.yuroyami.kiteplayer/KiteTrace.Sink.instant|instant(kotlin.String;kotlin.String;kotlin.Long;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
         abstract fun span(kotlin/String, kotlin/String, kotlin/Long, kotlin/Long, kotlin.collections/Map<kotlin/String, kotlin/String>) // io.github.yuroyami.kiteplayer/KiteTrace.Sink.span|span(kotlin.String;kotlin.String;kotlin.Long;kotlin.Long;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
     }
+}
+
+final object io.github.yuroyami.kiteplayer/Playlists { // io.github.yuroyami.kiteplayer/Playlists|null[0]
+    final fun parse(kotlin/String, kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem>? // io.github.yuroyami.kiteplayer/Playlists.parse|parse(kotlin.String;kotlin.String){}[0]
 }
 
 final val io.github.yuroyami.kiteplayer.spi/toneMapPeakNits // io.github.yuroyami.kiteplayer.spi/toneMapPeakNits|@io.github.yuroyami.kiteplayer.spi.VideoFrame{}toneMapPeakNits[0]

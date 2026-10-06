@@ -827,6 +827,32 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * The items of the playlist file at [uri], for [openQueue] once the application has filtered or
+     * ordered them (#490). See [Playlists] for what is read.
+     *
+     * The bytes come through the same doors as an external subtitle's: an http or https address
+     * through the network resolver, with [headers], and a path from disk. Their encoding is decided
+     * from the bytes as a subtitle file's is, so a list another player wrote in a legacy code page
+     * keeps its titles. A list it names is read in its place, one level deep, and the items it names
+     * from the playlist's own server carry [headers] too.
+     *
+     * @throws PlaylistException when the list cannot be read, is no playlist, names nothing, or
+     *         names itself.
+     */
+    @Throws(Exception::class)
+    public suspend fun readPlaylist(uri: String, headers: Map<String, String> = emptyMap()): List<MediaItem> =
+        core.readPlaylist(uri, headers)
+
+    /**
+     * Opens the playlist file at [uri] as the queue, starting at [startIndex]: [readPlaylist] and
+     * then [openQueue], with what each throws.
+     */
+    @Throws(Exception::class)
+    public suspend fun openPlaylist(uri: String, startIndex: Int = 0, headers: Map<String, String> = emptyMap()) {
+        openQueue(readPlaylist(uri, headers), startIndex)
+    }
+
+    /**
      * Opens the next queue item, keeping the play or pause intent.
      *
      * @throws IllegalStateException with no queue, or at the last item unless [LoopMode.All]

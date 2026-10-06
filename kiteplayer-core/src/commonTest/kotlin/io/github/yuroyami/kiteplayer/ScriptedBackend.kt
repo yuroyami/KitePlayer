@@ -74,6 +74,8 @@ internal data class ScriptedAudioTrack(
      * its packets start there.
      */
     val appearsAtUs: Long? = null,
+    /** A multiplier per channel, so a test can tell the sides apart (#462). Null is 1 on every one. */
+    val channelMarkers: List<Float>? = null,
 ) {
     fun format(defaultSampleRate: Int, defaultChannels: Int): AudioFormat = AudioFormat(
         sampleRate = sampleRate ?: defaultSampleRate,
@@ -215,6 +217,8 @@ internal class MediaScript(
     val recordable: Boolean = false,
     /** The first audio stream's own tags. */
     val audioMetadata: Map<String, String> = emptyMap(),
+    /** The default audio track's multiplier per channel, so a test can tell the sides apart (#462). */
+    val audioChannelMarkers: List<Float>? = null,
     /** The variants the source offers, as an HLS master playlist would. The item's choice picks one. */
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
     /** A read delay for one variant, in place of [readDelayUs]: a link too slow for that variant. */
@@ -310,6 +314,7 @@ internal class MediaScript(
                     channels = channels,
                     isDefault = true,
                     metadata = audioMetadata,
+                    channelMarkers = audioChannelMarkers,
                 ),
             )
         }
@@ -1534,6 +1539,7 @@ internal class ScriptedAudioDecoder(
                 generation = generation,
                 trackMarker = track.marker,
                 ledger = ledger,
+                channelMarkers = track.channelMarkers,
             ),
         )
         return true
@@ -1586,6 +1592,7 @@ internal class ScriptedAudioBuffer(
     override val generation: Generation,
     private val trackMarker: Float = 1f,
     private val ledger: LeakLedger? = null,
+    private val channelMarkers: List<Float>? = null,
 ) : AudioBuffer {
 
     private var isClosed = false
@@ -1596,7 +1603,8 @@ internal class ScriptedAudioBuffer(
     }
 
     override fun copyChannel(channel: Int, into: FloatArray, offset: Int) {
-        for (i in 0 until frameCount) into[offset + i] = value
+        val sample = value * (channelMarkers?.getOrNull(channel) ?: 1f)
+        for (i in 0 until frameCount) into[offset + i] = sample
     }
 
     override fun close() {

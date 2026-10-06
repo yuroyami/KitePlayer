@@ -438,6 +438,7 @@ class MementoTest {
             ),
             hdrPolicy = HdrPolicy.ToneMap,
             videoEnabled = false,
+            stereoMode = StereoMode.RightOnly,
         )
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
     }

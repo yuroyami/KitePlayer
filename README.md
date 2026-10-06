@@ -131,6 +131,8 @@ video decoder.
   gap.
 - A ten band equaliser with a preamp, balance, ReplayGain, volume up to twice the normal level
   through a limiter, audio delay, and a sleep timer that fades out.
+- A stereo mode: mono, left only, right only or swapped, after the downmix, with no click on a
+  change ([#462](https://github.com/yuroyami/KitePlayer/issues/462)).
 - Surround folds into the speakers the device has, and mono or stereo can fill a surround device.
 - A choice of output device on macOS and the desktop JVM.
 - Waveforms, and an optional audio visualiser for media with no picture.
@@ -549,7 +551,7 @@ can read it back.
 | **Shuffle** | `setShuffle`. The items never move. `queueOrder` tells you what plays next. `QueueConfig.reshuffleEachLap` draws a new order on each lap under `LoopMode.All` |
 | **Speed** | `setSpeed`, 0.25x to 4x with the pitch kept. `setPreservePitch(false)` lets the pitch change like a tape |
 | **Sync** | `setExternalClock` makes playback follow a clock your app owns, for watching together. A small difference closes through a speed change of at most 0.5 percent with the pitch kept, and a jump is one seek. Play and pause stay with your commands |
-| **Sound** | `setVolume`, `setMuted`, `setBalance`, `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), `setVideoEnabled(false)` for audio only |
+| **Sound** | `setVolume`, `setMuted`, `setBalance`, `setStereoMode` (mono, one side only, or swapped), `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), `setVideoEnabled(false)` for audio only |
 | **Loudness** | `PlayerConfig.audio.volumeCeiling` allows volume up to 2.0 through a limiter. `PlayerConfig.audio.replayGain` applies the file's own ReplayGain tags, off by default |
 | **Surround** | Multichannel audio folds into the speakers the device has. `PlayerConfig.audio.upmix = UpmixMode.Surround` also plays mono and stereo from the other speakers of a surround device, off by default |
 | **Picture** | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan) |

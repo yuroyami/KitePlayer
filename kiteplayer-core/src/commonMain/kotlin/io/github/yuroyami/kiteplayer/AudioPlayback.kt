@@ -500,6 +500,9 @@ public class AudioPlayback(
         // trim has to survive that without the rebuild knowing. Idempotent and a handful of
         // floats, so the common case costs a compare.
         applyTrim(stage)
+        // Reasserted per buffer like the trim: a rebuilt pipeline's fresh stage takes the mode at
+        // once, and a running one ramps to a change.
+        stage.stereo.set(wantedStereoMode.value)
         // Reasserted per buffer like the trim and for the same reason: a pipeline rebuilt for a
         // format change starts flat, and a flat stage is skipped, so the cost when nothing is set
         // is one reference compare.

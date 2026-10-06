@@ -279,6 +279,9 @@ internal class AudioPipeline(
          * with no ReplayGain tags pays nothing for the feature. In place: `result` is either our own
          * scratch or, in the all-bypass case, the caller's input, and the caller hands that buffer
          * over for the duration of the call. */
+        // The stereo mode first, so the balance and the equaliser act on the sides the listener
+        // hears (#462). Skipped in stereo, so it costs an ordinary file nothing.
+        stereo.apply(result, produced)
         // Before the trim, so ReplayGain and balance scale what the equaliser produced rather than
         // the equaliser amplifying a level the trim already set.
         equalizer.apply(result, produced)
@@ -295,6 +298,12 @@ internal class AudioPipeline(
      * container's tags have been read and the peak clamp resolved against the volume ceiling.
      */
     val trim: TrimStage = TrimStage(targetFormat.channels)
+
+    /**
+     * What the two front speakers play (#462), on the device's channels, after the downmix. Ramped
+     * over 10 ms on a change, so it never clicks.
+     */
+    val stereo: StereoStage = StereoStage(targetFormat.channels, rampFrames = targetFormat.sampleRate / 100)
 
     /**
      * The ten-band equaliser, at the device's own rate because that is what its coefficients are
@@ -351,7 +360,8 @@ internal class AudioPipeline(
         }
 
         if (total <= 0) return 0
-        // The same last two stages as process, in the same order (#257).
+        // The same last three stages as process, in the same order (#257, #462).
+        stereo.apply(finished, total)
         equalizer.apply(finished, total)
         trim.apply(finished, total)
         output = finished

@@ -219,7 +219,7 @@ final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.
 
 // Targets: [wasmJs]
 final class io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory : io.github.yuroyami.kiteplayer.spi/VideoRendererFactory { // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory|null[0]
-    constructor <init>(kotlin.js/JsAny) // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.<init>|<init>(kotlin.js.JsAny){}[0]
+    constructor <init>(kotlin.js/JsAny, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.<init>|<init>(kotlin.js.JsAny;kotlin.Boolean){}[0]
 
     final val name // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.name|{}name[0]
         final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.name.<get-name>|<get-name>(){}[0]
@@ -303,7 +303,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final suspend fun warningHistory(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TimedWarning> // io.github.yuroyami.kiteplayer/KitePlayerWorker.warningHistory|warningHistory(){}[0]
 
     final object Companion { // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion|null[0]
-        final suspend fun start(kotlin.js/JsAny?, kotlin/String = ..., kotlin/String = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/KitePlayerWorker // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion.start|start(kotlin.js.JsAny?;kotlin.String;kotlin.String;kotlin.String?){}[0]
+        final suspend fun start(kotlin.js/JsAny?, kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/KitePlayerWorker // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion.start|start(kotlin.js.JsAny?;kotlin.String;kotlin.String;kotlin.String?;kotlin.Boolean){}[0]
     }
 }
 

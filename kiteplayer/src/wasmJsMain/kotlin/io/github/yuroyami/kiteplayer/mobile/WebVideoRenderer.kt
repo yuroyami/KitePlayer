@@ -27,10 +27,15 @@ import kotlin.js.JsAny
  * because on the web a `ByteArray` of pixels is the twenty-times-slower path.
  *
  * @param canvas the `HTMLCanvasElement` or `OffscreenCanvas` to draw into.
+ * @param keepDisplayAwake whether the page's screen stays awake while pictures are drawn, and for
+ *        two seconds after the last one (#238). See `WebCanvasVideoRenderer`.
  */
-public class WebCanvasRendererFactory(private val canvas: JsAny) : VideoRendererFactory {
+public class WebCanvasRendererFactory(
+    private val canvas: JsAny,
+    private val keepDisplayAwake: Boolean = true,
+) : VideoRendererFactory {
     override val name: String = "web-canvas-kiteffmpeg"
-    override suspend fun create(): VideoRenderer = KiteFFmpegWebCanvasRenderer(canvas)
+    override suspend fun create(): VideoRenderer = KiteFFmpegWebCanvasRenderer(canvas, keepDisplayAwake)
 }
 
 /**
@@ -66,11 +71,11 @@ private class KiteFFmpegWebCanvasRenderer private constructor(
     private val delegate: WebCanvasVideoRenderer,
 ) : VideoRenderer by delegate {
 
-    constructor(canvas: JsAny) : this(canvas, LimitReportingPainter())
+    constructor(canvas: JsAny, keepDisplayAwake: Boolean) : this(canvas, LimitReportingPainter(), keepDisplayAwake)
 
-    private constructor(canvas: JsAny, painter: LimitReportingPainter) : this(
+    private constructor(canvas: JsAny, painter: LimitReportingPainter, keepDisplayAwake: Boolean) : this(
         painter,
-        WebCanvasVideoRenderer(canvas = canvas, painter = WebFramePainter(painter::paint)),
+        WebCanvasVideoRenderer(canvas = canvas, painter = WebFramePainter(painter::paint), keepDisplayAwake = keepDisplayAwake),
     )
 
     override fun close() {

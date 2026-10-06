@@ -1,7 +1,8 @@
-@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class, KitePlayerLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.output.WebDisplayAwake
 import io.github.yuroyami.kiteplayer.output.WebWorkletAudio
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride
@@ -70,7 +71,20 @@ public class KitePlayerWorker private constructor(
     private val worker: JsAny,
     private val audio: WebWorkletAudio?,
     private val canvas: JsAny?,
+    private val keepDisplayAwake: Boolean,
 ) : AutoCloseable {
+
+    /** True while this page holds its screen awake for the worker's picture (#238). */
+    private var holdingDisplay = false
+
+    /** Holds the page's screen awake while the worker draws a playing picture on its canvas (#238). */
+    private fun holdDisplay(snapshot: PlayerSnapshot?) {
+        val wanted = keepDisplayAwake && canvas != null && dead == null && !closed &&
+            snapshot != null && snapshot.status == PlaybackStatus.Playing && snapshot.videoSize != null
+        if (wanted == holdingDisplay) return
+        holdingDisplay = wanted
+        WebDisplayAwake.setHeld(wanted)
+    }
 
     private val stateFlow = MutableStateFlow(PlayerSnapshot())
     private val progressFlow = MutableStateFlow(Progress())
@@ -465,8 +479,11 @@ public class KitePlayerWorker private constructor(
                 if (failure == null) reply.complete(message.answer) else reply.completeExceptionally(failure.toException())
                 if (message.id == closeId) finish()
             }
-            is WorkerMessage.State -> stateFlow.value = message.snapshot.let { snapshot ->
-                snapshot.copy(media = snapshot.media?.let(::own), queue = snapshot.queue.map(::own))
+            is WorkerMessage.State -> {
+                stateFlow.value = message.snapshot.let { snapshot ->
+                    snapshot.copy(media = snapshot.media?.let(::own), queue = snapshot.queue.map(::own))
+                }
+                holdDisplay(message.snapshot)
             }
             is WorkerMessage.Progressed -> progressFlow.value = message.progress
             is WorkerMessage.Stats -> statsFlow.value = message.stats
@@ -489,6 +506,7 @@ public class KitePlayerWorker private constructor(
         if (dead != null) return
         val error = PlaybackError.Internal("the player's worker stopped: $detail")
         dead = error
+        holdDisplay(null)
         started?.completeExceptionally(PlaybackException(error))
         val closing = closeId?.let { pending.remove(it) }
         val waiting = pending.values.toList()
@@ -506,6 +524,7 @@ public class KitePlayerWorker private constructor(
 
     /** Ends the worker and the page's audio once the close is answered, or the worker is gone. */
     private fun finish() {
+        holdDisplay(null)
         workerTerminate(worker)
         audio?.close()
         closeId?.let { pending.remove(it) }?.complete(null)
@@ -526,6 +545,8 @@ public class KitePlayerWorker private constructor(
          *        starts loading it at once and does not wait for it: an ASS track that opens first is
          *        kept until it lands. Without the module, ASS draws with the built-in styling. Null
          *        loads nothing now, and the first ASS track then looks beside the worker binary.
+         * @param keepDisplayAwake whether the page's screen stays awake while the worker plays a
+         *        picture on [canvas] (#238), which a canvas does not get from the browser by itself.
          * @throws PlaybackException with [PlaybackError.Internal] when the worker cannot load, or
          *         cannot load the codec module.
          */
@@ -534,6 +555,7 @@ public class KitePlayerWorker private constructor(
             workerUrl: String = "./kiteplayer-web-worker.mjs",
             codecUrl: String = "./kite.mjs",
             libassUrl: String? = "./kiteass.mjs",
+            keepDisplayAwake: Boolean = true,
         ): KitePlayerWorker {
             val audio = WebWorkletAudio.createOrNull()
             val offscreen = canvas?.let(::canvasTransfer)
@@ -562,7 +584,7 @@ public class KitePlayerWorker private constructor(
                 // The worker sets its listener once its code has loaded. A message sent before that
                 // is lost, so the first one waits for the worker to say it is listening.
                 hello.await()
-                val created = KitePlayerWorker(worker, audio, canvas)
+                val created = KitePlayerWorker(worker, audio, canvas, keepDisplayAwake)
                 val ready = CompletableDeferred<Unit>()
                 created.started = ready
                 player = created

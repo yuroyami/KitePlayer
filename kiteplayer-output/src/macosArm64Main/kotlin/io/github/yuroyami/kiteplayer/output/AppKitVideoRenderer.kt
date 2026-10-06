@@ -130,16 +130,22 @@ public class AppKitVideoRenderer internal constructor(
      * thread, through the main queue.
      *
      * @param convert converts a frame to tightly packed RGBA, one byte per component, no row padding.
+     * @param keepDisplayAwake whether the display stays awake while pictures are shown, and for two
+     *        seconds after the last one (#238), which a Mac otherwise lets sleep in the middle of a film.
      */
     public constructor(
         window: AppKitWindow,
         convert: (VideoFrame) -> ByteArray,
         toneMapped: (VideoFrame) -> Boolean = { false },
+        keepDisplayAwake: Boolean = true,
     ) : this(
         convert = convert,
         toneMapped = toneMapped,
         enqueueOnMain = { block -> dispatch_async(dispatch_get_main_queue()) { block() } },
-        showImage = { image -> window.imageView.image = image },
+        showImage = { image ->
+            window.imageView.image = image
+            if (keepDisplayAwake) MacDisplayAwake.framePresented()
+        },
     )
 
     private val presented = atomic(0L)

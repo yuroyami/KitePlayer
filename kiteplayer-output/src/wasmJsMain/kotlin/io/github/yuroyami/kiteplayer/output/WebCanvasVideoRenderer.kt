@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@file:OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class, kotlin.js.ExperimentalWasmJsInterop::class)
 
 package io.github.yuroyami.kiteplayer.output
 
@@ -66,10 +66,15 @@ public fun interface WebFramePainter {
  *
  * Not thread-safe, and on the web that is not a constraint: there are no threads. `present` is
  * already `suspend` and runs on the event loop with no worker, no dispatcher and no `runBlocking`.
+ *
+ * @param keepDisplayAwake whether the page's screen stays awake while pictures are drawn, and for
+ *        two seconds after the last one (#238), through [WebDisplayAwake]. In a worker it does
+ *        nothing, because a worker has no screen; the page's `KitePlayerWorker` holds it there.
  */
 public class WebCanvasVideoRenderer(
     canvas: JsAny,
     private val painter: WebFramePainter,
+    private val keepDisplayAwake: Boolean = true,
 ) : VideoRenderer {
 
     private val state: JsAny? = webRendererState(canvas)
@@ -172,6 +177,7 @@ public class WebCanvasVideoRenderer(
             drawOverlay(s)
             pictureCleared = false
             presentedFrames++
+            if (keepDisplayAwake) WebDisplayAwake.framePresented()
             return true
         }
     }
@@ -333,13 +339,14 @@ public class WebCanvasVideoRenderer(
     }
 }
 
-/** Builds [WebCanvasVideoRenderer]s for one canvas. */
+/** Builds [WebCanvasVideoRenderer]s for one canvas. See [WebCanvasVideoRenderer] for [keepDisplayAwake]. */
 public class WebCanvasVideoRendererFactory(
     private val canvas: JsAny,
     private val painter: WebFramePainter,
+    private val keepDisplayAwake: Boolean = true,
 ) : VideoRendererFactory {
     override val name: String = "web-canvas"
-    override suspend fun create(): VideoRenderer = WebCanvasVideoRenderer(canvas, painter)
+    override suspend fun create(): VideoRenderer = WebCanvasVideoRenderer(canvas, painter, keepDisplayAwake)
 }
 
 /* The JS half. Every call takes the state object, so nothing here holds a JS reference in Kotlin

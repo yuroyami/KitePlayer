@@ -418,6 +418,11 @@ A player from `KitePlayer()` gives the views their renderer. A player built with
 on backends of your own also needs `view.installMobileRenderer()`, or `installDesktopRenderer()` on
 the desktop, from `io.github.yuroyami.kiteplayer.mobile`.
 
+While a video plays on screen, the display stays awake: every view, `KitePlayerVideo`, the Mac's
+`AppKitVideoRenderer` and the web's canvas renderers hold it, and let it sleep at a pause, the end,
+or with sound only. Pass `keepDisplayAwake = false` to turn that off. The desktop JVM has no way to
+hold its display, so there it does nothing.
+
 </details>
 
 ### ❸ Open something

@@ -33,9 +33,11 @@ internal class OpenedItem(
     val realTimeScheme: Boolean = false,
     /** The title a list of streams gave the stream it opened, for an item that named the list (#450). */
     val listedTitle: String? = null,
+    /** The reader of a file still being written, which the source tells when to wait at its end (#430). */
+    val growing: GrowingMediaIo? = null,
 ) {
     fun withListedTitle(title: String?): OpenedItem =
-        OpenedItem(source, bridge, hls, variants, selectedVariant, realTimeScheme, title ?: listedTitle)
+        OpenedItem(source, bridge, hls, variants, selectedVariant, realTimeScheme, title ?: listedTitle, growing)
 }
 
 /**
@@ -123,7 +125,9 @@ internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
             } else {
                 null
             }
-            val bridge = BlockingMediaIo(hls?.playlist ?: io, lifetime)
+            // A file still being written is read on past its end while the source reads packets (#430).
+            val growing = if (hls == null) item.growth?.let { GrowingMediaIo(io, it.endsAfter) } else null
+            val bridge = BlockingMediaIo(hls?.playlist ?: growing ?: io, lifetime)
             val source = openCancellably({ cancel.interrupt(); bridge.interrupt() }) {
                 if (hls == null) {
                     MediaSource.open(bridge, options, cancel)
@@ -138,7 +142,7 @@ internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
                     )
                 }
             }
-            OpenedItem(source, bridge, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant)
+            OpenedItem(source, bridge, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant, growing = growing)
         }
         // No protocol reads the descriptor now, so no protocol is left to consume its key.
         descriptor != null ->

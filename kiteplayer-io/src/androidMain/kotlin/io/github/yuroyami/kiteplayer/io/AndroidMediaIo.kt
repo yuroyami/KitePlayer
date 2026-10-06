@@ -66,7 +66,9 @@ internal fun AssetFileDescriptor.toMediaIo(): MediaIo {
         // changed between Android versions, and this one reads at absolute positions on all of
         // them. It never closes the descriptor, so this AssetFileDescriptor stays the one owner.
         val opened = FileInputStream(fileDescriptor).channel.also { channel = it }
-        val length = if (declaredLength >= 0) declaredLength else opened.size() - startOffset
+        // A descriptor with no stated length reads the whole file as it stands, so one still being
+        // written reads on (#430).
+        val length = declaredLength.takeIf { it >= 0 }
         val owner = AutoCloseable {
             opened.close()
             close()

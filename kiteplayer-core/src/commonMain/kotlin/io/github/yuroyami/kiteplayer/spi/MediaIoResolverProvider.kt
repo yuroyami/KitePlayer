@@ -50,4 +50,9 @@ public object MediaIoProviders {
         discovered
         return registry.resolve(uri, headers)
     }
+
+    internal suspend fun resolveLocalFile(path: String): MediaIo? {
+        discovered
+        return registry.resolveLocalFile(path)
+    }
 }

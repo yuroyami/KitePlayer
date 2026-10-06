@@ -105,6 +105,9 @@ internal class CachingMediaIo(
     override fun takeTags(): Map<String, String>? = pendingTags.also { pendingTags = null }
 
     override suspend fun seek(position: Long) {
+        // A seek asks the source again, so a file that grew since its end was read is read on
+        // (#430). For one that did not grow that costs one more read that answers the end.
+        upstreamEof = false
         if (position in windowStart..windowEnd) {
             // Inside the window (its end included: the next read extends forward from there).
             // NO upstream traffic: this is the free seek-back the cache exists for.

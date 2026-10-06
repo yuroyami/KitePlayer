@@ -86,7 +86,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         // documented SPI door behaved differently from the backend door for the same MediaItem.
         val source = typingOpenFailures(media) {
             openItem(media).let {
-                KiteFFmpegSource(it.source, it.bridge, it.hls, it.variants, it.selectedVariant, it.realTimeScheme, it.listedTitle)
+                KiteFFmpegSource(it.source, it.bridge, it.hls, it.variants, it.selectedVariant, it.realTimeScheme, it.listedTitle, it.growing)
             }
         }
         source.attachItemFilters(media)
@@ -125,6 +125,8 @@ public class KiteFFmpegSource internal constructor(
     realTimeScheme: Boolean = false,
     /** The title the list of streams the item named gave this stream (#450). */
     private val listedTitle: String? = null,
+    /** The reader of a file still being written, when the item is one (#430). */
+    private val growing: GrowingMediaIo? = null,
 ) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null
@@ -197,11 +199,25 @@ public class KiteFFmpegSource internal constructor(
      */
     override val programs: List<MediaProgram> get() = layout.programs
 
-    /** The length of the content, which is an interval and so carries no origin. */
-    override val duration: Pts? = mapper.mapDuration(source.durationMicros)
+    /** The length at the open, which is an interval and so carries no origin. */
+    private val openDuration: Pts? = mapper.mapDuration(source.durationMicros)
 
-    // FFmpeg's guess from the bit rate, for an input that states no length, can be minutes out (#422).
-    override val durationIsEstimate: Boolean = source.durationOrigin == io.github.yuroyami.kiteffmpeg.DurationOrigin.Bitrate
+    /**
+     * The length of the content. A file still being written grows (#430), so its length is the
+     * open's, scaled by how much the file has grown since, which is the open's own bit rate.
+     */
+    override val duration: Pts? get() {
+        val atOpen = openDuration ?: return null
+        val growing = growing ?: return atOpen
+        val from = growing.sizeAtOpen?.takeIf { it > 0 } ?: return atOpen
+        val now = growing.size?.takeIf { it > from } ?: return atOpen
+        return Pts((atOpen.micros.toDouble() * now / from).toLong())
+    }
+
+    // FFmpeg's guess from the bit rate, for an input that states no length, can be minutes out
+    // (#422). The length of a file still being written is one until it ends (#430).
+    override val durationIsEstimate: Boolean =
+        growing != null || source.durationOrigin == io.github.yuroyami.kiteffmpeg.DurationOrigin.Bitrate
 
     /**
      * Read from the input, never assumed. False for a pipe or a capture device, and a player that
@@ -373,7 +389,14 @@ public class KiteFFmpegSource internal constructor(
     override suspend fun readPacket(): PlayerPacket? {
         val reader = reader ?: error("selectStreams must be called before readPacket")
         copies.removeFirstOrNull()?.let { return it }
-        val packet = reader.read() ?: run {
+        // Only a packet read waits at the end of a file still being written (#430).
+        growing?.waitAtEnd = true
+        val read = try {
+            reader.read()
+        } finally {
+            growing?.waitAtEnd = false
+        }
+        val packet = read ?: run {
             // FFmpeg skips what it cannot read, so a stream whose server stopped answering ends here too.
             hls?.failureAtEnd()?.let { throw it }
             return null

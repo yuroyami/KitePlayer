@@ -32,21 +32,23 @@ public fun MediaIo.Companion.ofChannel(channel: FileChannel): MediaIoFactory = M
 }
 
 /**
- * Positional reads over the [length] bytes that start at [start] in [channel]. The size is fixed
- * when the reader opens. Closing the reader closes [owner], which is null when the caller owns the
- * channel.
+ * Positional reads over the [length] bytes that start at [start] in [channel], or, with no
+ * [length], over the whole channel from [start] as it stands at each call, so a file that is still
+ * being written reads on as it grows and says how large it is now (#430), as FFmpeg's own file
+ * reader does. A window's size is fixed. Closing the reader closes [owner], which is null when the
+ * caller owns the channel.
  */
 internal class FileChannelMediaIo(
     private val channel: FileChannel,
     private val owner: AutoCloseable?,
     private val start: Long = 0,
-    length: Long = channel.size() - start,
+    private val length: Long? = null,
 ) : MediaIo {
     init {
-        require(start >= 0 && length >= 0) { "The window at $start of $length bytes is not valid" }
+        require(start >= 0 && (length == null || length >= 0)) { "The window at $start of $length bytes is not valid" }
     }
 
-    override val size: Long = length
+    override val size: Long get() = length ?: (channel.size() - start).coerceAtLeast(0L)
     override val seekable: Boolean get() = true
 
     private var position = 0L
@@ -58,6 +60,7 @@ internal class FileChannelMediaIo(
         check(!closed) { "MediaIo is closed" }
         requireReadSlice(into, offset, length)
         if (length == 0) return 0
+        val size = size
         if (position >= size) return -1
         val want = minOf(length.toLong(), size - position).toInt()
         val count = channel.read(ByteBuffer.wrap(into, offset, want), start + position)
@@ -68,6 +71,7 @@ internal class FileChannelMediaIo(
 
     override suspend fun seek(position: Long) {
         check(!closed) { "MediaIo is closed" }
+        val size = size
         require(position in 0L..size) { "Seek position $position is outside 0..$size" }
         this.position = position
     }

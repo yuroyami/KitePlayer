@@ -525,6 +525,13 @@ forward only, so the player cannot seek in them. `MediaIo.ofBytes` does not copy
 it unchanged while playback can read it. The first two doors are in `kiteplayer-core`, and the
 others in `kiteplayer-io`, which comes with `kiteplayer`.
 
+A file that is still being written, such as a recording in progress or a download that plays as it
+arrives, plays to its current end and on as it grows when the item says so:
+`MediaItem(path, growth = FileGrowth())`. The player waits at the end for more, and ends the item
+once the file has not grown for `FileGrowth.endsAfter`, two seconds by default. Its length grows
+with the file, and a seek reaches any part already written. A plain path needs `kiteplayer-io` for
+this; an item with its own `io` needs nothing more.
+
 <details>
 <summary><b>Several settings on one item</b>: headers, probing and low latency</summary>
 <br>

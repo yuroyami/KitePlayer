@@ -3663,6 +3663,8 @@ internal class PlaybackCore(
         // decoder recovery, a loop and a queue returning to the same item all come back through it,
         // and the reader the previous session was given has been closed since.
         val suppliedIo = resolveReader(item, preemptible = pending == null)
+        // A file still being written that nothing installed reads as it grows plays as it stands (#430).
+        if (item.growth != null && suppliedIo == null) warn(io.github.yuroyami.kiteplayer.PlaybackWarning.GrowthUnavailable(item.label))
         // A reader that recovers from a dropped connection says so through the player's warnings.
         suppliedIo?.setWarningSink { warning -> report(warning) }
         // Every byte the reader delivers is progress for the stall timeout, so a slow reader that
@@ -6895,7 +6897,11 @@ internal class PlaybackCore(
      * @return true when the session was ended.
      */
     private suspend fun endStalledSession(session: OpenSession): Boolean {
-        val limit = config.buffer.stallTimeout
+        // A file still being written is waited for as long as its item says, so its reader, not
+        // the stall limit, calls its end (#430).
+        val limit = config.buffer.stallTimeout.let { timeout ->
+            media?.growth?.let { maxOf(timeout, it.endsAfter + GROWTH_STALL_MARGIN) } ?: timeout
+        }
         if (limit.isInfinite() || session.stallInterruptRefused) return false
         val stalledFor = session.stallWatch.stalledFor() ?: return false
         if (stalledFor < limit) {
@@ -8831,11 +8837,12 @@ internal class PlaybackCore(
     private fun noteFurthestPosition(active: OpenSession) {
         if (seekPhase.isRunning || pendingSeek != null) return
         val here = currentPosition().micros
-        if (here <= active.furthestPositionUs) return
-        active.furthestPositionUs = here
+        if (here > active.furthestPositionUs) active.furthestPositionUs = here
         if (!active.itemEndIsEstimate) return
         val shownUs = snapshotState.value.duration?.inWholeMicroseconds ?: return
-        if (here - active.clipStartUs - shownUs >= DURATION_FOLLOW_STEP_US) publishSnapshot()
+        // Ahead of playback too: the estimate of a file still being written grows with it (#430).
+        val lengthUs = publishedDuration(active)?.inWholeMicroseconds ?: return
+        if (kotlin.math.abs(lengthUs - shownUs) >= DURATION_FOLLOW_STEP_US) publishSnapshot()
     }
 
     /** True once the demuxer has read to the end of the input for every selected stream it feeds. */
@@ -13524,6 +13531,9 @@ internal class PlaybackCore(
 
         /** How far playback runs past an estimated length before the snapshot's length follows it (#422). */
         const val DURATION_FOLLOW_STEP_US: Long = 1_000_000L
+
+        /** How much longer than a growing file's own wait the stall limit lets its reader wait (#430). */
+        val GROWTH_STALL_MARGIN: Duration = 5.seconds
 
         /** Late drops in one stats interval that make dropping worth SAYING, not just counting. */
         const val FRAME_DROP_WARN_PER_INTERVAL: Long = 5L

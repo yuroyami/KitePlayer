@@ -48,6 +48,7 @@ class WarningAuditTest {
         PlaybackWarning.RecordingStopped("x.mkv", "x"),
         PlaybackWarning.SourceReconnecting(1_024, 1, "x"),
         PlaybackWarning.AddressRenewed("https://cdn.example/seg-1.ts", 403),
+        PlaybackWarning.GrowthUnavailable("live.ts"),
         PlaybackWarning.GaplessFallback(1, "x"),
         PlaybackWarning.SegmentSkipped("https://cdn.example/seg-1.ts", "x"),
         PlaybackWarning.ExternalClockSilent("x"),
@@ -75,6 +76,10 @@ class WarningAuditTest {
         is PlaybackWarning.GaplessFallback -> listOf(
             "PlaybackCore's queue handoff, when the next item cannot follow the current one without a " +
                 "gap: its preload failed or was not ready, an item has no audio, or its audio format differs",
+        )
+        is PlaybackWarning.GrowthUnavailable -> listOf(
+            "PlaybackCore.buildSession, when an item marked as still being written gets no reader from its " +
+                "own io, the configured resolver or an installed provider, and plays through the backend's own reader",
         )
         is PlaybackWarning.AddressRenewed -> listOf(
             "PlaybackCore.renewIfRefused, when the item's reader reports through MediaIo.takeRefusal that a " +

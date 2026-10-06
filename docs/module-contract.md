@@ -123,7 +123,9 @@ targets as `kiteplayer-subtitles`.
 
 `kiteplayer` depends on it with `api`, so `kiteplayer-compose` gets the doors too, and
 `kiteplayer-compose-ui` does not. A plain local path still goes to FFmpeg by name and needs no
-door. Each file door opens its own channel per open and reads it by position. `ofChannel` reads
+door. The one exception is an item marked as still being written (`MediaItem.growth`): the module
+registers a provider that serves local files, which automatic resolution never asks, and the engine
+asks it for that item alone, because FFmpeg's own reader ends a growing file at the open's size. Each file door opens its own channel per open and reads it by position. `ofChannel` reads
 a channel the caller owns and never closes it or moves its position.
 
 On Apple and Linux, `MediaIo.ofPath(String)` opens the file for each open and reads it with

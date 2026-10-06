@@ -55,6 +55,17 @@ internal class TempFiles {
         return path
     }
 
+    /** Adds [bytes] to the end of the file at [path]. */
+    fun append(path: String, bytes: ByteArray) {
+        val file = fopen(path, "ab") ?: error("Cannot open $path: ${strerror(errno)?.toKString()}")
+        try {
+            val written = bytes.usePinned { fwrite(it.addressOf(0), 1.convert(), bytes.size.convert(), file) }
+            check(written.convert<Long>() == bytes.size.toLong()) { "Short write to $path" }
+        } finally {
+            fclose(file)
+        }
+    }
+
     fun deleteAll() {
         paths.forEach { unlink(it) }
         paths.clear()
@@ -89,4 +100,21 @@ class PosixPathMediaIoTest : MediaIoContractTest() {
         reader.close()
         assertEquals(-1, fcntl(reader.descriptor, F_GETFD))
     }
+
+    @Test
+    fun aFileThatGrowsReadsOnAndSaysHowLargeItIsNow() = runTest {
+        val path = files.create(ByteArray(100) { 1 })
+        MediaIo.ofPath(path).open().use { reader ->
+            assertEquals(100, reader.read(ByteArray(200), 0, 200))
+            assertEquals(-1, reader.read(ByteArray(200), 0, 200))
+            files.append(path, ByteArray(50) { 2 })
+            assertEquals(150L, reader.size, "the size stayed where it stood at the open")
+            val more = ByteArray(200)
+            assertEquals(50, reader.read(more, 0, 200), "the bytes written after the open were not read")
+            assertEquals(2, more[0].toInt())
+            reader.seek(120)
+            assertEquals(30, reader.read(more, 0, 200))
+        }
+    }
 }
+

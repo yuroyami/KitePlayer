@@ -139,6 +139,8 @@ internal class MediaScript(
      */
     val declaredDurationUs: Long? = null,
     val durationIsEstimate: Boolean = false,
+    /** The declared length as it stands at each read, for a file still being written (#430). Overrides [declaredDurationUs]. */
+    val declaredDurationNowUs: (() -> Long)? = null,
     val hasVideo: Boolean = true,
     val hasAudio: Boolean = true,
     /** The chapter table the scripted container declares. */
@@ -1099,7 +1101,7 @@ internal class ScriptedSource(
         }
     }
 
-    override val duration: Pts? = if (script.live) null else Pts(script.declaredDurationUs ?: script.durationUs)
+    override val duration: Pts? get() = if (script.live) null else Pts(script.declaredDurationNowUs?.invoke() ?: script.declaredDurationUs ?: script.durationUs)
     override val durationIsEstimate: Boolean get() = script.durationIsEstimate
     override val seekable: Boolean = script.seekable
     override val realTime: Boolean = script.live

@@ -31,11 +31,20 @@ import kotlin.concurrent.Volatile
  */
 public fun MediaIo.Companion.ofPath(path: String): MediaIoFactory = MediaIoFactory { PosixFileMediaIo.open(path) }
 
-/** Positional reads with `pread` over a descriptor that this reader opened and owns. */
+/**
+ * Positional reads with `pread` over a descriptor that this reader opened and owns. The size is the
+ * file's as it stands at each call, so a file still being written reads on as it grows and says how
+ * large it is now (#430), as FFmpeg's own file reader does.
+ */
 internal class PosixFileMediaIo private constructor(
     internal val descriptor: Int,
-    override val size: Long,
+    private val sizeAtOpen: Long,
 ) : MediaIo {
+    override val size: Long get() = memScoped {
+        val status = alloc<stat>()
+        if (fstat(descriptor, status.ptr) == 0) status.st_size.convert<Long>() else sizeAtOpen
+    }
+
     override val seekable: Boolean get() = true
 
     private var position = 0L
@@ -47,6 +56,7 @@ internal class PosixFileMediaIo private constructor(
         check(!closed) { "MediaIo is closed" }
         requireReadSlice(into, offset, length)
         if (length == 0) return 0
+        val size = size
         if (position >= size) return -1
         val want = minOf(length.toLong(), size - position).toInt()
         val count: Long = into.usePinned { pinned ->
@@ -60,6 +70,7 @@ internal class PosixFileMediaIo private constructor(
 
     override suspend fun seek(position: Long) {
         check(!closed) { "MediaIo is closed" }
+        val size = size
         require(position in 0L..size) { "Seek position $position is outside 0..$size" }
         this.position = position
     }

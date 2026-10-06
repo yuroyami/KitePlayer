@@ -163,6 +163,15 @@ public interface VideoRenderer : AutoCloseable {
      * on its subtitle passes, never per frame, and lays the overlay out again when it changes.
      */
     public val outputSize: io.github.yuroyami.kiteplayer.VideoSize? get() = null
+
+    /**
+     * True when this renderer, on the display it draws to now, shows HDR as HDR under
+     * [io.github.yuroyami.kiteplayer.HdrPolicy.Auto], rather than tone mapping it (#447). The
+     * engine reads it when it chooses an adaptive stream's variant, so an HDR display gets the HDR
+     * version and a standard one the SDR version. Defaulted to false, for a renderer that always
+     * tone maps.
+     */
+    public val showsHdr: Boolean get() = false
 }
 
 /** What a renderer reports about itself on [VideoRenderer.events]. */

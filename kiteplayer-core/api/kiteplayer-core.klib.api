@@ -951,6 +951,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoRenderer : kotlin/Auto
         abstract fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.spi/VideoRenderer.events.<get-events>|<get-events>(){}[0]
     open val outputSize // io.github.yuroyami.kiteplayer.spi/VideoRenderer.outputSize|{}outputSize[0]
         open fun <get-outputSize>(): io.github.yuroyami.kiteplayer/VideoSize? // io.github.yuroyami.kiteplayer.spi/VideoRenderer.outputSize.<get-outputSize>|<get-outputSize>(){}[0]
+    open val showsHdr // io.github.yuroyami.kiteplayer.spi/VideoRenderer.showsHdr|{}showsHdr[0]
+        open fun <get-showsHdr>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/VideoRenderer.showsHdr.<get-showsHdr>|<get-showsHdr>(){}[0]
 
     abstract fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
     abstract fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.spi/VideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]
@@ -2574,10 +2576,12 @@ final class io.github.yuroyami.kiteplayer/Chapter { // io.github.yuroyami.kitepl
 }
 
 final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.kiteplayer/DemuxPolicy|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/DemuxPolicy.<init>|<init>(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?;kotlin.Int?;kotlin.Int?){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer/VariantFit? = ...) // io.github.yuroyami.kiteplayer/DemuxPolicy.<init>|<init>(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.VariantFit?){}[0]
 
     final val corruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.corruptPackets|{}corruptPackets[0]
         final fun <get-corruptPackets>(): io.github.yuroyami.kiteplayer/CorruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.corruptPackets.<get-corruptPackets>|<get-corruptPackets>(){}[0]
+    final val fit // io.github.yuroyami.kiteplayer/DemuxPolicy.fit|{}fit[0]
+        final fun <get-fit>(): io.github.yuroyami.kiteplayer/VariantFit? // io.github.yuroyami.kiteplayer/DemuxPolicy.fit.<get-fit>|<get-fit>(){}[0]
     final val generateTimestamps // io.github.yuroyami.kiteplayer/DemuxPolicy.generateTimestamps|{}generateTimestamps[0]
         final fun <get-generateTimestamps>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.generateTimestamps.<get-generateTimestamps>|<get-generateTimestamps>(){}[0]
     final val lowLatency // io.github.yuroyami.kiteplayer/DemuxPolicy.lowLatency|{}lowLatency[0]
@@ -2596,6 +2600,7 @@ final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.ki
         final fun <get-variant>(): kotlin/Int? // io.github.yuroyami.kiteplayer/DemuxPolicy.variant.<get-variant>|<get-variant>(){}[0]
 
     final fun component1(): io.github.yuroyami.kiteplayer/ProbeDepth // io.github.yuroyami.kiteplayer/DemuxPolicy.component1|component1(){}[0]
+    final fun component10(): io.github.yuroyami.kiteplayer/VariantFit? // io.github.yuroyami.kiteplayer/DemuxPolicy.component10|component10(){}[0]
     final fun component2(): io.github.yuroyami.kiteplayer/CorruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.component2|component2(){}[0]
     final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.component3|component3(){}[0]
     final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.component4|component4(){}[0]
@@ -2604,7 +2609,7 @@ final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.ki
     final fun component7(): kotlin/Int? // io.github.yuroyami.kiteplayer/DemuxPolicy.component7|component7(){}[0]
     final fun component8(): kotlin/Int? // io.github.yuroyami.kiteplayer/DemuxPolicy.component8|component8(){}[0]
     final fun component9(): kotlin/Int? // io.github.yuroyami.kiteplayer/DemuxPolicy.component9|component9(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Int? = ...): io.github.yuroyami.kiteplayer/DemuxPolicy // io.github.yuroyami.kiteplayer/DemuxPolicy.copy|copy(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?;kotlin.Int?;kotlin.Int?){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer/VariantFit? = ...): io.github.yuroyami.kiteplayer/DemuxPolicy // io.github.yuroyami.kiteplayer/DemuxPolicy.copy|copy(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.VariantFit?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/DemuxPolicy.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/DemuxPolicy.toString|toString(){}[0]
@@ -3705,7 +3710,7 @@ final class io.github.yuroyami.kiteplayer/RenderQuality { // io.github.yuroyami.
 }
 
 final class io.github.yuroyami.kiteplayer/StreamVariant { // io.github.yuroyami.kiteplayer/StreamVariant|null[0]
-    constructor <init>(kotlin/Int, kotlin/Long, kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Double? = ..., kotlin/String? = ...) // io.github.yuroyami.kiteplayer/StreamVariant.<init>|<init>(kotlin.Int;kotlin.Long;kotlin.Int?;kotlin.Int?;kotlin.Double?;kotlin.String?){}[0]
+    constructor <init>(kotlin/Int, kotlin/Long, kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Double? = ..., kotlin/String? = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/StreamVariant.<init>|<init>(kotlin.Int;kotlin.Long;kotlin.Int?;kotlin.Int?;kotlin.Double?;kotlin.String?;kotlin.Boolean){}[0]
 
     final val bitrate // io.github.yuroyami.kiteplayer/StreamVariant.bitrate|{}bitrate[0]
         final fun <get-bitrate>(): kotlin/Long // io.github.yuroyami.kiteplayer/StreamVariant.bitrate.<get-bitrate>|<get-bitrate>(){}[0]
@@ -3713,6 +3718,8 @@ final class io.github.yuroyami.kiteplayer/StreamVariant { // io.github.yuroyami.
         final fun <get-codecs>(): kotlin/String? // io.github.yuroyami.kiteplayer/StreamVariant.codecs.<get-codecs>|<get-codecs>(){}[0]
     final val frameRate // io.github.yuroyami.kiteplayer/StreamVariant.frameRate|{}frameRate[0]
         final fun <get-frameRate>(): kotlin/Double? // io.github.yuroyami.kiteplayer/StreamVariant.frameRate.<get-frameRate>|<get-frameRate>(){}[0]
+    final val hdr // io.github.yuroyami.kiteplayer/StreamVariant.hdr|{}hdr[0]
+        final fun <get-hdr>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/StreamVariant.hdr.<get-hdr>|<get-hdr>(){}[0]
     final val height // io.github.yuroyami.kiteplayer/StreamVariant.height|{}height[0]
         final fun <get-height>(): kotlin/Int? // io.github.yuroyami.kiteplayer/StreamVariant.height.<get-height>|<get-height>(){}[0]
     final val index // io.github.yuroyami.kiteplayer/StreamVariant.index|{}index[0]
@@ -3726,7 +3733,8 @@ final class io.github.yuroyami.kiteplayer/StreamVariant { // io.github.yuroyami.
     final fun component4(): kotlin/Int? // io.github.yuroyami.kiteplayer/StreamVariant.component4|component4(){}[0]
     final fun component5(): kotlin/Double? // io.github.yuroyami.kiteplayer/StreamVariant.component5|component5(){}[0]
     final fun component6(): kotlin/String? // io.github.yuroyami.kiteplayer/StreamVariant.component6|component6(){}[0]
-    final fun copy(kotlin/Int = ..., kotlin/Long = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Double? = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/StreamVariant // io.github.yuroyami.kiteplayer/StreamVariant.copy|copy(kotlin.Int;kotlin.Long;kotlin.Int?;kotlin.Int?;kotlin.Double?;kotlin.String?){}[0]
+    final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer/StreamVariant.component7|component7(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/Long = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Double? = ..., kotlin/String? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/StreamVariant // io.github.yuroyami.kiteplayer/StreamVariant.copy|copy(kotlin.Int;kotlin.Long;kotlin.Int?;kotlin.Int?;kotlin.Double?;kotlin.String?;kotlin.Boolean){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/StreamVariant.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/StreamVariant.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/StreamVariant.toString|toString(){}[0]
@@ -3992,6 +4000,22 @@ final class io.github.yuroyami.kiteplayer/Tracks { // io.github.yuroyami.kitepla
         final val Empty // io.github.yuroyami.kiteplayer/Tracks.Companion.Empty|{}Empty[0]
             final fun <get-Empty>(): io.github.yuroyami.kiteplayer/Tracks // io.github.yuroyami.kiteplayer/Tracks.Companion.Empty.<get-Empty>|<get-Empty>(){}[0]
     }
+}
+
+final class io.github.yuroyami.kiteplayer/VariantFit { // io.github.yuroyami.kiteplayer/VariantFit|null[0]
+    constructor <init>(kotlin/Int? = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/VariantFit.<init>|<init>(kotlin.Int?;kotlin.Boolean){}[0]
+
+    final val drawnHeight // io.github.yuroyami.kiteplayer/VariantFit.drawnHeight|{}drawnHeight[0]
+        final fun <get-drawnHeight>(): kotlin/Int? // io.github.yuroyami.kiteplayer/VariantFit.drawnHeight.<get-drawnHeight>|<get-drawnHeight>(){}[0]
+    final val showsHdr // io.github.yuroyami.kiteplayer/VariantFit.showsHdr|{}showsHdr[0]
+        final fun <get-showsHdr>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VariantFit.showsHdr.<get-showsHdr>|<get-showsHdr>(){}[0]
+
+    final fun component1(): kotlin/Int? // io.github.yuroyami.kiteplayer/VariantFit.component1|component1(){}[0]
+    final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VariantFit.component2|component2(){}[0]
+    final fun copy(kotlin/Int? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/VariantFit // io.github.yuroyami.kiteplayer/VariantFit.copy|copy(kotlin.Int?;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/VariantFit.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/VariantFit.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/VariantFit.toString|toString(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer/VideoAdjustments { // io.github.yuroyami.kiteplayer/VideoAdjustments|null[0]

@@ -17,4 +17,6 @@ public data class StreamVariant(
     val frameRate: Double? = null,
     /** The codecs in RFC 6381 form, such as `avc1.64001f,mp4a.40.2`, or null when not stated. */
     val codecs: String? = null,
+    /** True for a PQ or HLG picture, as the playlist or the manifest states it (#447). */
+    val hdr: Boolean = false,
 )

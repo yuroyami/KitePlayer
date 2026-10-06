@@ -33,6 +33,25 @@ public enum class CorruptPackets {
 }
 
 /**
+ * What an adaptive stream's picture is drawn into, which the player's choice of variant follows.
+ * See [DemuxPolicy.fit].
+ */
+public data class VariantFit(
+    /**
+     * How tall the picture is drawn, in physical pixels, or null for no cap. The player takes no
+     * variant taller than the first one at least this tall, so a 1080 pixel view of a 720, 1440 and
+     * 2160 ladder plays 1440 at most, and a view taller than every variant caps nothing.
+     */
+    val drawnHeight: Int? = null,
+    /** True when the output shows HDR as HDR, so an HDR variant is preferred over an SDR one. */
+    val showsHdr: Boolean = false,
+) {
+    init {
+        require(drawnHeight == null || drawnHeight > 0) { "drawnHeight must be positive, was $drawnHeight" }
+    }
+}
+
+/**
  * Typed settings for opening a container. The backend applies every field, or refuses the open
  * with a typed error. It never ignores one. Each default is the backend's own default, so
  * `DemuxPolicy()` changes nothing.
@@ -80,6 +99,16 @@ public data class DemuxPolicy(
      * for null. [KitePlayer.selectProgram] sets it on the item that plays (#505).
      */
     val program: Int? = null,
+    /**
+     * What the picture is drawn into, which the player's own choice of variant follows (#447): HDR
+     * over SDR when the output shows HDR, and no variant taller than the first one at least as tall
+     * as the picture is drawn. [maxBitrate] and [maxVideoHeight] still apply on top. Null, the
+     * default, has the player fill it at each open, and at each step up, from the renderer it
+     * draws into; with no renderer there is no cap and SDR is preferred. Set it to choose for the
+     * player, for example to plan for full screen before the view grows. `VariantFit()` keeps no
+     * cap and prefers SDR.
+     */
+    val fit: VariantFit? = null,
 ) {
     init {
         require(skipInitialBytes >= 0) { "skipInitialBytes must not be negative, was $skipInitialBytes" }

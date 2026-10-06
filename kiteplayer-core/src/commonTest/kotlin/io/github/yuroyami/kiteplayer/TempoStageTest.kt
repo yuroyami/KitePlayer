@@ -334,9 +334,17 @@ class TempoStageTest {
 
     @Test
     fun `speeds outside the documented range are refused`() {
+        // A stage takes an octave past the supported range, for the stretch of a pitch shift (#465).
         val stage = TempoStage(channels, rate)
         assertFailsWith<IllegalArgumentException> { stage.speed = 0.1 }
-        assertFailsWith<IllegalArgumentException> { stage.speed = 5.0 }
+        assertFailsWith<IllegalArgumentException> { stage.speed = 9.0 }
         assertFailsWith<IllegalArgumentException> { stage.speed = Double.NaN }
+        stage.speed = TempoStage.STAGE_MAX_SPEED
+        // The speed a player is asked for keeps to the supported range.
+        val pipeline = io.github.yuroyami.kiteplayer.internal.AudioPipeline(
+            io.github.yuroyami.kiteplayer.spi.AudioFormat(rate, channels, io.github.yuroyami.kiteplayer.spi.SampleFormat.F32),
+            io.github.yuroyami.kiteplayer.spi.AudioFormat(rate, channels, io.github.yuroyami.kiteplayer.spi.SampleFormat.F32),
+        )
+        assertFailsWith<IllegalArgumentException> { pipeline.speed = 5.0 }
     }
 }

@@ -76,3 +76,33 @@ class DialogueLevelEngineTest {
         assertEquals(1.995f, raised / plain, absoluteTolerance = 0.01f, message = "the centre went from $plain to $raised")
     }
 }
+
+/**
+ * The pitch through the whole engine (#465): it changes no timing, so the clock after two seconds
+ * reads what it reads with no pitch, at speed 1 and at 1.5, and the snapshot names it.
+ */
+class PitchEngineTest {
+
+    private suspend fun positionAfter(semitones: Double, speed: Double, scope: kotlinx.coroutines.test.TestScope): Long {
+        val harness = CoreHarness(scope, script = MediaScript(durationUs = 8_000_000))
+        harness.openWithRenderer()
+        harness.core.post(CoreCommand.SetPitch(semitones, CompletableDeferred()))
+        harness.core.setSpeed(speed)
+        harness.core.play()
+        harness.run(2_000.milliseconds)
+        assertEquals(semitones, harness.core.snapshots.value.pitchSemitones)
+        val position = harness.core.position().inWholeMilliseconds
+        harness.close()
+        return position
+    }
+
+    @Test
+    fun thePitchMovesNoTiming() = runTest {
+        for (speed in listOf(1.0, 1.5)) {
+            val plain = positionAfter(0.0, speed, this)
+            val shifted = positionAfter(12.0, speed, this)
+            assertTrue(kotlin.math.abs(shifted - plain) <= 60, "at speed $speed the clock read $shifted ms with the pitch and $plain without")
+            assertTrue(plain > 1_000, "at speed $speed the clock never moved: $plain ms")
+        }
+    }
+}

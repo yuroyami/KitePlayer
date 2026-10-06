@@ -21,6 +21,7 @@ import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.pow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
 import kotlin.time.Duration.Companion.milliseconds
@@ -506,6 +507,10 @@ public class AudioPlayback(
         // the whole ring depth of the old volume before the change arrives. See AudioRingHandle.setGain.
         stage.speed = speedNow
         stage.preservePitch = pitchNow
+        // A ratio, read per buffer like the speed: the pitch changes no timing, so the timeline
+        // needs nothing from it beyond the runs the pipeline reports (#465).
+        val semitones = wantedPitchSemitones.value
+        stage.pitch = if (semitones == 0.0) 1.0 else 2.0.pow(semitones / 12.0)
         // Reasserted per buffer: a pipeline rebuilt for a format change starts at unity, and the
         // trim has to survive that without the rebuild knowing. Idempotent and a handful of
         // floats, so the common case costs a compare.

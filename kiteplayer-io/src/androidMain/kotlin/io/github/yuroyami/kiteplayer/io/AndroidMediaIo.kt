@@ -36,6 +36,10 @@ public fun MediaIo.Companion.ofAsset(assets: AssetManager, name: String): MediaI
  * assets through [context]. An asset stored uncompressed reads by position, as through [ofAsset];
  * one stored compressed reads as a stream that seeks by opening it again, which costs little for a
  * clip an app bundles. Null for any other address, which then plays as it is.
+ *
+ * The player does this by itself for an item with no reader of its own, so `MediaItem(Res.getUri(...))`
+ * plays as it is. This door is for an app that configures a resolver of its own, which the player
+ * asks first and alone, or that removed the library's context provider from its manifest.
  */
 public fun MediaIo.Companion.ofResourceUri(context: Context, uri: String): MediaIoFactory? {
     val name = assetNameOf(uri) ?: return null

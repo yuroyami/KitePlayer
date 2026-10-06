@@ -11,6 +11,10 @@ import java.net.URI
  * the app's jar. The entry seeks, by opening it again when a seek goes back, because it is stored
  * compressed. Null for any other address, which then plays as it is: a `file:` address through
  * FFmpeg's own file reader, as when `Res.getUri` runs from the build directory.
+ *
+ * The player does this by itself for an item with no reader of its own, so `MediaItem(Res.getUri(...))`
+ * plays as it is. This door is for an app that configures a resolver of its own, which the player
+ * asks first and alone.
  */
 public fun MediaIo.Companion.ofResourceUri(uri: String): MediaIoFactory? {
     if (!uri.startsWith("jar:", ignoreCase = true)) return null

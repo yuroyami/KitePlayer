@@ -481,7 +481,11 @@ such as `play()`, `pause()` and `setVolume(float)`, is on `getPlayer()`.
 ## Media that is not a URL
 
 A file path or a URL needs nothing more. `MediaItem("/sdcard/movie.mkv")` goes straight to
-FFmpeg's own file reader, which is the fastest way to read a local file.
+FFmpeg's own file reader, which is the fastest way to read a local file. So does the address a
+Compose Multiplatform resource has, on every target: `MediaItem(Res.getUri("files/intro.mp4"))`
+plays the bundled file, from the app's assets on Android and from the app's jar on the desktop.
+On Android that reads the assets through the application context, which a small content provider
+of `kiteplayer-io` keeps from the moment the app starts, as Compose's own resources do.
 
 For anything else, use a **door**: a function that turns what you have into a `MediaIoFactory`
 for the item's `io` field. Each open of the item gets a new reader from it, because a track switch,

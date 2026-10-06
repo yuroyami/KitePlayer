@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Keeps the application context, so a Compose resource's asset address plays as it is (#457). -->
+        <provider
+            android:name="io.github.yuroyami.kiteplayer.io.KiteIoContextProvider"
+            android:authorities="${applicationId}.kiteplayer-io"
+            android:exported="false" />
+    </application>
+</manifest>

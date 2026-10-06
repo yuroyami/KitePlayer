@@ -314,6 +314,9 @@ internal class AudioPipeline(
      */
     val equalizer: EqualizerStage = EqualizerStage(targetFormat.channels, targetFormat.sampleRate)
 
+    /** Raises or lowers a centre the downmix folds into other speakers, by [db] decibels (#442). */
+    fun setDialogueLevel(db: Float) = mixer.setDialogueLevel(db)
+
     /** The night mode (#442), skipped while off. See [NightStage]. */
     val night: NightStage = NightStage(targetFormat.channels, targetFormat.sampleRate)
 

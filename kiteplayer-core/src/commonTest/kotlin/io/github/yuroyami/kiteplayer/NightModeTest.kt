@@ -42,3 +42,37 @@ class NightModeTest {
         const val QUIET = 0.0316f
     }
 }
+
+/**
+ * The dialogue level through the whole engine (#442): a 5.1 file whose centre alone carries sound,
+ * folded into a stereo device, is heard 6 dB louder once the level is raised by 6 dB.
+ */
+class DialogueLevelEngineTest {
+
+    private suspend fun leftPeak(db: Float, scope: kotlinx.coroutines.test.TestScope): Float {
+        val harness = CoreHarness(
+            scope,
+            script = MediaScript(durationUs = 3_000_000, channels = 6, audioChannelMarkers = listOf(0f, 0f, 0.1f, 0f, 0f, 0f)),
+            sinkAccepts = io.github.yuroyami.kiteplayer.spi.AudioFormat(48_000, 2, io.github.yuroyami.kiteplayer.spi.SampleFormat.F32),
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(50.milliseconds)
+        harness.core.post(CoreCommand.SetDialogueLevel(db, CompletableDeferred()))
+        harness.run(600.milliseconds)
+        harness.sink.clearChannelPeaks()
+        harness.run(200.milliseconds)
+        assertEquals(db, harness.core.snapshots.value.dialogueLevelDb)
+        val result = harness.sink.channelPeak(0)
+        harness.close()
+        return result
+    }
+
+    @Test
+    fun aRaisedDialogueLevelIsHeardInTheFoldedCentre() = runTest {
+        val plain = leftPeak(0f, this)
+        assertTrue(plain > 0f, "the folded centre was not heard at all")
+        val raised = leftPeak(6f, this)
+        assertEquals(1.995f, raised / plain, absoluteTolerance = 0.01f, message = "the centre went from $plain to $raised")
+    }
+}

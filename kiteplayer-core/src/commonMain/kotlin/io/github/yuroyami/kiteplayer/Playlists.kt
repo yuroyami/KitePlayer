@@ -2,7 +2,7 @@ package io.github.yuroyami.kiteplayer
 
 /**
  * Playlist files read into queue items (#490): the M3U lists people keep their music in and other
- * players export, PLS lists, and XSPF lists.
+ * players export, PLS lists, XSPF lists, and cue sheets.
  *
  * - M3U and M3U8 that are not HLS, which always carries `#EXT-X-` tags: each line that is not a
  *   comment names an item. `#EXTINF` gives the title of the item after it, `#EXTART` and `#EXTALB`
@@ -10,6 +10,10 @@ package io.github.yuroyami.kiteplayer
  *   `Referer` and `User-Agent` headers, as IPTV lists write them.
  * - PLS: the `FileN` entries in their number order, with their `TitleN`.
  * - XSPF: each `<track>`'s first `<location>`, with its `<title>`, `<creator>` and `<album>`.
+ * - A cue sheet (#456): each audio track as an item of its file with a [MediaClip], from its
+ *   `INDEX 01` to where the next track of the file begins, its pregap played at the end of the
+ *   track before it, with its `TITLE` and `PERFORMER` and the sheet's `TITLE` as its album. So an
+ *   album ripped to one file with its `.cue` plays as its tracks.
  *
  * A relative address is resolved against the list's own: a path beside a list on disk, with the
  * backslashes of a list written on Windows read as separators, and an address beside a list on a

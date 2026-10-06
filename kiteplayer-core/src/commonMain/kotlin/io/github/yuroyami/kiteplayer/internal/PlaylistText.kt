@@ -1,6 +1,8 @@
 package io.github.yuroyami.kiteplayer.internal
 
+import io.github.yuroyami.kiteplayer.MediaClip
 import io.github.yuroyami.kiteplayer.MediaItem
+import kotlin.time.Duration.Companion.microseconds
 
 /** The text work of [io.github.yuroyami.kiteplayer.Playlists] (#490), with no I/O. */
 internal object PlaylistText {
@@ -11,6 +13,7 @@ internal object PlaylistText {
         return when {
             start.startsWith("[playlist]", ignoreCase = true) -> pls(body, base)
             start.startsWith("<?xml") || start.startsWith("<playlist") -> xspf(body, base)
+            isCueSheet(body) -> cueSheet(body, base)
             else -> m3u(body, base)
         }
     }
@@ -176,6 +179,95 @@ internal object PlaylistText {
     }
 
     private val TRACK_OPEN = Regex("<track(\\s[^>]*)?>")
+
+    /** A cue sheet names a file, and a track in it, on lines of their own. */
+    private fun isCueSheet(text: String): Boolean {
+        var file = false
+        var track = false
+        for (raw in text.lineSequence()) {
+            val line = raw.trim()
+            if (line.startsWith("FILE ", ignoreCase = true)) file = true
+            if (file && line.startsWith("TRACK ", ignoreCase = true)) track = true
+            if (track) return true
+        }
+        return false
+    }
+
+    /**
+     * The tracks of a cue sheet (#456), each its file's part from its `INDEX 01` to where the next
+     * track of the same file begins: that track's `INDEX 00` when it has a pregap, which plays at
+     * the end of the track before it, as foobar2000 plays it, and its `INDEX 01` otherwise. The last
+     * track of a file runs to the file's end. A track takes its own `TITLE` and `PERFORMER`, the
+     * sheet's `PERFORMER` when it names none, and the sheet's `TITLE` as its album. Times are
+     * minutes, seconds and frames of a compact disc, 75 to the second.
+     */
+    private fun cueSheet(text: String, base: String): List<MediaItem> {
+        class Track(val file: String, var title: String? = null, var performer: String? = null, var pregap: Long? = null, var start: Long? = null)
+        var albumTitle: String? = null
+        var albumPerformer: String? = null
+        var file: String? = null
+        val tracks = mutableListOf<Track>()
+        var current: Track? = null
+        for (raw in text.lineSequence()) {
+            val line = raw.trim()
+            val keyword = line.substringBefore(' ').uppercase()
+            val rest = line.substringAfter(' ', "").trim()
+            when (keyword) {
+                "FILE" -> {
+                    // FILE "name" WAVE, or the name unquoted before its type.
+                    file = if (rest.startsWith('"')) cueValue(rest) else cueValue(rest.substringBeforeLast(' '))
+                    current = null
+                }
+                "TRACK" -> {
+                    val name = file ?: continue
+                    // Only the tracks a player can play: a data track of a mixed disc is not one.
+                    current = if (rest.substringAfter(' ').trim().uppercase() == "AUDIO") Track(name).also { tracks += it } else null
+                }
+                "TITLE" -> if (current == null) albumTitle = cueValue(rest) else current.title = cueValue(rest)
+                "PERFORMER" -> if (current == null) albumPerformer = cueValue(rest) else current.performer = cueValue(rest)
+                "INDEX" -> {
+                    val track = current ?: continue
+                    val number = rest.substringBefore(' ').toIntOrNull() ?: continue
+                    val time = cueTime(rest.substringAfter(' ').trim()) ?: continue
+                    when (number) {
+                        0 -> track.pregap = time
+                        1 -> track.start = time
+                    }
+                }
+            }
+        }
+        val playable = tracks.filter { it.start != null }
+        return playable.mapIndexed { index, track ->
+            val next = playable.getOrNull(index + 1)?.takeIf { it.file == track.file }
+            val start = track.start!!
+            val end = next?.let { it.pregap ?: it.start }?.takeIf { it > start }
+            MediaItem(
+                uri = playlistAddress(base, track.file),
+                clip = MediaClip(start = start.microseconds, end = end?.microseconds),
+                title = track.title,
+                artist = track.performer ?: albumPerformer,
+                album = albumTitle,
+            )
+        }
+    }
+
+    /** A cue sheet's value: inside its quotes when it has them, as written otherwise. */
+    private fun cueValue(value: String): String? {
+        val trimmed = value.trim()
+        val inner = if (trimmed.startsWith('"')) trimmed.drop(1).substringBefore('"') else trimmed
+        return inner.ifEmpty { null }
+    }
+
+    /** `mm:ss:ff`, in microseconds, or null for anything else. */
+    private fun cueTime(text: String): Long? {
+        val parts = text.split(':')
+        if (parts.size != 3) return null
+        val minutes = parts[0].toLongOrNull() ?: return null
+        val seconds = parts[1].toLongOrNull() ?: return null
+        val frames = parts[2].toLongOrNull() ?: return null
+        if (minutes < 0 || seconds !in 0..59 || frames !in 0..74) return null
+        return (minutes * 60 + seconds) * 1_000_000 + frames * 1_000_000 / 75
+    }
 }
 
 /**

@@ -1,10 +1,13 @@
 package io.github.yuroyami.kiteplayer.internal
 
+import io.github.yuroyami.kiteplayer.MediaClip
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Playlists
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.microseconds
+import kotlin.time.Duration.Companion.seconds
 
 /** Playlist files as queue items (#490): M3U, PLS and XSPF, and the addresses they name. */
 class PlaylistsTest {
@@ -84,6 +87,52 @@ class PlaylistsTest {
             <album>&#x41;lbum</album><location>file:///music/r%26r.ogg</location></track></trackList></playlist>"""
         val item = Playlists.parse(xspf, "/lists/x.xspf").orEmpty().single()
         assertEquals(listOf("/music/r&r.ogg", "Rock & Roll", "Somebody", "Album"), listOf(item.uri, item.title, item.artist, item.album))
+    }
+
+    /** An album ripped to one file with its cue sheet plays as its tracks (#456). */
+    @Test
+    fun aCueSheetsTracksAreClipsOfItsFile() {
+        val cue = """
+            REM GENRE Rock
+            PERFORMER "The Band"
+            TITLE "The Album"
+            FILE "The Album.flac" WAVE
+              TRACK 01 AUDIO
+                TITLE "Opening"
+                INDEX 01 00:00:00
+              TRACK 02 AUDIO
+                TITLE "Second Song"
+                PERFORMER "A Guest"
+                INDEX 00 04:10:00
+                INDEX 01 04:12:37
+              TRACK 03 AUDIO
+                TITLE "Closer"
+                INDEX 01 08:03:00
+        """.trimIndent()
+        val items = Playlists.parse(cue, "/music/The Band/album.cue").orEmpty()
+        assertEquals(List(3) { "/music/The Band/The Album.flac" }, items.map { it.uri })
+        assertEquals(listOf("Opening", "Second Song", "Closer"), items.map { it.title })
+        assertEquals(listOf("The Band", "A Guest", "The Band"), items.map { it.artist })
+        assertEquals(List(3) { "The Album" }, items.map { it.album })
+        val clips = items.map { it.clip!! }
+        // The pregap of track 2 plays at the end of track 1.
+        assertEquals(MediaClip(0.seconds, 250.seconds), clips[0])
+        assertEquals((4 * 60 + 12).seconds + (37 * 1_000_000 / 75).microseconds, clips[1].start)
+        assertEquals(483.seconds, clips[1].end)
+        assertEquals(MediaClip(483.seconds, null), clips[2])
+    }
+
+    @Test
+    fun aCueSheetOfSeveralFilesEndsEachFilesLastTrackAtItsEnd() {
+        val cue = "FILE disc1.wav WAVE\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 AUDIO\nINDEX 01 03:00:00\n" +
+            "FILE \"disc 2.wav\" WAVE\nTRACK 03 AUDIO\nINDEX 01 00:00:00\nTRACK 04 MODE1/2352\nINDEX 01 05:00:00\n"
+        val items = Playlists.parse(cue, "https://host.test/rips/album.cue").orEmpty()
+        assertEquals(
+            listOf("https://host.test/rips/disc1.wav", "https://host.test/rips/disc1.wav", "https://host.test/rips/disc 2.wav"),
+            items.map { it.uri },
+            "a data track was taken for audio",
+        )
+        assertEquals(listOf(MediaClip(0.seconds, 180.seconds), MediaClip(180.seconds, null), MediaClip(0.seconds, null)), items.map { it.clip })
     }
 
     @Test

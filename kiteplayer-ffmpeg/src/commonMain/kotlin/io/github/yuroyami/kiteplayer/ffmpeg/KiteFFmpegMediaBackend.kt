@@ -47,8 +47,8 @@ public class KiteFFmpegMediaBackend(
         "KiteFFmpegMediaBackend(decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
 
     /**
-     * External subtitle files, ASS included: the pure parsers this module ships. East Asian files
-     * are read with the tables of kiteplayer-subtitles, the same on every target.
+     * External subtitle files, ASS and LRC lyrics included: the pure parsers this module ships.
+     * East Asian files are read with the tables of kiteplayer-subtitles, the same on every target.
      */
     override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
         object : io.github.yuroyami.kiteplayer.spi.SubtitleFileParser {
@@ -58,6 +58,9 @@ public class KiteFFmpegMediaBackend(
                     text.trimStart('\uFEFF', ' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true) ->
                         io.github.yuroyami.kiteplayer.subtitle.AssParser.parse(text)
                     vttHint -> io.github.yuroyami.kiteplayer.subtitle.WebVttParser.parse(text)
+                    // Synced lyrics open with a tag and stamp their lines (#443).
+                    io.github.yuroyami.kiteplayer.subtitle.LrcParser.isLrc(text) ->
+                        io.github.yuroyami.kiteplayer.subtitle.LrcParser.parse(text)
                     else -> io.github.yuroyami.kiteplayer.subtitle.SubRipParser.parse(text)
                 }
 

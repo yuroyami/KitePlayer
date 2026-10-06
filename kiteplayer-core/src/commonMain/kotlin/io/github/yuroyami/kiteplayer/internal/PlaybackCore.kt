@@ -613,13 +613,15 @@ internal class PlaybackCore(
         // The same self-announcement the backend's parser routes on: labelling every
         // non-VTT file SubRip told a track list that an ASS script was something it is not.
         val isAss = trimmed.trimStart(' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true)
+        val isLrc = !isAss && !isVtt && looksLikeLrc(trimmed)
         val parsed = runCatching { parser.parse(trimmed, isVtt) }.getOrElse { failure ->
             return ExternalSubtitleParse.Failed(
                 "the external subtitle file failed to parse: ${redactUri(sourceFile.uri)}${causeDetail(failure)}",
             )
         }
-        // The notes of hearing-impaired subtitles go as the file is read, but never an ASS script's (#493).
-        val cues = if (isAss) parsed else hideHearingImpairedNotes(parsed, config.subtitles.hearingImpairedNotes)
+        // The notes of hearing-impaired subtitles go as the file is read, but never an ASS script's
+        // (#493), nor a song's lyrics, whose brackets are sung (#443).
+        val cues = if (isAss || isLrc) parsed else hideHearingImpairedNotes(parsed, config.subtitles.hearingImpairedNotes)
         if (cues.isEmpty()) {
             return ExternalSubtitleParse.Failed(
                 "the external subtitle file parsed to no cues: ${redactUri(sourceFile.uri)}",
@@ -634,6 +636,7 @@ internal class PlaybackCore(
                     codec = when {
                         isVtt -> "external/webvtt"
                         isAss -> "external/ass"
+                        isLrc -> "external/lrc"
                         else -> "external/subrip"
                     },
                     language = language,

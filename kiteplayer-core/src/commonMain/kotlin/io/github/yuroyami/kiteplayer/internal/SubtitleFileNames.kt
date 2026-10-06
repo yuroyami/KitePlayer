@@ -60,3 +60,18 @@ private val FLAGS = HEARING_IMPAIRED + "forced"
 
 /** How many dotted parts before the extension are read at most. */
 private const val MAX_HINT_PARTS = 4
+
+/**
+ * Whether an external file's [text] is LRC lyrics (#443), so its track is labelled as such and its
+ * brackets are kept: the first line that is not blank opens with a tag, and some line opens with a
+ * time stamp. The same test `LrcParser.isLrc` in kiteplayer-subtitles routes the file on, which this
+ * module sits below and cannot call.
+ */
+internal fun looksLikeLrc(text: String): Boolean {
+    val lines = text.lineSequence()
+    val first = lines.firstOrNull { it.isNotBlank() }?.trim() ?: return false
+    if (!first.startsWith('[')) return false
+    return lines.any { LRC_STAMP.containsMatchIn(it.trim()) }
+}
+
+private val LRC_STAMP = Regex("^\\[\\d{1,4}:\\d{1,2}([.:]\\d{1,6})?\\]")

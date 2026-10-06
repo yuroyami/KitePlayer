@@ -731,6 +731,22 @@ internal class ScriptedBackend(
                     }
                     .toList()
             }
+            // A one-stamp LRC branch for the engine's labelling of lyrics (#443): the real reader
+            // lives in kiteplayer-subtitles too.
+            val lrcLine = Regex("""^\[(\d{2}):(\d{2})\.(\d{2})\](.*)$""")
+            if (text.trimStart().startsWith("[")) {
+                val stamped = text.lines().mapNotNull { lrcLine.matchEntire(it.trim())?.groupValues }
+                if (stamped.isNotEmpty()) {
+                    return@SubtitleFileParser stamped.map { (_, min, s, cs, words) ->
+                        val start = ((min.toLong() * 60 + s.toLong()) * 100 + cs.toLong()) * 10_000
+                        io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(
+                            startMicros = start,
+                            endMicros = start + 1_000_000,
+                            spans = listOf(io.github.yuroyami.kiteplayer.subtitle.StyledSpan(words)),
+                        )
+                    }
+                }
+            }
             val timing = Regex("""(\d{2}):(\d{2}):(\d{2})[,.](\d{3}) --> (\d{2}):(\d{2}):(\d{2})[,.](\d{3})""")
             text.split(Regex("\r?\n\r?\n")).mapNotNull { block ->
                 val lines = block.trim().lines()

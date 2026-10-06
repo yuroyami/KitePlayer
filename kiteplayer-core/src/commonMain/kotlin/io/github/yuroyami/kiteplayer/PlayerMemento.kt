@@ -135,6 +135,9 @@ public data class PlayerMemento(
         put("transform.panX", videoTransform.panX.toString())
         put("transform.panY", videoTransform.panY.toString())
         videoTransform.aspectOverride?.let { put("transform.aspectOverride", it.toString()) }
+        put("transform.rotation", videoTransform.rotationDegrees.toString())
+        put("transform.mirrorHorizontal", videoTransform.mirrorHorizontal.toString())
+        put("transform.mirrorVertical", videoTransform.mirrorVertical.toString())
         put("adjust.brightness", videoAdjustments.brightness.toString())
         put("adjust.contrast", videoAdjustments.contrast.toString())
         put("adjust.saturation", videoAdjustments.saturation.toString())
@@ -252,6 +255,9 @@ public data class PlayerMemento(
                     zoom = properties["transform.zoom"]?.toFloat() ?: 1f,
                     panX = properties["transform.panX"]?.toFloat() ?: 0f,
                     panY = properties["transform.panY"]?.toFloat() ?: 0f,
+                    rotationDegrees = properties["transform.rotation"]?.toInt() ?: 0,
+                    mirrorHorizontal = properties["transform.mirrorHorizontal"]?.toBooleanStrict() ?: false,
+                    mirrorVertical = properties["transform.mirrorVertical"]?.toBooleanStrict() ?: false,
                 ),
                 videoAdjustments = VideoAdjustments(
                     brightness = properties["adjust.brightness"]?.toFloat() ?: 0f,

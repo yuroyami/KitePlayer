@@ -120,7 +120,7 @@ class WorkerProtocolTest {
         videoScale = VideoScale.Fill,
         videoAdjustments = VideoAdjustments(0.1f, 1.2f, 0.8f, -30f, 1.5f),
         renderQuality = RenderQuality(true, true, 32f, 8f, 16f, VideoScaler.CatmullRom, true, AnimationUpscaler.Fast),
-        videoTransform = VideoTransform(2.39f, 1.5f, -0.25f, 0.5f),
+        videoTransform = VideoTransform(2.39f, 1.5f, -0.25f, 0.5f, rotationDegrees = 270, mirrorHorizontal = true, mirrorVertical = true),
         subtitleDelay = (-1500).milliseconds,
         subtitleScale = 1.25f,
         subtitleStyle = style,

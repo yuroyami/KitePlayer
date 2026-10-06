@@ -728,8 +728,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * by a fraction of its own drawn size. Pass [VideoTransform.Identity] to reset. Published as
      * [PlayerSnapshot.videoTransform].
      *
+     * It also turns the picture in quarter steps and mirrors it either way (#428), on top of what
+     * the file asks for, and every renderer, the subtitles, picture in picture and [captureFrame]
+     * follow the turn.
+     *
      * @throws IllegalArgumentException outside the documented ranges: aspect 0.1..10 (or null),
-     *         zoom 0.25..4, pan -1..1 on each axis, all finite.
+     *         zoom 0.25..4, pan -1..1 on each axis, all finite, and a turn of 0, 90, 180 or 270.
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoTransform(value: VideoTransform) {
@@ -747,6 +751,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         }
         require(value.panX.isFinite() && value.panX in -1f..1f) { "panX must be within -1..1, was ${value.panX}" }
         require(value.panY.isFinite() && value.panY in -1f..1f) { "panY must be within -1..1, was ${value.panY}" }
+        require(value.rotationDegrees in setOf(0, 90, 180, 270)) {
+            "rotationDegrees must be 0, 90, 180 or 270, was ${value.rotationDegrees}"
+        }
     }
 
     /**

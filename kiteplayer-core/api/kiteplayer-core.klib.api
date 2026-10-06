@@ -3178,6 +3178,24 @@ final class io.github.yuroyami.kiteplayer/PictureCrop { // io.github.yuroyami.ki
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PictureCrop.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer/PictureOrientation { // io.github.yuroyami.kiteplayer/PictureOrientation|null[0]
+    constructor <init>(kotlin/Int, kotlin/Boolean) // io.github.yuroyami.kiteplayer/PictureOrientation.<init>|<init>(kotlin.Int;kotlin.Boolean){}[0]
+
+    final val isQuarterTurn // io.github.yuroyami.kiteplayer/PictureOrientation.isQuarterTurn|{}isQuarterTurn[0]
+        final fun <get-isQuarterTurn>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PictureOrientation.isQuarterTurn.<get-isQuarterTurn>|<get-isQuarterTurn>(){}[0]
+    final val mirrored // io.github.yuroyami.kiteplayer/PictureOrientation.mirrored|{}mirrored[0]
+        final fun <get-mirrored>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PictureOrientation.mirrored.<get-mirrored>|<get-mirrored>(){}[0]
+    final val rotationDegrees // io.github.yuroyami.kiteplayer/PictureOrientation.rotationDegrees|{}rotationDegrees[0]
+        final fun <get-rotationDegrees>(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureOrientation.rotationDegrees.<get-rotationDegrees>|<get-rotationDegrees>(){}[0]
+
+    final fun component1(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureOrientation.component1|component1(){}[0]
+    final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PictureOrientation.component2|component2(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/PictureOrientation // io.github.yuroyami.kiteplayer/PictureOrientation.copy|copy(kotlin.Int;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PictureOrientation.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PictureOrientation.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PictureOrientation.toString|toString(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/PipedMediaIo : io.github.yuroyami.kiteplayer/MediaIo { // io.github.yuroyami.kiteplayer/PipedMediaIo|null[0]
     constructor <init>(kotlin/Int = ...) // io.github.yuroyami.kiteplayer/PipedMediaIo.<init>|<init>(kotlin.Int){}[0]
 
@@ -4274,16 +4292,24 @@ final class io.github.yuroyami.kiteplayer/VideoSize { // io.github.yuroyami.kite
 }
 
 final class io.github.yuroyami.kiteplayer/VideoTransform { // io.github.yuroyami.kiteplayer/VideoTransform|null[0]
-    constructor <init>(kotlin/Float? = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer/VideoTransform.<init>|<init>(kotlin.Float?;kotlin.Float;kotlin.Float;kotlin.Float){}[0]
+    constructor <init>(kotlin/Float? = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Int = ..., kotlin/Boolean = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/VideoTransform.<init>|<init>(kotlin.Float?;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Int;kotlin.Boolean;kotlin.Boolean){}[0]
 
     final val aspectOverride // io.github.yuroyami.kiteplayer/VideoTransform.aspectOverride|{}aspectOverride[0]
         final fun <get-aspectOverride>(): kotlin/Float? // io.github.yuroyami.kiteplayer/VideoTransform.aspectOverride.<get-aspectOverride>|<get-aspectOverride>(){}[0]
     final val isIdentity // io.github.yuroyami.kiteplayer/VideoTransform.isIdentity|{}isIdentity[0]
         final fun <get-isIdentity>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VideoTransform.isIdentity.<get-isIdentity>|<get-isIdentity>(){}[0]
+    final val mirrorHorizontal // io.github.yuroyami.kiteplayer/VideoTransform.mirrorHorizontal|{}mirrorHorizontal[0]
+        final fun <get-mirrorHorizontal>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VideoTransform.mirrorHorizontal.<get-mirrorHorizontal>|<get-mirrorHorizontal>(){}[0]
+    final val mirrorVertical // io.github.yuroyami.kiteplayer/VideoTransform.mirrorVertical|{}mirrorVertical[0]
+        final fun <get-mirrorVertical>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VideoTransform.mirrorVertical.<get-mirrorVertical>|<get-mirrorVertical>(){}[0]
     final val panX // io.github.yuroyami.kiteplayer/VideoTransform.panX|{}panX[0]
         final fun <get-panX>(): kotlin/Float // io.github.yuroyami.kiteplayer/VideoTransform.panX.<get-panX>|<get-panX>(){}[0]
     final val panY // io.github.yuroyami.kiteplayer/VideoTransform.panY|{}panY[0]
         final fun <get-panY>(): kotlin/Float // io.github.yuroyami.kiteplayer/VideoTransform.panY.<get-panY>|<get-panY>(){}[0]
+    final val rotationDegrees // io.github.yuroyami.kiteplayer/VideoTransform.rotationDegrees|{}rotationDegrees[0]
+        final fun <get-rotationDegrees>(): kotlin/Int // io.github.yuroyami.kiteplayer/VideoTransform.rotationDegrees.<get-rotationDegrees>|<get-rotationDegrees>(){}[0]
+    final val turnsOrMirrors // io.github.yuroyami.kiteplayer/VideoTransform.turnsOrMirrors|{}turnsOrMirrors[0]
+        final fun <get-turnsOrMirrors>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VideoTransform.turnsOrMirrors.<get-turnsOrMirrors>|<get-turnsOrMirrors>(){}[0]
     final val zoom // io.github.yuroyami.kiteplayer/VideoTransform.zoom|{}zoom[0]
         final fun <get-zoom>(): kotlin/Float // io.github.yuroyami.kiteplayer/VideoTransform.zoom.<get-zoom>|<get-zoom>(){}[0]
 
@@ -4291,9 +4317,14 @@ final class io.github.yuroyami.kiteplayer/VideoTransform { // io.github.yuroyami
     final fun component2(): kotlin/Float // io.github.yuroyami.kiteplayer/VideoTransform.component2|component2(){}[0]
     final fun component3(): kotlin/Float // io.github.yuroyami.kiteplayer/VideoTransform.component3|component3(){}[0]
     final fun component4(): kotlin/Float // io.github.yuroyami.kiteplayer/VideoTransform.component4|component4(){}[0]
-    final fun copy(kotlin/Float? = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ...): io.github.yuroyami.kiteplayer/VideoTransform // io.github.yuroyami.kiteplayer/VideoTransform.copy|copy(kotlin.Float?;kotlin.Float;kotlin.Float;kotlin.Float){}[0]
+    final fun component5(): kotlin/Int // io.github.yuroyami.kiteplayer/VideoTransform.component5|component5(){}[0]
+    final fun component6(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VideoTransform.component6|component6(){}[0]
+    final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VideoTransform.component7|component7(){}[0]
+    final fun copy(kotlin/Float? = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Int = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/VideoTransform // io.github.yuroyami.kiteplayer/VideoTransform.copy|copy(kotlin.Float?;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Int;kotlin.Boolean;kotlin.Boolean){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/VideoTransform.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/VideoTransform.hashCode|hashCode(){}[0]
+    final fun orient(io.github.yuroyami.kiteplayer.spi/VideoFrame): io.github.yuroyami.kiteplayer/PictureOrientation // io.github.yuroyami.kiteplayer/VideoTransform.orient|orient(io.github.yuroyami.kiteplayer.spi.VideoFrame){}[0]
+    final fun orient(kotlin/Int, kotlin/Boolean): io.github.yuroyami.kiteplayer/PictureOrientation // io.github.yuroyami.kiteplayer/VideoTransform.orient|orient(kotlin.Int;kotlin.Boolean){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/VideoTransform.toString|toString(){}[0]
 
     final object Companion { // io.github.yuroyami.kiteplayer/VideoTransform.Companion|null[0]

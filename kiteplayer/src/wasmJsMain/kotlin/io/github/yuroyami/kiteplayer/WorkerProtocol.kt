@@ -658,6 +658,9 @@ private fun encodeTransform(value: VideoTransform): JsAny = record {
     put("zoom", value.zoom)
     put("panX", value.panX)
     put("panY", value.panY)
+    put("rotation", value.rotationDegrees)
+    put("mirrorHorizontal", value.mirrorHorizontal)
+    put("mirrorVertical", value.mirrorVertical)
 }
 
 private fun encodeStyle(value: SubtitleStyleOverride): JsAny = record {
@@ -1440,6 +1443,9 @@ private fun decodeTransform(o: JsAny): VideoTransform = VideoTransform(
     zoom = o.float("zoom") ?: 1f,
     panX = o.float("panX") ?: 0f,
     panY = o.float("panY") ?: 0f,
+    rotationDegrees = o.int("rotation") ?: 0,
+    mirrorHorizontal = o.flag("mirrorHorizontal"),
+    mirrorVertical = o.flag("mirrorVertical"),
 )
 
 private fun decodeStyle(o: JsAny): SubtitleStyleOverride = SubtitleStyleOverride(

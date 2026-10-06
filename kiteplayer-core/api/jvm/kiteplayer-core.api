@@ -1074,6 +1074,20 @@ public final class io/github/yuroyami/kiteplayer/PictureCrop {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/PictureOrientation {
+	public fun <init> (IZ)V
+	public final fun component1 ()I
+	public final fun component2 ()Z
+	public final fun copy (IZ)Lio/github/yuroyami/kiteplayer/PictureOrientation;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PictureOrientation;IZILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PictureOrientation;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMirrored ()Z
+	public final fun getRotationDegrees ()I
+	public fun hashCode ()I
+	public final fun isQuarterTurn ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/PipedMediaIo : io/github/yuroyami/kiteplayer/MediaIo {
 	public fun <init> ()V
 	public fun <init> (I)V
@@ -3010,21 +3024,30 @@ public final class io/github/yuroyami/kiteplayer/VideoSize {
 public final class io/github/yuroyami/kiteplayer/VideoTransform {
 	public static final field Companion Lio/github/yuroyami/kiteplayer/VideoTransform$Companion;
 	public fun <init> ()V
-	public fun <init> (Ljava/lang/Float;FFF)V
-	public synthetic fun <init> (Ljava/lang/Float;FFFILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/Float;FFFIZZ)V
+	public synthetic fun <init> (Ljava/lang/Float;FFFIZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/Float;
 	public final fun component2 ()F
 	public final fun component3 ()F
 	public final fun component4 ()F
-	public final fun copy (Ljava/lang/Float;FFF)Lio/github/yuroyami/kiteplayer/VideoTransform;
-	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/VideoTransform;Ljava/lang/Float;FFFILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/VideoTransform;
+	public final fun component5 ()I
+	public final fun component6 ()Z
+	public final fun component7 ()Z
+	public final fun copy (Ljava/lang/Float;FFFIZZ)Lio/github/yuroyami/kiteplayer/VideoTransform;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/VideoTransform;Ljava/lang/Float;FFFIZZILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/VideoTransform;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAspectOverride ()Ljava/lang/Float;
+	public final fun getMirrorHorizontal ()Z
+	public final fun getMirrorVertical ()Z
 	public final fun getPanX ()F
 	public final fun getPanY ()F
+	public final fun getRotationDegrees ()I
+	public final fun getTurnsOrMirrors ()Z
 	public final fun getZoom ()F
 	public fun hashCode ()I
 	public final fun isIdentity ()Z
+	public final fun orient (IZ)Lio/github/yuroyami/kiteplayer/PictureOrientation;
+	public final fun orient (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Lio/github/yuroyami/kiteplayer/PictureOrientation;
 	public fun toString ()Ljava/lang/String;
 }
 

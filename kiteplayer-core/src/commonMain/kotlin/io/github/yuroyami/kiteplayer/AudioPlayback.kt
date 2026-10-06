@@ -154,6 +154,9 @@ public class AudioPlayback(
     /** Whether the night mode is on (#442). */
     private val wantedNightMode = atomic(false)
 
+    /** How far the dialogue is raised or lowered in a downmix, in decibels (#442). */
+    private val wantedDialogueLevelDb = atomic(0f)
+
     /** The equaliser the feeder applies. Held here so a pipeline rebuild cannot lose it. */
     private val wantedEqualizer = atomic(EqualizerSettings.Flat)
 
@@ -1013,6 +1016,17 @@ public class AudioPlayback(
         get() = wantedNightMode.value
         set(value) {
             wantedNightMode.value = value
+        }
+
+    /**
+     * How far, in decibels, the centre channel is raised or lowered where the downmix folds it into
+     * other speakers (#442). Applied as audio is written, so it is heard after the ring's depth, as
+     * the balance is.
+     */
+    public var dialogueLevelDb: Float
+        get() = wantedDialogueLevelDb.value
+        set(value) {
+            wantedDialogueLevelDb.value = value
         }
 
     /** The settings last written into the current pipeline, so an unchanged one is not rebuilt. */

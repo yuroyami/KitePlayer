@@ -151,6 +151,7 @@ class WorkerProtocolTest {
         durationIsEstimate = true,
         stereoMode = StereoMode.Swapped,
         nightMode = true,
+        dialogueLevelDb = 4.5f,
         lyrics = "A line\nAnother line",
     )
 
@@ -289,6 +290,7 @@ class WorkerProtocolTest {
             Control.SetBalance(-0.75f),
             Control.SetStereoMode(StereoMode.LeftOnly),
             Control.SetNightMode(true),
+            Control.SetDialogueLevel(-3.5f),
             Control.SetMuted(true),
             Control.SetVideoEnabled(false),
             Control.SetLoop(LoopMode.One),

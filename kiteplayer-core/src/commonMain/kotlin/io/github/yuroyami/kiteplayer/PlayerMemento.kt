@@ -65,6 +65,8 @@ public data class PlayerMemento(
     val stereoMode: StereoMode = StereoMode.Stereo,
     /** Whether the night mode was on (#442). A listening setting, so it travels. */
     val nightMode: Boolean = false,
+    /** How far the dialogue was raised or lowered in a downmix, in decibels (#442). It travels. */
+    val dialogueLevelDb: Float = 0f,
 ) {
 
     /**
@@ -115,6 +117,7 @@ public data class PlayerMemento(
         put("balance", balance.toString())
         put("stereoMode", stereoMode.name)
         put("nightMode", nightMode.toString())
+        put("dialogueLevelDb", dialogueLevelDb.toString())
         put("equalizer.preampDb", equalizer.preampDb.toString())
         put("equalizer.gainsDb", equalizer.gainsDb.joinToString(" "))
         put("subtitleScale", subtitleScale.toString())
@@ -224,6 +227,7 @@ public data class PlayerMemento(
                 balance = properties["balance"]?.toFloat() ?: 0f,
                 stereoMode = properties["stereoMode"]?.let { StereoMode.valueOf(it) } ?: StereoMode.Stereo,
                 nightMode = properties["nightMode"]?.toBooleanStrict() ?: false,
+                dialogueLevelDb = properties["dialogueLevelDb"]?.toFloat() ?: 0f,
                 equalizer = EqualizerSettings(
                     gainsDb = properties["equalizer.gainsDb"]
                         ?.split(" ")?.filter { it.isNotBlank() }?.map { it.toFloat() }

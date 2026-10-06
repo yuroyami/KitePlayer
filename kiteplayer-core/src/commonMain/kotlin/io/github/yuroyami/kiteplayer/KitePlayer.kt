@@ -381,6 +381,25 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.SetNightMode(on, CompletableDeferred()))
     }
 
+    /**
+     * Raises or lowers the centre channel, where a film's dialogue lives, by [db] decibels wherever
+     * the downmix folds it into speakers that are not a centre (#442), as a receiver's dialogue
+     * level does. Zero, the default, leaves the downmix as FFmpeg's rules make it. A device that has
+     * a centre speaker, and a source without a centre channel, hear no change. A change crossfades,
+     * so it never clicks, and is heard once the audio already buffered has played, as a
+     * [setBalance] change is. Published as [PlayerSnapshot.dialogueLevelDb].
+     *
+     * @throws IllegalArgumentException when [db] is not finite or is more than
+     *         [DIALOGUE_LEVEL_MAX_DB] either way.
+     */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
+    public fun setDialogueLevel(db: Float) {
+        require(db.isFinite() && db >= -DIALOGUE_LEVEL_MAX_DB && db <= DIALOGUE_LEVEL_MAX_DB) {
+            "the dialogue level must be between -$DIALOGUE_LEVEL_MAX_DB and $DIALOGUE_LEVEL_MAX_DB dB, was $db"
+        }
+        core.post(CoreCommand.SetDialogueLevel(db, CompletableDeferred()))
+    }
+
     private fun checkDelay(name: String, value: Duration) =
         require(value.isFinite() && value.absoluteValue <= DELAY_MAX) {
             "$name must be finite and at most $DELAY_MAX either way, was $value"
@@ -1178,6 +1197,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             balance = snapshot.balance,
             stereoMode = snapshot.stereoMode,
             nightMode = snapshot.nightMode,
+            dialogueLevelDb = snapshot.dialogueLevelDb,
             equalizer = snapshot.equalizer,
             subtitleScale = snapshot.subtitleScale,
             subtitlePosition = snapshot.subtitlePosition,
@@ -1245,6 +1265,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setBalance(memento.balance)
         setStereoMode(memento.stereoMode)
         setNightMode(memento.nightMode)
+        setDialogueLevel(memento.dialogueLevelDb.coerceIn(-DIALOGUE_LEVEL_MAX_DB, DIALOGUE_LEVEL_MAX_DB))
         setEqualizer(memento.equalizer)
         setSubtitleScale(memento.subtitleScale)
         setSubtitlePosition(memento.subtitlePosition)
@@ -1600,6 +1621,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
         /** The largest shift, either way, that [setAudioDelay] and [setSubtitleDelay] accept. */
         public val DELAY_MAX: Duration = kotlin.time.Duration.parse("1h")
+
+        /** The most, in decibels either way, that [setDialogueLevel] accepts. */
+        public const val DIALOGUE_LEVEL_MAX_DB: Float = 12f
+
         /**
          * Builds a player from [config], on the backends it names and nothing else.
          *

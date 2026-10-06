@@ -291,6 +291,9 @@ public class KitePlayerWorker private constructor(
     /** Turns the night mode on or off (#442). */
     public fun setNightMode(on: Boolean): Unit = send(Control.SetNightMode(on))
 
+    /** Raises or lowers the dialogue in a downmix, in decibels (#442). */
+    public fun setDialogueLevel(db: Float): Unit = send(Control.SetDialogueLevel(db))
+
     /** Silences the sound without losing the volume. */
     public fun setMuted(value: Boolean): Unit = send(Control.SetMuted(value))
 

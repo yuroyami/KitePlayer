@@ -185,6 +185,8 @@ public data class PlayerSnapshot(
     val lyrics: String? = null,
     /** Whether the night mode is on. See [KitePlayer.setNightMode]. */
     val nightMode: Boolean = false,
+    /** How far the dialogue is raised or lowered in a downmix, in decibels. See [KitePlayer.setDialogueLevel]. */
+    val dialogueLevelDb: Float = 0f,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

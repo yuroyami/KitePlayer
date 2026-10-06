@@ -390,7 +390,24 @@ public interface MediaIo : AutoCloseable {
      * the bytes before [read] hands them over, so the demuxer never sees one.
      */
     public fun takeTags(): Map<String, String>? = null
+
+    /**
+     * A server's refusal of an address this reader, or one it opened, had been reading, once, or
+     * null, the default (#453). A signed address that expired gets one: the server answers 401 or
+     * 403 to the next segment, the next playlist reload or the next range of the file, after the
+     * item had opened. The engine asks on its own passes and opens the item again through its
+     * resolver or its `io` factory, which hand out a fresh address, at the position it reached.
+     *
+     * Report a refusal of the item's first open as a failure of that open instead, as always.
+     */
+    public fun takeRefusal(): SourceRefusal? = null
 }
+
+/**
+ * A server's answer [status], 401 or 403, to a request for [uri] that an open item's reader made
+ * (#453). See [MediaIo.takeRefusal].
+ */
+public data class SourceRefusal(val uri: String, val status: Int)
 
 /**
  * Turns a URI into a [MediaIo] when it knows how, at open time (the Ktor

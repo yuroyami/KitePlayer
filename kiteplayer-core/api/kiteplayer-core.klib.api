@@ -1030,6 +1030,7 @@ abstract interface io.github.yuroyami.kiteplayer/MediaIo : kotlin/AutoCloseable 
     abstract suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer/MediaIo.seek|seek(kotlin.Long){}[0]
     open fun networkBitsPerSecond(): kotlin/Long? // io.github.yuroyami.kiteplayer/MediaIo.networkBitsPerSecond|networkBitsPerSecond(){}[0]
     open fun setWarningSink(kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit>) // io.github.yuroyami.kiteplayer/MediaIo.setWarningSink|setWarningSink(kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>){}[0]
+    open fun takeRefusal(): io.github.yuroyami.kiteplayer/SourceRefusal? // io.github.yuroyami.kiteplayer/MediaIo.takeRefusal|takeRefusal(){}[0]
     open fun takeTags(): kotlin.collections/Map<kotlin/String, kotlin/String>? // io.github.yuroyami.kiteplayer/MediaIo.takeTags|takeTags(){}[0]
     open suspend fun openRelated(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer/MediaIo.openRelated|openRelated(kotlin.String){}[0]
 
@@ -3837,6 +3838,22 @@ final class io.github.yuroyami.kiteplayer/RenderQuality { // io.github.yuroyami.
     }
 }
 
+final class io.github.yuroyami.kiteplayer/SourceRefusal { // io.github.yuroyami.kiteplayer/SourceRefusal|null[0]
+    constructor <init>(kotlin/String, kotlin/Int) // io.github.yuroyami.kiteplayer/SourceRefusal.<init>|<init>(kotlin.String;kotlin.Int){}[0]
+
+    final val status // io.github.yuroyami.kiteplayer/SourceRefusal.status|{}status[0]
+        final fun <get-status>(): kotlin/Int // io.github.yuroyami.kiteplayer/SourceRefusal.status.<get-status>|<get-status>(){}[0]
+    final val uri // io.github.yuroyami.kiteplayer/SourceRefusal.uri|{}uri[0]
+        final fun <get-uri>(): kotlin/String // io.github.yuroyami.kiteplayer/SourceRefusal.uri.<get-uri>|<get-uri>(){}[0]
+
+    final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/SourceRefusal.component1|component1(){}[0]
+    final fun component2(): kotlin/Int // io.github.yuroyami.kiteplayer/SourceRefusal.component2|component2(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/SourceRefusal // io.github.yuroyami.kiteplayer/SourceRefusal.copy|copy(kotlin.String;kotlin.Int){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/SourceRefusal.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/SourceRefusal.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/SourceRefusal.toString|toString(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/StreamVariant { // io.github.yuroyami.kiteplayer/StreamVariant|null[0]
     constructor <init>(kotlin/Int, kotlin/Long, kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Double? = ..., kotlin/String? = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/StreamVariant.<init>|<init>(kotlin.Int;kotlin.Long;kotlin.Int?;kotlin.Int?;kotlin.Double?;kotlin.String?;kotlin.Boolean){}[0]
 
@@ -4611,6 +4628,25 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         open fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.fields.<get-fields>|<get-fields>(){}[0]
 
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.toString|toString(){}[0]
+
+    final class AddressRenewed : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed|null[0]
+        constructor <init>(kotlin/String, kotlin/Int) // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.<init>|<init>(kotlin.String;kotlin.Int){}[0]
+
+        final val fields // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.fields|{}fields[0]
+            final fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.fields.<get-fields>|<get-fields>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.message.<get-message>|<get-message>(){}[0]
+        final val status // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.status|{}status[0]
+            final fun <get-status>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.status.<get-status>|<get-status>(){}[0]
+        final val uri // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.uri|{}uri[0]
+            final fun <get-uri>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.uri.<get-uri>|<get-uri>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.component1|component1(){}[0]
+        final fun component2(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.copy|copy(kotlin.String;kotlin.Int){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AddressRenewed.hashCode|hashCode(){}[0]
+    }
 
     final class AudioDeviceChanged : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged.<init>|<init>(kotlin.String){}[0]

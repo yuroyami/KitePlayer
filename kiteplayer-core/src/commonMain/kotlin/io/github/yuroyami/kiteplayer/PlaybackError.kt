@@ -246,6 +246,22 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * A server refused an address of the item with [status], 401 or 403, after it opened, as one does
+     * when a signed address expires, and the player opened the item again through its resolver or
+     * its `io` factory, at the position it had reached (#453). [uri] is the refused address, with
+     * its query hidden. The picture holds for that moment. The player does this once until playback
+     * has moved on, so a resolver that hands out the refused address again ends in the server's
+     * answer as before.
+     */
+    public data class AddressRenewed(val uri: String, val status: Int) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("uri" to uri, "status" to status.toString())
+
+        override val message: String
+            get() = "$uri was refused with $status, so the item was opened again for a fresh address"
+    }
+
+    /**
      * The reader lost its connection to the source at byte [position] and is connecting again,
      * for the [attempt]-th time in one read. [detail] says what failed. Playback waits meanwhile,
      * and it fails only when the reader gives up or `BufferPolicy.stallTimeout` passes.

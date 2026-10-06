@@ -922,6 +922,11 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             kind("AudioUnderrun")
             put("total", warning.totalSoFar)
         }
+        is PlaybackWarning.AddressRenewed -> {
+            kind("AddressRenewed")
+            put("uri", warning.uri)
+            put("status", warning.status)
+        }
         is PlaybackWarning.SourceReconnecting -> {
             kind("SourceReconnecting")
             put("position", warning.position)
@@ -1590,6 +1595,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "FrameDropping" -> PlaybackWarning.FrameDropping(o.int("dropped") ?: missing("dropped"))
         "AudioDeviceChanged" -> PlaybackWarning.AudioDeviceChanged(detail)
         "AudioUnderrun" -> PlaybackWarning.AudioUnderrun(o.long("total") ?: missing("total"))
+        "AddressRenewed" -> PlaybackWarning.AddressRenewed(o.str("uri") ?: missing("uri"), o.int("status") ?: missing("status"))
         "SourceReconnecting" -> PlaybackWarning.SourceReconnecting(
             o.long("position") ?: missing("position"),
             o.int("attempt") ?: missing("attempt"),

@@ -47,6 +47,7 @@ class WarningAuditTest {
         PlaybackWarning.AudioTapFailed("x"),
         PlaybackWarning.RecordingStopped("x.mkv", "x"),
         PlaybackWarning.SourceReconnecting(1_024, 1, "x"),
+        PlaybackWarning.AddressRenewed("https://cdn.example/seg-1.ts", 403),
         PlaybackWarning.GaplessFallback(1, "x"),
         PlaybackWarning.SegmentSkipped("https://cdn.example/seg-1.ts", "x"),
         PlaybackWarning.ExternalClockSilent("x"),
@@ -74,6 +75,10 @@ class WarningAuditTest {
         is PlaybackWarning.GaplessFallback -> listOf(
             "PlaybackCore's queue handoff, when the next item cannot follow the current one without a " +
                 "gap: its preload failed or was not ready, an item has no audio, or its audio format differs",
+        )
+        is PlaybackWarning.AddressRenewed -> listOf(
+            "PlaybackCore.renewIfRefused, when the item's reader reports through MediaIo.takeRefusal that a " +
+                "server answered 401 or 403 after the open, and the item opens again through its resolver",
         )
         is PlaybackWarning.SourceReconnecting -> listOf(
             "KtorMediaIo.read in :kiteplayer-network, before each reconnect after a failed read, a read " +

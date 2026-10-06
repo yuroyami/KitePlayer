@@ -31,6 +31,7 @@ public final class io/github/yuroyami/kiteplayer/network/KtorMediaIo : io/github
 	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setWarningSink (Lkotlin/jvm/functions/Function1;)V
+	public fun takeRefusal ()Lio/github/yuroyami/kiteplayer/SourceRefusal;
 	public fun takeTags ()Ljava/util/Map;
 }
 
@@ -171,6 +172,7 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashMediaIo : io/g
 	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setWarningSink (Lkotlin/jvm/functions/Function1;)V
+	public fun takeRefusal ()Lio/github/yuroyami/kiteplayer/SourceRefusal;
 	public fun takeTags ()Ljava/util/Map;
 }
 

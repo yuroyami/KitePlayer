@@ -178,6 +178,7 @@ class WorkerProtocolTest {
         PlaybackWarning.AudioDeviceChanged("device lost: headphones"),
         PlaybackWarning.AudioUnderrun(3L),
         PlaybackWarning.SourceReconnecting(1_048_576L, 2, "reset"),
+        PlaybackWarning.AddressRenewed("https://cdn.test/seg-3.ts", 403),
         PlaybackWarning.AudioTapFailed("threw"),
         PlaybackWarning.AudioDeviceUnderrun("ran dry"),
         PlaybackWarning.AudioDrainIncomplete("bounded out"),

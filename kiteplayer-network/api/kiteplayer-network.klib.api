@@ -460,6 +460,7 @@ final class io.github.yuroyami.kiteplayer.network/KtorMediaIo : io.github.yuroya
     final fun close() // io.github.yuroyami.kiteplayer.network/KtorMediaIo.close|close(){}[0]
     final fun networkBitsPerSecond(): kotlin/Long? // io.github.yuroyami.kiteplayer.network/KtorMediaIo.networkBitsPerSecond|networkBitsPerSecond(){}[0]
     final fun setWarningSink(kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit>) // io.github.yuroyami.kiteplayer.network/KtorMediaIo.setWarningSink|setWarningSink(kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>){}[0]
+    final fun takeRefusal(): io.github.yuroyami.kiteplayer/SourceRefusal? // io.github.yuroyami.kiteplayer.network/KtorMediaIo.takeRefusal|takeRefusal(){}[0]
     final fun takeTags(): kotlin.collections/Map<kotlin/String, kotlin/String>? // io.github.yuroyami.kiteplayer.network/KtorMediaIo.takeTags|takeTags(){}[0]
     final suspend fun openRelated(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer.network/KtorMediaIo.openRelated|openRelated(kotlin.String){}[0]
     final suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer.network/KtorMediaIo.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]

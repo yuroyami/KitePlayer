@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.MediaIoResolver
 import io.github.yuroyami.kiteplayer.PlaybackWarning
+import io.github.yuroyami.kiteplayer.SourceRefusal
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.cookies.AcceptAllCookiesStorage
 import io.ktor.client.plugins.cookies.HttpCookies
@@ -13,6 +14,8 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import io.ktor.http.URLBuilder
 import io.ktor.http.URLProtocol
 import io.ktor.http.Url
@@ -254,6 +257,9 @@ public class KtorMediaIo private constructor(
      * The tags the last read brought (#423): the station's headers with the first, and then each
      * change of a song's fields, from the title block the read began after.
      */
+    /** The newest refusal this reader, or one it opened, was answered after the item opened (#453). */
+    override fun takeRefusal(): SourceRefusal? = related.takeRefusal()
+
     override fun takeTags(): Map<String, String>? {
         val station = stationPending
         val song = icy?.take()
@@ -439,6 +445,7 @@ public class KtorMediaIo private constructor(
         val ok = response.status == HttpStatusCode.PartialContent ||
             (target == 0L && response.status == HttpStatusCode.OK)
         if (!ok) {
+            related.answered(uri, response.status)
             val changed = if (entityTag != null && response.status == HttpStatusCode.OK) {
                 ", so the file changed since it was opened"
             } else {
@@ -494,6 +501,7 @@ public class KtorMediaIo private constructor(
             )
         }
         if (status != HttpStatusCode.OK) {
+            related.answered(uri, status)
             throw KtorMediaIoException(
                 "server answered $status to a reconnect to the live stream $shown",
                 retryable = status.value >= 500 || status == HttpStatusCode.RequestTimeout || status == HttpStatusCode.TooManyRequests,
@@ -621,13 +629,17 @@ public class KtorMediaIo private constructor(
                                         Probe(total, seekable = false, tag, location, type, date, live = total == null && radio, interval, station),
                                     )
                                 }
-                                else -> throw KtorMediaIoException(
-                                    "cannot open $shown: ${response.status}",
-                                    // A server error, an overloaded server or a slow request may pass.
-                                    retryable = response.status.value >= 500 ||
-                                        response.status == HttpStatusCode.RequestTimeout ||
-                                        response.status == HttpStatusCode.TooManyRequests,
-                                )
+                                else -> {
+                                    // An address the item's reader opens after the item did (#453).
+                                    related.answered(uri, response.status)
+                                    throw KtorMediaIoException(
+                                        "cannot open $shown: ${response.status}",
+                                        // A server error, an overloaded server or a slow request may pass.
+                                        retryable = response.status.value >= 500 ||
+                                            response.status == HttpStatusCode.RequestTimeout ||
+                                            response.status == HttpStatusCode.TooManyRequests,
+                                    )
+                                }
                             }
                             copyMeasured(response.bodyAsChannel(), pipe, meter, sent)
                             pipe.close()
@@ -772,6 +784,23 @@ internal class RelatedRequests(
     private val itemHeaders: Map<String, String>,
 ) {
     private val itemOrigin = originOrNull(itemUri)
+
+    /**
+     * The newest 401 or 403 that a reader of this item had answered after the item opened (#453),
+     * until [takeRefusal] hands it over. Shared by the item's reader and every one it opened, so
+     * a segment refused on a CDN reaches the engine through the reader it holds.
+     */
+    @OptIn(ExperimentalAtomicApi::class)
+    private val refusal = AtomicReference<SourceRefusal?>(null)
+
+    /** Notes that [uri] was answered [status], when that is a refusal a fresh address may cure. */
+    @OptIn(ExperimentalAtomicApi::class)
+    fun answered(uri: String, status: HttpStatusCode) {
+        if (status == HttpStatusCode.Unauthorized || status == HttpStatusCode.Forbidden) refusal.store(SourceRefusal(uri, status.value))
+    }
+
+    @OptIn(ExperimentalAtomicApi::class)
+    fun takeRefusal(): SourceRefusal? = refusal.exchange(null)
 
     fun headersFor(uri: String): Map<String, String> =
         if (itemOrigin != null && originOrNull(uri) == itemOrigin) itemHeaders else defaults

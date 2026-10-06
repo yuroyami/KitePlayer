@@ -249,6 +249,8 @@ internal class DashTransport(
     val bitsPerSecond: () -> Long?,
     /** Called once, when the item's reader closes. */
     val release: () -> Unit = {},
+    /** The newest refusal of a request any reader [open] made, once (#453). */
+    val refusal: () -> io.github.yuroyami.kiteplayer.SourceRefusal? = { null },
 )
 
 /**
@@ -267,6 +269,7 @@ internal fun DashTransport.failingOver(failover: DashFailover, mpdUrl: String, p
         date = inner.date,
         bitsPerSecond = inner.bitsPerSecond,
         release = inner.release,
+        refusal = inner.refusal,
     )
 }
 
@@ -281,6 +284,7 @@ private class ReleasingMediaIo(private val inner: MediaIo, private val release: 
     override suspend fun seek(position: Long) = inner.seek(position)
     override fun setWarningSink(sink: (PlaybackWarning) -> Unit) = inner.setWarningSink(sink)
     override suspend fun openRelated(uri: String): MediaIo? = inner.openRelated(uri)
+    override fun takeRefusal(): io.github.yuroyami.kiteplayer.SourceRefusal? = inner.takeRefusal()
     override fun networkBitsPerSecond(): Long? = inner.networkBitsPerSecond()
 
     override fun close() {
@@ -505,6 +509,8 @@ public object Dash {
                 date = { url -> openChecked(url).use { it.date } },
                 bitsPerSecond = io::networkBitsPerSecond,
                 release = io::close,
+                // Every reader this item opens goes through [io], which collects their refusals.
+                refusal = io::takeRefusal,
             ),
         )
     }
@@ -616,6 +622,7 @@ public object Dash {
                 fetchDate = transport.date,
                 bitsPerSecond = transport.bitsPerSecond,
                 release = transport.release,
+                refusal = transport.refusal,
             )
         }
 

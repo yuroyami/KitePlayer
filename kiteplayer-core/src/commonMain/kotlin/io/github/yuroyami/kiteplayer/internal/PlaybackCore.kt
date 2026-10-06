@@ -1304,6 +1304,9 @@ internal class PlaybackCore(
     /** True when the item's variant is the player's own step down, which it may lower again. */
     private var variantChosenByPlayer = false
 
+    /** Where the last renewal of the item's address (#453) opened it again, or null when none has. */
+    private var renewedAtUs: Long? = null
+
     /**
      * True while the primary subtitle is the one the open chose by its rules, which read the audio,
      * so an audio change chooses it again (#506). A selection by the viewer or the application, or a
@@ -3243,6 +3246,7 @@ internal class PlaybackCore(
     private fun resetForOpen(item: MediaItem, epoch: Generation) {
         media = item
         variantChosenByPlayer = false
+        renewedAtUs = null
         subtitleChosenByPlayer = false
         soundOffByViewer = false
         pictureOffByViewer = false
@@ -5132,6 +5136,34 @@ internal class PlaybackCore(
      * wakes the actor when it lands.
      */
     /**
+     * Opens the item again for a fresh address when its reader reports that a server refused one
+     * with 401 or 403 after the open (#453), as a signed address that expired is refused: through
+     * the same rebuild a live rejoin runs, which resolves the item again through its resolver or
+     * its `io` factory and goes back to the position it reached, or to the live edge.
+     *
+     * Once until playback has moved [RENEWAL_PROGRESS_US] past where the last renewal opened it, so
+     * a resolver that hands out the refused address again is not asked for ever: the refusal then
+     * ends the stream as it did before, with the server's answer in the error.
+     *
+     * @return true when a renewal is on its way, the one asked for here or a rebuild already waiting.
+     */
+    private fun renewIfRefused(session: OpenSession): Boolean {
+        val refusal = session.networkIo?.takeRefusal() ?: return false
+        if (reopenPending) return true
+        val at = currentPosition().micros
+        val last = renewedAtUs
+        if (last != null && at - last < RENEWAL_PROGRESS_US) {
+            io.github.yuroyami.kiteplayer.KiteLog.log("kiteplayer", "${redactUri(refusal.uri)} was refused with ${refusal.status} again right after a renewal")
+            return false
+        }
+        renewedAtUs = at
+        warn(PlaybackWarning.AddressRenewed(redactUri(refusal.uri), refusal.status))
+        pendingRejoin = true
+        wakeIn(Duration.ZERO)
+        return true
+    }
+
+    /**
      * Whether [session]'s silent stretches are cut (#429): while the setting is on, no picture is
      * shown and the stream is not live. A picture would have to follow each cut, and a live stream
      * cut would only reach its live edge sooner and wait there. Turning a video back on seeks to
@@ -6460,6 +6492,7 @@ internal class PlaybackCore(
             publishedPositionMicros.value = currentPosition().micros
         }
         showHeardTags(session)
+        renewIfRefused(session)
         // Each pass, so a video turned off or on, or a track change that brings a picture, decides
         // the cutting from the next buffer (#429).
         syncSilenceSkip(session)
@@ -10771,6 +10804,8 @@ internal class PlaybackCore(
             pendingVideoRecovery = recovery
             return
         }
+        // A read that failed because the server refused an expired address is cured by a fresh one (#453).
+        if (outcome.name == DEMUX_WORKER && renewIfRefused(session)) return
         val error = when {
             outcome.name == DEMUX_WORKER -> (cause as? PlaybackException)?.error ?: PlaybackError.SourceUnavailable(
                 media?.uri ?: "", cause, "the demuxer failed: ${cause.message}",
@@ -13445,6 +13480,9 @@ private const val EXTERNAL_SEEK_LATENCY_CAP_NANOS: Long = 2_000_000_000L
 private const val EXTERNAL_MOVED_US: Long = 1_000L
 private const val EXTERNAL_SILENT_NANOS: Long = 2_000_000_000L
 private const val EXTERNAL_TRIM_STEP: Double = 0.0005
+
+/** How far playback must move past a renewal of the item's address before another may run (#453). */
+private const val RENEWAL_PROGRESS_US: Long = 2_000_000L
 
 // Holding the delay behind a live sender (#395).
 /** How much faster than the caller's speed the player catches up: a second of delay in ten. */

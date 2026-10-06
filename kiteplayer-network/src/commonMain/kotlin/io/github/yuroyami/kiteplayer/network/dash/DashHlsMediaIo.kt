@@ -59,6 +59,8 @@ internal class DashHlsMediaIo(
     private val initBudgetBytes: Long = MAX_INIT_BYTES,
     /** Told of each live manifest fetched again, so the locations its segments come from follow it (#440). */
     private val onManifest: suspend (DashManifest) -> Unit = {},
+    /** The newest refusal of a request a reader of this item made, once (#453). */
+    private val refusal: () -> io.github.yuroyami.kiteplayer.SourceRefusal? = { null },
 ) : MediaIo {
 
     private val master = presentation.master.encodeToByteArray()
@@ -141,6 +143,8 @@ internal class DashHlsMediaIo(
     }
 
     override fun networkBitsPerSecond(): Long? = bitsPerSecond()
+
+    override fun takeRefusal(): io.github.yuroyami.kiteplayer.SourceRefusal? = refusal()
 
     override suspend fun openRelated(uri: String): MediaIo? {
         if (closed) throw KtorMediaIoException("openRelated after close")

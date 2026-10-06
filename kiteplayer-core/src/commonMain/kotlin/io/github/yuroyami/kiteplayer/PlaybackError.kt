@@ -248,8 +248,8 @@ public sealed class PlaybackWarning {
     /**
      * A server refused an address of the item with [status], 401 or 403, after it opened, as one does
      * when a signed address expires, and the player opened the item again through its resolver or
-     * its `io` factory, at the position it had reached (#453). [uri] is the refused address, with
-     * its query hidden. The picture holds for that moment. The player does this once until playback
+     * its `io` factory, at the position it had reached (#453). [uri] is the refused address's file
+     * name alone, so no token of a signed address shows. The picture holds for that moment. The player does this once until playback
      * has moved on, so a resolver that hands out the refused address again ends in the server's
      * answer as before.
      */

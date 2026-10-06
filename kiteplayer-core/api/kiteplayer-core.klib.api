@@ -967,6 +967,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoFrame : kotlin/AutoClo
         abstract fun <get-pts>(): io.github.yuroyami.kiteplayer/Pts // io.github.yuroyami.kiteplayer.spi/VideoFrame.pts.<get-pts>|<get-pts>(){}[0]
     abstract val size // io.github.yuroyami.kiteplayer.spi/VideoFrame.size|{}size[0]
         abstract fun <get-size>(): io.github.yuroyami.kiteplayer/VideoSize // io.github.yuroyami.kiteplayer.spi/VideoFrame.size.<get-size>|<get-size>(){}[0]
+    open val closedCaptions // io.github.yuroyami.kiteplayer.spi/VideoFrame.closedCaptions|{}closedCaptions[0]
+        open fun <get-closedCaptions>(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.spi/VideoFrame.closedCaptions.<get-closedCaptions>|<get-closedCaptions>(){}[0]
     open val crop // io.github.yuroyami.kiteplayer.spi/VideoFrame.crop|{}crop[0]
         open fun <get-crop>(): io.github.yuroyami.kiteplayer/PictureCrop? // io.github.yuroyami.kiteplayer.spi/VideoFrame.crop.<get-crop>|<get-crop>(){}[0]
     open val hdr // io.github.yuroyami.kiteplayer.spi/VideoFrame.hdr|{}hdr[0]
@@ -5413,6 +5415,9 @@ final object io.github.yuroyami.kiteplayer/Playlists { // io.github.yuroyami.kit
 final object io.github.yuroyami.kiteplayer/TextEncodings { // io.github.yuroyami.kiteplayer/TextEncodings|null[0]
     final fun decode(kotlin/ByteArray, kotlin/String? = ...): kotlin/String // io.github.yuroyami.kiteplayer/TextEncodings.decode|decode(kotlin.ByteArray;kotlin.String?){}[0]
 }
+
+final const val io.github.yuroyami.kiteplayer.spi/CLOSED_CAPTIONS_CODEC // io.github.yuroyami.kiteplayer.spi/CLOSED_CAPTIONS_CODEC|{}CLOSED_CAPTIONS_CODEC[0]
+    final fun <get-CLOSED_CAPTIONS_CODEC>(): kotlin/String // io.github.yuroyami.kiteplayer.spi/CLOSED_CAPTIONS_CODEC.<get-CLOSED_CAPTIONS_CODEC>|<get-CLOSED_CAPTIONS_CODEC>(){}[0]
 
 final val io.github.yuroyami.kiteplayer.spi/toneMapPeakNits // io.github.yuroyami.kiteplayer.spi/toneMapPeakNits|@io.github.yuroyami.kiteplayer.spi.VideoFrame{}toneMapPeakNits[0]
     final fun (io.github.yuroyami.kiteplayer.spi/VideoFrame).<get-toneMapPeakNits>(): kotlin/Float? // io.github.yuroyami.kiteplayer.spi/toneMapPeakNits.<get-toneMapPeakNits>|<get-toneMapPeakNits>@io.github.yuroyami.kiteplayer.spi.VideoFrame(){}[0]

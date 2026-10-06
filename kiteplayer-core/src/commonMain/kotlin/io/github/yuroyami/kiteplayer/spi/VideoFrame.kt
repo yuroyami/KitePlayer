@@ -93,6 +93,20 @@ public interface VideoFrame : AutoCloseable {
      */
     public val crop: PictureCrop? get() = null
 
+    /**
+     * The closed captions this picture carried, the cc_data of its ATSC A/53 data, three bytes per
+     * caption pair, as broadcast H.264, HEVC and MPEG-2 carry them inside the video, or null when it
+     * carried none (#236). Read once by the engine as the frame leaves its decoder, so a decoder
+     * hands out frames in the order they are shown, which is the order the captions were written in.
+     *
+     * The engine makes them a subtitle track of its own, CC1, from the first picture that carries
+     * any: a stream whose codec is [CLOSED_CAPTIONS_CODEC], each of whose packets holds one
+     * picture's bytes at the picture's time, decoded by whichever [SubtitleDecoderFactory] takes
+     * that codec. A frame decoded where these bytes cannot be read, such as one a platform decoder
+     * writes straight to a surface, answers null.
+     */
+    public val closedCaptions: ByteArray? get() = null
+
     /** Set when the frame lives in GPU or hardware memory and needs a matching renderer. */
     public val hardwareSurface: HwSurfaceKind?
 
@@ -105,6 +119,12 @@ public interface VideoFrame : AutoCloseable {
  * away, before the turn, which still swaps width and height for a renderer.
  */
 public val VideoFrame.visibleSize: VideoSize get() = size.cropped(crop)
+
+/**
+ * The codec of the subtitle track the engine makes of the closed captions inside a video stream
+ * (#236): see [VideoFrame.closedCaptions]. Named after FFmpeg's `A53_CC` frame data.
+ */
+public const val CLOSED_CAPTIONS_CODEC: String = "a53_cc"
 
 /**
  * A frame whose pixels can be read, for the cases that genuinely need them: a screenshot, a

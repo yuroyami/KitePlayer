@@ -256,6 +256,7 @@ public final class io/github/yuroyami/kiteplayer/CapturedFrame : io/github/yuroy
 	public synthetic fun <init> (JLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;IZJ[I[I[[BLio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;Lio/github/yuroyami/kiteplayer/PictureCrop;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
 	public fun copyPlane (I[BI)V
+	public fun getClosedCaptions ()[B
 	public fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
 	public fun getCrop ()Lio/github/yuroyami/kiteplayer/PictureCrop;
 	public fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
@@ -3848,6 +3849,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/SoftwareReadab
 
 public final class io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame$DefaultImpls {
 	public static synthetic fun copyPlane$default (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;I[BIILjava/lang/Object;)V
+	public static fun getClosedCaptions (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;)[B
 	public static fun getCrop (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;)Lio/github/yuroyami/kiteplayer/PictureCrop;
 	public static fun getHdr (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;)Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;
 	public static fun getMirrored (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;)Z
@@ -4032,6 +4034,7 @@ public final class io/github/yuroyami/kiteplayer/spi/VideoDecoderFactory$Default
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoFrame : java/lang/AutoCloseable {
+	public fun getClosedCaptions ()[B
 	public abstract fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
 	public fun getCrop ()Lio/github/yuroyami/kiteplayer/PictureCrop;
 	public abstract fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
@@ -4047,6 +4050,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoFrame : j
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/VideoFrame$DefaultImpls {
+	public static fun getClosedCaptions (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)[B
 	public static fun getCrop (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Lio/github/yuroyami/kiteplayer/PictureCrop;
 	public static fun getHdr (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;
 	public static fun getMirrored (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Z
@@ -4055,6 +4059,7 @@ public final class io/github/yuroyami/kiteplayer/spi/VideoFrame$DefaultImpls {
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/VideoFrameKt {
+	public static final field CLOSED_CAPTIONS_CODEC Ljava/lang/String;
 	public static final fun getToneMapPeakNits (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Ljava/lang/Float;
 	public static final fun getVisibleSize (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Lio/github/yuroyami/kiteplayer/VideoSize;
 }

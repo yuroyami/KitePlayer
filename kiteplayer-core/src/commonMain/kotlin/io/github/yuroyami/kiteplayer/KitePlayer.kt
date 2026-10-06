@@ -94,6 +94,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.subtitleCues
 
     /**
+     * The open item's own cover picture, or null when it carries none, until the player has read it,
+     * and once nothing is open (#425). The media session shows it on the lock screen and in the
+     * notification when the application gives no picture of its own.
+     *
+     * Its own flow rather than a field on [state], because a picture is large, and every consumer of
+     * the snapshot would otherwise compare it on every change. It is read once per item, from the
+     * bytes the file already holds, and nothing is decoded for it.
+     */
+    public val coverArt: StateFlow<CoverArt?> = core.coverArt
+
+    /**
      * Warnings, failures and the occurrences worth naming. Replays nothing to a late collector.
      *
      * One buffer of 64 events serves every collector, so when any one of them falls that far behind,

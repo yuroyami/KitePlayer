@@ -233,6 +233,10 @@ internal class PlaybackCore(
      */
     private val cuesState =
         MutableStateFlow<List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>>(emptyList())
+
+    /** The open item's cover picture (#425). Written by the actor. */
+    private val coverArtState = MutableStateFlow<io.github.yuroyami.kiteplayer.CoverArt?>(null)
+    val coverArt: StateFlow<io.github.yuroyami.kiteplayer.CoverArt?> get() = coverArtState
     private val eventSink = MutableSharedFlow<PlayerEvent>(extraBufferCapacity = 64)
 
     /** The loudest volume this player accepts, from its configuration. See `AudioConfig.volumeCeiling`. */

@@ -2630,6 +2630,19 @@ final class io.github.yuroyami.kiteplayer/Chapter { // io.github.yuroyami.kitepl
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/Chapter.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer/CoverArt { // io.github.yuroyami.kiteplayer/CoverArt|null[0]
+    constructor <init>(kotlin/ByteArray, kotlin/String?) // io.github.yuroyami.kiteplayer/CoverArt.<init>|<init>(kotlin.ByteArray;kotlin.String?){}[0]
+
+    final val bytes // io.github.yuroyami.kiteplayer/CoverArt.bytes|{}bytes[0]
+        final fun <get-bytes>(): kotlin/ByteArray // io.github.yuroyami.kiteplayer/CoverArt.bytes.<get-bytes>|<get-bytes>(){}[0]
+    final val mimeType // io.github.yuroyami.kiteplayer/CoverArt.mimeType|{}mimeType[0]
+        final fun <get-mimeType>(): kotlin/String? // io.github.yuroyami.kiteplayer/CoverArt.mimeType.<get-mimeType>|<get-mimeType>(){}[0]
+
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/CoverArt.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/CoverArt.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/CoverArt.toString|toString(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.kiteplayer/DemuxPolicy|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer/VariantFit? = ...) // io.github.yuroyami.kiteplayer/DemuxPolicy.<init>|<init>(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long;kotlin.Long?;kotlin.Int?;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.VariantFit?){}[0]
 
@@ -2792,6 +2805,8 @@ final class io.github.yuroyami.kiteplayer/IoCachePolicyBuilder { // io.github.yu
 }
 
 final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/KitePlayer|null[0]
+    final val coverArt // io.github.yuroyami.kiteplayer/KitePlayer.coverArt|{}coverArt[0]
+        final fun <get-coverArt>(): kotlinx.coroutines.flow/StateFlow<io.github.yuroyami.kiteplayer/CoverArt?> // io.github.yuroyami.kiteplayer/KitePlayer.coverArt.<get-coverArt>|<get-coverArt>(){}[0]
     final val events // io.github.yuroyami.kiteplayer/KitePlayer.events|{}events[0]
         final fun <get-events>(): kotlinx.coroutines.flow/SharedFlow<io.github.yuroyami.kiteplayer/PlayerEvent> // io.github.yuroyami.kiteplayer/KitePlayer.events.<get-events>|<get-events>(){}[0]
     final val keyframeChoice // io.github.yuroyami.kiteplayer/KitePlayer.keyframeChoice|{}keyframeChoice[0]

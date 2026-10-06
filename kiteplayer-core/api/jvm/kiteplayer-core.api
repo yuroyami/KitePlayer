@@ -304,6 +304,15 @@ public final class io/github/yuroyami/kiteplayer/CorruptPackets : java/lang/Enum
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/CorruptPackets;
 }
 
+public final class io/github/yuroyami/kiteplayer/CoverArt {
+	public fun <init> ([BLjava/lang/String;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBytes ()[B
+	public final fun getMimeType ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/DeinterlacePolicy : java/lang/Enum {
 	public static final field Always Lio/github/yuroyami/kiteplayer/DeinterlacePolicy;
 	public static final field Auto Lio/github/yuroyami/kiteplayer/DeinterlacePolicy;
@@ -636,6 +645,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun detachRenderer ()V
 	public final fun detachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
 	public final fun diagnosticsDump ()Ljava/lang/String;
+	public final fun getCoverArt ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getEvents ()Lkotlinx/coroutines/flow/SharedFlow;
 	public final fun getKeyframeChoice ()Lio/github/yuroyami/kiteplayer/KeyframeChoice;
 	public final fun getLosslessEvents ()Lkotlinx/coroutines/flow/Flow;

@@ -19,6 +19,7 @@ import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.delay
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
@@ -156,6 +157,9 @@ public class AudioPlayback(
 
     /** How far the dialogue is raised or lowered in a downmix, in decibels (#442). */
     private val wantedDialogueLevelDb = atomic(0f)
+
+    /** How far the pitch is moved, in semitones (#465). */
+    private val wantedPitchSemitones = atomic(0.0)
 
     /** The equaliser the feeder applies. Held here so a pipeline rebuild cannot lose it. */
     private val wantedEqualizer = atomic(EqualizerSettings.Flat)
@@ -1028,6 +1032,20 @@ public class AudioPlayback(
         get() = wantedDialogueLevelDb.value
         set(value) {
             wantedDialogueLevelDb.value = value
+        }
+
+    /**
+     * How far, in semitones, the pitch is moved without changing how fast the sound plays (#465).
+     * Applied to the next buffer the feeder converts with no seam, as a [speed] change is, and dated
+     * in the timeline as nothing at all, because it changes no timing.
+     */
+    public var pitchSemitones: Double
+        get() = wantedPitchSemitones.value
+        set(value) {
+            require(value.isFinite() && abs(value) <= KitePlayer.PITCH_MAX_SEMITONES) {
+                "the pitch must be within ${KitePlayer.PITCH_MAX_SEMITONES} semitones either way, was $value"
+            }
+            wantedPitchSemitones.value = value
         }
 
     /** The settings last written into the current pipeline, so an unchanged one is not rebuilt. */

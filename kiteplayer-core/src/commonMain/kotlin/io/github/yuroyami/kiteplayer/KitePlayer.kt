@@ -392,6 +392,27 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws IllegalArgumentException when [db] is not finite or is more than
      *         [DIALOGUE_LEVEL_MAX_DB] either way.
      */
+    /**
+     * Moves the pitch by [semitones], up or down to an octave, without changing how fast the media
+     * plays (#465), for a singer practising in another key or a learner following a voice that is
+     * hard to hear, as VLC's pitch control does. It works with any [setSpeed], and with
+     * [setPreservePitch] false the speed's own pitch change adds to it. The position, the clock and
+     * the picture's sync are untouched, because a pitch changes no timing. Zero, the default, costs
+     * nothing and leaves every sample as it was. A change has no seam and no gap, and is heard once
+     * the audio already buffered has played, as a speed change is. Published as
+     * [PlayerSnapshot.pitchSemitones].
+     *
+     * @throws IllegalArgumentException when [semitones] is not finite or is more than
+     *         [PITCH_MAX_SEMITONES] either way.
+     */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
+    public fun setPitch(semitones: Double) {
+        require(semitones.isFinite() && semitones >= -PITCH_MAX_SEMITONES && semitones <= PITCH_MAX_SEMITONES) {
+            "the pitch must be between -$PITCH_MAX_SEMITONES and $PITCH_MAX_SEMITONES semitones, was $semitones"
+        }
+        core.post(CoreCommand.SetPitch(semitones, CompletableDeferred()))
+    }
+
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setDialogueLevel(db: Float) {
         require(db.isFinite() && db >= -DIALOGUE_LEVEL_MAX_DB && db <= DIALOGUE_LEVEL_MAX_DB) {
@@ -1198,6 +1219,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             stereoMode = snapshot.stereoMode,
             nightMode = snapshot.nightMode,
             dialogueLevelDb = snapshot.dialogueLevelDb,
+            pitchSemitones = snapshot.pitchSemitones,
             equalizer = snapshot.equalizer,
             subtitleScale = snapshot.subtitleScale,
             subtitlePosition = snapshot.subtitlePosition,
@@ -1266,6 +1288,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setStereoMode(memento.stereoMode)
         setNightMode(memento.nightMode)
         setDialogueLevel(memento.dialogueLevelDb.coerceIn(-DIALOGUE_LEVEL_MAX_DB, DIALOGUE_LEVEL_MAX_DB))
+        setPitch(memento.pitchSemitones.coerceIn(-PITCH_MAX_SEMITONES, PITCH_MAX_SEMITONES))
         setEqualizer(memento.equalizer)
         setSubtitleScale(memento.subtitleScale)
         setSubtitlePosition(memento.subtitlePosition)
@@ -1621,6 +1644,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
         /** The largest shift, either way, that [setAudioDelay] and [setSubtitleDelay] accept. */
         public val DELAY_MAX: Duration = kotlin.time.Duration.parse("1h")
+
+        /** The most, in semitones either way, that [setPitch] accepts: an octave. */
+        public const val PITCH_MAX_SEMITONES: Double = 12.0
 
         /** The most, in decibels either way, that [setDialogueLevel] accepts. */
         public const val DIALOGUE_LEVEL_MAX_DB: Float = 12f

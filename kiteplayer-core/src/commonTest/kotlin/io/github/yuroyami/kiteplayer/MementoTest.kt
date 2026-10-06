@@ -441,6 +441,7 @@ class MementoTest {
             stereoMode = StereoMode.RightOnly,
             nightMode = true,
             dialogueLevelDb = 6f,
+            pitchSemitones = -3.0,
         )
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
     }

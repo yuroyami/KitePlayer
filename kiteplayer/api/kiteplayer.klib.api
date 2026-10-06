@@ -257,6 +257,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final fun setMarkers(kotlin.collections/List<io.github.yuroyami.kiteplayer/Marker>) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setMarkers|setMarkers(kotlin.collections.List<io.github.yuroyami.kiteplayer.Marker>){}[0]
     final fun setMuted(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setMuted|setMuted(kotlin.Boolean){}[0]
     final fun setNightMode(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setNightMode|setNightMode(kotlin.Boolean){}[0]
+    final fun setPitch(kotlin/Double) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setPitch|setPitch(kotlin.Double){}[0]
     final fun setPreservePitch(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setPreservePitch|setPreservePitch(kotlin.Boolean){}[0]
     final fun setRenderQuality(io.github.yuroyami.kiteplayer/RenderQuality) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setRenderQuality|setRenderQuality(io.github.yuroyami.kiteplayer.RenderQuality){}[0]
     final fun setShuffle(kotlin/Boolean, kotlin/Long? = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setShuffle|setShuffle(kotlin.Boolean;kotlin.Long?){}[0]

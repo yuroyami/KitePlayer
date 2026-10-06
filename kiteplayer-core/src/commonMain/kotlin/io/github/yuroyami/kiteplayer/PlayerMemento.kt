@@ -67,6 +67,8 @@ public data class PlayerMemento(
     val nightMode: Boolean = false,
     /** How far the dialogue was raised or lowered in a downmix, in decibels (#442). It travels. */
     val dialogueLevelDb: Float = 0f,
+    /** How far the pitch was moved, in semitones (#465). It travels with the speed. */
+    val pitchSemitones: Double = 0.0,
 ) {
 
     /**
@@ -118,6 +120,7 @@ public data class PlayerMemento(
         put("stereoMode", stereoMode.name)
         put("nightMode", nightMode.toString())
         put("dialogueLevelDb", dialogueLevelDb.toString())
+        put("pitchSemitones", pitchSemitones.toString())
         put("equalizer.preampDb", equalizer.preampDb.toString())
         put("equalizer.gainsDb", equalizer.gainsDb.joinToString(" "))
         put("subtitleScale", subtitleScale.toString())
@@ -228,6 +231,7 @@ public data class PlayerMemento(
                 stereoMode = properties["stereoMode"]?.let { StereoMode.valueOf(it) } ?: StereoMode.Stereo,
                 nightMode = properties["nightMode"]?.toBooleanStrict() ?: false,
                 dialogueLevelDb = properties["dialogueLevelDb"]?.toFloat() ?: 0f,
+                pitchSemitones = properties["pitchSemitones"]?.toDouble() ?: 0.0,
                 equalizer = EqualizerSettings(
                     gainsDb = properties["equalizer.gainsDb"]
                         ?.split(" ")?.filter { it.isNotBlank() }?.map { it.toFloat() }

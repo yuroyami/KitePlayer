@@ -187,6 +187,8 @@ public data class PlayerSnapshot(
     val nightMode: Boolean = false,
     /** How far the dialogue is raised or lowered in a downmix, in decibels. See [KitePlayer.setDialogueLevel]. */
     val dialogueLevelDb: Float = 0f,
+    /** How far the pitch is moved, in semitones. See [KitePlayer.setPitch]. */
+    val pitchSemitones: Double = 0.0,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

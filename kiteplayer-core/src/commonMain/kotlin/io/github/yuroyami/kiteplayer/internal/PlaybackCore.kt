@@ -1174,6 +1174,9 @@ internal class PlaybackCore(
 
     /** How far the dialogue is raised or lowered in a downmix, in decibels (#442). A player property. */
     private var dialogueLevelDb: Float = 0f
+
+    /** How far the pitch is moved, in semitones (#465). A player property, like the speed. */
+    private var pitchSemitones: Double = 0.0
     private var equalizer: EqualizerSettings = config.audio.equalizer
     private var videoEnabled: Boolean = config.videoEnabled
 
@@ -2689,6 +2692,12 @@ internal class PlaybackCore(
                 publishSnapshot()
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetPitch -> {
+                pitchSemitones = command.semitones
+                session?.audio?.pitchSemitones = command.semitones
+                publishSnapshot()
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetDialogueLevel -> {
                 dialogueLevelDb = command.db
                 session?.audio?.dialogueLevelDb = command.db
@@ -3704,6 +3713,7 @@ internal class PlaybackCore(
                 createdPlayback.stereoMode = stereoMode
                 createdPlayback.nightMode = nightMode
                 createdPlayback.dialogueLevelDb = dialogueLevelDb
+                createdPlayback.pitchSemitones = pitchSemitones
                 createdPlayback.equalizer = equalizer
                 emitEvent(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
@@ -5321,6 +5331,7 @@ internal class PlaybackCore(
             playback.stereoMode = stereoMode
             playback.nightMode = nightMode
             playback.dialogueLevelDb = dialogueLevelDb
+            playback.pitchSemitones = pitchSemitones
             playback.equalizer = equalizer
             playback.flush(requestedEpoch)
             return PreparedAudioPath(playback, createdSink, negotiated, decoder.outputFormat)
@@ -8737,6 +8748,7 @@ internal class PlaybackCore(
             playback.stereoMode = stereoMode
             playback.nightMode = nightMode
             playback.dialogueLevelDb = dialogueLevelDb
+            playback.pitchSemitones = pitchSemitones
             playback.equalizer = equalizer
             target.audio = playback
             target.sink = createdSink
@@ -10733,6 +10745,7 @@ internal class PlaybackCore(
             stereoMode = stereoMode,
             nightMode = nightMode,
             dialogueLevelDb = dialogueLevelDb,
+            pitchSemitones = pitchSemitones,
             videoEnabled = videoEnabled,
             equalizer = equalizer,
             sleepTimer = sleepTimer,
@@ -13612,6 +13625,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetStereoMode(val mode: StereoMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setStereoMode", reply)
     class SetNightMode(val on: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setNightMode", reply)
     class SetDialogueLevel(val db: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setDialogueLevel", reply)
+    class SetPitch(val semitones: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setPitch", reply)
     class SetVideoEnabled(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoEnabled", reply)
     class SetEqualizer(val settings: EqualizerSettings, val reply: CompletableDeferred<Unit>) : CoreCommand("setEqualizer", reply)
     class SetSleepTimer(

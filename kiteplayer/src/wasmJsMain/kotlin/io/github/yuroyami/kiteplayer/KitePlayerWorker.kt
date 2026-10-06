@@ -294,6 +294,9 @@ public class KitePlayerWorker private constructor(
     /** Raises or lowers the dialogue in a downmix, in decibels (#442). */
     public fun setDialogueLevel(db: Float): Unit = send(Control.SetDialogueLevel(db))
 
+    /** Moves the pitch by semitones without changing the speed (#465). */
+    public fun setPitch(semitones: Double): Unit = send(Control.SetPitch(semitones))
+
     /** Silences the sound without losing the volume. */
     public fun setMuted(value: Boolean): Unit = send(Control.SetMuted(value))
 

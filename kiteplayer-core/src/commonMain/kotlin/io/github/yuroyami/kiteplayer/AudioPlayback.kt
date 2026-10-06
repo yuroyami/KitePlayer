@@ -506,6 +506,7 @@ public class AudioPlayback(
         // Reasserted per buffer like the trim: a rebuilt pipeline's fresh stage takes the mode at
         // once, and a running one ramps to a change.
         stage.stereo.set(wantedStereoMode.value)
+        stage.night.set(wantedNightMode.value)
         // Reasserted per buffer like the trim and for the same reason: a pipeline rebuilt for a
         // format change starts flat, and a flat stage is skipped, so the cost when nothing is set
         // is one reference compare.

@@ -285,6 +285,9 @@ internal class AudioPipeline(
         // Before the trim, so ReplayGain and balance scale what the equaliser produced rather than
         // the equaliser amplifying a level the trim already set.
         equalizer.apply(result, produced)
+        // After the equaliser, so a band it raised is caught too, and before the trim, so the
+        // balance and ReplayGain act on what the listener hears (#442).
+        night.apply(result, produced)
         trim.apply(result, produced)
 
         output = result
@@ -310,6 +313,9 @@ internal class AudioPipeline(
      * derived from. Flat by default and then free: see [EqualizerStage].
      */
     val equalizer: EqualizerStage = EqualizerStage(targetFormat.channels, targetFormat.sampleRate)
+
+    /** The night mode (#442), skipped while off. See [NightStage]. */
+    val night: NightStage = NightStage(targetFormat.channels, targetFormat.sampleRate)
 
     /**
      * Pushes out what the stages are still holding, for the end of the stream.
@@ -363,6 +369,7 @@ internal class AudioPipeline(
         // The same last three stages as process, in the same order (#257, #462).
         stereo.apply(finished, total)
         equalizer.apply(finished, total)
+        night.apply(finished, total)
         trim.apply(finished, total)
         output = finished
         return total

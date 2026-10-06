@@ -7,6 +7,18 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer>
+final enum class io.github.yuroyami.kiteplayer.session/AudioFocusKind : kotlin/Enum<io.github.yuroyami.kiteplayer.session/AudioFocusKind> { // io.github.yuroyami.kiteplayer.session/AudioFocusKind|null[0]
+    enum entry Permanent // io.github.yuroyami.kiteplayer.session/AudioFocusKind.Permanent|null[0]
+    enum entry Transient // io.github.yuroyami.kiteplayer.session/AudioFocusKind.Transient|null[0]
+    enum entry TransientMayDuck // io.github.yuroyami.kiteplayer.session/AudioFocusKind.TransientMayDuck|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.session/AudioFocusKind.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.session/AudioFocusKind> // io.github.yuroyami.kiteplayer.session/AudioFocusKind.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.session/AudioFocusKind // io.github.yuroyami.kiteplayer.session/AudioFocusKind.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.session/AudioFocusKind> // io.github.yuroyami.kiteplayer.session/AudioFocusKind.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer.session/BackgroundPolicy : kotlin/Enum<io.github.yuroyami.kiteplayer.session/BackgroundPolicy> { // io.github.yuroyami.kiteplayer.session/BackgroundPolicy|null[0]
     enum entry ContinueAudio // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.ContinueAudio|null[0]
     enum entry Ignore // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.Ignore|null[0]
@@ -76,12 +88,14 @@ sealed interface io.github.yuroyami.kiteplayer/KitePlayerAvailability { // io.gi
 }
 
 final class io.github.yuroyami.kiteplayer.session/InterruptionPolicy { // io.github.yuroyami.kiteplayer.session/InterruptionPolicy|null[0]
-    constructor <init>(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Boolean = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.<init>|<init>(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Boolean;kotlin.Boolean){}[0]
+    constructor <init>(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer.session/AudioFocusKind = ...) // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.<init>|<init>(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Boolean;kotlin.Boolean;io.github.yuroyami.kiteplayer.session.AudioFocusKind){}[0]
 
     final val duckOnTransient // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.duckOnTransient|{}duckOnTransient[0]
         final fun <get-duckOnTransient>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.duckOnTransient.<get-duckOnTransient>|<get-duckOnTransient>(){}[0]
     final val duckVolume // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.duckVolume|{}duckVolume[0]
         final fun <get-duckVolume>(): kotlin/Float // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.duckVolume.<get-duckVolume>|<get-duckVolume>(){}[0]
+    final val focus // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.focus|{}focus[0]
+        final fun <get-focus>(): io.github.yuroyami.kiteplayer.session/AudioFocusKind // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.focus.<get-focus>|<get-focus>(){}[0]
     final val pauseOnLoss // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.pauseOnLoss|{}pauseOnLoss[0]
         final fun <get-pauseOnLoss>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.pauseOnLoss.<get-pauseOnLoss>|<get-pauseOnLoss>(){}[0]
     final val pauseWhenBecomingNoisy // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.pauseWhenBecomingNoisy|{}pauseWhenBecomingNoisy[0]
@@ -94,7 +108,8 @@ final class io.github.yuroyami.kiteplayer.session/InterruptionPolicy { // io.git
     final fun component3(): kotlin/Float // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.component3|component3(){}[0]
     final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.component4|component4(){}[0]
     final fun component5(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.component5|component5(){}[0]
-    final fun copy(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer.session/InterruptionPolicy // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.copy|copy(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Boolean;kotlin.Boolean){}[0]
+    final fun component6(): io.github.yuroyami.kiteplayer.session/AudioFocusKind // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.component6|component6(){}[0]
+    final fun copy(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer.session/AudioFocusKind = ...): io.github.yuroyami.kiteplayer.session/InterruptionPolicy // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.copy|copy(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Boolean;kotlin.Boolean;io.github.yuroyami.kiteplayer.session.AudioFocusKind){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.toString|toString(){}[0]

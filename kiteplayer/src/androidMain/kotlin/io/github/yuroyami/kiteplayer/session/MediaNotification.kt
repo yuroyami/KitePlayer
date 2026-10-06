@@ -80,6 +80,13 @@ public data class MediaNotificationOptions(
     }
 }
 
+/** What the application is told of [decision], or null when the user put nothing away (#427). */
+internal fun dismissalOf(decision: MediaNotificationDecision): MediaNotificationDismissal? = when (decision.dismissedBy) {
+    MediaNotificationEvent.Dismissed -> MediaNotificationDismissal.Swiped
+    MediaNotificationEvent.TaskRemoved -> MediaNotificationDismissal.TaskRemoved
+    else -> null
+}
+
 /** How the user put the media notification away. See [MediaNotificationOptions.onDismissed]. */
 public enum class MediaNotificationDismissal {
     /** The notification was swiped away. */
@@ -334,6 +341,8 @@ internal class MediaNotificationHandle(
         // The player may already be closed when an application closes it before this handle.
         if (decision.pause) runCatching { session.player.pause() }
         render()
+        // Last, so an application that closes the player from here finds the notification gone.
+        dismissalOf(decision)?.let { reason -> options.onDismissed?.invoke(reason) }
     }
 
     private fun render() {

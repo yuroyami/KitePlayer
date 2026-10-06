@@ -35,6 +35,37 @@ class MediaNotificationMachineTest {
         return status(PlaybackStatus.Paused)
     }
 
+    /** The answer names what put the notification away, so the application can be told (#427). */
+    @Test
+    fun aSwipeOrATaskRemovedWhilePausedSaysWhatDismissedIt() {
+        val swiped = machine()
+        swiped.playedThenPaused()
+        assertEquals(Dismissed, swiped.on(Dismissed).dismissedBy)
+        assertNull(swiped.on(Dismissed).dismissedBy, "a second swipe of a hidden notification dismissed it again")
+
+        val removed = machine()
+        removed.playedThenPaused()
+        assertEquals(TaskRemoved, removed.on(TaskRemoved).dismissedBy)
+    }
+
+    @Test
+    fun aTaskRemovedWhilePlayingDismissesNothing() {
+        val machine = machine()
+        machine.status(PlaybackStatus.Playing)
+        val decision = machine.on(TaskRemoved)
+        assertNull(decision.dismissedBy)
+        assertFalse(decision.pause)
+    }
+
+    @Test
+    fun nothingButASwipeOrATaskRemovedSaysItDismissed() {
+        val machine = machine()
+        assertNull(machine.status(PlaybackStatus.Playing).dismissedBy)
+        assertNull(machine.status(PlaybackStatus.Paused).dismissedBy)
+        assertNull(machine.on(TimerFired).dismissedBy)
+        assertNull(machine.on(Closed).dismissedBy)
+    }
+
     @Test
     fun playingShowsTheNotificationInTheForeground() {
         val decision = machine().status(PlaybackStatus.Playing)

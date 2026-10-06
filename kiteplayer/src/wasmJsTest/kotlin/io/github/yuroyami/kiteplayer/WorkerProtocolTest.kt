@@ -153,6 +153,7 @@ class WorkerProtocolTest {
         nightMode = true,
         dialogueLevelDb = 4.5f,
         pitchSemitones = -2.5,
+        skipSilence = true,
         lyrics = "A line\nAnother line",
     )
 
@@ -293,6 +294,7 @@ class WorkerProtocolTest {
             Control.SetNightMode(true),
             Control.SetDialogueLevel(-3.5f),
             Control.SetPitch(7.0),
+            Control.SetSkipSilence(true),
             Control.SetMuted(true),
             Control.SetVideoEnabled(false),
             Control.SetLoop(LoopMode.One),

@@ -261,6 +261,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final fun setPreservePitch(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setPreservePitch|setPreservePitch(kotlin.Boolean){}[0]
     final fun setRenderQuality(io.github.yuroyami.kiteplayer/RenderQuality) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setRenderQuality|setRenderQuality(io.github.yuroyami.kiteplayer.RenderQuality){}[0]
     final fun setShuffle(kotlin/Boolean, kotlin/Long? = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setShuffle|setShuffle(kotlin.Boolean;kotlin.Long?){}[0]
+    final fun setSkipSilence(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSkipSilence|setSkipSilence(kotlin.Boolean){}[0]
     final fun setSleepTimer(io.github.yuroyami.kiteplayer/SleepTimer?, kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSleepTimer|setSleepTimer(io.github.yuroyami.kiteplayer.SleepTimer?;kotlin.time.Duration){}[0]
     final fun setSpeed(kotlin/Double) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSpeed|setSpeed(kotlin.Double){}[0]
     final fun setStereoMode(io.github.yuroyami.kiteplayer/StereoMode) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setStereoMode|setStereoMode(io.github.yuroyami.kiteplayer.StereoMode){}[0]

@@ -1181,6 +1181,9 @@ internal class PlaybackCore(
 
     /** How far the pitch is moved, in semitones (#465). A player property, like the speed. */
     private var pitchSemitones: Double = 0.0
+
+    /** Whether the silent stretches are shortened (#429). A player property; see [cutsSilence]. */
+    private var skipSilence: Boolean = false
     private var equalizer: EqualizerSettings = config.audio.equalizer
     private var videoEnabled: Boolean = config.videoEnabled
 
@@ -2707,6 +2710,12 @@ internal class PlaybackCore(
             is CoreCommand.SetPitch -> {
                 pitchSemitones = command.semitones
                 session?.audio?.pitchSemitones = command.semitones
+                publishSnapshot()
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetSkipSilence -> {
+                skipSilence = command.on
+                session?.let(::syncSilenceSkip)
                 publishSnapshot()
                 command.reply.complete(Unit)
             }
@@ -5122,6 +5131,25 @@ internal class PlaybackCore(
      * packet the published position has reached, the last of them standing. A change still ahead
      * wakes the actor when it lands.
      */
+    /**
+     * Whether [session]'s silent stretches are cut (#429): while the setting is on, no picture is
+     * shown and the stream is not live. A picture would have to follow each cut, and a live stream
+     * cut would only reach its live edge sooner and wait there. Turning a video back on seeks to
+     * where the sound is, so the cuts made while it was off need nothing of the picture.
+     */
+    private fun cutsSilence(session: OpenSession): Boolean {
+        if (!skipSilence || session.source.realTime) return false
+        val picture = session.videoStream
+        return picture == null || picture.isCoverArt || picture.isSparse || session.videoParked.value
+    }
+
+    /** Hands [cutsSilence] to [session]'s audio, which applies it from the next buffer. */
+    private fun syncSilenceSkip(session: OpenSession) {
+        val audio = session.audio ?: return
+        val cuts = cutsSilence(session)
+        if (audio.skipSilence != cuts) audio.skipSilence = cuts
+    }
+
     private fun showHeardTags(session: OpenSession) {
         val waiting = session.tagChanges.value
         if (waiting.isEmpty()) return
@@ -6432,6 +6460,9 @@ internal class PlaybackCore(
             publishedPositionMicros.value = currentPosition().micros
         }
         showHeardTags(session)
+        // Each pass, so a video turned off or on, or a track change that brings a picture, decides
+        // the cutting from the next buffer (#429).
+        syncSilenceSkip(session)
         // The cover the demux lane copied, published by the actor, so a lane of a session already
         // gone can never show its picture over the next item's (#425).
         session.coverArt.value.let { cover -> if (coverArtState.value != cover) coverArtState.value = cover }
@@ -8712,6 +8743,8 @@ internal class PlaybackCore(
         audio.beginJoin()
         active.ownsAudio = false
         incoming.audio = audio
+        // Before the next item's first buffer, so an item with a picture is never cut (#429).
+        syncSilenceSkip(incoming)
         incoming.sink = active.sink
         incoming.negotiatedFormat = active.negotiatedFormat
         incoming.deviceRequest = active.deviceRequest
@@ -10819,6 +10852,7 @@ internal class PlaybackCore(
             nightMode = nightMode,
             dialogueLevelDb = dialogueLevelDb,
             pitchSemitones = pitchSemitones,
+            skipSilence = skipSilence,
             videoEnabled = videoEnabled,
             equalizer = equalizer,
             sleepTimer = sleepTimer,
@@ -13723,6 +13757,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetNightMode(val on: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setNightMode", reply)
     class SetDialogueLevel(val db: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setDialogueLevel", reply)
     class SetPitch(val semitones: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setPitch", reply)
+    class SetSkipSilence(val on: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setSkipSilence", reply)
     class SetItemDetails(
         val title: String?,
         val artist: String?,

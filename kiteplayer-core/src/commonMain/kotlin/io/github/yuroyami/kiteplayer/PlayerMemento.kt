@@ -69,6 +69,8 @@ public data class PlayerMemento(
     val dialogueLevelDb: Float = 0f,
     /** How far the pitch was moved, in semitones (#465). It travels with the speed. */
     val pitchSemitones: Double = 0.0,
+    /** Whether the silent stretches were shortened (#429). A listening setting, so it travels. */
+    val skipSilence: Boolean = false,
 ) {
 
     /**
@@ -121,6 +123,7 @@ public data class PlayerMemento(
         put("nightMode", nightMode.toString())
         put("dialogueLevelDb", dialogueLevelDb.toString())
         put("pitchSemitones", pitchSemitones.toString())
+        put("skipSilence", skipSilence.toString())
         put("equalizer.preampDb", equalizer.preampDb.toString())
         put("equalizer.gainsDb", equalizer.gainsDb.joinToString(" "))
         put("subtitleScale", subtitleScale.toString())
@@ -232,6 +235,7 @@ public data class PlayerMemento(
                 nightMode = properties["nightMode"]?.toBooleanStrict() ?: false,
                 dialogueLevelDb = properties["dialogueLevelDb"]?.toFloat() ?: 0f,
                 pitchSemitones = properties["pitchSemitones"]?.toDouble() ?: 0.0,
+                skipSilence = properties["skipSilence"]?.toBooleanStrict() ?: false,
                 equalizer = EqualizerSettings(
                     gainsDb = properties["equalizer.gainsDb"]
                         ?.split(" ")?.filter { it.isNotBlank() }?.map { it.toFloat() }

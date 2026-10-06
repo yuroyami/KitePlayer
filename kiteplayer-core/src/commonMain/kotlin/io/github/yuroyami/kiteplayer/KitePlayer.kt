@@ -440,6 +440,26 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.SetPitch(semitones, CompletableDeferred()))
     }
 
+    /**
+     * Shortens the silent stretches of the sound (#429), for a podcast or an audiobook: every pause
+     * longer than a fifth of a second is cut down to a fifth of a second, with a short fade at each
+     * side of the cut so it never clicks, as Media3's skip silence and the trim silence of podcast
+     * players do. A pause shorter than that, between two words, is left as it is. It works with any
+     * [setSpeed], and the two together are what a listener in a hurry turns on.
+     *
+     * The position, the subtitles, the lyrics and the lock screen follow every cut, because each one
+     * is dated in the audio clock where it is heard. It acts only while no picture is shown, so on an
+     * item with no video, one whose only picture is its cover, or one whose video is turned off with
+     * [setVideoEnabled]; a picture would have to follow each cut. A live stream is never cut, because
+     * cutting would only reach the live edge sooner and then wait for it. Off, the default, costs
+     * nothing and leaves every sample as it was. A change is heard once the audio already buffered
+     * has played, as a [setBalance] change is. Published as [PlayerSnapshot.skipSilence].
+     */
+    @Throws(IllegalStateException::class)
+    public fun setSkipSilence(on: Boolean) {
+        core.post(CoreCommand.SetSkipSilence(on, CompletableDeferred()))
+    }
+
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setDialogueLevel(db: Float) {
         require(db.isFinite() && db >= -DIALOGUE_LEVEL_MAX_DB && db <= DIALOGUE_LEVEL_MAX_DB) {
@@ -1247,6 +1267,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             nightMode = snapshot.nightMode,
             dialogueLevelDb = snapshot.dialogueLevelDb,
             pitchSemitones = snapshot.pitchSemitones,
+            skipSilence = snapshot.skipSilence,
             equalizer = snapshot.equalizer,
             subtitleScale = snapshot.subtitleScale,
             subtitlePosition = snapshot.subtitlePosition,
@@ -1316,6 +1337,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setNightMode(memento.nightMode)
         setDialogueLevel(memento.dialogueLevelDb.coerceIn(-DIALOGUE_LEVEL_MAX_DB, DIALOGUE_LEVEL_MAX_DB))
         setPitch(memento.pitchSemitones.coerceIn(-PITCH_MAX_SEMITONES, PITCH_MAX_SEMITONES))
+        setSkipSilence(memento.skipSilence)
         setEqualizer(memento.equalizer)
         setSubtitleScale(memento.subtitleScale)
         setSubtitlePosition(memento.subtitlePosition)

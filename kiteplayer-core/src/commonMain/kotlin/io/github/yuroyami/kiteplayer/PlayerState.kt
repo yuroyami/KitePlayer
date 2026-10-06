@@ -189,6 +189,11 @@ public data class PlayerSnapshot(
     val dialogueLevelDb: Float = 0f,
     /** How far the pitch is moved, in semitones. See [KitePlayer.setPitch]. */
     val pitchSemitones: Double = 0.0,
+    /**
+     * Whether the silent stretches are shortened. See [KitePlayer.setSkipSilence]: the setting, which
+     * is true even while an item with a picture or a live stream plays uncut.
+     */
+    val skipSilence: Boolean = false,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

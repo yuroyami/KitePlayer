@@ -110,6 +110,7 @@ internal sealed class Control(val member: String) {
     data class SetNightMode(val on: Boolean) : Control("setNightMode")
     data class SetDialogueLevel(val db: Float) : Control("setDialogueLevel")
     data class SetPitch(val semitones: Double) : Control("setPitch")
+    data class SetSkipSilence(val on: Boolean) : Control("setSkipSilence")
     data class SetMuted(val value: Boolean) : Control("setMuted")
     data class SetVideoEnabled(val enabled: Boolean) : Control("setVideoEnabled")
     data class SetLoop(val mode: LoopMode) : Control("setLoop")
@@ -356,6 +357,7 @@ private fun encodeControl(control: Control): JsAny = record {
         is Control.SetNightMode -> put("value", control.on)
         is Control.SetDialogueLevel -> put("value", control.db)
         is Control.SetPitch -> put("value", control.semitones)
+        is Control.SetSkipSilence -> put("value", control.on)
         is Control.SetMuted -> put("value", control.value)
         is Control.SetVideoEnabled -> put("value", control.enabled)
         is Control.SetLoop -> put("value", control.mode)
@@ -543,6 +545,7 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("nightMode", snapshot.nightMode)
     put("dialogueLevelDb", snapshot.dialogueLevelDb)
     put("pitchSemitones", snapshot.pitchSemitones)
+    put("skipSilence", snapshot.skipSilence)
     put("videoEnabled", snapshot.videoEnabled)
     put("sleepTimer", snapshot.sleepTimer?.let(::encodeSleepTimer))
     put("equalizer", encodeEqualizer(snapshot.equalizer))
@@ -1184,6 +1187,7 @@ private fun decodeControl(o: JsAny): Control? = when (o.str("t")) {
     "setNightMode" -> Control.SetNightMode(o.bool("value") ?: missing("value"))
     "setDialogueLevel" -> Control.SetDialogueLevel(o.float("value") ?: missing("value"))
     "setPitch" -> Control.SetPitch(o.num("value") ?: missing("value"))
+    "setSkipSilence" -> Control.SetSkipSilence(o.bool("value") ?: missing("value"))
     "setMuted" -> Control.SetMuted(o.flag("value"))
     "setVideoEnabled" -> Control.SetVideoEnabled(o.flag("value"))
     "setLoop" -> Control.SetLoop(o.enum<LoopMode>("value") ?: missing("value"))
@@ -1317,6 +1321,7 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         nightMode = o.flag("nightMode"),
         dialogueLevelDb = o.float("dialogueLevelDb") ?: default.dialogueLevelDb,
         pitchSemitones = o.num("pitchSemitones") ?: default.pitchSemitones,
+        skipSilence = o.flag("skipSilence"),
         videoEnabled = o.bool("videoEnabled") ?: default.videoEnabled,
         sleepTimer = o.child("sleepTimer")?.let(::decodeSleepTimer),
         equalizer = o.child("equalizer")?.let(::decodeEqualizer) ?: default.equalizer,

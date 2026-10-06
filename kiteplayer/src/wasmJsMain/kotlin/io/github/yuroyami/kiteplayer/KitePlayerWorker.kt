@@ -298,6 +298,9 @@ public class KitePlayerWorker private constructor(
     /** Moves the pitch by semitones without changing the speed (#465). */
     public fun setPitch(semitones: Double): Unit = send(Control.SetPitch(semitones))
 
+    /** Shortens the silent stretches of a podcast or an audiobook (#429). */
+    public fun setSkipSilence(on: Boolean): Unit = send(Control.SetSkipSilence(on))
+
     /** Silences the sound without losing the volume. */
     public fun setMuted(value: Boolean): Unit = send(Control.SetMuted(value))
 

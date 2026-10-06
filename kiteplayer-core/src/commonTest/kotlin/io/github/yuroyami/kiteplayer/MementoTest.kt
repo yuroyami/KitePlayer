@@ -442,6 +442,7 @@ class MementoTest {
             nightMode = true,
             dialogueLevelDb = 6f,
             pitchSemitones = -3.0,
+            skipSilence = true,
         )
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
     }

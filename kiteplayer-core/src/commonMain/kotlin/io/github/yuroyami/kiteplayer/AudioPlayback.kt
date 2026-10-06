@@ -162,6 +162,9 @@ public class AudioPlayback(
     /** How far the pitch is moved, in semitones (#465). */
     private val wantedPitchSemitones = atomic(0.0)
 
+    /** Whether the silent stretches are shortened (#429). */
+    private val wantedSkipSilence = atomic(false)
+
     /** The equaliser the feeder applies. Held here so a pipeline rebuild cannot lose it. */
     private val wantedEqualizer = atomic(EqualizerSettings.Flat)
 
@@ -1037,6 +1040,18 @@ public class AudioPlayback(
         get() = wantedDialogueLevelDb.value
         set(value) {
             wantedDialogueLevelDb.value = value
+        }
+
+    /**
+     * Whether every pause longer than a fifth of a second is cut down to a fifth of a second (#429).
+     * Applied as audio is written, so it is heard after the ring's depth, as the balance is. Each cut
+     * is a line in the playout timeline, where the output reaches it, so [position] follows it with
+     * no jump of its own. The engine turns it off for an item with a picture and for a live stream.
+     */
+    public var skipSilence: Boolean
+        get() = wantedSkipSilence.value
+        set(value) {
+            wantedSkipSilence.value = value
         }
 
     /**

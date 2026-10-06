@@ -598,6 +598,11 @@ and labels it.
 
 - SubRip, WebVTT and SubStation Alpha, from the container or from an external file. External files
   load in the middle of playback.
+- Synced lyrics: an `.lrc` file, or LRC lines in a song's own tags (an ID3 `USLT` frame, a Vorbis
+  or Matroska `LYRICS`, an MP4 `©lyr`), become a track that shows line by line through
+  `subtitleCues`, selected when nothing else is. Lyrics without times are
+  `PlayerSnapshot.lyrics`, for the application to show
+  ([#443](https://github.com/yuroyami/KitePlayer/issues/443)).
 - `SubtitleConfig.hearingImpairedNotes` hides the notes of subtitles made for deaf and
   hard-of-hearing viewers: `[DOOR SLAMS]`, a `(laughs)` that opens a line, `JOHN:` and `♪` music
   lines, and with `HideStrict` every parenthesis. ASS scripts are left alone
@@ -1001,7 +1006,7 @@ flowchart LR
 | `kiteplayer-io` | Input doors for platform types. Comes with `kiteplayer`. |
 | `kiteplayer-libass` | The libass typesetter for ASS and SSA. Registers itself. |
 | `kiteplayer-output` | Platform audio output, render support and the subtitle rasterisers. |
-| `kiteplayer-subtitles` | SubRip, WebVTT and ASS dialogue parsers, in Kotlin. |
+| `kiteplayer-subtitles` | SubRip, WebVTT, ASS dialogue and LRC lyrics parsers, in Kotlin. |
 | `kiteplayer-rt` | The real-time audio ring, in C. Comes with `kiteplayer-core` on native targets; never add it yourself. |
 
 To build your own stack, start from `kiteplayer-core` and supply backends through

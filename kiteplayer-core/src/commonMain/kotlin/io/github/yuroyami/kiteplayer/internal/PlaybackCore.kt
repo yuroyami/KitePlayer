@@ -336,6 +336,8 @@ internal class PlaybackCore(
         val source: SubtitleSource,
         /** How many times this track was read again, so the typesetter knows a reload from a reselection. */
         val revision: Int = 0,
+        /** True for the lyrics of the media's own tags (#443), which have no file to read again. */
+        val fromTags: Boolean = false,
     )
 
     /** The media item's parsed external subtitle files, in declaration order. */
@@ -404,16 +406,73 @@ internal class PlaybackCore(
         return reading.await()
     }
 
-    /** Merges what [parseExternalSubtitles] read into the session's track table. */
+    /**
+     * Merges what [parseExternalSubtitles] read into the session's track table, with the lyrics of
+     * the media's own tags (#443): a track when their lines carry LRC stamps, and the snapshot's
+     * [PlayerSnapshot.lyrics] when they carry none.
+     */
     private fun adoptExternalSubtitles(item: MediaItem, parsed: List<ExternalSubtitleTrack>) {
         // Every DECLARED file mints an id, loaded or not: the count of loaded tracks
         // used to seed addExternalSubtitle's next id, which collided with a declared track as
         // soon as one earlier declaration had failed to load.
         externalSubtitleIdsMinted = item.externalSubtitles.size
-        externalSubtitleTracks = parsed
-        if (parsed.isNotEmpty()) {
-            tracks = tracks.copy(all = tracks.all + parsed.map { it.info })
+        tagLyricsText = null
+        val lyricsTrack = tagLyricsTrack(item)
+        val adopted = if (lyricsTrack == null) parsed else parsed + lyricsTrack
+        externalSubtitleTracks = adopted
+        if (adopted.isNotEmpty()) {
+            tracks = tracks.copy(all = tracks.all + adopted.map { it.info })
         }
+    }
+
+    /**
+     * The track of the lyrics the open media's tags carry with LRC stamps, minted after the declared
+     * files, or null. Lyrics without stamps, and stamped lyrics no parser here reads, are kept as
+     * [tagLyricsText] for the snapshot instead.
+     */
+    private fun tagLyricsTrack(item: MediaItem): ExternalSubtitleTrack? {
+        val active = session ?: return null
+        val found = tagLyrics(active.source.metadata)
+            ?: active.audioStream?.let { tagLyrics(it.metadata) }
+            ?: return null
+        val cues = if (looksLikeLrc(found.text)) {
+            runCatching { backend.subtitleFileParser()?.parse(found.text, false) }.getOrNull().orEmpty()
+        } else {
+            emptyList()
+        }
+        if (cues.isEmpty()) {
+            tagLyricsText = found.text
+            return null
+        }
+        externalSubtitleIdsMinted++
+        val id = TrackId(-externalSubtitleIdsMinted)
+        return ExternalSubtitleTrack(
+            id = id,
+            info = TrackInfo(
+                id = id,
+                kind = TrackKind.Subtitle,
+                codec = TAG_LYRICS_CODEC,
+                language = found.language,
+                title = "Lyrics",
+                isDefault = true,
+            ),
+            cues = cues,
+            source = SubtitleSource(uri = item.uri, language = found.language, title = "Lyrics"),
+            fromTags = true,
+        )
+    }
+
+    /**
+     * Selects the lyrics of the media's own tags when the open chose no other subtitle (#443): by a
+     * language preference they match, or as the media's default when the configuration selects one.
+     * A song's lyrics are its only words, so nothing else competes with them.
+     */
+    private suspend fun selectTagLyricsIfNoneShows() {
+        if (tracks.selectedSubtitle != null || selectedExternalSubtitle != null) return
+        val lyrics = externalSubtitleTracks.firstOrNull { it.fromTags } ?: return
+        val preferred = LanguagePreferences(config.subtitles.preferredLanguages).matches(lyrics.info.language)
+        if (!preferred && !config.subtitles.autoSelect) return
+        applyExternalSubtitle(lyrics.id)
     }
 
     private sealed interface SubtitleBytes {
@@ -778,6 +837,12 @@ internal class PlaybackCore(
             )
             return
         }
+        if (loaded.fromTags) {
+            command.reply.completeExceptionally(
+                IllegalArgumentException("${command.track} holds the lyrics of the media's own tags, which have no file to read again"),
+            )
+            return
+        }
         subtitleAcquisitions.filter { it.reloading && it.id == command.track }.forEach { earlier ->
             subtitleAcquisitions.remove(earlier)
             earlier.job?.cancel()
@@ -976,6 +1041,9 @@ internal class PlaybackCore(
 
     /** Ids ever minted for external subtitle tracks this media, failed loads included. */
     private var externalSubtitleIdsMinted = 0
+
+    /** The open media's unsynced lyrics, for [PlayerSnapshot.lyrics] (#443). Actor only. */
+    private var tagLyricsText: String? = null
 
     /**
      * The armed A-B loop. A player property like [speed]: it survives seeks and reopen,
@@ -3179,6 +3247,7 @@ internal class PlaybackCore(
             // unselected above, so there is never a competing selection to defer to.
             (immediateExternal ?: preferredExternal)?.let { applyExternalSubtitle(it.id) }
             subtitleChosenByPlayer = immediateExternal == null
+            selectTagLyricsIfNoneShows()
             selectPreferredSecondarySubtitle()
             refreshTypesetting()
             // The start position's second half: the exact landing, as an ordinary precise seek
@@ -8482,6 +8551,7 @@ internal class PlaybackCore(
             }
             adoptExternalSubtitles(next.item, prepared.externals)
             applyPreparedSubtitle(next.item, prepared)
+            selectTagLyricsIfNoneShows()
             selectPreferredSecondarySubtitle()
             refreshTypesetting()
             if (incoming.videoStream == null) clearRendererPicture()
@@ -8581,6 +8651,7 @@ internal class PlaybackCore(
         next.build.events.forEach(::emitEvent)
         adoptExternalSubtitles(next.item, prepared.externals)
         applyPreparedSubtitle(next.item, prepared)
+        selectTagLyricsIfNoneShows()
         selectPreferredSecondarySubtitle()
         refreshTypesetting()
         startAudioEventCollector(incoming)
@@ -10501,6 +10572,7 @@ internal class PlaybackCore(
             tracks = tracks,
             chapters = session?.chapters ?: emptyList(),
             metadata = session?.source?.metadata ?: emptyMap(),
+            lyrics = if (session != null) tagLyricsText else null,
             speed = speed,
             volume = volume,
             /* Read from the live sink every publish rather than cached at open: it becomes null

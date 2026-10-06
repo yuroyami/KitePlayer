@@ -474,6 +474,14 @@ ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=6"
 ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=6" \
   -c:a flac audio-flac.flac
 
+echo "Songs whose tags carry lyrics: LRC lines in an ID3 USLT frame, and plain words in a FLAC comment"
+ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=6" \
+  -metadata "lyrics-eng=$(printf '[ar:KitePlayer]\n[00:00.50]First line\n[00:02.00]Second line\n[00:04.00]Third line')" \
+  -c:a libmp3lame -b:a 128k audio-lyrics.mp3
+ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=6" \
+  -metadata "LYRICS=$(printf 'A plain first line\nA plain second line')" \
+  -c:a flac audio-lyrics.flac
+
 echo "Torture cases, from bytes rather than encoders, deterministic"
 # The first 40% of the sync clip. The default mp4 layout writes moov after mdat, so this
 # amputates the index entirely; a player must refuse it with a typed error or survive whatever

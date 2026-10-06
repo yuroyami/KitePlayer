@@ -87,6 +87,58 @@ if [ "${1:-}" = "--check-only" ]; then
 fi
 check_ffmpeg
 
+# ---------------------------------------------------------------------------------------------
+# What this ffmpeg can do, asked of the ffmpeg itself rather than read off its version (#418).
+#
+# The series above is recorded and never gates, so every step below has to work on whatever ffmpeg
+# is on PATH, or say plainly that it cannot. Two steps need more than ffmpeg 6.1, which Ubuntu 24.04
+# ships, has:
+#
+# - The colour clips stamp their chroma siting. From ffmpeg 7 the encoder copies the filtered
+#   frame's siting and ignores its own option, so the siting has to be on the frame, through
+#   setparams. ffmpeg 6.1's setparams has no chroma_location, but its encoder still takes
+#   -chroma_sample_location, so there the siting goes on the encoder. Each clip's siting is then
+#   read back, so a fallback that stamps nothing fails here instead of in a golden test.
+# - The fragmented TTML-in-MP4 clip. ffmpeg 8 and earlier refuse to fragment TTML in MP4, so that
+#   one clip cannot be made, and nothing else can stand in for it. The step is skipped with the
+#   reason, the skip is listed in the MANIFEST, and the test that reads the clip skips naming it.
+if ffmpeg -hide_banner -h filter=setparams 2>/dev/null | grep -q chroma_location; then
+    siting_on_frame=1
+else
+    siting_on_frame=0
+    echo "testmedia.sh: this ffmpeg's setparams has no chroma_location, so the chroma siting goes on the encoder." >&2
+fi
+
+# The setparams text that stamps chroma siting $1 on the frame, or nothing where the encoder does it.
+frame_siting() {
+    if [ "$siting_on_frame" = "1" ]; then printf ':chroma_location=%s' "$1"; fi
+}
+
+# The encoder options that stamp chroma siting $1, or none where the frame carries it. Read into an
+# array with read -a, so an empty answer adds no argument.
+encoder_siting() {
+    if [ "$siting_on_frame" = "0" ]; then printf -- '-chroma_sample_location %s' "$1"; fi
+}
+
+# Fails unless the first video stream of $1 reads back with chroma siting $2.
+expect_siting() {
+    command -v ffprobe >/dev/null 2>&1 || return 0
+    local actual
+    actual="$(ffprobe -v error -select_streams v:0 -show_entries stream=chroma_location -of csv=p=0 "$1")"
+    if [ "$actual" != "$2" ]; then
+        echo "testmedia.sh: $1 reads back with chroma siting '$actual', not '$2'. This ffmpeg takes the siting neither from setparams nor from the encoder." >&2
+        exit 1
+    fi
+}
+
+# Fixtures this ffmpeg cannot make, one "path: reason" line each, which the MANIFEST lists.
+skipped_fixtures=()
+
+skip_fixture() {
+    echo "SKIPPED $1: $2" >&2
+    skipped_fixtures+=("$1: $2")
+}
+
 cd "$(dirname "$0")/.."
 mkdir -p testmedia
 cd testmedia
@@ -169,6 +221,9 @@ ffmpeg -v error -y -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" \
 ffmpeg -v error -y -i colors-10bit.mp4 -frames:v 1 \
   -vf "format=rgba" -sws_flags neighbor -f rawvideo colors-10bit.rgba
 
+read -r -a left_on_encoder <<< "$(encoder_siting left)"
+read -r -a center_on_encoder <<< "$(encoder_siting center)"
+
 echo "SMPTE 240M tagged clip plus its reference dump"
 # SMPTE 240M has its own inverse matrix and is not BT.601 with a different name. Converting this
 # clip with the BT.601 numbers gives a mean component error of 7.7 against the reference below,
@@ -177,9 +232,10 @@ echo "SMPTE 240M tagged clip plus its reference dump"
 # filtered frame's own properties onto the encoder and the frame is where the values have to be.
 ffmpeg -v error -y \
   -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" \
-  -vf "setparams=colorspace=smpte240m:color_trc=smpte240m:color_primaries=smpte240m:range=tv:chroma_location=left" \
-  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 1 \
+  -vf "setparams=colorspace=smpte240m:color_trc=smpte240m:color_primaries=smpte240m:range=tv$(frame_siting left)" \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 1 ${left_on_encoder[@]+"${left_on_encoder[@]}"} \
   colors-smpte240m.mp4
+expect_siting colors-smpte240m.mp4 left
 ffmpeg -v error -y -i colors-smpte240m.mp4 -frames:v 1 \
   -vf "format=rgba" -sws_flags neighbor -f rawvideo colors-smpte240m.rgba
 
@@ -191,11 +247,12 @@ echo "Centre-sited NV12 clip plus its reference dump"
 # be unmissable: with it, applying a chroma shift moves the mean error from 0.31 to 8.12.
 # Two frames is enough for a first-frame golden and keeps an uncompressed clip small.
 nv12_geq="geq=r='128+120*sin(X/5)':g='128+120*sin(X/8+Y/7)':b='128+120*sin(X/11+Y/13+4)'"
-nv12_tag="setparams=colorspace=bt709:color_trc=bt709:color_primaries=bt709:range=tv:chroma_location=center"
+nv12_tag="setparams=colorspace=bt709:color_trc=bt709:color_primaries=bt709:range=tv$(frame_siting center)"
 ffmpeg -v error -y \
   -f lavfi -i "color=c=black:size=320x240:rate=25:duration=1" -frames:v 2 \
   -vf "$nv12_geq,format=nv12,$nv12_tag" \
-  -c:v rawvideo colors-nv12.mkv
+  -c:v rawvideo ${center_on_encoder[@]+"${center_on_encoder[@]}"} colors-nv12.mkv
+expect_siting colors-nv12.mkv center
 # The reference goes through yuv420p on the way to RGBA. That step is a plane deinterleave and
 # nothing else, so it changes no sample value, and it avoids one difference between two swscale
 # paths: converting NV12 straight to RGB reads chroma row (row+1)/2 for a luma row, while the planar
@@ -216,34 +273,38 @@ echo "P010 source clip plus its high-aligned reference dump"
 # interpreted, so it is a reference for P010 and not for the planar source.
 ffmpeg -v error -y \
   -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" \
-  -vf "setparams=colorspace=bt709:color_trc=bt709:color_primaries=bt709:range=tv:chroma_location=left" \
-  -c:v libx264 -preset ultrafast -pix_fmt yuv420p10le -g 1 \
+  -vf "setparams=colorspace=bt709:color_trc=bt709:color_primaries=bt709:range=tv$(frame_siting left)" \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p10le -g 1 ${left_on_encoder[@]+"${left_on_encoder[@]}"} \
   colors-p010.mp4
+expect_siting colors-p010.mp4 left
 ffmpeg -v error -y -i colors-p010.mp4 -frames:v 1 \
   -vf "format=p010le,format=rgba" -sws_flags neighbor -f rawvideo colors-p010.rgba
 
 echo "PQ tagged HDR clip and a BT.2020 constant luminance clip"
 # Neither has a reference dump. Both exist so the converter's one-time warning can be counted: there
 # is no tone mapping and no constant luminance path, and both clips are converted approximately.
-pq_tag="setparams=colorspace=bt2020nc:color_trc=smpte2084:color_primaries=bt2020:range=tv:chroma_location=left"
-cl_tag="setparams=colorspace=bt2020c:color_trc=bt2020-10:color_primaries=bt2020:range=tv:chroma_location=left"
+pq_tag="setparams=colorspace=bt2020nc:color_trc=smpte2084:color_primaries=bt2020:range=tv$(frame_siting left)"
+cl_tag="setparams=colorspace=bt2020c:color_trc=bt2020-10:color_primaries=bt2020:range=tv$(frame_siting left)"
 ffmpeg -v error -y \
   -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 5 \
-  -vf "format=yuv420p10le,$pq_tag" \
+  -vf "format=yuv420p10le,$pq_tag" ${left_on_encoder[@]+"${left_on_encoder[@]}"} \
   -c:v libx265 -preset ultrafast -x265-params log-level=error -tag:v hvc1 -g 1 colors-pq.mp4
+expect_siting colors-pq.mp4 left
 ffmpeg -v error -y \
   -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 5 \
-  -vf "format=yuv420p10le,$cl_tag" \
+  -vf "format=yuv420p10le,$cl_tag" ${left_on_encoder[@]+"${left_on_encoder[@]}"} \
   -c:v libx265 -preset ultrafast -x265-params log-level=error -tag:v hvc1 -g 1 colors-bt2020cl.mp4
+expect_siting colors-bt2020cl.mp4 left
 
 echo "ICtCp tagged clip"
 # No reference dump either. ICtCp needs the PQ curve inside its inverse, so the converters approximate
 # it and the source warns once, and this clip exists so that warning can be counted.
-ictcp_tag="setparams=colorspace=ictcp:color_trc=smpte2084:color_primaries=bt2020:range=tv:chroma_location=left"
+ictcp_tag="setparams=colorspace=ictcp:color_trc=smpte2084:color_primaries=bt2020:range=tv$(frame_siting left)"
 ffmpeg -v error -y \
   -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 5 \
-  -vf "format=yuv420p10le,$ictcp_tag" \
+  -vf "format=yuv420p10le,$ictcp_tag" ${left_on_encoder[@]+"${left_on_encoder[@]}"} \
   -c:v libx265 -preset ultrafast -x265-params log-level=error -tag:v hvc1 -g 1 colors-ictcp.mp4
+expect_siting colors-ictcp.mp4 left
 
 echo "Identity (GBR) clip plus its reference dump"
 # Identity means the three planes hold G, B and R in the slots where YCbCr keeps Y, Cb and Cr. The
@@ -685,8 +746,21 @@ for cue in $(seq 0 34); do
   printf '%d\n00:%02d:%02d,000 --> 00:%02d:%02d,900\nLigne %d\n\n' \
     $((cue + 1)) $((cue * 2 / 60)) $((cue * 2 % 60)) $((cue * 2 / 60)) $((cue * 2 % 60)) $((cue + 1))
 done > dash/subs.srt
-ffmpeg -v error -y -i dash/subs.srt -c:s ttml -frag_duration 2000000 \
-  -movflags +empty_moov+default_base_moof+global_sidx -f mp4 dash/subs-stpp.mp4
+# ffmpeg 8 and earlier refuse to fragment TTML in MP4, so the clip is skipped there and the MANIFEST
+# says so (#418). Any other failure of this step still stops the script.
+stpp_log="$(mktemp)"
+if ! ffmpeg -v error -y -i dash/subs.srt -c:s ttml -frag_duration 2000000 \
+  -movflags +empty_moov+default_base_moof+global_sidx -f mp4 dash/subs-stpp.mp4 2> "$stpp_log"; then
+    if grep -q "Fragmentation is not currently supported for TTML" "$stpp_log"; then
+        rm -f dash/subs-stpp.mp4
+        skip_fixture dash/subs-stpp.mp4 "ffmpeg $(ffmpeg_series) cannot write fragmented TTML in MP4; ffmpeg 9 can"
+    else
+        cat "$stpp_log" >&2
+        rm -f "$stpp_log"
+        exit 1
+    fi
+fi
+rm -f "$stpp_log"
 
 # ---------------------------------------------------------------------------------------------
 # Provenance.
@@ -713,6 +787,11 @@ MANIFEST=MANIFEST.txt
     echo
     echo "generator: $(ffmpeg -version 2>/dev/null | head -1)"
     echo "host:      $(uname -sm)"
+    echo
+    # One line per fixture this ffmpeg could not make, which the test that reads it checks (#418).
+    for skipped in ${skipped_fixtures[@]+"${skipped_fixtures[@]}"}; do
+        echo "skipped:   $skipped"
+    done
     echo
     printf "%-64s %12s  %s\n" "FILE" "BYTES" "SHA256"
     for f in $(ls | grep -v "^${MANIFEST}$" | sort); do

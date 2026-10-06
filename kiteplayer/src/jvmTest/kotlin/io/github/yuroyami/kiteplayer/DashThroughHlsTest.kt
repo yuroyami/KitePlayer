@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.math.abs
 import java.net.InetSocketAddress
@@ -150,7 +151,7 @@ class DashThroughHlsTest {
     }
 
     @Test
-    fun anStppFilePlaysAsASubtitleRenditionAtItsOwnTimes() = withSource("stpp.mpd") { source ->
+    fun anStppFilePlaysAsASubtitleRenditionAtItsOwnTimes() = withSource("stpp.mpd", needs = "dash/subs-stpp.mp4") { source ->
         val subtitle = source.streams.singleOrNull { it.kind == TrackKind.Subtitle }
         assertNotNull(subtitle, "the stpp set is not a stream: ${source.streams.map { it.kind to it.codec }}")
         assertEquals("fr", subtitle.language)
@@ -664,7 +665,12 @@ class DashThroughHlsTest {
         }
     }
 
-    private fun withSource(manifest: String, test: suspend (PlayerMediaSource) -> Unit) = runBlocking {
+    private fun withSource(
+        manifest: String,
+        needs: String? = null,
+        test: suspend (PlayerMediaSource) -> Unit,
+    ) = runBlocking {
+        if (needs != null) assumeMade(needs)
         val source = KiteFFmpegSourceFactory().open(Dash.mediaItemFor("$root/$manifest", client))
         try {
             source.selectStreams(source.streams.map { it.index }.toSet())
@@ -672,6 +678,20 @@ class DashThroughHlsTest {
         } finally {
             source.close()
         }
+    }
+
+    /**
+     * Skips the test, with the generator's own reason, when `scripts/testmedia.sh` listed [fixture]
+     * in its MANIFEST as one the ffmpeg on that machine cannot make (#418). A fixture missing for
+     * any other reason fails the test instead.
+     */
+    private fun assumeMade(fixture: String) {
+        val testmedia = media.parentFile
+        val skipped = File(testmedia, "MANIFEST.txt").takeIf { it.isFile }?.readLines().orEmpty()
+            .map { it.removePrefix("skipped:").trim() to it.startsWith("skipped:") }
+            .firstOrNull { (entry, isSkip) -> isSkip && entry.startsWith("$fixture:") }?.first
+        assumeTrue("testmedia.sh skipped $skipped", skipped == null)
+        check(File(testmedia, fixture).isFile) { "$fixture is missing; run scripts/testmedia.sh" }
     }
 
     private class Read(

@@ -34,11 +34,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
 
 - `run-c-tests.sh` never builds anything, so on its own it proves nothing about a source change;
   run the variant's build script first, every time.
-- `scripts/testmedia.sh` says it generates anyway on an FFmpeg other than the recorded series, but
-  FFmpeg 6.1, which Ubuntu 24.04 and a cloud container ship, stops it part way: its `setparams` has
-  no `chroma_location`, and its MP4 muxer refuses fragmented TTML. The real-media tests then fail
-  on a missing `baseline.mkv`, nine of them in `kiteplayer-ffmpeg`, which reads like a regression.
-  For a local run, generate from a copy without those two options; the DASH TTML clip stays absent.
+- `scripts/testmedia.sh` asks the ffmpeg on PATH what it can do rather than reading its version
+  (#418). FFmpeg 6.1, which Ubuntu 24.04 and a cloud container ship, makes every clip but the
+  fragmented TTML one, which it lists as skipped in `MANIFEST.txt`; the stpp DASH test then skips
+  with that reason, so one skip there is expected and not a regression. Its colour clips take their
+  chroma siting from the encoder there instead of from `setparams`, and each one is read back.
 - A Gradle compile task with no sources prints `NO-SOURCE` and exits zero, so "the target compiles
   now" can mean "there was never anything there to compile". Grep the log for that word against the
   exact task name, or check that the run reports a test count rather than a build result.

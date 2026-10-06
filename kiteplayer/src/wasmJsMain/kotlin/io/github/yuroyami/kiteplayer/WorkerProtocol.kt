@@ -1017,6 +1017,11 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             put("uri", warning.uri)
             put("reason", warning.reason)
         }
+        is PlaybackWarning.ThumbnailsUnreadable -> {
+            kind("ThumbnailsUnreadable")
+            put("uri", warning.uri)
+            put("reason", warning.reason)
+        }
         is PlaybackWarning.SubtitleCharsetGuessed -> {
             kind("SubtitleCharsetGuessed")
             put("uri", warning.uri)
@@ -1649,6 +1654,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
             o.str("decoded").orEmpty(),
         )
         "SubtitleSourceUnreadable" -> PlaybackWarning.SubtitleSourceUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
+        "ThumbnailsUnreadable" -> PlaybackWarning.ThumbnailsUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "SubtitleCharsetGuessed" -> PlaybackWarning.SubtitleCharsetGuessed(
             o.str("uri").orEmpty(),
             o.str("charset").orEmpty(),

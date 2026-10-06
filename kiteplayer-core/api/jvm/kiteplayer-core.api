@@ -1850,6 +1850,19 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$SubtitlesNotDra
 	public fun hashCode ()I
 }
 
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ThumbnailsUnreadable : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$ThumbnailsUnreadable;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$ThumbnailsUnreadable;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$ThumbnailsUnreadable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getMessage ()Ljava/lang/String;
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getUri ()Ljava/lang/String;
+	public fun hashCode ()I
+}
+
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TonemappingUnavailable : io/github/yuroyami/kiteplayer/PlaybackWarning {
 	public fun <init> (Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;

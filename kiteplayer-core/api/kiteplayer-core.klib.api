@@ -5362,6 +5362,23 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitlesNotDrawn.hashCode|hashCode(){}[0]
     }
 
+    final class ThumbnailsUnreadable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable|null[0]
+        constructor <init>(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.message.<get-message>|<get-message>(){}[0]
+        final val reason // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.reason.<get-reason>|<get-reason>(){}[0]
+        final val uri // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.uri|{}uri[0]
+            final fun <get-uri>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.uri.<get-uri>|<get-uri>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.component1|component1(){}[0]
+        final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.copy|copy(kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ThumbnailsUnreadable.hashCode|hashCode(){}[0]
+    }
+
     final class TonemappingUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable.<init>|<init>(kotlin.String){}[0]
 

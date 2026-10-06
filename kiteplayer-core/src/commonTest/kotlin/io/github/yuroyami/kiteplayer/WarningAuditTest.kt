@@ -40,6 +40,7 @@ class WarningAuditTest {
         PlaybackWarning.ResourcesNotReleased("x"),
         PlaybackWarning.SubtitleCharsetGuessed("subs.srt", "windows-1252"),
         PlaybackWarning.SubtitleSourceUnreadable("subs.srt", "x"),
+        PlaybackWarning.ThumbnailsUnreadable("thumbs.vtt", "x"),
         PlaybackWarning.ContainerDeclarationDiverged(0, "Width", "1920", "1440"),
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
         PlaybackWarning.SubtitlesNotDrawn("x"),
@@ -120,6 +121,10 @@ class WarningAuditTest {
         is PlaybackWarning.SubtitleSourceUnreadable -> listOf(
             "PlaybackCore.parseExternalSubtitles, when an external subtitle could not be reached, " +
                 "read or parsed, so the track was skipped and the open carried on without it",
+        )
+        is PlaybackWarning.ThumbnailsUnreadable -> listOf(
+            "PlaybackCore.readItemThumbnails, after an open, when the item's thumbnail file could not " +
+                "be reached, read or parsed, or held no picture, so the seek bar has none of its pictures",
         )
         is PlaybackWarning.SubtitleCharsetGuessed -> listOf(
             "PlaybackCore.parseExternalSubtitle, when an external subtitle file carries no " +

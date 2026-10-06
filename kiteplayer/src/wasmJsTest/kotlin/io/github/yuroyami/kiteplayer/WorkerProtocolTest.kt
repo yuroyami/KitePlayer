@@ -197,6 +197,7 @@ class WorkerProtocolTest {
         PlaybackWarning.TrackDeselected(TrackId(-2), "unreadable"),
         PlaybackWarning.ContainerDeclarationDiverged(0, "width", "1920", "1440"),
         PlaybackWarning.SubtitleSourceUnreadable("https://example.com/a.srt", "404"),
+        PlaybackWarning.ThumbnailsUnreadable("https://example.com/thumbs.vtt", "404"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/a.srt", "windows-1252", "Shift_JIS"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/b.srt", "windows-1252"),
         PlaybackWarning.TypesetterUnavailable("libass", "no module"),

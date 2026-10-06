@@ -498,6 +498,18 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The item's WebVTT thumbnail file at [uri] could not be read or held no picture, so the seek
+     * bar has none of its pictures (#433). The item plays on, and the stream's own pictures, when
+     * it has any, stand in.
+     */
+    public data class ThumbnailsUnreadable(
+        val uri: String,
+        val reason: String,
+    ) : PlaybackWarning() {
+        override val message: String get() = "the thumbnail file ${redactUri(uri)} was skipped: ${redactUrisIn(reason)}"
+    }
+
+    /**
      * An external subtitle file whose encoding had to be guessed, or could not be decoded properly.
      *
      * A byte-order mark or a file that validates as UTF-8 is a fact and says nothing. This fires

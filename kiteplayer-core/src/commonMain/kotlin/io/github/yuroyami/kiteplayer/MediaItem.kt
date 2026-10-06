@@ -376,6 +376,20 @@ public interface MediaIo : AutoCloseable {
      * call while a read runs.
      */
     public fun networkBitsPerSecond(): Long? = null
+
+    /**
+     * The tags the bytes of the last [read] brought, or null, the default, when it brought none
+     * (#423): above all the song an internet radio station names in a title block between its audio
+     * bytes. The backend asks after every read that returned bytes, on the thread that read, and
+     * the tags belong at the first byte of that read, so a reader that stops each read where its
+     * next tags belong places them exactly.
+     *
+     * Report each change once. A station's fields keep the names FFmpeg's own `http` gives them,
+     * `StreamTitle` and `StreamUrl`. Finding the titles is the reader's work: it sends
+     * `Icy-MetaData: 1`, reads the block interval from `icy-metaint`, and takes every block out of
+     * the bytes before [read] hands them over, so the demuxer never sees one.
+     */
+    public fun takeTags(): Map<String, String>? = null
 }
 
 /**

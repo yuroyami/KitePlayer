@@ -691,6 +691,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun setExternalClock (Lio/github/yuroyami/kiteplayer/ExternalClock;)V
 	public final fun setForcedPicturesOnly (Z)V
 	public final fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
+	public final fun setItemDetails (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setKeyframeChoice (Lio/github/yuroyami/kiteplayer/KeyframeChoice;)V
 	public final fun setLoop (Lio/github/yuroyami/kiteplayer/LoopMode;)V
 	public final fun setMarkers (Ljava/util/List;)V
@@ -862,6 +863,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/MediaIo : java/lan
 	public abstract fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setWarningSink (Lkotlin/jvm/functions/Function1;)V
+	public fun takeTags ()Ljava/util/Map;
 }
 
 public final class io/github/yuroyami/kiteplayer/MediaIo$Companion {
@@ -873,6 +875,7 @@ public final class io/github/yuroyami/kiteplayer/MediaIo$DefaultImpls {
 	public static fun networkBitsPerSecond (Lio/github/yuroyami/kiteplayer/MediaIo;)Ljava/lang/Long;
 	public static fun openRelated (Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static fun setWarningSink (Lio/github/yuroyami/kiteplayer/MediaIo;Lkotlin/jvm/functions/Function1;)V
+	public static fun takeTags (Lio/github/yuroyami/kiteplayer/MediaIo;)Ljava/util/Map;
 }
 
 public final class io/github/yuroyami/kiteplayer/MediaIoDoorsKt {
@@ -1072,6 +1075,7 @@ public final class io/github/yuroyami/kiteplayer/PipedMediaIo : io/github/yuroya
 	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setWarningSink (Lkotlin/jvm/functions/Function1;)V
+	public fun takeTags ()Ljava/util/Map;
 	public final fun write ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun write$default (Lio/github/yuroyami/kiteplayer/PipedMediaIo;[BIILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
@@ -3500,6 +3504,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerPacket :
 	public abstract fun getBytePosition ()Ljava/lang/Long;
 	public abstract fun getDts-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public abstract fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
+	public fun getNewContainerTags ()Ljava/util/Map;
 	public fun getNewPrograms ()Ljava/util/List;
 	public fun getNewStreams ()Ljava/util/List;
 	public abstract fun getPts-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
@@ -3509,6 +3514,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerPacket :
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/PlayerPacket$DefaultImpls {
+	public static fun getNewContainerTags (Lio/github/yuroyami/kiteplayer/spi/PlayerPacket;)Ljava/util/Map;
 	public static fun getNewPrograms (Lio/github/yuroyami/kiteplayer/spi/PlayerPacket;)Ljava/util/List;
 	public static fun getNewStreams (Lio/github/yuroyami/kiteplayer/spi/PlayerPacket;)Ljava/util/List;
 }

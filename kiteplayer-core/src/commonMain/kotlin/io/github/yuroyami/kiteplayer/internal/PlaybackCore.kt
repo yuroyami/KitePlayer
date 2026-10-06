@@ -1881,6 +1881,11 @@ internal class PlaybackCore(
         }
     }
 
+    /** See [io.github.yuroyami.kiteplayer.KitePlayer.setItemDetails] (#423). */
+    suspend fun setItemDetails(title: String?, artist: String?, album: String?) {
+        throw IllegalStateException("item details are not set yet")
+    }
+
     /**
      * See [io.github.yuroyami.kiteplayer.KitePlayer.readPlaylist] (#490). Off the actor: it is
      * reading, as an external subtitle's bytes are, and touches no player state.

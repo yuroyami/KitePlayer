@@ -368,6 +368,22 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Replaces the title, the artist and the album of the item that is playing, without opening it
+     * again (#423), for a radio that publishes its song list somewhere else, or a stream whose
+     * details the application learns later. Null clears a field. The item in [PlayerSnapshot.media]
+     * and in the queue changes, and the media session and the notification follow.
+     *
+     * It and a station's own song title replace each other, whichever came last: this clears the
+     * `StreamTitle` the stream sent, and the stream's next title shows over it.
+     *
+     * @throws IllegalStateException when nothing is open.
+     */
+    @Throws(IllegalStateException::class)
+    public suspend fun setItemDetails(title: String?, artist: String?, album: String?) {
+        core.setItemDetails(title, artist, album)
+    }
+
+    /**
      * Turns the night mode on or off (#442): the quiet parts of the sound are brought up and the
      * loud parts down, so speech can be followed at a volume that does not wake the house, as a
      * receiver's night mode or mpv's `dynaudnorm` does. It acts on the output after the downmix, with

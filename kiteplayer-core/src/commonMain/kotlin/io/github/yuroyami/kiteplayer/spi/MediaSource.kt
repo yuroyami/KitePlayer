@@ -49,7 +49,10 @@ public interface PlayerMediaSource : AutoCloseable {
     /** False when the source can only read forward, such as a live stream. The engine then refuses seeks. */
     public val seekable: Boolean
 
-    /** Container-level tags. Never trusted, always reported. */
+    /**
+     * Container-level tags. Never trusted, always reported. They can change during playback, and
+     * each change also arrives on the packet that brings it, as [PlayerPacket.newContainerTags].
+     */
     public val metadata: Map<String, String>
 
     /**
@@ -494,6 +497,15 @@ public interface PlayerPacket : AutoCloseable {
      * first packet. Null for a source whose streams never change.
      */
     public val newStreams: List<PlayerStreamInfo>? get() = null
+
+    /**
+     * The source's [PlayerMediaSource.metadata] as it stands from this packet on, present only on
+     * the first packet a source hands out after its tags changed, and null on every other packet
+     * (#423): a radio station's next song, the comments of a chained Ogg's next song, an ID3 tag
+     * between ADTS frames. The engine shows them when this packet is heard, not when it is read,
+     * since a stream is read seconds ahead. Null for a source whose tags never change.
+     */
+    public val newContainerTags: Map<String, String>? get() = null
 
     /**
      * The source's [PlayerMediaSource.programs] as they stand from this packet on, present only on the

@@ -37,27 +37,37 @@ public enum class CorruptPackets {
  * See [DemuxPolicy.fit].
  */
 public data class VariantFit(
-    /**
-     * How tall the picture is drawn, in physical pixels, or null for no cap. The player takes no
-     * variant taller than the first one at least this tall, so a 1080 pixel view of a 720, 1440 and
-     * 2160 ladder plays 1440 at most, and a view taller than every variant caps nothing.
-     */
+    /** How wide the area the picture is drawn into is, in physical pixels, or null for no cap. */
+    val drawnWidth: Int? = null,
+    /** How tall the area the picture is drawn into is, in physical pixels, or null for no cap. */
     val drawnHeight: Int? = null,
     /** True when the output shows HDR as HDR, so an HDR variant is preferred over an SDR one. */
     val showsHdr: Boolean = false,
 ) {
     init {
+        require(drawnWidth == null || drawnWidth > 0) { "drawnWidth must be positive, was $drawnWidth" }
         require(drawnHeight == null || drawnHeight > 0) { "drawnHeight must be positive, was $drawnHeight" }
     }
 
     /**
-     * The tallest picture this fit lets play among variants of [heights], or null for no cap: the
-     * first height at least [drawnHeight], and null when [drawnHeight] is null or taller than
-     * every one of them. The source's first choice and the player's later steps both read it.
+     * The most pixels a variant may have under this fit, among variants of [sizes], or null for no
+     * cap. Each size is fitted into the drawn area at its own shape, as the picture is shown, and
+     * the cap is the smallest size that is not scaled up to fill it, so the picture is never
+     * enlarged and nothing much larger than the screen is fetched. A 1920 by 1080 area of a 720p,
+     * 1440p and 2160p ladder caps at 1440p, a landscape picture in a portrait phone's 1080 by 2400
+     * area is capped by the width, and an area larger than every size caps nothing. Null as well
+     * when either side of the area is unknown. The source's first choice and the player's later
+     * steps both read it.
      */
-    public fun heightCap(heights: Collection<Int>): Int? {
-        val drawn = drawnHeight ?: return null
-        return heights.filter { it >= drawn }.minOrNull()
+    public fun pixelCap(sizes: Collection<VideoSize>): Long? {
+        val areaWidth = drawnWidth ?: return null
+        val areaHeight = drawnHeight ?: return null
+        return sizes.filter { it.width > 0 && it.height > 0 }.filter { size ->
+            val scale = minOf(areaWidth.toDouble() / size.width, areaHeight.toDouble() / size.height)
+            // A size within two percent of its shown size counts as filling it, as an encoder's
+            // rounding to a multiple of 16 would otherwise push the cap a rung up.
+            scale <= 1.0 / 0.98
+        }.minOfOrNull { it.width.toLong() * it.height }
     }
 }
 
@@ -111,8 +121,8 @@ public data class DemuxPolicy(
     val program: Int? = null,
     /**
      * What the picture is drawn into, which the player's own choice of variant follows (#447): HDR
-     * over SDR when the output shows HDR, and no variant taller than the first one at least as tall
-     * as the picture is drawn. [maxBitrate] and [maxVideoHeight] still apply on top. Null, the
+     * over SDR when the output shows HDR, and no variant larger than the smallest one that fills the
+     * drawn area without being scaled up. [maxBitrate] and [maxVideoHeight] still apply on top. Null, the
      * default, has the player fill it at each open, and at each step up, from the renderer it
      * draws into; with no renderer there is no cap and SDR is preferred. Set it to choose for the
      * player, for example to plan for full screen before the view grows. `VariantFit()` keeps no

@@ -4003,19 +4003,22 @@ final class io.github.yuroyami.kiteplayer/Tracks { // io.github.yuroyami.kitepla
 }
 
 final class io.github.yuroyami.kiteplayer/VariantFit { // io.github.yuroyami.kiteplayer/VariantFit|null[0]
-    constructor <init>(kotlin/Int? = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/VariantFit.<init>|<init>(kotlin.Int?;kotlin.Boolean){}[0]
+    constructor <init>(kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/VariantFit.<init>|<init>(kotlin.Int?;kotlin.Int?;kotlin.Boolean){}[0]
 
     final val drawnHeight // io.github.yuroyami.kiteplayer/VariantFit.drawnHeight|{}drawnHeight[0]
         final fun <get-drawnHeight>(): kotlin/Int? // io.github.yuroyami.kiteplayer/VariantFit.drawnHeight.<get-drawnHeight>|<get-drawnHeight>(){}[0]
+    final val drawnWidth // io.github.yuroyami.kiteplayer/VariantFit.drawnWidth|{}drawnWidth[0]
+        final fun <get-drawnWidth>(): kotlin/Int? // io.github.yuroyami.kiteplayer/VariantFit.drawnWidth.<get-drawnWidth>|<get-drawnWidth>(){}[0]
     final val showsHdr // io.github.yuroyami.kiteplayer/VariantFit.showsHdr|{}showsHdr[0]
         final fun <get-showsHdr>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VariantFit.showsHdr.<get-showsHdr>|<get-showsHdr>(){}[0]
 
     final fun component1(): kotlin/Int? // io.github.yuroyami.kiteplayer/VariantFit.component1|component1(){}[0]
-    final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VariantFit.component2|component2(){}[0]
-    final fun copy(kotlin/Int? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/VariantFit // io.github.yuroyami.kiteplayer/VariantFit.copy|copy(kotlin.Int?;kotlin.Boolean){}[0]
+    final fun component2(): kotlin/Int? // io.github.yuroyami.kiteplayer/VariantFit.component2|component2(){}[0]
+    final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/VariantFit.component3|component3(){}[0]
+    final fun copy(kotlin/Int? = ..., kotlin/Int? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/VariantFit // io.github.yuroyami.kiteplayer/VariantFit.copy|copy(kotlin.Int?;kotlin.Int?;kotlin.Boolean){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/VariantFit.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/VariantFit.hashCode|hashCode(){}[0]
-    final fun heightCap(kotlin.collections/Collection<kotlin/Int>): kotlin/Int? // io.github.yuroyami.kiteplayer/VariantFit.heightCap|heightCap(kotlin.collections.Collection<kotlin.Int>){}[0]
+    final fun pixelCap(kotlin.collections/Collection<io.github.yuroyami.kiteplayer/VideoSize>): kotlin/Long? // io.github.yuroyami.kiteplayer/VariantFit.pixelCap|pixelCap(kotlin.collections.Collection<io.github.yuroyami.kiteplayer.VideoSize>){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/VariantFit.toString|toString(){}[0]
 }
 

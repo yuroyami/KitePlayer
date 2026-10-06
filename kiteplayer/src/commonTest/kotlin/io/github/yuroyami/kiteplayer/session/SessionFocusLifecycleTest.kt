@@ -14,7 +14,7 @@ class SessionFocusLifecycleTest {
     fun `playing asks once and asks no more`() {
         val lifecycle = SessionFocusLifecycle()
         assertEquals(true, lifecycle.on(PlaybackStatus.Playing))
-        lifecycle.answered(granted = true)
+        lifecycle.answered(FocusResult.Granted)
         assertNull(lifecycle.on(PlaybackStatus.Playing))
         assertNull(lifecycle.on(PlaybackStatus.Buffering))
     }
@@ -24,7 +24,7 @@ class SessionFocusLifecycleTest {
     fun `a denied request is asked again at the next play`() {
         val lifecycle = SessionFocusLifecycle()
         assertEquals(true, lifecycle.on(PlaybackStatus.Playing))
-        lifecycle.answered(granted = false)
+        lifecycle.answered(FocusResult.Failed)
         assertNull(lifecycle.on(PlaybackStatus.Paused))
         assertEquals(true, lifecycle.on(PlaybackStatus.Playing), "a play after a denial did not ask again")
         assertFalse(lifecycle.release(), "a denial left something to give back")
@@ -34,7 +34,7 @@ class SessionFocusLifecycleTest {
     fun `a permanent loss is asked again at the next play`() {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
-        lifecycle.answered(granted = true)
+        lifecycle.answered(FocusResult.Granted)
         lifecycle.lost()
         assertNull(lifecycle.on(PlaybackStatus.Paused))
         assertEquals(true, lifecycle.on(PlaybackStatus.Playing), "a play after a permanent loss did not ask again")
@@ -44,7 +44,7 @@ class SessionFocusLifecycleTest {
     fun `a pause keeps it so a call can hand it back`() {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
-        lifecycle.answered(granted = true)
+        lifecycle.answered(FocusResult.Granted)
         assertNull(lifecycle.on(PlaybackStatus.Paused))
         assertNull(lifecycle.on(PlaybackStatus.Playing))
     }
@@ -53,7 +53,7 @@ class SessionFocusLifecycleTest {
     fun `going idle gives it back once`() {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
-        lifecycle.answered(granted = true)
+        lifecycle.answered(FocusResult.Granted)
         assertEquals(false, lifecycle.on(PlaybackStatus.Idle))
         assertNull(lifecycle.on(PlaybackStatus.Idle))
     }
@@ -63,7 +63,7 @@ class SessionFocusLifecycleTest {
         for (status in listOf(PlaybackStatus.Ended, PlaybackStatus.Failed)) {
             val lifecycle = SessionFocusLifecycle()
             lifecycle.on(PlaybackStatus.Playing)
-            lifecycle.answered(granted = true)
+            lifecycle.answered(FocusResult.Granted)
             assertEquals(false, lifecycle.on(status), "$status")
         }
     }
@@ -80,7 +80,7 @@ class SessionFocusLifecycleTest {
     fun `closing while holding gives it back`() {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
-        lifecycle.answered(granted = true)
+        lifecycle.answered(FocusResult.Granted)
         assertTrue(lifecycle.release())
         assertFalse(lifecycle.release())
     }
@@ -91,7 +91,7 @@ class SessionFocusLifecycleTest {
         val lifecycle = SessionFocusLifecycle()
         assertEquals(true, lifecycle.on(PlaybackStatus.Playing))
         assertFalse(lifecycle.release(), "nothing was held yet when close ran")
-        assertEquals(FocusAnswer.AfterClose, lifecycle.answered(granted = true))
+        assertEquals(FocusAnswer.AfterClose, lifecycle.answered(FocusResult.Granted))
         assertFalse(lifecycle.release(), "the late grant was recorded as held, with no owner left to give it back")
     }
 
@@ -100,14 +100,14 @@ class SessionFocusLifecycleTest {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
         lifecycle.release()
-        assertEquals(FocusAnswer.AfterClose, lifecycle.answered(granted = false))
+        assertEquals(FocusAnswer.AfterClose, lifecycle.answered(FocusResult.Failed))
     }
 
     @Test
     fun aClosedLifecycleAsksForNothingAndGivesNothingBack() {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
-        lifecycle.answered(granted = true)
+        lifecycle.answered(FocusResult.Granted)
         assertTrue(lifecycle.release())
         assertNull(lifecycle.on(PlaybackStatus.Playing))
         assertNull(lifecycle.on(PlaybackStatus.Idle))
@@ -117,10 +117,10 @@ class SessionFocusLifecycleTest {
     fun anAnswerBeforeCloseSaysWhetherItIsHeld() {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
-        assertEquals(FocusAnswer.Held, lifecycle.answered(granted = true))
+        assertEquals(FocusAnswer.Held, lifecycle.answered(FocusResult.Granted))
         assertEquals(false, lifecycle.on(PlaybackStatus.Idle))
         lifecycle.on(PlaybackStatus.Playing)
-        assertEquals(FocusAnswer.Denied, lifecycle.answered(granted = false))
+        assertEquals(FocusAnswer.Denied, lifecycle.answered(FocusResult.Failed))
     }
 
     // A muted preview in a feed leaves another app's music playing (#436).
@@ -137,7 +137,7 @@ class SessionFocusLifecycleTest {
     fun anItemWithNoSoundGivesBackWhatTheItemBeforeItHeld() {
         val lifecycle = SessionFocusLifecycle()
         assertEquals(true, lifecycle.on(PlaybackStatus.Playing))
-        lifecycle.answered(granted = true)
+        lifecycle.answered(FocusResult.Granted)
         assertNull(lifecycle.on(PlaybackStatus.Opening, hasSound = false), "an item still opening has no tracks yet")
         assertEquals(false, lifecycle.on(PlaybackStatus.Playing, hasSound = false))
         assertNull(lifecycle.on(PlaybackStatus.Playing, hasSound = false))
@@ -148,8 +148,45 @@ class SessionFocusLifecycleTest {
     fun aPausedItemWithNoSoundGivesBackToo() {
         val lifecycle = SessionFocusLifecycle()
         lifecycle.on(PlaybackStatus.Playing)
-        lifecycle.answered(granted = true)
+        lifecycle.answered(FocusResult.Granted)
         assertEquals(false, lifecycle.on(PlaybackStatus.Paused, hasSound = false))
+        assertFalse(lifecycle.release())
+    }
+
+    // During a call Android answers "later" (#451): nothing is held, and the gain that comes holds it.
+    @Test
+    fun `a delayed request waits and the gain that arrives holds it`() {
+        val lifecycle = SessionFocusLifecycle()
+        assertEquals(true, lifecycle.on(PlaybackStatus.Playing))
+        assertEquals(FocusAnswer.Waiting, lifecycle.answered(FocusResult.Delayed))
+        assertNull(lifecycle.on(PlaybackStatus.Paused), "the wait was given back at the pause it causes")
+        lifecycle.gained()
+        assertNull(lifecycle.on(PlaybackStatus.Playing), "a gain after the wait did not hold the sound")
+        assertEquals(false, lifecycle.on(PlaybackStatus.Idle), "the held sound was not given back at idle")
+    }
+
+    @Test
+    fun `a wait is given back at idle and at close, and a play while waiting asks again`() {
+        val waitingAtIdle = SessionFocusLifecycle()
+        waitingAtIdle.on(PlaybackStatus.Playing)
+        waitingAtIdle.answered(FocusResult.Delayed)
+        assertEquals(false, waitingAtIdle.on(PlaybackStatus.Ended), "a wait left the request with the platform")
+
+        val waitingAtClose = SessionFocusLifecycle()
+        waitingAtClose.on(PlaybackStatus.Playing)
+        waitingAtClose.answered(FocusResult.Delayed)
+        assertTrue(waitingAtClose.release(), "close did not give the waiting request back")
+
+        val playedAgain = SessionFocusLifecycle()
+        playedAgain.on(PlaybackStatus.Playing)
+        playedAgain.answered(FocusResult.Delayed)
+        assertEquals(true, playedAgain.on(PlaybackStatus.Playing), "a play while waiting did not ask again")
+    }
+
+    @Test
+    fun `a gain that nobody waited for holds nothing`() {
+        val lifecycle = SessionFocusLifecycle()
+        lifecycle.gained()
         assertFalse(lifecycle.release())
     }
 }

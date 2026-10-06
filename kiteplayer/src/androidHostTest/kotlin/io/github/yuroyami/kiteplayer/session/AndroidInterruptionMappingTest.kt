@@ -42,4 +42,20 @@ class AndroidInterruptionMappingTest {
         assertEquals(AudioAttributes.CONTENT_TYPE_SPEECH, focusContentType(AudioContent.Speech))
         assertEquals(AudioAttributes.CONTENT_TYPE_MOVIE, focusContentType(AudioContent.Movie))
     }
+
+    @Test
+    fun `each kind of focus asks for its own gain`() {
+        assertEquals(AudioManager.AUDIOFOCUS_GAIN, focusGainFor(AudioFocusKind.Permanent))
+        assertEquals(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT, focusGainFor(AudioFocusKind.Transient))
+        assertEquals(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK, focusGainFor(AudioFocusKind.TransientMayDuck))
+    }
+
+    // A delayed answer is not a refusal (#451).
+    @Test
+    fun `a request is granted, delayed or refused`() {
+        assertEquals(FocusResult.Granted, focusResultFor(AudioManager.AUDIOFOCUS_REQUEST_GRANTED))
+        assertEquals(FocusResult.Delayed, focusResultFor(AudioManager.AUDIOFOCUS_REQUEST_DELAYED))
+        assertEquals(FocusResult.Failed, focusResultFor(AudioManager.AUDIOFOCUS_REQUEST_FAILED))
+        assertEquals(FocusResult.Failed, focusResultFor(12345))
+    }
 }

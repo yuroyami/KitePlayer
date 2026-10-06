@@ -135,6 +135,14 @@ internal class InterruptionMachine(private val policy: InterruptionPolicy) {
         )
     }
 
+    /**
+     * The platform answered a request for the sound with "later" (#451), as Android does during a
+     * phone call: no sound now, and a [InterruptionEvent.Gained] when it arrives. So a player that
+     * meant to play pauses, and that gain starts it again, whatever [InterruptionPolicy.resumeAfterTransient]
+     * says, because the listener asked to play and has not yet heard anything.
+     */
+    fun onDelayed(playing: Boolean): InterruptionDecision = decide(pause = playing, resumable = true, ducked = false)
+
     private fun decide(pause: Boolean, resumable: Boolean, ducked: Boolean): InterruptionDecision {
         this.ducked = ducked
         pausedByPolicy = pause && resumable

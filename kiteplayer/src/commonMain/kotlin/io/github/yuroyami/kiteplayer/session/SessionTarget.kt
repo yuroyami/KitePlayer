@@ -86,8 +86,12 @@ internal class InterruptionApplier(
     private val claim = PauseClaim(target)
     private var ducked = false
 
-    fun handle(event: InterruptionEvent) {
-        val decision = machine.on(event, target.playing)
+    fun handle(event: InterruptionEvent) = apply(machine.on(event, target.playing))
+
+    /** The platform will hand the sound over later (#451): pause now, and its gain plays. */
+    fun focusDelayed() = apply(machine.onDelayed(target.playing))
+
+    private fun apply(decision: InterruptionDecision) {
         // Volume first: a permanent loss arriving while ducked has to give the volume back BEFORE
         // it pauses, or the next press of play is quiet for no reason the listener can see.
         applyDuck(decision.ducked)
@@ -113,12 +117,15 @@ internal class InterruptionApplier(
  * holder that the sound is theirs again.
  *
  * Only a grant holds it. A denied request, or a permanent loss, leaves nothing held, so the next
- * play asks again (#282). A request still on its way to the platform when [release] closes the
+ * play asks again (#282). A request the platform answers "later" leaves it waiting: nothing is held
+ * yet, the gain that arrives later holds it, and going idle gives the waiting request back as it
+ * would a held one (#451). A play while waiting asks again. A request still on its way to the platform when [release] closes the
  * lifecycle answers [FocusAnswer.AfterClose], so a grant nobody would otherwise give back is given
  * back at once (#415). Not thread safe: a platform guard calls it from one thread at a time.
  */
 internal class SessionFocusLifecycle {
     private var held = false
+    private var waiting = false
     private var closed = false
 
     /**
@@ -137,31 +144,64 @@ internal class SessionFocusLifecycle {
         PlaybackStatus.Opening -> null
     }
 
-    private fun giveBack(): Boolean? = if (held) false.also { held = false } else null
+    private fun giveBack(): Boolean? = if (held || waiting) {
+        held = false
+        waiting = false
+        false
+    } else {
+        null
+    }
 
     /** The platform's answer to a request [on] asked for, and what the caller does with it. */
-    fun answered(granted: Boolean): FocusAnswer = when {
+    fun answered(result: FocusResult): FocusAnswer = when {
         closed -> FocusAnswer.AfterClose
-        granted -> FocusAnswer.Held.also { held = true }
-        else -> FocusAnswer.Denied.also { held = false }
+        result == FocusResult.Granted -> FocusAnswer.Held.also { held = true; waiting = false }
+        result == FocusResult.Delayed -> FocusAnswer.Waiting.also { held = false; waiting = true }
+        else -> FocusAnswer.Denied.also { held = false; waiting = false }
+    }
+
+    /** The sound arrived: a request that waited is now held (#451). */
+    fun gained() {
+        if (waiting && !closed) {
+            waiting = false
+            held = true
+        }
     }
 
     /** The platform took the sound away for good, so the next play has to ask again. */
     fun lost() {
         held = false
+        waiting = false
     }
 
-    /** Closes the lifecycle, and says whether something was held to give back. */
+    /** Closes the lifecycle, and says whether something was held or waited for, to give back. */
     fun release(): Boolean {
         closed = true
-        return held.also { held = false }
+        return (held || waiting).also {
+            held = false
+            waiting = false
+        }
     }
 }
 
 /** What a caller does with the platform's answer to a focus request. */
+internal enum class FocusResult {
+    /** The sound is ours now. */
+    Granted,
+
+    /** The sound will be ours later, when the platform says so (#451). */
+    Delayed,
+
+    /** Refused. */
+    Failed,
+}
+
 internal enum class FocusAnswer {
     /** Granted, and now held until the player goes idle or the lifecycle closes. */
     Held,
+
+    /** Answered "later": the player waits, paused, for the gain that will start it (#451). */
+    Waiting,
 
     /** Refused. Nothing is held, and there is no sound to make. */
     Denied,

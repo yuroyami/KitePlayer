@@ -45,7 +45,7 @@ internal fun interruptionHandling(player: KitePlayer, context: Context, policy: 
 private class AndroidInterruptionHandle(
     player: KitePlayer,
     private val context: Context,
-    policy: InterruptionPolicy,
+    private val policy: InterruptionPolicy,
 ) : AutoCloseable {
 
     private val applier = InterruptionApplier(PlayerSessionTarget(player), policy)
@@ -64,6 +64,8 @@ private class AndroidInterruptionHandle(
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         // A permanent loss ends this hold: the next play asks again (#282).
         if (change == AudioManager.AUDIOFOCUS_LOSS) synchronized(lifecycle) { lifecycle.lost() }
+        // The sound a request was told to wait for has arrived (#451).
+        if (change == AudioManager.AUDIOFOCUS_GAIN) synchronized(lifecycle) { lifecycle.gained() }
         interruptionEventFor(change)?.let(::handle)
     }
 
@@ -75,7 +77,10 @@ private class AndroidInterruptionHandle(
 
     // setWillPauseWhenDucked is left off deliberately: with it on the system converts a duckable
     // loss into a plain one, and the policy is the thing that decides between ducking and pausing here.
-    private fun focusRequestFor(content: AudioContent) = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+    private fun focusRequestFor(content: AudioContent) = AudioFocusRequest.Builder(focusGainFor(policy.focus))
+        // Only a permanent request waits through a call: a short sound refused now has no reason
+        // to play once the call is over (#451).
+        .setAcceptsDelayedFocusGain(policy.focus == AudioFocusKind.Permanent)
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -111,14 +116,17 @@ private class AndroidInterruptionHandle(
                         // A blocking platform call, which cancelling the scope does not stop, so the
                         // answer may come back after close (#415).
                         val request = focusRequestFor(player.state.value.audioContent).also { focusRequest = it }
-                        val granted = audioManager.requestAudioFocus(request) ==
-                            AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-                        when (synchronized(lifecycle) { lifecycle.answered(granted) }) {
+                        val result = focusResultFor(audioManager.requestAudioFocus(request))
+                        when (synchronized(lifecycle) { lifecycle.answered(result) }) {
                             FocusAnswer.Held -> Unit
+                            // "Later", during a call: pause now, and the gain that comes plays (#451).
+                            FocusAnswer.Waiting -> synchronized(applier) { if (!closed) applier.focusDelayed() }
                             // No focus, no sound: a denied request is a loss, and the policy pauses.
                             FocusAnswer.Denied -> handle(InterruptionEvent.Lost)
-                            // Close gave back only what was held then; this grant has no other owner.
-                            FocusAnswer.AfterClose -> if (granted) audioManager.abandonAudioFocusRequest(request)
+                            // Close gave back only what was held then; this grant, or this wait,
+                            // has no other owner.
+                            FocusAnswer.AfterClose ->
+                                if (result != FocusResult.Failed) audioManager.abandonAudioFocusRequest(request)
                         }
                     }
                     false -> audioManager.abandonAudioFocusRequest(focusRequest)
@@ -142,6 +150,20 @@ internal fun focusContentType(content: AudioContent): Int = when (content) {
     AudioContent.Music -> AudioAttributes.CONTENT_TYPE_MUSIC
     AudioContent.Speech -> AudioAttributes.CONTENT_TYPE_SPEECH
     AudioContent.Movie, AudioContent.Automatic -> AudioAttributes.CONTENT_TYPE_MOVIE
+}
+
+/** The focus a request for [kind] asks Android for (#451). */
+internal fun focusGainFor(kind: AudioFocusKind): Int = when (kind) {
+    AudioFocusKind.Permanent -> AudioManager.AUDIOFOCUS_GAIN
+    AudioFocusKind.Transient -> AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+    AudioFocusKind.TransientMayDuck -> AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+}
+
+/** Android's answer to a focus request, as this player's: granted, later, or refused (#451). */
+internal fun focusResultFor(code: Int): FocusResult = when (code) {
+    AudioManager.AUDIOFOCUS_REQUEST_GRANTED -> FocusResult.Granted
+    AudioManager.AUDIOFOCUS_REQUEST_DELAYED -> FocusResult.Delayed
+    else -> FocusResult.Failed
 }
 
 /** Android's focus codes, as this player's events. Anything else is not ours to react to. */

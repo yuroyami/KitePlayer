@@ -109,4 +109,34 @@ class SessionApplierTest {
         applier.handle(InterruptionEvent.Gained)
         assertEquals(listOf("pause", "play"), target.calls)
     }
+
+    // A play during a call starts when the call ends (#451).
+    @Test
+    fun `a delayed focus pauses the player and the gain that arrives plays it`() {
+        val target = FakeTarget()
+        val applier = applier(target, InterruptionPolicy(resumeAfterTransient = false))
+        applier.focusDelayed()
+        applier.handle(InterruptionEvent.Gained)
+        assertEquals(listOf("pause", "play"), target.calls, "the gain after the wait did not start the sound")
+    }
+
+    @Test
+    fun `a pause while waiting for focus cancels the wait`() {
+        val target = FakeTarget()
+        val applier = applier(target)
+        applier.focusDelayed()
+        target.userPauses()
+        target.calls.clear()
+        applier.handle(InterruptionEvent.Gained)
+        assertEquals(emptyList(), target.calls, "the gain played over the listener's pause")
+    }
+
+    @Test
+    fun `a delayed focus on a paused player plays nothing later`() {
+        val target = FakeTarget(playing = false)
+        val applier = applier(target)
+        applier.focusDelayed()
+        applier.handle(InterruptionEvent.Gained)
+        assertEquals(emptyList(), target.calls)
+    }
 }

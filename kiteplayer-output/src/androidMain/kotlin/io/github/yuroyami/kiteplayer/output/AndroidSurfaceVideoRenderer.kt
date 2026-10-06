@@ -338,6 +338,15 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     }
 
     /**
+     * True when HDR shows as HDR here (#447): under [HdrPolicy.Auto], on the direct codec path,
+     * which hands the codec's HDR to the system, and on a display that says it supports PQ or HLG.
+     * The software path tone maps every frame, and a display the view has not described yet counts
+     * as standard range, so the variant choice keeps SDR until the view says otherwise.
+     */
+    override val showsHdr: Boolean
+        get() = hdrPolicy.value == HdrPolicy.Auto && codecTarget != null && displayShowsHdr(displayHdr.value?.types)
+
+    /**
      * Says what happened to an HDR frame the codec sent to the Surface: tone mapped on request,
      * shown as HDR by a display that supports its transfer, or tone mapped by the system for one
      * that does not.
@@ -952,6 +961,17 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         private const val SURFACE_FENCE_TIMEOUT_MS: Long = 1_000L
     }
 }
+
+/**
+ * True when a display of `Display.HdrCapabilities` [types] shows HDR as HDR (#447): HDR10, HDR10+,
+ * Dolby Vision or HLG. Null, a display nobody described, counts as standard range.
+ */
+internal fun displayShowsHdr(types: IntArray?): Boolean = types?.any {
+    it == Display.HdrCapabilities.HDR_TYPE_HDR10 ||
+        it == Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS ||
+        it == Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION ||
+        it == Display.HdrCapabilities.HDR_TYPE_HLG
+} == true
 
 /** One shared lifecycle target for the direct codec producer and the software Canvas fallback. */
 private class AndroidSurfaceTargets(

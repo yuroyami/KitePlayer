@@ -222,6 +222,80 @@ class SelectVariantTest {
         harness.close()
     }
 
+    private val ladder = listOf(
+        StreamVariant(index = 0, bitrate = 800_000, width = 640, height = 360),
+        StreamVariant(index = 1, bitrate = 2_500_000, width = 1280, height = 720),
+        StreamVariant(index = 2, bitrate = 5_000_000, width = 1920, height = 1080),
+    )
+
+    /** The open hands the source what the renderer draws into, unless the item says itself (#447). */
+    @Test
+    fun theOpenTellsTheSourceWhatTheRendererDrawsInto() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 30_000_000, variants = ladder))
+        val renderer = assertNotNull(harness.renderer)
+        renderer.outputSizeOverride = VideoSize(1280, 720)
+        renderer.showsHdrOverride = true
+        harness.openWithRenderer()
+        assertEquals(VariantFit(drawnWidth = 1280, drawnHeight = 720, showsHdr = true), harness.backend.lastOpenedItem?.demux?.fit)
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "the 720p view did not get the 720p variant")
+        harness.close()
+
+        val toneMapped = CoreHarness(this, config = PlayerConfig(hdrPolicy = HdrPolicy.ToneMap), script = MediaScript(durationUs = 30_000_000, variants = ladder))
+        assertNotNull(toneMapped.renderer).showsHdrOverride = true
+        toneMapped.openWithRenderer()
+        assertEquals(false, toneMapped.backend.lastOpenedItem?.demux?.fit?.showsHdr, "a player that tone maps asked for HDR")
+        toneMapped.close()
+
+        val own = CoreHarness(this, script = MediaScript(durationUs = 30_000_000, variants = ladder))
+        assertNotNull(own.renderer).outputSizeOverride = VideoSize(640, 360)
+        own.attachRenderer()
+        own.core.open(MediaItem("scripted://media", demux = DemuxPolicy(fit = VariantFit())))
+        assertEquals(VariantFit(), own.backend.lastOpenedItem?.demux?.fit, "the item's own fit was replaced")
+        assertEquals(2, own.core.snapshots.value.tracks.selectedVariant)
+        own.close()
+    }
+
+    /** A fast link steps up only as far as the view, and further once the view grows (#447). */
+    @Test
+    fun aStepUpStopsAtTheDrawnSizeAndRisesWithTheView() = runTest {
+        val script = MediaScript(durationUs = 240_000_000, variants = ladder, linkBitsPerSecond = { 50_000_000 })
+        val harness = CoreHarness(this, script = script)
+        val renderer = assertNotNull(harness.renderer)
+        // Below 360p, so the open takes it, and a lower step than the view would allow.
+        renderer.outputSizeOverride = VideoSize(640, 360)
+        harness.attachRenderer()
+        harness.core.open(MediaItem("scripted://media", io = { LinkIo(script, harness.clock) }))
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant)
+        harness.core.play()
+        harness.run(70.seconds)
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant, "the step up passed the 360p view")
+
+        renderer.outputSizeOverride = VideoSize(1920, 1080)
+        harness.run(120.seconds)
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant, "the step up did not follow the view to 1080p")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    /** A step stays in the range that plays, so an SDR stream never steps up into the HDR ladder (#447). */
+    @Test
+    fun aStepUpStaysWithinTheDynamicRangeThatPlays() = runTest {
+        val mixed = listOf(
+            StreamVariant(index = 0, bitrate = 800_000, width = 640, height = 360),
+            StreamVariant(index = 1, bitrate = 5_000_000, width = 1920, height = 1080),
+            StreamVariant(index = 2, bitrate = 9_000_000, width = 1920, height = 1080, hdr = true),
+        )
+        val script = MediaScript(durationUs = 240_000_000, variants = mixed, linkBitsPerSecond = { 50_000_000 })
+        val harness = CoreHarness(this, script = script)
+        harness.attachRenderer()
+        harness.core.open(MediaItem("scripted://media", io = { LinkIo(script, harness.clock) }))
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "a renderer that tone maps did not get SDR")
+        harness.core.play()
+        harness.run(150.seconds)
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "the SDR stream stepped into the HDR ladder")
+        harness.close()
+    }
+
     @Test
     fun aVariantTheCallerChoseIsNotRaised() = runTest {
         val script = MediaScript(durationUs = 120_000_000, variants = variants, linkBitsPerSecond = { 50_000_000 })

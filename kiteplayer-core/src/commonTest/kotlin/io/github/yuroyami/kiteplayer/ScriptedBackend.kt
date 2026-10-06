@@ -767,15 +767,22 @@ internal class ScriptedBackend(
         val io = media.io?.open()
         repeat(readsDuringOpen) { io?.read(openScratch, 0, openScratch.size) }
         val itemScript = scriptFor?.invoke(media) ?: script
-        // The variant the item asks for, or else the highest bitrate within the item's caps, as the
-        // FFmpeg backend chooses.
+        // The variant the item asks for, or else the highest bitrate within the item's caps and its
+        // fit, in the dynamic range the fit prefers, as the FFmpeg backend chooses (#447).
         val variant = if (itemScript.variants.isEmpty()) {
             null
         } else {
+            val showsHdr = media.demux.fit?.showsHdr == true
+            val pool = itemScript.variants.filter { it.hdr == showsHdr }.ifEmpty { itemScript.variants }
+            val pixelCap = media.demux.fit?.pixelCap(pool.mapNotNull { variant ->
+                variant.width?.let { width -> variant.height?.let { VideoSize(width, it) } }
+            })
             media.demux.variant?.takeIf { it in itemScript.variants.indices }
-                ?: itemScript.variants.filter { candidate ->
+                ?: pool.filter { candidate ->
                     (media.demux.maxBitrate?.let { candidate.bitrate <= it } ?: true) &&
-                        (media.demux.maxVideoHeight?.let { cap -> candidate.height?.let { it <= cap } ?: true } ?: true)
+                        (media.demux.maxVideoHeight?.let { cap -> candidate.height?.let { it <= cap } ?: true } ?: true) &&
+                        (pixelCap == null || candidate.width == null || candidate.height == null ||
+                            candidate.width.toLong() * candidate.height <= pixelCap)
                 }.maxByOrNull { it.bitrate }?.index
                 ?: 0
         }

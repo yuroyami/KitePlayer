@@ -287,6 +287,27 @@ private fun awaitPresented(r: AndroidSurfaceVideoRenderer, atLeast: Long, timeou
 
 class AndroidSurfaceVideoRendererTest {
 
+    /** What the variant choice hears about HDR (#447): only a direct path, on an HDR display, under Auto. */
+    @Test
+    fun `the variant choice hears HDR only from a direct path on an HDR display under Auto`() {
+        val software = AndroidSurfaceVideoRenderer(convert = exactConverter(), target = FakeTarget())
+        val direct = AndroidSurfaceVideoRenderer(convert = exactConverter(), target = FakeTarget(), codecTarget = MediaCodecSurfaceTarget())
+        try {
+            software.setDisplayHdr(intArrayOf(android.view.Display.HdrCapabilities.HDR_TYPE_HDR10), 4f)
+            assertFalse(software.showsHdr, "the software path tone maps every frame")
+            assertFalse(direct.showsHdr, "a display nobody described is standard range")
+            direct.setDisplayHdr(IntArray(0), 1f)
+            assertFalse(direct.showsHdr)
+            direct.setDisplayHdr(intArrayOf(android.view.Display.HdrCapabilities.HDR_TYPE_HLG), 1f)
+            assertTrue(direct.showsHdr)
+            direct.setHdrPolicy(io.github.yuroyami.kiteplayer.HdrPolicy.ToneMap)
+            assertFalse(direct.showsHdr, "a renderer told to tone map said it shows HDR")
+        } finally {
+            software.close()
+            direct.close()
+        }
+    }
+
     @Test
     fun `newest of one hundred wins with ninety nine exact closes`() = runBlocking {
         val target = FakeTarget()

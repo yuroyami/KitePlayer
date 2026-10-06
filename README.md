@@ -681,6 +681,14 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
   with the highest bitrate within `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.
   `Tracks.variants` lists the variants, and `KitePlayer.selectVariant` plays another one from the
   current position. The stream opens again for that, so the picture holds for a moment.
+- The choice follows the screen ([#447](https://github.com/yuroyami/KitePlayer/issues/447)). An
+  HDR version plays on a display that shows HDR as HDR, under `HdrPolicy.Auto`, and the SDR one
+  elsewhere. Nothing larger plays than the smallest variant that fills the view the picture is
+  drawn into, so a phone does not fetch 4K, and the cap rises when the view grows. The player reads
+  both from the attached renderer at each open and each step. Set `DemuxPolicy.fit` to decide for
+  it, and `VariantFit()` for no cap. A DASH manifest's transfer characteristics property counts as
+  HLS's `VIDEO-RANGE`. The Apple renderers do not report HDR yet
+  ([#540](https://github.com/yuroyami/KitePlayer/issues/540)).
 - The player steps down when the stream reads slower than it plays, or when playback has waited
   4 s for data, and `PlaybackWarning.VariantLowered` says so.
 - It steps up when the network carries the next higher variant with half again to spare and the
@@ -689,7 +697,8 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
 - A step up waits 30 s after a step down, and twice as long after each step up that did not last,
   up to 5 minutes.
 - Each step opens the stream again, so the picture holds for a moment. A variant that you
-  selected stays, and a step up never passes `DemuxPolicy.maxBitrate` or `maxVideoHeight`.
+  selected stays, and a step up never passes `DemuxPolicy.maxBitrate`, `maxVideoHeight` or the
+  fit, and never moves between SDR and HDR.
 - MPEG-TS and fMP4 segments, byte ranges, AES-128 keys, separate audio and subtitle renditions, and
   live playlists play. A finished playlist can seek. A rendition's `NAME` is its track's title,
   and its `DEFAULT`, `FORCED` and accessibility `CHARACTERISTICS` set the track's flags.

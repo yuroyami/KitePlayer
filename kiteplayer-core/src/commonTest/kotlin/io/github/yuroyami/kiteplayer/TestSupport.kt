@@ -169,6 +169,12 @@ internal class RecordingRenderer(
     override val outputSize: io.github.yuroyami.kiteplayer.VideoSize?
         get() = outputSizeOverride
 
+    /** What this renderer claims about showing HDR, for the variant choice (#447). */
+    var showsHdrOverride: Boolean = false
+
+    override val showsHdr: Boolean
+        get() = showsHdrOverride
+
     override fun setScaleMode(mode: VideoScale) {
         scaleMode = mode
     }

@@ -59,6 +59,8 @@ import io.github.yuroyami.kiteplayer.VideoPlayback
 import io.github.yuroyami.kiteplayer.VideoAdjustments
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoTransform
+import io.github.yuroyami.kiteplayer.VideoSize
+import io.github.yuroyami.kiteplayer.VariantFit
 import io.github.yuroyami.kiteplayer.spi.AudioBuffer
 import io.github.yuroyami.kiteplayer.spi.AudioDecoder
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
@@ -3240,7 +3242,9 @@ internal class PlaybackCore(
         // otherwise. Handed over as a factory that answers with this one reader, because that is
         // what the item's own field is and the backend must not have two shapes to handle.
         val sessionIo = cachingIo ?: watchedIo
-        val effectiveItem = if (sessionIo == null) item else item.copy(io = { sessionIo })
+        val readItem = if (sessionIo == null) item else item.copy(io = { sessionIo })
+        // The variant choice follows what the picture is drawn into, unless the item says (#447).
+        val effectiveItem = if (readItem.demux.fit != null) readItem else readItem.copy(demux = readItem.demux.copy(fit = outputFit()))
         val backendSession = try {
             // Only an open that reads through the engine's reader shows its progress, so only such
             // an open can stall. The backend's own protocols carry their own timeouts instead.
@@ -6093,7 +6097,7 @@ internal class PlaybackCore(
         if (item.demux.variant != null && !variantChosenByPlayer) return
         if (!session.source.seekable) return
         val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
-        val lower = tracks.variants.filter { it.bitrate < current.bitrate }.maxByOrNull { it.bitrate } ?: return
+        val lower = lowerVariants(current).maxByOrNull { it.bitrate } ?: return
         lowerVariant(current, lower, "playback waited ${waited.inWholeMilliseconds} ms for data at ${current.bitrate} bits per second")
     }
 
@@ -6117,7 +6121,7 @@ internal class PlaybackCore(
         if (read >= speed) return
         // The bits per second the link delivers, divided by the speed, which plays that much faster.
         val linkBits = read * current.bitrate / speed
-        val lower = tracks.variants.filter { it.bitrate < current.bitrate }
+        val lower = lowerVariants(current)
         if (lower.isEmpty()) return
         val target = lower.filter { it.bitrate * VARIANT_FIT_HEADROOM <= linkBits }.maxByOrNull { it.bitrate }
             ?: lower.minBy { it.bitrate }
@@ -6126,6 +6130,15 @@ internal class PlaybackCore(
             target,
             "the link carried about ${linkBits.toLong()} bits per second of playback, too little for ${current.bitrate}",
         )
+    }
+
+    /**
+     * The variants a step down from [current] may take: those of lower bitrate in the range that
+     * plays, or of any range when that one has none, because a stall outranks the range (#447).
+     */
+    private fun lowerVariants(current: StreamVariant): List<StreamVariant> {
+        val lower = tracks.variants.filter { it.bitrate < current.bitrate }
+        return lower.filter { it.hdr == current.hdr }.ifEmpty { lower }
     }
 
     /** Moves the stream to [target], a lower variant, and makes the next step up wait. */
@@ -6160,8 +6173,9 @@ internal class PlaybackCore(
         if (!session.source.seekable) return
         if (stepUpNotBeforeNanos != NO_POSITION && clock.nanos() < stepUpNotBeforeNanos) return
         val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
+        // Within the range that plays: a step is a matter of bitrate, never of SDR or HDR (#447).
         val higher = tracks.variants
-            .filter { it.bitrate > current.bitrate && withinCaps(it, item.demux) }
+            .filter { it.bitrate > current.bitrate && it.hdr == current.hdr && withinCaps(it, item.demux) }
             .minByOrNull { it.bitrate } ?: return
         if (!wellBuffered(session)) return
         val linkBits = session.networkIo?.networkBitsPerSecond() ?: return
@@ -6172,12 +6186,41 @@ internal class PlaybackCore(
         pendingVariant = VariantRequest(higher.index, CompletableDeferred())
     }
 
-    /** True when [variant] stays within the caps the item set on the player's own choice. */
+    /**
+     * True when [variant] stays within the caps the item set on the player's own choice, and within
+     * the fit, the item's own or else what the renderer draws into now, so a view that grew lets
+     * the step go further (#447).
+     */
     private fun withinCaps(variant: StreamVariant, demux: DemuxPolicy): Boolean {
         val maxBitrate = demux.maxBitrate
         val maxHeight = demux.maxVideoHeight
         val height = variant.height
-        return (maxBitrate == null || variant.bitrate <= maxBitrate) && (maxHeight == null || height == null || height <= maxHeight)
+        val pixelCap = (demux.fit ?: outputFit()).pixelCap(tracks.variants.mapNotNull(::sizeOf))
+        val pixels = sizeOf(variant)?.let { it.width.toLong() * it.height }
+        return (maxBitrate == null || variant.bitrate <= maxBitrate) &&
+            (maxHeight == null || height == null || height <= maxHeight) &&
+            (pixelCap == null || pixels == null || pixels <= pixelCap)
+    }
+
+    private fun sizeOf(variant: StreamVariant): VideoSize? {
+        val width = variant.width ?: return null
+        val height = variant.height ?: return null
+        return if (width > 0 && height > 0) VideoSize(width, height) else null
+    }
+
+    /**
+     * What the attached renderer draws into, for the variant choice (#447): the size of its surface
+     * and whether it shows HDR as HDR, which it does only under [HdrPolicy.Auto]. With no renderer,
+     * no cap and no HDR, so an item that only sounds keeps today's choice.
+     */
+    private fun outputFit(): VariantFit {
+        val renderer = pendingRenderer ?: return VariantFit()
+        val size = renderer.outputSize
+        return VariantFit(
+            drawnWidth = size?.width?.takeIf { it > 0 },
+            drawnHeight = size?.height?.takeIf { it > 0 },
+            showsHdr = hdrPolicy == io.github.yuroyami.kiteplayer.HdrPolicy.Auto && renderer.showsHdr,
+        )
     }
 
     /**

@@ -57,6 +57,8 @@ internal class DashHlsMediaIo(
     private val fetchDate: suspend (url: String) -> String? = { null },
     /** How many bytes of initializations this reader keeps at most, together. */
     private val initBudgetBytes: Long = MAX_INIT_BYTES,
+    /** Told of each live manifest fetched again, so the locations its segments come from follow it (#440). */
+    private val onManifest: suspend (DashManifest) -> Unit = {},
 ) : MediaIo {
 
     private val master = presentation.master.encodeToByteArray()
@@ -532,6 +534,7 @@ internal class DashHlsMediaIo(
         if (fresh.isDynamic && fresh.periods.isNotEmpty()) {
             manifest = fresh
             allowedLocation(fresh)?.let { manifestAddress = it }
+            onManifest(fresh)
         }
     }
 

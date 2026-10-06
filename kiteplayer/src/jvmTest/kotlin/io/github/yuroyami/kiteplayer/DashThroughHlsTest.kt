@@ -330,9 +330,11 @@ class DashThroughHlsTest {
         assertContinuous(timeline.video, from = 0.0, to = 40.0, "picture")
         assertContinuous(timeline.audio, from = 0.0, to = 40.0, "sound")
         // A WebM stream read to its end still seeks, which FFmpeg's Matroska reader once refused (KiteFFmpeg#125).
-        source.seekToKeyframe(Pts(30_000_000))
+        // Inside a segment rather than on its boundary, which a clip whose media starts a few
+        // milliseconds late moves past the target (#539).
+        source.seekToKeyframe(Pts(31_000_000))
         val after = source.readFor(seconds = 1.0)
-        assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 30 s is at ${after.firstVideo} s")
+        assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 31 s is at ${after.firstVideo} s")
         // VP9 states its size in every keyframe, so the second Period's header need not reach the decoder.
         val video = source.streams.first { it.kind == TrackKind.Video }
         val decoder = checkNotNull((source as KiteFFmpegSource).videoDecoderFactories().firstNotNullOfOrNull { it.create(video, HwdecPolicy.Off) })
@@ -361,9 +363,11 @@ class DashThroughHlsTest {
         val timeline = source.readTimeline()
         assertContinuous(timeline.video, from = 0.0, to = 40.0, "picture")
         assertContinuous(timeline.audio, from = 0.0, to = 40.0, "sound")
-        source.seekToKeyframe(Pts(30_000_000))
+        // Inside a segment: FFmpeg 6.1 starts each Period's picture 21 ms late, behind the AAC
+        // encoder's start-up samples, which moves the boundary at 30 s past a target there (#539).
+        source.seekToKeyframe(Pts(31_000_000))
         val after = source.readFor(seconds = 1.0)
-        assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 30 s is at ${after.firstVideo} s")
+        assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 31 s is at ${after.firstVideo} s")
     }
 
 

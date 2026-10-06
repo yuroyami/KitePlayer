@@ -38,7 +38,7 @@ class ScanAlignmentTest {
     private fun compare(name: String, alternateTrack: Boolean = false) = runBlocking {
         val found = clip(name)
         // Skipped, not passed: a host without the clips or a sound device did not run this test.
-        assumeTrue("no $name in the test media folder", found != null)
+        requireTestMedia(found != null, "no $name in the test media folder; run scripts/testmedia.sh")
         assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
         val file = checkNotNull(found)
         val player = KitePlayer()

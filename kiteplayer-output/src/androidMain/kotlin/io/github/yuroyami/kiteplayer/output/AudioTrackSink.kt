@@ -1,5 +1,8 @@
 package io.github.yuroyami.kiteplayer.output
 
+import android.content.Context
+import android.media.AudioManager
+import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
@@ -40,7 +43,9 @@ public class AudioTrackSink internal constructor(
 ) : AudioSink {
 
     public constructor() : this(
-        AudioTrackDriverFactory { accepted -> PlatformAudioTrackDriver(accepted) },
+        AudioTrackDriverFactory { accepted, content ->
+            openWithFloatFallback { encoding -> PlatformAudioTrackDriver(accepted, encoding, content) }
+        },
         AndroidMonotonicClock,
     )
 
@@ -52,6 +57,8 @@ public class AudioTrackSink internal constructor(
     private val headLock = Any()
 
     private var driver: AudioTrackDriver? = null
+    /* What the next open declares, set by the engine before it opens. A recovery reopens with it too. */
+    @Volatile private var content: AudioContent = AudioContent.Movie
     private var accepted: AudioFormat? = null
     private var render: AudioRenderCallback? = null
     private var blockFrames = 0
@@ -101,6 +108,9 @@ public class AudioTrackSink internal constructor(
 
     override val events: Flow<AudioSinkEvent> get() = eventFlow
 
+    /** Whether the 16-bit fallback was reported. Written by the writer thread only. */
+    @Volatile private var reportedPcm16 = false
+
     override val deviceBufferFrames: Int
         get() = driver?.bufferSizeInFrames ?: 0
 
@@ -117,6 +127,10 @@ public class AudioTrackSink internal constructor(
 
     /** Which deadline source the writer last used: "timestamp", "head" or "none". Test seam. */
     internal val observedDeadlineSource: String get() = timestampSourceObserved
+
+    override fun setContent(content: AudioContent) {
+        this.content = content
+    }
 
     override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
         synchronized(lifecycle) {
@@ -151,7 +165,7 @@ public class AudioTrackSink internal constructor(
                     },
                 )
             }
-            val opened = driverFactory.open(format)
+            val opened = driverFactory.open(format, content)
             /* Failed open releases the partially created driver and leaves no writer (step 7). */
             if (opened.bufferSizeInFrames <= 0) {
                 opened.release()
@@ -203,7 +217,7 @@ public class AudioTrackSink internal constructor(
             if (!writerFailed) return
             val format = accepted ?: return
             dead?.release()
-            driver = driverFactory.open(format)
+            driver = driverFactory.open(format, content)
             submittedFrames = 0L
             resetTimestampState()
             writerFailed = false
@@ -359,6 +373,17 @@ public class AudioTrackSink internal constructor(
     private fun writerLoop() {
         val d = driver ?: return
         d.onWriterThreadStart()
+        // Said from here, once for the sink, and not from open: the engine listens to the events
+        // only once the session that opened the device exists, and a flow with no listener drops
+        // what it is given (#445).
+        if (d.encoding == DriverEncoding.Pcm16 && !reportedPcm16) {
+            reportedPcm16 = true
+            eventFlow.tryEmit(
+                AudioSinkEvent.DeviceChanged(
+                    "this device refused 32-bit float output, so the sound plays as 16-bit PCM with dither",
+                ),
+            )
+        }
         val format = accepted ?: return
         val callback = render ?: return
         val adapter = blockAdapter ?: return
@@ -599,8 +624,22 @@ public class AudioTrackSink internal constructor(
     }
 }
 
-/** Creates [AudioTrackSink]s for the engine. One sink per playback session. */
-public class AudioTrackSinkFactory() : AudioSinkFactory {
+/**
+ * Creates [AudioTrackSink]s for the engine. One sink per playback session.
+ *
+ * With a [context], it can also say how many channels the route media plays through carries, which
+ * [io.github.yuroyami.kiteplayer.AudioConfig.matchOutputChannels] needs (#466). Without one it cannot,
+ * because Android answers that only through a `Context`.
+ */
+public class AudioTrackSinkFactory(context: Context?) : AudioSinkFactory {
+    public constructor() : this(null)
+
+    private val audioManager: AudioManager? =
+        context?.applicationContext?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
     override suspend fun create(): AudioSink = AudioTrackSink()
     override val name: String get() = "AudioTrack"
+
+    override fun outputChannelCount(): Int? =
+        audioManager?.let { runCatching { mediaRouteChannelCount(it) }.getOrNull() }
 }

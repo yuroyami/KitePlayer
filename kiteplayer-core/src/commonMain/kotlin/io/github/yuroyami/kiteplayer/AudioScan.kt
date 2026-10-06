@@ -59,6 +59,10 @@ public class AudioScanResult internal constructor(
  * or before the asked-for time, and the blocks carry the timestamps they really have, so a caller
  * that needs an exact boundary reads it from them rather than assuming the seek was exact.
  *
+ * An item with a [MediaItem.clip] is scanned over its clip only, as if the range were cut to it,
+ * and a source that cannot seek reaches the clip's start by decoding forward. The range and every
+ * timestamp stay in the file's own timeline, not the item's.
+ *
  * Reads block in the caller's context, so call this from one that may block. Cancel the calling
  * coroutine to stop: the decoder and the session are closed before this returns or throws.
  *

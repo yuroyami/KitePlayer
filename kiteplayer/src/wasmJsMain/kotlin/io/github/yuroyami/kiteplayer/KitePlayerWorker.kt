@@ -1,7 +1,8 @@
-@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class, KitePlayerLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.output.WebDisplayAwake
 import io.github.yuroyami.kiteplayer.output.WebWorkletAudio
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride
@@ -56,10 +57,11 @@ import kotlin.time.Duration
  * ### What does not cross
  *
  * - `subtitleCues`: the worker draws the subtitles on the canvas itself.
+ * - `coverArt`: the media session of the page's own player shows it, and a worker has none.
  * - `position()` and `audioClock()`: read [progress] instead. `transportMark` and `awaitClose`.
- * - `inspect`, `scanAudio`, `captureFrame`, recording, `memento` and `restore`.
+ * - `inspect`, `scanAudio`, `captureFrame`, `thumbnailAt`, recording, `memento` and `restore`.
  * - Attaching or detaching a renderer or an audio tap, and `setExternalClock`.
- * - An item, or an external subtitle, with its own reader: it is refused with
+ * - An item, or an external subtitle or a thumbnail file, with its own reader: it is refused with
  *   [PlaybackError.ConfigurationInvalid]. Give it an address instead.
  * - A `PlayerConfig`: the worker builds its player on the default one.
  *
@@ -69,7 +71,20 @@ public class KitePlayerWorker private constructor(
     private val worker: JsAny,
     private val audio: WebWorkletAudio?,
     private val canvas: JsAny?,
+    private val keepDisplayAwake: Boolean,
 ) : AutoCloseable {
+
+    /** True while this page holds its screen awake for the worker's picture (#238). */
+    private var holdingDisplay = false
+
+    /** Holds the page's screen awake while the worker draws a playing picture on its canvas (#238). */
+    private fun holdDisplay(snapshot: PlayerSnapshot?) {
+        val wanted = keepDisplayAwake && canvas != null && dead == null && !closed &&
+            snapshot != null && snapshot.status == PlaybackStatus.Playing && snapshot.videoSize != null
+        if (wanted == holdingDisplay) return
+        holdingDisplay = wanted
+        WebDisplayAwake.setHeld(wanted)
+    }
 
     private val stateFlow = MutableStateFlow(PlayerSnapshot())
     private val progressFlow = MutableStateFlow(Progress())
@@ -236,6 +251,11 @@ public class KitePlayerWorker private constructor(
         call(Command.SelectVariant(index))
     }
 
+    /** Plays the channel numbered [number] of the tracks' programmes, or lets the player choose with null. */
+    public suspend fun selectProgram(number: Int?) {
+        call(Command.SelectProgram(number))
+    }
+
     /**
      * Loads a subtitle file, selects it, and returns its id once it is showing. [source] needs an
      * address: one with its own reader is refused with [PlaybackError.ConfigurationInvalid].
@@ -243,6 +263,14 @@ public class KitePlayerWorker private constructor(
     public suspend fun addExternalSubtitle(source: SubtitleSource): TrackId {
         crossingRefusal(source)?.let { throw it }
         return ask<Answer.Track>(Command.AddExternalSubtitle(source.copy(uri = pageAddress(source.uri)))).id
+    }
+
+    /**
+     * Reads an external subtitle track's file again in [encoding], or decided from its bytes for
+     * null, as `KitePlayer.reloadExternalSubtitle` does, and returns once the new reading shows.
+     */
+    public suspend fun reloadExternalSubtitle(track: TrackId, encoding: String? = null) {
+        call(Command.ReloadExternalSubtitle(track, encoding))
     }
 
     /** The worker player's diagnostics dump. */
@@ -260,6 +288,9 @@ public class KitePlayerWorker private constructor(
     /** Chooses whether [setSpeed] keeps pitch. */
     public fun setPreservePitch(value: Boolean): Unit = send(Control.SetPreservePitch(value))
 
+    /** Chooses which keyframe a [SeekMode.Keyframe] seek lands on; see [KitePlayer.setKeyframeChoice]. */
+    public fun setKeyframeChoice(choice: KeyframeChoice): Unit = send(Control.SetKeyframeChoice(choice))
+
     /** Sets the volume. */
     public fun setVolume(value: Float): Unit = send(Control.SetVolume(value))
 
@@ -268,6 +299,21 @@ public class KitePlayerWorker private constructor(
 
     /** Sets the stereo balance. */
     public fun setBalance(value: Float): Unit = send(Control.SetBalance(value))
+
+    /** Sets what the two front speakers play (#462). */
+    public fun setStereoMode(mode: StereoMode): Unit = send(Control.SetStereoMode(mode))
+
+    /** Turns the night mode on or off (#442). */
+    public fun setNightMode(on: Boolean): Unit = send(Control.SetNightMode(on))
+
+    /** Raises or lowers the dialogue in a downmix, in decibels (#442). */
+    public fun setDialogueLevel(db: Float): Unit = send(Control.SetDialogueLevel(db))
+
+    /** Moves the pitch by semitones without changing the speed (#465). */
+    public fun setPitch(semitones: Double): Unit = send(Control.SetPitch(semitones))
+
+    /** Shortens the silent stretches of a podcast or an audiobook (#429). */
+    public fun setSkipSilence(on: Boolean): Unit = send(Control.SetSkipSilence(on))
 
     /** Silences the sound without losing the volume. */
     public fun setMuted(value: Boolean): Unit = send(Control.SetMuted(value))
@@ -310,6 +356,9 @@ public class KitePlayerWorker private constructor(
 
     /** Moves the subtitles up the screen. */
     public fun setSubtitlePosition(value: Float): Unit = send(Control.SetSubtitlePosition(value))
+
+    /** Draws only the forced pictures of a Blu-ray or DVD subtitle track, or every picture again. */
+    public fun setForcedPicturesOnly(value: Boolean): Unit = send(Control.SetForcedPicturesOnly(value))
 
     /** Keeps subtitles inside the safe area of the output. */
     public fun setSubtitleSafeArea(value: SubtitleSafeArea): Unit = send(Control.SetSubtitleSafeArea(value))
@@ -430,8 +479,11 @@ public class KitePlayerWorker private constructor(
                 if (failure == null) reply.complete(message.answer) else reply.completeExceptionally(failure.toException())
                 if (message.id == closeId) finish()
             }
-            is WorkerMessage.State -> stateFlow.value = message.snapshot.let { snapshot ->
-                snapshot.copy(media = snapshot.media?.let(::own), queue = snapshot.queue.map(::own))
+            is WorkerMessage.State -> {
+                stateFlow.value = message.snapshot.let { snapshot ->
+                    snapshot.copy(media = snapshot.media?.let(::own), queue = snapshot.queue.map(::own))
+                }
+                holdDisplay(message.snapshot)
             }
             is WorkerMessage.Progressed -> progressFlow.value = message.progress
             is WorkerMessage.Stats -> statsFlow.value = message.stats
@@ -454,6 +506,7 @@ public class KitePlayerWorker private constructor(
         if (dead != null) return
         val error = PlaybackError.Internal("the player's worker stopped: $detail")
         dead = error
+        holdDisplay(null)
         started?.completeExceptionally(PlaybackException(error))
         val closing = closeId?.let { pending.remove(it) }
         val waiting = pending.values.toList()
@@ -471,6 +524,7 @@ public class KitePlayerWorker private constructor(
 
     /** Ends the worker and the page's audio once the close is answered, or the worker is gone. */
     private fun finish() {
+        holdDisplay(null)
         workerTerminate(worker)
         audio?.close()
         closeId?.let { pending.remove(it) }?.complete(null)
@@ -491,6 +545,8 @@ public class KitePlayerWorker private constructor(
          *        starts loading it at once and does not wait for it: an ASS track that opens first is
          *        kept until it lands. Without the module, ASS draws with the built-in styling. Null
          *        loads nothing now, and the first ASS track then looks beside the worker binary.
+         * @param keepDisplayAwake whether the page's screen stays awake while the worker plays a
+         *        picture on [canvas] (#238), which a canvas does not get from the browser by itself.
          * @throws PlaybackException with [PlaybackError.Internal] when the worker cannot load, or
          *         cannot load the codec module.
          */
@@ -499,6 +555,7 @@ public class KitePlayerWorker private constructor(
             workerUrl: String = "./kiteplayer-web-worker.mjs",
             codecUrl: String = "./kite.mjs",
             libassUrl: String? = "./kiteass.mjs",
+            keepDisplayAwake: Boolean = true,
         ): KitePlayerWorker {
             val audio = WebWorkletAudio.createOrNull()
             val offscreen = canvas?.let(::canvasTransfer)
@@ -527,7 +584,7 @@ public class KitePlayerWorker private constructor(
                 // The worker sets its listener once its code has loaded. A message sent before that
                 // is lost, so the first one waits for the worker to say it is listening.
                 hello.await()
-                val created = KitePlayerWorker(worker, audio, canvas)
+                val created = KitePlayerWorker(worker, audio, canvas, keepDisplayAwake)
                 val ready = CompletableDeferred<Unit>()
                 created.started = ready
                 player = created

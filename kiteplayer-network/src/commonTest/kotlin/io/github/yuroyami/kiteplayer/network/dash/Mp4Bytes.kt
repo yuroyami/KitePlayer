@@ -9,7 +9,7 @@ internal object Mp4Bytes {
 
     fun u64(value: Long): ByteArray = u32(value ushr 32) + u32(value and 0xFFFF_FFFFL)
 
-    private fun fullBox(type: String, version: Int, flags: Int, payload: ByteArray): ByteArray =
+    fun fullBox(type: String, version: Int, flags: Int, payload: ByteArray): ByteArray =
         box(type, byteArrayOf(version.toByte(), (flags shr 16).toByte(), (flags shr 8).toByte(), flags.toByte()) + payload)
 
     /**
@@ -48,6 +48,21 @@ internal object Mp4Bytes {
     }
 
     /**
+     * A visual sample entry of type [type] whose `hvcC` holds [vps], [sps] and [pps] with 4-byte
+     * NAL lengths, as `hvc1` and `hev1` carry it, and Dolby Vision's `dvh1` and `dvhe` beside a `dvcC`.
+     */
+    fun hevcEntry(type: String, vps: ByteArray, sps: ByteArray, pps: ByteArray): ByteArray {
+        fun array(nalType: Int, unit: ByteArray) =
+            byteArrayOf(nalType.toByte(), 0, 1, (unit.size shr 8).toByte(), unit.size.toByte()) + unit
+        // Twenty-one bytes of profile, level and format fields, the NAL length size in the low bits
+        // of the twenty-second, then the count of arrays.
+        val hvcC = byteArrayOf(1) + ByteArray(20) + byteArrayOf(0x0F, 3) +
+            array(32, vps) + array(33, sps) + array(34, pps)
+        val dvcC = if (type.startsWith("dv")) box("dvcC", byteArrayOf(1, 0, 10, 0x35, 0, 0, 0, 0) + ByteArray(16)) else ByteArray(0)
+        return box(type, ByteArray(78) + box("hvcC", hvcC) + dvcC)
+    }
+
+    /**
      * A media segment of one fragment of [trackId]: a `tfdt` of [decodeTime], and a `trun` with a
      * data offset and, for each sample, its size and its duration when it has one.
      */
@@ -74,6 +89,32 @@ internal object Mp4Bytes {
         val moofSize = moof(0).size
         val mdat = box("mdat", samples.fold(ByteArray(0)) { all, sample -> all + sample.data })
         return box("styp", "msdh".encodeToByteArray() + u32(0)) + moof((moofSize + 8).toLong()) + mdat
+    }
+
+    /**
+     * A media segment of [trackId] whose `traf` holds one `trun` of [count] samples for each of
+     * [runs], with no field per sample: every sample takes the default size, [tfhdSize] when it is
+     * given and the track's otherwise. Its data starts at the payload of [mdat], which follows the
+     * `moof`, unless [baseOffset] sets a base of its own, from which the data starts at once.
+     */
+    fun defaultRuns(
+        trackId: Long,
+        runs: List<Long>,
+        mdat: ByteArray = ByteArray(0),
+        tfhdSize: Long? = null,
+        baseOffset: Long? = null,
+    ): ByteArray {
+        val tfhdFlags = 0x020000 or (if (tfhdSize != null) 0x10 else 0) or (if (baseOffset != null) 0x1 else 0)
+        val tfhd = fullBox(
+            "tfhd", 0, tfhdFlags,
+            u32(trackId) + (baseOffset?.let { u64(it) } ?: ByteArray(0)) + (tfhdSize?.let { u32(it) } ?: ByteArray(0)),
+        )
+        fun moof(dataOffset: Long): ByteArray {
+            val truns = runs.fold(ByteArray(0)) { all, count -> all + fullBox("trun", 0, 0x1, u32(count) + u32(dataOffset)) }
+            return box("moof", fullBox("mfhd", 0, 0, u32(1)) + box("traf", tfhd + truns))
+        }
+        val dataOffset = if (baseOffset != null) 0L else (moof(0).size + 8).toLong()
+        return moof(dataOffset) + box("mdat", mdat)
     }
 
     /** A WebVTT sample (ISO/IEC 14496-30) of one cue for each of [cues], or an empty one when there are none. */

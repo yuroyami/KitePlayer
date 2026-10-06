@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.output
 
+import android.media.AudioAttributes
+import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioRenderCallback
@@ -143,7 +145,7 @@ private class FixedClock(var now: Long = 0L) : MonotonicClock {
 }
 
 private fun sink(driver: FakeAudioTrackDriver, clock: MonotonicClock = FixedClock()) =
-    AudioTrackSink({ driver }, clock)
+    AudioTrackSink({ _, _ -> driver }, clock)
 
 private val stereo48k = AudioFormat(48_000, 2, SampleFormat.F32)
 
@@ -169,7 +171,7 @@ class AudioTrackSinkTest {
     @Test
     fun `open negotiates mono or stereo and fails invalid requests before device creation`() = runBlocking {
         var factoryCalls = 0
-        val s = AudioTrackSink({ factoryCalls++; FakeAudioTrackDriver() }, FixedClock())
+        val s = AudioTrackSink({ _, _ -> factoryCalls++; FakeAudioTrackDriver() }, FixedClock())
         assertFailsWith<IllegalArgumentException> {
             s.open(AudioFormat(0, 2, SampleFormat.F32)) { _, _, _ -> 0 }
         }
@@ -294,7 +296,7 @@ class AudioTrackSinkTest {
     fun `after a device failure the next start reopens the device and plays again`() = runBlocking {
         var opens = 0
         val drivers = mutableListOf<FakeAudioTrackDriver>()
-        val factory = AudioTrackDriverFactory {
+        val factory = AudioTrackDriverFactory { _, _ ->
             opens++
             FakeAudioTrackDriver().also { drivers += it }
         }
@@ -320,6 +322,35 @@ class AudioTrackSinkTest {
             "the dead device must be released",
         )
         s.close()
+    }
+
+    @Test
+    fun `each open and a recovery declare the content the engine set before it`() = runBlocking {
+        val declared = mutableListOf<AudioContent>()
+        val drivers = mutableListOf<FakeAudioTrackDriver>()
+        val s = AudioTrackSink({ _, content -> declared += content; FakeAudioTrackDriver().also { drivers += it } }, FixedClock())
+        s.setContent(AudioContent.Speech)
+        s.open(stereo48k, FullBlockCallback())
+        drivers.single().writeResults.add(0) /* first block dies, so the next start reopens */
+        val lost = async { s.events.first { it is AudioSinkEvent.DeviceLost } }
+        yield()
+        s.start()
+        withTimeout(5_000) { lost.await() }
+        s.start()
+        s.close()
+
+        val next = AudioTrackSink({ _, content -> declared += content; FakeAudioTrackDriver() }, FixedClock())
+        next.setContent(AudioContent.Music)
+        next.open(stereo48k, FullBlockCallback())
+        next.close()
+        assertEquals(listOf(AudioContent.Speech, AudioContent.Speech, AudioContent.Music), declared)
+    }
+
+    @Test
+    fun `music speech and film map to the platform content types`() {
+        assertEquals(AudioAttributes.CONTENT_TYPE_MUSIC, contentType(AudioContent.Music))
+        assertEquals(AudioAttributes.CONTENT_TYPE_SPEECH, contentType(AudioContent.Speech))
+        assertEquals(AudioAttributes.CONTENT_TYPE_MOVIE, contentType(AudioContent.Movie))
     }
 
     @Test

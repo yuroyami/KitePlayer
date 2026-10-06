@@ -7,6 +7,18 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer>
+final enum class io.github.yuroyami.kiteplayer.session/AudioFocusKind : kotlin/Enum<io.github.yuroyami.kiteplayer.session/AudioFocusKind> { // io.github.yuroyami.kiteplayer.session/AudioFocusKind|null[0]
+    enum entry Permanent // io.github.yuroyami.kiteplayer.session/AudioFocusKind.Permanent|null[0]
+    enum entry Transient // io.github.yuroyami.kiteplayer.session/AudioFocusKind.Transient|null[0]
+    enum entry TransientMayDuck // io.github.yuroyami.kiteplayer.session/AudioFocusKind.TransientMayDuck|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.session/AudioFocusKind.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.session/AudioFocusKind> // io.github.yuroyami.kiteplayer.session/AudioFocusKind.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.session/AudioFocusKind // io.github.yuroyami.kiteplayer.session/AudioFocusKind.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.session/AudioFocusKind> // io.github.yuroyami.kiteplayer.session/AudioFocusKind.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer.session/BackgroundPolicy : kotlin/Enum<io.github.yuroyami.kiteplayer.session/BackgroundPolicy> { // io.github.yuroyami.kiteplayer.session/BackgroundPolicy|null[0]
     enum entry ContinueAudio // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.ContinueAudio|null[0]
     enum entry Ignore // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.Ignore|null[0]
@@ -76,12 +88,14 @@ sealed interface io.github.yuroyami.kiteplayer/KitePlayerAvailability { // io.gi
 }
 
 final class io.github.yuroyami.kiteplayer.session/InterruptionPolicy { // io.github.yuroyami.kiteplayer.session/InterruptionPolicy|null[0]
-    constructor <init>(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Boolean = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.<init>|<init>(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Boolean;kotlin.Boolean){}[0]
+    constructor <init>(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer.session/AudioFocusKind = ...) // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.<init>|<init>(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Boolean;kotlin.Boolean;io.github.yuroyami.kiteplayer.session.AudioFocusKind){}[0]
 
     final val duckOnTransient // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.duckOnTransient|{}duckOnTransient[0]
         final fun <get-duckOnTransient>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.duckOnTransient.<get-duckOnTransient>|<get-duckOnTransient>(){}[0]
     final val duckVolume // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.duckVolume|{}duckVolume[0]
         final fun <get-duckVolume>(): kotlin/Float // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.duckVolume.<get-duckVolume>|<get-duckVolume>(){}[0]
+    final val focus // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.focus|{}focus[0]
+        final fun <get-focus>(): io.github.yuroyami.kiteplayer.session/AudioFocusKind // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.focus.<get-focus>|<get-focus>(){}[0]
     final val pauseOnLoss // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.pauseOnLoss|{}pauseOnLoss[0]
         final fun <get-pauseOnLoss>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.pauseOnLoss.<get-pauseOnLoss>|<get-pauseOnLoss>(){}[0]
     final val pauseWhenBecomingNoisy // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.pauseWhenBecomingNoisy|{}pauseWhenBecomingNoisy[0]
@@ -94,7 +108,8 @@ final class io.github.yuroyami.kiteplayer.session/InterruptionPolicy { // io.git
     final fun component3(): kotlin/Float // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.component3|component3(){}[0]
     final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.component4|component4(){}[0]
     final fun component5(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.component5|component5(){}[0]
-    final fun copy(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer.session/InterruptionPolicy // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.copy|copy(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Boolean;kotlin.Boolean){}[0]
+    final fun component6(): io.github.yuroyami.kiteplayer.session/AudioFocusKind // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.component6|component6(){}[0]
+    final fun copy(kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Float = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer.session/AudioFocusKind = ...): io.github.yuroyami.kiteplayer.session/InterruptionPolicy // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.copy|copy(kotlin.Boolean;kotlin.Boolean;kotlin.Float;kotlin.Boolean;kotlin.Boolean;io.github.yuroyami.kiteplayer.session.AudioFocusKind){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.toString|toString(){}[0]
@@ -204,7 +219,7 @@ final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.
 
 // Targets: [wasmJs]
 final class io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory : io.github.yuroyami.kiteplayer.spi/VideoRendererFactory { // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory|null[0]
-    constructor <init>(kotlin.js/JsAny) // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.<init>|<init>(kotlin.js.JsAny){}[0]
+    constructor <init>(kotlin.js/JsAny, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.<init>|<init>(kotlin.js.JsAny;kotlin.Boolean){}[0]
 
     final val name // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.name|{}name[0]
         final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.name.<get-name>|<get-name>(){}[0]
@@ -232,17 +247,24 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final fun setAbLoop(kotlin.time/Duration?, kotlin.time/Duration? = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setAbLoop|setAbLoop(kotlin.time.Duration?;kotlin.time.Duration?){}[0]
     final fun setAudioDelay(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setAudioDelay|setAudioDelay(kotlin.time.Duration){}[0]
     final fun setBalance(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setBalance|setBalance(kotlin.Float){}[0]
+    final fun setDialogueLevel(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setDialogueLevel|setDialogueLevel(kotlin.Float){}[0]
     final fun setDuckLevel(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setDuckLevel|setDuckLevel(kotlin.Float){}[0]
     final fun setEqualizer(io.github.yuroyami.kiteplayer/EqualizerSettings) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setEqualizer|setEqualizer(io.github.yuroyami.kiteplayer.EqualizerSettings){}[0]
+    final fun setForcedPicturesOnly(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setForcedPicturesOnly|setForcedPicturesOnly(kotlin.Boolean){}[0]
     final fun setHdrPolicy(io.github.yuroyami.kiteplayer/HdrPolicy) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setHdrPolicy|setHdrPolicy(io.github.yuroyami.kiteplayer.HdrPolicy){}[0]
+    final fun setKeyframeChoice(io.github.yuroyami.kiteplayer/KeyframeChoice) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setKeyframeChoice|setKeyframeChoice(io.github.yuroyami.kiteplayer.KeyframeChoice){}[0]
     final fun setLoop(io.github.yuroyami.kiteplayer/LoopMode) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setLoop|setLoop(io.github.yuroyami.kiteplayer.LoopMode){}[0]
     final fun setMarkers(kotlin.collections/List<io.github.yuroyami.kiteplayer/Marker>) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setMarkers|setMarkers(kotlin.collections.List<io.github.yuroyami.kiteplayer.Marker>){}[0]
     final fun setMuted(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setMuted|setMuted(kotlin.Boolean){}[0]
+    final fun setNightMode(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setNightMode|setNightMode(kotlin.Boolean){}[0]
+    final fun setPitch(kotlin/Double) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setPitch|setPitch(kotlin.Double){}[0]
     final fun setPreservePitch(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setPreservePitch|setPreservePitch(kotlin.Boolean){}[0]
     final fun setRenderQuality(io.github.yuroyami.kiteplayer/RenderQuality) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setRenderQuality|setRenderQuality(io.github.yuroyami.kiteplayer.RenderQuality){}[0]
     final fun setShuffle(kotlin/Boolean, kotlin/Long? = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setShuffle|setShuffle(kotlin.Boolean;kotlin.Long?){}[0]
+    final fun setSkipSilence(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSkipSilence|setSkipSilence(kotlin.Boolean){}[0]
     final fun setSleepTimer(io.github.yuroyami.kiteplayer/SleepTimer?, kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSleepTimer|setSleepTimer(io.github.yuroyami.kiteplayer.SleepTimer?;kotlin.time.Duration){}[0]
     final fun setSpeed(kotlin/Double) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSpeed|setSpeed(kotlin.Double){}[0]
+    final fun setStereoMode(io.github.yuroyami.kiteplayer/StereoMode) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setStereoMode|setStereoMode(io.github.yuroyami.kiteplayer.StereoMode){}[0]
     final fun setSubtitleDelay(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSubtitleDelay|setSubtitleDelay(kotlin.time.Duration){}[0]
     final fun setSubtitlePosition(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSubtitlePosition|setSubtitlePosition(kotlin.Float){}[0]
     final fun setSubtitleSafeArea(io.github.yuroyami.kiteplayer.subtitle/SubtitleSafeArea) // io.github.yuroyami.kiteplayer/KitePlayerWorker.setSubtitleSafeArea|setSubtitleSafeArea(io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea){}[0]
@@ -267,9 +289,11 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final suspend fun openQueue(kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem>, kotlin/Int = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.openQueue|openQueue(kotlin.collections.List<io.github.yuroyami.kiteplayer.MediaItem>;kotlin.Int){}[0]
     final suspend fun previous() // io.github.yuroyami.kiteplayer/KitePlayerWorker.previous|previous(){}[0]
     final suspend fun previousChapter() // io.github.yuroyami.kiteplayer/KitePlayerWorker.previousChapter|previousChapter(){}[0]
+    final suspend fun reloadExternalSubtitle(io.github.yuroyami.kiteplayer/TrackId, kotlin/String? = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.reloadExternalSubtitle|reloadExternalSubtitle(io.github.yuroyami.kiteplayer.TrackId;kotlin.String?){}[0]
     final suspend fun removeFromQueue(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayerWorker.removeFromQueue|removeFromQueue(kotlin.Int){}[0]
     final suspend fun seek(kotlin.time/Duration, io.github.yuroyami.kiteplayer/SeekMode = ...) // io.github.yuroyami.kiteplayer/KitePlayerWorker.seek|seek(kotlin.time.Duration;io.github.yuroyami.kiteplayer.SeekMode){}[0]
     final suspend fun seekToChapter(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayerWorker.seekToChapter|seekToChapter(kotlin.Int){}[0]
+    final suspend fun selectProgram(kotlin/Int?) // io.github.yuroyami.kiteplayer/KitePlayerWorker.selectProgram|selectProgram(kotlin.Int?){}[0]
     final suspend fun selectSecondarySubtitle(io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayerWorker.selectSecondarySubtitle|selectSecondarySubtitle(io.github.yuroyami.kiteplayer.TrackId?){}[0]
     final suspend fun selectTrack(io.github.yuroyami.kiteplayer/TrackKind, io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayerWorker.selectTrack|selectTrack(io.github.yuroyami.kiteplayer.TrackKind;io.github.yuroyami.kiteplayer.TrackId?){}[0]
     final suspend fun selectVariant(kotlin/Int?) // io.github.yuroyami.kiteplayer/KitePlayerWorker.selectVariant|selectVariant(kotlin.Int?){}[0]
@@ -279,7 +303,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayerWorker : kotlin/AutoCloseabl
     final suspend fun warningHistory(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TimedWarning> // io.github.yuroyami.kiteplayer/KitePlayerWorker.warningHistory|warningHistory(){}[0]
 
     final object Companion { // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion|null[0]
-        final suspend fun start(kotlin.js/JsAny?, kotlin/String = ..., kotlin/String = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/KitePlayerWorker // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion.start|start(kotlin.js.JsAny?;kotlin.String;kotlin.String;kotlin.String?){}[0]
+        final suspend fun start(kotlin.js/JsAny?, kotlin/String = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/KitePlayerWorker // io.github.yuroyami.kiteplayer/KitePlayerWorker.Companion.start|start(kotlin.js.JsAny?;kotlin.String;kotlin.String;kotlin.String?;kotlin.Boolean){}[0]
     }
 }
 

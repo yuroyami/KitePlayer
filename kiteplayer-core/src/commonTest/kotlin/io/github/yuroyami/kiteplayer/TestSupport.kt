@@ -68,6 +68,10 @@ internal class FakePacket(
 ) : PlayerPacket {
     private var isClosed = false
 
+    override var newStreams: List<io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo>? = null
+    override var newPrograms: List<io.github.yuroyami.kiteplayer.MediaProgram>? = null
+    override var newContainerTags: Map<String, String>? = null
+
     init {
         ledger?.onOpen()
     }
@@ -91,6 +95,7 @@ internal class FakeVideoFrame(
     override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(1080),
     override val hardwareSurface: Nothing? = null,
     private val ledger: LeakLedger? = null,
+    override val closedCaptions: ByteArray? = null,
 ) : io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame {
     private var isClosed = false
 
@@ -166,6 +171,18 @@ internal class RecordingRenderer(
     override val outputSize: io.github.yuroyami.kiteplayer.VideoSize?
         get() = outputSizeOverride
 
+    /** What this renderer claims about showing HDR, for the variant choice (#447). */
+    var showsHdrOverride: Boolean = false
+
+    override val showsHdr: Boolean
+        get() = showsHdrOverride
+
+    /** False plays a renderer that cannot redraw its held picture, as Android's cannot (#463). */
+    var redrawsHeldPictureOverride: Boolean = true
+
+    override val redrawsHeldPicture: Boolean
+        get() = redrawsHeldPictureOverride
+
     override fun setScaleMode(mode: VideoScale) {
         scaleMode = mode
     }
@@ -223,8 +240,12 @@ internal class RecordingRenderer(
     /** Thrown by every overlay with images while set, as a renderer that cannot upload would. */
     var overlayFailure: Exception? = null
 
+    /** Thrown by every overlay with no images while set, as a renderer that lost its target would. */
+    var withdrawalFailure: Exception? = null
+
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         if (overlay != null && overlay.images.isNotEmpty()) overlayFailure?.let { throw it }
+        if (overlay != null && overlay.images.isEmpty()) withdrawalFailure?.let { throw it }
         if (overlayPublishDuration > Duration.ZERO && overlay != null && overlay.images.isNotEmpty()) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
                 kotlinx.coroutines.delay(overlayPublishDuration)
@@ -232,6 +253,20 @@ internal class RecordingRenderer(
         }
         overlays += overlay
     }
+
+    /** How many frames had been presented at each [clearPicture], in order. */
+    val clearedAt: MutableList<Int> = mutableListOf()
+
+    /** Thrown by every [clearPicture] while set, as a renderer with a bug in it would. */
+    var clearFailure: Exception? = null
+
+    override fun clearPicture() {
+        clearFailure?.let { throw it }
+        clearedAt += received.size
+    }
+
+    /** True while the last thing this renderer was told is a picture, not that none plays (#530). */
+    val showsPicture: Boolean get() = received.size > (clearedAt.lastOrNull() ?: 0)
 
     override val events: Flow<RendererEvent> = emptyFlow()
 

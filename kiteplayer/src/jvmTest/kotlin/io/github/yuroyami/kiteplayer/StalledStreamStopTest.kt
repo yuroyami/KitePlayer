@@ -13,6 +13,7 @@ import javax.sound.sampled.AudioSystem
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
+import org.junit.Assume.assumeTrue
 
 /**
  * A stream that stops sending bytes without ending must not hold stop and close for ever (#276).
@@ -59,8 +60,8 @@ class StalledStreamStopTest {
 
     @Test
     fun stopReturnsWhileAStreamReadWaitsForBytes() = runBlocking {
-        val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
-        if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
+        val file = requireTestMedia(media, "no $MEDIA to play; run scripts/testmedia.sh")
+        assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
         val stream = StallingStream(file.readBytes().copyOf(PREFIX_BYTES))
         val player = KitePlayer()
         try {

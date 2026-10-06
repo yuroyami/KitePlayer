@@ -357,7 +357,8 @@ class KiteVideoRendererTest {
             VideoSize(4, 2),
             0,
             requiresCommitFence = true,
-        ) { releases += 1 }
+            release = { releases += 1 },
+        )
         val replacement = KiteVideoFrame(FakeImage(4, 2), VideoSize(4, 2), 0)
         state.publishFrame(first)
 
@@ -389,7 +390,8 @@ class KiteVideoRendererTest {
             VideoSize(4, 2),
             0,
             requiresCommitFence = true,
-        ) { releases += 1 }
+            release = { releases += 1 },
+        )
         state.publishFrame(frame)
         val first = state.acquireFrameForDraw()!!
         state.frameDrawFinished(first, recorded = true)
@@ -421,7 +423,8 @@ class KiteVideoRendererTest {
             VideoSize(4, 2),
             0,
             requiresCommitFence = true,
-        ) { releases += 1 }
+            release = { releases += 1 },
+        )
         val replacement = KiteVideoFrame(
             FakeImage(4, 2),
             VideoSize(4, 2),
@@ -456,7 +459,8 @@ class KiteVideoRendererTest {
             VideoSize(4, 2),
             0,
             requiresCommitFence = true,
-        ) { releases += 1 }
+            release = { releases += 1 },
+        )
         val software = KiteVideoFrame(FakeImage(4, 2), VideoSize(4, 2), 0)
 
         state.publishFrame(hardware)
@@ -488,7 +492,8 @@ class KiteVideoRendererTest {
             VideoSize(4, 2),
             0,
             requiresCommitFence = true,
-        ) { releases += 1 }
+            release = { releases += 1 },
+        )
 
         state.publishFrame(hardware)
         repeat(2) {
@@ -589,6 +594,59 @@ class KiteVideoRendererTest {
         assertEquals(1, plug.closes)
         assertEquals(1, kept.closes)
         assertEquals(2L, h.renderer.presentedFrames)
+        h.renderer.close()
+    }
+
+    @Test
+    fun aClearedPictureIsNotPublishedByTheConversionInFlight() = runBlocking {
+        val gate = CountDownLatch(1)
+        val entered = CountDownLatch(1)
+        val h = Harness(convert = { frame ->
+            entered.countDown()
+            check(gate.await(10, TimeUnit.SECONDS)) { "the gate never opened" }
+            ByteArray(frame.size.width * frame.size.height * 4)
+        })
+        val converting = TestFrame()
+        val waiting = TestFrame()
+
+        assertTrue(h.renderer.present(converting, 0L))
+        check(entered.await(10, TimeUnit.SECONDS)) { "the worker never started" }
+        assertTrue(h.renderer.present(waiting, 0L))
+        h.renderer.clearPicture()
+        assertEquals(1, waiting.closes, "the frame waiting for the worker went with the picture")
+        assertEquals(listOf<KiteVideoFrame?>(null), h.published.toList(), "the clear published no picture")
+        gate.countDown()
+
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (h.renderer.supersededFrames < 2L) {
+            check(System.nanoTime() < deadline) { "the conversion in flight was never let go" }
+            Thread.sleep(2)
+        }
+        assertEquals(1, converting.closes)
+        assertEquals(listOf<KiteVideoFrame?>(null), h.published.toList(), "nothing older followed the clear")
+        assertEquals(0L, h.renderer.presentedFrames)
+
+        val next = TestFrame()
+        assertTrue(h.renderer.present(next, 0L))
+        h.awaitPublished(2)
+        assertTrue(h.published.last() != null, "the next frame brings a picture back")
+        assertEquals(1L, h.renderer.presentedFrames)
+        h.renderer.close()
+    }
+
+    @Test
+    fun aClearReachesTheGpuTierBeforeTheStateIsEmptied() {
+        val publishedWhenGpuCleared = CopyOnWriteArrayList<Int>()
+        lateinit var h: Harness
+        val hardware = object : KiteVideoHardwareRenderer by FakeHardwareRenderer() {
+            override fun clearPicture() {
+                publishedWhenGpuCleared += h.published.size
+            }
+        }
+        h = Harness(hardwareRenderer = hardware)
+        h.renderer.clearPicture()
+        assertEquals(listOf(0), publishedWhenGpuCleared.toList(), "the GPU tier is told first, and once")
+        assertEquals(listOf<KiteVideoFrame?>(null), h.published.toList())
         h.renderer.close()
     }
 

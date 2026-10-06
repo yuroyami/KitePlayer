@@ -209,7 +209,12 @@ jobs:
       #
       # A module with a jvmTest task and no test sources reports NO-SOURCE, which makes the job
       # look broader than it is, so only modules with tests are named.
+      #
+      # This job generated the clips above, so a test that finds one missing, or finds no ffmpeg,
+      # fails here rather than skipping (#419). A missing device, such as an audio mixer, still skips.
       - name: JVM tests, every module that has them
+        env:
+          KITEPLAYER_REQUIRE_TESTMEDIA: "1"
         run: |
           ./gradlew --stacktrace \
             :kiteplayer-core:jvmTest \
@@ -542,11 +547,18 @@ jobs:
             :kiteplayer-subtitles:testAndroidHostTest \
             :kiteplayer-io:testAndroidHostTest \
             :kiteplayer-output:testAndroidHostTest \
+            :kiteplayer-compose-video:testAndroidHostTest \
             :kiteplayer-view:testAndroidHostTest \
             :kiteplayer-network:testAndroidHostTest \
             :kiteplayer-audioviz:testAndroidHostTest \
             :kiteplayer-sample-shared:testAndroidHostTest \
             :kiteplayer-libass:testAndroidHostTest
+
+      # Two published modules that compile a class of one name break every Android app that
+      # packages both, at dex merging, and the ABI check reads one module at a time (#420). This
+      # step names the class and the two modules before the sample's packaging fails on them.
+      - name: No class compiled by two published modules
+        run: ./gradlew --stacktrace checkDuplicateClasses
 
       # The sample app packages every Android ABI, 32-bit ARM included, so it can be sideloaded
       # onto a streaming stick. A KiteFFmpeg release or a libass build that lacks one ABI's
@@ -1293,6 +1305,56 @@ jobs:
           # test-results carries the XML, and the XML carries stdout, stderr and the message of a
           # NATIVE crash. reports/ alone renders an empty "Failure details" box when the test
           # process dies instead of asserting, which is exactly the failure worth diagnosing.
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # The Kotlin/JS half of the web target, which is published beside Kotlin/Wasm and until #537 ran
+  # its tests nowhere. The two compile the same common code to different engines: Kotlin/JS builds
+  # every Regex in JavaScript's unicode mode and keeps a Float as a 64-bit number, and Kotlin/Wasm
+  # does neither, so a green wasm job says nothing about JS. The first by-hand run found the
+  # hearing-impaired notes pattern failing every external subtitle open there, and the WebVTT voice
+  # pattern losing every stylesheet.
+  #
+  # Node only. The browser half adds a page around the same engine, and the modules here have no
+  # browser-only code on JS. :kiteplayer-ffmpeg, :kiteplayer-output and :kiteplayer-web-worker have
+  # no JS target.
+  js:
+    name: Kotlin/JS (node)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/nodejs
+            ~/.gradle/yarn
+            build/js/node_modules
+          key: kotlin-js-node-${{ hashFiles('kotlin-js-store/yarn.lock', 'gradle/libs.versions.toml') }}
+
+      - name: JS tests, node
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:jsNodeTest \
+            :kiteplayer-subtitles:jsNodeTest \
+            :kiteplayer-io:jsNodeTest \
+            :kiteplayer-network:jsNodeTest \
+            :kiteplayer:jsNodeTest \
+            :kiteplayer-libass:jsNodeTest
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: js-reports
           path: |
             **/build/reports/tests/**
             **/build/test-results/**

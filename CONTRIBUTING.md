@@ -71,6 +71,9 @@ Style is guidance. It is never a task of its own.
 - Test fixtures are generated, not committed: run `./scripts/testmedia.sh` before any real-media
   suite. It records the encoder version in the manifest and warns when it differs from the recorded
   series. `TESTMEDIA_STRICT_FFMPEG=1` turns that warning into a refusal for version-sensitive work.
+  A clip the ffmpeg on PATH cannot make at all is skipped with its reason, listed under `skipped:`
+  in the manifest, and the test that reads it skips naming that reason. Today that is only the
+  fragmented TTML clip, which needs ffmpeg 9.
 
 ## The gate before every commit
 

@@ -21,12 +21,40 @@ public data class InterruptionPolicy(
     val resumeAfterTransient: Boolean = true,
     /** Pause when the route stops being audible: wired headphones out, Bluetooth gone. */
     val pauseWhenBecomingNoisy: Boolean = true,
+    /**
+     * The kind of audio focus to ask for (#451): [AudioFocusKind.Permanent] for music and films,
+     * or a transient kind for a short sound, such as a voice message or a notification, so the
+     * music it interrupts resumes after it. Android reads it; the other platforms have no such
+     * request and ignore it.
+     *
+     * A permanent request also accepts delayed focus. Asked during a phone call, Android answers
+     * "later" rather than refusing, and the player then waits, paused, and starts when the call
+     * ends and the focus arrives, unless something paused, played or opened in between. A
+     * transient request is refused during a call, and the player pauses, because a short sound
+     * that could not play now has no reason to play after it.
+     */
+    val focus: AudioFocusKind = AudioFocusKind.Permanent,
 ) {
     init {
         require(duckVolume.isFinite() && duckVolume in 0f..1f) {
             "duckVolume must be between 0 and 1, was $duckVolume"
         }
     }
+}
+
+/** How long a player asks to hold the right to make sound for. See [InterruptionPolicy.focus]. */
+public enum class AudioFocusKind {
+    /** Until it is done, as music and films ask: Android's `AUDIOFOCUS_GAIN`. */
+    Permanent,
+
+    /** For a short while, after which the app it interrupted resumes: `AUDIOFOCUS_GAIN_TRANSIENT`. */
+    Transient,
+
+    /**
+     * For a short while, and the app it interrupted may keep playing quietly under it:
+     * `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`, as a navigation prompt asks.
+     */
+    TransientMayDuck,
 }
 
 /** What the platform said happened to the right to make sound. */
@@ -106,6 +134,14 @@ internal class InterruptionMachine(private val policy: InterruptionPolicy) {
             ducked = false,
         )
     }
+
+    /**
+     * The platform answered a request for the sound with "later" (#451), as Android does during a
+     * phone call: no sound now, and a [InterruptionEvent.Gained] when it arrives. So a player that
+     * meant to play pauses, and that gain starts it again, whatever [InterruptionPolicy.resumeAfterTransient]
+     * says, because the listener asked to play and has not yet heard anything.
+     */
+    fun onDelayed(playing: Boolean): InterruptionDecision = decide(pause = playing, resumable = true, ducked = false)
 
     private fun decide(pause: Boolean, resumable: Boolean, ducked: Boolean): InterruptionDecision {
         this.ducked = ducked

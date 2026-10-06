@@ -8,11 +8,17 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.Chapter
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.DeinterlacePolicy
+import io.github.yuroyami.kiteplayer.DolbyVisionInfo
+import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
+import io.github.yuroyami.kiteplayer.KeyframeChoice
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.MediaProgram
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.Pts
+import io.github.yuroyami.kiteplayer.TrackId
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.AudioBuffer
@@ -45,18 +51,24 @@ import io.github.yuroyami.kiteplayer.spi.Vp9Level
 import io.github.yuroyami.kiteplayer.spi.Vp9Profile
 import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
 import io.github.yuroyami.kiteffmpeg.DecoderId
+import io.github.yuroyami.kiteffmpeg.DolbyVisionMetadata
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 import io.github.yuroyami.kiteffmpeg.dsl.DecoderOptions
+import io.github.yuroyami.kiteffmpeg.dsl.DecoderSkip
 import io.github.yuroyami.kiteffmpeg.MediaSource
+import io.github.yuroyami.kiteffmpeg.FFmpegError
+import io.github.yuroyami.kiteffmpeg.FFmpegException
 import io.github.yuroyami.kiteffmpeg.MediaType
 import io.github.yuroyami.kiteffmpeg.Packet
 import io.github.yuroyami.kiteffmpeg.PacketReader
+import io.github.yuroyami.kiteffmpeg.Program
 import io.github.yuroyami.kiteffmpeg.SeekDirection
 import io.github.yuroyami.kiteffmpeg.StreamDecoder
 import io.github.yuroyami.kiteffmpeg.StreamInfo
 import io.github.yuroyami.kiteffmpeg.durationMicros
 import io.github.yuroyami.kiteffmpeg.ptsMicros
 import io.github.yuroyami.kiteffmpeg.Frame as KiteFrame
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToLong
 
@@ -72,13 +84,21 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         // The same open KiteFFmpegMediaBackend.open runs. This factory once dropped headers,
         // openOptions, formatHint and videoFilter and skipped the FFmpeg identity mapping, so the
         // documented SPI door behaved differently from the backend door for the same MediaItem.
-        val source = mappingFFmpegRuntimeRejection {
-            openItem(media).let { KiteFFmpegSource(it.source, it.bridge, it.hls, it.variants, it.selectedVariant) }
+        val source = typingOpenFailures(media) {
+            openItem(media).toSource()
         }
         source.attachItemFilters(media)
         return source
     }
 }
+
+/**
+ * The source of this opened item, with everything the open learned. The backend's open and the
+ * source factory both build it here, so neither can leave a part out: the backend once built its
+ * own and left out the variants, so the player listed no quality to choose or step to (#543).
+ */
+internal fun OpenedItem.toSource(): KiteFFmpegSource =
+    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing, thumbnails)
 
 /**
  * Applies [media]'s filter chains to this source. An audio chain on a build without filter graphs,
@@ -107,6 +127,14 @@ public class KiteFFmpegSource internal constructor(
     private val hls: HlsLedger? = null,
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
     override val selectedVariant: Int? = null,
+    /** True when the URL fallback opened a scheme whose sender pushes media at the pace it plays. */
+    realTimeScheme: Boolean = false,
+    /** The title the list of streams the item named gave this stream (#450). */
+    private val listedTitle: String? = null,
+    /** The reader of a file still being written, when the item is one (#430). */
+    private val growing: GrowingMediaIo? = null,
+    /** The seek bar pictures an HLS stream, or a DASH one through its stand-in, names (#433). */
+    override val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? = null,
 ) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null
@@ -141,12 +169,16 @@ public class KiteFFmpegSource internal constructor(
      */
     private val mapper = TimestampMapper(source.startTimeMicros)
 
-    /** One canonical table for both the public track list and every reader selection. */
-    private val selectableStreams: List<Pair<StreamInfo, PlayerStreamInfo>> = source.streams.mapNotNull { stream ->
-        stream.toPlayerStream(mapper, renditionNames = source.formatName == "hls")?.let { exposed -> stream to exposed }
-    }
+    /**
+     * One canonical table for the public track list, every reader selection and every decoder, with
+     * the programmes over it. The demux lane replaces it whole when a read finds the container's
+     * streams or programmes changed (#509), and every other caller reads whichever table is current.
+     */
+    @Volatile
+    private var layout: Layout = Layout.of(source.streams, source.programs, mapper, renditionNames = source.formatName == "hls")
 
-    override val streams: List<PlayerStreamInfo> = selectableStreams.map { it.second }
+    /** What the container lists, as it stands after the latest read: a live stream can add to it (#509). */
+    override val streams: List<PlayerStreamInfo> get() = layout.streams
 
     /**
      * Matroska attachments, read once from the container's attachment streams. FFmpeg keeps an
@@ -165,10 +197,35 @@ public class KiteFFmpegSource internal constructor(
         }
 
     /** Raw KiteFFmpeg descriptors only for indices actually exposed through [streams]. */
-    private val byIndex: Map<Int, StreamInfo> = selectableStreams.associate { (raw, _) -> raw.index to raw }
+    private val byIndex: Map<Int, StreamInfo> get() = layout.byIndex
 
-    /** The length of the content, which is an interval and so carries no origin. */
-    override val duration: Pts? = mapper.mapDuration(source.durationMicros)
+    /**
+     * The channels of a multiplex (#505), as they stand after the latest read, because a live
+     * transport stream can change them (#509). Only a programme the container numbers is one,
+     * which leaves out those FFmpeg makes for the variants of an HLS master playlist and for a DASH
+     * presentation, and a programme keeps only the streams [streams] lists.
+     */
+    override val programs: List<MediaProgram> get() = layout.programs
+
+    /** The length at the open, which is an interval and so carries no origin. */
+    private val openDuration: Pts? = mapper.mapDuration(source.durationMicros)
+
+    /**
+     * The length of the content. A file still being written grows (#430), so its length is the
+     * open's, scaled by how much the file has grown since, which is the open's own bit rate.
+     */
+    override val duration: Pts? get() {
+        val atOpen = openDuration ?: return null
+        val growing = growing ?: return atOpen
+        val from = growing.sizeAtOpen?.takeIf { it > 0 } ?: return atOpen
+        val now = growing.size?.takeIf { it > from } ?: return atOpen
+        return Pts((atOpen.micros.toDouble() * now / from).toLong())
+    }
+
+    // FFmpeg's guess from the bit rate, for an input that states no length, can be minutes out
+    // (#422). The length of a file still being written is one until it ends (#430).
+    override val durationIsEstimate: Boolean =
+        growing != null || source.durationOrigin == io.github.yuroyami.kiteffmpeg.DurationOrigin.Bitrate
 
     /**
      * Read from the input, never assumed. False for a pipe or a capture device, and a player that
@@ -180,7 +237,31 @@ public class KiteFFmpegSource internal constructor(
      */
     override val seekable: Boolean = if (source.formatName == "hls") duration != null else source.isSeekable
 
-    override val metadata: Map<String, String> = source.metadata
+    /**
+     * The container's tags as they stand, which a packet that brings new ones replaces (#423): a
+     * radio station's next song, a chained Ogg's next comments. Written by the demux lane, read by
+     * the engine's snapshot from any thread.
+     */
+    override val metadata: Map<String, String> get() = tags.value
+
+    /**
+     * The stream whose comments are the file's own tags, or null: an Ogg file keeps its title and
+     * artist in its first sound's comments, not in the container, and a chained Ogg brings the next
+     * song's there (#423).
+     */
+    private val commentStream: Int? =
+        if (source.formatName == "ogg") source.streams.firstOrNull { it.type == io.github.yuroyami.kiteffmpeg.MediaType.Audio }?.index else null
+
+    /** The container's own tags and the comment stream's, as they last stood. */
+    private var containerTags: Map<String, String> = source.metadata
+    private var commentTags: Map<String, String> =
+        commentStream?.let { index -> source.streams.firstOrNull { it.index == index }?.metadata }.orEmpty()
+
+    private val tags = kotlinx.atomicfu.atomic(withListedTitle(containerTags + commentTags))
+
+    // The stream's own title wins; a list's title names a stream that names itself nothing.
+    private fun withListedTitle(found: Map<String, String>): Map<String, String> =
+        if (listedTitle == null || found.keys.any { it.equals("title", ignoreCase = true) }) found else found + ("title" to listedTitle)
 
     /** The container's own claim, read once at open. Null when it declares none. */
     override val containerBitrateBps: Long? = source.bitrateBps
@@ -224,8 +305,26 @@ public class KiteFFmpegSource internal constructor(
     override val timestampsMayJump: Boolean =
         source.formatName.let { it.contains("mpegts") || it.contains("rtsp") || it.contains("rtp") || it == "hls" }
 
+    /**
+     * True for a stream with no duration that came over udp, rtp, rtsp or rtmp, or from an SDP
+     * file: a sender pushes it at the pace it plays. An RTMP server's recording has a duration and
+     * is not one, and neither is anything read through the item's own reader.
+     */
+    override val realTime: Boolean = realTimeScheme && duration == null
+
+    /**
+     * FFmpeg's HLS reader downloads each rendition of a master playlist on its own, and a DASH
+     * presentation reaches it as one, so a sound nobody hears there costs its download (#455).
+     */
+    override val separateAudioRenditions: Boolean =
+        source.formatName == "hls" && streams.count { it.kind == io.github.yuroyami.kiteplayer.TrackKind.Audio } > 1
+
+    /**
+     * The first call opens the reader. A later one, between reads, changes which streams it delivers
+     * without moving it, which is how the demux lane adds a stream that appeared after the open; the
+     * packets of it that FFmpeg read before then come first on the next read (#509).
+     */
     override fun selectStreams(indices: Set<Int>) {
-        check(reader == null) { "streams must be selected before the first read" }
         // Named one by one, not filtered. A mapNotNull here meant {0, 999} selected 0 and never
         // mentioned 999: the caller asked for two streams, got one, and nothing said which request
         // went nowhere. A missing index is a caller mistake and this library answers those with
@@ -235,10 +334,37 @@ public class KiteFFmpegSource internal constructor(
             "no selectable stream at ${unknown.sorted()}; this source offers " +
                 "${byIndex.keys.sorted()}"
         }
-        val selected = indices.map { byIndex.getValue(it) }
+        // Several page tracks of one teletext stream are one stream to the reader (#510).
+        val selected = indices.map { byIndex.getValue(it) }.distinctBy { it.index }
         require(selected.isNotEmpty()) { "selectStreams needs at least one stream" }
-        reader = source.openPacketReader(selected)
+        val open = reader
+        if (open == null) reader = source.openPacketReader(selected) else open.reselect(selected)
         readStreams = selected
+        fanOut = indices.groupBy { byIndex.getValue(it).index }
+            .filter { (stream, tracks) -> tracks != listOf(stream) }
+            .mapValues { (_, tracks) -> tracks.sorted().toIntArray() }
+        dropCopies { it in indices }
+    }
+
+    /**
+     * The tracks each read stream's packets go to, for a stream whose packets do not simply go to
+     * its own index, which is a teletext stream with a page chosen that is not its first, or with
+     * more than one page chosen (#510).
+     */
+    private var fanOut: Map<Int, IntArray> = emptyMap()
+
+    /** Copies of the packet last read, still owed to the further pages [fanOut] chose from its stream. */
+    private val copies = ArrayDeque<KiteFFmpegPacket>()
+
+    /** Closes every owed copy except those for a track [keep] answers true for. */
+    private fun dropCopies(keep: (Int) -> Boolean = { false }) {
+        val iterator = copies.iterator()
+        while (iterator.hasNext()) {
+            val copy = iterator.next()
+            if (keep(copy.streamIndex)) continue
+            iterator.remove()
+            copy.close()
+        }
     }
 
     override val recordingPath: String? get() = recorder.path
@@ -266,19 +392,73 @@ public class KiteFFmpegSource internal constructor(
         return true
     }
 
+    /**
+     * KiteFFmpeg's pause (#441): RTSP's PAUSE once and then its keepalive whenever one is due, or
+     * RTMP's pause command. Every other input answers false.
+     */
+    override fun pauseReading(): Boolean = source.pause()
+
+    /** KiteFFmpeg's resume, which asks the sender to play on only while a pause is in effect. */
+    override fun resumeReading(): Boolean = source.resume()
+
     override suspend fun readPacket(): PlayerPacket? {
         val reader = reader ?: error("selectStreams must be called before readPacket")
-        val packet = reader.read() ?: run {
+        copies.removeFirstOrNull()?.let { return it }
+        // Only a packet read waits at the end of a file still being written (#430).
+        growing?.waitAtEnd = true
+        val read = try {
+            reader.read()
+        } finally {
+            growing?.waitAtEnd = false
+        }
+        val packet = read ?: run {
             // FFmpeg skips what it cannot read, so a stream whose server stopped answering ends here too.
             hls?.failureAtEnd()?.let { throw it }
             return null
         }
         recorder.copy(packet)
-        return KiteFFmpegPacket(packet, mapper)
+        absorbLayout(packet)
+        // The whole new set, from this packet on (#423), with an Ogg's comments over its container's.
+        packet.newContainerTags?.let { containerTags = it }
+        val comments = packet.newStreamTags?.takeIf { packet.streamIndex == commentStream }
+        if (comments != null) commentTags = comments
+        val newTags = if (packet.newContainerTags != null || comments != null) withListedTitle(containerTags + commentTags) else null
+        if (newTags != null) tags.value = newTags
+        val tracks = fanOut[packet.streamIndex]
+        if (tracks != null) for (track in 1 until tracks.size) copies.addLast(KiteFFmpegPacket(packet.copy(), mapper, index = tracks[track]))
+        val track = tracks?.first()
+        val before = announced
+        val after = layout
+        if (after === before) return KiteFFmpegPacket(packet, mapper, index = track, newContainerTags = newTags)
+        announced = after
+        // Only what the engine sees: a change to a stream it is never shown is no change to it.
+        return KiteFFmpegPacket(
+            packet,
+            mapper,
+            index = track,
+            newStreams = after.streams.takeIf { it != before.streams },
+            newPrograms = after.programs.takeIf { it != before.programs },
+            newContainerTags = newTags,
+        )
+    }
+
+    /** The table the engine last saw, which a keyframe search can leave behind [layout]. */
+    private var announced: Layout = layout
+
+    /** Takes in the streams and programmes [packet] says changed, before anything reads its stream. */
+    private fun absorbLayout(packet: Packet) {
+        if (packet.newStreams == null && packet.newPrograms == null) return
+        layout = Layout.of(
+            packet.newStreams ?: source.streams,
+            packet.newPrograms ?: source.programs,
+            mapper,
+            renditionNames = source.formatName == "hls",
+        )
     }
 
     override suspend fun seekToKeyframe(target: Pts): Pts? {
         val reader = reader ?: error("selectStreams must be called before seeking")
+        dropCopies()
         recorder.endForSeek()
         // [target] needs no conversion. KiteFFmpeg's seek already speaks the content-relative
         // timeline, and every timestamp this class produces is now on that same timeline.
@@ -290,9 +470,81 @@ public class KiteFFmpegSource internal constructor(
         return null
     }
 
+    /**
+     * Finds the keyframes either side of [target] by reading the first picture after a forward seek
+     * and, for [KeyframeChoice.Closest], after a backward one, then lands with a backward seek aimed
+     * at the chosen keyframe's own time, which KiteFFmpeg lands on exactly (#496). A source with no
+     * picture has nothing to choose between, because every sound packet is a keyframe.
+     */
+    override suspend fun seekToKeyframe(target: Pts, choice: KeyframeChoice): Pts? {
+        if (choice == KeyframeChoice.Before) return seekToKeyframe(target)
+        val reader = reader ?: error("selectStreams must be called before seeking")
+        val picture = readStreams.firstOrNull { it.type == MediaType.Video && !it.disposition.attachedPicture }
+            ?: return seekToKeyframe(target)
+        dropCopies()
+        recorder.endForSeek()
+        val after = keyframeAfter(reader, picture.index, target.micros)
+        val aim = when {
+            after == null -> target.micros
+            choice == KeyframeChoice.After -> after
+            else -> {
+                seekBackward(target.micros) { micros, floor ->
+                    reader.seek(micros, SeekDirection.Backward, notEarlierThan = floor)
+                }
+                val before = firstKeyframe(reader, picture.index, Long.MIN_VALUE)
+                if (before != null && target.micros - before <= after - target.micros) target.micros else after
+            }
+        }
+        seekBackward(aim) { micros, floor ->
+            reader.seek(micros, SeekDirection.Backward, notEarlierThan = floor)
+        }
+        return null
+    }
+
+    /** The time of the first keyframe of [stream] that shows at or after [micros], or null when none follows. */
+    private fun keyframeAfter(reader: PacketReader, stream: Int, micros: Long): Long? {
+        try {
+            reader.seek(micros, SeekDirection.Forward)
+        } catch (failure: FFmpegException) {
+            // FFmpeg refuses a forward seek with nothing after the target, and how depends on the
+            // demuxer: the MP4 reader answers a bare -1, which reads as EPERM. Any refusal means
+            // "take the one before", and the backward seek that follows reports a real failure
+            // itself. An interrupt is the engine abandoning the seek, so it is never swallowed.
+            when (failure.error) {
+                is FFmpegError.Interrupted, is FFmpegError.OutOfMemory, is FFmpegError.Internal -> throw failure
+                else -> return null
+            }
+        }
+        return firstKeyframe(reader, stream, micros)
+    }
+
+    /**
+     * Reads on to the first keyframe of [stream] that shows at or after [notBefore] and returns its
+     * time, closing every packet it reads. Null at the end of the media, or past
+     * [KEYFRAME_SEARCH_BYTES] of input, which bounds a stream whose keyframes are lost.
+     */
+    private fun firstKeyframe(reader: PacketReader, stream: Int, notBefore: Long): Long? {
+        var bytes = 0L
+        while (bytes < KEYFRAME_SEARCH_BYTES) {
+            val packet = reader.read() ?: return null
+            try {
+                // The change still reaches the engine, on the next packet it reads.
+                absorbLayout(packet)
+                bytes += packet.sizeBytes
+                if (packet.streamIndex != stream || !packet.isKeyframe) continue
+                val shows = mapper.mapTimestamp(packet.ptsMicros)?.micros ?: continue
+                if (shows >= notBefore) return shows
+            } finally {
+                packet.close()
+            }
+        }
+        return null
+    }
+
     override fun close() {
         closeInOrder(
             recorder::close,
+            { dropCopies() },
             { reader?.close() },
             { reader = null },
             source::close,
@@ -378,6 +630,7 @@ public class KiteFFmpegSource internal constructor(
         warn = { onWarning(it) },
         // The graph runs on software frames only; the factory stands hardware down first.
         filterDescription = if (hardware == HwdecStatus.Software) filter else null,
+        openingSkip = openingSkip(videoDecoderOptions["skip_frame"]),
     )
 
     /**
@@ -412,7 +665,10 @@ public class KiteFFmpegSource internal constructor(
 
     /** A decoder for the caption stream [stream], such as a MOV `c608` track. */
     internal fun newCaptionDecoder(stream: PlayerStreamInfo): io.github.yuroyami.kiteplayer.spi.SubtitleDecoder =
-        KiteFFmpegCaptionDecoder(decoder = source.openSubtitleDecoder(kiteStream(stream.index)), mapper = mapper)
+        // CEA-608 captions show as they are sent (#542); the other formats carry their own times.
+        (stream.codec == "eia_608").let { realTime ->
+            KiteFFmpegCaptionDecoder(decoder = source.openSubtitleDecoder(kiteStream(stream.index), realTime), mapper = mapper, realTime = realTime)
+        }
 
     /** Video decoders for this source. The factory applies the caller's platform policy at open. */
     public fun videoDecoderFactories(): List<VideoDecoderFactory> =
@@ -457,6 +713,12 @@ internal class TimestampMapper(private val containerStartMicros: Long) {
 }
 
 /**
+ * How much input a keyframe choice reads looking for the next keyframe before it gives up and takes
+ * the one before: the same 32 MB KiteFFmpeg's backward seek reads to check its own landing.
+ */
+private const val KEYFRAME_SEARCH_BYTES: Long = 32L * 1024 * 1024
+
+/**
  * The last resort step between two synthesised video timestamps: 40 milliseconds, or 25 frames a
  * second. It is the same guess the engine's own frame duration estimator falls back to, and it only
  * ever applies to a stream that declares no frame rate and whose decoder reports no duration.
@@ -468,15 +730,15 @@ private const val SYNTHESIZED_FRAME_STEP_US: Long = 40_000
  *
  * Replay begins at the last decoded keyframe. Remembering the timestamp immediately before that
  * keyframe makes a timestampless replay reproduce the same synthetic sequence, so ordinal
- * suppression neither jumps backward to zero nor advances the timeline twice. The colour-warning
- * latch is also per stream, not per wrapper, and deliberately survives seeks.
+ * suppression neither jumps backward to zero nor advances the timeline twice. The two warning
+ * latches are also per stream, not per wrapper, and deliberately survive seeks.
  */
 internal class VideoDecoderContinuity {
     private var lastPts: Pts? = null
     private var replaySeed: Pts? = null
     private var replaySeedPending: Boolean = false
     private var colorWarningClaimed: Boolean = false
-
+    private var dolbyVisionWarningClaimed: Boolean = false
     internal fun timestamp(
         real: Pts?,
         duration: Pts?,
@@ -515,6 +777,15 @@ internal class VideoDecoderContinuity {
         colorWarningClaimed = true
         return true
     }
+
+    /** The latch of the warning that a Dolby Vision frame came without the RPU to compose it. */
+    internal fun claimDolbyVisionWarning(): Boolean {
+        if (dolbyVisionWarningClaimed) return false
+        dolbyVisionWarningClaimed = true
+        return true
+    }
+
+    /** The latch of the warning that the container's crop does not fit a decoded frame. */
 }
 
 /** The media library's HDR metadata in the player's type, or null when it holds nothing usable. */
@@ -561,6 +832,7 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: 
         isDefault = disposition.default,
         isForced = disposition.forced,
         isAccessibility = disposition.hearingImpaired || disposition.visualImpaired,
+        isCommentary = disposition.comment,
         bitrate = bitrateBps,
         // Verbatim. `language` and `title` above are parsed readings of two of these keys; an
         // application that wants the rest, or wants the raw form, had no way to reach them.
@@ -588,9 +860,19 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: 
         // synchronisation. Treating it as normal video makes the player hang at the end of every
         // audio file that has album art.
         isCoverArt = disposition.attachedPicture,
-        sampleRate = audio?.sampleRate,
-        channels = audio?.channels,
+        // FFmpeg says 0 for what it does not know yet, as for a transport stream's sound listed from
+        // its programme table before any of its packets was parsed, and 0 is no rate (#509).
+        sampleRate = audio?.sampleRate?.takeIf { it > 0 },
+        channels = audio?.channels?.takeIf { it > 0 },
         hdr = video?.hdr?.toPlayerHdr(),
+        dolbyVision = video?.dolbyVision?.let { config ->
+            DolbyVisionInfo(
+                profile = config.profile,
+                level = config.level,
+                baseLayerCompatibility = config.baseLayerCompatibility,
+                hasEnhancementLayer = config.hasEnhancementLayer,
+            )
+        },
         fieldOrder = when (video?.fieldOrder) {
             io.github.yuroyami.kiteffmpeg.FieldOrder.Progressive -> io.github.yuroyami.kiteplayer.spi.FieldOrder.Progressive
             io.github.yuroyami.kiteffmpeg.FieldOrder.TopFirst -> io.github.yuroyami.kiteplayer.spi.FieldOrder.TopFirst
@@ -614,11 +896,58 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: 
             )
         },
         codecExtradata = codecExtradata?.copyOf(),
+        // As the container states it. Whether it fits is a question for each decoded frame, whose
+        // size can differ from the one declared here (#497).
+        crop = video?.crop?.let { PictureCrop(top = it.top, bottom = it.bottom, left = it.left, right = it.right) }
+            ?.takeUnless { it.isEmpty },
     )
 }
 
-internal class KiteFFmpegPacket(val native: Packet, private val mapper: TimestampMapper) : PlayerPacket {
-    override val streamIndex: Int get() = native.streamIndex
+/**
+ * The source's selectable streams as the engine sees them, keyed back to KiteFFmpeg's own entries,
+ * and the programmes over them. A teletext stream is one entry for each subtitle page it carries,
+ * all keyed back to the one stream (#510).
+ */
+private class Layout(
+    val streams: List<PlayerStreamInfo>,
+    val byIndex: Map<Int, StreamInfo>,
+    val programs: List<MediaProgram>,
+) {
+    companion object {
+        fun of(raw: List<StreamInfo>, rawPrograms: List<Program>, mapper: TimestampMapper, renditionNames: Boolean): Layout {
+            val selectable = raw.flatMap { stream ->
+                val exposed = stream.toPlayerStream(mapper, renditionNames) ?: return@flatMap emptyList()
+                if (exposed.codec == TELETEXT) teletextPages(exposed).map { stream to it } else listOf(stream to exposed)
+            }
+            val byIndex = selectable.associate { (stream, exposed) -> exposed.index to stream }
+            val tracksOf = selectable.groupBy({ (stream, _) -> stream.index }, { (_, exposed) -> exposed.index })
+            val programs = rawPrograms
+                .mapNotNull { program ->
+                    val number = program.number ?: return@mapNotNull null
+                    MediaProgram(
+                        number = number,
+                        tracks = program.streamIndexes.flatMap { tracksOf[it].orEmpty() }.map(::TrackId),
+                        name = program.serviceName,
+                        provider = program.serviceProvider,
+                        metadata = program.metadata,
+                    )
+                }
+                .distinctBy { it.number }
+            return Layout(selectable.map { it.second }, byIndex, programs)
+        }
+    }
+}
+
+internal class KiteFFmpegPacket(
+    val native: Packet,
+    private val mapper: TimestampMapper,
+    override val newStreams: List<PlayerStreamInfo>? = null,
+    override val newPrograms: List<MediaProgram>? = null,
+    /** The track this packet goes to when that is not its stream, as for a teletext page (#510). */
+    private val index: Int? = null,
+    override val newContainerTags: Map<String, String>? = null,
+) : PlayerPacket {
+    override val streamIndex: Int get() = index ?: native.streamIndex
     override val pts: Pts? get() = mapper.mapTimestamp(native.ptsMicros)
 
     /**
@@ -634,7 +963,7 @@ internal class KiteFFmpegPacket(val native: Packet, private val mapper: Timestam
     override val sizeBytes: Int get() = native.sizeBytes
     override fun copyBytes(): ByteArray = native.copyBytes()
     override val bytePosition: Long? get() = native.bytePosition.takeIf { it >= 0 }
-    internal fun copyForReplay(): KiteFFmpegPacket = KiteFFmpegPacket(native.copy(), mapper)
+    internal fun copyForReplay(): KiteFFmpegPacket = KiteFFmpegPacket(native.copy(), mapper, index = index)
     override fun close() = native.close()
 }
 
@@ -672,6 +1001,21 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
                     } else {
                         "the stream is deinterlaced, and the deinterlacer runs on software frames"
                     },
+                ),
+            )
+            return if (hwdec == HwdecPolicy.Require) null else source.newVideoDecoder(stream, filter = filter)
+        }
+
+        // MediaCodec hands back pictures without the RPU, so a stream whose base layer needs it
+        // plays in software. VideoToolbox and Direct3D frames keep the RPU, and are downloaded
+        // for the composer.
+        val dolbyVision = stream.dolbyVision
+        if (dolbyVision != null && !dolbyVision.baseLayerPlaysAlone && selection.hardware?.kind == HwdecKind.MediaCodec) {
+            source.onWarning(
+                PlaybackWarning.HardwareDecodeUnavailable(
+                    stream.codec,
+                    "the stream is Dolby Vision profile ${dolbyVision.profileName}, and MediaCodec hands back " +
+                        "pictures without the RPU that composes them",
                 ),
             )
             return if (hwdec == HwdecPolicy.Require) null else source.newVideoDecoder(stream, filter = filter)
@@ -728,6 +1072,20 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
     }
 }
 
+/**
+ * The skip level the `skip_frame` decoder option names, by FFmpeg's own names for it, or
+ * [DecoderSkip.None] when there is none. FFmpeg's `default` skips only empty packets, which no
+ * decoder treats differently from `none`.
+ */
+internal fun openingSkip(option: String?): DecoderSkip = when (option?.trim()) {
+    "noref" -> DecoderSkip.NonReference
+    "bidir" -> DecoderSkip.Bidirectional
+    "nointra" -> DecoderSkip.NonIntra
+    "nokey" -> DecoderSkip.NonKey
+    "all" -> DecoderSkip.All
+    else -> DecoderSkip.None
+}
+
 /** The deinterlacer: FFmpeg's bwdif, which keeps the frame rate in send_frame mode. */
 private const val DEINTERLACER = "bwdif"
 
@@ -742,6 +1100,12 @@ internal fun deinterlaceFilter(policy: DeinterlacePolicy, fieldOrder: FieldOrder
     DeinterlacePolicy.Always -> "$DEINTERLACER=mode=send_frame:parity=auto:deint=all"
 }
 
+/** Two frame times this close are one time written in two time bases: a millisecond. */
+private const val SAME_TIME_US: Long = 1_000
+
+/** A decoded picture, composed when its stream needs it, and the peak of its scene when its RPU says. */
+private class DecodedPicture(val picture: KiteFrame, val sceneMaxNits: Float?)
+
 private class KiteFFmpegVideoDecoder(
     private val decoder: StreamDecoder,
     private val stream: PlayerStreamInfo,
@@ -751,17 +1115,36 @@ private class KiteFFmpegVideoDecoder(
     private val warn: (PlaybackWarning) -> Unit,
     /** The compiled filter chain every decoded frame runs through, or null for none. */
     private val filterDescription: String? = null,
+    /** The frames the decoder was opened to skip, which [skipNonReferenceFrames] goes back to. */
+    private val openingSkip: DecoderSkip = DecoderSkip.None,
 ) : VideoDecoder {
 
     private var generation: Generation = Generation.Initial
+    private var skippingNonReference = false
 
-    /** The graph, built lazily from the FIRST decoded frame's own geometry and format. */
+    /** The graph, built from the first decoded frame's own geometry and format and rebuilt when that changes. */
     private var filterGraph: io.github.yuroyami.kiteffmpeg.FilterGraph? = null
-    private val filteredPending = ArrayDeque<KiteFrame>()
+    private var graphInput: List<Any?>? = null
+    private val filteredPending = ArrayDeque<DecodedPicture>()
     private var filterFlushed = false
 
     override suspend fun send(packet: PlayerPacket?): Boolean =
         decoder.send((packet as KiteFFmpegPacket?)?.native)
+
+    /**
+     * FFmpeg's `skip_frame` at its non-reference level, raised and lowered between packets (#468).
+     *
+     * A decoder opened to skip more, such as the scrubbing profile's keyframes only, already skips
+     * every frame this would and keeps its own level. A decoder with a filter graph decodes every
+     * frame, because a filter such as the deinterlacer reads the frames beside the one it gives,
+     * so the first picture kept would differ from the one an unskipped run gives.
+     */
+    override fun skipNonReferenceFrames(skip: Boolean) {
+        if (skip == skippingNonReference) return
+        skippingNonReference = skip
+        if (filterDescription != null || openingSkip >= DecoderSkip.NonReference) return
+        decoder.setSkipFrame(if (skip) DecoderSkip.NonReference else openingSkip)
+    }
 
     /** KiteFFmpeg's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
     override val isDrained: Boolean
@@ -772,7 +1155,8 @@ private class KiteFFmpegVideoDecoder(
             (filterDescription == null || filterGraph == null || (filterFlushed && filteredPending.isEmpty()))
 
     override suspend fun receive(): VideoFrame? {
-        val frame = nextDecodedFrame() ?: return null
+        val decoded = nextDecodedFrame() ?: return null
+        val frame = decoded.picture
         val duration = mapper.mapDuration(frame.durationMicros)
         val info = frame.info
         val pts = continuity.timestamp(
@@ -782,9 +1166,11 @@ private class KiteFFmpegVideoDecoder(
             isKeyframe = info.isKeyframe,
         )
         // The rotation is the stream's, taken from the container's display matrix once at open. Every
-        // frame of the stream carries it, because the renderer sees frames and nothing else.
+        // frame of the stream carries it, because the renderer sees frames and nothing else. So does
+        // the container's crop, which FFmpeg's decoder never applies (#497).
         val wrapped = KiteFFmpegVideoFrame(
-            frame, pts, duration, generation, stream.rotationDegrees, stream.mirrored, stream.hdr,
+            frame, pts, duration, generation, stream.rotationDegrees, stream.mirrored, stream.hdr, decoded.sceneMaxNits,
+            crop = cropFitting(info.width, info.height),
         )
         try {
             warnIfColorIsApproximated(wrapped.colorSpace)
@@ -800,24 +1186,33 @@ private class KiteFFmpegVideoDecoder(
      *
      * The graph is built from the first frame's own width, height, format, time base and rate,
      * which is the only honest moment to build it: the container's declared parameters can lie
-     * and the decoder's output cannot. Timestamps pass through in the stream's own time base, so
+     * and the decoder's output cannot. A graph takes one input shape, so a picture whose size,
+     * format or pixel shape moves mid-stream gets a new graph, after the old one gave back what it
+     * held (#484), as the `ffmpeg` command line does. Timestamps pass through in the stream's own time base, so
      * the supported chains are the timebase-preserving ones (scale, crop, eq, format and
      * friends); fps-changing chains are the KD roadmap's own next step and refuse nothing today
      * because their output time base would silently disagree with the stream's.
      */
-    private fun nextDecodedFrame(): KiteFrame? {
-        val description = filterDescription ?: return decoder.receive()
+    private fun nextDecodedFrame(): DecodedPicture? {
+        val description = filterDescription ?: return decoder.receive()?.let(::readDolbyVision)
         while (filteredPending.isEmpty()) {
-            val raw = decoder.receive()
-            if (raw == null) {
+            val decoded = decoder.receive()
+            if (decoded == null) {
                 if (decoder.isDrained && filterGraph != null && !filterFlushed) {
                     filterFlushed = true
-                    filterGraph?.flushInput(0) { out -> filteredPending.addLast(out.copy()) }
+                    filterGraph?.flushInput(0) { out -> filteredPending.addLast(DecodedPicture(out.copy(), scenePeakOf(out))) }
                     continue
                 }
                 return null
             }
+            // Composed first, so a filter sees the picture rather than Dolby Vision's IPT signal.
+            val picture = readDolbyVision(decoded)
+            val raw = picture.picture
             val info = raw.info
+            val input = listOf(info.width, info.height, info.pixelFormat, info.sampleAspectRatio)
+            if (filterGraph != null && input != graphInput) {
+                retireGraph { out -> filteredPending.addLast(DecodedPicture(out.copy(), scenePeakOf(out))) }
+            }
             val graph = filterGraph ?: try {
                 io.github.yuroyami.kiteffmpeg.FilterGraph.buildVideo(
                     description = description,
@@ -832,11 +1227,97 @@ private class KiteFFmpegVideoDecoder(
                 // Only feedInput takes the frame, so a graph that cannot be built leaves it here (#263).
                 raw.close()
                 throw failure
-            }.also { filterGraph = it }
+            }.also {
+                filterGraph = it
+                graphInput = input
+            }
+            scenePeaksInGraph.addLast(raw.ptsMicros to picture.sceneMaxNits)
             // feedInput owns and closes the raw frame; every output is copied out of the callback.
-            graph.feedInput(0, raw) { out -> filteredPending.addLast(out.copy()) }
+            graph.feedInput(0, raw) { out -> filteredPending.addLast(DecodedPicture(out.copy(), scenePeakOf(out))) }
         }
         return filteredPending.removeFirst()
+    }
+
+    /**
+     * The scene peaks of the frames inside the filter graph, in the order they went in, by their
+     * times in microseconds. A filter such as the deinterlacer gives a frame back an input later
+     * than it took it, and in a time base of its own, so an output takes the peak of the input at
+     * its own time, not of the last one in.
+     */
+    private val scenePeaksInGraph = ArrayDeque<Pair<Long?, Float?>>()
+
+    /** The scene peak of the input [out] came from, forgetting the inputs before it, which the graph dropped. */
+    private fun scenePeakOf(out: KiteFrame): Float? {
+        val time = out.ptsMicros ?: return scenePeaksInGraph.removeFirstOrNull()?.second
+        while (scenePeaksInGraph.isNotEmpty() && (scenePeaksInGraph.first().first ?: Long.MIN_VALUE) < time - SAME_TIME_US) {
+            scenePeaksInGraph.removeFirst()
+        }
+        val (inputTime, peak) = scenePeaksInGraph.firstOrNull() ?: return null
+        return peak.takeIf { inputTime != null && inputTime <= time + SAME_TIME_US }
+    }
+
+    /** Whether this stream's frames mean nothing until they are composed with their RPU. */
+    private val composesDolbyVision: Boolean = stream.dolbyVision?.baseLayerPlaysAlone == false
+
+    /**
+     * [frame] as a renderer should see it, with its scene's peak from the RPU it carries.
+     *
+     * Every frame of a Dolby Vision stream is read for its level 1, which profile 8 benefits from
+     * as much as profile 5. A stream whose base layer does not play alone is composed into HDR10
+     * here, in bands on the converter's row-slice threads. A hardware frame is downloaded first,
+     * because the composer reads memory; a frame without an RPU passes as it came.
+     */
+    private fun readDolbyVision(frame: KiteFrame): DecodedPicture {
+        if (stream.dolbyVision == null) return DecodedPicture(frame, null)
+        val metadata = try {
+            frame.dolbyVision()
+        } catch (failure: Throwable) {
+            frame.close()
+            throw failure
+        }
+        if (metadata == null) {
+            if (composesDolbyVision) warnUncomposed()
+            return DecodedPicture(frame, null)
+        }
+        val sceneMaxNits = metadata.sceneBrightness?.let { DolbyVisionMetadata.nitsOfPq(it.maxPq).toFloat() }
+        return DecodedPicture(if (composesDolbyVision) composeDolbyVision(frame) else frame, sceneMaxNits)
+    }
+
+    /** The HDR10 composition of [frame], which this takes and closes. */
+    private fun composeDolbyVision(frame: KiteFrame): KiteFrame {
+        val readable = if (frame.info.isHardware) {
+            try {
+                frame.downloadFromHardware()
+            } finally {
+                frame.close()
+            }
+        } else {
+            frame
+        }
+        val composition = try {
+            readable.beginDolbyVisionComposition()
+        } catch (failure: Throwable) {
+            readable.close()
+            throw failure
+        } ?: return readable
+        val width = readable.info.width
+        // The composition holds its own reference to the picture it reads.
+        readable.close()
+        return composition.use {
+            parallelRowSlices(width, it.height) { start, end -> it.composeRows(start, end) }
+            it.finish()
+        }
+    }
+
+    /** Says once that a frame of a stream that needs composition came without the RPU to compose it. */
+    private fun warnUncomposed() {
+        if (!continuity.claimDolbyVisionWarning()) return
+        warn(
+            PlaybackWarning.ColorApproximated(
+                "a frame of Dolby Vision profile ${stream.dolbyVision?.profileName} on stream ${stream.index} " +
+                    "carries no RPU, so its base layer is shown as it is",
+            ),
+        )
     }
 
     private fun frameRateRational(): io.github.yuroyami.kiteffmpeg.Rational {
@@ -844,10 +1325,27 @@ private class KiteFFmpegVideoDecoder(
         return io.github.yuroyami.kiteffmpeg.Rational((rate * 1000).toInt(), 1000)
     }
 
+    /**
+     * Ends the graph's input, hands [output] every picture it still held, and closes it. The new
+     * graph's pictures follow these, so the order stays the order the decoder gave (#484).
+     */
+    private fun retireGraph(output: (KiteFrame) -> Unit) {
+        val graph = filterGraph ?: return
+        filterGraph = null
+        graphInput = null
+        try {
+            graph.flushInput(0, output)
+        } finally {
+            graph.close()
+        }
+    }
+
     private fun dropFilterState() {
-        while (true) filteredPending.removeFirstOrNull()?.close() ?: break
+        while (true) filteredPending.removeFirstOrNull()?.picture?.close() ?: break
+        scenePeaksInGraph.clear()
         filterGraph?.close()
         filterGraph = null
+        graphInput = null
         filterFlushed = false
     }
 
@@ -867,6 +1365,14 @@ private class KiteFFmpegVideoDecoder(
      * only ever have been right by accident. Tone mapping now announces itself where it ENGAGES,
      * as `RendererEvent.ToneMapEngaged` from the renderer that did it.
      */
+    /**
+     * The stream's crop when it leaves something of a [width] by [height] frame, else null. A crop
+     * that leaves nothing is the file's mistake, and showing the whole picture beats showing none;
+     * the engine, which sees the stream's crop beside each frame, says so once.
+     */
+    private fun cropFitting(width: Int, height: Int): PictureCrop? =
+        stream.crop?.takeIf { it.fits(width, height) }
+
     private fun warnIfColorIsApproximated(color: ColorSpaceInfo) {
         val detail = when (color.matrix) {
             ColorMatrix.Bt2020Cl ->
@@ -1081,9 +1587,9 @@ private class KiteFFmpegAudioDecoder(
             val info = raw.info
             val input = listOf(info.sampleRate, info.sampleFormat, info.channelCount, info.channelLayoutMask)
             if (filterGraph != null && input != graphInput) {
-                // The decoder changed its format mid-stream, and a graph takes one input format.
-                filterGraph?.close()
-                filterGraph = null
+                // The decoder changed its format mid-stream, and a graph takes one input format. The
+                // old graph's tail, such as the window a tempo filter holds, comes out first (#484).
+                retireGraph { out -> filteredPending.addLast(out.copy()) }
             }
             val graph = filterGraph ?: try {
                 io.github.yuroyami.kiteffmpeg.FilterGraph.buildAudio(
@@ -1106,6 +1612,18 @@ private class KiteFFmpegAudioDecoder(
             graph.feedInput(0, raw) { out -> filteredPending.addLast(out.copy()) }
         }
         return filteredPending.removeFirst()
+    }
+
+    /** Ends the graph's input, hands [output] every frame it still held, and closes it (#484). */
+    private fun retireGraph(output: (KiteFrame) -> Unit) {
+        val graph = filterGraph ?: return
+        filterGraph = null
+        graphInput = null
+        try {
+            graph.flushInput(0, output)
+        } finally {
+            graph.close()
+        }
     }
 
     private fun dropFilterState() {
@@ -1142,6 +1660,10 @@ public class KiteFFmpegVideoFrame internal constructor(
     override val mirrored: Boolean,
     /** The stream's static HDR metadata, which a frame that carries none of its own reports. */
     private val streamHdr: HdrStaticMetadata? = null,
+    /** The peak of this frame's scene, from the Dolby Vision RPU the decoder read, in nits. */
+    override val sceneMaxNits: Float? = null,
+    /** The container's crop, already checked to fit this frame. */
+    override val crop: PictureCrop? = null,
 ) : VideoFrame, SoftwareReadableFrame {
 
     private val info = frame.info
@@ -1171,6 +1693,18 @@ public class KiteFFmpegVideoFrame internal constructor(
 
     /** Decoder-keyframe truth used only to confirm the fallback replay handover boundary. */
     internal val isKeyframe: Boolean = info.isKeyframe
+
+    /**
+     * The A/53 caption bytes FFmpeg's decoder attached to this picture (#236). Unreadable side
+     * data costs this picture's captions and nothing more.
+     */
+    override val closedCaptions: ByteArray? by lazy {
+        try {
+            frame.closedCaptions()
+        } catch (unreadable: io.github.yuroyami.kiteffmpeg.FFmpegException) {
+            null
+        }
+    }
 
     /**
      * The software twin of a VideoToolbox frame, downloaded ONCE on first need and owned by this

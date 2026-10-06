@@ -57,6 +57,12 @@ A `PlayerMediaSource` answers five questions and one command:
   suite's teardown asserts `liveCount == 0`, which is how the ownership law stays true.
 - `seekToKeyframe(target)`: move the cursor at or before the target. The engine handles discard
   and preroll; you only have to land on something decodable.
+- `pauseReading()` and `resumeReading()`, for a source that says `realTime`: a paused player calls
+  the first on the demux lane instead of reading, then again about once a second as the keepalive,
+  and calls the second on play. Answer false when the sender has no notion of a pause, and the
+  engine reads on as before. Answer true, and play drops what was buffered and plays the live edge;
+  throw, and play opens the stream again. The scripted source models an RTSP camera with
+  `livePause` and a session timeout.
 
 ## The decoders: `ScriptedVideoDecoder` and its audio sibling
 
@@ -93,9 +99,12 @@ only answer.
 
 ## What the engine guarantees back
 
-- One thread per role: your source is only ever touched from the demux worker, each decoder from
-  its own decode worker, and `flush` from that same worker during seeks. No backend object needs
-  its own locking for engine calls. The one exception is a recording, below.
+- One lane per role: your source is only ever touched from the demux worker, each decoder from
+  its own decode worker, and `flush` from that same worker during seeks. A lane makes one call at a
+  time and each call sees what the one before it wrote, so no backend object needs its own locking
+  for engine calls. The one exception is a recording, below. A lane is not a fixed thread: on the
+  threaded targets it runs over a shared pool, so two calls can arrive on two different threads, and
+  nothing may depend on thread identity or thread-local state.
 - Quiescence before mutation: seeks stop the sink, park the workers and flush the decoders in a
   fixed, tested order (the `ScriptTrace` assertions in the seek suite pin it).
 - Ownership is absolute: anything you hand over is closed exactly once by the engine; anything
@@ -207,17 +216,35 @@ take about 110 KB of generated source, so they live above the core, and
 `SubtitleFileParser.decode(bytes, encoding)` is the optional member that reads them. The default
 answers null.
 
-The engine names the encoding from the shape of the byte pairs, spelled as the WHATWG Encoding
-Standard spells it: `Shift_JIS`, `EUC-JP`, `GBK`, `Big5` or `EUC-KR`. It asks `decode` for the
-likeliest name first. When the answer leaves more than one character in fifty as U+FFFD or as a
-private use character, it asks for the other names in a fixed order, and keeps the first reading
-that passes. So a table must turn every byte sequence it cannot read into U+FFFD.
+The engine names the encodings from the shape of the byte pairs, spelled as the WHATWG Encoding
+Standard spells them: `Shift_JIS`, `EUC-JP`, `GBK`, `Big5` and `EUC-KR`. A file with two byte pairs
+or more, or one under a track whose language is Chinese, Japanese or Korean, is read through `decode`
+as each of the five, the likeliest first. A reading that leaves more than one character in fifty as
+U+FFFD or as a private use character is set aside, so a table must turn every byte sequence it
+cannot read into U+FFFD. Of the rest, the reading whose characters are likeliest in its language is
+kept when it is also likelier than the best single-byte reading. On a line or two several tables
+often read the bytes cleanly, as different characters, so being readable is not enough on its own.
 
-- The likeliest name, read with nothing left over, is certain, and the engine says nothing.
-- Any other reading is kept, and `PlaybackWarning.SubtitleCharsetGuessed` names the encoding used.
-- When every answer is null, or no reading passes, the engine reads the file as windows-1252. The
-  same warning names the encoding that the bytes appear to be in. A `decode` that throws counts as
-  one that answered null.
+The track's language counts against the readings in other languages, and the encodings it names
+are taken as the likeliest: Japanese names `Shift_JIS` and `EUC-JP`, Korean `EUC-KR`, and Chinese
+`GBK` and `Big5`, or only `Big5` for `zh-TW`, `zh-HK` or `zh-Hant` and only `GBK` for `zh-CN` or
+`zh-Hans`.
+
+- A reading in the likeliest encoding, with nothing left over and far likelier than every other
+  reading, single-byte or East Asian, is certain, and the engine says nothing.
+- Any other reading that is kept is shown, and `PlaybackWarning.SubtitleCharsetGuessed` names the
+  encoding used. So is a single-byte reading that an East Asian one came close to.
+- When every answer is null, or no reading passes, the file is read as single-byte text. When the
+  track's language is Chinese, Japanese or Korean, or the file has many byte pairs and no
+  single-byte table reads it as text, that text is windows-1252, and the same warning names the
+  encoding that the bytes appear to be in. A `decode` that throws counts as one that answered null.
+
+An application can also name the encoding itself, through `SubtitleSource.encoding`, through
+`KitePlayer.reloadExternalSubtitle` once a file is loaded, or as a standing preference for files
+that are not UTF-8, through `SubtitleConfig.fallbackEncoding`. A named East Asian encoding reaches
+`decode` as the same WHATWG name, and is used as told with no warning. A source that names one to a
+backend whose `decode` answers null fails to load, with an error that says so, rather than
+falling back to a guess the application asked not to have.
 
 `EastAsianText` in `kiteplayer-subtitles` is the one implementation, and the FFmpeg backend's
 parser hands `decode` to it. It follows the standard's decoder algorithms, with tables that

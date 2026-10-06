@@ -81,7 +81,9 @@ internal sealed class Command(val member: String) {
     data class SelectTrack(val kind: TrackKind, val track: TrackId?) : Command("selectTrack")
     data class SelectSecondarySubtitle(val track: TrackId?) : Command("selectSecondarySubtitle")
     data class SelectVariant(val index: Int?) : Command("selectVariant")
+    data class SelectProgram(val number: Int?) : Command("selectProgram")
     data class AddExternalSubtitle(val source: SubtitleSource) : Command("addExternalSubtitle")
+    data class ReloadExternalSubtitle(val track: TrackId, val encoding: String?) : Command("reloadExternalSubtitle")
     data object DiagnosticsDump : Command("diagnosticsDump")
     data object SupportBundle : Command("supportBundle")
     data object WarningHistory : Command("warningHistory")
@@ -100,9 +102,15 @@ internal sealed class Control(val member: String) {
     data class RequestSeek(val to: Duration, val mode: SeekMode) : Control("requestSeek")
     data class SetSpeed(val value: Double) : Control("setSpeed")
     data class SetPreservePitch(val value: Boolean) : Control("setPreservePitch")
+    data class SetKeyframeChoice(val choice: KeyframeChoice) : Control("setKeyframeChoice")
     data class SetVolume(val value: Float) : Control("setVolume")
     data class SetDuckLevel(val level: Float) : Control("setDuckLevel")
     data class SetBalance(val value: Float) : Control("setBalance")
+    data class SetStereoMode(val mode: StereoMode) : Control("setStereoMode")
+    data class SetNightMode(val on: Boolean) : Control("setNightMode")
+    data class SetDialogueLevel(val db: Float) : Control("setDialogueLevel")
+    data class SetPitch(val semitones: Double) : Control("setPitch")
+    data class SetSkipSilence(val on: Boolean) : Control("setSkipSilence")
     data class SetMuted(val value: Boolean) : Control("setMuted")
     data class SetVideoEnabled(val enabled: Boolean) : Control("setVideoEnabled")
     data class SetLoop(val mode: LoopMode) : Control("setLoop")
@@ -117,6 +125,7 @@ internal sealed class Control(val member: String) {
     data class SetSubtitleScale(val value: Float) : Control("setSubtitleScale")
     data class SetSubtitleStyle(val value: SubtitleStyleOverride?) : Control("setSubtitleStyle")
     data class SetSubtitlePosition(val value: Float) : Control("setSubtitlePosition")
+    data class SetForcedPicturesOnly(val value: Boolean) : Control("setForcedPicturesOnly")
     data class SetSubtitleSafeArea(val value: SubtitleSafeArea) : Control("setSubtitleSafeArea")
     data class SetAudioDelay(val value: Duration) : Control("setAudioDelay")
     data class SetSleepTimer(val timer: SleepTimer?, val fade: Duration) : Control("setSleepTimer")
@@ -202,6 +211,7 @@ internal fun crossingRefusal(item: MediaItem): PlaybackException? = refusal(
     listOfNotNull(
         "a reader of its own".takeIf { item.io != null },
         "an external subtitle with a reader of its own".takeIf { item.externalSubtitles.any { it.io != null } },
+        "a thumbnail file with a reader of its own".takeIf { item.thumbnails?.io != null },
     ),
 )
 
@@ -313,7 +323,12 @@ private fun encodeCommand(command: Command): JsAny = record {
         }
         is Command.SelectSecondarySubtitle -> put("track", command.track?.value)
         is Command.SelectVariant -> put("index", command.index)
+        is Command.SelectProgram -> put("number", command.number)
         is Command.AddExternalSubtitle -> put("source", encodeSubtitle(command.source))
+        is Command.ReloadExternalSubtitle -> {
+            put("track", command.track.value)
+            put("encoding", command.encoding)
+        }
         Command.Stop, Command.Next, Command.Previous, Command.ClearQueue, Command.NextChapter,
         Command.PreviousChapter, Command.DiagnosticsDump, Command.SupportBundle, Command.WarningHistory,
         -> Unit
@@ -335,9 +350,15 @@ private fun encodeControl(control: Control): JsAny = record {
         }
         is Control.SetSpeed -> put("value", control.value)
         is Control.SetPreservePitch -> put("value", control.value)
+        is Control.SetKeyframeChoice -> put("choice", control.choice)
         is Control.SetVolume -> put("value", control.value)
         is Control.SetDuckLevel -> put("value", control.level)
         is Control.SetBalance -> put("value", control.value)
+        is Control.SetStereoMode -> put("value", control.mode)
+        is Control.SetNightMode -> put("value", control.on)
+        is Control.SetDialogueLevel -> put("value", control.db)
+        is Control.SetPitch -> put("value", control.semitones)
+        is Control.SetSkipSilence -> put("value", control.on)
         is Control.SetMuted -> put("value", control.value)
         is Control.SetVideoEnabled -> put("value", control.enabled)
         is Control.SetLoop -> put("value", control.mode)
@@ -358,6 +379,7 @@ private fun encodeControl(control: Control): JsAny = record {
         is Control.SetSubtitleScale -> put("value", control.value)
         is Control.SetSubtitleStyle -> put("value", control.value?.let(::encodeStyle))
         is Control.SetSubtitlePosition -> put("value", control.value)
+        is Control.SetForcedPicturesOnly -> put("value", control.value)
         is Control.SetSubtitleSafeArea -> put("value", encodeSafeArea(control.value))
         is Control.SetAudioDelay -> put("value", control.value)
         is Control.SetSleepTimer -> {
@@ -444,6 +466,13 @@ private fun encodeItem(item: MediaItem): JsAny = record {
     put("artist", item.artist)
     put("album", item.album)
     put("audioFilter", item.audioFilter)
+    put("audioContent", item.audioContent.name)
+    item.clip?.let { clip ->
+        put("clipStart", clip.start)
+        put("clipEnd", clip.end)
+    }
+    item.growth?.let { growth -> put("growthEndsAfter", growth.endsAfter) }
+    item.thumbnails?.let { put("thumbnails", it.uri) }
 }
 
 private fun encodeSubtitle(source: SubtitleSource): JsAny = record {
@@ -451,6 +480,7 @@ private fun encodeSubtitle(source: SubtitleSource): JsAny = record {
     put("title", source.title)
     put("language", source.language)
     put("selectImmediately", source.selectImmediately)
+    put("encoding", source.encoding)
 }
 
 private fun encodeDemux(demux: DemuxPolicy): JsAny = record {
@@ -476,6 +506,7 @@ private fun encodeDemux(demux: DemuxPolicy): JsAny = record {
     put("maxBitrate", demux.maxBitrate)
     put("maxVideoHeight", demux.maxVideoHeight)
     put("variant", demux.variant)
+    put("program", demux.program)
 }
 
 private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
@@ -500,6 +531,7 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("subtitleScale", snapshot.subtitleScale)
     put("subtitleStyle", snapshot.subtitleStyle?.let(::encodeStyle))
     put("subtitlePosition", snapshot.subtitlePosition)
+    put("forcedPicturesOnly", snapshot.forcedPicturesOnly)
     put("subtitleTypesetter", snapshot.subtitleTypesetter)
     put("audioDelay", snapshot.audioDelay)
     put("abLoopA", snapshot.abLoopA)
@@ -512,6 +544,11 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("audioSessionId", snapshot.audioSessionId)
     put("replayGainDb", snapshot.appliedReplayGainDb)
     put("balance", snapshot.balance)
+    put("stereoMode", snapshot.stereoMode)
+    put("nightMode", snapshot.nightMode)
+    put("dialogueLevelDb", snapshot.dialogueLevelDb)
+    put("pitchSemitones", snapshot.pitchSemitones)
+    put("skipSilence", snapshot.skipSilence)
     put("videoEnabled", snapshot.videoEnabled)
     put("sleepTimer", snapshot.sleepTimer?.let(::encodeSleepTimer))
     put("equalizer", encodeEqualizer(snapshot.equalizer))
@@ -521,6 +558,9 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("preloadedIndex", snapshot.preloadedIndex)
     put("hdrPolicy", snapshot.hdrPolicy)
     put("videoDynamicRange", snapshot.videoDynamicRange)
+    put("failedQueueItems", numbers(snapshot.failedQueueItems.sorted().map(Int::toDouble)))
+    put("durationIsEstimate", snapshot.durationIsEstimate)
+    put("lyrics", snapshot.lyrics)
 }
 
 private fun encodeVideoSize(size: VideoSize): JsAny = record {
@@ -538,6 +578,15 @@ private fun encodeTracks(tracks: Tracks): JsAny = record {
     put("secondarySubtitle", tracks.selectedSecondarySubtitle?.value)
     put("variants", tracks.variants.encodeEach(::encodeVariant))
     put("variant", tracks.selectedVariant)
+    put("programs", tracks.programs.encodeEach(::encodeProgram))
+    put("program", tracks.selectedProgram)
+    tracks.thumbnails?.let { set ->
+        put("thumbnails", record {
+            put("width", set.width)
+            put("height", set.height)
+            put("interval", set.interval)
+        })
+    }
 }
 
 private fun encodeTrack(track: TrackInfo): JsAny = record {
@@ -556,6 +605,14 @@ private fun encodeTrack(track: TrackInfo): JsAny = record {
     put("channels", track.channels)
     put("isCoverArt", track.isCoverArt)
     put("metadata", track.metadata.toJsObject())
+    put("dolbyVision", track.dolbyVision?.let(::encodeDolbyVision))
+}
+
+private fun encodeDolbyVision(info: DolbyVisionInfo): JsAny = record {
+    put("profile", info.profile)
+    put("level", info.level)
+    put("baseLayerCompatibility", info.baseLayerCompatibility)
+    put("hasEnhancementLayer", info.hasEnhancementLayer)
 }
 
 private fun encodeVariant(variant: StreamVariant): JsAny = record {
@@ -565,6 +622,14 @@ private fun encodeVariant(variant: StreamVariant): JsAny = record {
     put("height", variant.height)
     put("frameRate", variant.frameRate)
     put("codecs", variant.codecs)
+}
+
+private fun encodeProgram(program: MediaProgram): JsAny = record {
+    put("number", program.number)
+    put("tracks", numbers(program.tracks.map { it.value.toDouble() }))
+    put("name", program.name)
+    put("provider", program.provider)
+    put("metadata", program.metadata.toJsObject())
 }
 
 private fun encodeChapter(chapter: Chapter): JsAny = record {
@@ -595,6 +660,7 @@ private fun encodeRenderQuality(value: RenderQuality): JsAny = record {
     put("debandGrain", value.debandGrain)
     put("scaler", value.scaler)
     put("linearLight", value.linearLight)
+    put("animationUpscaler", value.animationUpscaler)
 }
 
 private fun encodeTransform(value: VideoTransform): JsAny = record {
@@ -602,6 +668,9 @@ private fun encodeTransform(value: VideoTransform): JsAny = record {
     put("zoom", value.zoom)
     put("panX", value.panX)
     put("panY", value.panY)
+    put("rotation", value.rotationDegrees)
+    put("mirrorHorizontal", value.mirrorHorizontal)
+    put("mirrorVertical", value.mirrorVertical)
 }
 
 private fun encodeStyle(value: SubtitleStyleOverride): JsAny = record {
@@ -667,6 +736,7 @@ private fun encodeStats(stats: PlaybackStats): JsAny = record {
     put("droppedFramesDecode", stats.droppedFramesDecode)
     put("repeatedFrames", stats.repeatedFrames)
     put("audioUnderruns", stats.audioUnderruns)
+    put("audioLimitedFrames", stats.audioLimitedFrames)
     put("rebuffers", stats.rebuffers)
     put("droppedEvents", stats.droppedEvents)
     put("avDrift", stats.avDrift)
@@ -751,6 +821,15 @@ private fun encodeEvent(event: PlayerEvent): JsAny = record {
             kind("MarkerReached")
             put("marker", encodeMarker(event.marker))
         }
+        is PlayerEvent.TracksAdded -> {
+            kind("TracksAdded")
+            put("tracks", event.tracks.encodeEach(::encodeTrack))
+        }
+        is PlayerEvent.TrackChosenByPlayer -> {
+            kind("TrackChosenByPlayer")
+            put("kind", event.kind)
+            put("track", event.track?.value)
+        }
     }
 }
 
@@ -760,6 +839,12 @@ private fun encodeError(error: PlaybackError): JsAny = record {
         is PlaybackError.SourceUnavailable -> {
             kind("SourceUnavailable")
             put("uri", error.uri)
+            put("detail", error.detail)
+        }
+        is PlaybackError.SchemeUnsupported -> {
+            kind("SchemeUnsupported")
+            put("uri", error.uri)
+            put("scheme", error.scheme)
             put("detail", error.detail)
         }
         is PlaybackError.SourceStalled -> {
@@ -850,6 +935,15 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             kind("AudioUnderrun")
             put("total", warning.totalSoFar)
         }
+        is PlaybackWarning.AddressRenewed -> {
+            kind("AddressRenewed")
+            put("uri", warning.uri)
+            put("status", warning.status)
+        }
+        is PlaybackWarning.GrowthUnavailable -> {
+            kind("GrowthUnavailable")
+            put("uri", warning.uri)
+        }
         is PlaybackWarning.SourceReconnecting -> {
             kind("SourceReconnecting")
             put("position", warning.position)
@@ -888,6 +982,11 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             kind("ColorApproximated")
             put("detail", warning.detail)
         }
+        is PlaybackWarning.CropIgnored -> {
+            kind("CropIgnored")
+            put("stream", warning.streamIndex)
+            put("detail", warning.detail)
+        }
         is PlaybackWarning.TonemappingUnavailable -> {
             kind("TonemappingUnavailable")
             put("detail", warning.detail)
@@ -915,6 +1014,11 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
         }
         is PlaybackWarning.SubtitleSourceUnreadable -> {
             kind("SubtitleSourceUnreadable")
+            put("uri", warning.uri)
+            put("reason", warning.reason)
+        }
+        is PlaybackWarning.ThumbnailsUnreadable -> {
+            kind("ThumbnailsUnreadable")
             put("uri", warning.uri)
             put("reason", warning.reason)
         }
@@ -988,6 +1092,12 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             put("from", warning.from)
             put("to", warning.to)
             put("detail", warning.detail)
+        }
+        is PlaybackWarning.QueueItemSkipped -> {
+            kind("QueueItemSkipped")
+            put("index", warning.index)
+            put("uri", warning.uri)
+            put("error", encodeError(warning.error))
         }
     }
 }
@@ -1076,7 +1186,9 @@ private fun decodeCommand(o: JsAny): Command? = when (o.str("t")) {
     "selectTrack" -> Command.SelectTrack(o.enum<TrackKind>("kind") ?: missing("kind"), o.int("track")?.let(::TrackId))
     "selectSecondarySubtitle" -> Command.SelectSecondarySubtitle(o.int("track")?.let(::TrackId))
     "selectVariant" -> Command.SelectVariant(o.int("index"))
+    "selectProgram" -> Command.SelectProgram(o.int("number"))
     "addExternalSubtitle" -> Command.AddExternalSubtitle(decodeSubtitle(o.child("source") ?: missing("source")))
+    "reloadExternalSubtitle" -> Command.ReloadExternalSubtitle(TrackId(o.int("track") ?: missing("track")), o.str("encoding"))
     "diagnosticsDump" -> Command.DiagnosticsDump
     "supportBundle" -> Command.SupportBundle
     "warningHistory" -> Command.WarningHistory
@@ -1094,9 +1206,15 @@ private fun decodeControl(o: JsAny): Control? = when (o.str("t")) {
     "requestSeek" -> Control.RequestSeek(o.micros("to") ?: missing("to"), o.enum<SeekMode>("mode") ?: missing("mode"))
     "setSpeed" -> Control.SetSpeed(o.num("value") ?: missing("value"))
     "setPreservePitch" -> Control.SetPreservePitch(o.flag("value"))
+    "setKeyframeChoice" -> Control.SetKeyframeChoice(o.enum<KeyframeChoice>("choice") ?: missing("choice"))
     "setVolume" -> Control.SetVolume(o.float("value") ?: missing("value"))
     "setDuckLevel" -> Control.SetDuckLevel(o.float("value") ?: missing("value"))
     "setBalance" -> Control.SetBalance(o.float("value") ?: missing("value"))
+    "setStereoMode" -> Control.SetStereoMode(o.enum<StereoMode>("value") ?: missing("value"))
+    "setNightMode" -> Control.SetNightMode(o.bool("value") ?: missing("value"))
+    "setDialogueLevel" -> Control.SetDialogueLevel(o.float("value") ?: missing("value"))
+    "setPitch" -> Control.SetPitch(o.num("value") ?: missing("value"))
+    "setSkipSilence" -> Control.SetSkipSilence(o.bool("value") ?: missing("value"))
     "setMuted" -> Control.SetMuted(o.flag("value"))
     "setVideoEnabled" -> Control.SetVideoEnabled(o.flag("value"))
     "setLoop" -> Control.SetLoop(o.enum<LoopMode>("value") ?: missing("value"))
@@ -1111,6 +1229,7 @@ private fun decodeControl(o: JsAny): Control? = when (o.str("t")) {
     "setSubtitleScale" -> Control.SetSubtitleScale(o.float("value") ?: missing("value"))
     "setSubtitleStyle" -> Control.SetSubtitleStyle(o.child("value")?.let(::decodeStyle))
     "setSubtitlePosition" -> Control.SetSubtitlePosition(o.float("value") ?: missing("value"))
+    "setForcedPicturesOnly" -> Control.SetForcedPicturesOnly(o.bool("value") ?: missing("value"))
     "setSubtitleSafeArea" -> Control.SetSubtitleSafeArea(decodeSafeArea(o.child("value") ?: missing("value")))
     "setAudioDelay" -> Control.SetAudioDelay(o.micros("value") ?: missing("value"))
     "setSleepTimer" -> Control.SetSleepTimer(o.child("value")?.let(::decodeSleepTimer), o.micros("fade") ?: missing("fade"))
@@ -1156,6 +1275,10 @@ private fun decodeItem(o: JsAny): MediaItem = MediaItem(
     artist = o.str("artist"),
     album = o.str("album"),
     audioFilter = o.str("audioFilter"),
+    audioContent = o.enum<AudioContent>("audioContent") ?: AudioContent.Automatic,
+    clip = o.micros("clipStart")?.let { start -> MediaClip(start, o.micros("clipEnd")) },
+    growth = o.micros("growthEndsAfter")?.let(::FileGrowth),
+    thumbnails = o.str("thumbnails")?.let { ThumbnailSource(it) },
 )
 
 private fun decodeSubtitle(o: JsAny): SubtitleSource = SubtitleSource(
@@ -1163,6 +1286,7 @@ private fun decodeSubtitle(o: JsAny): SubtitleSource = SubtitleSource(
     title = o.str("title"),
     language = o.str("language"),
     selectImmediately = o.flag("selectImmediately"),
+    encoding = o.str("encoding"),
 )
 
 private fun decodeDemux(o: JsAny): DemuxPolicy = DemuxPolicy(
@@ -1174,6 +1298,7 @@ private fun decodeDemux(o: JsAny): DemuxPolicy = DemuxPolicy(
     maxBitrate = o.long("maxBitrate"),
     maxVideoHeight = o.int("maxVideoHeight"),
     variant = o.int("variant"),
+    program = o.int("program"),
 )
 
 private fun decodeProbe(o: JsAny): ProbeDepth = when (o.str("t")) {
@@ -1208,6 +1333,7 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         subtitleScale = o.float("subtitleScale") ?: default.subtitleScale,
         subtitleStyle = o.child("subtitleStyle")?.let(::decodeStyle),
         subtitlePosition = o.float("subtitlePosition") ?: default.subtitlePosition,
+        forcedPicturesOnly = o.bool("forcedPicturesOnly") ?: default.forcedPicturesOnly,
         subtitleTypesetter = o.str("subtitleTypesetter"),
         audioDelay = o.micros("audioDelay") ?: default.audioDelay,
         abLoopA = o.micros("abLoopA"),
@@ -1220,6 +1346,11 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         audioSessionId = o.int("audioSessionId"),
         appliedReplayGainDb = o.float("replayGainDb"),
         balance = o.float("balance") ?: default.balance,
+        stereoMode = o.enum<StereoMode>("stereoMode") ?: default.stereoMode,
+        nightMode = o.flag("nightMode"),
+        dialogueLevelDb = o.float("dialogueLevelDb") ?: default.dialogueLevelDb,
+        pitchSemitones = o.num("pitchSemitones") ?: default.pitchSemitones,
+        skipSilence = o.flag("skipSilence"),
         videoEnabled = o.bool("videoEnabled") ?: default.videoEnabled,
         sleepTimer = o.child("sleepTimer")?.let(::decodeSleepTimer),
         equalizer = o.child("equalizer")?.let(::decodeEqualizer) ?: default.equalizer,
@@ -1229,6 +1360,9 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         preloadedIndex = o.int("preloadedIndex"),
         hdrPolicy = o.enum<HdrPolicy>("hdrPolicy") ?: default.hdrPolicy,
         videoDynamicRange = o.enum<VideoDynamicRange>("videoDynamicRange") ?: default.videoDynamicRange,
+        failedQueueItems = o.numbers("failedQueueItems")?.map(Double::toInt)?.toSet() ?: default.failedQueueItems,
+        durationIsEstimate = o.flag("durationIsEstimate"),
+        lyrics = o.str("lyrics"),
     )
 }
 
@@ -1247,6 +1381,9 @@ private fun decodeTracks(o: JsAny): Tracks = Tracks(
     selectedSecondarySubtitle = o.int("secondarySubtitle")?.let(::TrackId),
     variants = o.list("variants", ::decodeVariant).orEmpty(),
     selectedVariant = o.int("variant"),
+    programs = o.list("programs", ::decodeProgram).orEmpty(),
+    selectedProgram = o.int("program"),
+    thumbnails = o.child("thumbnails")?.let { set -> ThumbnailSet(set.int("width"), set.int("height"), set.micros("interval")) },
 )
 
 private fun decodeTrack(o: JsAny): TrackInfo = TrackInfo(
@@ -1265,6 +1402,14 @@ private fun decodeTrack(o: JsAny): TrackInfo = TrackInfo(
     channels = o.int("channels"),
     isCoverArt = o.flag("isCoverArt"),
     metadata = o.map("metadata"),
+    dolbyVision = o.child("dolbyVision")?.let(::decodeDolbyVision),
+)
+
+private fun decodeDolbyVision(o: JsAny): DolbyVisionInfo = DolbyVisionInfo(
+    profile = o.int("profile") ?: missing("profile"),
+    level = o.int("level") ?: missing("level"),
+    baseLayerCompatibility = o.int("baseLayerCompatibility") ?: missing("baseLayerCompatibility"),
+    hasEnhancementLayer = o.flag("hasEnhancementLayer"),
 )
 
 private fun decodeVariant(o: JsAny): StreamVariant = StreamVariant(
@@ -1274,6 +1419,14 @@ private fun decodeVariant(o: JsAny): StreamVariant = StreamVariant(
     height = o.int("height"),
     frameRate = o.num("frameRate"),
     codecs = o.str("codecs"),
+)
+
+private fun decodeProgram(o: JsAny): MediaProgram = MediaProgram(
+    number = o.int("number") ?: missing("number"),
+    tracks = o.numbers("tracks").orEmpty().map { TrackId(it.toInt()) },
+    name = o.str("name"),
+    provider = o.str("provider"),
+    metadata = o.map("metadata"),
 )
 
 private fun decodeChapter(o: JsAny): Chapter = Chapter(
@@ -1303,6 +1456,7 @@ private fun decodeRenderQuality(o: JsAny): RenderQuality {
         debandGrain = o.float("debandGrain") ?: default.debandGrain,
         scaler = o.enum<VideoScaler>("scaler") ?: default.scaler,
         linearLight = o.flag("linearLight"),
+        animationUpscaler = o.enum<AnimationUpscaler>("animationUpscaler") ?: default.animationUpscaler,
     )
 }
 
@@ -1311,6 +1465,9 @@ private fun decodeTransform(o: JsAny): VideoTransform = VideoTransform(
     zoom = o.float("zoom") ?: 1f,
     panX = o.float("panX") ?: 0f,
     panY = o.float("panY") ?: 0f,
+    rotationDegrees = o.int("rotation") ?: 0,
+    mirrorHorizontal = o.flag("mirrorHorizontal"),
+    mirrorVertical = o.flag("mirrorVertical"),
 )
 
 private fun decodeStyle(o: JsAny): SubtitleStyleOverride = SubtitleStyleOverride(
@@ -1366,6 +1523,7 @@ private fun decodeStats(o: JsAny): PlaybackStats {
         droppedFramesDecode = o.long("droppedFramesDecode") ?: 0L,
         repeatedFrames = o.long("repeatedFrames") ?: 0L,
         audioUnderruns = o.long("audioUnderruns") ?: 0L,
+        audioLimitedFrames = o.long("audioLimitedFrames") ?: 0L,
         rebuffers = o.long("rebuffers") ?: 0L,
         droppedEvents = o.long("droppedEvents") ?: 0L,
         avDrift = o.micros("avDrift") ?: Duration.ZERO,
@@ -1416,12 +1574,19 @@ private fun decodeEvent(o: JsAny): PlayerEvent? = when (o.str("t")) {
     "Failed" -> PlayerEvent.Failed(decodeError(o.child("error") ?: missing("error")) ?: return null)
     "ChapterChanged" -> PlayerEvent.ChapterChanged(o.child("chapter")?.let(::decodeChapter))
     "MarkerReached" -> PlayerEvent.MarkerReached(decodeMarker(o.child("marker") ?: missing("marker")))
+    "TracksAdded" -> PlayerEvent.TracksAdded(o.list("tracks", ::decodeTrack) ?: missing("tracks"))
+    "TrackChosenByPlayer" -> PlayerEvent.TrackChosenByPlayer(o.enum<TrackKind>("kind") ?: missing("kind"), o.int("track")?.let(::TrackId))
     else -> null
 }
 
 /** The error in [o], or null for a kind this side does not know. */
 private fun decodeError(o: JsAny): PlaybackError? = when (o.str("t")) {
     "SourceUnavailable" -> PlaybackError.SourceUnavailable(o.str("uri") ?: missing("uri"), null, o.str("detail"))
+    "SchemeUnsupported" -> PlaybackError.SchemeUnsupported(
+        o.str("uri") ?: missing("uri"),
+        o.str("scheme") ?: missing("scheme"),
+        o.str("detail"),
+    )
     "SourceStalled" -> PlaybackError.SourceStalled(o.str("uri") ?: missing("uri"), o.micros("stalledFor") ?: missing("stalledFor"))
     "NotMedia" -> PlaybackError.NotMedia(o.str("uri") ?: missing("uri"), o.str("detail"))
     "NoPlayableStream" -> PlaybackError.NoPlayableStream(o.list("streams", ::decodeTrack).orEmpty())
@@ -1458,6 +1623,8 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "FrameDropping" -> PlaybackWarning.FrameDropping(o.int("dropped") ?: missing("dropped"))
         "AudioDeviceChanged" -> PlaybackWarning.AudioDeviceChanged(detail)
         "AudioUnderrun" -> PlaybackWarning.AudioUnderrun(o.long("total") ?: missing("total"))
+        "AddressRenewed" -> PlaybackWarning.AddressRenewed(o.str("uri") ?: missing("uri"), o.int("status") ?: missing("status"))
+        "GrowthUnavailable" -> PlaybackWarning.GrowthUnavailable(o.str("uri") ?: missing("uri"))
         "SourceReconnecting" -> PlaybackWarning.SourceReconnecting(
             o.long("position") ?: missing("position"),
             o.int("attempt") ?: missing("attempt"),
@@ -1475,6 +1642,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         )
         "HdrToneMapped" -> PlaybackWarning.HdrToneMapped(o.str("transfer").orEmpty(), o.int("stream") ?: missing("stream"))
         "ColorApproximated" -> PlaybackWarning.ColorApproximated(detail)
+        "CropIgnored" -> PlaybackWarning.CropIgnored(o.int("stream") ?: missing("stream"), detail)
         "TonemappingUnavailable" -> PlaybackWarning.TonemappingUnavailable(detail)
         "ChannelLayoutUnknown" -> PlaybackWarning.ChannelLayoutUnknown(o.int("channels") ?: missing("channels"), detail)
         "BadTimestamps" -> PlaybackWarning.BadTimestamps(detail)
@@ -1486,6 +1654,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
             o.str("decoded").orEmpty(),
         )
         "SubtitleSourceUnreadable" -> PlaybackWarning.SubtitleSourceUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
+        "ThumbnailsUnreadable" -> PlaybackWarning.ThumbnailsUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "SubtitleCharsetGuessed" -> PlaybackWarning.SubtitleCharsetGuessed(
             o.str("uri").orEmpty(),
             o.str("charset").orEmpty(),
@@ -1508,6 +1677,11 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "SegmentSkipped" -> PlaybackWarning.SegmentSkipped(o.str("uri").orEmpty(), detail)
         "ExternalClockSilent" -> PlaybackWarning.ExternalClockSilent(detail)
         "VariantLowered" -> PlaybackWarning.VariantLowered(o.int("from") ?: missing("from"), o.int("to") ?: missing("to"), detail)
+        "QueueItemSkipped" -> PlaybackWarning.QueueItemSkipped(
+            o.int("index") ?: missing("index"),
+            o.str("uri").orEmpty(),
+            o.child("error")?.let(::decodeError) ?: missing("error"),
+        )
         else -> null
     }
 }

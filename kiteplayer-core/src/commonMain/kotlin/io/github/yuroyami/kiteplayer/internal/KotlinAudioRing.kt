@@ -1,10 +1,14 @@
+@file:OptIn(ExperimentalAtomicApi::class)
+
 package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
-import kotlinx.atomicfu.AtomicLongArray
 import kotlinx.atomicfu.atomic
+import kotlin.concurrent.atomics.AtomicLongArray
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetchAt
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -154,6 +158,45 @@ internal class KotlinAudioRing(
     private var gainStarted = false
     private val gainSlopePerFrame: Float = 1f / gainRampFrames(format.sampleRate)
 
+    /**
+     * The peak limiter's state (#504), the mirror of the `lim_` fields of the C ring.
+     *
+     * The render limits frame `s` with the mean of [limitHeld] over the box of frames
+     * `[s, s + lookahead)`, where the held value of frame `j` is the smallest gain any frame in
+     * `[j - lookahead + 1, j]` needs to stay within full scale. Every box that holds a frame `k`
+     * therefore holds only values at or below the gain `k` needs, so the mean reaches it by the time
+     * `k` plays, and it walks there at most 1/lookahead of the range per frame. A frame not yet in
+     * the ring counts as needing nothing until it arrives.
+     *
+     * [limitReset] is how [flush] reaches the rest: it raises the flag and the render starts the
+     * limiter over at its next call, so only the render ever writes the plain fields. The arrays are
+     * sized here because the device's thread may not allocate.
+     */
+    private val limitReset = atomic(true)
+    private val limitedCount = atomic(0L)
+    private val limitLookahead: Int = limitLookaheadFrames(format.sampleRate)
+    private val limitRelease: Float = 1f / limitReleaseFrames(format.sampleRate)
+    private var limitGain = 1f
+    private var limitEntered = 0L
+    private var limitSum = 0.0
+    private var limitReduced = 0
+    private var limitOutSlot = 0
+    private var limitInSlot = 0
+    private var limitQueueHead = 0
+    private var limitQueueCount = 0
+    private val limitHeld = FloatArray(limitLookahead)
+    private val limitQueueGain = FloatArray(limitLookahead)
+    private val limitQueueFrame = LongArray(limitLookahead)
+
+    /** The loudest the frames waiting in the ring can leave the gain walk unfolded; see [applyGain]. */
+    private var limitScale = 1f
+
+    /** Whether [hold] holds the sound. Written by the session owner, read by the render. */
+    private val holding = atomic(false)
+
+    /** Whether a held ring has reached silence. Stored by every render; see [silent]. */
+    private val silentNow = atomic(false)
+
     /** Total frames ever written by the feeder. Only the feeder advances it. */
     private val written = atomic(0L)
 
@@ -175,7 +218,9 @@ internal class KotlinAudioRing(
     // segments. Written by the feeder, read by the callback. Arrays rather than objects, because the
     // side that reads them is a real-time thread that must not allocate. Each slot is published by
     // its own sequence counter, odd while the feeder changes it, and every element is read
-    // atomically so that the closing counter read cannot pass the payload reads.
+    // atomically so that the closing counter read cannot pass the payload reads. The standard
+    // library's arrays load and store each element with sequential consistency on every target,
+    // which is that order; atomicfu's own array type is deprecated for removal (#417).
     private val segmentStartFrame = AtomicLongArray(MAX_SEGMENTS)
     private val segmentPtsUs = AtomicLongArray(MAX_SEGMENTS)
     private val segmentSlotSeq = AtomicLongArray(MAX_SEGMENTS)
@@ -206,6 +251,8 @@ internal class KotlinAudioRing(
     private val nanosPerFrame: Double = if (format.sampleRate > 0) 1_000_000_000.0 / format.sampleRate else 0.0
 
     override val underruns: Long get() = underrunCount.value
+
+    override val limitedFrames: Long get() = limitedCount.value
 
     /** Frames written but not yet handed to the device. */
     override val bufferedFrames: Int get() = (written.value - consumed.value).toInt().coerceAtLeast(0)
@@ -290,8 +337,8 @@ internal class KotlinAudioRing(
             // Through framesToMicros and not `delta * 1_000_000L / sampleRate`, which overflows.
             // The naive product overflows a signed 64 bit intermediate at a large frame delta, the
             // same defect once found in KiteFFmpeg's timestamp helpers.
-            val micros = framesToMicros(atFrame - segmentStartFrame[newest].value, format.sampleRate)
-            if (driftWithinTolerance(segmentPtsUs[newest].value, micros, ptsUs)) return true
+            val micros = framesToMicros(atFrame - segmentStartFrame.loadAt(newest), format.sampleRate)
+            if (driftWithinTolerance(segmentPtsUs.loadAt(newest), micros, ptsUs)) return true
         }
         return appendSegment(ptsUs, atFrame)
     }
@@ -347,8 +394,8 @@ internal class KotlinAudioRing(
 
         val slot = (appended % MAX_SEGMENTS).toInt()
         beginSegmentWrite(slot)
-        segmentStartFrame[slot].value = atFrame
-        segmentPtsUs[slot].value = ptsUs
+        segmentStartFrame.storeAt(slot, atFrame)
+        segmentPtsUs.storeAt(slot, ptsUs)
         endSegmentWrite(slot)
         segmentsAppended.value = appended + 1
         return true
@@ -356,11 +403,11 @@ internal class KotlinAudioRing(
 
     /** Makes [slot]'s counter odd, so the callback does not use it until [endSegmentWrite]. Feeder only. */
     internal fun beginSegmentWrite(slot: Int) {
-        segmentSlotSeq[slot].incrementAndGet()
+        segmentSlotSeq.incrementAndFetchAt(slot)
     }
 
     internal fun endSegmentWrite(slot: Int) {
-        segmentSlotSeq[slot].incrementAndGet()
+        segmentSlotSeq.incrementAndFetchAt(slot)
     }
 
     /**
@@ -381,7 +428,7 @@ internal class KotlinAudioRing(
         val retired = segmentsRetired.value
         var stillNeeded = retired
         while (appended - stillNeeded > 1) {
-            val nextStart = segmentStartFrame[((stillNeeded + 1) % MAX_SEGMENTS).toInt()].value
+            val nextStart = segmentStartFrame.loadAt(((stillNeeded + 1) % MAX_SEGMENTS).toInt())
             if (nextStart >= consumedNow) break
             stillNeeded++
         }
@@ -396,6 +443,16 @@ internal class KotlinAudioRing(
         gainTarget.value = target
     }
 
+    override fun hold(held: Boolean) {
+        // Not silent first, then the hold, in the order `kprt_ring_set_hold` takes. A render in
+        // flight may still store a true it worked out under the old hold; it does that only with
+        // the gain at zero, and being the latest render it leaves the gain there.
+        silentNow.value = false
+        holding.value = held
+    }
+
+    override val silent: Boolean get() = silentNow.value
+
     /**
      * Fills [destination] from the ring. Called on the device's real-time thread.
      *
@@ -407,9 +464,25 @@ internal class KotlinAudioRing(
      * @return frames of real audio written. The rest of [destination] is silence.
      */
     fun render(destination: AudioSinkBuffer, frames: Int, deadlineNanos: Long): Int {
+        val held = holding.value
+        if (held) {
+            // Nothing heard yet, so there is no level to walk down from.
+            if (!gainStarted) {
+                gainStarted = true
+                gainCurrent = 0f
+            }
+            if (gainCurrent == 0f) {
+                // Held at silence: exact zeroes, nothing consumed, no anchor and no underrun, so
+                // the audio after the fade waits for the resume (#486).
+                destination.writeSilence(frameOffset = 0, frames = frames)
+                silentNow.value = true
+                return frames
+            }
+        }
         val startFrame = consumed.value
-        val available = (written.value - startFrame).toInt().coerceAtLeast(0)
-        val toRead = min(frames, available)
+        val writtenNow = written.value
+        val available = (writtenNow - startFrame).toInt().coerceAtLeast(0)
+        var toRead = min(frames, available)
 
         if (toRead > 0) {
             // Copy out first, then scale the copy. Two steps and not one, because `data` belongs to
@@ -427,7 +500,10 @@ internal class KotlinAudioRing(
                 frameIndex = (frameIndex + runFrames) % capacityFrames
                 writtenSoFar += runFrames
             }
-            applyGain(renderScratch, toRead)
+            toRead = applyGain(renderScratch, toRead, held)
+            // Before `consumed` moves, because the frames it reads must still be the feeder's to
+            // leave alone.
+            limit(renderScratch, startFrame, toRead, writtenNow, limitScale)
             destination.writeInterleaved(
                 source = renderScratch,
                 sourceOffset = 0,
@@ -439,7 +515,14 @@ internal class KotlinAudioRing(
 
         if (toRead < frames) {
             destination.writeSilence(frameOffset = toRead, frames = frames - toRead)
-            if (!ending.value) underrunCount.incrementAndGet()
+            // A held ring that stops short is silent from here on purpose, or ran dry partway down
+            // the fade, and either way what follows is silence: the gain goes there too, so the
+            // next render does not step back up to the level the walk had reached.
+            if (held) {
+                gainCurrent = 0f
+            } else if (!ending.value) {
+                underrunCount.incrementAndGet()
+            }
         }
 
         if (toRead > 0) {
@@ -449,7 +532,12 @@ internal class KotlinAudioRing(
             publishAnchor(lastRealFrame = startFrame + toRead - 1, atNanos = boundaryNanos)
         }
 
-        return toRead
+        // After the anchor, so a reader that sees silence also sees when the last faded frame
+        // reaches the speaker. A held ring answers every frame, because its silence is deliberate
+        // rather than a device going hungry, and a sink that reports a short render as an underrun
+        // must not report a pause as one.
+        silentNow.value = held && gainCurrent == 0f
+        return if (held) frames else toRead
     }
 
     /**
@@ -460,14 +548,24 @@ internal class KotlinAudioRing(
      *
      * The C ring does the same thing in the same order; the differential oracle compares the
      * samples, so a difference here is a failing row there rather than a surprise on one platform.
+     *
+     * @return the frames to consume: all of [frames], or under a [held] fade only those up to and
+     *         including the one that reaches silence.
      */
-    private fun applyGain(samples: FloatArray, frames: Int) {
-        val wanted = gainTarget.value
+    private fun applyGain(samples: FloatArray, frames: Int, held: Boolean): Int {
+        // A hold walks to silence whatever the volume, and stops at the frame that reaches it. The
+        // gain is above zero whenever this runs under a hold, so the walk below is the one that runs.
+        val wanted = if (held) 0f else gainTarget.value
         if (!gainStarted) {
             gainStarted = true
             gainCurrent = wanted
         }
         var gain = gainCurrent
+        // The loudest the frames still waiting can leave here unfolded. The walk moves between this
+        // gain and the wanted one, and above unity the fold keeps every sample within full scale,
+        // so only the part of that span at or below unity counts, and a boost that stays a boost
+        // needs no limiting at all.
+        limitScale = if (gain > 1f && wanted > 1f) 0f else min(if (gain > wanted) gain else wanted, 1f)
         if (gain == wanted) {
             if (wanted > 1f) {
                 // Boosting. Fold, so a loud passage cannot leave here squared off.
@@ -478,7 +576,7 @@ internal class KotlinAudioRing(
             } else if (wanted != 1f) {
                 for (i in 0 until frames * channels) samples[i] *= wanted
             }
-            return
+            return frames
         }
         var base = 0
         for (frame in 0 until frames) {
@@ -495,8 +593,129 @@ internal class KotlinAudioRing(
                 for (channel in 0 until channels) samples[base + channel] *= gain
             }
             base += channels
+            if (held && gain == 0f) {
+                // The fade ends on this frame; the frames after it stay in the ring.
+                gainCurrent = gain
+                return frame + 1
+            }
         }
         gainCurrent = gain
+        return frames
+    }
+
+    /**
+     * The peak limiter (#504): turns the gain down ahead of any frame that would pass full scale,
+     * and leaves every other frame exactly as it was.
+     *
+     * [samples] holds [frames] frames already scaled by the volume, the first of them ring frame
+     * [start]. The frames after them that the ring already holds are the lookahead, read raw from
+     * [data] and scaled by [scale]; a frame the ring does not hold yet counts as needing nothing until
+     * it arrives. The gain falls no faster than the box lets it and rises no faster than the
+     * release. A frame the lookahead could not see coming, because it was not in the ring yet or the
+     * volume rose after it was read, is turned down on the spot instead, and whatever rounding leaves
+     * above full scale after the multiply is clamped, only on a frame being limited.
+     *
+     * Identical in order and arithmetic to `kprt_limit` in `kite_rt_render.c`, because the
+     * differential oracle compares the samples.
+     */
+    private fun limit(samples: FloatArray, start: Long, frames: Int, writtenNow: Long, scale: Float) {
+        val lookahead = limitLookahead
+        var gain = limitGain
+        var limited = 0L
+        var base = 0
+
+        if (limitReset.value) {
+            limitReset.value = false
+            limitEntered = start
+            limitSum = lookahead.toDouble()
+            limitReduced = 0
+            limitOutSlot = 0
+            limitInSlot = 0
+            limitQueueHead = 0
+            limitQueueCount = 0
+            gain = 1f
+        }
+        var inPos = (limitEntered % capacityFrames).toInt()
+
+        for (frame in 0 until frames) {
+            val tail = start + frame + lookahead - 1
+
+            // Bring the box's last frame in, and any before it that arrived late.
+            while (limitEntered <= tail && limitEntered < writtenNow) {
+                val entering = limitEntered
+                val x = inPos * channels
+                var level = 0f
+                for (i in 0 until channels) {
+                    val a = if (data[x + i] < 0f) -data[x + i] else data[x + i]
+                    if (a > level) level = a
+                }
+                level = level * scale
+                while (limitQueueCount > 0 && limitQueueFrame[limitQueueHead] <= entering - lookahead) {
+                    limitQueueHead = if (limitQueueHead + 1 == lookahead) 0 else limitQueueHead + 1
+                    limitQueueCount--
+                }
+                if (level > 1f) {
+                    val need = 1f / level
+                    while (limitQueueCount > 0) {
+                        var back = limitQueueHead + limitQueueCount - 1
+                        if (back >= lookahead) back -= lookahead
+                        if (limitQueueGain[back] < need) break
+                        limitQueueCount--
+                    }
+                    var back = limitQueueHead + limitQueueCount
+                    if (back >= lookahead) back -= lookahead
+                    limitQueueGain[back] = need
+                    limitQueueFrame[back] = entering
+                    limitQueueCount++
+                }
+                val held = if (limitQueueCount > 0) limitQueueGain[limitQueueHead] else 1f
+                limitHeld[limitInSlot] = held
+                if (held < 1f) {
+                    limitSum = limitSum + (held.toDouble() - 1.0)
+                    limitReduced++
+                }
+                limitInSlot = if (limitInSlot + 1 == lookahead) 0 else limitInSlot + 1
+                inPos = if (inPos + 1 == capacityFrames) 0 else inPos + 1
+                limitEntered = entering + 1
+            }
+
+            val target: Float
+            if (limitReduced == 0) {
+                limitSum = lookahead.toDouble()
+                target = 1f
+            } else {
+                target = (limitSum / lookahead.toDouble()).toFloat()
+            }
+            gain = gain + limitRelease
+            if (gain > target) gain = target
+            if (gain > 1f) gain = 1f
+            var peak = 0f
+            for (i in 0 until channels) {
+                val y = samples[base + i]
+                val a = if (y < 0f) -y else y
+                if (a > peak) peak = a
+            }
+            if (peak * gain > 1f) gain = 1f / peak
+            if (gain < 1f) {
+                for (i in 0 until channels) {
+                    var y = samples[base + i] * gain
+                    if (y > 1f) y = 1f else if (y < -1f) y = -1f
+                    samples[base + i] = y
+                }
+                limited++
+            }
+            base += channels
+
+            // The frame leaves the box, and the frame after the box's end, not in it yet, counts as 1.
+            val leaving = limitHeld[limitOutSlot]
+            if (leaving < 1f) {
+                limitSum = limitSum + (1.0 - leaving.toDouble())
+                limitReduced--
+            }
+            limitOutSlot = if (limitOutSlot + 1 == lookahead) 0 else limitOutSlot + 1
+        }
+        limitGain = gain
+        if (limited > 0) limitedCount.value = limitedCount.value + limited
     }
 
     /**
@@ -521,14 +740,14 @@ internal class KotlinAudioRing(
         var index = appended - 1
         while (index >= retired) {
             val slot = (index % MAX_SEGMENTS).toInt()
-            val opening = segmentSlotSeq[slot].value
+            val opening = segmentSlotSeq.loadAt(slot)
             if (opening % 2L != 0L) {
                 torn = true
                 break
             }
-            val frame = segmentStartFrame[slot].value
-            val pts = segmentPtsUs[slot].value
-            if (segmentSlotSeq[slot].value != opening) {
+            val frame = segmentStartFrame.loadAt(slot)
+            val pts = segmentPtsUs.loadAt(slot)
+            if (segmentSlotSeq.loadAt(slot) != opening) {
                 torn = true
                 break
             }
@@ -609,6 +828,8 @@ internal class KotlinAudioRing(
         segmentsRetired.value = 0
         segmentsAppended.value = 0
         consumed.value = written.value
+        // The frames the limiter read ahead are gone, so its next render starts it over.
+        limitReset.value = true
     }
 
     internal companion object {

@@ -37,12 +37,15 @@ internal sealed interface MediaNotificationEvent {
 
 /**
  * One answer. [pause] asks for the player to be paused. [checkAfter] is how long to wait before
- * sending [MediaNotificationEvent.TimerFired], or null when nothing is waiting.
+ * sending [MediaNotificationEvent.TimerFired], or null when nothing is waiting. [dismissedBy] is the
+ * swipe or the task removal that put the notification away this time, which the application is
+ * told of (#427), or null.
  */
 internal data class MediaNotificationDecision(
     val mode: MediaNotificationMode,
     val pause: Boolean,
     val checkAfter: Duration?,
+    val dismissedBy: MediaNotificationEvent? = null,
 )
 
 /**
@@ -56,9 +59,10 @@ internal data class MediaNotificationDecision(
  *   foreground, and the notification stays until it is swiped away.
  * - Opening changes nothing, because a change of track passes through it.
  * - Idle and a failure remove the notification and stop the service.
- * - A swipe removes the notification and pauses the player.
+ * - A swipe removes the notification and pauses the player, and the answer says so, so the
+ *   application can be told.
  * - Removing the app from the recent apps screen does the same, unless the player plays, buffers
- *   or opens. Then the sound goes on.
+ *   or opens. Then the sound goes on and nothing is said.
  * - After [MediaNotificationEvent.Closed], the answer is always hidden.
  *
  * One instance per notification, fed from one thread.
@@ -74,6 +78,7 @@ internal class MediaNotificationMachine(
 
     fun on(event: MediaNotificationEvent): MediaNotificationDecision {
         var pause = false
+        var dismissedBy: MediaNotificationEvent? = null
         if (!closed) {
             when (event) {
                 is MediaNotificationEvent.StatusChanged -> onStatus(event.status)
@@ -81,11 +86,13 @@ internal class MediaNotificationMachine(
                 MediaNotificationEvent.Dismissed -> if (mode != MediaNotificationMode.Hidden) {
                     hide()
                     pause = true
+                    dismissedBy = event
                 }
                 MediaNotificationEvent.TaskRemoved ->
                     if (mode != MediaNotificationMode.Hidden && !status.carriesOn()) {
                         hide()
                         pause = true
+                        dismissedBy = event
                     }
                 MediaNotificationEvent.Closed -> {
                     hide()
@@ -94,7 +101,7 @@ internal class MediaNotificationMachine(
             }
         }
         val remaining = leaveForegroundAt?.let { maxOf(-it.elapsedNow(), Duration.ZERO) }
-        return MediaNotificationDecision(mode, pause, remaining)
+        return MediaNotificationDecision(mode, pause, remaining, dismissedBy)
     }
 
     private fun onStatus(next: PlaybackStatus) {

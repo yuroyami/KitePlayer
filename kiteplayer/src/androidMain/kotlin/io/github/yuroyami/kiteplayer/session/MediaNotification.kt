@@ -62,6 +62,15 @@ public data class MediaNotificationOptions(
     val wakeLocks: WakeLockPolicy = WakeLockPolicy.Network,
     /** What a screen reader says for each transport button. Pass translated ones. */
     val labels: MediaNotificationLabels = MediaNotificationLabels(),
+    /**
+     * Called on the main thread when the user puts the notification away (#427): a swipe, or
+     * removing the application from the recent apps screen while the player is not playing. The
+     * library has already paused the player and removed the notification, as it does without a
+     * callback; the reason tells a swipe from a press of pause, which also ends at Paused, so an
+     * application that reads a swipe as "I am done" can close the player and free what it holds.
+     * Removing the application while it plays leaves the sound going and calls nothing.
+     */
+    val onDismissed: ((MediaNotificationDismissal) -> Unit)? = null,
 ) {
     init {
         require(smallIcon != 0) { "the notification needs a small icon" }
@@ -69,6 +78,22 @@ public data class MediaNotificationOptions(
         require(notificationId != 0) { "Android refuses notification id 0 for a foreground service" }
         require(!pausedForegroundTimeout.isNegative()) { "the paused foreground timeout cannot be negative" }
     }
+}
+
+/** What the application is told of [decision], or null when the user put nothing away (#427). */
+internal fun dismissalOf(decision: MediaNotificationDecision): MediaNotificationDismissal? = when (decision.dismissedBy) {
+    MediaNotificationEvent.Dismissed -> MediaNotificationDismissal.Swiped
+    MediaNotificationEvent.TaskRemoved -> MediaNotificationDismissal.TaskRemoved
+    else -> null
+}
+
+/** How the user put the media notification away. See [MediaNotificationOptions.onDismissed]. */
+public enum class MediaNotificationDismissal {
+    /** The notification was swiped away. */
+    Swiped,
+
+    /** The application was removed from the recent apps screen while the player was not playing. */
+    TaskRemoved,
 }
 
 /** The names of the notification's transport buttons, which a screen reader says. English by default. */
@@ -227,7 +252,9 @@ internal class MediaNotificationHandle(
 
     init {
         manager.createNotificationChannel(
-            NotificationChannel(options.channelId, options.channelName, NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(options.channelId, options.channelName, NotificationManager.IMPORTANCE_LOW).apply {
+                if (playbackChannelHidesBadge(Build.VERSION.SDK_INT)) setShowBadge(false)
+            },
         )
         options.contentIntent?.let(session::setSessionActivity)
         onMain { if (!closed) MediaNotificationRegistry.attach(this) }
@@ -314,6 +341,8 @@ internal class MediaNotificationHandle(
         // The player may already be closed when an application closes it before this handle.
         if (decision.pause) runCatching { session.player.pause() }
         render()
+        // Last, so an application that closes the player from here finds the notification gone.
+        dismissalOf(decision)?.let { reason -> options.onDismissed?.invoke(reason) }
     }
 
     private fun render() {
@@ -395,6 +424,14 @@ internal class MediaNotificationHandle(
         if (Looper.myLooper() == Looper.getMainLooper()) block() else main.post(block)
     }
 }
+
+/**
+ * Whether the playback channel asks for no dot on the launcher icon. Android 8.0 and 8.1 put one there
+ * for every channel that does not ask, so a playing item looked like a message waiting; from Android 9
+ * the system leaves a media notification's dot off by itself (#426). A channel the application created
+ * first under the same id keeps its own choice, because Android does not change it on a second creation.
+ */
+internal fun playbackChannelHidesBadge(sdk: Int): Boolean = sdk < Build.VERSION_CODES.P
 
 /** Rounded up, so the timer never fires before the machine's own clock says the wait is over. */
 private fun Duration.inWholeMillisecondsRoundedUp(): Long = (inWholeMicroseconds + 999) / 1000

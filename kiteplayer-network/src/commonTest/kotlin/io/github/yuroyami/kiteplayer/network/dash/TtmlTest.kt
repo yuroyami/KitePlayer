@@ -98,6 +98,64 @@ class TtmlTest {
         assertEquals(listOf("a <i>b</i> <b><u>c</u></b>", "<i><b>whole </b></i><b>plain</b>"), cues(xml).map { it.third })
     }
 
+    /**
+     * A style that names itself is a loop, which TTML2 (10.4.1.3) calls an error. It is cut at the
+     * first repeat, so the style is read once. Followed nine levels deep instead, a style naming
+     * itself ten times cost about 10^9 visits and six seconds for one cue (#408).
+     */
+    @Test
+    fun aStyleThatNamesItselfIsReadOnce() {
+        val names = List(10) { "s" }.joinToString(" ")
+        val xml = tt(
+            """<p begin="0s" end="1s" style="s">ok</p>""",
+            head = """<styling><style xml:id="s" style="$names" tts:fontStyle="italic"/></styling>""",
+        )
+        val work = TtmlWork()
+        assertEquals(listOf("<i>ok</i>"), Ttml.cues(xml, work = work).map { it.text })
+        assertEquals(1, work.styleVisits, "the style was read more than once")
+    }
+
+    /** A loop through two styles keeps what each one sets, in a fixed order, and reads each once. */
+    @Test
+    fun aLoopThroughTwoStylesIsCutAtItsFirstRepeat() {
+        val xml = tt(
+            """<p begin="0s" end="1s" style="a">ok</p>""",
+            head = """<styling>
+                <style xml:id="a" style="b" tts:fontStyle="italic"/>
+                <style xml:id="b" style="a" tts:fontWeight="bold"/>
+            </styling>""",
+        )
+        val work = TtmlWork()
+        assertEquals(listOf("<i><b>ok</b></i>"), Ttml.cues(xml, work = work).map { it.text })
+        assertEquals(2, work.styleVisits)
+    }
+
+    /**
+     * Nine layers of four styles, each naming all four of the layer below, is a legal document
+     * whose chains fan out to 4^9 paths. Each style is still read once per document, and every cue
+     * reuses what the first one resolved.
+     */
+    @Test
+    fun aWideStyleGraphIsReadOncePerStyleForTheWholeDocument() {
+        val layers = 9
+        val styling = buildString {
+            for (layer in 0 until layers) {
+                for (i in 0 until 4) {
+                    val below = if (layer + 1 < layers) (0 until 4).joinToString(" ") { "s${layer + 1}_$it" } else ""
+                    val own = if (layer + 1 == layers && i == 3) """ tts:textDecoration="underline"""" else ""
+                    append("""<style xml:id="s${layer}_$i" style="$below"$own/>""")
+                }
+            }
+        }
+        val body = (0 until 100).joinToString("") { """<p begin="${it}s" end="${it + 1}s" style="s0_0">c$it</p>""" }
+        val work = TtmlWork()
+        val cues = Ttml.cues(tt(body, head = "<styling>$styling</styling>"), work = work)
+        assertEquals(100, cues.size)
+        assertEquals("<u>c0</u>", cues.first().text, "the deepest style's underline reaches the cue")
+        // s0_0, then the four styles of each layer below it.
+        assertEquals(1 + (layers - 1) * 4, work.styleVisits, "each style is read once, for every cue together")
+    }
+
     @Test
     fun textThatLooksLikeMarkupIsEscaped() {
         val xml = tt("""<div><p begin="0s" end="1s">a &lt; b &amp; c &gt; d</p></div>""")

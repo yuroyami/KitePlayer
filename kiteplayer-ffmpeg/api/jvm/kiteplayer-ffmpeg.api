@@ -29,20 +29,28 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public fun getChapters ()Ljava/util/List;
 	public fun getContainerBitrateBps ()Ljava/lang/Long;
 	public fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
+	public fun getDurationIsEstimate ()Z
 	public final fun getFirstAudio ()Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
 	public final fun getFirstVideo ()Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
 	public fun getMetadata ()Ljava/util/Map;
 	public final fun getOnWarning ()Lkotlin/jvm/functions/Function1;
+	public fun getPrograms ()Ljava/util/List;
+	public fun getRealTime ()Z
 	public fun getRecordingPath ()Ljava/lang/String;
 	public fun getSeekable ()Z
 	public fun getSelectedVariant ()Ljava/lang/Integer;
+	public fun getSeparateAudioRenditions ()Z
 	public fun getStreamDivergences ()Ljava/util/List;
 	public fun getStreams ()Ljava/util/List;
+	public fun getThumbnails ()Lio/github/yuroyami/kiteplayer/spi/PlayerThumbnails;
 	public fun getTimestampsMayJump ()Z
 	public fun getVariants ()Ljava/util/List;
 	public fun interrupt ()Z
+	public fun pauseReading ()Z
 	public fun readPacket (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun resumeReading ()Z
 	public fun seekToKeyframe-HwpeAyI (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun seekToKeyframe-h5-aQVI (JLio/github/yuroyami/kiteplayer/KeyframeChoice;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun selectStreams (Ljava/util/Set;)V
 	public final fun setOnWarning (Lkotlin/jvm/functions/Function1;)V
 	public fun startRecording (Ljava/lang/String;)V
@@ -66,10 +74,12 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoDecoderFa
 }
 
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame, io/github/yuroyami/kiteplayer/spi/VideoFrame {
-	public synthetic fun <init> (Lio/github/yuroyami/kiteffmpeg/Frame;JLio/github/yuroyami/kiteplayer/Pts;JIZLio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteffmpeg/Frame;JLio/github/yuroyami/kiteplayer/Pts;JIZLio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;Ljava/lang/Float;Lio/github/yuroyami/kiteplayer/PictureCrop;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
 	public fun copyPlane (I[BI)V
+	public fun getClosedCaptions ()[B
 	public fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
+	public fun getCrop ()Lio/github/yuroyami/kiteplayer/PictureCrop;
 	public fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public fun getGeneration-exH1Oj8 ()J
 	public fun getHardwareSurface ()Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
@@ -81,6 +91,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : i
 	public fun getPlaneFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
 	public fun getPts-BBkgT00 ()J
 	public fun getRotationDegrees ()I
+	public fun getSceneMaxNits ()Ljava/lang/Float;
 	public fun getSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
 	public fun planeHeight (I)I
 	public fun planeStride (I)I

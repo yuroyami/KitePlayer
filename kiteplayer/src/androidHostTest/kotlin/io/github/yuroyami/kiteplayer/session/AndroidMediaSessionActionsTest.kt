@@ -62,11 +62,17 @@ class AndroidMediaSessionActionsTest {
     fun `next and previous follow the queue and not the file`() {
         assertEquals(false, actionsFor(state()).has(PlaybackState.ACTION_SKIP_TO_NEXT))
         assertEquals(true, actionsFor(state(hasNext = true)).has(PlaybackState.ACTION_SKIP_TO_NEXT))
-        assertEquals(false, actionsFor(state()).has(PlaybackState.ACTION_SKIP_TO_PREVIOUS))
+        assertEquals(false, actionsFor(state(canSeek = false)).has(PlaybackState.ACTION_SKIP_TO_PREVIOUS))
         assertEquals(
             true,
-            actionsFor(state(hasPrevious = true)).has(PlaybackState.ACTION_SKIP_TO_PREVIOUS),
+            actionsFor(state(canSeek = false, hasPrevious = true)).has(PlaybackState.ACTION_SKIP_TO_PREVIOUS),
         )
+    }
+
+    // Previous also starts the song again, so a single seekable file offers it too (#424).
+    @Test
+    fun previousIsOfferedForASingleSeekableFile() {
+        assertEquals(true, actionsFor(state(canSeek = true)).has(PlaybackState.ACTION_SKIP_TO_PREVIOUS))
     }
 
     @Test

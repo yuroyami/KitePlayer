@@ -42,6 +42,19 @@ class MediaSessionStateTest {
         queueOrder = queueOrder,
     )
 
+    /** A radio station's song is the title, and the station moves to the artist line (#423). */
+    @Test
+    fun aStationsSongIsTheTitleAndTheStationItsArtist() {
+        val radio = MediaItem(uri = "https://fm.test/live", title = "Jazz FM")
+        val playing = snapshot(media = radio, metadata = mapOf("StreamTitle" to "Miles - So What", "icy-name" to "Jazz 24")).toMediaSessionState(Progress())
+        assertEquals("Miles - So What", playing.title)
+        assertEquals("Jazz FM", playing.artist)
+        val unnamed = snapshot(media = MediaItem(uri = "https://fm.test/live"), metadata = mapOf("StreamTitle" to "Song", "icy-name" to "Jazz 24"))
+        assertEquals("Jazz 24", unnamed.toMediaSessionState(Progress()).artist, "a station the item names nothing takes its own name")
+        val between = snapshot(media = radio, metadata = mapOf("icy-name" to "Jazz 24")).toMediaSessionState(Progress())
+        assertEquals("Jazz FM", between.title, "with no song the item's title stands")
+    }
+
     @Test
     fun `a paused player early in a two item queue`() {
         val state = snapshot(queueSize = 2, queueIndex = 0, queueOrder = listOf(0, 1))

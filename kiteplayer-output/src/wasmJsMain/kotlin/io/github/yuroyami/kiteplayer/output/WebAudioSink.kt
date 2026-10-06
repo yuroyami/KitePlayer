@@ -38,10 +38,10 @@ import kotlin.coroutines.coroutineContext
  * ### The one surprise a caller must know about
  *
  * A browser starts every `AudioContext` suspended and only a real user gesture may resume it. Until
- * the page has had a click or a key, this sink hands audio to a device that plays nothing, its
- * queue fills, the feeder backs off, and because the engine's clock is anchored on consumed audio,
- * playback sits at position zero. That is correct behaviour and not a hang. Call [start] from a
- * gesture handler, or expect a play button to be part of the page.
+ * the page has had a click or a key, the context's `resume()` may stay pending, so [start] waits
+ * for it, and because the engine's clock is anchored on consumed audio, playback sits at position
+ * zero. That is correct behaviour and not a hang, and the wait ends as soon as its caller is
+ * cancelled. Call [start] from a gesture handler, or expect a play button to be part of the page.
  */
 internal class WebAudioSink(
     private val device: WebAudioDevice,
@@ -86,6 +86,9 @@ internal class WebAudioSink(
         feeder = null
         device.flush()
     }
+
+    /** Suspending the context cuts the sound where it is, so the engine fades it first (#486). */
+    override val cutsSoundOnStop: Boolean get() = true
 
     override suspend fun setPaused(paused: Boolean): Boolean {
         if (paused) {

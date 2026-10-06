@@ -82,6 +82,16 @@ public interface SubtitleTypesetter : AutoCloseable {
  * [fontScale] is the viewer's size multiplier over the authored size. [linePosition] is where the
  * default bottom stack anchors as a fraction of the picture height: 1.0 is the authored bottom
  * edge, 0.5 mid-screen. Both are the same knobs the Kotlin tier honours.
+ *
+ * [videoColor] is the colour of the video the overlays are drawn over, which a typesetter matches
+ * the script's colours to through the script's `YCbCr Matrix` header (#499): each colour goes from
+ * RGB to YCbCr with the header's matrix and range, rounded to 8-bit steps, and back to RGB with
+ * these. A header of `None`, one that cannot be read, and a [videoColor] whose matrix is the
+ * header's own at the same range leave a colour as it is, and so does a null [videoColor]. The
+ * engine gives null when [SubtitleConfig.assColorMatching][io.github.yuroyami.kiteplayer.SubtitleConfig.assColorMatching]
+ * is off, when there is no picture, and for HDR video and video that is not YCbCr, so a typesetter
+ * converts whenever it is given a colour, to the matrix and the range given. A matrix the file left
+ * unstated arrives already guessed by [ColorSpaceInfo.guessFor].
  */
 public data class TypesetFrame(
     val width: Int,
@@ -94,6 +104,7 @@ public data class TypesetFrame(
     val marginRight: Int = 0,
     val fontScale: Float = 1f,
     val linePosition: Float = 1f,
+    val videoColor: ColorSpaceInfo? = null,
 ) {
     init {
         require(width > 0 && height > 0) { "a typeset frame needs a positive surface, got ${width}x$height" }

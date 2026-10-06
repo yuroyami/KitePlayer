@@ -1,12 +1,14 @@
 package io.github.yuroyami.kiteplayer.io
 
 import android.content.ContentResolver
+import android.content.Context
 import android.content.res.AssetFileDescriptor
 import android.content.res.AssetManager
 import android.net.Uri
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoFactory
 import java.io.FileInputStream
+import java.io.FileNotFoundException
 import java.nio.channels.FileChannel
 
 /**
@@ -28,6 +30,31 @@ public fun MediaIo.Companion.ofAsset(assets: AssetManager, name: String): MediaI
     assets.openFd(name).toMediaIo()
 }
 
+/**
+ * Plays the address a Compose Multiplatform resource has on Android (#457), the
+ * `file:///android_asset/composeResources/...` that `Res.getUri` returns there, from the app's
+ * assets through [context]. An asset stored uncompressed reads by position, as through [ofAsset];
+ * one stored compressed reads as a stream that seeks by opening it again, which costs little for a
+ * clip an app bundles. Null for any other address, which then plays as it is.
+ *
+ * The player does this by itself for an item with no reader of its own, so `MediaItem(Res.getUri(...))`
+ * plays as it is. This door is for an app that configures a resolver of its own, which the player
+ * asks first and alone, or that removed the library's context provider from its manifest.
+ */
+public fun MediaIo.Companion.ofResourceUri(context: Context, uri: String): MediaIoFactory? {
+    val name = assetNameOf(uri) ?: return null
+    val assets = context.applicationContext.assets
+    return MediaIoFactory {
+        try {
+            assets.openFd(name).toMediaIo()
+        } catch (compressed: FileNotFoundException) {
+            // openFd answers so for an asset stored compressed, and open still reads it.
+            val size = assets.open(name).use { it.available().toLong() }
+            ReopeningStreamMediaIo({ assets.open(name) }, size)
+        }
+    }
+}
+
 /** Reads the window of this descriptor by position. Closing the reader closes the descriptor. */
 internal fun AssetFileDescriptor.toMediaIo(): MediaIo {
     var channel: FileChannel? = null
@@ -39,7 +66,9 @@ internal fun AssetFileDescriptor.toMediaIo(): MediaIo {
         // changed between Android versions, and this one reads at absolute positions on all of
         // them. It never closes the descriptor, so this AssetFileDescriptor stays the one owner.
         val opened = FileInputStream(fileDescriptor).channel.also { channel = it }
-        val length = if (declaredLength >= 0) declaredLength else opened.size() - startOffset
+        // A descriptor with no stated length reads the whole file as it stands, so one still being
+        // written reads on (#430).
+        val length = declaredLength.takeIf { it >= 0 }
         val owner = AutoCloseable {
             opened.close()
             close()

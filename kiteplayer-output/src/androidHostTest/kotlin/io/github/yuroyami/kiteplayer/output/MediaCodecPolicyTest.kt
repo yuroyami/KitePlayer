@@ -47,4 +47,36 @@ class DirectSurfaceGeometryTest {
         kotlin.test.assertNull(directSurfaceGeometryRefusal(mirrored, applyCodecRotation = false))
         kotlin.test.assertNull(directSurfaceGeometryRefusal(stream, applyCodecRotation = true))
     }
+
+    @Test
+    fun `the viewer's mirror is refused where the codec turns the picture and a mirror undone is kept`() {
+        val viewerMirror = io.github.yuroyami.kiteplayer.VideoTransform(mirrorHorizontal = true)
+        assertTrue(
+            directSurfaceGeometryRefusal(stream, applyCodecRotation = true, viewerMirror).orEmpty().contains("viewer"),
+        )
+        // A mirrored stream mirrored back by the viewer shows unmirrored, which the codec can draw.
+        kotlin.test.assertNull(directSurfaceGeometryRefusal(stream.copy(mirrored = true), true, viewerMirror))
+        // A turn alone is the codec's to apply.
+        kotlin.test.assertNull(
+            directSurfaceGeometryRefusal(stream, true, io.github.yuroyami.kiteplayer.VideoTransform(rotationDegrees = 90)),
+        )
+        kotlin.test.assertNull(directSurfaceGeometryRefusal(stream, applyCodecRotation = false, viewerMirror))
+    }
+}
+
+class DirectSurfaceDolbyVisionTest {
+    private val stream = io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo(
+        index = 0,
+        kind = io.github.yuroyami.kiteplayer.TrackKind.Video,
+        codec = "hevc",
+    )
+
+    @Test
+    fun `a Dolby Vision base layer that cannot play alone is refused and one that can is kept`() {
+        val profile5 = stream.copy(dolbyVision = io.github.yuroyami.kiteplayer.DolbyVisionInfo(profile = 5, level = 6, baseLayerCompatibility = 0))
+        val profile81 = stream.copy(dolbyVision = io.github.yuroyami.kiteplayer.DolbyVisionInfo(profile = 8, level = 6, baseLayerCompatibility = 1))
+        assertTrue(directSurfaceDolbyVisionRefusal(profile5).orEmpty().contains("profile 5"))
+        kotlin.test.assertNull(directSurfaceDolbyVisionRefusal(profile81))
+        kotlin.test.assertNull(directSurfaceDolbyVisionRefusal(stream))
+    }
 }

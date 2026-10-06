@@ -31,6 +31,8 @@ public final class io/github/yuroyami/kiteplayer/network/KtorMediaIo : io/github
 	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setWarningSink (Lkotlin/jvm/functions/Function1;)V
+	public fun takeRefusal ()Lio/github/yuroyami/kiteplayer/SourceRefusal;
+	public fun takeTags ()Ljava/util/Map;
 }
 
 public final class io/github/yuroyami/kiteplayer/network/KtorMediaIo$Companion {
@@ -87,11 +89,43 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashAdaptationSet 
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/network/dash/DashBaseUrl {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/Integer;
+	public final fun component4 ()Ljava/lang/Integer;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;)Lio/github/yuroyami/kiteplayer/network/dash/DashBaseUrl;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/network/dash/DashBaseUrl;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/network/dash/DashBaseUrl;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPriority ()Ljava/lang/Integer;
+	public final fun getServiceLocation ()Ljava/lang/String;
+	public final fun getUrl ()Ljava/lang/String;
+	public final fun getWeight ()Ljava/lang/Integer;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/network/dash/DashBaseUrls {
+	public fun <init> (Ljava/lang/String;Ljava/util/List;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/util/List;)Lio/github/yuroyami/kiteplayer/network/dash/DashBaseUrls;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/network/dash/DashBaseUrls;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/network/dash/DashBaseUrls;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getLocations ()Ljava/util/List;
+	public final fun getPrimary ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/network/dash/DashManifest {
-	public fun <init> (ZLjava/lang/Long;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;)V
-	public synthetic fun <init> (ZLjava/lang/Long;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (ZLjava/lang/Long;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (ZLjava/lang/Long;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Z
 	public final fun component10 ()Ljava/util/List;
+	public final fun component11 ()Ljava/util/List;
 	public final fun component2 ()Ljava/lang/Long;
 	public final fun component3 ()Ljava/util/List;
 	public final fun component4 ()Ljava/lang/String;
@@ -100,9 +134,10 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashManifest {
 	public final fun component7 ()Ljava/lang/Long;
 	public final fun component8 ()Ljava/lang/Long;
 	public final fun component9 ()Ljava/lang/String;
-	public final fun copy (ZLjava/lang/Long;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;)Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;
-	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;ZLjava/lang/Long;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;
+	public final fun copy (ZLjava/lang/Long;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;Ljava/util/List;)Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;ZLjava/lang/Long;Ljava/util/List;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAlternativeBaseUrls ()Ljava/util/List;
 	public final fun getAvailabilityStartTimeMicros ()Ljava/lang/Long;
 	public final fun getBaseUrl ()Ljava/lang/String;
 	public final fun getDurationMicros ()Ljava/lang/Long;
@@ -137,6 +172,8 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashMediaIo : io/g
 	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setWarningSink (Lkotlin/jvm/functions/Function1;)V
+	public fun takeRefusal ()Lio/github/yuroyami/kiteplayer/SourceRefusal;
+	public fun takeTags ()Ljava/util/Map;
 }
 
 public final class io/github/yuroyami/kiteplayer/network/dash/DashMediaIoKt {
@@ -165,14 +202,16 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashPeriod {
 }
 
 public final class io/github/yuroyami/kiteplayer/network/dash/DashRepresentation {
-	public fun <init> (Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentTemplate;Ljava/util/List;Ljava/lang/String;Ljava/lang/Double;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentList;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentBase;Ljava/lang/Integer;)V
-	public synthetic fun <init> (Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentTemplate;Ljava/util/List;Ljava/lang/String;Ljava/lang/Double;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentList;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentBase;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentTemplate;Ljava/util/List;Ljava/lang/String;Ljava/lang/Double;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentList;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentBase;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashTiles;)V
+	public synthetic fun <init> (Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentTemplate;Ljava/util/List;Ljava/lang/String;Ljava/lang/Double;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentList;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentBase;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashTiles;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component10 ()Ljava/lang/String;
 	public final fun component11 ()Ljava/lang/Double;
 	public final fun component12 ()Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentList;
 	public final fun component13 ()Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentBase;
 	public final fun component14 ()Ljava/lang/Integer;
+	public final fun component15 ()Ljava/lang/String;
+	public final fun component16 ()Lio/github/yuroyami/kiteplayer/network/dash/DashTiles;
 	public final fun component2 ()J
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/lang/String;
@@ -181,8 +220,8 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashRepresentation
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentTemplate;
 	public final fun component9 ()Ljava/util/List;
-	public final fun copy (Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentTemplate;Ljava/util/List;Ljava/lang/String;Ljava/lang/Double;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentList;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentBase;Ljava/lang/Integer;)Lio/github/yuroyami/kiteplayer/network/dash/DashRepresentation;
-	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/network/dash/DashRepresentation;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentTemplate;Ljava/util/List;Ljava/lang/String;Ljava/lang/Double;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentList;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentBase;Ljava/lang/Integer;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/network/dash/DashRepresentation;
+	public final fun copy (Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentTemplate;Ljava/util/List;Ljava/lang/String;Ljava/lang/Double;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentList;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentBase;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashTiles;)Lio/github/yuroyami/kiteplayer/network/dash/DashRepresentation;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/network/dash/DashRepresentation;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentTemplate;Ljava/util/List;Ljava/lang/String;Ljava/lang/Double;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentList;Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentBase;Ljava/lang/Integer;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashTiles;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/network/dash/DashRepresentation;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAudioChannels ()Ljava/lang/Integer;
 	public final fun getBandwidth ()J
@@ -197,6 +236,8 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashRepresentation
 	public final fun getSegmentList ()Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentList;
 	public final fun getSegmentTemplate ()Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentTemplate;
 	public final fun getSegmentUrls ()Ljava/util/List;
+	public final fun getTiles ()Lio/github/yuroyami/kiteplayer/network/dash/DashTiles;
+	public final fun getVideoRange ()Ljava/lang/String;
 	public final fun getWidth ()Ljava/lang/Integer;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -300,6 +341,19 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashSegmentUrl {
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getRange ()Lkotlin/ranges/LongRange;
 	public final fun getUrl ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/network/dash/DashTiles {
+	public fun <init> (II)V
+	public final fun component1 ()I
+	public final fun component2 ()I
+	public final fun copy (II)Lio/github/yuroyami/kiteplayer/network/dash/DashTiles;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/network/dash/DashTiles;IIILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/network/dash/DashTiles;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getColumns ()I
+	public final fun getRows ()I
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

@@ -28,7 +28,7 @@ import kotlin.test.assertTrue
  *
  * The one difference from the blit is the sampler's type. MediaCodec is the only thing that can
  * fill an external texture, so a test holding one could not put a known pattern in; the body is
- * compiled over an ordinary texture instead through [GlState.TEST_FRAGMENT_SHADER]. That header
+ * compiled over an ordinary texture instead through [GlState.PLAIN_FRAGMENT_SHADER]. That header
  * is two lines and the arithmetic under it is shared verbatim.
  */
 @RunWith(AndroidJUnit4::class)
@@ -115,7 +115,7 @@ class AndroidGlRenderQualityDeviceTest {
             val program = GLES20.glCreateProgram()
             GLES20.glAttachShader(program, compile(GLES20.GL_VERTEX_SHADER, GlState.VERTEX_SHADER))
             GLES20.glAttachShader(
-                program, compile(GLES20.GL_FRAGMENT_SHADER, GlState.TEST_FRAGMENT_SHADER),
+                program, compile(GLES20.GL_FRAGMENT_SHADER, GlState.PLAIN_FRAGMENT_SHADER),
             )
             GLES20.glLinkProgram(program)
             val status = IntArray(1)

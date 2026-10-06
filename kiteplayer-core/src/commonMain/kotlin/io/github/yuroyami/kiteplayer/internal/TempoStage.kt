@@ -74,8 +74,8 @@ internal class TempoStage(
      */
     var speed: Double = 1.0
         set(value) {
-            require(value.isFinite() && value >= MIN_SPEED && value <= MAX_SPEED) {
-                "speed must be within $MIN_SPEED..$MAX_SPEED, was $value"
+            require(value.isFinite() && value >= STAGE_MIN_SPEED && value <= STAGE_MAX_SPEED) {
+                "speed must be within $STAGE_MIN_SPEED..$STAGE_MAX_SPEED, was $value"
             }
             field = value
         }
@@ -128,7 +128,7 @@ internal class TempoStage(
     private val searchHalf = max(1, (sampleRate * SEARCH_HALF_SECONDS).roundToInt())
     private val excludeHalf = max(1, (sampleRate * EXCLUDE_HALF_SECONDS).roundToInt())
     private val coarseStep = max(1, (sampleRate / COARSE_RATE).roundToInt())
-    private val foldReachMax = ceil(FOLD_ZERO_CROSSINGS * MAX_SPEED).toInt() + 1
+    private val foldReachMax = ceil(FOLD_ZERO_CROSSINGS * STAGE_MAX_SPEED).toInt() + 1
 
     /** Frames kept behind the read position while bypassing, so a later stretch or fold has history. */
     private val history = max(searchHalf, foldReachMax) + 1
@@ -880,6 +880,14 @@ internal class TempoStage(
         /** The supported range. */
         const val MIN_SPEED: Double = 0.25
         const val MAX_SPEED: Double = 4.0
+
+        /**
+         * The range one stage takes, an octave past the supported one either way, because a pitch
+         * shift asks its stretch for the speed over the pitch (#465): a speed of 4 an octave down
+         * stretches at 8.
+         */
+        const val STAGE_MIN_SPEED: Double = MIN_SPEED / 2
+        const val STAGE_MAX_SPEED: Double = MAX_SPEED * 2
 
         /** Overlap-add block length. 20 ms holds a low voice's period twice and smears no attack. */
         private const val WINDOW_SECONDS = 0.020

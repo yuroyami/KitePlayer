@@ -12,7 +12,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * A clock that reads the test scheduler's virtual time.
@@ -53,6 +55,13 @@ internal class CoreHarness(
     sinkAccepts: io.github.yuroyami.kiteplayer.spi.AudioFormat? = null,
     /** The dispatcher every engine worker runs on, over the test's own scheduler. */
     engineDispatcher: (TestCoroutineScheduler) -> CoroutineDispatcher = { StandardTestDispatcher(it) },
+    /**
+     * A lane of its own for the session release at close, as a platform gives it, or null to keep it
+     * on [engineDispatcher] with every other lane.
+     */
+    releaseDispatcher: CoroutineContext? = null,
+    /** How long a close waits for the release before it reports a compromised runtime: production's ten seconds. */
+    closeDeadline: Duration = 10.seconds,
 ) {
     val scheduler: TestCoroutineScheduler = scope.testScheduler
     val clock: VirtualClock = VirtualClock(scheduler)
@@ -74,8 +83,14 @@ internal class CoreHarness(
         config = config,
         backend = backend,
         output = output,
-        dispatchers = PlaybackDispatchers.sharing(engineDispatcher(scheduler)),
+        dispatchers = PlaybackDispatchers.sharing(engineDispatcher(scheduler)).let { shared ->
+            if (releaseDispatcher == null) shared else object : PlaybackDispatchers by shared {
+                override val release: CoroutineContext get() = releaseDispatcher
+            }
+        },
         closeDispatchers = false,
+        closeDeadline = closeDeadline,
+        recordTransitions = true,
         // Under the test's own background lifetime, so a test that fails an assertion before it closes
         // still leaves no worker running. Without it, one failed assertion leaves five loops on the
         // scheduler and the test framework drains them for ever.

@@ -20,6 +20,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import org.junit.Assume.assumeTrue
 
 /**
  * The end-to-end desktop proof: one dependency line, a real file, real audio out, real progress.
@@ -38,19 +39,19 @@ class DesktopPlaybackTest {
 
     @Test
     fun theDefaultDesktopStackPlaysARealFileAndTheClockMoves() = runBlocking {
-        val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
+        val file = requireTestMedia(media, "no $MEDIA to play; run scripts/testmedia.sh")
         playsAndTheClockMoves(MediaItem(file.absolutePath))
     }
 
     @Test
     fun theSameFilePlaysThroughTheFileDoor() = runBlocking {
-        val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
+        val file = requireTestMedia(media, "no $MEDIA to play; run scripts/testmedia.sh")
         playsAndTheClockMoves(MediaItem.from(MediaIo.ofFile(file), file.name))
     }
 
     @Test
     fun aPlayerBoundToAnOutputDeviceThatIsNotThereFailsTheOpenTyped() = runBlocking {
-        val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
+        val file = requireTestMedia(media, "no $MEDIA to play; run scripts/testmedia.sh")
         val defaults = assertNotNull(KitePlayerPlatform.backendsOrNull(), "no default desktop backends")
         val player = KitePlayer.create(
             PlayerConfig(backends = defaults.copy(output = DesktopOutputBackend.withAudioOutputDevice("no such device"))),
@@ -65,7 +66,7 @@ class DesktopPlaybackTest {
     }
 
     private suspend fun playsAndTheClockMoves(item: MediaItem) {
-        if (AudioSystem.getMixerInfo().isEmpty()) return println("SKIP: no audio mixer")
+        assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
 
         val player = KitePlayer()
         try {
@@ -118,8 +119,8 @@ class DesktopPlaybackTest {
             System.getenv("KITEPLAYER_TESTMEDIA")?.let { File(it, QUEUE_MEDIA) },
             File("testmedia/$QUEUE_MEDIA"),
             File("../testmedia/$QUEUE_MEDIA"),
-        ).filterNotNull().firstOrNull { it.isFile } ?: return@runBlocking println("SKIP: no $QUEUE_MEDIA to play")
-        if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
+        ).filterNotNull().firstOrNull { it.isFile }.let { requireTestMedia(it, "no $QUEUE_MEDIA to play; run scripts/testmedia.sh") }
+        assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
 
         val defaults = assertNotNull(KitePlayerPlatform.backendsOrNull(), "no default desktop backends")
         val counts = LineCounts()

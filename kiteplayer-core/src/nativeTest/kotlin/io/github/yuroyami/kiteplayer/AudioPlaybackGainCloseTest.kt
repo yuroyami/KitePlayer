@@ -75,6 +75,7 @@ private class HeldGainRing(override val format: AudioFormat) : AudioRingHandle {
     @Volatile var gainCalls = 0
 
     override val underruns: Long get() = 0
+    override val limitedFrames: Long get() = 0
     override val bufferedFrames: Int get() = 0
     override val bufferedUs: Long get() = 0
 
@@ -90,6 +91,10 @@ private class HeldGainRing(override val format: AudioFormat) : AudioRingHandle {
             while (!releaseGain) usleep(100u)
         }
     }
+
+    override fun hold(held: Boolean) = Unit
+
+    override val silent: Boolean get() = false
 
     override fun markEnding() = Unit
 

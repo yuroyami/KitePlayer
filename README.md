@@ -93,6 +93,9 @@ video decoder.
   what FFmpeg decodes.
 - Audio: AAC, MP3, Opus, Vorbis, FLAC, ALAC, AC-3, E-AC-3, DTS, TrueHD and PCM.
 - Containers: MKV, WebM, MP4, MOV, MPEG-TS, AVI, FLV, VOB, WMV, WAV and raw streams.
+- A transport stream with several channels, such as a DVB recording or an IPTV multiplex, plays one
+  channel's tracks together. `Tracks.programs` lists the channels, `DemuxPolicy.program` picks one
+  before the open and `KitePlayer.selectProgram` switches while playing.
 - Hardware decoding through MediaCodec on Android and VideoToolbox on Apple, with software decoding
   when the device cannot. AV1 decodes with dav1d where the device has no AV1 hardware.
 - The web build carries a smaller set: H.264, HEVC, VP9, AAC, MP3, Opus, Vorbis, FLAC and PCM, in
@@ -105,9 +108,12 @@ video decoder.
 
 - True HDR: HDR10 and HLG show as HDR on a display that can show it, through Metal on a Mac or an
   iPhone and through `KitePlayerView` on an Android HDR display. Elsewhere they are tone mapped.
+- Dolby Vision: profile 5 and 10.0 are composed into HDR10 on the processor, which keeps up at
+  1080p, and each scene's own brightness guides the tone mapping.
 - Picture-in-picture on Android, iOS, macOS and in the browser, and a floating window on the
   desktop JVM.
-- Rotation and mirroring from the file, on every renderer.
+- Rotation and mirroring from the file, on every renderer, and the viewer's own quarter turns and
+  mirrors on top.
 - Fit, fill and stretch, zoom, pan and a forced aspect ratio. Brightness, contrast, saturation and
   hue.
 - Dithering, debanding and a sharper scaler, on Apple's Metal renderer and Android's GPU renderer.
@@ -126,6 +132,8 @@ video decoder.
   gap.
 - A ten band equaliser with a preamp, balance, ReplayGain, volume up to twice the normal level
   through a limiter, audio delay, and a sleep timer that fades out.
+- A stereo mode: mono, left only, right only or swapped, after the downmix, with no click on a
+  change ([#462](https://github.com/yuroyami/KitePlayer/issues/462)).
 - Surround folds into the speakers the device has, and mono or stereo can fill a surround device.
 - A choice of output device on macOS and the desktop JVM.
 - Waveforms, and an optional audio visualiser for media with no picture.
@@ -137,7 +145,7 @@ video decoder.
 
 - ASS and SSA drawn by libass as authored: signs, karaoke, animated transforms and the fonts the
   file carries.
-- SubRip and WebVTT, and Blu-ray (PGS), DVD, DVB and XSUB image subtitles.
+- SubRip and WebVTT, DVB teletext, and Blu-ray (PGS), DVD, DVB and XSUB image subtitles.
 - External subtitle files that load during playback, and a second subtitle track at the same time.
 - Delay, scale, position, style and a safe area that keeps text out of cutouts and controls.
 
@@ -151,12 +159,15 @@ video decoder.
 - HTTP and HTTPS with your headers, through OkHttp on Android and the JVM and NSURLSession on
   Apple.
 - HLS: master playlists, a choice of variant, automatic steps down and up with the network rate,
-  MPEG-TS and fMP4 segments, AES-128, separate audio and subtitle renditions, and live playlists.
+  MPEG-TS and fMP4 segments, AES-128, separate audio and subtitle renditions, IMSC (TTML)
+  subtitle renditions, served to FFmpeg as WebVTT, backup variants tried when a server fails, and
+  live playlists. A DASH manifest's backup `BaseURL`s are tried the same way.
 - DASH through the HLS path, for fMP4, MPEG-TS and WebM segments: separate video, audio and
   subtitle sets, seeking, a variant for each video representation, segment indexes of single
   files, live manifests, and manifests of several Periods, joined into one presentation. TTML and
   MP4 subtitle sets play as WebVTT. A DASH or HLS address plays as it is, recognised by its content
   type, its extension or its first bytes.
+- Lists of streams, as radio stations hand them out: a PLS file, or an M3U list that is not HLS.
 - Files, memory, bytes that your code pushes, streams, and Android content URIs and assets.
 - Recording of what plays into a Matroska file, with no re-encode.
 
@@ -317,8 +328,8 @@ the worker player.
 leave the page's thread free (#100). The worker draws on the canvas and sends its sound straight to
 the page's audio device, and it plays `http`, `https` and `blob` addresses. It loads a third module:
 unpack `kiteplayer-wasm-js-<version>-web.zip` beside `index.html` too, for
-`kiteplayer-web-worker.mjs` and the three files beside it. With gzip it is about 1.21 MiB to
-download, and CI holds it to 1.25 MiB. The worker player has the calls and flows of `KitePlayer`
+`kiteplayer-web-worker.mjs` and the three files beside it. With gzip it is about 0.50 MiB to
+download, and CI holds it to 0.53 MiB. The worker player has the calls and flows of `KitePlayer`
 with the same names, except those its KDoc lists, such as `captureFrame` and recording. A setter
 it refuses arrives on `events` as `CommandRefused` rather than throwing at the call. An item, or an
 external subtitle, with a reader of its own cannot cross to the worker; give it an address. The
@@ -408,6 +419,11 @@ A player from `KitePlayer()` gives the views their renderer. A player built with
 on backends of your own also needs `view.installMobileRenderer()`, or `installDesktopRenderer()` on
 the desktop, from `io.github.yuroyami.kiteplayer.mobile`.
 
+While a video plays on screen, the display stays awake: every view, `KitePlayerVideo`, the Mac's
+`AppKitVideoRenderer` and the web's canvas renderers hold it, and let it sleep at a pause, the end,
+or with sound only. Pass `keepDisplayAwake = false` to turn that off. The desktop JVM has no way to
+hold its display, so there it does nothing.
+
 </details>
 
 ### ❸ Open something
@@ -471,7 +487,11 @@ such as `play()`, `pause()` and `setVolume(float)`, is on `getPlayer()`.
 ## Media that is not a URL
 
 A file path or a URL needs nothing more. `MediaItem("/sdcard/movie.mkv")` goes straight to
-FFmpeg's own file reader, which is the fastest way to read a local file.
+FFmpeg's own file reader, which is the fastest way to read a local file. So does the address a
+Compose Multiplatform resource has, on every target: `MediaItem(Res.getUri("files/intro.mp4"))`
+plays the bundled file, from the app's assets on Android and from the app's jar on the desktop.
+On Android that reads the assets through the application context, which a small content provider
+of `kiteplayer-io` keeps from the moment the app starts, as Compose's own resources do.
 
 For anything else, use a **door**: a function that turns what you have into a `MediaIoFactory`
 for the item's `io` field. Each open of the item gets a new reader from it, because a track switch,
@@ -486,6 +506,7 @@ a loop or a recovery opens the item again.
 | An `InputStream` | `MediaIo.ofStream { openStream() }` | <kbd>JVM</kbd> <kbd>Android</kbd> |
 | A `content://` URI, such as one from the file picker | `MediaIo.ofUri(contentResolver, uri)` | <kbd>Android</kbd> |
 | A file in the app's `assets` | `MediaIo.ofAsset(assets, "clip.mp4")` | <kbd>Android</kbd> |
+| A Compose Multiplatform resource's `Res.getUri` address, when you set a resolver of your own | `MediaIo.ofResourceUri(context, uri)`, `MediaIo.ofResourceUri(uri)` | <kbd>Android</kbd> <kbd>JVM</kbd> |
 | A path that every read must pass through Kotlin | `MediaIo.ofPath("/path/to/clip.mp4")` | <kbd>Apple</kbd> <kbd>Linux</kbd> |
 | A file URL, such as one from the document picker | `MediaIo.ofUrl(url)` | <kbd>Apple</kbd> |
 
@@ -503,6 +524,13 @@ The label names the item in logs and helps FFmpeg guess the format. A stream and
 forward only, so the player cannot seek in them. `MediaIo.ofBytes` does not copy the array, so keep
 it unchanged while playback can read it. The first two doors are in `kiteplayer-core`, and the
 others in `kiteplayer-io`, which comes with `kiteplayer`.
+
+A file that is still being written, such as a recording in progress or a download that plays as it
+arrives, plays to its current end and on as it grows when the item says so:
+`MediaItem(path, growth = FileGrowth())`. The player waits at the end for more, and ends the item
+once the file has not grown for `FileGrowth.endsAfter`, two seconds by default. Its length grows
+with the file, and a seek reaches any part already written. A plain path needs `kiteplayer-io` for
+this; an item with its own `io` needs nothing more.
 
 <details>
 <summary><b>Several settings on one item</b>: headers, probing and low latency</summary>
@@ -539,16 +567,16 @@ can read it back.
 | Area | What to call |
 | --- | --- |
 | **Playback** | `open`, `play`, `pause`, `stop`, `seek`, `requestSeek`, `stepFrame`, `close`, `closeAndAwait` |
-| **Queue** | `openQueue`, `next`, `previous`, `setLoop`, and `addToQueue`, `removeFromQueue`, `moveInQueue`, `clearQueue` while it plays. Items follow each other on the same audio device with no gap; `PlayerConfig.queue` turns that off, and [the gapless design](docs/gapless-queue.md) says when an item opens from scratch instead |
-| **Shuffle** | `setShuffle`. The items never move. `queueOrder` tells you what plays next |
-| **Speed** | `setSpeed`, 0.25x to 4x with the pitch kept. `setPreservePitch(false)` lets the pitch change like a tape |
+| **Queue** | `openQueue`, `next`, `previous`, `setLoop`, and `addToQueue`, `removeFromQueue`, `moveInQueue`, `clearQueue` while it plays. Items follow each other on the same audio device with no gap; `PlayerConfig.queue` turns that off, and [the gapless design](docs/gapless-queue.md) says when an item opens from scratch instead. `QueueConfig.onItemFailure` makes the queue skip an item that cannot be opened rather than stop on it. `openPlaylist` opens an M3U, PLS or XSPF file, or an album's cue sheet as its tracks, which play on one open of the file with every sample heard once, as the queue, and `readPlaylist` hands its items over to filter or reorder first |
+| **Shuffle** | `setShuffle`. The items never move. `queueOrder` tells you what plays next. `QueueConfig.reshuffleEachLap` draws a new order on each lap under `LoopMode.All` |
+| **Speed** | `setSpeed`, 0.25x to 4x with the pitch kept. `setPreservePitch(false)` lets the pitch change like a tape. `setPitch` moves the pitch by up to an octave in semitones without changing the speed |
 | **Sync** | `setExternalClock` makes playback follow a clock your app owns, for watching together. A small difference closes through a speed change of at most 0.5 percent with the pitch kept, and a jump is one seek. Play and pause stay with your commands |
-| **Sound** | `setVolume`, `setMuted`, `setBalance`, `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), `setVideoEnabled(false)` for audio only |
+| **Sound** | `setVolume`, `setMuted`, `setBalance`, `setStereoMode` (mono, one side only, or swapped), `setNightMode` (quiet speech up, loud effects down), `setDialogueLevel` (the centre of a downmix up or down), `setSkipSilence` (every pause longer than a fifth of a second cut down to that, for podcasts and audiobooks), `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), `setVideoEnabled(false)` for audio only |
 | **Loudness** | `PlayerConfig.audio.volumeCeiling` allows volume up to 2.0 through a limiter. `PlayerConfig.audio.replayGain` applies the file's own ReplayGain tags, off by default |
 | **Surround** | Multichannel audio folds into the speakers the device has. `PlayerConfig.audio.upmix = UpmixMode.Surround` also plays mono and stereo from the other speakers of a surround device, off by default |
-| **Picture** | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan) |
-| **HDR** | `setHdrPolicy`. HDR10 and HLG show as HDR on a display that can: through Metal on a Mac or an iPhone with extended range, and through `KitePlayerView` on an Android HDR display. Elsewhere they are tone mapped, and `PlaybackWarning.HdrToneMapped` says so. `HdrPolicy.ToneMap` tone maps everywhere, and `videoDynamicRange` says what the screen shows |
-| **Subtitles** | `selectTrack`, `selectSecondarySubtitle`, `addExternalSubtitle`, `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, `setSubtitleStyle`, `setSubtitleSafeArea`, and `subtitleCues` to draw the lines yourself |
+| **Picture** | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan, quarter turns, mirrors) |
+| **HDR** | `setHdrPolicy`. HDR10 and HLG show as HDR on a display that can: through Metal on a Mac or an iPhone with extended range, and through `KitePlayerView` on an Android HDR display. Elsewhere they are tone mapped, and `PlaybackWarning.HdrToneMapped` says so. `HdrPolicy.ToneMap` tone maps everywhere, and `videoDynamicRange` says what the screen shows. `TrackInfo.dolbyVision` names a Dolby Vision track's profile, and a profile 5 or 10.0 track is composed into HDR10 on the processor |
+| **Subtitles** | `selectTrack`, `selectSecondarySubtitle`, `addExternalSubtitle`, `seekToSubtitleLine` (the line showing, the previous or the next), `stepSubtitleDelay` (a line forward or back), `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, `setSubtitleStyle`, `setSubtitleSafeArea`, `setForcedPicturesOnly`, and `subtitleCues` to draw the lines yourself. `PlayerConfig.subtitles.secondaryLanguages` shows a second track in another language at each open, at the top or, with `secondaryPlacement`, directly above or below the first |
 | **Sections** | `setAbLoop` repeats between two points. `setMarkers` fires an event when playback crosses a position |
 | **Chapters** | `chapterAt`, `seekToChapter`, `nextChapter`, `previousChapter` |
 | **Resume** | `memento()` saves the item, position, tracks and speed. `restore(memento)` puts them back |
@@ -590,10 +618,55 @@ and labels it.
 
 - SubRip, WebVTT and SubStation Alpha, from the container or from an external file. External files
   load in the middle of playback.
+- Synced lyrics: an `.lrc` file, or LRC lines in a song's own tags (an ID3 `USLT` frame, a Vorbis
+  or Matroska `LYRICS`, an MP4 `©lyr`), become a track that shows line by line through
+  `subtitleCues`, selected when nothing else is. Lyrics without times are
+  `PlayerSnapshot.lyrics`, for the application to show
+  ([#443](https://github.com/yuroyami/KitePlayer/issues/443)).
+- `SubtitleConfig.hearingImpairedNotes` hides the notes of subtitles made for deaf and
+  hard-of-hearing viewers: `[DOOR SLAMS]`, a `(laughs)` that opens a line, `JOHN:` and `♪` music
+  lines, and with `HideStrict` every parenthesis. ASS scripts are left alone
+  ([#493](https://github.com/yuroyami/KitePlayer/issues/493)).
+- An external file added without a language takes one from its name, as `Film.en.srt`,
+  `Film.eng.forced.srt` and `Film.pt-BR.sdh.srt` say it, with `forced`, and `sdh`, `cc` or `hi`,
+  marking the track, and a file in a preferred language is chosen at open over the container's
+  track in a later one ([#514](https://github.com/yuroyami/KitePlayer/issues/514)).
+- A subtitle the player chose by itself follows the audio: switching an anime to the English dub
+  shows the English signs track made for it, and switching back shows every line again. One the
+  viewer chose stays. `SubtitleConfig.withMatchingAudio`, as mpv's `subs-with-matching-audio`,
+  keeps only forced tracks, or none, under audio in a preferred subtitle language
+  ([#506](https://github.com/yuroyami/KitePlayer/issues/506)).
+- WebVTT keeps its colours: the standard's colour classes such as `<c.yellow>` and `<c.bg_blue>`,
+  and the `::cue` rules of its `STYLE` blocks for colour, background, bold, italic, underline,
+  font and relative size, by class, voice and cue identifier. A rule that asks for anything more
+  is ignored whole ([#498](https://github.com/yuroyami/KitePlayer/issues/498)). A
+  `SubtitleStyleOverride` still wins over the file's colours.
 - Blu-ray (PGS), DVB, DVD and XSUB image subtitles from the container, placed on the picture they
   were authored for.
+- DVB teletext subtitles from a broadcast recording or an IPTV stream, read in Kotlin with no
+  native library. Each subtitle page the channel lists is a track of its own, with its language
+  and its hearing impaired mark, as VLC lists them, and a page shows its colours, its boxed
+  backgrounds and its double height lines in the top or bottom half of the picture. The letters
+  follow the page's national character set, Latin, Cyrillic, Greek or Hebrew, as libzvbi reads
+  them ([#510](https://github.com/yuroyami/KitePlayer/issues/510)).
+- The closed captions broadcast H.264, HEVC and MPEG-2 carry inside the picture, which have no
+  subtitle stream of their own, become a track, CC1, from the first picture that carries any. Each
+  screen shows as it is sent, as mpv shows them, and like a television the player shows them when
+  the viewer's preferences or the viewer ask, not by default. Pictures a platform decoder draws
+  straight to a surface carry none ([#236](https://github.com/yuroyami/KitePlayer/issues/236)).
+- A disc's forced captions, the signs and foreign dialogue it marks forced among a Blu-ray or DVD
+  track's pictures, can draw on their own. `setForcedPicturesOnly`, as mpv's
+  `sub-forced-events-only`, draws only those of the chosen track, and
+  `SubtitleConfig.forcedPicturesWhenOff` draws those of the track in the audio's language while no
+  subtitle is chosen, following the audio, as Kodi does
+  ([#513](https://github.com/yuroyami/KitePlayer/issues/513)).
 - ASS and SSA tracks are drawn by libass as authored: moving signs, animated transforms, karaoke
   fills, clips and vector drawings. They re-render every video frame while they move.
+- An ASS script's colours are matched to the video through its `YCbCr Matrix` header, as
+  XySubFilter and libass's own notes ask, so a sign coloured to blend into the picture still blends
+  in. A script with no header counts as BT.601 at studio range, `None` keeps its colours, and so do
+  HDR and RGB video. The built-in styling does the same, and `SubtitleConfig.assColorMatching =
+  false` keeps every colour as authored ([#499](https://github.com/yuroyami/KitePlayer/issues/499)).
 - Fonts attached to a Matroska file load for the track, and `SubtitleConfig.fonts` adds your own.
   On Android and Linux, a bounded set of system fonts loads too.
 - `setSubtitleSafeArea` keeps the built-in text out of a display cutout, rounded corners or a
@@ -640,6 +713,14 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
   with the highest bitrate within `DemuxPolicy.maxBitrate` and `DemuxPolicy.maxVideoHeight`.
   `Tracks.variants` lists the variants, and `KitePlayer.selectVariant` plays another one from the
   current position. The stream opens again for that, so the picture holds for a moment.
+- The choice follows the screen ([#447](https://github.com/yuroyami/KitePlayer/issues/447)). An
+  HDR version plays on a display that shows HDR as HDR, under `HdrPolicy.Auto`, and the SDR one
+  elsewhere. Nothing larger plays than the smallest variant that fills the view the picture is
+  drawn into, so a phone does not fetch 4K, and the cap rises when the view grows. The player reads
+  both from the attached renderer at each open and each step. Set `DemuxPolicy.fit` to decide for
+  it, and `VariantFit()` for no cap. A DASH manifest's transfer characteristics property counts as
+  HLS's `VIDEO-RANGE`. The Apple renderers do not report HDR yet
+  ([#540](https://github.com/yuroyami/KitePlayer/issues/540)).
 - The player steps down when the stream reads slower than it plays, or when playback has waited
   4 s for data, and `PlaybackWarning.VariantLowered` says so.
 - It steps up when the network carries the next higher variant with half again to spare and the
@@ -648,16 +729,65 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
 - A step up waits 30 s after a step down, and twice as long after each step up that did not last,
   up to 5 minutes.
 - Each step opens the stream again, so the picture holds for a moment. A variant that you
-  selected stays, and a step up never passes `DemuxPolicy.maxBitrate` or `maxVideoHeight`.
+  selected stays, and a step up never passes `DemuxPolicy.maxBitrate`, `maxVideoHeight` or the
+  fit, and never moves between SDR and HDR.
 - MPEG-TS and fMP4 segments, byte ranges, AES-128 keys, separate audio and subtitle renditions, and
   live playlists play. A finished playlist can seek. A rendition's `NAME` is its track's title,
   and its `DEFAULT`, `FORCED` and accessibility `CHARACTERISTICS` set the track's flags.
+- Only the audio rendition being heard is downloaded, so a stream with six languages does not pay
+  for five that nobody hears. A switch to another language reads it from the moment playing: the
+  picture and the old language go on until the new one is there, usually within a second, and the
+  reads go back once over what they had read ahead. A file switches instantly, as before.
+- Playlist variables play: `EXT-X-DEFINE` by `NAME` and `VALUE`, by `IMPORT` from the master
+  playlist, and by `QUERYPARAM` from the playlist's own address, so a token in the master
+  playlist's address reaches every variant, segment and key that names it. A playlist that was
+  redirected takes its `QUERYPARAM` and its relative addresses from where it was redirected to. A
+  reference to a variable that nothing defined fails the open, and the error names it.
 - A segment that cannot be read is skipped, and `PlaybackWarning.SegmentSkipped` says so. A stream
   that ends while its last segments fail ends with `PlaybackError.SourceUnavailable`.
 - `MediaItem.headers` go only to the scheme, host and port of the item's own address, because a
   playlist can name segments on any server.
 - Your own `MediaIo` can serve HLS too: report the address it read in `location`, and open the
   addresses the playlist names in `openRelated`.
+
+### Songs on a radio station
+
+A Shoutcast or Icecast station names each song as it starts, and the player shows it when it is
+heard rather than when it is read, seconds ahead
+([#423](https://github.com/yuroyami/KitePlayer/issues/423)). The network reader asks for the
+titles, takes the title blocks out of the bytes, and reads a title in windows-1251 or another
+legacy table as the player reads a subtitle file. A chained Ogg's next song and the other tags a
+stream changes while it plays arrive the same way.
+
+- `PlayerSnapshot.metadata` holds the song as `StreamTitle`, beside the station's `icy-name`.
+- The media session shows the song as the title and the station on the artist line.
+- `setItemDetails` replaces the playing item's title, artist and album without opening it again,
+  for a station that publishes its song list somewhere else. It and the station's next song replace
+  each other, whichever came last.
+- A reader of your own reports tags through `MediaIo.takeTags`.
+
+### Lists of streams
+
+A radio station's link is often a list that names its stream rather than the stream itself, and
+it plays as it is ([#450](https://github.com/yuroyami/KitePlayer/issues/450)). A PLS file is
+recognised by its `[playlist]` first line, an `audio/x-scpls` type or a `.pls` address, and an M3U
+list by the same marks as an HLS playlist, but with no `#EXT-X-` tag in it.
+
+- The first stream on the list that opens plays, so the backups a station lists after its main
+  stream take over when that one is down. When none opens, the last failure is reported.
+- The stream's title is the one the list gives it, `TitleN` in a PLS file and the `#EXTINF` text
+  in an M3U list, unless the stream names itself.
+- The streams open through the list's reader, on its client, so a `MediaIo` of your
+  own serves them through `openRelated`, as for HLS. A list that names another list is followed,
+  three levels deep at most.
+- A station's server closes a listener's connection now and then, after a long pause, when its
+  encoder restarts or when a load balancer moves the listener. A stream with no length and no
+  ranges that carries Shoutcast or Icecast `icy-` headers connects again and goes on from the live
+  edge, with `PlaybackWarning.SourceReconnecting` each time, and ends only when the station still
+  answers 404 or 410 once the reconnects are spent
+  ([#508](https://github.com/yuroyami/KitePlayer/issues/508)). Without those headers
+  the stream ends where the server stops, because a media server that encodes a song as it sends
+  it answers the same way, and asking it again would play the song again.
 
 ### DASH
 
@@ -747,12 +877,15 @@ screen. A desktop app keeps playing without help, and a web page plays while its
 
 - It shows the title, the artist, previous, play or pause, and next. Set `title`, `artist` and
   `album` on the `MediaItem` to choose them; otherwise they come from the file's tags, then its
-  file name. `session.setCustomActions` adds your own buttons, and `session.setArtworkLoader`
-  supplies the picture.
+  file name. `session.setCustomActions` adds your own buttons. The picture is the file's own
+  cover when it carries one, and `session.setArtworkLoader` supplies another that wins over it.
+  `player.coverArt` hands the cover's bytes to your own screens too.
 - Skip back and skip forward move 15 seconds. Pass `skipInterval` to `attachMediaSession` for
   another interval.
 - The session takes audio focus, so a call or another app pauses or ducks the player, and the
-  player pauses when the headphones come out. `interruptions = null` turns that off, and
+  player pauses when the headphones come out. The focus request and the audio track say whether
+  the item is music, speech or a film, from `MediaItem.audioContent`, which by default says film
+  for a picture and music for sound alone. `interruptions = null` turns that off, and
   `background = null` leaves the app's background behaviour alone.
 - While the player plays or buffers, the notification keeps the processor and Wi-Fi awake, so a
   stream keeps loading with the screen off. That needs `WAKE_LOCK`. Pick another `wakeLocks` policy
@@ -824,7 +957,7 @@ already listening when a song starts. Album art does not count as a picture.
 | **tvOS, watchOS, iOS x64, Android native** | Only the engine modules build there; CI runs the tvOS and watchOS tests on their simulators. |
 | **js** | The facade reports unavailable. |
 
-KitePlayer's JVM and Android classes are Java 11 bytecode, and so is the KiteFFmpeg 0.4.0 jar, so a
+KitePlayer's JVM and Android classes are Java 11 bytecode, and so is the KiteFFmpeg 0.5.0 jar, so a
 desktop app runs on Java 11 or later.
 
 <details>
@@ -857,7 +990,7 @@ summary.
 
 | Topic | What to expect |
 | --- | --- |
-| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment.<br><br>A DASH manifest of fMP4, MPEG-TS or WebM segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`, and a manifest of several Periods plays as one presentation. A persistent cache does not work yet. |
+| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time. `selectVariant` changes it, with a short pause while the stream opens again. The player steps down and up by itself with the measured network rate, and each step holds the picture for a moment.<br><br>A DASH manifest of fMP4, MPEG-TS or WebM segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`, and a manifest of several Periods plays as one presentation. A persistent cache does not work yet.<br><br>A seek bar's preview pictures come from the stream, an HLS image playlist or a DASH thumbnail set, or from a WebVTT thumbnail file that `MediaItem.thumbnails` names: `thumbnailAt` gives the grid image and the region of the tile for a position, downloaded only when asked ([#433](https://github.com/yuroyami/KitePlayer/issues/433)). |
 | **Native Linux and Windows** | No audio output and no HTTPS. Use the desktop JVM target, or pass your own `OutputBackend`. |
 | **Desktop JVM sound** | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | **AV1 on the web** | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |
@@ -919,7 +1052,7 @@ flowchart LR
 | `kiteplayer-io` | Input doors for platform types. Comes with `kiteplayer`. |
 | `kiteplayer-libass` | The libass typesetter for ASS and SSA. Registers itself. |
 | `kiteplayer-output` | Platform audio output, render support and the subtitle rasterisers. |
-| `kiteplayer-subtitles` | SubRip, WebVTT and ASS dialogue parsers, in Kotlin. |
+| `kiteplayer-subtitles` | SubRip, WebVTT, ASS dialogue and LRC lyrics parsers, in Kotlin. |
 | `kiteplayer-rt` | The real-time audio ring, in C. Comes with `kiteplayer-core` on native targets; never add it yourself. |
 
 To build your own stack, start from `kiteplayer-core` and supply backends through

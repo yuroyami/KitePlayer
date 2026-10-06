@@ -301,6 +301,9 @@ public class DesktopAudioSink internal constructor(
         clearHeldBlock()
     }
 
+    /** Stopping a line cuts the sound where it is, so the engine fades it first (#486). */
+    override val cutsSoundOnStop: Boolean get() = true
+
     override suspend fun setPaused(paused: Boolean): Boolean {
         if (paused) {
             /* Signal, stop the line to unblock a blocking write, join WITHOUT flushing: a pause
@@ -617,4 +620,17 @@ public class DesktopAudioSinkFactory private constructor(
         if (device == null) DesktopAudioSink() else DesktopAudioSink(MixerSourceDataLineDriverFactory(device), DesktopMonotonicClock)
 
     override val name: String get() = "SourceDataLine"
+
+    /** The most channels the mixer opens a line for, of eight, six and two (#466). */
+    override fun outputChannelCount(): Int? =
+        widestOutput(if (device == null) PlatformSourceDataLineDriverFactory else MixerSourceDataLineDriverFactory(device))
+}
+
+/**
+ * The widest of 7.1, 5.1 and stereo that [factory] opens a line for, or null when it opens none.
+ * The mixer is what Java Sound has of the speaker setup, so this is as far as the JVM can see.
+ */
+internal fun widestOutput(factory: SourceDataLineDriverFactory): Int? = listOf(8, 6, 2).firstOrNull { channels ->
+    runCatching { factory.supports(AudioFormat(sampleRate = 48_000, channels = channels, sampleFormat = SampleFormat.F32)) }
+        .getOrDefault(false)
 }

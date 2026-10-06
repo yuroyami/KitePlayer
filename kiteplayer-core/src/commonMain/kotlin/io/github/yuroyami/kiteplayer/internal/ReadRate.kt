@@ -17,8 +17,8 @@ import kotlin.math.pow
  * a link that changes speed shows in the figure within seconds.
  *
  * The demux lane alone calls [read] and [restart], and the actor alone calls
- * [mediaPerReadSecond]. The actor sees only the two published values, so it never reads a measure
- * that a restart has half cleared.
+ * [mediaPerReadSecond] and [newestUs]. The actor sees only the published values, so it never reads
+ * a measure that a restart has half cleared.
  */
 internal class ReadRate {
     // Demux lane only.
@@ -31,6 +31,7 @@ internal class ReadRate {
     // Published for the actor. A restart clears the span first, so an old span never pairs with a cleared rate.
     private val spanUs = atomic(0L)
     private val rateBits = atomic(Double.NaN.toRawBits())
+    private val newest = atomic(NOT_SEEN)
 
     /** One read that took [nanos]. [ptsUs] is the packet's time when it belongs to the measured stream. */
     fun read(nanos: Long, ptsUs: Long?) {
@@ -41,6 +42,7 @@ internal class ReadRate {
         // The first packet only anchors the timeline, and a jump in the timestamps is not media read.
         if (last == NOT_SEEN || abs(ptsUs - last) > MAX_STEP_US) {
             lastUs = ptsUs
+            newest.value = ptsUs
             pendingNanos = 0L
             return
         }
@@ -48,6 +50,7 @@ internal class ReadRate {
         if (ptsUs <= last) return
         val stepUs = ptsUs - last
         lastUs = ptsUs
+        newest.value = ptsUs
         val keep = 0.5.pow(stepUs / HALF_LIFE_US)
         weightedMediaUs = weightedMediaUs * keep + stepUs
         weightedNanos = weightedNanos * keep + pendingNanos
@@ -60,6 +63,7 @@ internal class ReadRate {
 
     /** Starts the measure again, after a seek moved the reads elsewhere on the timeline. */
     fun restart() {
+        newest.value = NOT_SEEN
         spanUs.value = 0L
         rateBits.value = Double.NaN.toRawBits()
         weightedMediaUs = 0.0
@@ -78,6 +82,12 @@ internal class ReadRate {
         val rate = Double.fromBits(rateBits.value)
         return if (rate.isNaN()) null else rate
     }
+
+    /**
+     * The latest media time read on the measured stream, or null when nothing was read since the
+     * last restart. A jump in the timestamps moves it with the jump.
+     */
+    fun newestUs(): Long? = newest.value.takeIf { it != NOT_SEEN }
 
     private companion object {
         const val NOT_SEEN = Long.MIN_VALUE

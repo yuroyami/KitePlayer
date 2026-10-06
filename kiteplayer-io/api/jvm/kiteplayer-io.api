@@ -8,6 +8,10 @@ public final class io/github/yuroyami/kiteplayer/io/InputStreamMediaIoKt {
 	public static final fun ofStream (Lio/github/yuroyami/kiteplayer/MediaIo$Companion;Lkotlin/jvm/functions/Function0;)Lio/github/yuroyami/kiteplayer/MediaIoFactory;
 }
 
+public final class io/github/yuroyami/kiteplayer/io/JarResourceMediaIoKt {
+	public static final fun ofResourceUri (Lio/github/yuroyami/kiteplayer/MediaIo$Companion;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaIoFactory;
+}
+
 public final class io/github/yuroyami/kiteplayer/io/MediaIoException : java/lang/Exception {
 	public fun <init> (Ljava/lang/String;)V
 }

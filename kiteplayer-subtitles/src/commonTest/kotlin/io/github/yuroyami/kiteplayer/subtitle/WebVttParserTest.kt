@@ -67,6 +67,36 @@ class WebVttParserTest {
     }
 
     @Test
+    fun aLanguageSpanKeepsItsTextWithoutItsTags() {
+        val cue = WebVttParser.parse("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<lang ja>こんにちは</lang>\n").single()
+        assertEquals(listOf("こんにちは"), cue.spans.map { it.text })
+        assertEquals("Hi there", WebVttParser.parseCueBody("<lang.loud en-GB>Hi</lang> there").joinToString("") { it.text })
+    }
+
+    @Test
+    fun rubyIsWrittenAsTheBaseTextFollowedByItsReading() {
+        fun read(body: String) = WebVttParser.parseCueBody(body).joinToString("") { it.text }
+        assertEquals("漢字(かんじ)", read("<ruby>漢字<rt>かんじ</rt></ruby>"))
+        assertEquals("漢(かん)字(じ)を読む", read("<ruby>漢<rt>かん</rt>字<rt>じ</rt></ruby>を読む"))
+        // The reading's end tag may be left out before the ruby's, and either tag may carry a class.
+        assertEquals("日本(にほん)", read("<ruby.big>日本<rt.small>にほん</ruby>"))
+        // A reading outside a ruby keeps its text, as the specification's parser does.
+        assertEquals("alone", read("<rt>alone</rt>"))
+        // Styles inside a ruby still apply to the text they hold.
+        val styled = WebVttParser.parseCueBody("<ruby><i>漢字</i><rt>かんじ</rt></ruby>")
+        assertEquals("漢字(かんじ)", styled.joinToString("") { it.text })
+        assertTrue(styled.first { it.text.contains("漢字") }.style.italic)
+    }
+
+    @Test
+    fun aTagThatOnlyStartsLikeAKnownOneStaysText() {
+        fun read(body: String) = WebVttParser.parseCueBody(body).joinToString("") { it.text }
+        assertEquals("<foo>bar</foo>", read("<foo>bar</foo>"))
+        assertEquals("<language>x</language>", read("<language>x</language>"))
+        assertEquals("<rubyx>y</rubyx>", read("<rubyx>y</rubyx>"))
+    }
+
+    @Test
     fun boldAndItalicSurviveAsStyles() {
         val cues = WebVttParser.parse(
             "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nplain <b>bold</b> <i>italic</i>\n",

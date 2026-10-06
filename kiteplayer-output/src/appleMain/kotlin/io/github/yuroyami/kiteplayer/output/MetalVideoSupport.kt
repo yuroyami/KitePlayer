@@ -109,6 +109,7 @@ struct QuadUniforms {
     float2 texRotate0; // texcoord basis row 0 (rotation)
     float2 texRotate1; // texcoord basis row 1
     float2 offset;     // NDC centre of the quad
+    float2 texShift;   // moves the read onto the part a crop leaves; zero for the whole texture
 };
 
 struct ColorUniforms {
@@ -404,7 +405,7 @@ vertex VertexOut kp_vertex(uint id [[vertex_id]], constant QuadUniforms &quad [[
     out.texcoord = float2(
         dot(centered, quad.texRotate0),
         dot(centered, quad.texRotate1)
-    ) + float2(0.5, 0.5);
+    ) + float2(0.5, 0.5) + quad.texShift;
     return out;
 }
 
@@ -1058,12 +1059,19 @@ internal fun quadUniformsFor(
     mode: VideoScale = VideoScale.Fit,
     transform: io.github.yuroyami.kiteplayer.VideoTransform = io.github.yuroyami.kiteplayer.VideoTransform.Identity,
 ): FloatArray {
-    val size = frame.size
+    val stored = frame.size
+    // The crop comes off first: the picture is shaped by what it leaves, and the read is narrowed
+    // onto that part of the texture (#497).
+    val crop = frame.crop?.takeIf { !it.isEmpty && it.fits(stored.width, stored.height) }
+    val size = stored.cropped(crop)
     val sarNum = size.pixelAspectNumerator.takeIf { it > 0 } ?: 1
     val sarDen = size.pixelAspectDenominator.takeIf { it > 0 } ?: 1
     val storedWidth = size.width.toFloat() * sarNum / sarDen
     val storedHeight = size.height.toFloat()
-    val turn = normalizedQuarterTurn(frame.rotationDegrees)
+    // The viewer's turn and mirrors fold into the frame's own (#428), so the quad shows the picture
+    // as the viewer turned it and the fit is of that shape.
+    val shown = transform.orient(frame.rotationDegrees, frame.mirrored)
+    val turn = normalizedQuarterTurn(shown.rotationDegrees)
     val quarterTurn = turn == 90 || turn == 270
     // The forced aspect describes the picture AS PRESENTED, after the turn, and only its ratio
     // matters to the fit: the same words as the other two geometries, so no drift.
@@ -1102,8 +1110,21 @@ internal fun quadUniformsFor(
         else -> floatArrayOf(1f, 0f, 0f, 1f)
     }
     // A mirror comes before the turn, so it negates the stored x the turned point reads (#233).
-    val mirror = if (frame.mirrored) -1f else 1f
-    return floatArrayOf(ndcX, ndcY, mirror * basis[0], mirror * basis[1], basis[2], basis[3], offsetX, offsetY)
+    val mirror = if (shown.mirrored) -1f else 1f
+    // The crop scales each texture axis down to the share it leaves and shifts the read onto it:
+    // a texture coordinate t becomes origin + extent * t, which folds into the basis rows and a
+    // shift of origin + extent / 2 - 1 / 2. Texture y runs down from the top, as the crop counts.
+    val extentX = size.width.toFloat() / stored.width
+    val extentY = size.height.toFloat() / stored.height
+    val shiftX = if (crop == null) 0f else crop.left.toFloat() / stored.width + extentX / 2f - 0.5f
+    val shiftY = if (crop == null) 0f else crop.top.toFloat() / stored.height + extentY / 2f - 0.5f
+    return floatArrayOf(
+        ndcX, ndcY,
+        extentX * mirror * basis[0], extentX * mirror * basis[1],
+        extentY * basis[2], extentY * basis[3],
+        offsetX, offsetY,
+        shiftX, shiftY,
+    )
 }
 
 /**
@@ -1134,5 +1155,5 @@ internal fun overlayQuadUniforms(
     val ndcHalfH = height / viewportHeight
     val centerX = (left + width / 2f) / viewportWidth * 2f - 1f
     val centerY = 1f - (top + height / 2f) / viewportHeight * 2f
-    return floatArrayOf(ndcHalfW, ndcHalfH, 1f, 0f, 0f, 1f, centerX, centerY)
+    return floatArrayOf(ndcHalfW, ndcHalfH, 1f, 0f, 0f, 1f, centerX, centerY, 0f, 0f)
 }

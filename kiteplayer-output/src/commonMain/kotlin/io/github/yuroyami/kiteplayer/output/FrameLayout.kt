@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.VideoTransform
@@ -30,6 +31,11 @@ import kotlin.math.roundToInt
  *
  * When [mirrored] is set, the bitmap is mirrored left to right inside the drawing rectangle before
  * the turn, about the same centre. The mirror changes no rectangle.
+ *
+ * Only the part of the stored picture from [sourceLeft] to [sourceRight] and [sourceTop] to
+ * [sourceBottom] is drawn, in stored pixels. That is the whole picture unless the frame carries a
+ * crop (#497), which comes off before the mirror and the turn, so a renderer takes the source
+ * rectangle out of its bitmap first and then draws exactly as it would draw a whole one.
  */
 internal data class FrameLayout(
     val left: Int,
@@ -38,9 +44,20 @@ internal data class FrameLayout(
     val bottom: Int,
     val rotationDegrees: Int,
     val mirrored: Boolean = false,
+    val sourceLeft: Int = 0,
+    val sourceTop: Int = 0,
+    val sourceRight: Int = 0,
+    val sourceBottom: Int = 0,
 ) {
     val width: Int get() = right - left
     val height: Int get() = bottom - top
+
+    val sourceWidth: Int get() = sourceRight - sourceLeft
+    val sourceHeight: Int get() = sourceBottom - sourceTop
+
+    /** Whether only part of a [storedWidth] by [storedHeight] bitmap is drawn. */
+    fun cropsSource(storedWidth: Int, storedHeight: Int): Boolean =
+        sourceLeft != 0 || sourceTop != 0 || sourceRight != storedWidth || sourceBottom != storedHeight
 
     val centerX: Float get() = (left + right) / 2f
     val centerY: Float get() = (top + bottom) / 2f
@@ -68,6 +85,13 @@ internal data class FrameLayout(
  * The fit is integer arithmetic on purpose. Exactly one axis fills the canvas exactly and the other is
  * centred with the remainder split in two, so the letterbox is symmetric to the pixel and the picture
  * never overhangs the canvas by a rounding error.
+ *
+ * [rotationDegrees] and [mirrored] are the frame's own, and the layout's are those with the
+ * viewer's turn and mirrors of [transform] folded in (#428).
+ *
+ * [size] is the stored size and [crop] the frame's own crop, so the fit is of what the crop leaves
+ * and the source rectangle names it. A crop that does not fit the stored size is not applied, the
+ * same rule as [VideoSize.cropped].
  */
 internal fun frameLayout(
     canvasWidth: Int,
@@ -77,15 +101,21 @@ internal fun frameLayout(
     mode: VideoScale = VideoScale.Fit,
     transform: VideoTransform = VideoTransform.Identity,
     mirrored: Boolean = false,
+    crop: PictureCrop? = null,
 ): FrameLayout? {
     if (canvasWidth <= 0 || canvasHeight <= 0) return null
     if (size.width <= 0 || size.height <= 0) return null
+    val applied = crop?.takeIf { !it.isEmpty && it.fits(size.width, size.height) }
+    val shown = size.cropped(applied)
 
     // The core rule for a non-square pixel aspect, borrowed rather than restated so the two cannot
     // drift. A nonsense aspect that scales the width away leaves the stored width, which shows the
     // picture slightly wrong instead of showing nothing at all.
-    val displayWidth = size.displayWidth.takeIf { it > 0 } ?: size.width
-    val turn = quarterTurn(rotationDegrees)
+    val displayWidth = shown.displayWidth.takeIf { it > 0 } ?: shown.width
+    // The viewer's turn and mirrors (#428) fold into the file's own here, so every renderer that
+    // draws by this layout follows them, and the fit below is of the picture as it is turned.
+    val orientation = transform.orient(rotationDegrees, mirrored)
+    val turn = quarterTurn(orientation.rotationDegrees)
     val quarterTurned = turn == 90 || turn == 270
     val aspect = transform.aspectOverride
     val contentWidth: Long
@@ -96,8 +126,8 @@ internal fun frameLayout(
         contentWidth = (aspect * 100_000f).toLong().coerceAtLeast(1)
         contentHeight = 100_000L
     } else {
-        contentWidth = (if (quarterTurned) size.height else displayWidth).toLong()
-        contentHeight = (if (quarterTurned) displayWidth else size.height).toLong()
+        contentWidth = (if (quarterTurned) shown.height else displayWidth).toLong()
+        contentHeight = (if (quarterTurned) displayWidth else shown.height).toLong()
     }
 
     // Fit keeps the smaller axis ratio and letterboxes; Fill keeps the larger and overhangs the
@@ -138,7 +168,11 @@ internal fun frameLayout(
         right = left + destinationWidth,
         bottom = top + destinationHeight,
         rotationDegrees = turn,
-        mirrored = mirrored,
+        mirrored = orientation.mirrored,
+        sourceLeft = applied?.left ?: 0,
+        sourceTop = applied?.top ?: 0,
+        sourceRight = size.width - (applied?.right ?: 0),
+        sourceBottom = size.height - (applied?.bottom ?: 0),
     )
 }
 

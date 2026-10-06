@@ -6,8 +6,11 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.text.Layout
 import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.text.StaticLayout
+import android.text.TextDirectionHeuristics
 import android.text.TextPaint
+import android.text.style.AlignmentSpan
 import android.text.style.CharacterStyle
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
@@ -100,11 +103,17 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         val safeWidth = cueSafeWidth(layoutSpec, viewportWidth)
         if (safeWidth <= 0) return null
 
-        val alignment = when (layoutSpec.alignment) {
-            CueAlignment.BottomLeft, CueAlignment.MiddleLeft, CueAlignment.TopLeft -> Layout.Alignment.ALIGN_NORMAL
-            CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight -> Layout.Alignment.ALIGN_OPPOSITE
-            else -> Layout.Alignment.ALIGN_CENTER
+        // A cue's alignment names a physical side, and Android's names the start or the end of each
+        // paragraph's own direction, so NORMAL is the right edge of a Hebrew or Arabic line. Each
+        // paragraph of a side-aligned cue therefore gets the one that lands on the side the cue
+        // names; the copies drawn for the shadow and the outline keep those spans (#478).
+        val side = when (layoutSpec.alignment) {
+            CueAlignment.BottomLeft, CueAlignment.MiddleLeft, CueAlignment.TopLeft -> CueSide.Left
+            CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight -> CueSide.Right
+            else -> null
         }
+        if (side != null) alignParagraphs(text, side)
+        val alignment = if (side == null) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
         fun layoutAt(width: Int, forText: CharSequence = text): StaticLayout =
             StaticLayout.Builder.obtain(forText, 0, forText.length, paint, width)
                 .setAlignment(alignment)
@@ -113,12 +122,22 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         // The cue's own wrap mode decides the width StaticLayout breaks at; see wrapWidthFor.
         val wrapWidth = wrapWidthFor(layoutSpec.wrap, safeWidth) { layoutAt(it).lineCount }
         val layout = layoutAt(wrapWidth)
-        var widest = 0f
+        // Where the lines' ink lies inside the layout, measured rather than inferred from the
+        // alignment, which a right-to-left paragraph turns around. A line of nothing but blanks has
+        // none, and trailing blanks are not ink either: the line's left and right leave them out.
+        var inkLeft = Float.MAX_VALUE
+        var inkRight = -Float.MAX_VALUE
         for (line in 0 until layout.lineCount) {
-            val w = layout.getLineWidth(line)
-            if (w > widest) widest = w
+            if (layout.getLineMax(line) <= 0f) continue
+            inkLeft = minOf(inkLeft, layout.getLineLeft(line))
+            inkRight = maxOf(inkRight, layout.getLineRight(line))
         }
-        val textWidth = kotlin.math.ceil(widest).toInt().coerceAtLeast(1)
+        if (inkRight < inkLeft) {
+            inkLeft = 0f
+            inkRight = 0f
+        }
+        val inkWidth = inkRight - inkLeft
+        val textWidth = kotlin.math.ceil(inkWidth).toInt().coerceAtLeast(1)
         // A POSITIONED cue's bitmap is its text extent, not the whole safe width:
         // the layout keeps its wrap width so the lines break identically, but the
         // draw below translates the glyphs to the bitmap's origin and the placement anchors
@@ -133,13 +152,16 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         } else {
             textWidth.coerceIn(safeWidth, ceiling)
         }
-        // The layout centres and right-aligns inside its own WRAP width, so whenever the bitmap
-        // is narrower than that, the glyphs have to slide back onto it.
-        val glyphShift = when (alignment) {
-            Layout.Alignment.ALIGN_OPPOSITE -> (layout.width - width).toFloat()
-            Layout.Alignment.ALIGN_CENTER -> (layout.width - width) / 2f
-            else -> 0f
+        // The layout places the lines inside its own WRAP width, so whenever the bitmap is narrower
+        // or wider than that, the glyphs have to slide onto it: their ink flush with the side the
+        // cue names, or centred. The shift comes from the measured ink, so a right-to-left line,
+        // which the layout puts at the far edge of its width, is not cropped away (#478).
+        val inkX = when (side) {
+            CueSide.Left -> 0f
+            CueSide.Right -> width - inkWidth
+            null -> (width - inkWidth) / 2f
         }
+        val glyphShift = inkLeft - inkX
         // Never taller than the viewport: the lines that fit are drawn from the top, as CoreText
         // does on Apple, and the rest would be pixels nobody can see.
         val height = layout.height.coerceIn(1, viewportHeight)
@@ -207,6 +229,26 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
 
     /** One span's character range and the style it carries, in the joined cue text. */
     private data class StyleRun(val start: Int, val end: Int, val style: CueStyle)
+
+    /** The physical side a cue is aligned to. */
+    private enum class CueSide { Left, Right }
+
+    /**
+     * Gives each paragraph of [text] the layout alignment that puts it on [side]: NORMAL is the
+     * left edge of a left-to-right paragraph and the right edge of a right-to-left one, which the
+     * paragraph's first strong character decides, as StaticLayout itself decides it.
+     */
+    private fun alignParagraphs(text: SpannableStringBuilder, side: CueSide) {
+        var start = 0
+        while (start < text.length) {
+            val newline = text.indexOf('\n', start)
+            val end = if (newline < 0) text.length else newline + 1
+            val rtl = TextDirectionHeuristics.FIRSTSTRONG_LTR.isRtl(text, start, end - start)
+            val alignment = if ((side == CueSide.Left) != rtl) Layout.Alignment.ALIGN_NORMAL else Layout.Alignment.ALIGN_OPPOSITE
+            text.setSpan(AlignmentSpan.Standard(alignment), start, end, Spanned.SPAN_PARAGRAPH)
+            start = end
+        }
+    }
 
     /**
      * A copy of the text in one flat [color], keeping every size and weight span.

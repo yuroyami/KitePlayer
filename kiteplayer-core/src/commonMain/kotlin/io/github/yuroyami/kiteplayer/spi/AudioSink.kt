@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.spi
 
+import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.PlaybackError
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +42,14 @@ public interface AudioSink : AutoCloseable {
      */
     public suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat
 
+    /**
+     * What the sound the next open plays is, for the platform's own sound processing (#446). The
+     * engine calls this before every open with the item's [AudioContent], never [AudioContent.Automatic],
+     * which it has already resolved. It takes effect at that open: a device already open keeps
+     * what it was opened with. A platform with no such setting ignores it, which is the default.
+     */
+    public fun setContent(content: AudioContent) {}
+
     /** Starts the device pulling samples through the render callback. */
     public suspend fun start()
 
@@ -57,6 +66,22 @@ public interface AudioSink : AutoCloseable {
      *         [stop] and accepts the restart cost. Saying false honestly is better than pretending.
      */
     public suspend fun setPaused(paused: Boolean): Boolean
+
+    /**
+     * Whether stopping or pausing this device cuts the sound at whatever sample it reached (#486).
+     *
+     * A wave that drops from its level to silence in one sample is heard as a click, and so is one
+     * that jumps back at the resume. When this is true the engine fades the sound out over 5 ms
+     * before it pauses, seeks or stops, waits until the device has played that fade, and fades in
+     * again after the restart, the way a volume change already walks. It waits by the deadlines the
+     * render callback is handed, so a sink that answers true must keep pulling its render callback
+     * until it is stopped and must date the deadlines it hands over honestly.
+     *
+     * False by default, which keeps the old cut, and false is right for a platform that fades on
+     * its own: Android's mixer ramps a paused track down, and fading again ahead of a buffer that
+     * deep would only make the pause late.
+     */
+    public val cutsSoundOnStop: Boolean get() = false
 
     /** The device's own buffer size in sample frames. Sizes the engine's ring. */
     public val deviceBufferFrames: Int
@@ -117,6 +142,16 @@ public interface AudioSinkFactory {
     public suspend fun create(): AudioSink
     /** For logs and diagnostics. */
     public val name: String
+
+    /**
+     * How many channels the output the next sink would play through carries, or null when the
+     * platform does not say (#466). Two for headphones, a phone speaker or a stereo device, six
+     * for a 5.1 receiver. This is the route's own count, not what a sink would accept: a sink may
+     * take six channels and fold them to two itself. The engine asks at an open when
+     * [io.github.yuroyami.kiteplayer.AudioConfig.matchOutputChannels] is on, so it must answer
+     * quickly and never throw. Null by default.
+     */
+    public fun outputChannelCount(): Int? = null
 }
 
 /**

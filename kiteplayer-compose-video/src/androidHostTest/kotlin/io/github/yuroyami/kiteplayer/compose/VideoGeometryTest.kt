@@ -133,4 +133,22 @@ class VideoGeometryTest {
         )!!
         assertEquals(plain, identity)
     }
+
+    @Test
+    fun theViewersTurnAndMirrorShapeTheLayout() {
+        // A 2:1 picture the viewer turns a quarter fits a square area as 1:2 (#428).
+        val turned = videoLayout(
+            100, 100, VideoSize(200, 100), 0,
+            transform = io.github.yuroyami.kiteplayer.VideoTransform(rotationDegrees = 90),
+        )!!
+        assertEquals(90, turned.rotationDegrees)
+        assertEquals(50, turned.width)
+        assertEquals(100, turned.height)
+        val mirror = io.github.yuroyami.kiteplayer.VideoTransform(mirrorHorizontal = true)
+        kotlin.test.assertTrue(videoLayout(100, 100, VideoSize(200, 100), 0, transform = mirror)!!.mirrored)
+        kotlin.test.assertFalse(
+            videoLayout(100, 100, VideoSize(200, 100), 0, transform = mirror, mirrored = true)!!.mirrored,
+        )
+    }
 }
+

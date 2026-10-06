@@ -19,7 +19,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -30,6 +29,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -52,6 +52,9 @@ class PlaybackCoreTest {
         val harness = CoreHarness(this)
         val expected = listOf(
             "drainCommands",
+            // Before the track changes, so a sound the player chose for a stream that appeared after
+            // the open switches in the same pass.
+            "handleLateStreams",
             "handleTrackChanges",
             "handleAudioFill",
             // Right after the clock is anchored for the pass, so a gapless swap happens before
@@ -67,6 +70,9 @@ class PlaybackCoreTest {
             // After the status and the position have settled for this pass, so the difference from
             // an external clock is measured on what this pass will publish.
             "handleExternalClock",
+            // Right after it, because an external clock owns the speed when there is one, and the
+            // live delay is measured on the same settled position.
+            "handleLiveDelay",
             // After the status has settled for this pass, so a timer reads the real position and
             // the real playing state; before the queue advances, because an end-of-item timer must
             // stop the queue rather than watch it move on.
@@ -425,6 +431,62 @@ class PlaybackCoreTest {
     }
 
     @Test
+    fun `an audio change that rides a decoder recovery takes the subtitle that goes with it`() = runTest {
+        // Japanese by default and an English dub, a full English track and an English signs
+        // track: the dub takes the signs track (#506), here through the software reopen.
+        val script = MediaScript(
+            durationUs = 4_000_000,
+            hasAudio = false,
+            additionalAudioTracks = listOf(
+                ScriptedAudioTrack(index = 1, marker = 1f, language = "jpn", isDefault = true),
+                ScriptedAudioTrack(index = 2, marker = 2f, language = "eng"),
+            ),
+            additionalSubtitleTracks = listOf(
+                ScriptedSubtitleTrack(index = 3, cues = emptyList(), language = "eng", isDefault = true),
+                ScriptedSubtitleTrack(index = 4, cues = emptyList(), language = "eng", isForced = true),
+            ),
+        )
+        val hardwareFrames = LeakLedger()
+        lateinit var harness: CoreHarness
+        var selection: TrackChange? = null
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            queuedRendererDecoderFailingOnReceive(
+                script = script,
+                hardwareFrames = hardwareFrames,
+                failOutputAt = 12,
+                onBeforeFailure = {
+                    backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        selection = harness.core.selectTrack(TrackKind.Audio, TrackId(2))
+                    }
+                },
+            )
+        }
+        harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+
+        harness.openWithRenderer()
+        assertEquals(TrackId(3), harness.core.snapshots.value.tracks.selectedSubtitle)
+        harness.core.play()
+        harness.run(1.seconds)
+
+        assertIs<TrackChange.Applied>(selection, "the audio change was not applied by the recovery")
+        assertEquals(2, harness.backend.openCalls, "the audio change must ride the recovery reopen")
+        assertEquals(TrackId(2), harness.core.snapshots.value.tracks.selectedAudio)
+        assertEquals(
+            TrackId(4),
+            harness.core.snapshots.value.tracks.selectedSubtitle,
+            "the recovery kept every line under the dub",
+        )
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+        assertEquals(0, hardwareFrames.liveCount)
+    }
+
+    @Test
     fun `video deselection queued with decoder failure becomes a valid audio only recovery`() = runTest {
         val script = MediaScript(durationUs = 4_000_000)
         val hardwareFrames = LeakLedger()
@@ -775,11 +837,22 @@ class PlaybackCoreTest {
         val caller = launch { runCatching { harness.core.open(MediaItem("https://example.com/silent.mp4", io = reader)) } }
         harness.run(100.milliseconds)
 
-        val closed = withTimeoutOrNull(500.milliseconds) { harness.core.closeAndAwait() }
-        assertNotNull(closed, "a close must not wait for the reader to give up (#398)")
+        val asked = harness.clock.nanos().nanoseconds
+        val closing = async {
+            harness.core.closeAndAwait()
+            harness.clock.nanos().nanoseconds
+        }
+        harness.run(500.milliseconds)
         assertTrue(reader.cancelled, "the reader's open was cancelled, not left running")
-        caller.join()
+        // A close is answered from a thread of its own, because its last step closes the dispatchers
+        // the engine runs on, so it may still be on its way after the half second and is awaited, as
+        // in #521. With the device stopped nothing moves the virtual clock while it comes, so the
+        // time it reads is when the engine let it go. A close held by this reader, which never gives
+        // up, would not come at all.
         harness.stopDevice()
+        val closedAt = closing.await()
+        assertTrue(closedAt - asked <= 500.milliseconds, "a close waited ${closedAt - asked} for the reader to give up (#398)")
+        caller.join()
     }
 
     // ---------------------------------------------------------------------------------------------

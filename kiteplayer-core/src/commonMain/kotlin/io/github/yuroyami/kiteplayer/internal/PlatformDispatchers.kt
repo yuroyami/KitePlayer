@@ -5,14 +5,15 @@ import kotlin.coroutines.CoroutineContext
 /**
  * The dispatcher set a player builds for itself when nobody hands it one.
  *
- * [PlaybackDispatchers] documents why each worker wants a thread of its own, and why common code cannot
- * build such a set: `newSingleThreadContext` does not exist on every target this module compiles for. So
- * the construction is the one platform-dependent step in the engine, and it is this function. Everything
+ * [PlaybackDispatchers] documents why each worker wants a context that runs one thing at a time, and why
+ * common code does not choose the pools behind them: the pools, and whether there is more than one thread
+ * at all, differ by target. So the construction is the one platform-dependent step in the engine, and it
+ * is this function. Everything
  * else in `commonMain` stays free of platform API, which is what keeps the whole engine testable in
  * virtual time.
  *
- * A target with real threads answers with one thread per worker. A single-threaded runtime answers with
- * its one dispatcher for all of them, which is not a compromise there: there is no second thread to
+ * A target with real threads answers with [SharedLaneDispatchers], one serial lane per worker over the
+ * shared pools. A single-threaded runtime answers with its one dispatcher for all of them, which is not a compromise there: there is no second thread to
  * confine anything to, and the engine's rule is confinement rather than parallelism.
  */
 internal expect fun platformPlaybackDispatchers(): PlaybackDispatchers
@@ -24,12 +25,15 @@ internal expect fun platformPlaybackDispatchers(): PlaybackDispatchers
 internal expect val blockingWorkDispatcher: kotlinx.coroutines.CoroutineDispatcher
 
 /**
- * Six SERIAL LANES over the runtime's shared pools instead of six owned OS threads.
+ * Eight SERIAL LANES over the runtime's shared pools instead of eight owned OS threads: the session
+ * actor, the video scheduler, demux, video decode, audio decode, audio feed, subtitle raster and
+ * release.
  *
  * The engine's contracts are about CONFINEMENT, and `limitedParallelism(1)` is confinement:
  * one task at a time per lane, happens-before between consecutive tasks, exactly the mutual
- * exclusion the per-worker threads provided, without a player costing six threads and six
- * players costing thirty-six. The split is by BEHAVIOUR: lanes that only suspend (the video
+ * exclusion the per-worker threads provided, without one player costing eight threads and six
+ * players costing forty-eight. A lane may run on a different pool thread from one task to the
+ * next, so nothing in the engine may rely on thread identity or thread-local state. The split is by BEHAVIOUR: lanes that only suspend (the video
  * scheduler, the raster lane) ride [calm], the pool for computation; lanes that can BLOCK ride
  * [blocking], the pool built for exactly that, so a stall parks an elastic IO thread and never
  * starves computation. The session actor rides [blocking] too: its teardown
@@ -37,7 +41,7 @@ internal expect val blockingWorkDispatcher: kotlinx.coroutines.CoroutineDispatch
  * that on a two-core Default pool could sit on half the computation budget.
  *
  * The one pinned thread the platform genuinely demands, the audio DEVICE callback, was never
- * one of these six: the C ring owns it.
+ * one of these eight: the platform output owns it, and the ring is all it touches.
  *
  * close() releases nothing because nothing here is owned; the pools are the runtime's.
  */

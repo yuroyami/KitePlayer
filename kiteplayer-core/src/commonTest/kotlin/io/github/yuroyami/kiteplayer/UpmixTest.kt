@@ -133,14 +133,15 @@ class UpmixTest {
     @Test
     fun `off leaves the four other channels at zero`() {
         val mixer = ChannelMixer(stereo, format(6, MixLayout.Surround51.mask), upmix = UpmixMode.Off)
-        assertEquals(listOf(0.8f, 0.2f, 0f, 0f, 0f, 0f), settled(mixer, floatArrayOf(0.8f, 0.2f), 6, frames = 4))
+        // Near rather than equal: on JavaScript a Float is a 64-bit number and the array holds 32 bits (#537).
+        assertNear(listOf(0.8f, 0.2f, 0f, 0f, 0f, 0f), settled(mixer, floatArrayOf(0.8f, 0.2f), 6, frames = 4), "off")
     }
 
     @Test
     fun `off is the default`() {
         assertEquals(UpmixMode.Off, AudioConfig().upmix)
         val mixer = ChannelMixer(stereo, format(6, MixLayout.Surround51.mask))
-        assertEquals(listOf(0.8f, 0.2f, 0f, 0f, 0f, 0f), settled(mixer, floatArrayOf(0.8f, 0.2f), 6, frames = 4))
+        assertNear(listOf(0.8f, 0.2f, 0f, 0f, 0f, 0f), settled(mixer, floatArrayOf(0.8f, 0.2f), 6, frames = 4), "the default")
     }
 
     @Test

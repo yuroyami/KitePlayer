@@ -27,6 +27,7 @@ import libass.kite_ass_open_document
 import libass.kite_ass_open_track
 import libass.kite_ass_render
 import libass.kite_ass_set_frame
+import libass.kite_ass_set_video_color
 import platform.posix.memcpy
 
 /** The cinterop half: the shared C driver reached directly, with the chain linked into the binary. */
@@ -62,12 +63,15 @@ internal actual class LibassEngine private constructor(
         }
     }
 
-    actual fun setFrame(frame: TypesetFrame) = kite_ass_set_frame(
-        self,
-        frame.width, frame.height, frame.videoWidth, frame.videoHeight,
-        frame.marginTop, frame.marginBottom, frame.marginLeft, frame.marginRight,
-        frame.fontScale.toDouble(), frame.linePosition.toDouble(),
-    )
+    actual fun setFrame(frame: TypesetFrame) {
+        kite_ass_set_frame(
+            self,
+            frame.width, frame.height, frame.videoWidth, frame.videoHeight,
+            frame.marginTop, frame.marginBottom, frame.marginLeft, frame.marginRight,
+            frame.fontScale.toDouble(), frame.linePosition.toDouble(),
+        )
+        kite_ass_set_video_color(self, frame.videoMatrixCode, if (frame.videoFullRange) 1 else 0)
+    }
 
     actual fun render(timeMillis: Long): ByteArray? = memScoped {
         val out = alloc<CPointerVar<UByteVar>>()

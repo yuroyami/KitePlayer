@@ -7,6 +7,8 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioResampler
 import io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.time.Duration
 
 /**
@@ -20,6 +22,9 @@ import kotlin.time.Duration
  *    configured [AudioResamplerFactory] makes.
  * 3. [TempoStage] plays the sound at `speed`, keeping its pitch or not. After the resampler, so
  *    it works at the device's rate, and before the equaliser and the trim.
+ *
+ * After them, [SilenceStage] shortens the pauses when skip silence is on (#429), on the sound as it
+ * will be heard, and then the stereo mode, the equaliser, the night mode and the trim scale it.
  *
  * The gain is NOT here. Volume and mute moved to the ring's read side on 2026-08-31, because a gain
  * applied on the way INTO the ring cannot reach audio already buffered and a change stayed inaudible
@@ -112,6 +117,18 @@ internal class AudioPipeline(
         it.preservePitch = preservePitch
     }
 
+    /**
+     * The second half of a pitch shift (#465): a fold at the pitch ratio after the stretch, which
+     * moves the pitch and gives back the time the stretch took, as VLC's `scaletempo_pitch` pairs a
+     * stretch with a resampler. It bypasses at no shift, so it costs nothing then.
+     */
+    private val pitchStage = TempoStage(targetFormat.channels, targetFormat.sampleRate).also {
+        it.preservePitch = false
+    }
+
+    private var wantedSpeed: Double = checkedSpeed(initialSpeed)
+    private var wantedPreservePitch: Boolean = preservePitch
+
     /** Source frames per device frame, which turns the tempo stage's positions into source frames. */
     private val sourcePerTarget: Double = sourceFormat.sampleRate.toDouble() / targetFormat.sampleRate
 
@@ -141,9 +158,10 @@ internal class AudioPipeline(
      * Owned by the feeder, like every stage of the pipeline.
      */
     var speed: Double
-        get() = tempo.speed
+        get() = wantedSpeed
         set(value) {
-            tempo.speed = checkedSpeed(value)
+            wantedSpeed = checkedSpeed(value)
+            configureRates()
         }
 
     /**
@@ -151,10 +169,44 @@ internal class AudioPipeline(
      * `audio-pitch-correction=no`. A new value applies to the next buffer, with no seam.
      */
     var preservePitch: Boolean
-        get() = tempo.preservePitch
+        get() = wantedPreservePitch
         set(value) {
-            tempo.preservePitch = value
+            wantedPreservePitch = value
+            configureRates()
         }
+
+    /**
+     * The pitch as a ratio of the sound's own, 2.0 an octave up and 0.5 an octave down (#465). 1.0
+     * bypasses the pitch stage. A new value applies to the next buffer, with no seam, and moves no
+     * timing: the stretch plays at the speed over the pitch and the fold at the pitch, so the two
+     * together play at the speed.
+     */
+    var pitch: Double = 1.0
+        set(value) {
+            require(value.isFinite() && value >= MIN_PITCH && value <= MAX_PITCH) {
+                "the pitch ratio must be within $MIN_PITCH..$MAX_PITCH, was $value"
+            }
+            field = value
+            configureRates()
+        }
+
+    /**
+     * The two stages' rates for the speed, the pitch law and the pitch. With no pitch the tempo
+     * stage alone plays the speed, as it always has. With one, the fold takes the pitch, and the
+     * speed's own pitch too when it is not preserved, and the stretch makes the rest of the speed.
+     */
+    private fun configureRates() {
+        if (pitch == 1.0) {
+            pitchStage.speed = 1.0
+            tempo.speed = wantedSpeed
+            tempo.preservePitch = wantedPreservePitch
+        } else {
+            val fold = pitch * (if (wantedPreservePitch) 1.0 else wantedSpeed)
+            pitchStage.speed = fold
+            tempo.speed = wantedSpeed / fold
+            tempo.preservePitch = true
+        }
+    }
 
     private fun checkedSpeed(value: Double): Double {
         require(value.isFinite() && value >= TempoStage.MIN_SPEED && value <= TempoStage.MAX_SPEED) {
@@ -167,38 +219,132 @@ internal class AudioPipeline(
     // [reset]: [pieceCount] runs, each from [pieceStart] in the output, reading the source from
     // [pieceSource] at [pieceSlope] source frames per output frame. The audio clock is dated from
     // these, so it follows every change of rate exactly where the output changes.
-    private val pieceStarts = IntArray(MAX_PIECES)
-    private val pieceSources = DoubleArray(MAX_PIECES)
-    private val pieceSlopes = DoubleArray(MAX_PIECES)
-    private val pieceRates = DoubleArray(MAX_PIECES)
+    private val chainRuns = OutputRuns()
+
+    /** The runs the last call reports: the chain's own, or the silence stage's when it ran. */
+    private var reported: OutputRuns = chainRuns
 
     /** Runs of output the last [process] or [finish] made. */
-    var pieceCount: Int = 0
-        private set
+    val pieceCount: Int get() = reported.count
 
-    fun pieceStart(index: Int): Int = pieceStarts[index]
+    fun pieceStart(index: Int): Int = reported.start(index)
 
-    fun pieceSource(index: Int): Double = pieceSources[index]
+    fun pieceSource(index: Int): Double = reported.source(index)
 
-    fun pieceSlope(index: Int): Double = pieceSlopes[index]
+    fun pieceSlope(index: Int): Double = reported.slope(index)
 
     /**
      * Media seconds per output second across piece [index]: the speed it plays at. Taken from the
      * tempo stage as it is, so a speed of 1.5 reads 1.5 exactly whatever the two sample rates.
      */
-    fun pieceRate(index: Int): Double = pieceRates[index]
+    fun pieceRate(index: Int): Double = reported.rate(index)
 
-    /** Copies the tempo stage's runs after any already recorded, shifted to start at [at] in the output. */
-    private fun takePieces(at: Int) {
+    /** Starts a call's runs afresh. */
+    private fun clearPieces() {
+        chainRuns.clear()
+        reported = chainRuns
+    }
+
+    // The tempo stage's runs in its own output frames since the last [reset], kept while the pitch
+    // stage may still read the frames they made: the pitch stage's runs point into them (#465).
+    private val lineStarts = LongArray(LINE_CAPACITY)
+    private val lineSources = DoubleArray(LINE_CAPACITY)
+    private val lineSlopes = DoubleArray(LINE_CAPACITY)
+    private var lineCount = 0
+
+    /** Records the tempo stage's runs from its last call, which began at its output frame [emittedBefore]. */
+    private fun recordTempoLine(emittedBefore: Long) {
         for (index in 0 until tempo.pieceCount) {
-            if (pieceCount == MAX_PIECES) return
-            pieceStarts[pieceCount] = at + tempo.pieceStart(index)
-            pieceSources[pieceCount] = tempo.pieceSource(index) * sourcePerTarget
-            pieceSlopes[pieceCount] = tempo.pieceSlope(index) * sourcePerTarget
-            pieceRates[pieceCount] = tempo.pieceSlope(index)
-            pieceCount++
+            val start = emittedBefore + tempo.pieceStart(index)
+            val source = tempo.pieceSource(index)
+            val slope = tempo.pieceSlope(index)
+            if (lineCount > 0) {
+                val last = lineCount - 1
+                val predicted = lineSources[last] + (start - lineStarts[last]) * lineSlopes[last]
+                if (lineSlopes[last] == slope && abs(predicted - source) < LINE_TOLERANCE) continue
+                if (lineStarts[last] == start) lineCount--
+            }
+            if (lineCount == LINE_CAPACITY) dropOldestLines(LINE_CAPACITY / 2)
+            lineStarts[lineCount] = start
+            lineSources[lineCount] = source
+            lineSlopes[lineCount] = slope
+            lineCount++
+        }
+        // Past a second behind what the pitch stage has taken in, nothing reads a run any more.
+        val needed = pitchStage.receivedFrames - targetFormat.sampleRate
+        var drop = 0
+        while (drop + 1 < lineCount && lineStarts[drop + 1] <= needed) drop++
+        if (drop > 0) dropOldestLines(drop)
+    }
+
+    private fun dropOldestLines(count: Int) {
+        lineStarts.copyInto(lineStarts, 0, count, lineCount)
+        lineSources.copyInto(lineSources, 0, count, lineCount)
+        lineSlopes.copyInto(lineSlopes, 0, count, lineCount)
+        lineCount -= count
+    }
+
+    /** The recorded tempo run that made the tempo stage's output frame [position]. */
+    private fun lineAt(position: Double): Int {
+        var index = lineCount - 1
+        while (index > 0 && lineStarts[index] > position) index--
+        return index
+    }
+
+    /**
+     * The pitch stage's runs from its last call, which made [frames] frames, each traced through
+     * the tempo stage's runs to the source and recorded after any already there, shifted to start at
+     * [at] in the output. A run of the pitch stage that crosses a change of the tempo stage's rate
+     * splits there. With no pitch the pitch stage passes through, and these are the tempo stage's
+     * own runs exactly.
+     */
+    private fun composePieces(at: Int, frames: Int) {
+        if (lineCount == 0) return
+        for (index in 0 until pitchStage.pieceCount) {
+            val start = pitchStage.pieceStart(index)
+            val end = if (index + 1 < pitchStage.pieceCount) pitchStage.pieceStart(index + 1) else frames
+            val source = pitchStage.pieceSource(index)
+            val slope = pitchStage.pieceSlope(index)
+            var out = start
+            while (out < end) {
+                val position = source + (out - start) * slope
+                val line = lineAt(position)
+                val traced = lineSources[line] + (position - lineStarts[line]) * lineSlopes[line]
+                addPiece(at + out, traced, slope * lineSlopes[line])
+                if (line + 1 >= lineCount || slope <= 0.0) break
+                val next = start + ceil((lineStarts[line + 1] - source) / slope).toInt()
+                if (next <= out || next >= end) break
+                out = next
+            }
         }
     }
+
+    private fun addPiece(start: Int, source: Double, rate: Double) {
+        chainRuns.add(start, source * sourcePerTarget, rate * sourcePerTarget, rate)
+    }
+
+    /**
+     * Runs [frames] of [input], which the tempo stage made in the call that began at its output
+     * frame [emittedBefore], through the pitch stage, and records where the result came from, from
+     * [at] in the output. The result is in [chainOutput].
+     */
+    private fun pitchRun(input: FloatArray, frames: Int, emittedBefore: Long, at: Int): Int {
+        recordTempoLine(emittedBefore)
+        val produced: Int
+        if (pitchStage.isBypassing) {
+            pitchStage.passThrough(input, frames)
+            chainOutput = input
+            produced = frames
+        } else {
+            produced = pitchStage.process(input, frames)
+            chainOutput = pitchStage.output
+        }
+        composePieces(at, produced)
+        return produced
+    }
+
+    /** Where [pitchRun] left its result. */
+    private var chainOutput: FloatArray = FloatArray(0)
 
     /** True when this pipeline was built for exactly the format [decoderFormat] describes. */
     fun matches(decoderFormat: AudioFormat): Boolean = decoderFormat == sourceFormat
@@ -221,6 +367,7 @@ internal class AudioPipeline(
             resamplerFactory, onResamplerRefused, initialSpeed = speed, upmix = upmix,
         ).also {
             it.speed = speed
+            it.pitch = pitch
             // No gain crosses here any more, and none needs to: the gain lives in the ring, which
             // outlives every pipeline rebuild. A rebuild used to have to carry the ramp POSITION
             // across or a swap un-muted itself for one whole ramp.
@@ -235,7 +382,7 @@ internal class AudioPipeline(
      *         input frame carry to the next call, so the conversion stays continuous across it.
      */
     fun process(input: FloatArray, frames: Int): Int {
-        pieceCount = 0
+        clearPieces()
         if (frames <= 0) return 0
 
         /* An identity mixer used to copy the whole buffer anyway. Skipping it means
@@ -267,21 +414,36 @@ internal class AudioPipeline(
         // The tempo stage owns lookahead, so at speeds other than 1.0 it may answer zero while it
         // accumulates, and its output buffer replaces ours. At 1.0 with nothing held the samples
         // stay where they are, so normal playback pays not even a copy for it.
+        val tempoBefore = tempo.emittedFrames
         if (tempo.isBypassing) {
             tempo.passThrough(result, produced)
         } else {
             produced = tempo.process(result, produced)
             result = tempo.output
         }
-        takePieces(0)
+        produced = pitchRun(result, produced, tempoBefore, 0)
+        result = chainOutput
+        // Skip silence (#429), on what will be heard, before the stages that only scale it. Skipped
+        // while off with nothing held, so an ordinary item pays nothing for it.
+        if (!silence.isIdentity) {
+            produced = silence.process(result, produced, chainRuns, ending = false)
+            result = silence.output
+            reported = silence.runs
+        }
 
         /* Last, so it scales exactly what reaches the ring, and skipped entirely at unity so a file
          * with no ReplayGain tags pays nothing for the feature. In place: `result` is either our own
          * scratch or, in the all-bypass case, the caller's input, and the caller hands that buffer
          * over for the duration of the call. */
+        // The stereo mode first, so the balance and the equaliser act on the sides the listener
+        // hears (#462). Skipped in stereo, so it costs an ordinary file nothing.
+        stereo.apply(result, produced)
         // Before the trim, so ReplayGain and balance scale what the equaliser produced rather than
         // the equaliser amplifying a level the trim already set.
         equalizer.apply(result, produced)
+        // After the equaliser, so a band it raised is caught too, and before the trim, so the
+        // balance and ReplayGain act on what the listener hears (#442).
+        night.apply(result, produced)
         trim.apply(result, produced)
 
         output = result
@@ -297,15 +459,31 @@ internal class AudioPipeline(
     val trim: TrimStage = TrimStage(targetFormat.channels)
 
     /**
+     * What the two front speakers play (#462), on the device's channels, after the downmix. Ramped
+     * over 10 ms on a change, so it never clicks.
+     */
+    val stereo: StereoStage = StereoStage(targetFormat.channels, rampFrames = targetFormat.sampleRate / 100)
+
+    /**
      * The ten-band equaliser, at the device's own rate because that is what its coefficients are
      * derived from. Flat by default and then free: see [EqualizerStage].
      */
     val equalizer: EqualizerStage = EqualizerStage(targetFormat.channels, targetFormat.sampleRate)
 
+    /** Raises or lowers a centre the downmix folds into other speakers, by [db] decibels (#442). */
+    fun setDialogueLevel(db: Float) = mixer.setDialogueLevel(db)
+
+    /** The night mode (#442), skipped while off. See [NightStage]. */
+    val night: NightStage = NightStage(targetFormat.channels, targetFormat.sampleRate)
+
+    /** Skip silence (#429), skipped while off with nothing held. See [SilenceStage]. */
+    val silence: SilenceStage = SilenceStage(targetFormat.channels, targetFormat.sampleRate)
+
     /**
      * Pushes out what the stages are still holding, for the end of the stream.
      *
-     * TWO stages hold something now. The tempo stage keeps up to two pitch periods of lookahead
+     * Three stages hold something. The silence stage holds the pause it has not decided on yet, which
+     * plays now, as it is. The tempo stage keeps up to two pitch periods of lookahead
      * that no further input will ever trigger, and dropping them loses the end of the media. The
      * rate conversion holds half a kernel, which is 0.36 ms at 44.1 kHz: small, but it
      * is real audio and the old interpolator's excuse for skipping it (it held under one frame, and
@@ -323,7 +501,7 @@ internal class AudioPipeline(
      * @return sample frames written to [output], zero when no stage was holding anything.
      */
     fun finish(): Int {
-        pieceCount = 0
+        clearPieces()
         var total = 0
         // 1. The rate conversion's tail, through the tempo stage like any other buffer.
         val conversion = resampler
@@ -333,28 +511,48 @@ internal class AudioPipeline(
             val drained = conversion.flush(resampled)
             checkWritten(drained, capacity)
             if (drained > 0) {
+                val tempoBefore = tempo.emittedFrames
+                var made = drained
+                var stretched = resampled
                 if (tempo.isBypassing) {
                     tempo.passThrough(resampled, drained)
-                    total = appendFinished(resampled, drained, 0)
                 } else {
-                    val stretched = tempo.process(resampled, drained)
-                    total = appendFinished(tempo.output, stretched, 0)
+                    made = tempo.process(resampled, drained)
+                    stretched = tempo.output
                 }
-                takePieces(0)
+                val shifted = pitchRun(stretched, made, tempoBefore, total)
+                total = appendFinished(chainOutput, shifted, total)
             }
         }
-        // 2. Whatever the tempo stage was still holding, after it.
+        // 2. Whatever the tempo stage was still holding, after it, through the pitch stage.
+        val tempoBefore = tempo.emittedFrames
         val last = tempo.finish()
         if (last > 0) {
-            takePieces(total)
-            total = appendFinished(tempo.output, last, total)
+            val shifted = pitchRun(tempo.output, last, tempoBefore, total)
+            total = appendFinished(chainOutput, shifted, total)
+        }
+        // 3. Whatever the pitch stage was still holding, after that.
+        val held = pitchStage.finish()
+        if (held > 0) {
+            composePieces(total, held)
+            total = appendFinished(pitchStage.output, held, total)
         }
 
+        // The silence stage hands on what it holds, the kept half of a cut included, so the last
+        // frame out is the stream's last (#429).
+        var tail = finished
+        if (!silence.isIdentity) {
+            total = silence.process(finished, total, chainRuns, ending = true)
+            tail = silence.output
+            reported = silence.runs
+        }
         if (total <= 0) return 0
-        // The same last two stages as process, in the same order (#257).
-        equalizer.apply(finished, total)
-        trim.apply(finished, total)
-        output = finished
+        // The same last stages as process, in the same order (#257, #462).
+        stereo.apply(tail, total)
+        equalizer.apply(tail, total)
+        night.apply(tail, total)
+        trim.apply(tail, total)
+        output = tail
         return total
     }
 
@@ -376,10 +574,14 @@ internal class AudioPipeline(
      * flush. The gain keeps its position: the volume did not change because the position did.
      */
     fun reset() {
-        pieceCount = 0
+        clearPieces()
         mixer.reset()
         resampler?.reset()
         tempo.reset()
+        pitchStage.reset()
+        lineCount = 0
+        // What it held is of the position that was abandoned.
+        silence.reset()
         // The filters ring for a few dozen samples, so a seek that kept their history would splice
         // the tail of the old position onto the head of the new one.
         equalizer.reset()
@@ -436,8 +638,15 @@ internal class AudioPipeline(
          */
         const val MAX_STAGE_VALUES: Int = 4 * 1024 * 1024
 
-        /** More than any call makes: a pitch-law change and its settling come to three runs. */
-        private const val MAX_PIECES = 16
+        /** The pitch ratios [pitch] takes: an octave either way. */
+        const val MIN_PITCH: Double = 0.5
+        const val MAX_PITCH: Double = 2.0
+
+        /** How many of the tempo stage's runs are kept for the pitch stage to trace through. */
+        private const val LINE_CAPACITY = 64
+
+        /** How far apart, in frames, two runs on one line may predict a position and still be one. */
+        private const val LINE_TOLERANCE = 1e-6
 
         /** The typed refusal. The audio feed replaces "audio" with the stream's codec. */
         fun refused(detail: String): PlaybackException =

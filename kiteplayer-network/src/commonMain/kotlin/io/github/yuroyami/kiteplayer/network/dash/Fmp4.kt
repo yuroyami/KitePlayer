@@ -38,6 +38,17 @@ internal object Fmp4 {
     /** The sample-is-non-sync-sample bit of a sample's flags. */
     const val NON_SYNC: Long = 0x10000
 
+    /**
+     * The most samples one media segment may hold, counted over all its fragments. A run's count
+     * is a 32-bit number that costs four bytes, and a run of samples whose size is zero by default
+     * needs no other byte at all, so without this a few bytes could ask for billions of samples
+     * (#474). Ten seconds of 240 fps video are 2,400 samples and an hour of 48 kHz AAC about
+     * 169,000, so no real segment comes near it, and the samples it allows cost about 12 MB.
+     */
+    const val MAX_SAMPLES_PER_SEGMENT: Long = 1L shl 18
+
+    private val EMPTY = ByteArray(0)
+
     /** The tracks of the initialization segment [init]. */
     fun tracks(init: ByteArray): List<Track> {
         val moov = boxes(init, 0, init.size).firstOrNull { it.type == "moov" } ?: return emptyList()
@@ -65,11 +76,19 @@ internal object Fmp4 {
     }
 
     /** The samples of [track] in the media segment [segment], in decode order. */
-    fun samples(segment: ByteArray, track: Track): List<Sample> = fragments(segment, track).flatMap { it.samples }
+    fun samples(segment: ByteArray, track: Track, maxSamples: Long = MAX_SAMPLES_PER_SEGMENT): List<Sample> =
+        fragments(segment, track, maxSamples).flatMap { it.samples }
 
-    /** The fragments of [track] in the media segment [segment], each with its samples in decode order. */
-    fun fragments(segment: ByteArray, track: Track): List<Fragment> {
+    /**
+     * The fragments of [track] in the media segment [segment], each with its samples in decode order.
+     *
+     * @throws DashUnsupportedException when the segment holds more than [maxSamples] samples,
+     *         before any sample of the run that passes it is made
+     * @throws IllegalArgumentException when a run's fields or samples lie outside their box or segment
+     */
+    fun fragments(segment: ByteArray, track: Track, maxSamples: Long = MAX_SAMPLES_PER_SEGMENT): List<Fragment> {
         val fragments = ArrayList<Fragment>()
+        var budget = maxSamples
         for (moof in boxes(segment, 0, segment.size).filter { it.type == "moof" }) {
             val out = ArrayList<Sample>()
             val sequence = children(segment, moof, "mfhd").firstOrNull()?.let { u32(segment, it.dataStart + 4) } ?: 0L
@@ -95,10 +114,25 @@ internal object Fmp4 {
                     val version = segment[trun.dataStart].toInt()
                     val runFlags = u24(segment, trun.dataStart + 1)
                     val count = u32(segment, trun.dataStart + 4)
+                    if (count > budget) {
+                        throw DashUnsupportedException(
+                            "a media segment asks for more than $maxSamples samples, which no real segment holds",
+                        )
+                    }
+                    budget -= count
                     var field = trun.dataStart + 8
                     if (runFlags and 0x1 != 0) { dataAt = base + s32(segment, field); field += 4 }
                     var firstFlags: Long? = null
                     if (runFlags and 0x4 != 0) { firstFlags = u32(segment, field); field += 4 }
+                    // Every field the run's samples carry must lie in the run, and samples of the
+                    // default size in the segment, before any sample is made.
+                    val perSample = 4L * (runFlags and 0xF00).countOneBits()
+                    require(field + count * perSample <= trun.end) { "a run's sample fields run past its box" }
+                    if (runFlags and 0x200 == 0) {
+                        require(dataAt >= 0 && dataAt <= segment.size && count * defaultSize <= segment.size - dataAt) {
+                            "a sample lies outside its segment"
+                        }
+                    }
                     for (i in 0 until count) {
                         var duration = defaultDuration
                         var size = defaultSize
@@ -111,10 +145,13 @@ internal object Fmp4 {
                             offset = if (version == 0) u32(segment, field) else s32(segment, field)
                             field += 4
                         }
+                        require(dataAt >= 0 && dataAt <= segment.size && size <= segment.size - dataAt) {
+                            "a sample lies outside its segment"
+                        }
                         val start = dataAt.toInt()
                         val end = (dataAt + size).toInt()
-                        require(start >= 0 && end <= segment.size && end >= start) { "a sample lies outside its segment" }
-                        out += Sample(time, duration, offset, segment.copyOfRange(start, end), sampleFlags)
+                        val data = if (end == start) EMPTY else segment.copyOfRange(start, end)
+                        out += Sample(time, duration, offset, data, sampleFlags)
                         dataAt += size
                         time += duration
                     }

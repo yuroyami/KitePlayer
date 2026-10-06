@@ -28,8 +28,19 @@ internal class MediaIoProviderRegistry {
         }
     }
 
-    suspend fun resolve(uri: String, headers: Map<String, String>): MediaIo? {
-        val snapshot = synchronized(lock) { entries.entries.sortedBy { it.key }.map { it.value } }
+    /** A reader from the first provider that answers [uri], never one that serves local files. */
+    suspend fun resolve(uri: String, headers: Map<String, String>): MediaIo? = firstAnswer(localFiles = false, uri, headers)
+
+    /**
+     * A Kotlin reader of the local file [path], from the first provider that serves local files, for
+     * an item that needs one (#430).
+     */
+    suspend fun resolveLocalFile(path: String): MediaIo? = firstAnswer(localFiles = true, path, emptyMap())
+
+    private suspend fun firstAnswer(localFiles: Boolean, uri: String, headers: Map<String, String>): MediaIo? {
+        val snapshot = synchronized(lock) {
+            entries.entries.sortedBy { it.key }.map { it.value }.filter { it.provider.servesLocalFiles == localFiles }
+        }
         for (entry in snapshot) {
             entry.resolver.resolve(uri, headers)?.let { return it }
         }

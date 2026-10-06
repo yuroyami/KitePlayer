@@ -289,6 +289,36 @@ class ExternalSubtitleTest {
         harness.close()
     }
 
+    /** A song's `.lrc` file is a lyrics track, and its brackets are sung rather than notes (#443). */
+    @Test
+    fun anLrcFileLoadsAsLyricsAndKeepsItsBrackets() = runTest {
+        val lrc = File.createTempFile("kiteplayer-external", ".lrc").apply {
+            writeText("[ar:Somebody]\n[00:00.50][music] plays on\n")
+            deleteOnExit()
+        }
+        val harness = CoreHarness(
+            this,
+            config = PlayerConfig(subtitles = SubtitleConfig(hearingImpairedNotes = HearingImpairedNotes.Hide)),
+        )
+        harness.attachRenderer()
+        harness.core.open(
+            MediaItem(
+                "scripted://media",
+                externalSubtitles = listOf(SubtitleSource(uri = lrc.absolutePath, selectImmediately = true)),
+            ),
+        )
+        val external = harness.core.snapshots.value.tracks.all.filter { it.id.isExternal }
+        assertEquals(1, external.size, "the lrc file must load: ${harness.core.warningHistory().map { it.warning.message }}")
+        assertEquals("external/lrc", external.single().codec)
+        harness.core.play()
+        harness.run(800.milliseconds)
+        assertEquals(
+            listOf("[music] plays on"),
+            harness.core.subtitleCues.value.map { (it as io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text).plainText },
+        )
+        harness.close()
+    }
+
     /** A container that carries its own subtitle stream, which is what makes the swap a REOPEN. */
     private fun containerScript(): MediaScript = MediaScript(
         subtitleCues = listOf(

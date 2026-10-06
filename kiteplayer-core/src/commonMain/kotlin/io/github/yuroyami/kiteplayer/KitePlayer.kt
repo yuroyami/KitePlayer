@@ -3,9 +3,11 @@ package io.github.yuroyami.kiteplayer
 import io.github.yuroyami.kiteplayer.internal.CoreCommand
 import io.github.yuroyami.kiteplayer.internal.PlaybackCore
 import io.github.yuroyami.kiteplayer.internal.SeekResult
+import io.github.yuroyami.kiteplayer.internal.SubtitleEncodings
 import io.github.yuroyami.kiteplayer.internal.platformPlaybackDispatchers
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.jvm.JvmOverloads
@@ -23,8 +25,11 @@ import kotlin.time.Duration.Companion.seconds
  *
  * ### What it is made of
  *
- * The state and the decisions live in one session actor on its own thread, with five workers on theirs:
- * demux, video decode, audio decode, audio feed, video schedule. This class is the outside of that.
+ * The state and the decisions live in one session actor, with workers beside it for demux, video decode,
+ * audio decode, audio feed, video schedule, subtitle raster and release. Each of the eight runs on a
+ * serial lane of its own, so it does one thing at a time, but a lane is not a thread: on the JVM, Android
+ * and the native targets all eight are lanes over the shared `Dispatchers.Default` and `Dispatchers.IO`
+ * pools, and on the web they share the page's one thread. This class is the outside of that.
  * Accepted state-changing commands are actor messages: awaited calls carry one reply each, while
  * fire-and-forget calls discard or omit theirs. The two close routes instead share one terminal result. After the actor
  * returns, its independent close finalizer alone publishes the terminal snapshot and result. Calling from
@@ -88,8 +93,36 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public val subtitleCues: StateFlow<List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
         core.subtitleCues
 
-    /** Warnings, failures and the occurrences worth naming. Replays nothing to a late collector. */
+    /**
+     * The open item's own cover picture, or null when it carries none, until the player has read it,
+     * and once nothing is open (#425). The media session shows it on the lock screen and in the
+     * notification when the application gives no picture of its own.
+     *
+     * Its own flow rather than a field on [state], because a picture is large, and every consumer of
+     * the snapshot would otherwise compare it on every change. It is read once per item, from the
+     * bytes the file already holds, and nothing is decoded for it.
+     */
+    public val coverArt: StateFlow<CoverArt?> = core.coverArt
+
+    /**
+     * Warnings, failures and the occurrences worth naming. Replays nothing to a late collector.
+     *
+     * One buffer of 64 events serves every collector, so when any one of them falls that far behind,
+     * the next event reaches none of them, and [PlaybackStats.droppedEvents] counts it. A collector
+     * that must see every event collects [losslessEvents] instead.
+     */
     public val events: SharedFlow<PlayerEvent> = core.events
+
+    /**
+     * The same events as [events], with none ever dropped (#414).
+     *
+     * Each collector has a queue of its own with no limit, so it gets every event that happens while
+     * it collects, in order, however slow it or any collector of [events] is. The price is that
+     * queue: a collector that stops taking events holds every one it has not taken. Collection
+     * subscribes before its first suspension, so a collector started undispatched misses nothing
+     * from that moment on. Like [events], it replays nothing.
+     */
+    public val losslessEvents: Flow<PlayerEvent> = core.losslessEvents
 
     /**
      * The position now, without waiting for the next [progress] sample.
@@ -206,6 +239,20 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Chooses which keyframe a [SeekMode.Keyframe] seek lands on, for the seeks asked for from now
+     * on. [KeyframeChoice.InSeekDirection] is what a skip button wants in a file whose keyframes
+     * are far apart. The precise modes are not affected.
+     *
+     * Seeded from [PlayerConfig.keyframeChoice].
+     */
+    public fun setKeyframeChoice(choice: KeyframeChoice) {
+        core.setKeyframeChoice(choice)
+    }
+
+    /** The [KeyframeChoice] the next keyframe seek takes; see [setKeyframeChoice]. */
+    public val keyframeChoice: KeyframeChoice get() = core.currentKeyframeChoice
+
+    /**
      * Stops playback, tears the session down and returns to Idle.
      *
      * Preempts an open, a seek or a drain that is still running. Idempotent.
@@ -319,6 +366,108 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.SetBalance(value, CompletableDeferred()))
     }
 
+    /**
+     * Sets what the two front speakers play (#462): each its own side, both the average of the two,
+     * both the left or both the right, or the two swapped. It acts after the downmix, so a surround
+     * film folded to two speakers obeys it too. A change crossfades, so it never clicks, and is
+     * heard once the audio already buffered has played, as a [setBalance] change is. Published as
+     * [PlayerSnapshot.stereoMode].
+     */
+    @Throws(IllegalStateException::class)
+    public fun setStereoMode(mode: StereoMode) {
+        core.post(CoreCommand.SetStereoMode(mode, CompletableDeferred()))
+    }
+
+    /**
+     * Replaces the title, the artist and the album of the item that is playing, without opening it
+     * again (#423), for a radio that publishes its song list somewhere else, or a stream whose
+     * details the application learns later. Null clears a field. The item in [PlayerSnapshot.media]
+     * and in the queue changes, and the media session and the notification follow.
+     *
+     * It and a station's own song title replace each other, whichever came last: this clears the
+     * `StreamTitle` the stream sent, and the stream's next title shows over it.
+     *
+     * @throws IllegalStateException when nothing is open.
+     */
+    @Throws(IllegalStateException::class)
+    public suspend fun setItemDetails(title: String?, artist: String?, album: String?) {
+        core.setItemDetails(title, artist, album)
+    }
+
+    /**
+     * Turns the night mode on or off (#442): the quiet parts of the sound are brought up and the
+     * loud parts down, so speech can be followed at a volume that does not wake the house, as a
+     * receiver's night mode or mpv's `dynaudnorm` does. It acts on the output after the downmix, with
+     * a gentle attack and release, and never passes full scale. Off, the default, costs nothing and
+     * leaves every sample as it was. A change glides in and out, so it never clicks, and is heard
+     * once the audio already buffered has played, as a [setBalance] change is. Published as
+     * [PlayerSnapshot.nightMode].
+     */
+    @Throws(IllegalStateException::class)
+    public fun setNightMode(on: Boolean) {
+        core.post(CoreCommand.SetNightMode(on, CompletableDeferred()))
+    }
+
+    /**
+     * Raises or lowers the centre channel, where a film's dialogue lives, by [db] decibels wherever
+     * the downmix folds it into speakers that are not a centre (#442), as a receiver's dialogue
+     * level does. Zero, the default, leaves the downmix as FFmpeg's rules make it. A device that has
+     * a centre speaker, and a source without a centre channel, hear no change. A change crossfades,
+     * so it never clicks, and is heard once the audio already buffered has played, as a
+     * [setBalance] change is. Published as [PlayerSnapshot.dialogueLevelDb].
+     *
+     * @throws IllegalArgumentException when [db] is not finite or is more than
+     *         [DIALOGUE_LEVEL_MAX_DB] either way.
+     */
+    /**
+     * Moves the pitch by [semitones], up or down to an octave, without changing how fast the media
+     * plays (#465), for a singer practising in another key or a learner following a voice that is
+     * hard to hear, as VLC's pitch control does. It works with any [setSpeed], and with
+     * [setPreservePitch] false the speed's own pitch change adds to it. The position, the clock and
+     * the picture's sync are untouched, because a pitch changes no timing. Zero, the default, costs
+     * nothing and leaves every sample as it was. A change has no seam and no gap, and is heard once
+     * the audio already buffered has played, as a speed change is. Published as
+     * [PlayerSnapshot.pitchSemitones].
+     *
+     * @throws IllegalArgumentException when [semitones] is not finite or is more than
+     *         [PITCH_MAX_SEMITONES] either way.
+     */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
+    public fun setPitch(semitones: Double) {
+        require(semitones.isFinite() && semitones >= -PITCH_MAX_SEMITONES && semitones <= PITCH_MAX_SEMITONES) {
+            "the pitch must be between -$PITCH_MAX_SEMITONES and $PITCH_MAX_SEMITONES semitones, was $semitones"
+        }
+        core.post(CoreCommand.SetPitch(semitones, CompletableDeferred()))
+    }
+
+    /**
+     * Shortens the silent stretches of the sound (#429), for a podcast or an audiobook: every pause
+     * longer than a fifth of a second is cut down to a fifth of a second, with a short fade at each
+     * side of the cut so it never clicks, as Media3's skip silence and the trim silence of podcast
+     * players do. A pause shorter than that, between two words, is left as it is. It works with any
+     * [setSpeed], and the two together are what a listener in a hurry turns on.
+     *
+     * The position, the subtitles, the lyrics and the lock screen follow every cut, because each one
+     * is dated in the audio clock where it is heard. It acts only while no picture is shown, so on an
+     * item with no video, one whose only picture is its cover, or one whose video is turned off with
+     * [setVideoEnabled]; a picture would have to follow each cut. A live stream is never cut, because
+     * cutting would only reach the live edge sooner and then wait for it. Off, the default, costs
+     * nothing and leaves every sample as it was. A change is heard once the audio already buffered
+     * has played, as a [setBalance] change is. Published as [PlayerSnapshot.skipSilence].
+     */
+    @Throws(IllegalStateException::class)
+    public fun setSkipSilence(on: Boolean) {
+        core.post(CoreCommand.SetSkipSilence(on, CompletableDeferred()))
+    }
+
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
+    public fun setDialogueLevel(db: Float) {
+        require(db.isFinite() && db >= -DIALOGUE_LEVEL_MAX_DB && db <= DIALOGUE_LEVEL_MAX_DB) {
+            "the dialogue level must be between -$DIALOGUE_LEVEL_MAX_DB and $DIALOGUE_LEVEL_MAX_DB dB, was $db"
+        }
+        core.post(CoreCommand.SetDialogueLevel(db, CompletableDeferred()))
+    }
+
     private fun checkDelay(name: String, value: Duration) =
         require(value.isFinite() && value.absoluteValue <= DELAY_MAX) {
             "$name must be finite and at most $DELAY_MAX either way, was $value"
@@ -333,9 +482,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * Parked, video packets are discarded before the decoder and the picture freezes on the last
      * frame; audio keeps playing and subtitles keep timing, because the container is still being
-     * read. This is what an application going to the background wants: the alternative,
-     * deselecting the video track, reopens the container and seeks back, which on a network source
-     * is a fresh request nobody asked for.
+     * read. This is what an application going to the background wants, because the decoder stays
+     * and the frozen picture is still there to look at until the new one arrives. Deselecting the
+     * video track stops the picture in place too while a sound plays, but it closes the decoder and
+     * takes the last picture off the screen, which suits a viewer who chose to only listen.
      *
      * Resumed, decoding restarts at a keyframe. On a seekable source the engine seeks precisely to
      * where playback already is, so the picture returns at the right frame rather than at whatever
@@ -434,7 +584,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * [PlayerSnapshot.abLoopB], and they belong to the player, not the media: like [setSpeed]
      * they survive seeks and the next [open].
      *
-     * The jump back is an ordinary precise seek, so the loop needs a seekable source. Arming it
+     * Each turn of the section is opened at [a] in the background before the one that plays
+     * reaches [b], and its first sample follows the last one before [b] in the device's ring, the
+     * way a gapless queue item follows the one before it: the phrase repeats in time, with no
+     * silence and no [PlaybackStatus.Buffering] between turns, and nothing from past [b] is heard
+     * or shown. Where that cannot happen, a turn jumps back by an ordinary precise seek, as
+     * `docs/gapless-queue.md` describes. Either way the loop needs a seekable source. Arming it
      * while an unseekable one plays is refused, and the refusal is published as a
      * [PlaybackWarning.CommandRefused] on [events] and the warning history, because this member
      * does not wait for the engine. A loop armed earlier stays armed through the open of an
@@ -460,6 +615,22 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * renderer is told it on attach. Pixel aspect and container rotation are honoured in every
      * mode. The current mode is published as [PlayerSnapshot.videoScale].
      */
+    /**
+     * Draws the picture on screen again (#438), for a surface that was replaced and came back
+     * empty, as an Android view's does when its application returns to the foreground. A paused or
+     * ended player decodes the picture it shows once more and presents it, and its position and its
+     * status stay as they are, so an ended player stays [PlaybackStatus.Ended] and [play] still
+     * starts it from the beginning. A playing player needs nothing, because its next frame comes on
+     * its own, and a source that cannot seek cannot decode a past picture again. Fire and forget.
+     *
+     * A change of the picture's look while paused redraws by itself on a renderer that cannot redraw
+     * from a copy, so this is only for a surface the engine cannot know came back.
+     */
+    @Throws(IllegalStateException::class)
+    public fun redrawPicture() {
+        core.post(CoreCommand.RedrawPicture(CompletableDeferred()))
+    }
+
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoScale(mode: VideoScale) {
         core.post(CoreCommand.SetVideoScale(mode, CompletableDeferred()))
@@ -557,8 +728,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * by a fraction of its own drawn size. Pass [VideoTransform.Identity] to reset. Published as
      * [PlayerSnapshot.videoTransform].
      *
+     * It also turns the picture in quarter steps and mirrors it either way (#428), on top of what
+     * the file asks for, and every renderer, the subtitles, picture in picture and [captureFrame]
+     * follow the turn.
+     *
      * @throws IllegalArgumentException outside the documented ranges: aspect 0.1..10 (or null),
-     *         zoom 0.25..4, pan -1..1 on each axis, all finite.
+     *         zoom 0.25..4, pan -1..1 on each axis, all finite, and a turn of 0, 90, 180 or 270.
      */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoTransform(value: VideoTransform) {
@@ -576,6 +751,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         }
         require(value.panX.isFinite() && value.panX in -1f..1f) { "panX must be within -1..1, was ${value.panX}" }
         require(value.panY.isFinite() && value.panY in -1f..1f) { "panY must be within -1..1, was ${value.panY}" }
+        require(value.rotationDegrees in setOf(0, 90, 180, 270)) {
+            "rotationDegrees must be 0, 90, 180 or 270, was ${value.rotationDegrees}"
+        }
     }
 
     /**
@@ -649,6 +827,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Draws only the forced pictures of a Blu-ray or DVD subtitle track, or every picture again
+     * (#513), as mpv's `sub-forced-events-only`. [SubtitleConfig.forcedPicturesOnly] says what
+     * that means and is where the player starts. Applies to the subtitles showing now, with no
+     * reselection; published as [PlayerSnapshot.forcedPicturesOnly].
+     */
+    @Throws(IllegalStateException::class)
+    public fun setForcedPicturesOnly(value: Boolean) {
+        core.post(CoreCommand.SetForcedPicturesOnly(value, CompletableDeferred()))
+    }
+
+    /**
      * Delays the sound against the picture by [value], mpv's `audio-delay` sign. A positive value
      * presents every video frame that much earlier. It is for sound that reaches the ear early.
      *
@@ -688,6 +877,39 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.addExternalSubtitle(source)
 
     /**
+     * Reads an external subtitle track's file again, in [encoding], and puts the new reading in
+     * place of the old one (#515).
+     *
+     * For a viewer looking at garbled letters. [PlaybackWarning.SubtitleCharsetGuessed] says when a
+     * file's encoding was guessed, and an application can offer [SubtitleSource.ENCODINGS] as a
+     * "Text encoding" menu and call this with the one chosen. The file is read in it as it is, with
+     * no guess, and a file that is not in it still loads, read as told, so the viewer sees what the
+     * choice does. Null decides from the bytes again, as the first read did, which also suits a
+     * file corrected on disk since it was loaded, because the file itself is read again.
+     *
+     * The track keeps its id, its place in [PlayerSnapshot.tracks], and its selection as the
+     * subtitle or the secondary subtitle, and playback does not move. A read that fails leaves the
+     * track as it was. Works for any external track: one declared in [MediaItem.externalSubtitles]
+     * or one added with [addExternalSubtitle]. The choice holds for this load of the track: the
+     * item's own [SubtitleSource] is unchanged, so opening the item again reads the file as that
+     * source says, and an application that wants the choice to last sets [SubtitleSource.encoding].
+     *
+     * @throws IllegalStateException when nothing is open, when the media changes before the file
+     *         is read, or when a later reload of the same track replaced this one.
+     * @throws IllegalArgumentException when [track] is not an external subtitle track of the open
+     *         media, when [encoding] is not one of [SubtitleSource.ENCODINGS] or a label for one, or
+     *         when the file cannot be read, cannot be parsed, parses to no cues, or is to be read in
+     *         an East Asian encoding the backend has no table for; the message says which.
+     */
+    @Throws(Exception::class)
+    public suspend fun reloadExternalSubtitle(track: TrackId, encoding: String? = null) {
+        require(encoding == null || SubtitleEncodings.canonical(encoding) != null) {
+            "$encoding is not an encoding a subtitle file can be read in; the names are ${SubtitleSource.ENCODINGS.joinToString()}"
+        }
+        core.reloadExternalSubtitle(track, encoding)
+    }
+
+    /**
      * Opens [items] as the queue, starting at [startIndex], and returns paused on its first frame
      * exactly like [open].
      *
@@ -710,6 +932,32 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public suspend fun openQueue(items: List<MediaItem>, startIndex: Int = 0) {
         transportCommands.incrementAndGet()
         core.openQueue(items, startIndex)
+    }
+
+    /**
+     * The items of the playlist file at [uri], for [openQueue] once the application has filtered or
+     * ordered them (#490). See [Playlists] for what is read.
+     *
+     * The bytes come through the same doors as an external subtitle's: an http or https address
+     * through the network resolver, with [headers], and a path from disk. Their encoding is decided
+     * from the bytes as a subtitle file's is, so a list another player wrote in a legacy code page
+     * keeps its titles. A list it names is read in its place, one level deep, and the items it names
+     * from the playlist's own server carry [headers] too.
+     *
+     * @throws PlaylistException when the list cannot be read, is no playlist, names nothing, or
+     *         names itself.
+     */
+    @Throws(Exception::class)
+    public suspend fun readPlaylist(uri: String, headers: Map<String, String> = emptyMap()): List<MediaItem> =
+        core.readPlaylist(uri, headers)
+
+    /**
+     * Opens the playlist file at [uri] as the queue, starting at [startIndex]: [readPlaylist] and
+     * then [openQueue], with what each throws.
+     */
+    @Throws(Exception::class)
+    public suspend fun openPlaylist(uri: String, startIndex: Int = 0, headers: Map<String, String> = emptyMap()) {
+        openQueue(readPlaylist(uri, headers), startIndex)
     }
 
     /**
@@ -861,6 +1109,16 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.captureFrame(withSubtitles)
 
     /**
+     * The seek bar picture for [position] of the item that plays, or null when the item carries
+     * no pictures or none stands for that position (#433). The pictures come from the item's
+     * [MediaItem.thumbnails] file, or else from the stream itself, a DASH thumbnail set or an HLS
+     * image playlist, which [Tracks.thumbnails] lists. An image downloads only when it is asked
+     * for, and a few recent ones are kept, so asking at every step of a scrub costs one download
+     * for each image. The picture's times count from the item's start, as [position] does.
+     */
+    public suspend fun thumbnailAt(position: Duration): StreamThumbnail? = core.thumbnailAt(position)
+
+    /**
      * Starts copying what plays into a Matroska file at [path], with no re-encode.
      *
      * The file holds the selected video track and every audio and subtitle track, because the
@@ -875,6 +1133,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * warns [PlaybackWarning.RecordingStopped]: a seek, a move to another queue item, a video track
      * switch, or a write that failed. A seek always ends a recording, because a file with a jump in
      * it is not a recording.
+     *
+     * A file already at [path] is replaced when the first packet is written, not before. When
+     * [path] is the file playing, through any link or spelling of it, the recording ends at that
+     * first packet with [PlaybackWarning.RecordingStopped] and the file is left whole.
      *
      * @throws IllegalStateException when nothing is open, or when a recording already runs.
      * @throws UnsupportedOperationException when the backend cannot record. The FFmpeg backend
@@ -891,6 +1153,38 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public suspend fun stopRecording() {
         core.stopRecording()
     }
+
+    /**
+     * Seeks to the start of a subtitle line and returns it once the line's first frame is on screen,
+     * with [seek]'s contract (#491). [offset] 0 is the line showing, or the last line before now
+     * when none shows, so a learner who missed a line hears it again; -1 and +1 are the previous
+     * and the next line. Lines are the selected subtitle track's cues as far as the player has read
+     * them, every cue of an external file and those an embedded track has delivered, at the times
+     * they show with the subtitle delay. Repeated calls move one line each, a paused player
+     * included, because each counts from where the last one went.
+     *
+     * @return where the line starts, in the item's time.
+     * @throws IllegalStateException when no subtitle track is selected, or there is no such line,
+     *         for example past the last one read so far, besides [seek]'s own refusals.
+     */
+    @Throws(Exception::class)
+    public suspend fun seekToSubtitleLine(offset: Int = 0): Duration {
+        val start = core.subtitleLineStart(offset)
+        seek(start)
+        return start
+    }
+
+    /**
+     * Shifts the subtitle delay so the line [offset] lines away starts now (#491), for subtitles
+     * that are out of sync by a line or so: +1 brings the next line forward to now, -1 holds the
+     * previous one back to now, and 0 starts the line showing now. The result is the new delay,
+     * published as [PlayerSnapshot.subtitleDelay] like a [setSubtitleDelay].
+     *
+     * @throws IllegalStateException when no subtitle track is selected, when there is no such line,
+     *         or when the delay it needs is more than [DELAY_MAX] either way.
+     */
+    @Throws(IllegalStateException::class)
+    public suspend fun stepSubtitleDelay(offset: Int): Duration = core.stepSubtitleDelay(offset)
 
     /**
      * The chapter whose span holds [position], or null before the first chapter or in media with
@@ -986,9 +1280,15 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             subtitlesOff = tracks.selectedSubtitle == null && tracks.subtitles.isNotEmpty(),
             secondarySubtitleLanguage = tracks.selectedSecondarySubtitle?.let { tracks.find(it) }?.language,
             balance = snapshot.balance,
+            stereoMode = snapshot.stereoMode,
+            nightMode = snapshot.nightMode,
+            dialogueLevelDb = snapshot.dialogueLevelDb,
+            pitchSemitones = snapshot.pitchSemitones,
+            skipSilence = snapshot.skipSilence,
             equalizer = snapshot.equalizer,
             subtitleScale = snapshot.subtitleScale,
             subtitlePosition = snapshot.subtitlePosition,
+            forcedPicturesOnly = snapshot.forcedPicturesOnly,
             subtitleStyle = snapshot.subtitleStyle,
             videoScale = snapshot.videoScale,
             videoTransform = snapshot.videoTransform,
@@ -1050,9 +1350,15 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setSubtitleDelay(memento.subtitleDelay)
         setAudioDelay(memento.audioDelay)
         setBalance(memento.balance)
+        setStereoMode(memento.stereoMode)
+        setNightMode(memento.nightMode)
+        setDialogueLevel(memento.dialogueLevelDb.coerceIn(-DIALOGUE_LEVEL_MAX_DB, DIALOGUE_LEVEL_MAX_DB))
+        setPitch(memento.pitchSemitones.coerceIn(-PITCH_MAX_SEMITONES, PITCH_MAX_SEMITONES))
+        setSkipSilence(memento.skipSilence)
         setEqualizer(memento.equalizer)
         setSubtitleScale(memento.subtitleScale)
         setSubtitlePosition(memento.subtitlePosition)
+        setForcedPicturesOnly(memento.forcedPicturesOnly)
         setSubtitleStyle(memento.subtitleStyle)
         setVideoScale(memento.videoScale)
         setVideoTransform(memento.videoTransform)
@@ -1076,17 +1382,23 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             }
         }
 
-        val tracks = state.value.tracks
         memento.audioLanguage?.let { language ->
-            val wanted = tracks.audio.firstOrNull { it.language == language } ?: return@let
-            if (tracks.selectedAudio != wanted.id) selectTrack(TrackKind.Audio, wanted.id)
+            val opened = state.value.tracks
+            val wanted = opened.audio.firstOrNull { it.language == language } ?: return@let
+            if (opened.selectedAudio != wanted.id) selectTrack(TrackKind.Audio, wanted.id)
         }
+        // Read after the audio, because a subtitle the player chose follows the audio (#506). One
+        // already in the memento's language stays: the memento names only a language, and the
+        // player's choice among that language's tracks, a forced one for this audio, is the better
+        // guess at which of them it was.
+        val tracks = state.value.tracks
         if (memento.subtitlesOff) {
             if (tracks.selectedSubtitle != null) selectTrack(TrackKind.Subtitle, null)
         } else {
             memento.subtitleLanguage?.let { language ->
                 val wanted = tracks.subtitles.firstOrNull { it.language == language } ?: return@let
-                if (tracks.selectedSubtitle != wanted.id) selectTrack(TrackKind.Subtitle, wanted.id)
+                val selected = tracks.selectedSubtitle?.let { tracks.find(it) }
+                if (selected?.language != language) selectTrack(TrackKind.Subtitle, wanted.id)
             }
         }
         memento.secondarySubtitleLanguage?.let { language ->
@@ -1106,7 +1418,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * It reads the container, so it costs what reaching and parsing a header costs. That is far
      * less than an open, and it is not free. It reaches the media as [open] does, through the same
-     * reader resolution, and the reading runs off the caller's thread.
+     * reader resolution, and the reading runs off the caller's thread. An item with a
+     * [MediaItem.clip] reports the clip's length and chapters, as [open] does.
      *
      * @throws PlaybackException when the media cannot be reached or is not media.
      */
@@ -1136,15 +1449,21 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /**
      * Selects a track, or deselects the kind entirely with a null [track], and says what happened.
      *
-     * Switching a CONTAINER track reopens the container and seeks back to where playback was,
-     * because the demuxer permits its stream selection to be set once before the first read, so
-     * that path needs a seekable source. Selecting an EXTERNAL subtitle track (a negative
-     * [TrackId] from [MediaItem.externalSubtitles]) while no container subtitle stream is
-     * selected is an in-place cue-table swap: no reopen, no seek, any source. Seamless container
-     * switching is tracked as an issue.
+     * An audio or subtitle track switches in place, from the packets the player already keeps for
+     * every track of those kinds, on any source. So do no video while a sound plays, a VIDEO track
+     * that appeared after the open, and one turned off before, because the player keeps the packets
+     * of those too. Any other VIDEO track reopens the container and seeks back to where playback was,
+     * so that path needs a seekable source. An EXTERNAL subtitle track (a negative [TrackId] from
+     * [MediaItem.externalSubtitles]) is a cue table and switches in place.
      *
-     * Selections of DIFFERENT kinds made close together are merged into one reopen, so setting the
-     * audio track and then the subtitle track costs one rebuild and both are applied. Two requests
+     * A subtitle the open chose by itself follows the audio. After an audio change it is chosen
+     * again by the same rules against the new audio, so a viewer who switches an anime from Japanese
+     * to the English dub gets the English signs track made for the dub instead of every line they now
+     * hear, and the full track again on switching back. A subtitle selected here, or a file added or
+     * flagged to show, is the caller's and stays through every audio change.
+     *
+     * Selections of DIFFERENT kinds made close together apply together, and a video change takes the
+     * audio or subtitle change waiting beside it into its one reopen. Two requests
      * for the SAME kind cannot both be honoured, and the earlier one returns
      * [TrackChange.Superseded] rather than the success it used to report. Read the
      * result when it matters; ignore it when your application only ever selects from one place.
@@ -1155,20 +1474,24 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws PlaybackException when the reopen itself failed: the media or the device broke.
      * @throws IllegalStateException when nothing is open.
      * @throws IllegalArgumentException when [track] is not a track of [kind] in the current media.
-     * @throws UnsupportedOperationException for a container switch on a source that cannot seek,
-     *         and for a container subtitle track when the backend decodes no subtitle format.
+     * @throws UnsupportedOperationException for a video track switch that reopens, on a source that
+     *         cannot seek, for turning off the picture or the sound when it is the only one that
+     *         plays, and for a container subtitle track when the backend decodes no subtitle format.
      */
     @Throws(Exception::class)
     public suspend fun selectTrack(kind: TrackKind, track: TrackId?): TrackChange =
         core.selectTrack(kind, track)
 
     /**
-     * Shows a second subtitle track at the top of the picture, or clears it with null.
+     * Shows a second subtitle track where [SubtitleConfig.secondaryPlacement] puts it, at the top of
+     * the picture by default, or clears it with null. [SubtitleConfig.secondaryLanguages] can choose
+     * one at each open instead.
      *
-     * The secondary track's cues are forced to the top, so the two tracks never sit on each
-     * other; the primary stays where its author put it. External tracks (negative ids) are
-     * allowed on either slot. Selecting the track that already fills the other slot throws
-     * [IllegalArgumentException]. [Tracks.selectedSecondarySubtitle] reports the selection.
+     * The secondary track's text leaves where its author put it for that place, so the two tracks
+     * never sit on each other; the primary stays where its author put it. External tracks
+     * (negative ids) are allowed on either slot. Selecting the track that already fills the other
+     * slot throws [IllegalArgumentException]. [Tracks.selectedSecondarySubtitle] reports the
+     * selection.
      */
     @Throws(Exception::class)
     public suspend fun selectSecondarySubtitle(track: TrackId?): TrackChange =
@@ -1194,6 +1517,31 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     @Throws(Exception::class)
     public suspend fun selectVariant(index: Int?) {
         core.selectVariant(index)
+    }
+
+    /**
+     * Plays the channel numbered [number] of [Tracks.programs], or chooses one again, the first
+     * with a picture, when [number] is null (#505). The media opens again on that channel, through
+     * the same rebuild as a video track change, and the picture, the sound and the subtitles are
+     * all chosen again from its tracks by the usual rules, unless a track change waiting beside it
+     * asks for one. The player keeps playing or stays paused. The choice is kept on the item as
+     * [DemuxPolicy.program], so a later rebuild keeps it too.
+     *
+     * Media that can seek opens again at the current position. A live sender, such as an IPTV
+     * multicast, opens again and joins the new channel where the sender is now, as a television
+     * does when it changes channel.
+     *
+     * @throws IllegalStateException when nothing is open, or when a stop, a close, a new open or a
+     *         later call ended the change first.
+     * @throws IllegalArgumentException when the media has no programme [number].
+     * @throws UnsupportedOperationException when the source can neither seek nor be joined live,
+     *         as a pipe cannot, which can only be read once. Open the item again with
+     *         [DemuxPolicy.program] instead.
+     * @throws PlaybackException when the reopen itself failed.
+     */
+    @Throws(Exception::class)
+    public suspend fun selectProgram(number: Int?) {
+        core.selectProgram(number)
     }
 
     /**
@@ -1362,6 +1710,13 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
         /** The largest shift, either way, that [setAudioDelay] and [setSubtitleDelay] accept. */
         public val DELAY_MAX: Duration = kotlin.time.Duration.parse("1h")
+
+        /** The most, in semitones either way, that [setPitch] accepts: an octave. */
+        public const val PITCH_MAX_SEMITONES: Double = 12.0
+
+        /** The most, in decibels either way, that [setDialogueLevel] accepts. */
+        public const val DIALOGUE_LEVEL_MAX_DB: Float = 12f
+
         /**
          * Builds a player from [config], on the backends it names and nothing else.
          *
@@ -1374,9 +1729,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
          * explicit pair is `KiteFFmpegMediaBackend()` from `kiteplayer-ffmpeg` and `AppleOutputBackend` from
          * `kiteplayer-output`; the engine never names either, which is what keeps it free of any platform.
          *
-         * The player owns six threads from here until terminal close completes, one for the session actor
-         * and one for each worker, because that is the confinement every contract inside the engine is
-         * written against. [close] requests that work; [closeAndAwait] proves its completion.
+         * The player owns no thread. From here until terminal close completes it runs eight serial lanes,
+         * one for the session actor and one for each worker, over the shared `Dispatchers.Default` and
+         * `Dispatchers.IO` pools, and each lane does one thing at a time, which is the confinement every
+         * contract inside the engine is written against. The one thread that is pinned is the audio
+         * device's own callback, which the platform output owns. [close] requests that work;
+         * [closeAndAwait] proves its completion.
          *
          * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] when no media backend or no
          *         output backend was supplied.

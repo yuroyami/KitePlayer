@@ -2,13 +2,16 @@ package io.github.yuroyami.kiteplayer.session
 
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import kotlinx.coroutines.CancellationException
@@ -17,10 +20,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -56,6 +61,19 @@ public class KitePlayerMediaSession(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val artwork = MutableStateFlow<Bitmap?>(null)
     private val artworkLoader = MutableStateFlow<(suspend (PlayerSnapshot) -> Bitmap?)?>(null)
+
+    /** The item's own cover, decoded off the main thread at the size the session draws (#425). */
+    private val fileArtwork = MutableStateFlow<Bitmap?>(null)
+
+    private val artworkSide = mediaArtworkSidePx(context)
+
+    /**
+     * The picture the session and the notification show: the application's own or its loader's,
+     * else the item's own cover, held once per picture to the size they draw (#425).
+     */
+    private val shownArtwork: StateFlow<Bitmap?> =
+        combine(artwork, fileArtwork) { own, file -> (own ?: file)?.let { fittedArtwork(it, artworkSide) } }
+            .stateIn(scope, SharingStarted.Eagerly, null)
     private val customActions = MutableStateFlow<List<MediaNotificationAction>>(emptyList())
     private val mirror = MediaSessionMirror<Bitmap>(::pushMetadata, ::pushPlaybackState)
     private val callback = Callback()
@@ -73,7 +91,7 @@ public class KitePlayerMediaSession(
     public val isAvailable: Boolean = true
 
     /** The picture the session shows, for the media notification. */
-    internal val artworkState: StateFlow<Bitmap?> get() = artwork
+    internal val artworkState: StateFlow<Bitmap?> get() = shownArtwork
 
     /** The activity set with [setSessionActivity], or null. */
     internal val sessionActivityIntent: PendingIntent? get() = sessionActivity
@@ -94,7 +112,7 @@ public class KitePlayerMediaSession(
             combine(
                 player.state,
                 player.progress,
-                artwork,
+                shownArtwork,
                 customActions,
             ) { snapshot, progress, image, actions ->
                 Triple(snapshot.toMediaSessionState(progress), image, actions)
@@ -109,12 +127,17 @@ public class KitePlayerMediaSession(
             }
         }
         scope.launch { loadArtwork() }
+        scope.launch {
+            player.coverArt.collectLatest { cover ->
+                fileArtwork.value = cover?.let { runCatching { decodeCover(it.bytes, artworkSide) }.getOrNull() }
+            }
+        }
     }
 
     /**
-     * The picture the session shows. The application supplies it: the engine reads a file's cover
-     * art but does not decode it, so there is nothing here to hand over on its own. A loader set
-     * with [setArtworkLoader] replaces it when the media item changes.
+     * The picture the session shows, over the item's own cover, which shows when this is null and
+     * no loader gives one (#425). A loader set with [setArtworkLoader] replaces it when the media
+     * item changes. A picture larger than the system draws it is scaled down once to that size.
      */
     public fun setArtwork(image: Bitmap?) {
         artwork.value = image
@@ -125,9 +148,9 @@ public class KitePlayerMediaSession(
      *
      * [loader] runs on a background thread when the item changes, and again when its tags arrive
      * after the item opens. A newer item cancels an older load, and the picture is cleared while the
-     * new one loads. A loader that throws or returns null shows no picture. Decode at a sensible
-     * size: the platform scales a large picture down but still carries it. Null stops loading and
-     * keeps the picture shown.
+     * new one loads. A loader that throws or returns null shows the item's own cover, when it has
+     * one. A picture larger than the system draws it is scaled down once to that size. Null stops
+     * loading and keeps the picture shown.
      */
     public fun setArtworkLoader(loader: (suspend (PlayerSnapshot) -> Bitmap?)?) {
         artworkLoader.value = loader
@@ -235,6 +258,23 @@ public class KitePlayerMediaSession(
         override fun onPause() = player.pauseFromRemote()
         override fun onStop() = player.pauseFromRemote()
 
+        // The platform holds a play-pause key for the double tap timeout and reads a second one as
+        // "next", a rule for a wired headset's one button. A remote, a keyboard or a speaker sends
+        // the same key, so play-pause acts at once here, and only the headset's own key keeps the
+        // double press (#437).
+        override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
+            val event = mediaButtonIntent.keyEvent() ?: return super.onMediaButtonEvent(mediaButtonIntent)
+            return when (mediaKeyAction(event.keyCode, event.action, event.repeatCount)) {
+                MediaKeyAction.Toggle -> {
+                    // Buffering counts as playing: the listener asked for sound, so a toggle means stop.
+                    if (player.state.value.status.isActive) player.pauseFromRemote() else player.playFromRemote()
+                    true
+                }
+                MediaKeyAction.Consume -> true
+                MediaKeyAction.Platform -> super.onMediaButtonEvent(mediaButtonIntent)
+            }
+        }
+
         // A refused seek throws, and an exception that leaves this scope ends the process.
         override fun onSeekTo(positionMillis: Long) {
             scope.launch { runCatching { player.seek(positionMillis.milliseconds) } }
@@ -245,7 +285,7 @@ public class KitePlayerMediaSession(
         }
 
         override fun onSkipToPrevious() {
-            scope.launch { runCatching { player.previous() } }
+            scope.launch { runCatching { player.pressPrevious() } }
         }
 
         override fun onFastForward() = skipBy(skipInterval)
@@ -264,6 +304,39 @@ public class KitePlayerMediaSession(
     }
 
 }
+
+/** What the session does with one media key event. */
+internal enum class MediaKeyAction {
+    /** Plays or pauses, at once. */
+    Toggle,
+
+    /** Taken and ignored: the release or the auto-repeat of a key acted on when it went down. */
+    Consume,
+
+    /** Left to the platform's own handling. */
+    Platform,
+}
+
+/**
+ * The session's answer to a media key (#437). Play-pause acts the moment it goes down, whatever
+ * sent it, and never waits for or reads a second press. The headset hook keeps the platform's
+ * double press for next, because a one-button headset has no other way to skip. Every other key is
+ * the platform's.
+ */
+internal fun mediaKeyAction(keyCode: Int, action: Int, repeatCount: Int): MediaKeyAction = when (keyCode) {
+    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ->
+        if (action == KeyEvent.ACTION_DOWN && repeatCount == 0) MediaKeyAction.Toggle else MediaKeyAction.Consume
+    else -> MediaKeyAction.Platform
+}
+
+/** The key event a media button intent carries, or null. */
+private fun Intent.keyEvent(): KeyEvent? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
+    } else {
+        @Suppress("DEPRECATION")
+        getParcelableExtra(Intent.EXTRA_KEY_EVENT)
+    }
 
 /** A new item, or new tags on the same one, is what makes the artwork loader run again. */
 private fun artworkKey(snapshot: PlayerSnapshot): Any =
@@ -312,7 +385,8 @@ internal fun actionsFor(state: MediaSessionState): Long {
             PlaybackState.ACTION_REWIND
     }
     if (state.hasNext) actions = actions or PlaybackState.ACTION_SKIP_TO_NEXT
-    if (state.hasPrevious) actions = actions or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+    // Previous also starts the item again, so it is there whenever the item can seek (#424).
+    if (state.offersPrevious) actions = actions or PlaybackState.ACTION_SKIP_TO_PREVIOUS
     return actions
 }
 

@@ -81,7 +81,11 @@ internal class CachingMediaIo(
         if (upstreamEof && cursor == upstreamPos) return -1
         val chunk = ByteArray(policy.readChunkBytes)
         val pulled = upstream.read(chunk, 0, chunk.size)
-        if (pulled > 0) upstreamBytesRead.addAndGet(pulled.toLong())
+        if (pulled > 0) {
+            upstreamBytesRead.addAndGet(pulled.toLong())
+            // The tags belong at the first byte of this upstream read, which this read serves (#423).
+            upstream.takeTags()?.let { tags -> pendingTags = pendingTags?.plus(tags) ?: tags }
+        }
         if (pulled < 0) {
             upstreamEof = true
             return -1
@@ -95,7 +99,15 @@ internal class CachingMediaIo(
         return served
     }
 
+    /** The tags of the upstream read whose first byte the last read served, once (#423). */
+    private var pendingTags: Map<String, String>? = null
+
+    override fun takeTags(): Map<String, String>? = pendingTags.also { pendingTags = null }
+
     override suspend fun seek(position: Long) {
+        // A seek asks the source again, so a file that grew since its end was read is read on
+        // (#430). For one that did not grow that costs one more read that answers the end.
+        upstreamEof = false
         if (position in windowStart..windowEnd) {
             // Inside the window (its end included: the next read extends forward from there).
             // NO upstream traffic: this is the free seek-back the cache exists for.

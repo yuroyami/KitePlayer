@@ -25,6 +25,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * DASH played through the HLS path (#295), with the real FFmpeg backend reading the `dash/`
@@ -77,6 +78,12 @@ class DashThroughHlsTest {
                             """<Label>English, described</Label><Role schemeIdUri="urn:mpeg:dash:role:2011" value="description"/>""",
                     )
                     .replace("</Period>", FORCED_SET + "</Period>").encodeToByteArray()
+                // A thumbnail set beside the picture and the sound, by number and by a timeline far into its media's time (#433).
+                path == "thumbs.mpd" -> File(media, "separate.mpd").readText()
+                    .replace("</Period>", "$THUMBNAIL_SET</Period>").encodeToByteArray()
+                path == "thumbs-offset.mpd" -> File(media, "separate.mpd").readText()
+                    .replace("</Period>", "$OFFSET_THUMBNAIL_SET</Period>").encodeToByteArray()
+                path.startsWith("thumb-") -> thumbnailImage(path)
                 path == "periods.mpd" -> periodsManifest(listOf("a", "b", "c"), PeriodLayout.Mp4).encodeToByteArray()
                 path == "webm-periods.mpd" -> periodsManifest(listOf("a", "b"), PeriodLayout.Webm).encodeToByteArray()
                 path == "ts-periods.mpd" -> periodsManifest(listOf("a", "b"), PeriodLayout.Ts).encodeToByteArray()
@@ -115,6 +122,47 @@ class DashThroughHlsTest {
     }
 
     @Test
+    fun aThumbnailSetGivesTheTileForAPosition() = thumbnailsOf("thumbs.mpd", "thumb-1.jpg")
+
+    @Test
+    fun aThumbnailSetFarIntoItsMediasTimeGivesTheSameTile() = thumbnailsOf("thumbs-offset.mpd", "thumb-86400.jpg")
+
+    /** The picture for 35 s of [manifest]'s ten tiles by one over 100 s: the fourth tile of [image] (#433). */
+    private fun thumbnailsOf(manifest: String, image: String) = runBlocking {
+        val session = io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend().open(Dash.mediaItemFor("$root/$manifest", client))
+        try {
+            val thumbnails = kotlin.test.assertNotNull(session.source.thumbnails, "the thumbnail set is not offered")
+            assertEquals(io.github.yuroyami.kiteplayer.ThumbnailSet(width = 160, height = 90), thumbnails.set)
+            assertTrue(asked.none { it.startsWith("thumb-") }, "an image was read before one was asked for")
+            val picture = kotlin.test.assertNotNull(thumbnails.at(Pts(35_000_000)))
+            kotlin.test.assertContentEquals(thumbnailImage(image), picture.image)
+            assertEquals(480, picture.x, "the fourth tile")
+            assertEquals(0, picture.y)
+            assertEquals(160, picture.width)
+            assertEquals(90, picture.height)
+            assertEquals(30.seconds, picture.start)
+            assertEquals(40.seconds, picture.end)
+            thumbnails.at(Pts(12_000_000))
+            assertEquals(1, asked.count { it == image }, "the image was read once")
+        } finally {
+            session.close()
+        }
+    }
+
+    @Test
+    fun thePlayersBackendListsTheVariantsToo() = runBlocking {
+        // The player opens through the backend rather than the source factory, and the variants
+        // must reach the track table that way too, or nothing can choose or step one.
+        val session = io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend().open(Dash.mediaItemFor("$root/separate.mpd", client))
+        try {
+            assertEquals(listOf(180, 360), session.source.variants.map { it.height }, "each video representation is a variant")
+            assertEquals(1, session.source.selectedVariant, "the larger variant plays")
+        } finally {
+            session.close()
+        }
+    }
+
+    @Test
     fun separateVideoAndAudioSetsPlayTogetherAndSeekToSixtySeconds() = withSource("separate.mpd") { source ->
         assertEquals(listOf(180, 360), source.variants.map { it.height }, "each video representation is a variant")
         assertEquals(1, source.selectedVariant, "the larger variant plays")
@@ -135,7 +183,7 @@ class DashThroughHlsTest {
         assertNotNull(subtitle, "the WebVTT set is not a stream: ${source.streams.map { it.kind to it.codec }}")
         assertEquals("de", subtitle.language)
         val read = source.readFor(seconds = 6.0)
-        assertTrue(read.subtitleTimes.size >= 2, "only ${read.subtitleTimes} cues arrived in the first 6 s")
+        assertOnTheTwoSecondGrid(read.subtitleTimes)
         assertTrue("subs.vtt" in asked, "the WebVTT file was not read: $asked")
     }
 
@@ -145,32 +193,30 @@ class DashThroughHlsTest {
         assertNotNull(subtitle, "the TTML set is not a stream: ${source.streams.map { it.kind to it.codec }}")
         assertEquals("es", subtitle.language)
         val read = source.readFor(seconds = 6.0)
-        assertTrue(read.subtitleTimes.size >= 2, "only ${read.subtitleTimes} cues arrived in the first 6 s")
         assertOnTheTwoSecondGrid(read.subtitleTimes)
         assertTrue("subs.ttml" in asked, "the TTML file was not read: $asked")
     }
 
     @Test
-    fun anStppFilePlaysAsASubtitleRenditionAtItsOwnTimes() = withSource("stpp.mpd") { source ->
+    fun anStppFilePlaysAsASubtitleRenditionAtItsOwnTimes() = withSource("stpp.mpd", needs = "dash/subs-stpp.mp4") { source ->
         val subtitle = source.streams.singleOrNull { it.kind == TrackKind.Subtitle }
         assertNotNull(subtitle, "the stpp set is not a stream: ${source.streams.map { it.kind to it.codec }}")
         assertEquals("fr", subtitle.language)
         val read = source.readFor(seconds = 6.0)
-        assertTrue(read.subtitleTimes.size >= 2, "only ${read.subtitleTimes} cues arrived in the first 6 s")
         assertOnTheTwoSecondGrid(read.subtitleTimes)
         assertTrue("subs-stpp.mp4" in asked, "the stpp file was not read: $asked")
     }
 
     /**
-     * The cues arrive at the times the document names, one every two seconds from zero, and no
-     * later than the first segment. FFmpeg's HLS reader starts a subtitle playlist at the point the
-     * reading has reached when the stream is selected, after it read ahead to find the streams, and
-     * drops the cues that begin before it, so the cue at zero may be missing; the WebVTT set loses
-     * it the same way.
+     * The cues arrive at the times the document names, one every two seconds from zero, the first
+     * one included. FFmpeg's HLS reader starts a subtitle playlist at the point the reading has
+     * reached when the stream is selected, after it read ahead to find the streams, and catches it
+     * up by dropping what came before; the cue at zero is still on screen there, so it survives
+     * (KiteFFmpeg#126).
      */
     private fun assertOnTheTwoSecondGrid(times: List<Double>) {
-        assertTrue(times.size >= 2, "only $times cues arrived in the first 6 s")
-        assertTrue(times.first() < 2.5, "the first cue came at ${times.first()} s, past the first two")
+        assertTrue(times.size >= 3, "only $times cues arrived in the first 6 s")
+        assertTrue(times.first() < 0.1, "the first cue came at ${times.first()} s: the one at zero was dropped")
         // FFmpeg's HLS reader moves every playlist by the same small offset, which the picture has too.
         assertTrue(times.all { abs(it - 2 * kotlin.math.round(it / 2)) < 0.1 }, "the cues are not at the times the document names: $times")
     }
@@ -328,10 +374,15 @@ class DashThroughHlsTest {
     @Test
     fun twoWebmPeriodsPlayAsOnePresentation() = withSource("webm-periods.mpd") { source ->
         assertEquals(40.0, assertNotNull(source.duration).micros / 1e6, 0.5)
-        // The seek comes first: once FFmpeg's HLS reader has read WebM to its end, it seeks nowhere.
-        source.seekToKeyframe(Pts(30_000_000))
+        val timeline = source.readTimeline()
+        assertContinuous(timeline.video, from = 0.0, to = 40.0, "picture")
+        assertContinuous(timeline.audio, from = 0.0, to = 40.0, "sound")
+        // A WebM stream read to its end still seeks, which FFmpeg's Matroska reader once refused (KiteFFmpeg#125).
+        // Inside a segment rather than on its boundary, which a clip whose media starts a few
+        // milliseconds late moves past the target (#539).
+        source.seekToKeyframe(Pts(31_000_000))
         val after = source.readFor(seconds = 1.0)
-        assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 30 s is at ${after.firstVideo} s")
+        assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 31 s is at ${after.firstVideo} s")
         // VP9 states its size in every keyframe, so the second Period's header need not reach the decoder.
         val video = source.streams.first { it.kind == TrackKind.Video }
         val decoder = checkNotNull((source as KiteFFmpegSource).videoDecoderFactories().firstNotNullOfOrNull { it.create(video, HwdecPolicy.Off) })
@@ -342,10 +393,16 @@ class DashThroughHlsTest {
         } finally {
             decoder.close()
         }
-        source.seekToKeyframe(Pts(0))
+    }
+
+    @Test
+    fun aWebmSetReadToItsEndSeeksBackToTheMiddle() = withSource("webm.mpd") { source ->
         val timeline = source.readTimeline()
-        assertContinuous(timeline.video, from = 0.0, to = 40.0, "picture")
-        assertContinuous(timeline.audio, from = 0.0, to = 40.0, "sound")
+        assertTrue(timeline.video.last() > 69.0, "the reading stopped at ${timeline.video.last()} s, short of the end")
+        source.seekToKeyframe(Pts(30_000_000))
+        val after = source.readFor(seconds = 2.0)
+        assertTrue(after.firstVideo in 27.9..30.1, "the first picture after the seek to 30 s is at ${after.firstVideo} s")
+        assertTrue(after.firstAudio in 27.5..30.5, "the first sound after the seek is at ${after.firstAudio} s")
     }
 
     @Test
@@ -354,9 +411,11 @@ class DashThroughHlsTest {
         val timeline = source.readTimeline()
         assertContinuous(timeline.video, from = 0.0, to = 40.0, "picture")
         assertContinuous(timeline.audio, from = 0.0, to = 40.0, "sound")
-        source.seekToKeyframe(Pts(30_000_000))
+        // Inside a segment: FFmpeg 6.1 starts each Period's picture 21 ms late, behind the AAC
+        // encoder's start-up samples, which moves the boundary at 30 s past a target there (#539).
+        source.seekToKeyframe(Pts(31_000_000))
         val after = source.readFor(seconds = 1.0)
-        assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 30 s is at ${after.firstVideo} s")
+        assertTrue(after.firstVideo in 29.9..30.1, "the first picture after the seek to 31 s is at ${after.firstVideo} s")
     }
 
 
@@ -491,6 +550,24 @@ class DashThroughHlsTest {
     }
 
     private companion object {
+        /** Ten tiles of 160x90 by one, each image 100 s, by number (#433). */
+        const val THUMBNAIL_SET = """<AdaptationSet id="9" contentType="image" mimeType="image/jpeg">
+            <SegmentTemplate media="thumb-${'$'}Number${'$'}.jpg" duration="100" startNumber="1" timescale="1"/>
+            <Representation id="thumbs" bandwidth="16000" width="1600" height="90">
+              <EssentialProperty schemeIdUri="http://dashif.org/thumbnail_tile" value="10x1"/>
+            </Representation>
+          </AdaptationSet>"""
+
+        /** The same tiles, by a timeline whose media time starts a day in (#433). */
+        const val OFFSET_THUMBNAIL_SET = """<AdaptationSet id="9" contentType="image" mimeType="image/jpeg">
+            <SegmentTemplate media="thumb-${'$'}Time${'$'}.jpg" timescale="1" presentationTimeOffset="86400">
+              <SegmentTimeline><S t="86400" d="100"/></SegmentTimeline>
+            </SegmentTemplate>
+            <Representation id="thumbs" bandwidth="16000" width="1600" height="90">
+              <EssentialProperty schemeIdUri="http://dashif.org/guidelines/thumbnail_tile" value="10x1"/>
+            </Representation>
+          </AdaptationSet>"""
+
         /** A WebVTT set of one file, as packagers write subtitles that need no segments. */
         const val SUBTITLE_SET = """<AdaptationSet contentType="text" mimeType="text/vtt" lang="de">
             <Representation id="de" bandwidth="1000"><BaseURL>subs.vtt</BaseURL></Representation>
@@ -657,7 +734,15 @@ class DashThroughHlsTest {
         }
     }
 
-    private fun withSource(manifest: String, test: suspend (PlayerMediaSource) -> Unit) = runBlocking {
+    /** The bytes of a thumbnail image the server serves at [path]: a JPEG's first bytes, then the path. */
+    private fun thumbnailImage(path: String): ByteArray = byteArrayOf(0xFF.toByte(), 0xD8.toByte()) + path.encodeToByteArray()
+
+    private fun withSource(
+        manifest: String,
+        needs: String? = null,
+        test: suspend (PlayerMediaSource) -> Unit,
+    ) = runBlocking {
+        if (needs != null) assumeMade(needs)
         val source = KiteFFmpegSourceFactory().open(Dash.mediaItemFor("$root/$manifest", client))
         try {
             source.selectStreams(source.streams.map { it.index }.toSet())
@@ -665,6 +750,20 @@ class DashThroughHlsTest {
         } finally {
             source.close()
         }
+    }
+
+    /**
+     * Skips the test, with the generator's own reason, when `scripts/testmedia.sh` listed [fixture]
+     * in its MANIFEST as one the ffmpeg on that machine cannot make (#418), or fails it where the
+     * job says it generated every clip (#419). A fixture missing for any other reason fails the test.
+     */
+    private fun assumeMade(fixture: String) {
+        val testmedia = media.parentFile
+        val skipped = File(testmedia, "MANIFEST.txt").takeIf { it.isFile }?.readLines().orEmpty()
+            .map { it.removePrefix("skipped:").trim() to it.startsWith("skipped:") }
+            .firstOrNull { (entry, isSkip) -> isSkip && entry.startsWith("$fixture:") }?.first
+        requireTestMedia(skipped == null, "testmedia.sh skipped $skipped")
+        check(File(testmedia, fixture).isFile) { "$fixture is missing; run scripts/testmedia.sh" }
     }
 
     private class Read(

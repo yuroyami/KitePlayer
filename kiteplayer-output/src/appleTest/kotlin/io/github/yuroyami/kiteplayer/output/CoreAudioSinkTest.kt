@@ -486,7 +486,7 @@ class CoreAudioSinkTest {
 
     private companion object {
         val sessionRoundTrip = listOf(
-            "category:playback:moviePlayback:none",
+            "category:playback:moviePlayback:mixWithOthers",
             "active:true:none",
             "active:false:notifyOthers",
         )

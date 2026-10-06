@@ -6,7 +6,9 @@ import kotlin.jvm.JvmInline
  * Identifies one track for the life of one opened media item.
  *
  * This is the stream index inside the container for tracks that came from the container, and a
- * negative value for tracks the application added, for example an external subtitle file. Both are
+ * negative value for tracks the application added, for example an external subtitle file. A
+ * teletext stream lists one track per subtitle page (#510): its first page keeps the stream's
+ * index and each further page has an id of its own above every stream index. All of them are
  * opaque to callers: pass back what [Tracks] gave you.
  */
 @JvmInline
@@ -37,6 +39,7 @@ public data class TrackInfo(
     val isAccessibility: Boolean = false,
     val bitrate: Long? = null,
     // Video only.
+    /** The size of the picture as it is shown, after any crop its container states. See [PictureCrop]. */
     val videoSize: VideoSize? = null,
     val frameRate: Double? = null,
     // Audio only.
@@ -55,6 +58,11 @@ public data class TrackInfo(
      * the container carried none, which is common.
      */
     val metadata: Map<String, String> = emptyMap(),
+    /**
+     * What this video track is in Dolby Vision terms, or null when it is not Dolby Vision. See
+     * [DolbyVisionInfo.baseLayerPlaysAlone] for what playing it costs.
+     */
+    val dolbyVision: DolbyVisionInfo? = null,
 ) {
     /** A label suitable for a track menu, built from whatever the container actually provided. */
     public val label: String
@@ -83,7 +91,10 @@ public data class Tracks(
      * is still refused with a typed error rather than selected and left silent.
      */
     val selectedSubtitle: TrackId? = null,
-    /** The secondary subtitle track, drawn at the top of the picture, or null when off. */
+    /**
+     * The secondary subtitle track, drawn where [SubtitleConfig.secondaryPlacement] says, at the top
+     * of the picture by default, or null when off.
+     */
     val selectedSecondarySubtitle: TrackId? = null,
     /**
      * The versions of the media at other qualities, such as the variants of an HLS master
@@ -92,6 +103,22 @@ public data class Tracks(
     val variants: List<StreamVariant> = emptyList(),
     /** The [StreamVariant.index] of the variant that plays, or null for media with one version. */
     val selectedVariant: Int? = null,
+    /**
+     * The channels of a multiplex, such as a DVB recording or an IPTV transport stream, each with
+     * the tracks that play together, or empty for media that declares none, as MP4 and Matroska do
+     * not. Switch with [KitePlayer.selectProgram] (#505).
+     */
+    val programs: List<MediaProgram> = emptyList(),
+    /**
+     * The [MediaProgram.number] of the channel the player chose its tracks from, or null when the
+     * media declares no programme.
+     */
+    val selectedProgram: Int? = null,
+    /**
+     * The pictures the item carries for a seek bar's preview, or null when it carries none (#433).
+     * [KitePlayer.thumbnailAt] gives the one for a position. See [ThumbnailSet].
+     */
+    val thumbnails: ThumbnailSet? = null,
 ) {
     public val video: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Video }
     public val audio: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Audio }
@@ -104,6 +131,9 @@ public data class Tracks(
     }
 
     public fun find(id: TrackId): TrackInfo? = all.firstOrNull { it.id == id }
+
+    /** The programmes [id] belongs to, which is none for media without programmes or an external file. */
+    public fun programsOf(id: TrackId): List<MediaProgram> = programs.filter { id in it.tracks }
 
     /**
      * The track of [kind] that plays, or null when none does. The same answer as [selected], as

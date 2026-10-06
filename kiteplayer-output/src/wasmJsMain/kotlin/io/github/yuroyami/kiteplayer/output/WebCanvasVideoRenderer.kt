@@ -1,7 +1,8 @@
-@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@file:OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class, kotlin.js.ExperimentalWasmJsInterop::class)
 
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.VideoTransform
@@ -65,10 +66,15 @@ public fun interface WebFramePainter {
  *
  * Not thread-safe, and on the web that is not a constraint: there are no threads. `present` is
  * already `suspend` and runs on the event loop with no worker, no dispatcher and no `runBlocking`.
+ *
+ * @param keepDisplayAwake whether the page's screen stays awake while pictures are drawn, and for
+ *        two seconds after the last one (#238), through [WebDisplayAwake]. In a worker it does
+ *        nothing, because a worker has no screen; the page's `KitePlayerWorker` holds it there.
  */
 public class WebCanvasVideoRenderer(
     canvas: JsAny,
     private val painter: WebFramePainter,
+    private val keepDisplayAwake: Boolean = true,
 ) : VideoRenderer {
 
     private val state: JsAny? = webRendererState(canvas)
@@ -85,6 +91,13 @@ public class WebCanvasVideoRenderer(
     private var retainedSize: VideoSize? = null
     private var retainedRotation: Int = 0
     private var retainedMirrored: Boolean = false
+    private var retainedCrop: PictureCrop? = null
+
+    /**
+     * True from [clearPicture] until the next picture is drawn. The canvas then shows its background
+     * and the cues, and draws a change of cue at once, because no frame is coming to carry it.
+     */
+    private var pictureCleared: Boolean = false
 
     /** Diagnostics, in the same three counts the Android renderer keeps. */
     public var presentedFrames: Long = 0
@@ -149,6 +162,7 @@ public class WebCanvasVideoRenderer(
                 mode = scaleMode,
                 transform = transform,
                 mirrored = frame.mirrored,
+                crop = frame.crop,
             )
             if (layout == null) {
                 failedFrames++
@@ -158,9 +172,12 @@ public class WebCanvasVideoRenderer(
             retainedSize = size
             retainedRotation = frame.rotationDegrees
             retainedMirrored = frame.mirrored
+            retainedCrop = frame.crop
             drawStage(s, layout)
             drawOverlay(s)
+            pictureCleared = false
             presentedFrames++
+            if (keepDisplayAwake) WebDisplayAwake.framePresented()
             return true
         }
     }
@@ -168,6 +185,10 @@ public class WebCanvasVideoRenderer(
     private fun drawStage(s: JsAny, layout: FrameLayout) {
         webDrawStage(
             state = s,
+            sourceLeft = layout.sourceLeft,
+            sourceTop = layout.sourceTop,
+            sourceWidth = layout.sourceWidth,
+            sourceHeight = layout.sourceHeight,
             drawLeft = layout.drawLeft,
             drawTop = layout.drawTop,
             drawWidth = layout.drawWidth,
@@ -187,6 +208,7 @@ public class WebCanvasVideoRenderer(
      */
     private fun redrawRetained(s: JsAny) {
         if (closed) return
+        if (pictureCleared) return drawBackground(s)
         val size = retainedSize ?: return
         val layout = frameLayout(
             canvasWidth = viewportWidth,
@@ -196,8 +218,15 @@ public class WebCanvasVideoRenderer(
             mode = scaleMode,
             transform = transform,
             mirrored = retainedMirrored,
+            crop = retainedCrop,
         ) ?: return
         drawStage(s, layout)
+        drawOverlay(s)
+    }
+
+    /** The canvas's background with the cues over it, for a picture taken off. */
+    private fun drawBackground(s: JsAny) {
+        webClearCanvas(s)
         drawOverlay(s)
     }
 
@@ -280,8 +309,24 @@ public class WebCanvasVideoRenderer(
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         this.overlay = overlay
-        // Not drawn here: the next present draws it above that frame. Drawing now would put
-        // subtitles over a picture that is about to be cleared and replaced.
+        // Not drawn here while a picture plays: the next present draws it above that frame, and
+        // drawing now would put subtitles over a picture that is about to be cleared and replaced.
+        // With the picture taken off, no frame is coming, so the cue is drawn now.
+        val s = state ?: return
+        if (pictureCleared && !closed) drawBackground(s)
+    }
+
+    /**
+     * Takes the picture off (#530): the canvas shows its background, transparent as between the
+     * bars, with the cues over it, until the next picture. The stage keeps its storage for that
+     * picture, but nothing draws from it again.
+     */
+    override fun clearPicture() {
+        val s = state ?: return
+        if (closed) return
+        pictureCleared = true
+        retainedSize = null
+        drawBackground(s)
     }
 
     override fun close() {
@@ -294,13 +339,14 @@ public class WebCanvasVideoRenderer(
     }
 }
 
-/** Builds [WebCanvasVideoRenderer]s for one canvas. */
+/** Builds [WebCanvasVideoRenderer]s for one canvas. See [WebCanvasVideoRenderer] for [keepDisplayAwake]. */
 public class WebCanvasVideoRendererFactory(
     private val canvas: JsAny,
     private val painter: WebFramePainter,
+    private val keepDisplayAwake: Boolean = true,
 ) : VideoRendererFactory {
     override val name: String = "web-canvas"
-    override suspend fun create(): VideoRenderer = WebCanvasVideoRenderer(canvas, painter)
+    override suspend fun create(): VideoRenderer = WebCanvasVideoRenderer(canvas, painter, keepDisplayAwake)
 }
 
 /* The JS half. Every call takes the state object, so nothing here holds a JS reference in Kotlin
@@ -359,21 +405,26 @@ private external fun webCommitStage(state: JsAny)
  * The turn is applied about the layout's centre and the picture drawn into the pre-turn rectangle,
  * which is exactly what the Android renderer does with the same [FrameLayout], so the two cannot
  * disagree about where a rotated frame lands. A mirror is set after the turn, so it applies to the
- * picture first.
+ * picture first. Only the layout's source rectangle of the stage is drawn, which is how a crop
+ * comes off before both.
  */
 @JsFun(
-    """(s, dl, dt, dw, dh, cx, cy, rot, mirror) => {
+    """(s, sl, st, sw, sh, dl, dt, dw, dh, cx, cy, rot, mirror) => {
       const g = s.ctx, c = s.canvas;
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.clearRect(0, 0, c.width, c.height);
       if (rot !== 0) { g.translate(cx, cy); g.rotate(rot * Math.PI / 180); g.translate(-cx, -cy); }
       if (mirror) { g.translate(cx, cy); g.scale(-1, 1); g.translate(-cx, -cy); }
-      g.drawImage(s.stage, dl, dt, dw, dh);
+      g.drawImage(s.stage, sl, st, sw, sh, dl, dt, dw, dh);
       g.setTransform(1, 0, 0, 1, 0, 0);
     }""",
 )
 private external fun webDrawStage(
     state: JsAny,
+    sourceLeft: Int,
+    sourceTop: Int,
+    sourceWidth: Int,
+    sourceHeight: Int,
     drawLeft: Float,
     drawTop: Float,
     drawWidth: Float,
@@ -383,6 +434,9 @@ private external fun webDrawStage(
     rotation: Int,
     mirrored: Boolean,
 )
+
+@JsFun("(s) => { const g = s.ctx; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, s.canvas.width, s.canvas.height); }")
+private external fun webClearCanvas(state: JsAny)
 
 @JsFun("(s, w, h) => { if (s.canvas.width !== w) s.canvas.width = w; if (s.canvas.height !== h) s.canvas.height = h; }")
 private external fun webResizeCanvas(state: JsAny, width: Int, height: Int)

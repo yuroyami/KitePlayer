@@ -180,8 +180,10 @@ private class AndroidKiteVideoHardwareRenderer(
 
     override fun vsyncIntervalNanos() = delegate.vsyncIntervalNanos()
     override fun setViewport(width: Int, height: Int, scale: Float) = delegate.setViewport(width, height, scale)
+    override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) = delegate.setTransform(transform)
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) = delegate.setScaleMode(mode)
     override suspend fun setOverlay(overlay: SubtitleOverlay?) = delegate.setOverlay(overlay)
+    override fun clearPicture() = delegate.clearPicture()
     override val events get() = delegate.events
 
     override fun close() {
@@ -317,6 +319,8 @@ private class ConsumerGuardedDecoder(
         delegate.flush(newGeneration)
         session.check()
     }
+
+    override fun skipNonReferenceFrames(skip: Boolean) = delegate.skipNonReferenceFrames(skip)
 
     override fun close() = delegate.close()
 }

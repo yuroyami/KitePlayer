@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.mobile
 
 import android.view.Surface
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
@@ -16,7 +17,7 @@ import io.github.yuroyami.kiteplayer.view.KitePlayerView
 public object MobileAndroidPlayerViewRendererFactory : AndroidPlayerViewRendererFactory {
     override fun create(
         onOverlay: (SubtitleOverlay?) -> Unit,
-        onVideoGeometry: (VideoSize, Int) -> Unit,
+        onVideoGeometry: (VideoSize, Int, PictureCrop?) -> Unit,
         onScaleMode: (VideoScale) -> Unit,
     ): AndroidPlayerViewRenderer = MobileAndroidPlayerViewRenderer(
         AndroidSurfaceVideoRenderer(

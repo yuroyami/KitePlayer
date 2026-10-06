@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.output
 
+import android.content.Context
 import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
@@ -24,4 +25,13 @@ public object AndroidOutputBackend : OutputBackend {
 
     /** StaticLayout does the line breaking, bidi and shaping; see the rasteriser's own KDoc. */
     override val subtitleRasterizer: SubtitleRasterizer = AndroidSubtitleRasterizer()
+
+    /**
+     * This backend with a [context] its audio can ask about the route, so it can say how many
+     * channels the output carries, which [io.github.yuroyami.kiteplayer.AudioConfig.matchOutputChannels]
+     * needs (#466). Everything else is this backend's own.
+     */
+    public fun withContext(context: Context): OutputBackend = object : OutputBackend by AndroidOutputBackend {
+        override val audioSink: AudioSinkFactory = AudioTrackSinkFactory(context)
+    }
 }

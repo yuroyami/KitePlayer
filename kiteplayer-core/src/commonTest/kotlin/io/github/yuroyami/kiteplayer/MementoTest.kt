@@ -79,6 +79,7 @@ class MementoTest {
         volume: Float = 1f,
         balance: Float = 0f,
         audioLanguage: String? = null,
+        subtitleLanguage: String? = null,
     ) = PlayerMemento(
         queue = listOf(MediaItem("scripted://one")),
         queueIndex = 0,
@@ -92,7 +93,7 @@ class MementoTest {
         subtitleDelay = kotlin.time.Duration.ZERO,
         audioDelay = kotlin.time.Duration.ZERO,
         audioLanguage = audioLanguage,
-        subtitleLanguage = null,
+        subtitleLanguage = subtitleLanguage,
         subtitlesOff = false,
         balance = balance,
     )
@@ -107,6 +108,49 @@ class MementoTest {
         harness.run(100.milliseconds)
         assertEquals(PlaybackStatus.Paused, player.state.value.status)
         assertEquals(1f, player.state.value.volume, "the volume must be clamped to the default ceiling of 1")
+        harness.close()
+    }
+
+    // Japanese audio by default and a dub, a full English subtitle track and a forced signs track
+    // in the dub's language. The restored dub makes the player choose the signs track (#506).
+    private fun dubbed(dub: String) = MediaScript(
+        durationUs = 20_000_000,
+        hasAudio = false,
+        additionalAudioTracks = listOf(
+            ScriptedAudioTrack(index = 1, marker = 1f, language = "jpn", isDefault = true),
+            ScriptedAudioTrack(index = 2, marker = 2f, language = dub),
+        ),
+        additionalSubtitleTracks = listOf(
+            ScriptedSubtitleTrack(index = 3, cues = emptyList(), language = "eng", isDefault = true),
+            ScriptedSubtitleTrack(index = 4, cues = emptyList(), language = dub, isForced = true),
+        ),
+    )
+
+    @Test
+    fun `the restored subtitle language wins over the track the player matched to the restored audio`() = runTest {
+        val harness = CoreHarness(this, script = dubbed("fre"))
+        val player = KitePlayer(harness.core)
+        harness.attachRenderer()
+        player.restore(memento(audioLanguage = "fre", subtitleLanguage = "eng"))
+        harness.run(100.milliseconds)
+        val tracks = player.state.value.tracks
+        assertEquals(TrackId(2), tracks.selectedAudio)
+        assertEquals(TrackId(3), tracks.selectedSubtitle, "the French signs track the audio brought replaced the saved English")
+        harness.close()
+    }
+
+    @Test
+    fun `a subtitle the player matched to the restored audio stays when it is in the saved language`() = runTest {
+        // The memento names a language and nothing more, and the signs track the player chose for
+        // the dub is in it, so it is the better guess at what was showing.
+        val harness = CoreHarness(this, script = dubbed("eng"))
+        val player = KitePlayer(harness.core)
+        harness.attachRenderer()
+        player.restore(memento(audioLanguage = "eng", subtitleLanguage = "eng"))
+        harness.run(100.milliseconds)
+        val tracks = player.state.value.tracks
+        assertEquals(TrackId(2), tracks.selectedAudio)
+        assertEquals(TrackId(4), tracks.selectedSubtitle, "the restore swapped the dub's signs track for the full track")
         harness.close()
     }
 
@@ -160,8 +204,12 @@ class MementoTest {
             title = "A title",
             artist = "An artist",
             album = "An album",
+            audioContent = AudioContent.Speech,
+            clip = MediaClip(start = 4.seconds, end = 61.seconds),
         )
-        val memento = memento().copy(queue = listOf(item))
+        // A clip with no end runs to the end of the file, and must not come back with one.
+        val toTheEnd = MediaItem("album.flac", clip = MediaClip(start = 61.seconds))
+        val memento = memento().copy(queue = listOf(item, toTheEnd))
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
     }
 
@@ -330,6 +378,7 @@ class MementoTest {
         original.setRenderQuality(RenderQuality(dither = true, deband = true))
         original.setSubtitleScale(1.4f)
         original.setSubtitlePosition(0.8f)
+        original.setForcedPicturesOnly(true)
         original.setSubtitleStyle(SubtitleStyleOverride(fontSizePx = 40f, bold = true))
         original.setVideoEnabled(false)
         first.run(100.milliseconds)
@@ -348,6 +397,7 @@ class MementoTest {
         assertTrue(snapshot.renderQuality.dither && snapshot.renderQuality.deband)
         assertEquals(1.4f, snapshot.subtitleScale)
         assertEquals(0.8f, snapshot.subtitlePosition)
+        assertEquals(true, snapshot.forcedPicturesOnly)
         assertEquals(40f, snapshot.subtitleStyle?.fontSizePx)
         assertEquals(false, snapshot.videoEnabled)
         first.close()
@@ -376,13 +426,23 @@ class MementoTest {
             equalizer = EqualizerSettings(gainsDb = List(10) { it.toFloat() }, preampDb = 1.5f),
             subtitleScale = 1.3f,
             subtitlePosition = 0.7f,
+            forcedPicturesOnly = true,
             subtitleStyle = SubtitleStyleOverride(fontFamily = "Serif", bold = true, primaryColor = -1),
             videoScale = VideoScale.Stretch,
-            videoTransform = VideoTransform(aspectOverride = 2.35f, zoom = 1.1f),
+            videoTransform = VideoTransform(aspectOverride = 2.35f, zoom = 1.1f, rotationDegrees = 90, mirrorVertical = true),
             videoAdjustments = VideoAdjustments(saturation = 0.5f, gamma = 1.6f),
-            renderQuality = RenderQuality(dither = true, scaler = VideoScaler.CatmullRom),
+            renderQuality = RenderQuality(
+                dither = true,
+                scaler = VideoScaler.CatmullRom,
+                animationUpscaler = AnimationUpscaler.Quality,
+            ),
             hdrPolicy = HdrPolicy.ToneMap,
             videoEnabled = false,
+            stereoMode = StereoMode.RightOnly,
+            nightMode = true,
+            dialogueLevelDb = 6f,
+            pitchSemitones = -3.0,
+            skipSilence = true,
         )
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
     }
@@ -401,6 +461,7 @@ class MementoTest {
                         skipInitialBytes = 188,
                         maxBitrate = 3_000_000,
                         maxVideoHeight = 720,
+                        program = 202,
                     ),
                 ),
                 MediaItem("fast.mp4", demux = DemuxPolicy(probe = ProbeDepth.Fast)),

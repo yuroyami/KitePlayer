@@ -37,7 +37,7 @@ public class MetalPictureReader public constructor() {
     private var targetHeight = 0
 
     /** The identity quad: full-viewport, unrotated, untouched texcoords. */
-    private val identityQuad = floatArrayOf(1f, 1f, 1f, 0f, 0f, 1f, 0f, 0f)
+    private val identityQuad = floatArrayOf(1f, 1f, 1f, 0f, 0f, 1f, 0f, 0f, 0f, 0f)
 
     /**
      * Renders [picture] and returns `width * height * 4` tightly packed RGBA bytes at the

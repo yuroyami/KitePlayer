@@ -16,10 +16,14 @@ import io.github.yuroyami.kiteplayer.spi.TypesetFrame
  * render returns.
  *
  * Fonts: Apple and Windows builds find system fonts on their own (CoreText, DirectWrite). Android
- * and Linux have no font provider in this chain, so the first track opened loads a bounded set of
- * the system's font files (see [KiteLibass.fontDirectories]) beside whatever the container attached
- * and the application configured. Fonts embedded in the script's own `[Fonts]` section are read by
- * libass itself.
+ * and Linux have no font provider in this chain, so the first font or track that arrives loads a
+ * bounded set of the system's font files first (see [KiteLibass.fontDirectories]), and then
+ * whatever the container attached and the application configured. libass takes its default family,
+ * the one a style naming a missing font falls back to, from the first font it is given, so there it
+ * is the platform's Latin sans face, Roboto on Android. The web has no system fonts to read: the
+ * first font the application or the file brings is the default family, and a page that wants East
+ * Asian text in typeset subtitles hands the typesetter a font that has it. Fonts embedded in the
+ * script's own `[Fonts]` section are read by libass itself.
  *
  * Every member is called from the engine's raster lane and never concurrently, as the interface
  * promises; the constructor is the one call that happens elsewhere, and it does no I/O.
@@ -60,6 +64,10 @@ public class LibassTypesetter internal constructor(
     override fun addFont(name: String, data: ByteArray) {
         checkOpen()
         if (data.isEmpty()) return
+        // libass takes its default family from the first font it is given, and the engine hands
+        // over application fonts and attachments before the track opens, so the system's own go
+        // first or one of those would become the face every missing font falls back to (#507).
+        loadSystemFontsOnce()
         engine.addFont(name, data)
     }
 
@@ -125,7 +133,8 @@ internal expect class LibassEngine : AutoCloseable {
 }
 
 /**
- * Reads font files out of [directories], sans-serif faces first, until [budgetBytes] is spent.
+ * Reads font files out of [directories] in the order [pickFontFiles] gives them, the platform's
+ * Latin sans face first, until [budgetBytes] is spent.
  * Empty on platforms whose libass finds fonts itself, and on ones with no filesystem.
  */
 internal expect fun readFontFiles(directories: List<String>, budgetBytes: Long): List<Pair<String, ByteArray>>

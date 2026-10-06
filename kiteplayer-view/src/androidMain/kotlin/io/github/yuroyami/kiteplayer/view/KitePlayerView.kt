@@ -15,8 +15,8 @@ import android.view.SurfaceView
 import android.view.View
 import android.widget.FrameLayout
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.PlaybackStatus
-import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
@@ -60,6 +60,7 @@ public open class KitePlayerView @JvmOverloads constructor(
     private val subtitleView = SubtitleOverlayView(context)
     private var videoAspect: Float = 0f
     private var videoRotation: Int = 0
+    private var videoCrop: CropShare? = null
     private var videoScale: VideoScale = VideoScale.Fit
     private var rendererGeneration: Long = 0L
 
@@ -79,9 +80,9 @@ public open class KitePlayerView @JvmOverloads constructor(
                     onOverlay = { overlay ->
                         runForRenderer(generation) { subtitleView.showOverlay(overlay) }
                     },
-                    onVideoGeometry = { size, rotationDegrees ->
+                    onVideoGeometry = { size, rotationDegrees, crop ->
                         runForRenderer(generation) {
-                            setVideoGeometry(size.displayAspect, rotationDegrees)
+                            setVideoGeometry(size, rotationDegrees, crop)
                         }
                     },
                     onScaleMode = { mode ->
@@ -105,7 +106,7 @@ public open class KitePlayerView @JvmOverloads constructor(
                         }
                     } finally {
                         subtitleView.showOverlay(null)
-                        setVideoGeometry(0f, 0)
+                        setVideoGeometry(null, 0, null)
                     }
                     throw configurationFailure
                 }
@@ -131,7 +132,7 @@ public open class KitePlayerView @JvmOverloads constructor(
                 supersededBefore += renderer.supersededFrames
                 failedBefore += renderer.failedFrames
                 subtitleView.showOverlay(null)
-                setVideoGeometry(0f, 0)
+                setVideoGeometry(null, 0, null)
             }
         },
         rendererNeedsSurface = false,
@@ -182,11 +183,18 @@ public open class KitePlayerView @JvmOverloads constructor(
      */
     private var stateWatch: Job? = null
 
+    /**
+     * Whether this view is attached, by its own two callbacks. isAttachedToWindow cannot say it:
+     * Android clears what it reads only after onDetachedFromWindow returns, so the detach used to
+     * find the view still attached and start the watch again on a view leaving the screen (#477).
+     */
+    private var attached = false
+
     private fun watchPlayer() {
         stateWatch?.cancel()
         stateWatch = null
         val watched = player
-        if (watched == null || !isAttachedToWindow) {
+        if (watched == null || !attached) {
             displayAwake.playing = false
             return
         }
@@ -208,11 +216,13 @@ public open class KitePlayerView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        attached = true
         displayAwake.onScreen = true
         watchPlayer()
     }
 
     override fun onDetachedFromWindow() {
+        attached = false
         displayAwake.onScreen = false
         watchPlayer()
         super.onDetachedFromWindow()
@@ -272,15 +282,14 @@ public open class KitePlayerView @JvmOverloads constructor(
     private var surfaceLost = false
 
     /**
-     * Draws the paused picture again on a new surface. The frames that made it went to the old
-     * surface, and a paused player makes no next frame, so a precise seek to where it stands
-     * presents it once more. A playing player needs nothing: its next frame arrives on its own.
+     * Draws the held picture again on a new surface. The frames that made it went to the old
+     * surface, and a paused or ended player makes no next frame, so the player decodes the one on
+     * screen once more, keeping its position and its status (#438). A playing player needs
+     * nothing, and the player itself tells the two apart.
      */
-    private fun repaintIfPaused() {
-        val bound = player ?: return
-        if (bound.state.value.status != PlaybackStatus.Paused) return
+    private fun redrawHeldPicture() {
         // A closed player refuses; there is then no picture to bring back.
-        runCatching { bound.requestSeek(bound.position(), SeekMode.Precise) }
+        runCatching { player?.redrawPicture() }
     }
 
     /**
@@ -372,7 +381,7 @@ public open class KitePlayerView @JvmOverloads constructor(
                 binding.surfaceReady()
                 if (surfaceLost) {
                     surfaceLost = false
-                    repaintIfPaused()
+                    redrawHeldPicture()
                 }
             }
 
@@ -436,7 +445,24 @@ public open class KitePlayerView @JvmOverloads constructor(
         val videoTop = paddingTop + picture.top
         // Measured again at the size it is about to get: Fill lays the Surface out LARGER than
         // this view measured it, and a child laid out past its measurement is not a contract.
-        layoutChild(surfaceView, videoLeft, videoTop, picture.width, picture.height)
+        val crop = videoCrop
+        if (crop == null) {
+            surfaceView.clipBounds = null
+            layoutChild(surfaceView, videoLeft, videoTop, picture.width, picture.height)
+        } else {
+            // A decoder writing straight into the Surface writes the whole stored picture, so the
+            // Surface is laid out larger by what the crop takes and clipped back to the picture.
+            // The clip bounds cut the hole the Surface shows through on every version, the same
+            // way this view's own clip makes Fill (#497).
+            val surface = croppedSurfaceBounds(picture, crop)
+            layoutChild(surfaceView, paddingLeft + surface.left, paddingTop + surface.top, surface.width, surface.height)
+            surfaceView.clipBounds = Rect(
+                picture.left - surface.left,
+                picture.top - surface.top,
+                picture.left - surface.left + picture.width,
+                picture.top - surface.top + picture.height,
+            )
+        }
     }
 
     /** Tells [renderer] how large the subtitle layer is, once the layer has a size. */
@@ -454,14 +480,17 @@ public open class KitePlayerView @JvmOverloads constructor(
         child.layout(x, y, x + childWidth, y + childHeight)
     }
 
-    private fun setVideoGeometry(displayAspect: Float, rotationDegrees: Int) {
+    private fun setVideoGeometry(size: VideoSize?, rotationDegrees: Int, crop: PictureCrop?) {
         val turn = ((rotationDegrees % 360) + 360) % 360
+        val applied = crop?.takeIf { size != null && !it.isEmpty && it.fits(size.width, size.height) }
+        val displayAspect = size?.cropped(applied)?.displayAspect ?: 0f
         videoAspect = if (turn == 90 || turn == 270) {
             if (displayAspect > 0f) 1f / displayAspect else 0f
         } else {
             displayAspect
         }
         videoRotation = turn
+        videoCrop = if (size != null && applied != null) CropShare.of(applied, size, turn) else null
         requestLayout()
     }
 
@@ -516,16 +545,58 @@ public fun interface AndroidPlayerViewRendererFactory {
     /**
      * Creates one renderer generation. UI callbacks may arrive off the main thread; the view safely
      * marshals them before changing its overlay or layout.
+     *
+     * [onVideoGeometry] carries the stored size and the turn of pictures that a decoder writes
+     * straight into the view's Surface, and the crop their container states, or null for none.
+     * Nothing draws such a picture, so the view hides the cropped edges itself (#497).
      */
     public fun create(
         onOverlay: (SubtitleOverlay?) -> Unit,
-        onVideoGeometry: (VideoSize, rotationDegrees: Int) -> Unit,
+        onVideoGeometry: (VideoSize, rotationDegrees: Int, crop: PictureCrop?) -> Unit,
         onScaleMode: (VideoScale) -> Unit,
     ): AndroidPlayerViewRenderer
 }
 
 /** The rectangle the picture occupies, relative to the padded content box. */
 internal data class VideoBounds(val left: Int, val top: Int, val width: Int, val height: Int)
+
+/**
+ * What a crop takes off each side of the picture as the view shows it, as a share of that side's
+ * whole length, so the pixel aspect has nothing to change and the turn only moves the sides.
+ */
+internal data class CropShare(val left: Float, val top: Float, val right: Float, val bottom: Float) {
+    internal companion object {
+        /** [crop] of a [stored] picture, after the clockwise [turn] the view applies to it. */
+        fun of(crop: PictureCrop, stored: VideoSize, turn: Int): CropShare {
+            val top = crop.top.toFloat() / stored.height
+            val bottom = crop.bottom.toFloat() / stored.height
+            val left = crop.left.toFloat() / stored.width
+            val right = crop.right.toFloat() / stored.width
+            return when (turn) {
+                // A clockwise quarter turn moves the stored left edge to the top and the top to the right.
+                90 -> CropShare(left = bottom, top = left, right = top, bottom = right)
+                180 -> CropShare(left = right, top = bottom, right = left, bottom = top)
+                270 -> CropShare(left = top, top = right, right = bottom, bottom = left)
+                else -> CropShare(left = left, top = top, right = right, bottom = bottom)
+            }
+        }
+    }
+}
+
+/**
+ * Where the Surface goes so that the part [crop] leaves of it lands exactly on [picture]: larger by
+ * what the crop takes, and moved up and left by what it takes there. The caller clips it back.
+ */
+internal fun croppedSurfaceBounds(picture: VideoBounds, crop: CropShare): VideoBounds {
+    val width = (picture.width / (1f - crop.left - crop.right)).roundToInt().coerceAtLeast(picture.width)
+    val height = (picture.height / (1f - crop.top - crop.bottom)).roundToInt().coerceAtLeast(picture.height)
+    return VideoBounds(
+        left = picture.left - (crop.left * width).roundToInt(),
+        top = picture.top - (crop.top * height).roundToInt(),
+        width = width,
+        height = height,
+    )
+}
 
 /**
  * Where the video surface goes for a scale mode.

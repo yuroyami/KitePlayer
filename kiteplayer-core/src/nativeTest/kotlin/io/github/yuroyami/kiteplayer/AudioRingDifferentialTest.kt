@@ -9,10 +9,14 @@ import io.github.yuroyami.kiteplayer.internal.KotlinAudioRing
 import io.github.yuroyami.kiteplayer.internal.NativeAudioRing
 import io.github.yuroyami.kiteplayer.internal.framesToMicros
 import io.github.yuroyami.kiteplayer.internal.gainRampFrames
+import io.github.yuroyami.kiteplayer.internal.limitLookaheadFrames
+import io.github.yuroyami.kiteplayer.internal.limitReleaseFrames
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlin.math.PI
+import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -123,6 +127,16 @@ class AudioRingDifferentialTest {
      */
     private class FeedConstant(val frames: Int, val value: Float) : Step
 
+    /**
+     * The feeder hands over [frames] frames of a 1 kHz sine at [level] times full scale, continuing
+     * the stream's phase, the second channel opposite the first and any further ones at half.
+     *
+     * The peak limiter (#504) is shaped around full scale the way the fold is, so it needs audio
+     * that crosses it: a level above 1 makes both rings turn the gain down ahead of the loud frames,
+     * and a level below 1 must leave every sample as it was.
+     */
+    private class FeedSine(val frames: Int, val level: Float) : Step
+
     private class Pull(val frames: Int) : Step
 
     /**
@@ -135,6 +149,9 @@ class AudioRingDifferentialTest {
      * samples rather than as anything a state comparison would notice.
      */
     private class SetGain(val target: Float) : Step
+
+    /** Both rings are told to fade to silence and hold there, or to play again (#486). */
+    private class Hold(val held: Boolean) : Step
 
     /** The seek path: both rings are flushed. */
     private object Flush : Step
@@ -210,6 +227,23 @@ class AudioRingDifferentialTest {
                         streamFrame += kotlinAccepted
                     }
 
+                    is FeedSine -> {
+                        val source = FloatArray(step.frames * channels) { index ->
+                            val frame = streamFrame + index / channels
+                            val v = (step.level * sin(2.0 * PI * 1_000.0 * frame / sampleRate)).toFloat()
+                            when (index % channels) {
+                                0 -> v
+                                1 -> -v
+                                else -> v * 0.5f
+                            }
+                        }
+                        val pts = Pts(framesToMicros(streamFrame, sampleRate))
+                        val kotlinAccepted = kotlinRing.write(source, 0, step.frames, pts)
+                        val nativeAccepted = nativeRing.write(source, 0, step.frames, pts)
+                        assertEquals(kotlinAccepted, nativeAccepted, "$at: accepted frames")
+                        streamFrame += kotlinAccepted
+                    }
+
                     is FeedAtMicros -> {
                         val source = ramp(frames = step.frames, from = streamFrame, channels = channels, frameOffset = 0)
                         val pts = Pts(step.ptsUs)
@@ -246,6 +280,11 @@ class AudioRingDifferentialTest {
                         nativeRing.setGain(step.target)
                     }
 
+                    is Hold -> {
+                        kotlinRing.hold(step.held)
+                        nativeRing.hold(step.held)
+                    }
+
                     Flush -> {
                         kotlinRing.flush()
                         nativeRing.flush()
@@ -274,6 +313,8 @@ class AudioRingDifferentialTest {
         assertEquals(kotlinRing.freeFrames, nativeRing.freeFrames, "$at: free frames")
         assertEquals(kotlinRing.bufferedUs, nativeRing.bufferedUs, "$at: buffered microseconds")
         assertSameAnchor(kotlinRing.anchor(), nativeRing.anchor(), at)
+        assertEquals(kotlinRing.silent, nativeRing.silent, "$at: silent under the hold")
+        assertEquals(kotlinRing.limitedFrames, nativeRing.limitedFrames, "$at: limited frames")
     }
 
     private fun assertSameAnchor(expected: AudioAnchor?, actual: AudioAnchor?, at: String) {
@@ -894,6 +935,143 @@ class AudioRingDifferentialTest {
         val out = CapturingSinkBuffer(format, 64)
         ring.render(out, 64, FIRST_DEADLINE_NANOS)
         assertEquals(0f, out.samples[0], "a ring opened muted must render its first frame silent")
+    }
+
+    @Test
+    fun `a fade to silence and back agrees at every rate and channel count`() {
+        // The fade stops consuming on the frame its walk reaches zero, so the two rings agree on
+        // every sample only if they agree on that frame too, which the float walk decides one way
+        // or the other at each rate. Pulls shorter than the fade compare it mid-flight; the pulls
+        // under the held silence compare that nothing is consumed or dated; the release compares
+        // the walk back up to a gain set while held (#486).
+        for (rate in rates) {
+            for (channels in listOf(1, 2, 6)) {
+                runScenario(
+                    Scenario(
+                        "a pause and a resume",
+                        capacityFrames = 8_192,
+                        steps = listOf(
+                            FeedConstant(frames = 6_000, value = 0.8f),
+                            Pull(frames = 100),
+                            Hold(true),
+                            Pull(frames = 96),
+                            Pull(frames = 96),
+                            Pull(frames = 1_024),
+                            Pull(frames = 512),
+                            SetGain(0.5f),
+                            Hold(false),
+                            Pull(frames = 96),
+                            Pull(frames = 1_024),
+                            // A boost faded from above unity walks through the fold on the way down.
+                            SetGain(2f),
+                            Pull(frames = 1_024),
+                            Hold(true),
+                            Pull(frames = 1_024),
+                            Pull(frames = 1_024),
+                        ),
+                    ),
+                    sampleRate = rate,
+                    channels = channels,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a fade that runs dry or holds before any sound agrees`() {
+        runScenario(
+            Scenario(
+                "held before the first frame, then a seek's flush, then dry partway down",
+                capacityFrames = 4_096,
+                steps = listOf(
+                    Feed(frames = 1_024, mediaFrame = 0),
+                    Hold(true),
+                    Pull(frames = 256),
+                    Hold(false),
+                    Pull(frames = 512),
+                    Hold(true),
+                    Pull(frames = 512),
+                    Flush,
+                    Feed(frames = 300, mediaFrame = 48_000),
+                    Hold(false),
+                    Pull(frames = 200),
+                    Hold(true),
+                    // 100 frames left, fewer than the fade wants.
+                    Pull(frames = 512),
+                    Feed(frames = 512, mediaFrame = null),
+                    Pull(frames = 512),
+                    Hold(false),
+                    Pull(frames = 512),
+                ),
+            ),
+            sampleRate = 48_000,
+        )
+    }
+
+    @Test
+    fun `the peak limiter agrees at every rate and channel count`() {
+        // A burst past full scale inside quieter audio, fed far enough ahead that the lookahead
+        // sees it, then fed only as fast as it plays so the lookahead cannot, then across a volume
+        // walk, a boost, a fade and a seek. Pulls of odd sizes put the box's edges at every place
+        // in a request (#504).
+        for (rate in rates) {
+            for (channels in listOf(1, 2, 6)) {
+                runScenario(
+                    Scenario(
+                        "a burst past full scale",
+                        capacityFrames = 16_384,
+                        steps = listOf(
+                            FeedSine(frames = 3_000, level = 0.5f),
+                            FeedSine(frames = 2_000, level = 1.4f),
+                            FeedSine(frames = 6_000, level = 0.5f),
+                            Pull(frames = 1_000),
+                            Pull(frames = 777),
+                            Pull(frames = 1_500),
+                            Pull(frames = 333),
+                            Pull(frames = 4_096),
+                            FeedSine(frames = 500, level = 1.8f),
+                            Pull(frames = 500),
+                            FeedSine(frames = 500, level = 0.9f),
+                            Pull(frames = 512),
+                            FeedSine(frames = 4_000, level = 1.2f),
+                            SetGain(0.6f),
+                            Pull(frames = 1_000),
+                            SetGain(1f),
+                            Pull(frames = 1_000),
+                            SetGain(2f),
+                            Pull(frames = 1_000),
+                            SetGain(1f),
+                            FeedSine(frames = 3_000, level = 1.3f),
+                            Pull(frames = 1_200),
+                            Hold(true),
+                            Pull(frames = 1_024),
+                            Flush,
+                            Hold(false),
+                            FeedSine(frames = 2_000, level = 0.5f),
+                            Pull(frames = 2_048),
+                        ),
+                    ),
+                    sampleRate = rate,
+                    channels = channels,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `both implementations derive the same limiter laws from a rate`() {
+        for (rate in rates + listOf(0, 1, 7, 8_000, 11_025, 384_000, 768_000)) {
+            assertEquals(
+                limitLookaheadFrames(rate),
+                io.github.yuroyami.kiteplayer.rt.cinterop.kprt_limit_lookahead_frames(rate),
+                "the lookahead at $rate Hz",
+            )
+            assertEquals(
+                limitReleaseFrames(rate),
+                io.github.yuroyami.kiteplayer.rt.cinterop.kprt_limit_release_frames(rate),
+                "the release at $rate Hz",
+            )
+        }
     }
 
     @Test

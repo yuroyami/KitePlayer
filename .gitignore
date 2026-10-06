@@ -31,3 +31,6 @@ kiteplayer-sample-shared/media/SynthyBattle.mp3
 
 # Offline issue-remediation plans and tracker snapshots.
 /SOLISTIC_PLANS/
+
+# Python bytecode left by running or compiling a script.
+__pycache__/

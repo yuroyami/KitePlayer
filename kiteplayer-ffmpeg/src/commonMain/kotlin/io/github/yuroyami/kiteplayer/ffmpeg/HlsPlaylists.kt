@@ -1,5 +1,8 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
+import io.github.yuroyami.kiteplayer.VariantFit
+import io.github.yuroyami.kiteplayer.VideoSize
+
 /**
  * The text work of the HLS path, with no FFmpeg and no network: recognising a playlist, keeping
  * one variant of a master playlist, and resolving the addresses a playlist names. RFC 8216 is the
@@ -95,6 +98,9 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
     /** The picture width in pixels, or null when the variant does not state its size. */
     val width: Int? = attributes["RESOLUTION"]?.substringBefore('x', "")?.trim()?.toIntOrNull()
 
+    /** The picture size, or null when the variant does not state both sides. */
+    val size: VideoSize? = if (width != null && height != null && width > 0 && height > 0) VideoSize(width, height) else null
+
     /** The highest frame rate, or null when the variant does not state it. */
     val frameRate: Double? = attributes["FRAME-RATE"]?.toDoubleOrNull()?.takeIf { it > 0.0 && it.isFinite() }
 
@@ -107,8 +113,9 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
     val hdr: Boolean = attributes["VIDEO-RANGE"].let { it == "PQ" || it == "HLG" }
 
     /**
-     * True for Dolby Vision profile 5, whose picture has no HDR10 or SDR base layer. Without Dolby
-     * Vision processing its colours come out wrong, so it plays only when nothing else is offered.
+     * True for Dolby Vision profile 5, whose picture has no HDR10 or SDR base layer. The engine
+     * composes each of its frames into HDR10 on the processor, which costs tens of milliseconds a
+     * frame at 1080p and more than a phone has at 4K, so it plays only when nothing else is offered.
      */
     val dolbyVisionOnly: Boolean = codecs.any { it.startsWith("dvh1.05") || it.startsWith("dvhe.05") }
 
@@ -120,12 +127,18 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
 
 /**
  * Chooses the variant to play. A variant with a picture wins over one with sound only, one without
- * Dolby Vision profile 5 over one with it, and SDR over HDR, because the renderers show HDR tone
- * mapped. Among the rest, the variant with the highest bitrate within [maxBitrate] and
- * [maxVideoHeight] plays, and the first one listed wins a tie. When none fits, the one with the
- * lowest bitrate plays.
+ * Dolby Vision profile 5 over one with it, because profile 5 is composed on the processor, and HDR
+ * over SDR when [fit] says the output shows HDR, SDR over HDR otherwise (#447). Among the rest, the
+ * variant with the highest bitrate within [maxBitrate], [maxVideoHeight] and [fit]'s pixel cap
+ * plays, and the first one listed wins a tie.
+ * When none fits, the one with the lowest bitrate plays.
  */
-internal fun chooseHlsVariant(variants: List<HlsVariant>, maxBitrate: Long?, maxVideoHeight: Int?): HlsVariant {
+internal fun chooseHlsVariant(
+    variants: List<HlsVariant>,
+    maxBitrate: Long?,
+    maxVideoHeight: Int?,
+    fit: VariantFit? = null,
+): HlsVariant {
     require(variants.isNotEmpty()) { "a master playlist has at least one variant" }
     var pool = variants
     fun prefer(keep: (HlsVariant) -> Boolean) {
@@ -133,10 +146,13 @@ internal fun chooseHlsVariant(variants: List<HlsVariant>, maxBitrate: Long?, max
     }
     prefer { !it.audioOnly }
     prefer { !it.dolbyVisionOnly }
-    prefer { !it.hdr }
+    val showsHdr = fit?.showsHdr == true
+    prefer { it.hdr == showsHdr }
+    val pixelCap = fit?.pixelCap(pool.mapNotNull { it.size })
     val fitting = pool.filter { variant ->
         (maxBitrate == null || variant.bandwidth <= maxBitrate) &&
-            (maxVideoHeight == null || variant.height == null || variant.height <= maxVideoHeight)
+            (maxVideoHeight == null || variant.height == null || variant.height <= maxVideoHeight) &&
+            (pixelCap == null || variant.size == null || variant.size.width.toLong() * variant.size.height <= pixelCap)
     }
     if (fitting.isEmpty()) return pool.minBy { it.bandwidth }
     return fitting.maxWith(compareBy<HlsVariant> { it.bandwidth }.thenBy { it.height ?: 0 })
@@ -144,9 +160,51 @@ internal fun chooseHlsVariant(variants: List<HlsVariant>, maxBitrate: Long?, max
 
 /**
  * A master playlist with one variant kept: the playlist FFmpeg reads, every variant it offered in
- * playlist order, and the place of the kept one in that list.
+ * playlist order, the place of the kept one in that list, and the [backups] of what it kept.
  */
-internal class HlsMaster(val playlist: String, val variants: List<HlsVariant>, val chosen: Int)
+internal class HlsMaster(
+    val playlist: String,
+    val variants: List<HlsVariant>,
+    val chosen: Int,
+    val backups: List<HlsBackup> = emptyList(),
+)
+
+/**
+ * A playlist the kept master names, by its address as written, and the playlists of its backup
+ * variants that stand in for it, in the master's order (#440).
+ */
+internal class HlsBackup(val primary: String, val alternatives: List<String>)
+
+/**
+ * The backups of [chosen] among [variants] (#440): the variants that RFC 8216 calls redundant,
+ * every attribute the same but the address. The rendition groups they name may
+ * differ, as a backup on another network names its own, and each rendition of [chosen]'s groups
+ * then has for backup the rendition of the same type, language and name in theirs. Content
+ * steering's `PATHWAY-ID` names the network, so it differs between backups too.
+ */
+private fun backupsOf(chosen: HlsVariant, variants: List<HlsVariant>, lines: List<String>): List<HlsBackup> {
+    val groupTypes = listOf("AUDIO", "VIDEO", "SUBTITLES")
+    val ignored = groupTypes.toSet() + "CLOSED-CAPTIONS" + "PATHWAY-ID"
+    fun identity(variant: HlsVariant) = variant.attributes.filterKeys { it !in ignored }
+    val backups = variants.filter { it !== chosen && identity(it) == identity(chosen) && lines[it.uriLine].trim() != lines[chosen.uriLine].trim() }
+    if (backups.isEmpty()) return emptyList()
+    val out = mutableListOf(HlsBackup(lines[chosen.uriLine].trim(), backups.map { lines[it.uriLine].trim() }))
+    val renditions = lines.filter { it.startsWith("#EXT-X-MEDIA:") }.map { parseHlsAttributes(it.substringAfter(':')) }
+    for (type in groupTypes) {
+        val group = chosen.attributes[type] ?: continue
+        for (rendition in renditions.filter { it["TYPE"] == type && it["GROUP-ID"] == group }) {
+            val uri = rendition["URI"] ?: continue
+            val alternatives = backups.mapNotNull { backup ->
+                val theirs = backup.attributes[type]?.takeIf { it != group } ?: return@mapNotNull null
+                renditions.firstOrNull {
+                    it["TYPE"] == type && it["GROUP-ID"] == theirs && it["LANGUAGE"] == rendition["LANGUAGE"] && it["NAME"] == rendition["NAME"]
+                }?.get("URI")
+            }.distinct()
+            if (alternatives.isNotEmpty()) out += HlsBackup(uri, alternatives)
+        }
+    }
+    return out
+}
 
 /**
  * [text] with only the chosen variant left, or null when [text] is not a master playlist. The
@@ -158,9 +216,16 @@ internal class HlsMaster(val playlist: String, val variants: List<HlsVariant>, v
  * the media. This keeps the header tags, the chosen `EXT-X-STREAM-INF` tag and its address, and
  * the `EXT-X-MEDIA` renditions of the groups that the chosen variant names. It drops the other
  * variants, every `EXT-X-I-FRAME-STREAM-INF` tag, and the renditions of other groups. Relative
- * addresses stay as they are, so the playlist must be read against its own address.
+ * addresses stay as they are, so the playlist must be read against its own address. The chosen
+ * variant's backups are kept apart, in [HlsMaster.backups], for the opener to fail over to (#440).
  */
-internal fun keepOneHlsVariant(text: String, maxBitrate: Long?, maxVideoHeight: Int?, wanted: Int? = null): HlsMaster? {
+internal fun keepOneHlsVariant(
+    text: String,
+    maxBitrate: Long?,
+    maxVideoHeight: Int?,
+    wanted: Int? = null,
+    fit: VariantFit? = null,
+): HlsMaster? {
     val lines = text.removePrefix("﻿").split('\n').map { it.removeSuffix("\r") }
     val variants = mutableListOf<HlsVariant>()
     var index = 0
@@ -179,7 +244,7 @@ internal fun keepOneHlsVariant(text: String, maxBitrate: Long?, maxVideoHeight: 
         index++
     }
     if (variants.isEmpty()) return null
-    val chosen = wanted?.let(variants::getOrNull) ?: chooseHlsVariant(variants, maxBitrate, maxVideoHeight)
+    val chosen = wanted?.let(variants::getOrNull) ?: chooseHlsVariant(variants, maxBitrate, maxVideoHeight, fit)
     // The rendition group of each type that the chosen variant names, if any.
     val groups = listOf("AUDIO", "VIDEO", "SUBTITLES", "CLOSED-CAPTIONS").associateWith { chosen.attributes[it] }
     val dropped = HashSet<Int>()
@@ -199,116 +264,10 @@ internal fun keepOneHlsVariant(text: String, maxBitrate: Long?, maxVideoHeight: 
             }
         }
     }
-    return HlsMaster(lines.filterIndexed { at, _ -> at !in dropped }.joinToString("\n"), variants, variants.indexOf(chosen))
-}
-
-/**
- * [text] with every relative address made absolute against [base]: the address lines, and the
- * `URI` attribute of every tag that has one. A playlist that was read after a redirect needs this,
- * because FFmpeg resolves its addresses against the address it asked for, not the one that
- * answered.
- */
-internal fun absoluteHlsAddresses(text: String, base: String): String =
-    text.split('\n').joinToString("\n") { raw ->
-        val line = raw.removeSuffix("\r")
-        val ending = raw.substring(line.length)
-        val rewritten = when {
-            line.isBlank() -> line
-            !line.startsWith("#") -> resolveUriReference(base, line.trim())
-            line.startsWith("#EXT") && "URI=\"" in line -> {
-                val start = line.indexOf("URI=\"") + 5
-                val end = line.indexOf('"', start)
-                if (end < 0) line else line.substring(0, start) + resolveUriReference(base, line.substring(start, end)) + line.substring(end)
-            }
-            else -> line
-        }
-        rewritten + ending
-    }
-
-/**
- * Resolves [reference] against [base] as RFC 3986, section 5.2, defines it. A reference with a
- * scheme of its own, such as `https:` or `data:`, comes back with its dot segments removed.
- */
-internal fun resolveUriReference(base: String, reference: String): String {
-    if (SCHEME.matchesAt(reference, 0)) {
-        val scheme = reference.substringBefore(':')
-        if (!reference.startsWith("$scheme://")) return reference
-        val parts = splitUri(reference)
-        return compose(parts.scheme, parts.authority, removeDotSegments(parts.path), parts.query, parts.fragment)
-    }
-    val baseParts = splitUri(base)
-    val ref = splitUri(reference, hasScheme = false)
-    return when {
-        ref.authority != null ->
-            compose(baseParts.scheme, ref.authority, removeDotSegments(ref.path), ref.query, ref.fragment)
-        ref.path.isEmpty() ->
-            compose(baseParts.scheme, baseParts.authority, baseParts.path, ref.query ?: baseParts.query, ref.fragment)
-        ref.path.startsWith("/") ->
-            compose(baseParts.scheme, baseParts.authority, removeDotSegments(ref.path), ref.query, ref.fragment)
-        else -> {
-            // RFC 3986, section 5.2.3.
-            val slash = baseParts.path.lastIndexOf('/')
-            val merged = when {
-                baseParts.authority != null && baseParts.path.isEmpty() -> "/" + ref.path
-                slash < 0 -> ref.path
-                else -> baseParts.path.substring(0, slash + 1) + ref.path
-            }
-            compose(baseParts.scheme, baseParts.authority, removeDotSegments(merged), ref.query, ref.fragment)
-        }
-    }
-}
-
-private val SCHEME = Regex("[A-Za-z][A-Za-z0-9+.-]*:")
-
-private class UriParts(val scheme: String?, val authority: String?, val path: String, val query: String?, val fragment: String?)
-
-private fun splitUri(uri: String, hasScheme: Boolean = true): UriParts {
-    var rest = uri
-    val fragment = rest.substringAfter('#', "").takeIf { '#' in rest }
-    rest = rest.substringBefore('#')
-    val query = rest.substringAfter('?', "").takeIf { '?' in rest }
-    rest = rest.substringBefore('?')
-    val scheme = if (hasScheme && SCHEME.matchesAt(rest, 0)) rest.substringBefore(':') else null
-    if (scheme != null) rest = rest.substringAfter(':')
-    val authority = if (rest.startsWith("//")) rest.substring(2).substringBefore('/') else null
-    if (authority != null) rest = rest.substring(2 + authority.length)
-    return UriParts(scheme, authority, rest, query, fragment)
-}
-
-private fun compose(scheme: String?, authority: String?, path: String, query: String?, fragment: String?): String = buildString {
-    if (scheme != null) append(scheme).append(':')
-    if (authority != null) append("//").append(authority)
-    append(path)
-    if (query != null) append('?').append(query)
-    if (fragment != null) append('#').append(fragment)
-}
-
-/** RFC 3986, section 5.2.4, step by step. */
-private fun removeDotSegments(path: String): String {
-    var input = path
-    val output = StringBuilder()
-    fun dropLastSegment() = output.setLength(output.lastIndexOf('/').coerceAtLeast(0))
-    while (input.isNotEmpty()) {
-        when {
-            input.startsWith("../") -> input = input.substring(3)
-            input.startsWith("./") -> input = input.substring(2)
-            input.startsWith("/./") -> input = input.substring(2)
-            input == "/." -> input = "/"
-            input.startsWith("/../") -> {
-                input = input.substring(3)
-                dropLastSegment()
-            }
-            input == "/.." -> {
-                input = "/"
-                dropLastSegment()
-            }
-            input == "." || input == ".." -> input = ""
-            else -> {
-                val next = input.indexOf('/', startIndex = if (input.startsWith("/")) 1 else 0).let { if (it < 0) input.length else it }
-                output.append(input, 0, next)
-                input = input.substring(next)
-            }
-        }
-    }
-    return output.toString()
+    return HlsMaster(
+        lines.filterIndexed { at, _ -> at !in dropped }.joinToString("\n"),
+        variants,
+        variants.indexOf(chosen),
+        backupsOf(chosen, variants, lines),
+    )
 }

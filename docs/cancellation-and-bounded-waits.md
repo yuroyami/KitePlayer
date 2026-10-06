@@ -10,7 +10,8 @@ call reaches every read that KitePlayer performs itself.
 ## Terms
 
 - **The actor** is the one coroutine in `PlaybackCore` that owns all session state.
-- **The demux lane** is the single thread that opens the container and reads packets.
+- **The demux lane** is the serial lane that opens the container and reads packets. It runs one task
+  at a time over the shared IO pool, so it is not one fixed thread.
 - **A reader** is a `MediaIo`: the item's own `io`, or one that a resolver supplied, such as the
   HTTP reader of `kiteplayer-network`.
 - **The blocking bridge** is `BlockingMediaIo` in `kiteplayer-ffmpeg`. It hands a reader to FFmpeg,

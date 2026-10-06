@@ -77,11 +77,13 @@ public class KitePlayerJava(
             return
         }
         registration.invokeOnCompletion { registrations.remove(listener, registration) }
-        // Subscribed before this returns, so no event after it can be missed. The engine drops an
-        // event that a slow subscriber has no room for, so this side only ever queues.
+        // Subscribed before this returns, so no event after it can be missed. The lossless feed, and
+        // not `events`, whose shared buffer drops an event for every collector once any one of them
+        // falls behind, so a slow Kotlin collector elsewhere in the app cannot cost this listener
+        // one (#414). This side only ever queues.
         val events = Channel<PlayerEvent>(Channel.UNLIMITED)
         CoroutineScope(registration + Dispatchers.Default).launch(start = CoroutineStart.UNDISPATCHED) {
-            player.events.collect { events.trySend(it) }
+            player.losslessEvents.collect { events.trySend(it) }
         }
         val deliver = CoroutineScope(registration + executor.asCoroutineDispatcher())
         deliver.launch { player.state.collect { listener.onState(it) } }
@@ -131,6 +133,9 @@ public class KitePlayerJava(
     /** `KitePlayer.selectVariant`: the variant with [index], or the automatic choice for null. */
     public fun selectVariantAsync(index: Int?): CompletableFuture<Void?> = launchCall { player.selectVariant(index) }
 
+    /** `KitePlayer.selectProgram`: the channel numbered [number], or the automatic choice for null. */
+    public fun selectProgramAsync(number: Int?): CompletableFuture<Void?> = launchCall { player.selectProgram(number) }
+
     /**
      * `KitePlayer.addExternalSubtitle`. Completes once the file's track shows, selected; it is then
      * the subtitle track of `Tracks.selectedTrack`.
@@ -138,10 +143,23 @@ public class KitePlayerJava(
     public fun addExternalSubtitleAsync(source: SubtitleSource): CompletableFuture<Void?> =
         launchCall { player.addExternalSubtitle(source) }
 
+    /**
+     * `KitePlayer.reloadExternalSubtitle`: reads the file of [track] again, in [encoding], or by the
+     * guess for null. Completes once the track holds the new reading, in the same place and with the
+     * same selection.
+     */
+    @JvmOverloads
+    public fun reloadExternalSubtitleAsync(track: TrackInfo, encoding: String? = null): CompletableFuture<Void?> =
+        launchCall { player.reloadExternalSubtitle(track.id, encoding) }
+
     /** `KitePlayer.openQueue`. */
     @JvmOverloads
-    public fun openQueueAsync(items: List<MediaItem>, startIndex: Int = 0): CompletableFuture<Void?> =
-        launchCall { player.openQueue(items, startIndex) }
+    public fun openQueueAsync(items: List<MediaItem>, startIndex: Int = 0): CompletableFuture<Void?> {
+        // Copied on the caller's thread before the call runs on another one, so a caller that
+        // reuses its list as soon as this returns changes nothing in the queue (#409).
+        val owned = items.toList()
+        return launchCall { player.openQueue(owned, startIndex) }
+    }
 
     /** `KitePlayer.next`. */
     public fun nextAsync(): CompletableFuture<Void?> = launchCall { player.next() }
@@ -151,8 +169,11 @@ public class KitePlayerJava(
 
     /** `KitePlayer.addToQueue` with [items], at [index] or at the end for null. */
     @JvmOverloads
-    public fun addToQueueAsync(items: List<MediaItem>, index: Int? = null): CompletableFuture<Void?> =
-        launchCall { player.addToQueue(items, index) }
+    public fun addToQueueAsync(items: List<MediaItem>, index: Int? = null): CompletableFuture<Void?> {
+        // Copied here for the reason openQueueAsync gives (#409).
+        val owned = items.toList()
+        return launchCall { player.addToQueue(owned, index) }
+    }
 
     /** `KitePlayer.addToQueue` with [item], at [index] or at the end for null. */
     @JvmOverloads

@@ -197,24 +197,68 @@ class GaplessQueueTest {
     }
 
     @Test
-    fun aCurrentItemWithNoAudioDoesNotPreload() = runTest {
+    fun itemsWithNoAudioJoinByTheirPictures() = runTest {
+        val silent = MediaScript(durationUs = 3_000_000, hasAudio = false)
+        val harness = CoreHarness(this, script = silent)
+        harness.attachRenderer()
+        harness.core.openQueue(items, 0)
+        harness.core.play()
+        assertTrue(harness.runUntil(8.seconds) { harness.core.snapshots.value.status == PlaybackStatus.Ended }, "the queue ends")
+
+        assertEquals(2, harness.backend.openCalls, "each item opened its source once")
+        assertEquals(emptyList(), harness.fallbacks())
+        val afterPlay = harness.core.statusHistory.dropWhile { it != PlaybackStatus.Playing }
+        assertEquals(listOf(PlaybackStatus.Playing, PlaybackStatus.Ended), afterPlay, "no Buffering at the join")
+        val renderer = assertNotNull(harness.renderer)
+        val whole = List(75) { it * 40L }
+        assertEquals(whole + whole, renderer.timestamps.map { it.micros / 1_000 }, "every picture of both items, once each")
+        // The open shows the first picture and play starts from it, so the cadence is read after it.
+        val steps = renderer.targets.zipWithNext { a, b -> b - a }.drop(1)
+        assertEquals(List(steps.size) { 40_000_000L }, steps, "one frame period between pictures, across the join too")
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount, "nothing leaked")
+    }
+
+    @Test
+    fun anItemWithNoAudioFollowedByOneWithSoundFallsBack() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 3_000_000, hasAudio = false))
+        harness.backend.scriptFor = { item -> if (item.uri.endsWith("second")) threeSeconds else null }
         harness.attachRenderer()
         harness.core.openQueue(items, 0)
         harness.core.play()
         assertTrue(harness.runUntil(5.seconds) { harness.core.snapshots.value.queueIndex == 1 })
         val fallback = harness.fallbacks().single()
         assertTrue("current item has no selected audio track" in fallback.reason, fallback.reason)
+        assertEquals(2, harness.backend.openCalls, "the old path played the preloaded item without opening it again")
         harness.close()
     }
 
     @Test
-    fun aNextItemWithAStartPositionFallsBack() = runTest {
+    fun aPreloadStillOpeningWhenThePicturesRunOutFallsBack() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 3_000_000, hasAudio = false))
+        harness.attachRenderer()
+        harness.core.openQueue(items, 0)
+        val gate = CompletableDeferred<Unit>()
+        harness.backend.openGate = gate
+        harness.core.play()
+        assertTrue(harness.runUntil(4.seconds) { harness.fallbacks().isNotEmpty() })
+        assertTrue("ran out of pictures" in harness.fallbacks().single().reason, harness.fallbacks().single().reason)
+        gate.complete(Unit)
+        assertTrue(harness.runUntil(2.seconds) { harness.core.snapshots.value.queueIndex == 1 && harness.core.snapshots.value.status == PlaybackStatus.Playing })
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount, "nothing leaked")
+    }
+
+    @Test
+    fun aNextItemWithAStartPositionJoinsAtThatPositionWithNoGap() = runTest {
         val harness = CoreHarness(this, script = threeSeconds)
         harness.core.openQueue(listOf(items[0], MediaItem("scripted://second", startPosition = 1.seconds)), 0)
         harness.core.play()
         assertTrue(harness.runUntil(5.seconds) { harness.core.snapshots.value.queueIndex == 1 })
-        assertTrue("start position" in harness.fallbacks().single().reason, harness.fallbacks().single().reason)
+        assertEquals(emptyList(), harness.fallbacks())
+        assertEquals(1, harness.sink.openCount, "the sound followed without a gap")
+        val position = harness.core.position()
+        assertTrue(position in 1.seconds..1_300.milliseconds, "the next item began at its start position, not at $position")
         harness.close()
     }
 

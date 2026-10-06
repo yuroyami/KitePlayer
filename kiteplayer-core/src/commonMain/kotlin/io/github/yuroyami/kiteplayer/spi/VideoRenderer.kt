@@ -114,6 +114,23 @@ public interface VideoRenderer : AutoCloseable {
     public suspend fun setOverlay(overlay: SubtitleOverlay?)
 
     /**
+     * No picture plays any more, so the one on screen must go.
+     *
+     * The engine calls this when a picture stops and nothing takes its place: the picture is
+     * turned off while the sound plays, an item with no picture opens, an open fails, the player
+     * stops, or this renderer is attached while no picture plays. The renderer forgets the frame it
+     * shows and any frame it accepted but has not drawn yet, and shows its background from then on,
+     * with the subtitle overlay still drawn over it, until the next [present] brings a picture
+     * back. An item that ended, or failed while it played, is not told, so its last picture stays,
+     * as in other players.
+     *
+     * Never called while a [present] is running. Defaulted so an existing renderer keeps
+     * compiling; such a renderer keeps its last picture on screen, which is what every renderer
+     * did before this existed.
+     */
+    public fun clearPicture() {}
+
+    /**
      * Surface loss, surface return, refresh changes, colour limits, hard failure.
      *
      * The engine collects this feed. [RendererEvent.SurfaceLost] and [RendererEvent.Failed] become
@@ -146,6 +163,27 @@ public interface VideoRenderer : AutoCloseable {
      * on its subtitle passes, never per frame, and lays the overlay out again when it changes.
      */
     public val outputSize: io.github.yuroyami.kiteplayer.VideoSize? get() = null
+
+    /**
+     * True when this renderer, on the display it draws to now, shows HDR as HDR under
+     * [io.github.yuroyami.kiteplayer.HdrPolicy.Auto], rather than tone mapping it (#447). The
+     * engine reads it when it chooses an adaptive stream's variant, so an HDR display gets the HDR
+     * version and a standard one the SDR version. Defaulted to false, for a renderer that always
+     * tone maps.
+     */
+    public val showsHdr: Boolean get() = false
+
+    /**
+     * True when this renderer draws the picture it holds again by itself after a change of its
+     * look: scale mode, adjustments, framing, render quality or the subtitle overlay. False makes
+     * the engine decode the held picture once more after such a change while the player is paused
+     * or ended, so the change shows at once rather than with the next frame (#463). Read at each
+     * change, so the answer may follow the picture: Android's renderers answer false while a
+     * MediaCodec frame shows, because it goes to the Surface and leaves no copy, and the surface
+     * renderer answers true while a software picture it keeps shows (#541). Defaulted to true, for
+     * a renderer that keeps its picture.
+     */
+    public val redrawsHeldPicture: Boolean get() = true
 }
 
 /** What a renderer reports about itself on [VideoRenderer.events]. */

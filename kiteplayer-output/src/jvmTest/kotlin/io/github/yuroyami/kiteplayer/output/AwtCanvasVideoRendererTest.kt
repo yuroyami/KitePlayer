@@ -33,6 +33,7 @@ class AwtCanvasVideoRendererTest {
         override val size: VideoSize = VideoSize(64, 32),
         override val rotationDegrees: Int = 0,
         private val color: ColorSpaceInfo = ColorSpaceInfo(),
+        override val crop: io.github.yuroyami.kiteplayer.PictureCrop? = null,
     ) : VideoFrame {
         var closes = 0
             private set
@@ -174,6 +175,19 @@ class AwtCanvasVideoRendererTest {
         r.setCanvas(java.awt.Canvas())
         r.present(CountingFrame(size = VideoSize(1920, 1080), rotationDegrees = 90), 0L)
         assertEquals(VideoSize(1920, 1080) to 90, reported)
+    }
+
+    @Test
+    fun `a cropped frame reports the shape of what its crop leaves`() = runTest {
+        var reported: Pair<VideoSize, Int>? = null
+        val r = AwtCanvasVideoRenderer(
+            painter = { _, _, _, _ -> true },
+            onVideoGeometry = { size, rotation -> reported = size to rotation },
+        )
+        r.setCanvas(java.awt.Canvas())
+        val crop = io.github.yuroyami.kiteplayer.PictureCrop(bottom = 8)
+        r.present(CountingFrame(size = VideoSize(1920, 1088), crop = crop), 0L)
+        assertEquals(VideoSize(1920, 1080) to 0, reported)
     }
 
     @Test
@@ -409,12 +423,17 @@ class AwtCanvasVideoRendererTest {
         val painting = java.util.concurrent.CountDownLatch(1)
         val paints = java.util.concurrent.atomic.AtomicInteger()
 
+        /** For each paint, whether it carried a picture, and the overlay it was given. */
+        val drawn: MutableList<Pair<Boolean, io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?>> =
+            java.util.Collections.synchronizedList(mutableListOf())
+
         override fun present(
             canvas: java.awt.Canvas,
-            image: BufferedImage,
-            layout: FrameLayout,
+            image: BufferedImage?,
+            layout: FrameLayout?,
             overlay: io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?,
         ): Boolean {
+            drawn += (image != null && layout != null) to overlay
             val now = inside.incrementAndGet()
             mostAtOnce.accumulateAndGet(now, ::maxOf)
             painting.countDown()
@@ -590,6 +609,58 @@ class AwtCanvasVideoRendererTest {
         r.setOverlay(null)
         assertEquals(2, presenter.paints.get(), "the refused picture was dropped instead of retained")
         r.close()
+    }
+
+    @Test
+    fun `a cleared picture leaves the background and the cues until the next frame`() = runTest {
+        val r = renderer()
+        val presenter = CountingPresenter(holdMillis = 0)
+        r.presenter = presenter
+        r.setCanvas(DisplayableCanvas())
+        assertTrue(r.present(CountingFrame(), 0L))
+        val cue = io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+            images = emptyList(),
+            viewportWidth = 160,
+            viewportHeight = 90,
+            contentHash = 1L,
+        )
+
+        r.clearPicture()
+        r.setOverlay(cue)
+        r.setScaleMode(io.github.yuroyami.kiteplayer.VideoScale.Fill)
+        assertTrue(r.present(CountingFrame(), 0L))
+        assertEquals(
+            listOf(true to null, false to null, false to cue, false to cue, true to cue),
+            presenter.drawn.toList(),
+            "the picture came back only with the next frame",
+        )
+        r.close()
+    }
+
+    @Test
+    fun `with no picture the whole canvas is background under the cues`() {
+        val pixels = ByteArray(4 * 4 * 4) { 0xFF.toByte() }
+        val overlay = io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+            images = listOf(
+                io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                    x = 8,
+                    y = 8,
+                    bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(4, 4, pixels),
+                ),
+            ),
+            viewportWidth = 40,
+            viewportHeight = 40,
+            contentHash = 1L,
+        )
+        val target = BufferedImage(40, 40, BufferedImage.TYPE_INT_RGB)
+        val g = target.createGraphics()
+        g.color = Color.WHITE
+        g.fillRect(0, 0, 40, 40)
+        AwtCanvasPresenter.compose(g, 40, 40, image = null, layout = null, overlay = overlay)
+        g.dispose()
+        assertEquals(Color.BLACK.rgb, target.getRGB(2, 2), "the old picture is gone")
+        assertEquals(Color.BLACK.rgb, target.getRGB(30, 30))
+        assertEquals(Color.WHITE.rgb, target.getRGB(10, 10), "the cue is still drawn")
     }
 
     /**

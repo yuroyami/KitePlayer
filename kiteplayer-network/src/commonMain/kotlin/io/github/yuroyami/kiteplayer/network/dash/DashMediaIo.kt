@@ -249,7 +249,29 @@ internal class DashTransport(
     val bitsPerSecond: () -> Long?,
     /** Called once, when the item's reader closes. */
     val release: () -> Unit = {},
+    /** The newest refusal of a request any reader [open] made, once (#453). */
+    val refusal: () -> io.github.yuroyami.kiteplayer.SourceRefusal? = { null },
 )
+
+/**
+ * [this] with every open and every fetch going through [failover] (#440), so a segment whose
+ * location fails is read from another the manifest names. A moved address is judged by [policy]
+ * as any other the manifest names.
+ */
+internal fun DashTransport.failingOver(failover: DashFailover, mpdUrl: String, policy: DashUrlPolicy): DashTransport {
+    val inner = this
+    fun checked(url: String, target: String): String =
+        if (target == url) url else DashManifestParser.requireAllowed(mpdUrl, target, policy)
+    return DashTransport(
+        open = { url -> failover.open(url) { target -> inner.open(checked(url, target)) } },
+        fetch = { url, limit, what -> failover.open(url) { target -> inner.fetch(checked(url, target), limit, what) } },
+        refetch = inner.refetch,
+        date = inner.date,
+        bitsPerSecond = inner.bitsPerSecond,
+        release = inner.release,
+        refusal = inner.refusal,
+    )
+}
 
 /** [inner], which also calls [release] once when it closes. */
 private class ReleasingMediaIo(private val inner: MediaIo, private val release: () -> Unit) : MediaIo {
@@ -262,6 +284,7 @@ private class ReleasingMediaIo(private val inner: MediaIo, private val release: 
     override suspend fun seek(position: Long) = inner.seek(position)
     override fun setWarningSink(sink: (PlaybackWarning) -> Unit) = inner.setWarningSink(sink)
     override suspend fun openRelated(uri: String): MediaIo? = inner.openRelated(uri)
+    override fun takeRefusal(): io.github.yuroyami.kiteplayer.SourceRefusal? = inner.takeRefusal()
     override fun networkBitsPerSecond(): Long? = inner.networkBitsPerSecond()
 
     override fun close() {
@@ -486,6 +509,8 @@ public object Dash {
                 date = { url -> openChecked(url).use { it.date } },
                 bitsPerSecond = io::networkBitsPerSecond,
                 release = io::close,
+                // Every reader this item opens goes through [io], which collects their refusals.
+                refusal = io::takeRefusal,
             ),
         )
     }
@@ -513,7 +538,7 @@ public object Dash {
             // Built here, so a manifest whose playlists cannot be written is refused before any open.
             // Every Period plays, joined onto the first one's tracks (#403).
             manifest.periodTimings()
-            return DashRoute.Hls(mpdUrl, manifest, DashHls.presentation(period, live = manifest.isDynamic), policy)
+            return DashRoute.Hls(mpdUrl, manifest, DashHls.presentation(period, live = manifest.isDynamic, thumbnails = !manifest.isDynamic && manifest.periods.size == 1), policy)
         }
         // Refused, not truncated: the one-stream reader byte-concatenates ONE Period's segments,
         // and silently playing period one of an ad-stitched presentation looked like a player that
@@ -546,10 +571,20 @@ public object Dash {
             // BaseURL names the media, and then there is nothing to play.
             val file = representation.baseUrl
             require(file != mpdUrl) { "${shownUri(mpdUrl)} names no media for representation ${representation.id}" }
-            return DashRoute.File(file)
+            return DashRoute.File(file, Failover(mpdUrl, manifest.alternativeBaseUrls, policy))
         }
         // The plan itself is immutable and shared by every reader the route makes.
-        return DashRoute.Segments(DashManifestParser.segmentPlan(manifest, period, representation, policy), maxSegmentBytes)
+        return DashRoute.Segments(
+            DashManifestParser.segmentPlan(manifest, period, representation, policy),
+            maxSegmentBytes,
+            Failover(mpdUrl, manifest.alternativeBaseUrls, policy),
+        )
+    }
+
+    /** What a reader needs to fail over between a manifest's locations: a fresh [DashFailover] per open. */
+    private class Failover(val mpdUrl: String, val alternatives: List<DashBaseUrls>, val policy: DashUrlPolicy) {
+        fun over(transport: DashTransport, failover: DashFailover = DashFailover(alternatives)): DashTransport =
+            if (alternatives.isEmpty()) transport else transport.failingOver(failover, mpdUrl, policy)
     }
 
     /** One way a manifest plays, decided once; [reader] makes the reader of one open over a [DashTransport]. */
@@ -563,32 +598,49 @@ public object Dash {
             private val presentation: DashHlsPresentation,
             private val policy: DashUrlPolicy,
         ) : DashRoute {
-            override suspend fun reader(transport: DashTransport): MediaIo = DashHlsMediaIo(
+            override suspend fun reader(transport: DashTransport): MediaIo {
+                // A live manifest fetched again may name its locations anew, and the reader keeps
+                // the one it moved to for a base it still names.
+                val failover = DashFailover(manifest.alternativeBaseUrls)
+                val routed = if (manifest.isDynamic || manifest.alternativeBaseUrls.isNotEmpty()) {
+                    transport.failingOver(failover, mpdUrl, policy)
+                } else {
+                    transport
+                }
+                return reader(routed, failover)
+            }
+
+            private fun reader(transport: DashTransport, failover: DashFailover): MediaIo = DashHlsMediaIo(
                 presentation = presentation,
                 manifest = manifest,
                 manifestUrl = mpdUrl,
                 policy = policy,
                 openUrl = transport.open,
+                onManifest = { fresh -> failover.update(fresh.alternativeBaseUrls) },
                 refetch = if (manifest.isDynamic) transport.refetch else null,
                 nowMicros = ::wallClockMicros,
                 fetchDate = transport.date,
                 bitsPerSecond = transport.bitsPerSecond,
                 release = transport.release,
+                refusal = transport.refusal,
             )
         }
 
         /** One file, read with range requests, so it seeks. */
-        class File(private val url: String) : DashRoute {
+        class File(private val url: String, private val failover: Failover) : DashRoute {
             override suspend fun reader(transport: DashTransport): MediaIo =
-                ReleasingMediaIo(transport.open(url), transport.release)
+                ReleasingMediaIo(failover.over(transport).open(url), transport.release)
         }
 
         /** One representation's segments as one forward stream. */
-        class Segments(private val plan: DashSegmentPlan, private val maxSegmentBytes: Long) : DashRoute {
-            override suspend fun reader(transport: DashTransport): MediaIo = ReleasingMediaIo(
-                DashMediaIo(plan) { url -> transport.fetch(url, maxSegmentBytes, "the segment at ${shownUri(url)}") },
-                transport.release,
-            )
+        class Segments(private val plan: DashSegmentPlan, private val maxSegmentBytes: Long, private val failover: Failover) : DashRoute {
+            override suspend fun reader(transport: DashTransport): MediaIo {
+                val routed = failover.over(transport)
+                return ReleasingMediaIo(
+                    DashMediaIo(plan) { url -> routed.fetch(url, maxSegmentBytes, "the segment at ${shownUri(url)}") },
+                    transport.release,
+                )
+            }
         }
     }
 

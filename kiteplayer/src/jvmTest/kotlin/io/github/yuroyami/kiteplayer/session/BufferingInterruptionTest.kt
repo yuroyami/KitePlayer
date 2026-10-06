@@ -1,12 +1,14 @@
 package io.github.yuroyami.kiteplayer.session
 
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.availability
 import io.github.yuroyami.kiteplayer.isAvailable
 import io.github.yuroyami.kiteplayer.MediaIoFactory
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PipedMediaIo
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.from
+import io.github.yuroyami.kiteplayer.requireTestMedia
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -16,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import org.junit.Assume.assumeTrue
 
 /**
  * A player waiting for data still counts as playing for the session guards, because the engine
@@ -31,9 +34,9 @@ class BufferingInterruptionTest {
 
     @Test
     fun aNoisyRoutePausesABufferingPlayer() = runBlocking {
-        val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
-        if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
-        if (!KitePlayer.isAvailable) return@runBlocking println("SKIP: no desktop player")
+        val file = requireTestMedia(media, "no $MEDIA to play; run scripts/testmedia.sh")
+        assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
+        requireTestMedia(KitePlayer.isAvailable, "no desktop player: ${KitePlayer.availability}")
         val player = KitePlayer()
         try {
             val bytes = file.readBytes()

@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
@@ -33,6 +34,7 @@ import platform.CoreGraphics.CGBitmapContextCreateImage
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
 import platform.CoreGraphics.CGColorSpaceRef
 import platform.CoreGraphics.CGColorSpaceRelease
+import platform.CoreGraphics.CGContextClearRect
 import platform.CoreGraphics.CGContextDrawImage
 import platform.CoreGraphics.CGContextRelease
 import platform.CoreGraphics.CGContextRestoreGState
@@ -128,16 +130,22 @@ public class AppKitVideoRenderer internal constructor(
      * thread, through the main queue.
      *
      * @param convert converts a frame to tightly packed RGBA, one byte per component, no row padding.
+     * @param keepDisplayAwake whether the display stays awake while pictures are shown, and for two
+     *        seconds after the last one (#238), which a Mac otherwise lets sleep in the middle of a film.
      */
     public constructor(
         window: AppKitWindow,
         convert: (VideoFrame) -> ByteArray,
         toneMapped: (VideoFrame) -> Boolean = { false },
+        keepDisplayAwake: Boolean = true,
     ) : this(
         convert = convert,
         toneMapped = toneMapped,
         enqueueOnMain = { block -> dispatch_async(dispatch_get_main_queue()) { block() } },
-        showImage = { image -> window.imageView.image = image },
+        showImage = { image ->
+            window.imageView.image = image
+            if (keepDisplayAwake) MacDisplayAwake.framePresented()
+        },
     )
 
     private val presented = atomic(0L)
@@ -147,13 +155,19 @@ public class AppKitVideoRenderer internal constructor(
     /** The single frame waiting to be converted. Newest wins, and the displaced one is closed here. */
     private val pending = atomic<VideoFrame?>(null)
 
-    /** The single finished image waiting for the main thread. Newest wins. */
-    private class PendingDelivery(val image: NSImage, val ptsUs: Long)
+    /**
+     * The single finished image waiting for the main thread. Newest wins. [picture] is false for
+     * the background a clear shows, which no frame counter counts and no event reports.
+     */
+    private class PendingDelivery(val image: NSImage, val ptsUs: Long, val picture: Boolean = true)
 
     private val pendingImage = atomic<PendingDelivery?>(null)
 
     /** True from the moment a delivery block is queued until that block starts running. */
     private val deliveryQueued = atomic(false)
+
+    /** Set by [clearPicture] and consumed by the worker, which owns the retained picture. */
+    private val clearWanted = atomic(false)
 
     /** Wakes the worker. Conflated, so a signal sent before it waits is kept rather than lost. */
     private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -196,6 +210,9 @@ public class AppKitVideoRenderer internal constructor(
         try {
             while (!closed.value) {
                 signal.receive()
+                // The clear comes first, so a frame presented after it is drawn over the
+                // background rather than under it.
+                if (clearWanted.getAndSet(false)) takeOffPicture()
                 convertPending()
                 // An overlay change during a pause re-composites the retained pixels;
                 // a converted frame above already baked the new overlay in.
@@ -273,7 +290,9 @@ public class AppKitVideoRenderer internal constructor(
         val ptsUs = frame.pts.micros
         val width = frame.size.width
         val height = frame.size.height
-        val displayWidth = frame.size.displayWidth
+        val crop = frame.crop
+        // The crop comes off before the aspect, so the shown width is that of what is left.
+        val displayWidth = frame.size.cropped(crop).displayWidth
         val rotation = quarterTurn(frame.rotationDegrees)
         val mirrored = frame.mirrored
         val image = try {
@@ -289,8 +308,10 @@ public class AppKitVideoRenderer internal constructor(
                 retainedDisplayWidth = displayWidth
                 retainedRotation = rotation
                 retainedMirrored = mirrored
+                retainedCrop = crop
                 retainedPtsUs = ptsUs
-                makeImage(rgba, width, height, displayWidth, rotation, mirrored)
+                pictureCleared = false
+                makeImage(rgba, width, height, displayWidth, rotation, mirrored, crop)
             }
         } catch (failure: Throwable) {
             eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "conversion failed"))
@@ -313,8 +334,9 @@ public class AppKitVideoRenderer internal constructor(
      * The flag is what bounds the work: it is set when a block is queued and cleared when that block
      * starts, so while one is waiting every further image just replaces the one in the slot.
      */
-    private fun deliver(image: NSImage, ptsUs: Long) {
-        if (pendingImage.getAndSet(PendingDelivery(image, ptsUs)) != null) superseded.incrementAndGet()
+    private fun deliver(image: NSImage, ptsUs: Long, picture: Boolean = true) {
+        val displaced = pendingImage.getAndSet(PendingDelivery(image, ptsUs, picture))
+        if (displaced != null && displaced.picture) superseded.incrementAndGet()
         if (deliveryQueued.compareAndSet(expect = false, update = true)) {
             enqueueOnMain { drawPendingImage() }
         }
@@ -328,10 +350,11 @@ public class AppKitVideoRenderer internal constructor(
         val delivery = pendingImage.getAndSet(null) ?: return
         if (closed.value) {
             // The renderer is closed, so the window is no longer this renderer's to draw into.
-            failed.incrementAndGet()
+            if (delivery.picture) failed.incrementAndGet()
             return
         }
         showImage(delivery.image)
+        if (!delivery.picture) return
         presented.incrementAndGet()
         // Best effort by design: the image reached the view on the main thread, which is the
         // closest this CPU path can observe to pixels on glass.
@@ -382,11 +405,14 @@ public class AppKitVideoRenderer internal constructor(
         displayWidth: Int,
         rotationDegrees: Int,
         mirrored: Boolean,
+        crop: PictureCrop?,
     ): NSImage? {
         // The engine's one colour-matrix law, applied to bytes here instead of in
         // a shader. Identity hands back the same array, so an untouched picture copies nothing.
         val pixels = adjustRgba(rgba, adjustSlot.value)
         val transform = transformSlot.value
+        // The viewer's turn and mirror fold into the frame's own, so one drawing applies both (#428).
+        val orientation = transform.orient(rotationDegrees, mirrored)
         val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
         try {
             return pixels.usePinned { pinned ->
@@ -403,14 +429,17 @@ public class AppKitVideoRenderer internal constructor(
                 ) ?: return@usePinned null
 
                 try {
-                    val stored = CGBitmapContextCreateImage(context) ?: return@usePinned null
+                    val whole = CGBitmapContextCreateImage(context) ?: return@usePinned null
+                    // Everything below sees only what the crop leaves, [displayWidth] included.
+                    val stored = cropStoredImage(whole, width, height, crop) ?: return@usePinned null
+                    val shown = io.github.yuroyami.kiteplayer.VideoSize(width, height).cropped(crop)
                     try {
                         // Sizing by the display width applies a non-square pixel aspect, so anamorphic
                         // content is not stretched. A quarter turn moves that stretch onto the other
                         // axis, because the picture's own width is vertical afterwards.
-                        val quarterTurned = rotationDegrees == 90 || rotationDegrees == 270
-                        val presentedWidth = if (quarterTurned) height else displayWidth
-                        val presentedHeight = if (quarterTurned) displayWidth else height
+                        val quarterTurned = orientation.isQuarterTurn
+                        val presentedWidth = if (quarterTurned) shown.height else displayWidth
+                        val presentedHeight = if (quarterTurned) displayWidth else shown.height
                         // An aspect override reshapes the picture AS PRESENTED,
                         // which for this path is only a different declared size and costs nothing.
                         val size = CGSizeMake(
@@ -421,13 +450,15 @@ public class AppKitVideoRenderer internal constructor(
                         // composite; an active overlay routes through the drawing pass at every
                         // rotation, and so does zoom or pan.
                         if (
-                            rotationDegrees == 0 && !mirrored && overlaySlot.value == null &&
+                            orientation.rotationDegrees == 0 && !orientation.mirrored && overlaySlot.value == null &&
                             !transform.needsDrawingPass()
                         ) {
                             NSImage(cGImage = stored, size = size)
                         } else {
-                            val turned = turn(stored, width, height, rotationDegrees, mirrored, transform, colorSpace)
-                                ?: return@usePinned null
+                            val turned = turn(
+                                stored, shown.width, shown.height, orientation.rotationDegrees, orientation.mirrored,
+                                transform, colorSpace,
+                            ) ?: return@usePinned null
                             try {
                                 NSImage(cGImage = turned, size = size)
                             } finally {
@@ -619,19 +650,103 @@ public class AppKitVideoRenderer internal constructor(
     private var retainedDisplayWidth: Int = 0
     private var retainedRotation: Int = 0
     private var retainedMirrored: Boolean = false
+    private var retainedCrop: PictureCrop? = null
     private val redrawWanted = kotlinx.atomicfu.atomic(false)
+
+    /** True from a clear until the next frame converts, so a redraw shows the background. */
+    private var pictureCleared: Boolean = false
 
     /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
     private fun redrawRetained() {
         // Nobody will ever see a picture drawn after the close began.
         if (closed.value) return
+        if (pictureCleared) return deliverBackground()
         val rgba = retainedRgba ?: return
         val image = try {
-            makeImage(rgba, retainedWidth, retainedHeight, retainedDisplayWidth, retainedRotation, retainedMirrored)
+            makeImage(
+                rgba, retainedWidth, retainedHeight, retainedDisplayWidth, retainedRotation, retainedMirrored, retainedCrop,
+            )
         } catch (_: Throwable) {
             null
         } ?: return
         deliver(image, retainedPtsUs)
+    }
+
+    /**
+     * Forgets the retained picture and shows the background, with the cues still drawn over it,
+     * until the next frame converts. Worker thread only.
+     */
+    private fun takeOffPicture() {
+        retainedRgba = null
+        retainedCrop = null
+        pictureCleared = true
+        deliverBackground()
+    }
+
+    /**
+     * Delivers a transparent image with only the cues on it, so the window shows its own
+     * background where the picture was. A picture still waiting for the main thread is displaced
+     * by it and counted superseded, like the frame [clearPicture] lets go of.
+     */
+    private fun deliverBackground() {
+        if (closed.value) return
+        val image = try {
+            makeBackground()
+        } catch (_: Throwable) {
+            null
+        } ?: return
+        deliver(image, retainedPtsUs, picture = false)
+    }
+
+    /**
+     * A transparent image with the active cues drawn on it, the size of the overlay's own
+     * viewport so the image view places them where they sat over the picture, or one pixel when
+     * no cue shows.
+     */
+    private fun makeBackground(): NSImage? {
+        val active = overlaySlot.value?.takeIf { it.images.isNotEmpty() }
+        val width = active?.viewportWidth?.coerceAtLeast(1) ?: 1
+        val height = active?.viewportHeight?.coerceAtLeast(1) ?: 1
+        val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
+        try {
+            val context = CGBitmapContextCreate(
+                data = null,
+                width = width.toULong(),
+                height = height.toULong(),
+                bitsPerComponent = 8u,
+                bytesPerRow = 0u,
+                space = colorSpace,
+                bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value,
+            ) ?: return null
+            try {
+                CGContextClearRect(context, CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()))
+                drawOverlayInto(context, width, height)
+                val drawn = CGBitmapContextCreateImage(context) ?: return null
+                try {
+                    return NSImage(cGImage = drawn, size = CGSizeMake(width.toDouble(), height.toDouble()))
+                } finally {
+                    CGImageRelease(drawn)
+                }
+            } finally {
+                CGContextRelease(context)
+            }
+        } finally {
+            CGColorSpaceRelease(colorSpace)
+        }
+    }
+
+    /**
+     * Lets go of a frame waiting to convert, counted superseded, and has the worker forget the
+     * retained picture and show the background with the cues over it.
+     */
+    override fun clearPicture() {
+        if (closed.value) return
+        pending.getAndSet(null)?.let { frame ->
+            frame.close()
+            superseded.incrementAndGet()
+        }
+        clearWanted.value = true
+        signal.trySend(Unit)
     }
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
@@ -656,7 +771,7 @@ public class AppKitVideoRenderer internal constructor(
         worker.cancel()
         runBlocking { workerJob.join() }
         drainPending()
-        if (pendingImage.getAndSet(null) != null) failed.incrementAndGet()
+        if (pendingImage.getAndSet(null)?.picture == true) failed.incrementAndGet()
         // The worker is out, so the overlay cache has no other owner left.
         overlayImages.release()
         dispatcher.close()

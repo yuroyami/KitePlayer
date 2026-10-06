@@ -33,6 +33,25 @@ public sealed class PlaybackError {
     }
 
     /**
+     * The item's address has a scheme this build has no way to open, such as `srt://` or
+     * `rtmps://`, or `rtsp://` on the web, where the player has no sockets of its own. Nothing was
+     * sent over any network: the address was refused for its scheme alone.
+     *
+     * The same address fails the same way every time in this build, which is what separates it
+     * from [SourceUnavailable], where the bytes could not be reached this time. [scheme] is the
+     * address's scheme in lower case, without its colon, and [detail] may say what would open it.
+     * [MediaItem]'s documentation lists the schemes each platform opens.
+     */
+    public data class SchemeUnsupported(
+        val uri: String,
+        val scheme: String,
+        val detail: String? = null,
+    ) : PlaybackError() {
+        override val message: String
+            get() = "this build cannot open $scheme addresses: ${redactUri(uri)}" + (detail?.let { ". ${redactUrisIn(it)}" } ?: "")
+    }
+
+    /**
      * The source stopped answering: a read waited [stalledFor] without a packet or a byte, which is
      * at least `BufferPolicy.stallTimeout`. The engine interrupted the read and ended the session.
      * The same media may play when the network recovers.
@@ -43,7 +62,8 @@ public sealed class PlaybackError {
 
     /** The bytes were reached and are not media the demuxer recognises. */
     public data class NotMedia(val uri: String, val detail: String? = null) : PlaybackError() {
-        override val message: String get() = "not a recognised media format: ${redactUri(uri)}"
+        override val message: String
+            get() = "not a recognised media format: ${redactUri(uri)}" + (detail?.let { ": ${redactUrisIn(it)}" } ?: "")
     }
 
     /** The container was read and holds nothing this build can play. */
@@ -63,12 +83,15 @@ public sealed class PlaybackError {
     }
 
     /**
-     * A shutdown did not complete inside its deadline, so part of the pipeline may still be running.
+     * A shutdown did not complete inside its deadline, or stopped part way, so part of the pipeline
+     * may still be running or still hold resources.
      *
      * A native call that has wedged cannot be killed from inside the process. When teardown exceeds its
      * bound the honest answer is this, not a successful close: the caller learns that the runtime is
      * compromised and that resources may still be held, which is information it can act on. Reporting
-     * success and leaking a thread is what leaves an application with a mystery instead.
+     * success and leaking a thread is what leaves an application with a mystery instead. A release
+     * step that refuses is a warning, `PlaybackWarning.ResourcesNotReleased`, and the steps after it
+     * still run; this is the report for a release that could not go on to them.
      */
     public data class RuntimeCompromised(val detail: String) : PlaybackError() {
         override val message: String get() = "shutdown did not complete: $detail"
@@ -220,6 +243,37 @@ public sealed class PlaybackWarning {
      */
     public data class AudioUnderrun(val totalSoFar: Long) : PlaybackWarning() {
         override val message: String get() = "audio underrun, $totalSoFar so far"
+    }
+
+    /**
+     * A server refused an address of the item with [status], 401 or 403, after it opened, as one does
+     * when a signed address expires, and the player opened the item again through its resolver or
+     * its `io` factory, at the position it had reached (#453). [uri] is the refused address's file
+     * name alone, so no token of a signed address shows. The picture holds for that moment. The player does this once until playback
+     * has moved on, so a resolver that hands out the refused address again ends in the server's
+     * answer as before.
+     */
+    public data class AddressRenewed(val uri: String, val status: Int) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("uri" to uri, "status" to status.toString())
+
+        override val message: String
+            get() = "$uri was refused with $status, so the item was opened again for a fresh address"
+    }
+
+    /**
+     * The item is marked as still being written ([MediaItem.growth]), but nothing gave it a reader:
+     * it has no `io` of its own, and no installed provider serves its address, which for a local
+     * path is one that serves local files, so it plays as the file stood when it opened (#430).
+     * Adding `kiteplayer-io`, or giving the item an `io` factory, cures it. [uri] is the file's name
+     * alone.
+     */
+    public data class GrowthUnavailable(val uri: String) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("uri" to uri)
+
+        override val message: String
+            get() = "$uri is still being written, but nothing installed reads it as it grows, so it plays as it stood at the open"
     }
 
     /**
@@ -385,6 +439,16 @@ public sealed class PlaybackWarning {
         override val message: String get() = "unknown channel layout for $channels channels: $detail"
     }
 
+    /**
+     * A crop the container states for stream [streamIndex] leaves nothing of its pictures, or has a
+     * negative count, so the pictures are shown whole (#497). Emitted once each time the stream is
+     * opened. See
+     * [PictureCrop].
+     */
+    public data class CropIgnored(val streamIndex: Int, val detail: String) : PlaybackWarning() {
+        override val message: String get() = "crop ignored on stream $streamIndex: $detail"
+    }
+
     /** Timestamps in the stream are broken and the engine is compensating. */
     public data class BadTimestamps(val detail: String) : PlaybackWarning() {
         override val message: String get() = "compensating for bad timestamps: $detail"
@@ -434,6 +498,18 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The item's WebVTT thumbnail file at [uri] could not be read or held no picture, so the seek
+     * bar has none of its pictures (#433). The item plays on, and the stream's own pictures, when
+     * it has any, stand in.
+     */
+    public data class ThumbnailsUnreadable(
+        val uri: String,
+        val reason: String,
+    ) : PlaybackWarning() {
+        override val message: String get() = "the thumbnail file ${redactUri(uri)} was skipped: ${redactUrisIn(reason)}"
+    }
+
+    /**
      * An external subtitle file whose encoding had to be guessed, or could not be decoded properly.
      *
      * A byte-order mark or a file that validates as UTF-8 is a fact and says nothing. This fires
@@ -443,7 +519,11 @@ public sealed class PlaybackWarning {
      * bytes. That is a different answer from "no idea" and worth telling apart.
      *
      * The track still loads. Imperfect subtitles beat absent ones, and an application that shows
-     * this can offer the viewer an override rather than leaving them with mojibake and no reason.
+     * this can offer the viewer an override rather than leaving them with mojibake and no reason:
+     * [KitePlayer.reloadExternalSubtitle] reads the file again in the encoding the viewer picks from
+     * [SubtitleSource.ENCODINGS], whose names are every name [charset] and [detected] can carry.
+     * A file read in an encoding the application named, as [SubtitleSource.encoding] or
+     * [SubtitleConfig.fallbackEncoding], raises none.
      */
     public data class SubtitleCharsetGuessed(
         val uri: String,
@@ -577,9 +657,29 @@ public sealed class PlaybackWarning {
      * The queue item at [index] did not follow the one before it without a gap. The device
      * stopped at the end of that item, and this one opened from scratch, as it does with
      * [QueueConfig.gapless] off. [reason] names what stopped the gapless handoff.
+     *
+     * Under a repeat of the current item, what did not follow is the item's next pass (#467).
+     * [index] is then the current item's own queue position, or -1 outside queue playback, which
+     * no next queue item can have, and the old path seeks back to the item's start.
      */
     public data class GaplessFallback(val index: Int, val reason: String) : PlaybackWarning() {
-        override val message: String get() = "queue item $index opened without the gapless handoff: $reason"
+        override val message: String
+            get() = if (index < 0) {
+                "the repeat of the item played without the gapless handoff: $reason"
+            } else {
+                "queue item $index played without the gapless handoff: $reason"
+            }
+    }
+
+    /**
+     * The queue item at [index] could not be opened, with [error], and the queue moved past it,
+     * because [QueueConfig.onItemFailure] is [QueueItemFailure.Skip] (#487).
+     */
+    public data class QueueItemSkipped(val index: Int, val uri: String, val error: PlaybackError) : PlaybackWarning() {
+        override val message: String get() = "queue item $index, ${redactUri(uri)}, could not be opened and was skipped: ${error.message}"
+
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("index" to index.toString(), "error" to (error::class.simpleName ?: "PlaybackError"))
     }
 
     /**

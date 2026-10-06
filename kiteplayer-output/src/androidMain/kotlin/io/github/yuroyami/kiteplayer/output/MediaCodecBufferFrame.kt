@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
@@ -49,6 +50,7 @@ internal class MediaCodecBufferFrame(
     override val colorSpace: ColorSpaceInfo,
     override val rotationDegrees: Int = 0,
     override val mirrored: Boolean = false,
+    override val crop: PictureCrop? = null,
     /**
      * The source transfer, PQ or HLG, when the codec was asked for SDR output and the frame is
      * that tone mapped output. Null when the frame shows its source's own range.

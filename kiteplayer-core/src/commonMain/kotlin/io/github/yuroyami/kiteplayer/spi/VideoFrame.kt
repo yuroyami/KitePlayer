@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.spi
 
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecStatus
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.VideoSize
 
@@ -43,6 +44,16 @@ public interface VideoFrame : AutoCloseable {
     public val hdr: HdrStaticMetadata? get() = null
 
     /**
+     * The brightest level of this frame's scene in nits, from dynamic HDR metadata that travels
+     * with the frame, such as Dolby Vision's level 1, or null when the frame carries none.
+     *
+     * [hdr] describes the whole title, so a tone mapper that knows only it compresses every scene
+     * for the title's brightest highlight. A dark scene then loses brightness it never needed to
+     * give up. [toneMapPeakNits] is the peak a tone mapper rolls off from, with this taken first.
+     */
+    public val sceneMaxNits: Float? get() = null
+
+    /**
      * Clockwise rotation a renderer applies before the picture is shown, in degrees.
      *
      * Phones write this into every recording they make in portrait, and a player that ignores it shows
@@ -68,12 +79,52 @@ public interface VideoFrame : AutoCloseable {
      */
     public val mirrored: Boolean get() = false
 
+    /**
+     * The edges of the stored picture that are not part of the image, as its container states, or
+     * null when it states none (#497). See [PictureCrop].
+     *
+     * Like the turn and the mirror, the crop is a presentation instruction: the pixels and [size]
+     * stay as stored, and a renderer draws only the rectangle the crop leaves, as a source
+     * rectangle, so a hardware frame is cropped with no copy. The crop comes first, before the
+     * mirror and the turn, and [visibleSize] is what the fit, the zoom and the overlay layout use.
+     * A decoder never hands out a crop that does not [fit][PictureCrop.fits] its frame: it drops
+     * such a crop, and the engine reports
+     * [io.github.yuroyami.kiteplayer.PlaybackWarning.CropIgnored].
+     */
+    public val crop: PictureCrop? get() = null
+
+    /**
+     * The closed captions this picture carried, the cc_data of its ATSC A/53 data, three bytes per
+     * caption pair, as broadcast H.264, HEVC and MPEG-2 carry them inside the video, or null when it
+     * carried none (#236). Read once by the engine as the frame leaves its decoder, so a decoder
+     * hands out frames in the order they are shown, which is the order the captions were written in.
+     *
+     * The engine makes them a subtitle track of its own, CC1, from the first picture that carries
+     * any: a stream whose codec is [CLOSED_CAPTIONS_CODEC], each of whose packets holds one
+     * picture's bytes at the picture's time, decoded by whichever [SubtitleDecoderFactory] takes
+     * that codec. A frame decoded where these bytes cannot be read, such as one a platform decoder
+     * writes straight to a surface, answers null.
+     */
+    public val closedCaptions: ByteArray? get() = null
+
     /** Set when the frame lives in GPU or hardware memory and needs a matching renderer. */
     public val hardwareSurface: HwSurfaceKind?
 
     /** The epoch this frame belongs to. A frame from a superseded generation is never presented. */
     public val generation: Generation
 }
+
+/**
+ * The size of the picture this frame shows: [VideoFrame.size] with [VideoFrame.crop]'s edges taken
+ * away, before the turn, which still swaps width and height for a renderer.
+ */
+public val VideoFrame.visibleSize: VideoSize get() = size.cropped(crop)
+
+/**
+ * The codec of the subtitle track the engine makes of the closed captions inside a video stream
+ * (#236): see [VideoFrame.closedCaptions]. Named after FFmpeg's `A53_CC` frame data.
+ */
+public const val CLOSED_CAPTIONS_CODEC: String = "a53_cc"
 
 /**
  * A frame whose pixels can be read, for the cases that genuinely need them: a screenshot, a
@@ -322,3 +373,15 @@ public enum class HwSurfaceKind {
     /** A browser `VideoFrame`, drawn straight to a canvas. */
     WebVideoFrame,
 }
+
+/**
+ * The content peak a tone mapper rolls this frame off from, in nits: the scene's brightest level
+ * when the frame carries one between 100 and 10000 nits, held at most at the title's own peak, else
+ * the title's peak from [VideoFrame.hdr], else null for the 1000 nits a PQ master is assumed to have.
+ */
+public val VideoFrame.toneMapPeakNits: Float?
+    get() {
+        val title = hdr?.peakNits
+        val scene = sceneMaxNits?.takeIf { it in 100f..10_000f } ?: return title
+        return if (title != null) minOf(scene, title) else scene
+    }

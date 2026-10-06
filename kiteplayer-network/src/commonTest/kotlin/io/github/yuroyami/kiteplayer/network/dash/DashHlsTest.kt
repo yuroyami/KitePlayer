@@ -41,6 +41,42 @@ class DashHlsTest {
     private fun parse(xml: String, url: String = "https://cdn.test/vod/movie.mpd", policy: DashUrlPolicy = DashUrlPolicy.Default) =
         DashManifestParser.parse(xml, url, policy)
 
+    /**
+     * A set marked with transfer characteristics 16 is PQ and one marked 18 is HLG, at the set or
+     * the representation, and the HLS stand-in says so the way an HLS master does (#447).
+     */
+    @Test
+    fun theTransferCharacteristicsPropertyBecomesTheVariantsVideoRange() {
+        val xml = """
+            <MPD type="static" mediaPresentationDuration="PT8S">
+                <Period>
+                    <AdaptationSet contentType="video" mimeType="video/mp4">
+                        <SegmentTemplate media="sdr-${'$'}Number${'$'}.m4s" initialization="sdr-init.mp4" timescale="1000" duration="4000"/>
+                        <Representation id="sdr" bandwidth="6000000" codecs="avc1.640028" width="1920" height="1080"/>
+                    </AdaptationSet>
+                    <AdaptationSet contentType="video" mimeType="video/mp4">
+                        <SupplementalProperty schemeIdUri="urn:mpeg:mpegB:cicp:TransferCharacteristics" value="16"/>
+                        <SegmentTemplate media="hdr-${'$'}RepresentationID${'$'}-${'$'}Number${'$'}.m4s" initialization="hdr-${'$'}RepresentationID${'$'}-init.mp4" timescale="1000" duration="4000"/>
+                        <Representation id="pq" bandwidth="8000000" codecs="hvc1.2.4.L150.90" width="1920" height="1080"/>
+                        <Representation id="hlg" bandwidth="7000000" codecs="hvc1.2.4.L150.90" width="1920" height="1080">
+                            <EssentialProperty schemeIdUri="urn:mpeg:mpegB:cicp:TransferCharacteristics" value="18"/>
+                        </Representation>
+                        <Representation id="sdr709" bandwidth="5000000" codecs="hvc1.1.6.L150.90" width="1920" height="1080">
+                            <SupplementalProperty schemeIdUri="urn:mpeg:mpegB:cicp:TransferCharacteristics" value="1"/>
+                        </Representation>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+        """.trimIndent()
+        val period = parse(xml).periods.single()
+        val ranges = period.adaptationSets.flatMap { it.representations }.associate { it.id to it.videoRange }
+        assertEquals(mapOf<String?, String?>("sdr" to null, "pq" to "PQ", "hlg" to "HLG", "sdr709" to null), ranges)
+        val variants = DashHls.presentation(period).master.lines().filter { it.startsWith("#EXT-X-STREAM-INF:") }
+        assertEquals(1, variants.count { "VIDEO-RANGE=PQ" in it }, variants.joinToString("\n"))
+        assertEquals(1, variants.count { "VIDEO-RANGE=HLG" in it }, variants.joinToString("\n"))
+        assertEquals(2, variants.count { "VIDEO-RANGE" !in it }, variants.joinToString("\n"))
+    }
+
     @Test
     fun separateVideoAndAudioSetsBecomeVariantsAndOneRendition() {
         val period = parse(separateSets).periods.single()

@@ -137,7 +137,30 @@ kprt_ring *kprt_ring_create(int32_t sample_rate, int32_t channels, int32_t capac
     ring->gain_current = 1.0f;
     ring->gain_slope = 1.0f / (float)kprt_gain_ramp_frames(sample_rate);
     kprt_ring_set_gain(ring, 1.0f);
+    ring->lim_lookahead = kprt_limit_lookahead_frames(sample_rate);
+    ring->lim_release = 1.0f / (float)kprt_limit_release_frames(sample_rate);
+    atomic_store_explicit(&ring->lim_reset, 1, memory_order_relaxed);
     return ring;
+}
+
+int32_t kprt_limit_lookahead_frames(int32_t sample_rate)
+{
+    int64_t frames;
+    if (sample_rate <= 0)
+        return 1;
+    frames = (int64_t)sample_rate * KPRT_LIMIT_LOOKAHEAD_MICROS / 1000000;
+    if (frames < 1)
+        return 1;
+    return frames > KPRT_LIMIT_MAX_LOOKAHEAD ? KPRT_LIMIT_MAX_LOOKAHEAD : (int32_t)frames;
+}
+
+int32_t kprt_limit_release_frames(int32_t sample_rate)
+{
+    int64_t frames;
+    if (sample_rate <= 0)
+        return 1;
+    frames = (int64_t)sample_rate * KPRT_LIMIT_RELEASE_MICROS / 1000000;
+    return frames < 1 ? 1 : (int32_t)frames;
 }
 
 int32_t kprt_gain_ramp_frames(int32_t sample_rate)
@@ -164,6 +187,25 @@ void kprt_ring_set_gain(kprt_ring *ring, float target)
         target = KPRT_GAIN_MAX;
     memcpy(&bits, &target, sizeof(bits));
     atomic_store_explicit(&ring->gain_target_bits, bits, memory_order_relaxed);
+}
+
+void kprt_ring_set_hold(kprt_ring *ring, int32_t held)
+{
+    if (ring == NULL)
+        return;
+    /* Not silent first, then the hold, so a reader that sees the new hold cannot pair it with an
+     * answer from before it. A render already in flight may still store a 1 it worked out under
+     * the old hold. It stores that only with the gain at zero, and being the latest render it
+     * leaves the gain there, so the 1 is true until the next render answers again. */
+    atomic_store_explicit(&ring->silent, 0, memory_order_relaxed);
+    atomic_store_explicit(&ring->hold, held != 0 ? 1 : 0, memory_order_release);
+}
+
+int32_t kprt_ring_is_silent(const kprt_ring *ring)
+{
+    if (ring == NULL)
+        return 0;
+    return atomic_load_explicit(&ring->silent, memory_order_acquire);
 }
 
 void kprt_ring_destroy(kprt_ring *ring)
@@ -484,6 +526,11 @@ int64_t kprt_ring_underruns(const kprt_ring *ring)
     return ring == NULL ? 0 : atomic_load_explicit(&ring->underruns, memory_order_relaxed);
 }
 
+int64_t kprt_ring_limited_frames(const kprt_ring *ring)
+{
+    return ring == NULL ? 0 : atomic_load_explicit(&ring->limited_frames, memory_order_relaxed);
+}
+
 int64_t kprt_ring_written_frames(const kprt_ring *ring)
 {
     return ring == NULL ? 0 : atomic_load_explicit(&ring->written, memory_order_acquire);
@@ -562,4 +609,9 @@ void kprt_ring_flush(kprt_ring *ring)
 
     atomic_store_explicit(&ring->has_pending, 0, memory_order_relaxed);
     atomic_store_explicit(&ring->pending_frames, 0, memory_order_relaxed);
+
+    /* The frames the limiter read ahead are gone, so its next render starts it over from the new
+     * position. Release, paired with the render's acquire: the render then sees the new consumed
+     * count it starts from. */
+    atomic_store_explicit(&ring->lim_reset, 1, memory_order_release);
 }

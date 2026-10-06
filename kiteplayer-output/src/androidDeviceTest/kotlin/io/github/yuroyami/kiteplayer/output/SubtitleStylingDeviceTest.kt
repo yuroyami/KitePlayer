@@ -6,6 +6,7 @@ import android.text.TextPaint
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
+import io.github.yuroyami.kiteplayer.subtitle.CueAlignment
 import io.github.yuroyami.kiteplayer.subtitle.CueLayout
 import io.github.yuroyami.kiteplayer.subtitle.CueStyle
 import io.github.yuroyami.kiteplayer.subtitle.CueWrap
@@ -111,6 +112,44 @@ class SubtitleStylingDeviceTest {
             val padded = (1..2).any { boxed.isBoxAt(left - it, row) } && (1..2).any { boxed.isBoxAt(right + it, row) }
             assertTrue(padded, "no box padding beside $line")
         }
+    }
+
+    @Test
+    fun aPositionedRightToLeftCueKeepsAllItsInkOnEitherSide() {
+        // A short Hebrew line in a wrap width far wider than it: the layout puts its ink at the far
+        // right of that width, and the bitmap is cropped to the ink, so the ink has to be moved (#478).
+        val sizes = listOf(CueAlignment.BottomLeft, CueAlignment.BottomCenter, CueAlignment.BottomRight).map { alignment ->
+            val image = draw(cue(HEBREW, layout = CueLayout(alignment = alignment, positionX = 0.5f, positionY = 0.9f)), "rtl-positioned-$alignment")
+            val ink = assertNotNull(image.box(::isWhite), "the positioned $alignment cue has no white text")
+            assertTrue(ink.left - image.left <= 6 && image.left + image.width - 1 - ink.right <= 6, "the positioned $alignment ink $ink does not fill its image ${image.width} wide at ${image.left}")
+            ink.width
+        }
+        assertTrue(sizes.max() - sizes.min() <= 2, "the positioned cues lost ink on one side: widths $sizes")
+    }
+
+    @Test
+    fun anUnpositionedRightToLeftCueSitsOnTheSideItNames() {
+        for (text in listOf(HEBREW, "HELLO WORLD")) {
+            val left = draw(cue(text, layout = CueLayout(alignment = CueAlignment.BottomLeft)), "side-left-${text.length}")
+            val right = draw(cue(text, layout = CueLayout(alignment = CueAlignment.BottomRight)), "side-right-${text.length}")
+            val leftInk = assertNotNull(left.box(::isWhite), "the left cue '$text' has no white text")
+            val rightInk = assertNotNull(right.box(::isWhite), "the right cue '$text' has no white text")
+            assertTrue(leftInk.left - left.left <= 6, "the left cue '$text' starts at $leftInk in an image at ${left.left}")
+            assertTrue(right.left + right.width - 1 - rightInk.right <= 6, "the right cue '$text' ends at $rightInk in an image ${right.width} wide at ${right.left}")
+            assertTrue(leftInk.right < rightInk.left, "the left cue '$text' at $leftInk is not left of the right one at $rightInk")
+        }
+    }
+
+    @Test
+    fun eachParagraphOfAMixedCueSitsOnTheSideTheCueNames() {
+        val text = "HELLO\n$HEBREW"
+        val left = draw(cue(text, layout = CueLayout(alignment = CueAlignment.BottomLeft)), "mixed-left").lines()
+        val right = draw(cue(text, layout = CueLayout(alignment = CueAlignment.BottomRight)), "mixed-right")
+        assertEquals(2, left.size, "mixed left lines $left")
+        for (line in left) assertTrue(line.left <= 6, "a mixed line does not start at the left: $left")
+        val rightLines = right.lines()
+        assertEquals(2, rightLines.size, "mixed right lines $rightLines")
+        for (line in rightLines) assertTrue(right.width - 1 - line.right <= 6, "a mixed line does not end at the right: $rightLines in ${right.width}")
     }
 
     // ---- Drawing and measuring ----------------------------------------------------------------
@@ -231,5 +270,8 @@ class SubtitleStylingDeviceTest {
         const val RED = 0xFFFF0000.toInt()
         const val BLUE = 0xFF0000FF.toInt()
         const val BOX = 0xFF1040A0.toInt()
+
+        /** "Hello world" in Hebrew: short, strongly right-to-left, and with no Latin to steer it. */
+        const val HEBREW = "\u05E9\u05DC\u05D5\u05DD \u05E2\u05D5\u05DC\u05DD"
     }
 }

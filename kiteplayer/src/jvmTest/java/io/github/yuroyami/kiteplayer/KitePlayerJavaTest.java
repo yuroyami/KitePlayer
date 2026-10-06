@@ -11,6 +11,7 @@ import java.io.File;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,6 +49,29 @@ public class KitePlayerJavaTest {
     @After
     public void stopMain() {
         main.shutdownNow();
+    }
+
+    /**
+     * The item builder is the one behind Kotlin's mediaItem block, and each call returns it, so
+     * Java chains them (#420). A whole number of milliseconds is a long, as Java writes it.
+     */
+    @Test
+    public void aJavaAppChainsTheItemBuilder() {
+        MediaItem item = new MediaItemBuilder("movie.mkv")
+                .header("Authorization", "Bearer token")
+                .headers(Map.of("X-Session", "42"))
+                .startPositionMillis(90_000)
+                .formatHint("matroska")
+                .lowLatency()
+                .title("Movie")
+                .artist(null)
+                .build();
+        assertEquals(Map.of("Authorization", "Bearer token", "X-Session", "42"), item.getHeaders());
+        assertEquals("matroska", item.getFormatHint());
+        assertTrue(item.getDemux().getLowLatency());
+        assertEquals("Movie", item.getTitle());
+        assertNull(item.getArtist());
+        assertTrue(item.toString(), item.toString().contains("startPosition=1m 30s"));
     }
 
     @Test

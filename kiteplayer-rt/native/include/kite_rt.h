@@ -281,6 +281,62 @@ KPRT_API int32_t kprt_gain_ramp_frames(int32_t sample_rate);
  * outcome. */
 KPRT_API void kprt_ring_set_gain(kprt_ring *ring, float target);
 
+/* Fades the sound out and holds it there, or lets it play again (#486).
+ *
+ * While held, `kprt_ring_render` walks the applied gain down to silence over the real frames it
+ * renders, at the slope a volume change takes, and from the frame the walk reaches silence it
+ * consumes nothing: it hands the device exact zeroes, publishes no anchor and counts no underrun,
+ * so the audio after the fade waits in the ring for the resume. A device stopped at any moment
+ * after that stops on silence, which is what keeps a pause or a seek from clicking. A held ring
+ * that runs dry before it reaches silence is silent from there, because what follows is silence
+ * either way.
+ *
+ * Released, the render consumes again and walks up from silence to the gain set with
+ * `kprt_ring_set_gain`, so the resumed sound fades in, and a volume change or a mute made while
+ * held is in place from the first resumed frame.
+ *
+ * Safe from any thread, allocation free, and it never blocks. */
+KPRT_API void kprt_ring_set_hold(kprt_ring *ring, int32_t held);
+
+/* 1 once a held ring has reached silence, which is when its device can be stopped without a
+ * click, and 0 while it is not held or is still walking down. Every render updates it, so a device
+ * that is not pulling never gets there. Read it with acquire semantics: a 1 here comes after the
+ * anchor of the last faded frame, so `kprt_ring_anchor` then says when the fade ends at the
+ * speaker. Safe from any thread. */
+KPRT_API int32_t kprt_ring_is_silent(const kprt_ring *ring);
+
+/* How far ahead the render's peak limiter looks, in microseconds (#504).
+ *
+ * At or below unity the render does not fold, so a sample past full scale, which a downmix or an
+ * equaliser can produce on its own, would reach the device and be clamped there, squaring off the
+ * wave. The render instead turns the gain down smoothly before such a sample arrives, reading the
+ * frames that wait in the ring after the ones it hands over. The ring already holds those frames,
+ * so the lookahead adds no delay and nothing to the latency the clock accounts for. A frame whose
+ * whole neighbourhood stays within full scale goes through untouched, bit for bit.
+ *
+ * One law shared with KotlinAudioRing, whose `LIMIT_LOOKAHEAD_DURATION` carries the same value. */
+#define KPRT_LIMIT_LOOKAHEAD_MICROS 5000
+
+/* How long the limiter takes to give back the whole range once the loud passage has gone, in
+ * microseconds, so a reduction of a third recovers over about 30 ms instead of pumping. One law
+ * shared with KotlinAudioRing's `LIMIT_RELEASE_DURATION`. */
+#define KPRT_LIMIT_RELEASE_MICROS 100000
+
+/* The longest lookahead the ring keeps state for, in frames: 5 ms up to 409.6 kHz. A faster rate
+ * looks ahead for these frames, a shorter time. The state lives inside the ring's own allocation,
+ * because the render may not allocate. */
+#define KPRT_LIMIT_MAX_LOOKAHEAD 2048
+
+/* Sample frames the limiter looks ahead at `sample_rate`, from 1 to KPRT_LIMIT_MAX_LOOKAHEAD, and
+ * the frames its release takes to give back the whole range, at least one. Exposed because the
+ * differential oracle asserts both rings derive the same numbers. */
+KPRT_API int32_t kprt_limit_lookahead_frames(int32_t sample_rate);
+KPRT_API int32_t kprt_limit_release_frames(int32_t sample_rate);
+
+/* How many rendered frames the limiter turned down, since the ring was created. Zero for content
+ * that never passes full scale. Safe from any thread. */
+KPRT_API int64_t kprt_ring_limited_frames(const kprt_ring *ring);
+
 /* ---- The real-time side ---- */
 
 /* Fills `frames` frames of `destination` from the ring, and publishes the anchor.
@@ -296,7 +352,10 @@ KPRT_API void kprt_ring_set_gain(kprt_ring *ring, float target);
  *        engine's monotonic clock. This is what the audio clock is anchored to, and it is the
  *        reason the callback takes a time at all. No device latency is subtracted anywhere,
  *        because the deadline already accounts for it.
- * @return frames of real audio written. The rest of `destination` is silence. */
+ * @return frames of real audio written. The rest of `destination` is silence. A held ring answers
+ *         all of `frames`, because its silence is deliberate rather than a device going hungry, and
+ *         a sink that reports short renders as underruns must not report a pause as one; see
+ *         `kprt_ring_set_hold`. */
 KPRT_API int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, int64_t deadline_nanos);
 
 /* ---- Readers ---- */

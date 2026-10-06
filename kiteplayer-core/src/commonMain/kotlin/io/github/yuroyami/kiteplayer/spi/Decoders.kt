@@ -88,6 +88,21 @@ public interface VideoDecoder : AutoCloseable {
      * a freshly flushed decoder.
      */
     public suspend fun flush(newGeneration: Generation)
+
+    /**
+     * Whether to skip the frames no other frame is predicted from, from the next packet [send]
+     * offers until the next call (#468).
+     *
+     * The engine turns it on while a precise seek decodes its way up to the target, for the packets
+     * whose pictures nothing will show, and off again before the pictures it keeps, so the landed
+     * picture and every one after it are the same as with no skipping at all. A frame others predict
+     * from is always decoded, which is what lets a decoder turn it off at any packet with no flush
+     * and carry on undamaged. A [flush] leaves it as it was.
+     *
+     * The default skips nothing, so a decoder that cannot skip, such as a platform codec, decodes
+     * every frame exactly as before. A skipped frame gives no output.
+     */
+    public fun skipNonReferenceFrames(skip: Boolean) {}
 }
 
 /** Creates audio decoders. The engine tries the factories in order and uses the first one that answers. */
@@ -134,6 +149,12 @@ public interface SubtitleDecoderFactory {
 /**
  * Turns subtitle packets into cues. The engine drains it on the actor between packets and flushes
  * it on every seek; see [SubtitleDecoderFactory].
+ *
+ * Once a track's packets have run out at the end of its stream, the engine sends null, once, and
+ * receives what that gives: a decoder that holds its last cue until the next packet, as a closed
+ * caption decoder holds the caption on screen, gives it then. A decoder that refuses the null
+ * packet is offered it again after its output is received, a few times at most. The next packet
+ * after a drain comes only after a [flush].
  */
 public interface SubtitleDecoder : AutoCloseable {
     /** Offers a packet, or null to start the drain. False means receive before offering again, as for [VideoDecoder.send]. */

@@ -19,10 +19,12 @@
 #include <stdint.h>
 
 /* Every frame is identifiable by its value, so a wrap mistake or an off-by-one shows up as a
- * value rather than as a silence. Frame n of the stream carries the value n in every channel. */
+ * value rather than as a silence. Frame n of the stream carries n / 2^24 in every channel: exact
+ * and distinct for every frame below 2^24, and within full scale, because the render's peak
+ * limiter turns down anything above it (#504) and a frame's value must come back as it went in. */
 static inline float kprt_test_frame_value(int64_t frame)
 {
-    return (float)frame;
+    return (float)frame * (1.0f / 16777216.0f);
 }
 
 /* Writes `frames` frames of ramp starting at stream position `from`, and commits them.

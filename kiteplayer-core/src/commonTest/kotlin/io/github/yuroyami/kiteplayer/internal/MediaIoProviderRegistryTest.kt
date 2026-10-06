@@ -84,4 +84,23 @@ class MediaIoProviderRegistryTest {
         assertFailsWith<IllegalStateException> { registry.resolve("https://host/media", emptyMap()) }
         assertEquals(emptyList(), trace)
     }
+
+    @Test
+    fun aProviderThatServesLocalFilesIsAskedOnlyForALocalFile() = runTest {
+        val trace = mutableListOf<String>()
+        val files = object : MediaIoResolverProvider {
+            override val id: String = "files"
+            override val servesLocalFiles: Boolean = true
+            override fun create(): MediaIoResolver = MediaIoResolver { uri -> trace += "files:$uri"; null }
+        }
+        val registry = MediaIoProviderRegistry()
+        registry.register(Provider("network", trace))
+        registry.register(files)
+        assertNull(registry.resolve("/media/a.ts", emptyMap()))
+        assertEquals(listOf("network"), trace, "automatic resolution asked a provider of local files")
+        trace.clear()
+        assertNull(registry.resolveLocalFile("/media/a.ts"))
+        assertEquals(listOf("files:/media/a.ts"), trace)
+    }
 }
+

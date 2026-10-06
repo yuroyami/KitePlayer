@@ -91,6 +91,9 @@ public class PlayerConfigBuilder(from: PlayerConfig = PlayerConfig()) {
     /** See [PlayerConfig.externalClock]. */
     public var externalClock: ExternalClockPolicy = from.externalClock
 
+    /** See [PlayerConfig.keyframeChoice]. */
+    public var keyframeChoice: KeyframeChoice = from.keyframeChoice
+
     /** Changes [audio] field by field. */
     public fun audio(build: AudioConfigBuilder.() -> Unit) {
         audio = AudioConfigBuilder(audio).apply(build).build()
@@ -135,6 +138,7 @@ public class PlayerConfigBuilder(from: PlayerConfig = PlayerConfig()) {
         queue = queue,
         hdrPolicy = hdrPolicy,
         externalClock = externalClock,
+        keyframeChoice = keyframeChoice,
     )
 }
 
@@ -171,6 +175,9 @@ public class AudioConfigBuilder(from: AudioConfig = AudioConfig()) {
     /** See [AudioConfig.upmix]. */
     public var upmix: UpmixMode = from.upmix
 
+    /** See [AudioConfig.matchOutputChannels]. */
+    public var matchOutputChannels: Boolean = from.matchOutputChannels
+
     /** The [AudioConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): AudioConfig = AudioConfig(
         preferredLanguages = preferredLanguages,
@@ -183,6 +190,7 @@ public class AudioConfigBuilder(from: AudioConfig = AudioConfig()) {
         replayGainFallbackDb = replayGainFallbackDb,
         resampler = resampler,
         upmix = upmix,
+        matchOutputChannels = matchOutputChannels,
     )
 }
 
@@ -213,6 +221,30 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
     /** See [SubtitleConfig.fonts]. */
     public var fonts: List<SubtitleFont> = from.fonts
 
+    /** See [SubtitleConfig.assColorMatching]. */
+    public var assColorMatching: Boolean = from.assColorMatching
+
+    /** See [SubtitleConfig.hearingImpairedNotes]. */
+    public var hearingImpairedNotes: HearingImpairedNotes = from.hearingImpairedNotes
+
+    /** See [SubtitleConfig.fallbackEncoding]. */
+    public var fallbackEncoding: String? = from.fallbackEncoding
+
+    /** See [SubtitleConfig.withMatchingAudio]. */
+    public var withMatchingAudio: MatchingAudioSubtitles = from.withMatchingAudio
+
+    /** See [SubtitleConfig.forcedPicturesOnly]. */
+    public var forcedPicturesOnly: Boolean = from.forcedPicturesOnly
+
+    /** See [SubtitleConfig.forcedPicturesWhenOff]. */
+    public var forcedPicturesWhenOff: Boolean = from.forcedPicturesWhenOff
+
+    /** See [SubtitleConfig.secondaryLanguages]. */
+    public var secondaryLanguages: List<String> = from.secondaryLanguages
+
+    /** See [SubtitleConfig.secondaryPlacement]. */
+    public var secondaryPlacement: SecondarySubtitlePlacement = from.secondaryPlacement
+
     /** The [SubtitleConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): SubtitleConfig = SubtitleConfig(
         preferredLanguages = preferredLanguages,
@@ -223,6 +255,14 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
         style = style,
         typesetting = typesetting,
         fonts = fonts,
+        assColorMatching = assColorMatching,
+        hearingImpairedNotes = hearingImpairedNotes,
+        fallbackEncoding = fallbackEncoding,
+        withMatchingAudio = withMatchingAudio,
+        forcedPicturesOnly = forcedPicturesOnly,
+        forcedPicturesWhenOff = forcedPicturesWhenOff,
+        secondaryLanguages = secondaryLanguages,
+        secondaryPlacement = secondaryPlacement,
     )
 }
 
@@ -320,9 +360,17 @@ public class QueueConfigBuilder(from: QueueConfig = QueueConfig()) {
     /** See [QueueConfig.gapless]. */
     public var gapless: Boolean = from.gapless
 
+    /** See [QueueConfig.reshuffleEachLap]. */
+    public var reshuffleEachLap: Boolean = from.reshuffleEachLap
+
+    /** See [QueueConfig.onItemFailure]. */
+    public var onItemFailure: QueueItemFailure = from.onItemFailure
+
     /** The [QueueConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): QueueConfig = QueueConfig(
         preloadNext = preloadNext,
         gapless = gapless,
+        reshuffleEachLap = reshuffleEachLap,
+        onItemFailure = onItemFailure,
     )
 }

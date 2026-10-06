@@ -34,7 +34,10 @@ public sealed interface PlayerEvent {
         public val landedAtMillis: Long get() = landedAt.inWholeMilliseconds
     }
 
-    /** The video's size or pixel aspect changed, at the start or mid-stream. */
+    /**
+     * The video's size or pixel aspect changed, at the start or mid-stream. [size] is the picture
+     * as it is shown, after any crop its container states. See [PictureCrop].
+     */
     public data class VideoSizeChanged(val size: VideoSize) : PlayerEvent
 
     /** The audio output format changed, at the start or after a device change. */
@@ -93,5 +96,27 @@ public sealed interface PlayerEvent {
      * loop, re-arms it for the next pass. Each marker fires at most once per pass.
      */
     public data class MarkerReached(val marker: Marker) : PlayerEvent
+
+    /**
+     * The media gained [tracks] after it opened, and they are in the snapshot's tracks from now on
+     * (#509).
+     *
+     * A live transport stream, a UDP multicast or a tuner recording can announce a stream only once it
+     * plays: the sound starts a few seconds after the picture, a subtitle stream starts with the next
+     * programme, or a channel moves its sound to a new stream at a programme boundary. Media whose
+     * streams are all known at the open never sends this.
+     */
+    public data class TracksAdded(val tracks: List<TrackInfo>) : PlayerEvent
+
+    /**
+     * The player changed which track of [kind] plays, on its own rather than because a caller asked;
+     * [track] is the one that plays now, or null for none.
+     *
+     * It does this for a sound or subtitles that appeared after the open when none played or the one
+     * that played fell silent (#509), and for the subtitles that go with a new sound while the open's
+     * own subtitle choice stands (#506). A track a caller chose is never changed this way, except a
+     * sound the media stopped carrying.
+     */
+    public data class TrackChosenByPlayer(val kind: TrackKind, val track: TrackId?) : PlayerEvent
 }
 

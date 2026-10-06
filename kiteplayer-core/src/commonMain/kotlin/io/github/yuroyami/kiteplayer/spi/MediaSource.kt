@@ -1,7 +1,10 @@
 package io.github.yuroyami.kiteplayer.spi
 
 import io.github.yuroyami.kiteplayer.Chapter
+import io.github.yuroyami.kiteplayer.DolbyVisionInfo
+import io.github.yuroyami.kiteplayer.KeyframeChoice
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.VideoSize
@@ -20,16 +23,36 @@ public interface MediaSourceFactory {
 
 /** A packet cursor over one opened item. The engine closes it with its session. */
 public interface PlayerMediaSource : AutoCloseable {
-    /** Every stream the container declares, including streams this build cannot decode. */
+    /**
+     * Every stream the container declares, including streams this build cannot decode.
+     *
+     * A container can add a stream while it plays, as a live transport stream does when its
+     * programme table names a sound that starts after the open (#509). A source that sees one lists
+     * it here from the read that found it on, at the end and under a new index, and hands the whole
+     * list out on the next packet as [PlayerPacket.newStreams]. A stream is never taken out and never
+     * changes its index. The engine reads this list from the actor while the demux lane reads, so a
+     * source replaces it whole rather than changing it in place.
+     */
     public val streams: List<PlayerStreamInfo>
 
     /** Null when unknown, for example a live stream. */
     public val duration: Pts?
 
+    /**
+     * True when [duration] is an estimate rather than a length the media states, such as FFmpeg's
+     * guess from the bit rate of an ADTS AAC file or of an MP3 without its Xing header, which for
+     * variable bit rate audio is minutes out (#422). The engine then cuts no seek, start position
+     * or clock at it, and once playback passes it, or ends before it, reports the length played.
+     */
+    public val durationIsEstimate: Boolean get() = false
+
     /** False when the source can only read forward, such as a live stream. The engine then refuses seeks. */
     public val seekable: Boolean
 
-    /** Container-level tags. Never trusted, always reported. */
+    /**
+     * Container-level tags. Never trusted, always reported. They can change during playback, and
+     * each change also arrives on the packet that brings it, as [PlayerPacket.newContainerTags].
+     */
     public val metadata: Map<String, String>
 
     /**
@@ -79,11 +102,75 @@ public interface PlayerMediaSource : AutoCloseable {
     public val timestampsMayJump: Boolean
 
     /**
+     * True when a sender pushes this stream at the pace it plays, as RTSP, RTMP, UDP and RTP do.
+     *
+     * Media from such a source arrives no faster than real time, so whatever has arrived and not
+     * yet been heard is delay behind the sender, and a stall that is later made good leaves the
+     * picture that much later for good unless the player catches up. The engine keeps that delay
+     * bounded for a source that says true here, by playing a little faster for a while.
+     *
+     * A live HLS or DASH stream is not one: its segments arrive faster than they play, up to the
+     * live edge, so its buffer says nothing about how far behind it is. Defaulted to false, so an
+     * existing source keeps compiling and keeps playing at the speed it is given.
+     */
+    public val realTime: Boolean get() = false
+
+    /**
+     * True when each alternate sound arrives by a download of its own, as an HLS or a DASH audio
+     * rendition does (#455), rather than in the same bytes as the picture, as every track of a file
+     * does. Reading such a sound costs bandwidth whether anyone hears it or not, so the engine then
+     * reads only the sound being heard. A switch to another one reads it from the moment playing,
+     * by a seek of the reads that keeps what the other streams already hold when the source can
+     * seek, and the sound being heard goes on until the new one covers that moment.
+     *
+     * False, the default, keeps every sound read into a cache, which is what makes a switch on a
+     * file instant.
+     */
+    public val separateAudioRenditions: Boolean get() = false
+
+    /**
+     * Tells the sender of a [realTime] stream that the player has stopped reading because it is
+     * paused (#441), and says whether the source has any notion of that: true when it has and is
+     * now paused, false when it has none, in which case nothing was sent and the source reads on.
+     *
+     * An RTSP camera ends a session it has not heard from within its timeout, usually 60 seconds,
+     * and a paused player reads nothing. So while paused the engine calls this again about every
+     * second, and the source sends whatever keeps the session alive when it is due: KiteFFmpeg
+     * sends RTSP's PAUSE once and then the keepalive, GET_PARAMETER or OPTIONS, at half the
+     * session timeout. [resumeReading] asks the sender to play on.
+     *
+     * The engine calls it on the demux lane, between two reads, and reads nothing until
+     * [resumeReading] succeeds. Defaulted to false, so an existing source keeps compiling and keeps
+     * reading through a pause as it always did.
+     *
+     * @throws Exception when the sender or the connection refuses, for example because the
+     *   server already ended the session. The engine then opens the stream again on play.
+     */
+    public fun pauseReading(): Boolean = false
+
+    /**
+     * Lifts a [pauseReading]: the sender plays on, which for a live stream is the live edge, so the
+     * engine drops what it had buffered before the pause and plays what arrives from here (#441).
+     * Called on the demux lane, only after a [pauseReading] that answered true.
+     *
+     * @return true when a pause was lifted, false when there was none
+     * @throws Exception when the sender or the connection refuses, for example because the server
+     *   ended the session while the player was paused. The engine then opens the stream again, at
+     *   the live edge. Defaulted to false, as [pauseReading] is.
+     */
+    public fun resumeReading(): Boolean = false
+
+    /**
      * Packets for streams outside this set are read and discarded by the source.
      *
      * Every index must be one this source offers. A set naming one it does not is a caller
      * mistake and an implementation must refuse the whole call, never quietly select the subset it
      * recognised: a caller that asked for two streams and silently got one has no way to find out.
+     *
+     * The engine calls this once before the first read, and again on the demux lane, between two
+     * reads, to add a stream that [PlayerPacket.newStreams] announced (#509). Called again before the
+     * read after the announcing packet, it should deliver the new stream from its first packet, as
+     * KiteFFmpeg does by holding that stream's packets until then. The cursor does not move.
      *
      * @throws IllegalArgumentException when [indices] is empty or names a stream this source does
      *   not have.
@@ -126,6 +213,20 @@ public interface PlayerMediaSource : AutoCloseable {
     public suspend fun seekToKeyframe(target: Pts): Pts?
 
     /**
+     * Moves the read cursor to the keyframe [choice] names around [target], under the same rules as
+     * the call without a choice.
+     *
+     * The engine resolves [KeyframeChoice.InSeekDirection] itself, so
+     * [choice] is one of `Before`, `After` and `Closest`. `After` and `Closest` fall back to the
+     * keyframe before [target] when none follows it.
+     *
+     * The default serves every choice as `Before`, which is what a source that cannot look for a
+     * keyframe after the target can honestly do.
+     */
+    public suspend fun seekToKeyframe(target: Pts, choice: KeyframeChoice): Pts? =
+        seekToKeyframe(target)
+
+    /**
      * The versions of this media at other qualities, such as the variants of an HLS master
      * playlist, or empty for media with one version. The engine lists them in [io.github.yuroyami.kiteplayer.Tracks.variants].
      */
@@ -133,6 +234,26 @@ public interface PlayerMediaSource : AutoCloseable {
 
     /** The [io.github.yuroyami.kiteplayer.StreamVariant.index] of the variant this source reads, or null. */
     public val selectedVariant: Int? get() = null
+
+    /**
+     * The seek bar pictures the media carries, such as a DASH thumbnail set or an HLS image
+     * playlist, or null when it carries none (#433). The engine lists them in
+     * [io.github.yuroyami.kiteplayer.Tracks.thumbnails].
+     */
+    public val thumbnails: PlayerThumbnails? get() = null
+
+    /**
+     * The channels of a multiplex, each a set of [streams] that play together, or empty when the
+     * container declares none (#505). Every [io.github.yuroyami.kiteplayer.MediaProgram.tracks]
+     * entry names one of [streams] by its index, and every number is one only that programme has.
+     * The engine lists them in [io.github.yuroyami.kiteplayer.Tracks.programs] and, when there are
+     * two or more, picks every track from one of them.
+     *
+     * A live transport stream can change them while it plays, as when a channel moves its sound to a
+     * new stream at a programme boundary. A source that sees a change lists it here from the read that
+     * found it on and hands it out on the next packet as [PlayerPacket.newPrograms] (#509).
+     */
+    public val programs: List<io.github.yuroyami.kiteplayer.MediaProgram> get() = emptyList()
 }
 
 /** What the container declares about one stream. */
@@ -190,7 +311,30 @@ public data class PlayerStreamInfo(
      * [VideoFrame.mirrored] for the order in which a renderer mirrors and turns it.
      */
     val mirrored: Boolean = false,
+    /**
+     * The Dolby Vision configuration the container declares, or null when the stream is not Dolby
+     * Vision. When [DolbyVisionInfo.baseLayerPlaysAlone] is false, a frame means nothing until it is
+     * composed with its RPU, so a decoder whose frames do not carry the RPU cannot play the stream.
+     */
+    val dolbyVision: DolbyVisionInfo? = null,
+    /**
+     * The container marks this stream as commentary, such as a director talking over the film.
+     * Never chosen in place of the main mix for its channel count (#466).
+     */
+    val isCommentary: Boolean = false,
+    /**
+     * The edges of each stored picture that the container says are not part of the image, or null
+     * when it says none (#497). [videoSize] stays the stored size; [visibleVideoSize] is what is
+     * shown. See [PictureCrop].
+     */
+    val crop: PictureCrop? = null,
 ) {
+    /**
+     * The size of the picture as it is shown: [videoSize] with [crop]'s edges taken away, or
+     * [videoSize] itself when the crop is absent or does not fit it.
+     */
+    val visibleVideoSize: VideoSize? get() = videoSize?.cropped(crop)
+
     /**
      * By CONTENT, including [codecExtradata].
      *
@@ -225,6 +369,9 @@ public data class PlayerStreamInfo(
             fieldOrder == other.fieldOrder &&
             hdr == other.hdr &&
             mirrored == other.mirrored &&
+            dolbyVision == other.dolbyVision &&
+            isCommentary == other.isCommentary &&
+            crop == other.crop &&
             (codecExtradata?.contentEquals(other.codecExtradata) ?: (other.codecExtradata == null))
     }
 
@@ -252,6 +399,9 @@ public data class PlayerStreamInfo(
         result = 31 * result + fieldOrder.hashCode()
         result = 31 * result + (hdr?.hashCode() ?: 0)
         result = 31 * result + mirrored.hashCode()
+        result = 31 * result + (dolbyVision?.hashCode() ?: 0)
+        result = 31 * result + isCommentary.hashCode()
+        result = 31 * result + (crop?.hashCode() ?: 0)
         result = 31 * result + (codecExtradata?.contentHashCode() ?: 0)
         return result
     }
@@ -358,6 +508,31 @@ public interface PlayerPacket : AutoCloseable {
 
     /** Byte offset in the container, when known. Used for progress on streams with broken times. */
     public val bytePosition: Long?
+
+    /**
+     * The source's [PlayerMediaSource.streams] as they stand from this packet on, present only on the
+     * first packet a source hands out after its list changed, and null on every other packet (#509).
+     * It is the whole list: a stream is new when its index was not in the list before, and an entry
+     * that differs from the one before was corrected, as FFmpeg corrects a sound's sample rate at its
+     * first packet. Null for a source whose streams never change.
+     */
+    public val newStreams: List<PlayerStreamInfo>? get() = null
+
+    /**
+     * The source's [PlayerMediaSource.metadata] as it stands from this packet on, present only on
+     * the first packet a source hands out after its tags changed, and null on every other packet
+     * (#423): a radio station's next song, the comments of a chained Ogg's next song, an ID3 tag
+     * between ADTS frames. The engine shows them when this packet is heard, not when it is read,
+     * since a stream is read seconds ahead. Null for a source whose tags never change.
+     */
+    public val newContainerTags: Map<String, String>? get() = null
+
+    /**
+     * The source's [PlayerMediaSource.programs] as they stand from this packet on, present only on the
+     * first packet a source hands out after they changed, and null on every other packet (#509). A
+     * stream the container stopped carrying has left its programme here.
+     */
+    public val newPrograms: List<io.github.yuroyami.kiteplayer.MediaProgram>? get() = null
 }
 
 /**
@@ -410,3 +585,19 @@ public data class StreamDivergence(
     /** What the decoder actually produced. */
     val decoded: String,
 )
+
+/**
+ * The seek bar pictures of a source (#433). [at] reads an image only when it is asked for, through
+ * the source's own transport, and keeps a few recent ones, so a finger that scrubs back and forth
+ * over one image downloads it once. Safe to call from any coroutine while the source is read.
+ */
+public interface PlayerThumbnails {
+    /** What the pictures are: the size of a tile and the time one stands for. */
+    public val set: io.github.yuroyami.kiteplayer.ThumbnailSet
+
+    /**
+     * The picture for [position], on the source's own timeline, with its start and end on that
+     * timeline too, or null where no picture stands for it.
+     */
+    public suspend fun at(position: io.github.yuroyami.kiteplayer.Pts): io.github.yuroyami.kiteplayer.StreamThumbnail?
+}

@@ -34,6 +34,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
 
 - `run-c-tests.sh` never builds anything, so on its own it proves nothing about a source change;
   run the variant's build script first, every time.
+- `scripts/testmedia.sh` asks the ffmpeg on PATH what it can do rather than reading its version
+  (#418). FFmpeg 6.1, which Ubuntu 24.04 and a cloud container ship, makes every clip but the
+  fragmented TTML one, which it lists as skipped in `MANIFEST.txt`; the stpp DASH test then skips
+  with that reason, so one skip there is expected and not a regression. Its colour clips take their
+  chroma siting from the encoder there instead of from `setparams`, and each one is read back.
 - A Gradle compile task with no sources prints `NO-SOURCE` and exits zero, so "the target compiles
   now" can mean "there was never anything there to compile". Grep the log for that word against the
   exact task name, or check that the run reports a test count rather than a build result.
@@ -52,6 +57,12 @@ Each line is something that bit someone. Delete a line when it stops being true.
   files in one module does the same in a second shape: the run fails with `NoClassDefFoundError`
   for one of our own classes, usually a companion, because that class file was never written.
   Delete `build/kotlin` and `build/classes/kotlin/jvm`.
+- A test task's environment is stored in the configuration cache with the rest of the task, so a
+  variable set for one run, such as `KITEPLAYER_REQUIRE_TESTMEDIA=1`, is silently missing when the
+  entry from a run without it is reused, and the run passes as if it were not set. The test results
+  come from the build cache the same way, because neither the variable nor the clips are task
+  inputs. Pass `--no-configuration-cache` and `--rerun` to the test task when the run depends on
+  either. CI starts fresh, so it is not affected.
 - A Gradle test run that is killed part way leaves its results directory unusable, and the next run
   fails before any test with `NoSuchFileException ... in-progress-results-generic.bin`. Delete
   `build/test-results/<task>` and run again.
@@ -140,6 +151,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
   40 ms. It now pulls on an exact running total. A test that needs an underrun must stall decoding
   (`stallAudioDecodeReceive`): with an honest device a slow reader makes the engine buffer while the
   ring still holds sound (#373).
+- Both rings limit any sample past full scale (#504), so a ring test that labels each frame with its
+  index as its sample value reads back turned-down values from the second frame on, which looks like
+  a wrap or ordering bug. Label frames with values inside full scale; the ring suites use n / 2^24.
 - A fake audio device pumped by the same loop that feeds the ring deadlocks when one buffer
   releases more audio than the ring has room for, and runTest then reports a test that never
   finished. After a change from 2x to 0.5x the tempo stage releases about 120 ms at once, the
@@ -169,6 +183,36 @@ Each line is something that bit someone. Delete a line when it stops being true.
   go above 1, and the surface calls `allowance`. The old guard answered a light above the one asked
   for when it held a fall, so a test that read `limit` passed while the surface let the flash
   through. Test the guard through `allowance` (#357).
+- An RTSP client lines up its streams only from the RTCP sender reports or the RTP-Info of PLAY;
+  until one arrives each stream's timestamps start at zero on their own. The `ffmpeg` command
+  line's RTP muxer sends a report only every 5 seconds, so a test relay must hand a joining player
+  each stream's latest report at PLAY, as a camera does. Without that, RTSP over UDP played 300 ms
+  out of sync, which reads like an engine bug (#395).
+- FFmpeg starts an RTSP stream's timestamps again at every PLAY, the one after a pause included,
+  from the Range and RTP-Info the reply carries. A test server that answers PLAY with neither sends
+  the position back near zero on resume, which reads like an engine bug. `RtspCamera` dates each
+  PLAY as a camera does (#441).
+- A test of a paused live player needs a pause that outlasts the read-ahead. FFmpeg sends the RTSP
+  keepalive from inside a read, and an audio-only stream takes far longer than a short pause to
+  fill the default 30 second budget, so the old reads kept the session alive and the test passed
+  with the fix taken out. `RtspPauseTest` reads two seconds ahead (#441).
+- The `ffmpeg` 6.1 command line's `-sdp_file` holds only the first stream of an RTP output with
+  two. It prints a description to standard output as each stream starts, and only the last one
+  names both, so a test takes that one (#395).
+- The `ffmpeg` command line's RTSP publisher packs about 0.7 s of AAC into each RTP packet, so its
+  audio arrives twice a second, up to 0.65 s after the media it carries, and the start of each
+  session arrives in one burst, late by as long as the relay took to accept it. Audio arrivals
+  therefore measure the packing, not the network. Date the sender's line on the earliest audio
+  arrival and measure lateness on the video arrivals after play starts, which come one picture at
+  a time within 20 ms (#395).
+- The loopback sync readings step by about 30 ms from one run to the next, and now and then within
+  a run, and the step is in the engine's clock against the sound actually heard: the test renderer
+  is handed each picture within 2 ms of the time that clock gives it. Raw UDP and TCP read 18 ms
+  early or 14 ms late, RTSP over UDP 7 ms early or 34 ms late, RTSP over TCP 7 or 38 ms early, and
+  the file, steady at 6 ms early, read 28 ms early in three runs of four once the test renderer did
+  a little more work per picture. RTSP over TCP's second reading sits on the 40 ms edge of the
+  window, so that test can fail on it with no catch-up running at all; the catch-up adds only about
+  10 ms of the tempo stage's own spread while it runs (#395).
 
 ### Language and toolchain
 
@@ -321,15 +365,21 @@ Each line is something that bit someone. Delete a line when it stops being true.
   keyframe seek lands up to one segment early and a precise seek decodes forward from there. It
   reads a run of byte-range fragments of one file through one reader, so playing from the start
   asks for that file from byte 0 only, and a range request appears only after a seek (#209).
-- FFmpeg's HLS reader cannot seek a WebM stream once it has read it to the end: the seek returns
-  and no packet follows, with one Period or several. MP4 and MPEG-TS seek fine. The Matroska
-  reader's end flag survives the HLS reader's byte-level reset, so this is upstream; a WebM test
-  seeks before it reads to the end (#403).
 - FFmpeg's MP4 reader keeps the first `moov` it sees and skips every later one, and a decoder keeps
   the last H.264 or HEVC parameter sets it was given. So every fMP4 segment of a joined DASH
   presentation carries its own Period's parameter sets in band, even a Period whose
   initialization is the stream's own: without them a third Period decoded with the second's
   picture size (#403).
+- Each live protocol in FFmpeg takes its read timeout under its own name, and without one it
+  waits for a silent sender for ever: http, tcp and rtmp take `rw_timeout`, udp takes its own
+  `timeout`, and rtsp takes the demuxer's `timeout`. The rtp reader waits for its first packet
+  through a protocol it opens from the address alone, so no option reaches it and the timeout goes
+  in the address as `?timeout=`, in microseconds. Over a TCP connection a silent sender takes two
+  timeouts to fail a read once playing, because FFmpeg waits again after the first; the command
+  line does the same (#395).
+- FFmpeg lets an input opened through `file` reach only `file`, `crypto` and `data`, so an SDP file
+  on disk opens and then fails to reach the RTP session it describes, until the open names `udp`
+  and `rtp` in `protocol_whitelist` (#395).
 
 ### The web target
 
@@ -359,12 +409,23 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - C struct fields are read from JavaScript by byte offset, and those offsets come only from the
   committed generated layout file. A wrong offset reads the neighbouring field and answers
   something plausible.
+- The web worker's protocol copies every field of the snapshot, a track, an item and each warning
+  by hand, and its decoders fill a missing field from the default, so a new member that skips it
+  reads on the page as "nothing" and only a new warning breaks the build. Add each new member both
+  ways and set it off its default in `WorkerProtocolTest`; three fields and a warning went missing
+  this way at once (#517).
 - `runBlocking` does not exist on the web target because there is no thread to block, so a shared
   test written with it will not compile there. The fix is the test-coroutine builder, not moving the
   test into a narrower source set: narrowing silently removes it from every target that no longer
   sees it. Moving two files out of the common test set here would have dropped 32 tests from the
   Android host run with nothing going red to say so. Count tests per target before and after any
   source-set move.
+- Kotlin/JS builds every `Regex` in JavaScript's unicode mode, which refuses a `]` or `}` that
+  closes nothing, so a pattern the JVM, native and Wasm all accept throws on JS, and inside an
+  object it takes the whole object down. Escape them. A `Float` there is a 64-bit number, so a value
+  read back from a `FloatArray` misses its literal by the float's rounding and 1.0f prints as "1";
+  compare floats within a tolerance and never by their text. The Wasm run proves nothing about any
+  of this, which is why the JS half has its own CI job (#537).
 
 ### Platform truths, measured on real hardware
 

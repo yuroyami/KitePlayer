@@ -10,11 +10,14 @@ public final class io/github/yuroyami/kiteplayer/output/AwtCanvasVideoRenderer :
 	public fun <init> (Lio/github/yuroyami/kiteplayer/output/AwtFramePainter;Lkotlin/jvm/functions/Function2;)V
 	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/output/AwtFramePainter;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun accepts (Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
+	public fun clearPicture ()V
 	public fun close ()V
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getFailedFrames ()J
 	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
 	public final fun getPresentedFrames ()J
+	public fun getRedrawsHeldPicture ()Z
+	public fun getShowsHdr ()Z
 	public final fun getSupersededFrames ()J
 	public fun present (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setAdjustments (Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
@@ -50,12 +53,14 @@ public final class io/github/yuroyami/kiteplayer/output/CodecSpecificData {
 public final class io/github/yuroyami/kiteplayer/output/DesktopAudioSink : io/github/yuroyami/kiteplayer/spi/AudioSink {
 	public fun close ()V
 	public fun drain (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getCutsSoundOnStop ()Z
 	public fun getDeviceBufferFrames ()I
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public fun getLatencyQuality ()Lio/github/yuroyami/kiteplayer/LatencyQuality;
 	public fun getPlatformSessionId ()Ljava/lang/Integer;
 	public fun latencyNanos ()J
 	public fun open (Lio/github/yuroyami/kiteplayer/spi/AudioFormat;Lio/github/yuroyami/kiteplayer/spi/AudioRenderCallback;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun setContent (Lio/github/yuroyami/kiteplayer/AudioContent;)V
 	public fun setPaused (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun start (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun stop (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -65,6 +70,7 @@ public final class io/github/yuroyami/kiteplayer/output/DesktopAudioSinkFactory 
 	public fun <init> ()V
 	public fun create (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getName ()Ljava/lang/String;
+	public fun outputChannelCount ()Ljava/lang/Integer;
 }
 
 public final class io/github/yuroyami/kiteplayer/output/DesktopMonotonicClock : io/github/yuroyami/kiteplayer/MonotonicClock {

@@ -49,12 +49,15 @@ internal object Fmp4Rewrite {
         if (sourceCodec != targetCodec) {
             throw DashUnsupportedException("a Period in $sourceCodec cannot play in a stream that began in $targetCodec")
         }
+        val inject = inBandParameterSets(plan.source, plan.target)
+        val unchanged = plan.shiftMicros == 0L && inject == null && sameLayout(plan.source, plan.target)
+        // Nothing to move, inject or trim, so the samples need not be read at all.
+        if (unchanged && plan.endMicros == null) return segment
         val fragments = Fmp4.fragments(segment, plan.source)
         val trims = plan.endMicros != null && fragments.any { fragment ->
             fragment.samples.any { micros(it.decodeTime, plan.source.timescale) + plan.shiftMicros >= plan.endMicros }
         }
-        val inject = inBandParameterSets(plan.source, plan.target)
-        if (plan.shiftMicros == 0L && !trims && inject == null && sameLayout(plan.source, plan.target)) return segment
+        if (unchanged && !trims) return segment
         val out = Bytes(segment.size + 1024)
         Fmp4.boxes(segment, 0, segment.size).firstOrNull()?.takeIf { it.type == "styp" }?.let { styp ->
             out.bytes(segment, styp.start, styp.end)
@@ -129,26 +132,31 @@ internal object Fmp4Rewrite {
     }
 
     /**
-     * The codec of [track]'s sample entry, by its four characters, with the two spellings of H.264
-     * and of HEVC each counted as one, or null when the initialization names none.
+     * The codec of [track]'s sample entry, by its four characters, with the spellings of H.264 and
+     * of HEVC each counted as one, Dolby Vision's among them, or null when the initialization names
+     * none. A Dolby Vision entry is the same bitstream with an RPU beside each picture.
      */
     private fun codecOf(track: Fmp4.Track): String? {
         val entry = track.sampleEntryBytes ?: return null
         if (entry.size < 8) return null
         return when (val type = entry.decodeToString(4, 8)) {
-            "avc1", "avc3" -> "H.264"
-            "hvc1", "hev1" -> "HEVC"
+            in AVC_ENTRIES -> "H.264"
+            in HEVC_ENTRIES -> "HEVC"
             else -> type
         }
     }
+
+    /** The sample entries of H.264 and of HEVC: `avc1` and `avc3`, `hvc1` and `hev1`, and Dolby Vision's twins of each. */
+    private val AVC_ENTRIES = setOf("avc1", "avc3", "dva1", "dvav")
+    private val HEVC_ENTRIES = setOf("hvc1", "hev1", "dvh1", "dvhe")
 
     /** The codec family, and the NAL length size and parameter sets of [track]'s `avcC` or `hvcC`, or null for another codec. */
     private fun configuration(track: Fmp4.Track): Pair<String, Pair<Int, List<ByteArray>>>? {
         val entry = track.sampleEntryBytes ?: return null
         val type = if (entry.size >= 8) entry.decodeToString(4, 8) else return null
         val family = when (type) {
-            "avc1", "avc3" -> "avc"
-            "hvc1", "hev1" -> "hevc"
+            in AVC_ENTRIES -> "avc"
+            in HEVC_ENTRIES -> "hevc"
             else -> return null
         }
         // A visual sample entry has 78 bytes of its own fields after its header, then its boxes.

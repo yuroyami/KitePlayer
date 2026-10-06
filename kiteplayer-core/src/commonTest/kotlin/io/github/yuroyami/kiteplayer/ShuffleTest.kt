@@ -8,6 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Shuffle, as an order OVER the queue rather than a reorder OF it.
@@ -150,6 +151,75 @@ class ShuffleTest {
         assertEquals(order.first(), visited.last(), "the fifth step did not wrap back to the front")
         assertEquals(listOf(0, 1, 2, 3, 4), visited.take(5).sorted(), "some item was played twice and another never")
         harness.close()
+    }
+
+    /** The queue positions of two laps of next, from the first item of the published order. */
+    private suspend fun kotlinx.coroutines.test.TestScope.lapsOf(reshuffle: Boolean, seed: Long): Pair<List<Int>, List<Int>> {
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 20_000_000),
+            config = PlayerConfig(queue = QueueConfig(reshuffleEachLap = reshuffle)),
+        )
+        openFive(harness)
+        harness.core.setLoop(LoopMode.All)
+        harness.core.setShuffle(true, seed = seed)
+        assertActuallyShuffled(harness.order())
+        val visited = mutableListOf(harness.core.snapshots.value.queueIndex)
+        repeat(9) {
+            harness.core.queueNext()
+            harness.run(100.milliseconds)
+            visited += harness.core.snapshots.value.queueIndex
+        }
+        val second = harness.order()
+        harness.close()
+        assertEquals(visited.drop(5), second, "the second lap did not follow the published order")
+        return visited.take(5) to visited.drop(5)
+    }
+
+    @Test
+    fun reshuffleEachLapPlaysTheSecondLapInANewOrderThatDoesNotRepeatTheLastItem() = runTest {
+        val (first, second) = lapsOf(reshuffle = true, seed = 42)
+        assertEquals(listOf(0, 1, 2, 3, 4), second.sorted(), "the second lap did not play every item once")
+        assertNotEquals(first, second, "the second lap repeated the first order")
+        assertNotEquals(first.last(), second.first(), "the item that ended a lap began the next")
+        // The same seed draws the same laps.
+        assertEquals(first to second, lapsOf(reshuffle = true, seed = 42))
+    }
+
+    @Test
+    fun itemsThatEndOnTheirOwnTakeUpTheNewLapThroughTheGaplessHandoff() = runTest {
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 2_000_000, hasVideo = false),
+            config = PlayerConfig(queue = QueueConfig(reshuffleEachLap = true)),
+        )
+        harness.core.openQueue(items(5), startIndex = 2)
+        harness.core.setLoop(LoopMode.All)
+        harness.core.setShuffle(true, seed = 42)
+        val first = harness.order()
+        assertActuallyShuffled(first)
+        harness.core.play()
+        val visited = mutableListOf(harness.core.snapshots.value.queueIndex)
+        var waited = kotlin.time.Duration.ZERO
+        while (visited.size < 6 && waited < 30.seconds) {
+            harness.run(10.milliseconds)
+            waited += 10.milliseconds
+            val now = harness.core.snapshots.value.queueIndex
+            if (now != visited.last()) visited += now
+        }
+        assertEquals(6, visited.size, "the queue did not come round: $visited")
+        assertEquals(first, visited.take(5), "the first lap did not follow the published order")
+        val second = harness.order()
+        assertEquals(second.first(), visited[5], "the new lap did not begin where the handoff went")
+        assertNotEquals(first.last(), visited[5], "the item that ended a lap began the next")
+        assertEquals(listOf(0, 1, 2, 3, 4), second.sorted())
+        harness.close()
+    }
+
+    @Test
+    fun withoutReshuffleEveryLapPlaysTheSameOrder() = runTest {
+        val (first, second) = lapsOf(reshuffle = false, seed = 42)
+        assertEquals(first, second)
     }
 
     @Test

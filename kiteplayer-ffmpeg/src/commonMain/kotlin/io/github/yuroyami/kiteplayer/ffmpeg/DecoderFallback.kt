@@ -112,6 +112,9 @@ private class ReplayFallbackDecoder(
     private val hardwareOutputs: ArrayDeque<VideoFrame> = ArrayDeque()
 
     private var hardwareDrainAccepted: Boolean = false
+
+    /** What the engine last asked of [skipNonReferenceFrames], which the software decoder takes over. */
+    private var skipNonReference: Boolean = false
     private var currentGeneration: Generation = Generation.Initial
     private var warned: Boolean = false
     private var closed: Boolean = false
@@ -211,6 +214,16 @@ private class ReplayFallbackDecoder(
             closeFailure = closeFailure ?: failure
         }
         closeFailure?.let { throw it }
+    }
+
+    /**
+     * Forwarded to the software decoder only (#468). The hardware decoder decodes every frame,
+     * because a demotion replays its packets through software and suppresses as many outputs as
+     * the hardware gave, and a platform codec may ignore the setting where software obeys it.
+     */
+    override fun skipNonReferenceFrames(skip: Boolean) {
+        skipNonReference = skip
+        if (!usingHardware) active?.skipNonReferenceFrames(skip)
     }
 
     override fun close() {
@@ -351,6 +364,10 @@ private class ReplayFallbackDecoder(
         } finally {
             closeRetainedQuietly()
         }
+
+        // The replay above decoded every frame, as the hardware did; the packets from here on
+        // skip what the engine asks.
+        software.skipNonReferenceFrames(skipNonReference)
 
         if (replayDrain && replaySuppressRemaining != 0L) {
             failTerminal(

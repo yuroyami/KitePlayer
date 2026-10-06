@@ -10,6 +10,7 @@ import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.spi.AudioBuffer
 import io.github.yuroyami.kiteplayer.spi.AudioDecoder
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
@@ -31,13 +32,22 @@ internal suspend fun scanMediaAudio(
     sink: AudioScanSink,
 ): AudioScanResult {
     val session = backend.open(media)
+    // A read can block its thread inside the backend, where a cancellation cannot reach it, so
+    // the caller's cancellation is linked to the source's interrupt for the whole scan (#411). A
+    // child job is cancelled the moment its parent is, even while this thread is blocked, and its
+    // handler runs on the thread that cancelled. It is detached before the session closes, because
+    // an interrupt must never run after the close.
+    val link = currentCoroutineContext()[Job]?.let { Job(it) }
+    link?.invokeOnCompletion { cause -> if (cause != null) session.source.interrupt() }
     try {
         val source = session.source
         val stream = if (track != null) {
             source.streams.firstOrNull { it.index == track.value && it.kind == TrackKind.Audio }
                 ?: throw IllegalArgumentException("track ${track.value} is not an audio track of this media")
         } else {
-            pickAudioStream(source.streams, preferredLanguages)
+            // The sound the player would play, so from the programme it would play (#505).
+            val program = chooseProgram(source.programs, source.streams, media.demux.program)
+            pickAudioStream(programCandidates(source.streams, source.programs, program), preferredLanguages)
                 ?: throw IllegalArgumentException("this media has no audio track to scan")
         }
         source.selectStreams(setOf(stream.index))
@@ -52,15 +62,23 @@ internal suspend fun scanMediaAudio(
             var frames = 0L
             var first: Pts? = null
             var end: Pts? = null
-            val untilMicros = range?.until?.micros
+            // An item with a clip is scanned over its clip only, in the file's own times (#456).
+            val clip = media.clip
+            val clipFrom = clip?.start?.takeIf { it.isPositive() }?.let { Pts(it.inWholeMicroseconds) }
+            val from = listOfNotNull(range?.from, clipFrom).maxOrNull()
+            val untilMicros = listOfNotNull(range?.until?.micros, clip?.end?.inWholeMicroseconds).minOrNull()
+            // A source that cannot seek reaches the clip by decoding forward, and what ends before
+            // it is not handed on.
+            val skipUntilMicros = if (range?.from == null && from != null && !source.seekable) from.micros else Long.MIN_VALUE
             var stoppedAtLimit = false
             suspend fun deliver(buffer: AudioBuffer) {
                 try {
                     val count = buffer.frameCount
                     if (count <= 0) return
+                    val finish = Pts(buffer.pts.micros + buffer.format.durationOf(count).micros)
+                    if (finish.micros <= skipUntilMicros) return
                     val samples = interleaver.interleave(buffer)
                     if (first == null) first = buffer.pts
-                    val finish = Pts(buffer.pts.micros + buffer.format.durationOf(count).micros)
                     end = finish
                     if (untilMicros != null && finish.micros >= untilMicros) stoppedAtLimit = true
                     frames += count
@@ -69,7 +87,7 @@ internal suspend fun scanMediaAudio(
                     buffer.close()
                 }
             }
-            range?.from?.let { source.seekToKeyframe(it) }
+            if (from != null && skipUntilMicros == Long.MIN_VALUE) source.seekToKeyframe(from)
             while (!stoppedAtLimit) {
                 currentCoroutineContext().ensureActive()
                 val packet = source.readPacket() ?: break
@@ -104,7 +122,12 @@ internal suspend fun scanMediaAudio(
         } finally {
             active.close()
         }
+    } catch (failure: Throwable) {
+        // An interrupted read fails with the backend's own error; the caller asked for a cancellation.
+        currentCoroutineContext().ensureActive()
+        throw failure
     } finally {
+        link?.complete()
         session.close()
     }
 }

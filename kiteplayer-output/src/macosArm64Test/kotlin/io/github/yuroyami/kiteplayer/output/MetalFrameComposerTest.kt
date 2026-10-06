@@ -382,6 +382,42 @@ class MetalFrameComposerTest {
     }
 
     @Test
+    fun aBackgroundTakesThePictureOffAndKeepsTheOverlay() {
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val target = device.makeTargetTexture(64, 64)
+        composer.encode(
+            target, TestFrame(64, 64, bt(ColorMatrix.Bt709)), solidNv12(64, 64, y = 63, cb = 102, cr = 240), null, 64, 64,
+        ).waitUntilCompleted()
+        val whiteOverlay = SubtitleOverlay(
+            images = listOf(OverlayImage(x = 28, y = 28, bitmap = RgbaBitmap(8, 8, ByteArray(8 * 8 * 4) { 0xFF.toByte() }))),
+            viewportWidth = 64,
+            viewportHeight = 64,
+            contentHash = 43L,
+        )
+        composer.encodeBackground(target, whiteOverlay, 64, 64).waitUntilCompleted()
+        val bytes = ByteArray(64 * 64 * 4)
+        bytes.usePinned { pinned ->
+            target.getBytes(
+                pinned.addressOf(0),
+                bytesPerRow = (64 * 4).toULong(),
+                fromRegion = MTLRegionMake2D(0u, 0u, 64u, 64u),
+                mipmapLevel = 0u,
+            )
+        }
+        val background = bgraAt(bytes, 64, 8, 32)
+        assertTrue(
+            background[0] == 0 && background[1] == 0 && background[2] == 0,
+            "the red picture must be gone, got ${background.toList()}",
+        )
+        val overlay = bgraAt(bytes, 64, 32, 32)
+        assertTrue(
+            overlay[0] > 200 && overlay[1] > 200 && overlay[2] > 200,
+            "the overlay must still be drawn, got ${overlay.toList()}",
+        )
+    }
+
+    @Test
     fun theAdjustUniformsAreLiveAndDisabledIsBitExact() {
         val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
         val composer = MetalFrameComposer(device)

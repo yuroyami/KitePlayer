@@ -39,6 +39,8 @@ internal class HlsOpen(
     val variants: List<StreamVariant> = emptyList(),
     /** The index of the variant that plays, or null for a media playlist. */
     val selectedVariant: Int? = null,
+    /** The seek bar pictures of a master playlist that names an image stream, or null (#433). */
+    val thumbnails: HlsThumbnails? = null,
 ) {
     /**
      * The pre-open options this open adds. A segment address often has no file extension, so
@@ -55,14 +57,16 @@ internal const val MAX_PLAYLIST_BYTES: Int = 16 * 1024 * 1024
  * Reads [io]'s playlist and prepares the open. [lifetime] is the lifetime of every bridge of the
  * source. The caller closes [io] when this throws.
  */
-internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job): HlsOpen {
+internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: String? = null): HlsOpen {
     val base = io.location ?: item.uri
-    val text = readPlaylist(io, item.uri).decodeToString()
-    val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant)
+    val text = read ?: readPlaylist(io, item.uri).decodeToString()
+    val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant, item.demux.fit)
     val playlist = master?.playlist ?: text
     val ledger = HlsLedger(item.uri)
+    // The kept variant's backups stand in for it when an address fails (#440).
+    val failover = HlsFailover(master?.backups.orEmpty(), base)
     val opener = if (io.location != null && nestedOpensSupported) {
-        MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger) }
+        MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger, failover) }
     } else {
         null
     }
@@ -74,19 +78,24 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job): HlsOp
             height = variant.height,
             frameRate = variant.frameRate,
             codecs = variant.attributes["CODECS"],
+            hdr = variant.hdr,
         )
     }
-    return HlsOpen(PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen)
+    // The pictures are read through the item's own reader, as its segments are (#433).
+    val thumbnails = HlsThumbnails.choose(hlsImageStreams(text))?.let { HlsThumbnails(io, base, it) }
+    return HlsOpen(PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen, thumbnails)
 }
 
 /**
- * Opens [address] through [io] for FFmpeg, on the demux thread. A playlist read after a redirect
- * gets its addresses made absolute, because FFmpeg would resolve them against [address].
+ * Opens [address] through [io] for FFmpeg, on the demux thread. A reader that was redirected
+ * hands FFmpeg its new address as the bridge's location, and FFmpeg resolves a playlist's
+ * addresses against it after it has put in the playlist's variables, exactly as it does after a
+ * redirect its own `http` follows. The playlist reaches FFmpeg as the server sent it.
  */
-private fun openRelatedBridge(io: MediaIo, address: String, lifetime: Job, ledger: HlsLedger): MediaByteSource? =
+private fun openRelatedBridge(io: MediaIo, address: String, lifetime: Job, ledger: HlsLedger, failover: HlsFailover): MediaByteSource? =
     blockingIn(lifetime) {
         val related = try {
-            io.openRelated(address)
+            if (failover.isEmpty) io.openRelated(address) else failover.open(address) { target -> io.openRelated(target) }
         } catch (failure: Throwable) {
             if (failure is CancellationException) throw failure
             ledger.failed(address, failure.message ?: failure.toString())
@@ -96,26 +105,7 @@ private fun openRelatedBridge(io: MediaIo, address: String, lifetime: Job, ledge
             ledger.failed(address, "the reader refused the address")
             return@blockingIn null
         }
-        val redirected = related.location?.takeIf { it != address }
-        val readable = if (redirected == null) {
-            related
-        } else {
-            try {
-                // A playlist that nothing marks is recognised by its first bytes, as the item's own is (#400).
-                val marked = looksLikeHls(null, related.contentType, address)
-                val reader = if (marked || !mayBeAPlaylist(related.contentType)) related else SniffedMediaIo.sniff(related, HLS_SNIFF_BYTES)
-                if (marked || (reader is SniffedMediaIo && startsLikeHls(reader.head))) {
-                    val text = readPlaylist(reader, address).decodeToString()
-                    PlaylistMediaIo(absoluteHlsAddresses(text, redirected).encodeToByteArray(), owner = reader)
-                } else {
-                    reader
-                }
-            } catch (failure: Throwable) {
-                related.close()
-                throw failure
-            }
-        }
-        BlockingMediaIo(LedgeredMediaIo(readable, address, ledger), lifetime)
+        BlockingMediaIo(LedgeredMediaIo(related, address, ledger), lifetime)
     }
 
 /** Reads [io] to its end, refusing a playlist larger than [MAX_PLAYLIST_BYTES]. */

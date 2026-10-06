@@ -1,12 +1,38 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.SubtitleEncodings
 import io.github.yuroyami.kiteplayer.internal.redactUri
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /** What to play. */
 public data class MediaItem(
     /**
-     * Where the media is. A file path, or a URL with any scheme the linked FFmpeg supports.
+     * Where the media is: a file path, or an address.
+     *
+     * With no [io] and no resolver answer, the FFmpeg backend opens the address through FFmpeg's
+     * own protocols. On Android, Apple platforms, the JVM and native desktop those are `file`,
+     * `fd`, `pipe`, `data`, `http`, `tcp`, `udp`, `rtp`, `rtsp` and `rtmp`, and a path with no
+     * scheme is a file. An `https` address plays through `kiteplayer-network`. Any other scheme,
+     * among them `srt`, `rtmps` and `rtsps`, fails the open with [PlaybackError.SchemeUnsupported]
+     * before anything goes over the network. A web page has no sockets, so there an address plays
+     * only through [io] or `kiteplayer-network`, and the open of any other fails the same way.
+     *
+     * A live sender is read as it sends. RTSP tries UDP and falls back to TCP when nothing arrives;
+     * `rtsp_transport` in [openOptions], set to `tcp` or `udp`, chooses one. A `udp` or `rtp`
+     * address may name a multicast group, which plays where the host is allowed to join it, and a
+     * file ending in `.sdp` plays the RTP session it describes. A sender that goes silent fails
+     * the open after ten seconds, and the playback after ten over UDP and twenty over a TCP
+     * connection, on which FFmpeg waits twice. The user name and password in an address never
+     * reach a log or an error.
+     *
+     * The player stays about the buffer policy's ready duration behind such a sender. When the
+     * open or a stall leaves it more than half a second further behind, it plays 1.1 times faster,
+     * keeping the pitch, until it is back within a tenth of a second of that, so each second of
+     * extra delay clears in ten. It leaves a speed the caller chose alone, and does not catch up
+     * with the pitch correction off, which would raise every voice by a tenth. A raw `tcp` address
+     * is not caught up, because a sender there may as well send a file as fast as it can.
      *
      * When [io] is set, the bytes come from that reader and this is a label. The FFmpeg backend
      * still reads its extension to recognise an HLS playlist, and resolves the playlist's relative
@@ -40,7 +66,9 @@ public data class MediaItem(
     @property:KitePlayerLowLevelApi
     val videoFilter: String? = null,
     /**
-     * Where to start. Null means the beginning, or the container's own start time.
+     * Where to start. Null means the beginning, or the container's own start time. With a [clip]
+     * it counts from the clip's start, as every position of a clipped item does, and null means
+     * the clip's start.
      *
      * Honoured in two halves: the source is moved to the keyframe at or before this position
      * BEFORE the first frame is decoded, so nothing from the beginning of the media is ever
@@ -118,6 +146,31 @@ public data class MediaItem(
      */
     @property:KitePlayerLowLevelApi
     val audioFilter: String? = null,
+    /**
+     * What the item's sound is, for the platform's sound processing: see [AudioContent]. The
+     * default declares a film when the item shows a picture, cover art aside, and music when it
+     * shows none. Name [AudioContent.Speech] for a podcast or an audiobook.
+     */
+    val audioContent: AudioContent = AudioContent.Automatic,
+    /**
+     * The part of the file this item is, or null for the whole file: a track of an album ripped
+     * to one file, a chapter played on its own, or any clip of a longer file (#456). The item is
+     * then an item of the clip's length, and every position and length the player reports for it
+     * counts from the clip's start. See [MediaClip].
+     */
+    val clip: MediaClip? = null,
+    /**
+     * Marks the file as still being written, as a recording in progress, a download that plays
+     * while it arrives or a TV recorder's file is (#430), or null, the default, for a file that is
+     * complete. See [FileGrowth].
+     */
+    val growth: FileGrowth? = null,
+    /**
+     * A WebVTT thumbnail file whose pictures a seek bar shows for this item, or null (#433). A
+     * stream that carries thumbnails of its own needs none: [KitePlayer.thumbnailAt] answers from
+     * this file when it is set, and from the stream otherwise. See [ThumbnailSource].
+     */
+    val thumbnails: ThumbnailSource? = null,
 ) {
     public companion object {}
 
@@ -160,6 +213,7 @@ public data class MediaItem(
         if (externalSubtitles.isNotEmpty()) append(", externalSubtitles=").append(externalSubtitles.size)
         if (videoFilter != null) append(", videoFilter=").append(videoFilter)
         if (audioFilter != null) append(", audioFilter=").append(audioFilter)
+        if (clip != null) append(", clip=").append(clip)
         if (startPosition != null) append(", startPosition=").append(startPosition)
         if (io != null) append(", io")
         if (formatHint != null) append(", formatHint=").append(formatHint)
@@ -169,6 +223,104 @@ public data class MediaItem(
         if (artist != null) append(", artist=").append(artist)
         if (album != null) append(", album=").append(album)
         append(")")
+    }
+}
+
+/**
+ * The part of a file a [MediaItem] plays, from [start] to [end] (#456). Both are positions of the
+ * whole file, as the item would report them with no clip.
+ *
+ * A clipped item is an item of the clip's length. Every position and length the player reports for
+ * it counts from [start]: [KitePlayer.position], [KitePlayer.progress], [PlayerSnapshot.duration],
+ * [PlayerSnapshot.chapters], [PlayerSnapshot.abLoopA] and [PlayerSnapshot.abLoopB], the markers,
+ * [SleepTimer.At], [PlayerEvent.SeekCompleted], [PlayerMemento.position] and [MediaItem.startPosition],
+ * and every position the caller hands in is read the same way. A seek stays inside the clip. The
+ * item ends at [end] as an item ends at the end of its file, and the queue moves on. Nothing from
+ * before [start] or from [end] on is heard or shown, and a subtitle on screen at [end] leaves there.
+ * A clip whose [end] lies past the end of the media ends where the media does, and one that starts
+ * at or past the stated end of the media fails the open with [PlaybackError.ConfigurationInvalid].
+ *
+ * The timestamps of the media itself stay the file's: every [Pts], such as the audio clock, a
+ * presented or captured frame, the audio tap and a scan, and the times of a subtitle cue. Add
+ * [start] to a position to get the timestamp that plays there, and take it away to go back.
+ *
+ * Two items in a queue that are the same file, every field equal but the clip, the start position
+ * and the titles, where the second clip starts exactly where the first one ends, play as one
+ * stream: the player reads on through the boundary without opening the file again, so an album in
+ * one file plays its tracks with no gap and no seam, even in a lossy format. See
+ * `docs/gapless-queue.md`.
+ *
+ * @throws IllegalArgumentException when [start] is negative or not finite, or when [end] is not
+ *         finite or not after [start].
+ */
+public data class MediaClip(
+    /** Where the item starts in the file. */
+    val start: Duration = Duration.ZERO,
+    /** Where the item ends in the file, or null when it runs to the end of the file. */
+    val end: Duration? = null,
+) {
+    init {
+        require(start.isFinite() && start >= Duration.ZERO) { "a clip must start at a finite position from zero, was $start" }
+        require(end == null || (end.isFinite() && end > start)) { "a clip must end after it starts, was $start to $end" }
+    }
+
+    /** [start] in milliseconds. For Java, which cannot read a [Duration] (#394). */
+    public val startMillis: Long get() = start.inWholeMilliseconds
+
+    /** [end] in milliseconds, or null when the clip runs to the end of the file. For Java (#394). */
+    public val endMillis: Long? get() = end?.inWholeMilliseconds
+
+    /** How long the clip is, or null when it runs to the end of the file, whose length decides. */
+    public val length: Duration? get() = end?.minus(start)
+
+    public companion object {
+        /**
+         * A clip from [startMillis] to [endMillis], or to the end of the file when [endMillis] is
+         * null. For Java, which cannot make a [Duration] (#394).
+         */
+        @kotlin.jvm.JvmStatic
+        @kotlin.jvm.JvmOverloads
+        public fun ofMillis(startMillis: Long, endMillis: Long? = null): MediaClip =
+            MediaClip(startMillis.milliseconds, endMillis?.milliseconds)
+    }
+}
+
+/**
+ * How a [MediaItem] whose file is still being written is played (#430).
+ *
+ * The item plays to the file's current end and on as it grows. At what looks like the end, the
+ * player waits for more and reads again, and the item ends once the file has not grown for
+ * [endsAfter]. Its length follows the file: [PlayerSnapshot.duration] is an estimate that grows
+ * with it, as [PlayerSnapshot.durationIsEstimate] says, and a seek reaches any part already
+ * written, not only the part that existed at the open. While playback waits at the end it buffers,
+ * as it does for a slow network.
+ *
+ * The file is read through Kotlin rather than by FFmpeg's own file reader, which reports the end at
+ * the first read that finds no more bytes. The item's [MediaItem.io] does that reading when it has
+ * one. A local path with none needs a provider that serves local files, which `kiteplayer-io`
+ * installs on the JVM, Android, Apple and Linux; without one, the item plays as a complete file
+ * and the player says so with [PlaybackWarning.GrowthUnavailable].
+ *
+ * mpv's `appending://` protocol plays such files the same way, and waits about two seconds, the
+ * default here, before it calls the end.
+ *
+ * @throws IllegalArgumentException when [endsAfter] is not positive and finite.
+ */
+public data class FileGrowth(
+    /** How long the file must go without growing before the item ends. */
+    val endsAfter: Duration = 2.seconds,
+) {
+    init {
+        require(endsAfter.isFinite() && endsAfter > Duration.ZERO) { "a growing file must end after a positive wait, was $endsAfter" }
+    }
+
+    /** [endsAfter] in milliseconds. For Java, which cannot read a [Duration]. */
+    public val endsAfterMillis: Long get() = endsAfter.inWholeMilliseconds
+
+    public companion object {
+        /** Growth that ends after [endsAfterMillis] without new bytes. For Java, which cannot make a [Duration]. */
+        @kotlin.jvm.JvmStatic
+        public fun ofMillis(endsAfterMillis: Long): FileGrowth = FileGrowth(endsAfterMillis.milliseconds)
     }
 }
 
@@ -276,7 +428,38 @@ public interface MediaIo : AutoCloseable {
      * call while a read runs.
      */
     public fun networkBitsPerSecond(): Long? = null
+
+    /**
+     * The tags the bytes of the last [read] brought, or null, the default, when it brought none
+     * (#423): above all the song an internet radio station names in a title block between its audio
+     * bytes. The backend asks after every read that returned bytes, on the thread that read, and
+     * the tags belong at the first byte of that read, so a reader that stops each read where its
+     * next tags belong places them exactly.
+     *
+     * Report each change once. A station's fields keep the names FFmpeg's own `http` gives them,
+     * `StreamTitle` and `StreamUrl`. Finding the titles is the reader's work: it sends
+     * `Icy-MetaData: 1`, reads the block interval from `icy-metaint`, and takes every block out of
+     * the bytes before [read] hands them over, so the demuxer never sees one.
+     */
+    public fun takeTags(): Map<String, String>? = null
+
+    /**
+     * A server's refusal of an address this reader, or one it opened, had been reading, once, or
+     * null, the default (#453). A signed address that expired gets one: the server answers 401 or
+     * 403 to the next segment, the next playlist reload or the next range of the file, after the
+     * item had opened. The engine asks on its own passes and opens the item again through its
+     * resolver or its `io` factory, which hand out a fresh address, at the position it reached.
+     *
+     * Report a refusal of the item's first open as a failure of that open instead, as always.
+     */
+    public fun takeRefusal(): SourceRefusal? = null
 }
+
+/**
+ * A server's answer [status], 401 or 403, to a request for [uri] that an open item's reader made
+ * (#453). See [MediaIo.takeRefusal].
+ */
+public data class SourceRefusal(val uri: String, val status: Int)
 
 /**
  * Turns a URI into a [MediaIo] when it knows how, at open time (the Ktor
@@ -316,6 +499,13 @@ public fun interface MediaIoResolver {
  * The network resolver gets the parent item's [MediaItem.headers] only when [uri] has the same
  * scheme, host and port as the item's own URI, so a subtitle beside a signed URL works. A subtitle
  * on another server gets no item header. To send headers to it, give it its own [io].
+ *
+ * The text's encoding is decided from the bytes unless [encoding] names it: a byte-order mark, then
+ * UTF-8, then [SubtitleConfig.fallbackEncoding] when one is set, and otherwise a guess, which
+ * [PlaybackWarning.SubtitleCharsetGuessed] reports. A track whose guess was wrong can be read again in
+ * another encoding with [KitePlayer.reloadExternalSubtitle].
+ *
+ * @throws IllegalArgumentException when [encoding] is not one of [ENCODINGS] or a label for one.
  */
 public data class SubtitleSource(
     val uri: String,
@@ -332,13 +522,48 @@ public data class SubtitleSource(
      * everything at once and closed.
      */
     val io: MediaIoFactory? = null,
-)
+    /**
+     * The encoding the file is in, which is then used as it is, with no guess (#515). Null decides
+     * from the bytes.
+     *
+     * One of [ENCODINGS], or any label the WHATWG Encoding Standard gives one of them, such as
+     * `cp1250`, `latin2` or `sjis`, in any letter case. A file that is not in the encoding it is
+     * given still loads, with its bytes read as told, so the viewer sees the result of the choice.
+     * The five East Asian encodings are read by the backend's subtitle parser, which the FFmpeg
+     * backend supplies; with a backend that has no table for the one named, the file does not load.
+     */
+    val encoding: String? = null,
+) {
+    init {
+        require(encoding == null || SubtitleEncodings.canonical(encoding) != null) {
+            "$encoding is not an encoding a subtitle file can be read in; the names are ${ENCODINGS.joinToString()}"
+        }
+    }
+
+    public companion object {
+        /**
+         * The encodings [encoding] accepts, by the names the WHATWG Encoding Standard gives them, in
+         * the order a "Text encoding" menu would list them: Unicode, then the single-byte tables by
+         * script, then the East Asian ones. They are also every name
+         * [PlaybackWarning.SubtitleCharsetGuessed] can report.
+         *
+         * `UTF-8`, `UTF-16LE`, `UTF-16BE`; `windows-1252` (Western European), `windows-1250` and
+         * `ISO-8859-2` (Central European), `windows-1257` (Baltic), `windows-1254` and `ISO-8859-9`
+         * (Turkish), `windows-1258` (Vietnamese), `windows-1251` and `KOI8-R` (Cyrillic),
+         * `windows-1253` (Greek), `windows-1255` (Hebrew), `windows-1256` (Arabic), `windows-874`
+         * (Thai); `Shift_JIS` and `EUC-JP` (Japanese), `GBK` (Simplified Chinese), `Big5`
+         * (Traditional Chinese) and `EUC-KR` (Korean).
+         */
+        public val ENCODINGS: List<String> = SubtitleEncodings.names
+    }
+}
 
 /** How exact a seek needs to be, traded against how long it takes. */
 public enum class SeekMode {
     /**
-     * Land on the nearest keyframe at or before the target. One decode, always fast, and up to a
-     * whole group of pictures away from where you asked.
+     * Land on a keyframe near the target without decoding forward to it: by default the last one
+     * at or before the target, and [KeyframeChoice] picks another. One decode, always fast, and up
+     * to a whole group of pictures away from where you asked.
      */
     Keyframe,
 
@@ -360,4 +585,39 @@ public enum class SeekMode {
      * second time; that cost buys the immediate picture, mpv's own trade.
      */
     KeyframeThenRefine,
+}
+
+/**
+ * Which keyframe a [SeekMode.Keyframe] seek lands on, since it does not decode forward to the
+ * exact target.
+ *
+ * In a file whose keyframes are far apart, such as a screen recording, a long-GOP encode or the
+ * recording of a live stream, the choice decides whether a short jump forward goes anywhere: with
+ * ten seconds between keyframes, a five second skip forward under [Before] lands where it started or even
+ * earlier.
+ * Set it with [PlayerConfig.keyframeChoice] or live with [KitePlayer.setKeyframeChoice]. The precise
+ * modes are not affected: [SeekMode.KeyframeThenRefine] always shows the keyframe before the target
+ * first, because that is where its decode forward starts.
+ */
+public enum class KeyframeChoice {
+    /** The last keyframe at or before the target. Never lands past where you asked; the default. */
+    Before,
+
+    /**
+     * The first keyframe at or after the target, or the last one before it when none follows,
+     * so a seek near the end still lands rather than failing.
+     */
+    After,
+
+    /**
+     * Whichever of the keyframes either side of the target is nearer to it, the one before on a
+     * tie or when none follows.
+     */
+    Closest,
+
+    /**
+     * [After] for a seek forward from the current position and [Before] for a seek backward, so a
+     * skip button always moves the way it points. mpv applies the same rule to a relative keyframe seek.
+     */
+    InSeekDirection,
 }

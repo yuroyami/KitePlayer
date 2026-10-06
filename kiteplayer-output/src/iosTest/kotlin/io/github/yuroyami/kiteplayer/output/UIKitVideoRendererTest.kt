@@ -306,6 +306,94 @@ class UIKitVideoRendererTest {
     }
 
     @Test
+    fun `a clear delivers a transparent picture that keeps the cues until a frame comes back`() = runBlocking {
+        val width = 64
+        val height = 32
+        val red = ByteArray(width * height * 4).also {
+            var at = 0
+            while (at < it.size) {
+                it[at] = -1     /* R */
+                it[at + 3] = -1 /* A */
+                at += 4
+            }
+        }
+        val ledger = LeakLedger()
+        val drawn = atomic<DrawnPixels?>(null)
+        val renderer = UIKitVideoRenderer(
+            convert = { red },
+            enqueueOnMain = { block -> block() },
+            deliverImage = { image -> drawn.value = image?.let(::readBack) },
+        )
+        try {
+            assertTrue(renderer.present(FakeVideoFrame(Pts(0), VideoSize(width, height), 0, ledger), 0L))
+            awaitTrue("the picture") { drawn.value?.redAndGreenAt(2, 2) == (255 to 0) }
+            renderer.setOverlay(
+                io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+                    images = listOf(
+                        io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                            x = 24,
+                            y = 12,
+                            bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(
+                                16,
+                                8,
+                                ByteArray(16 * 8 * 4) { -1 },
+                            ),
+                        ),
+                    ),
+                    viewportWidth = width,
+                    viewportHeight = height,
+                    contentHash = 4711L,
+                ),
+            )
+
+            awaitTrue("the cue over the picture") { drawn.value?.redAndGreenAt(31, 15) == (255 to 255) }
+            val presented = renderer.presentedFrames
+
+            renderer.clearPicture()
+            awaitTrue("the background") { drawn.value?.redAndGreenAt(2, 2) == (0 to 0) }
+            val cleared = assertNotNull(drawn.value)
+            assertEquals(width, cleared.width, "the background takes the overlay's viewport")
+            assertEquals(255 to 255, cleared.redAndGreenAt(31, 15), "the cue stays where it was")
+            assertEquals(presented, renderer.presentedFrames, "a background is not a presented frame")
+
+            assertTrue(renderer.present(FakeVideoFrame(Pts(40_000), VideoSize(width, height), 0, ledger), 0L))
+            awaitTrue("the picture back") { drawn.value?.redAndGreenAt(2, 2) == (255 to 0) }
+            assertEquals(255 to 255, assertNotNull(drawn.value).redAndGreenAt(31, 15))
+        } finally {
+            renderer.close()
+        }
+        assertEquals(2, ledger.closeCount)
+        assertEquals(0, ledger.doubleCloseCount)
+    }
+
+    @Test
+    fun `a clear lets go of a frame still waiting to convert and a clear after close does nothing`() = runBlocking {
+        val ledger = LeakLedger()
+        val queue = DeferredMainQueue()
+        val delivered = atomic(0)
+        val renderer = UIKitVideoRenderer(
+            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
+            enqueueOnMain = queue::enqueue,
+            deliverImage = { image -> if (image != null) delivered.incrementAndGet() },
+        )
+        renderer.present(FakeVideoFrame(Pts(0), ledger = ledger), 0L)
+        awaitTrue("one queued delivery") { queue.enqueued == 1 }
+
+        renderer.clearPicture()
+        awaitTrue("the waiting picture displaced by the background") { renderer.supersededFrames == 1L }
+        assertTrue(queue.runNext())
+        assertEquals(1, delivered.value, "only the background reached the layer")
+        assertEquals(0L, renderer.presentedFrames)
+        assertEquals(0L, renderer.failedFrames)
+
+        renderer.close()
+        renderer.clearPicture()
+        assertFalse(queue.runNext())
+        assertEquals(1, ledger.closeCount)
+        assertEquals(0, ledger.doubleCloseCount)
+    }
+
+    @Test
     fun `pixel aspect is baked into image geometry before rotation`() = runBlocking {
         val size = VideoSize(width = 6, height = 4, pixelAspectNumerator = 2, pixelAspectDenominator = 1)
         for ((rotation, expected) in listOf(0 to (12 to 4), 90 to (4 to 12), 270 to (4 to 12))) {

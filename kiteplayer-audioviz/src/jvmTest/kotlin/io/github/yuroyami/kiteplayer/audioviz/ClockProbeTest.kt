@@ -32,7 +32,7 @@ class ClockProbeTest {
     @Test
     fun `queued analysis follows the device anchored media clock`() = runBlocking {
         // Skipped, not passed: a host without the clip or a sound device did not run this test.
-        assumeTrue("no $MEDIA to play", media != null)
+        requireTestMedia(media != null, "no $MEDIA to play; run scripts/testmedia.sh")
         assumeTrue("no audio mixer on this host", AudioSystem.getMixerInfo().isNotEmpty())
         val file = checkNotNull(media)
 

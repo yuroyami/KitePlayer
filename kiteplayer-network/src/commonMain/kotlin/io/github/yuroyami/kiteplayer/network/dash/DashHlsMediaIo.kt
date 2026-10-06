@@ -34,6 +34,13 @@ import kotlinx.coroutines.sync.withLock
  * reader keeps for the whole stream, and loses the samples from its Period's end on. A WebM or
  * MPEG-TS segment keeps them, so media that runs past its Period's end overlaps the next Period;
  * packagers end a Period's last segment at its end, as the fixtures do.
+ *
+ * Every address of this reader's own host that a playlist hands out stays resolvable for as long as
+ * the playlist is valid (#405): for the reader's life in a static presentation, and in a live one
+ * for as long as the track's current playlist or the one before lists it. An initialization read
+ * for a joined Period or an MP4 subtitle segment is kept while something still listed needs it,
+ * within [initBudgetBytes] for all of them together, and read again when it is asked for after it
+ * went (#407).
  */
 internal class DashHlsMediaIo(
     private val presentation: DashHlsPresentation,
@@ -48,6 +55,12 @@ internal class DashHlsMediaIo(
     private val release: () -> Unit = {},
     /** The `Date` header of a URL's response, for a live clock whose `UTCTiming` reads one. */
     private val fetchDate: suspend (url: String) -> String? = { null },
+    /** How many bytes of initializations this reader keeps at most, together. */
+    private val initBudgetBytes: Long = MAX_INIT_BYTES,
+    /** Told of each live manifest fetched again, so the locations its segments come from follow it (#440). */
+    private val onManifest: suspend (DashManifest) -> Unit = {},
+    /** The newest refusal of a request a reader of this item made, once (#453). */
+    private val refusal: () -> io.github.yuroyami.kiteplayer.SourceRefusal? = { null },
 ) : MediaIo {
 
     private val master = presentation.master.encodeToByteArray()
@@ -60,14 +73,26 @@ internal class DashHlsMediaIo(
     private val indexed = HashMap<String, DashTimedPlan>()
     private val sequences = HashMap<String, LiveSequence>()
 
-    /** The subtitle segments served as WebVTT, by the address their playlist names them under, oldest first. */
-    private val conversions = LinkedHashMap<String, Conversion>()
+    /** The subtitle segments served as WebVTT, by the address their playlist names them under. */
+    private val conversions = HashMap<String, Conversion>()
 
-    /** The initialization segments read so far, by address and range, read once each. */
-    private val inits = HashMap<String, ByteArray>()
+    /** The initialization segments read, by address and range, the least recently used first. */
+    private val inits = LinkedHashMap<String, ByteArray>()
 
-    /** The segments and initializations of joined Periods, by the address their playlist names them under, oldest first. */
-    private val pieces = LinkedHashMap<String, Piece>()
+    /** The bytes of every initialization in [inits] together. */
+    private var initBytes = 0L
+
+    /** The segments and initializations of joined Periods, by the address their playlist names them under. */
+    private val pieces = HashMap<String, Piece>()
+
+    /**
+     * For each track of a live presentation, the addresses of this reader's own host that its
+     * current playlist and the one before it list. Nothing else is kept (#405).
+     */
+    private val listed = HashMap<String, Listed>()
+
+    /** The tracks whose set or representation a live refresh dropped, each reported once (#406). */
+    private val goneReported = HashSet<String>()
 
     /** The MP4 track each HLS track's stream began with: the first initialization served for it. */
     private val baseTracks = HashMap<String, Fmp4.Track>()
@@ -119,6 +144,8 @@ internal class DashHlsMediaIo(
 
     override fun networkBitsPerSecond(): Long? = bitsPerSecond()
 
+    override fun takeRefusal(): io.github.yuroyami.kiteplayer.SourceRefusal? = refusal()
+
     override suspend fun openRelated(uri: String): MediaIo? {
         if (closed) throw KtorMediaIoException("openRelated after close")
         if (uri == presentation.masterAddress) return MemoryMediaIo(master, uri)
@@ -146,20 +173,41 @@ internal class DashHlsMediaIo(
     override fun close() {
         if (closed) return
         closed = true
+        // The initializations go with the reader (#407). A read still in flight finds the reader
+        // closed and keeps nothing it reads after this.
+        if (lock.tryLock()) {
+            try {
+                inits.clear()
+                initBytes = 0
+            } finally {
+                lock.unlock()
+            }
+        }
         release()
     }
+
+    /** How many initializations this reader keeps now, for a test. */
+    internal val retainedInitializations: Int get() = inits.size
+
+    /** How many bytes of initializations this reader keeps now, for a test. */
+    internal val retainedInitializationBytes: Long get() = initBytes
 
     /** The media playlist of [track] as it stands now. */
     private suspend fun playlist(track: DashHlsTrack): String = lock.withLock {
         if (!manifest.isDynamic) {
             return@withLock written.getOrPut(track.address) {
-                DashHls.mediaPlaylist(servedPlan(track, manifest, null), live = false)
+                DashHls.mediaPlaylist(
+                    servedPlan(track, manifest, null),
+                    live = false,
+                    images = track.representation.takeIf { track.role == DashHlsRole.Images },
+                )
             }
         }
         // The refresh follows the device's own clock, which only measures how long has passed.
         refreshIfDue(nowMicros())
         val now = clock.nowMicros()
         val plan = servedPlan(track, manifest, now)
+        retainListed(track, plan)
         val sequence = sequences.getOrPut(track.address) { LiveSequence() }.first(plan)
         DashHls.mediaPlaylist(plan, live = true, sequence = sequence)
     }
@@ -182,7 +230,15 @@ internal class DashHlsMediaIo(
         val segments = ArrayList<DashTimedSegment>()
         val root = "https://${DashHls.HOST}/${track.setIndex}-${track.representationIndex}"
         for ((index, timing) in timings.withIndex()) {
-            val (setIndex, representationIndex) = DashPeriods.match(track, reference, timing.period) ?: continue
+            // The Period the track came from, fetched again, keeps the track's own set (#406); another
+            // Period gives its like.
+            val refreshed = timing.startMicros == referenceStartMicros && timing.period.id == reference.id
+            val bound = if (refreshed) {
+                DashPeriods.bind(track, timing.period).also { if (it == null) reportGone(track) }
+            } else {
+                DashPeriods.match(track, reference, timing.period)
+            }
+            val (setIndex, representationIndex) = bound ?: continue
             val set = timing.period.adaptationSets[setIndex]
             val representation = set.representations[representationIndex]
             val periodPlan = DashManifestParser.timedPlan(
@@ -216,7 +272,6 @@ internal class DashHlsMediaIo(
                 val address: String
                 if (format != null) {
                     address = "$root/${timing.key}/${segment.number}.vtt"
-                    conversions.remove(address)
                     conversions[address] = Conversion(
                         track, format, segment,
                         segment.initializationUrl ?: periodPlan.initializationUrl,
@@ -225,7 +280,6 @@ internal class DashHlsMediaIo(
                     )
                 } else {
                     address = "$root/${timing.key}/${segment.number}"
-                    pieces.remove(address)
                     pieces[address] = Piece.Media(
                         track, segment.url, segment.range, container, shift,
                         endMicros = end.takeIf { container == DashContainer.Mp4 },
@@ -240,9 +294,6 @@ internal class DashHlsMediaIo(
                 first = false
             }
         }
-        // A live presentation names new segments for ever; the oldest go once FFmpeg is long past them.
-        while (pieces.size > MAX_PIECES) pieces.remove(pieces.keys.first())
-        while (conversions.size > MAX_CONVERSIONS) conversions.remove(conversions.keys.first())
         return DashTimedPlan(null, null, segments)
     }
 
@@ -284,14 +335,71 @@ internal class DashHlsMediaIo(
     /** [value] divided by [divisor], to the nearest whole number, halves away from zero. */
     private fun rounded(value: Long, divisor: Long): Long = if (value >= 0) (value + divisor / 2) / divisor else (value - divisor / 2) / divisor
 
-    /** The initialization at [url], or its [range] of it, read once and kept. */
+    /**
+     * The initialization at [url], or its [range] of it, read once and kept within the budget. The
+     * least recently used go first when the budget is passed, never the one just read, and one that
+     * went is read again here when a listed address asks for it (#407).
+     */
     private suspend fun cachedInit(url: String, range: LongRange?): ByteArray {
-        val key = "$url#$range"
-        lock.withLock { inits[key] }?.let { return it }
+        val key = initKey(url, range)
+        lock.withLock {
+            inits.remove(key)?.let { kept ->
+                inits[key] = kept
+                return kept
+            }
+        }
         val bytes = fetch(url, range, MAX_SUBTITLE_BYTES)
-        lock.withLock { inits[key] = bytes }
+        lock.withLock {
+            if (closed) return bytes
+            inits.remove(key)?.let { initBytes -= it.size }
+            inits[key] = bytes
+            initBytes += bytes.size
+            while (initBytes > initBudgetBytes && inits.size > 1) {
+                initBytes -= inits.remove(inits.keys.first())!!.size
+            }
+        }
         return bytes
     }
+
+    /** What [inits] is keyed by. */
+    private fun initKey(url: String, range: LongRange?): String = "$url#$range"
+
+    /**
+     * Records the addresses of this reader's own host that [track]'s live [plan] lists, and lets go
+     * of every one that neither the current nor the previous playlist of any track lists, with the
+     * initializations nothing kept refers to (#405, #407). The previous playlist counts too,
+     * because FFmpeg may still be asking for a segment it named.
+     */
+    private fun retainListed(track: DashHlsTrack, plan: DashTimedPlan) {
+        val current = HashSet<String>()
+        for (segment in plan.segments) {
+            current += segment.url
+            segment.initializationUrl?.let(current::add)
+        }
+        listed[track.address] = Listed(current, listed[track.address]?.current.orEmpty())
+        val keep = HashSet<String>()
+        for (addresses in listed.values) {
+            keep += addresses.current
+            keep += addresses.previous
+        }
+        conversions.keys.retainAll(keep)
+        pieces.keys.retainAll(keep)
+        val needed = HashSet<String>()
+        for (piece in pieces.values) {
+            when (piece) {
+                is Piece.Init -> needed += initKey(piece.url, piece.range)
+                is Piece.Media -> piece.initializationUrl?.let { needed += initKey(it, piece.initializationRange) }
+            }
+        }
+        for (conversion in conversions.values) {
+            conversion.initializationUrl?.let { needed += initKey(it, conversion.initializationRange) }
+        }
+        val unneeded = inits.keys.filter { it !in needed }
+        for (key in unneeded) initBytes -= inits.remove(key)!!.size
+    }
+
+    /** The addresses one live track's [current] playlist and the one before it, [previous], list. */
+    private class Listed(val current: Set<String>, val previous: Set<String>)
 
     /** A segment or initialization of a joined Period, served from this reader's own address. */
     private sealed interface Piece {
@@ -318,12 +426,9 @@ internal class DashHlsMediaIo(
         if (format == null || format == DashSubtitleFormat.WebVtt) return plan
         val segments = plan.segments.map { segment ->
             val address = "https://${DashHls.HOST}/${track.setIndex}-${track.representationIndex}/${segment.number}.vtt"
-            conversions.remove(address)
             conversions[address] = Conversion(track, format, segment, plan.initializationUrl, plan.initializationRange, timelineOffset(track))
             DashTimedSegment(address, null, segment.number, segment.startMicros, segment.durationMicros)
         }
-        // A live track names new segments for ever; the oldest go once FFmpeg is long past them.
-        while (conversions.size > MAX_CONVERSIONS) conversions.remove(conversions.keys.first())
         return DashTimedPlan(null, null, segments)
     }
 
@@ -382,8 +487,10 @@ internal class DashHlsMediaIo(
 
     private suspend fun plan(track: DashHlsTrack, from: DashManifest, now: Long?): DashTimedPlan {
         val period = from.periods.single()
-        val set = period.adaptationSets.getOrNull(track.setIndex) ?: track.set
-        val representation = set.representations.getOrNull(track.representationIndex) ?: track.representation
+        // A refresh may have moved the track's set or representation, or dropped it (#406).
+        val (setIndex, representationIndex) = DashPeriods.bind(track, period) ?: throw gone(track)
+        val set = period.adaptationSets[setIndex]
+        val representation = set.representations[representationIndex]
         DashManifestParser.timedPlan(from, period, representation, policy, now)?.let { return it }
         val base = checkNotNull(representation.segmentBase) { "a representation without segments" }
         return indexed.getOrPut(track.address) {
@@ -394,6 +501,28 @@ internal class DashHlsMediaIo(
             }
         }
     }
+
+    /**
+     * The failure that a track's playlist meets when the live manifest no longer has its set or its
+     * representation (#406). Serving the set now at its old place would give it another set's
+     * segments, so the playlist is refused instead, and [reportGone] says so once.
+     */
+    private fun gone(track: DashHlsTrack): DashTrackGoneException {
+        reportGone(track)
+        return DashTrackGoneException(goneDetail(track))
+    }
+
+    /** Says once, through the warning sink, that [track] is gone from the live manifest. */
+    private fun reportGone(track: DashHlsTrack) {
+        if (!goneReported.add(track.address)) return
+        val detail = goneDetail(track)
+        KiteLog.log("KiteDash", detail)
+        warningSink(PlaybackWarning.SegmentSkipped(track.address, detail))
+    }
+
+    private fun goneDetail(track: DashHlsTrack): String =
+        "the live manifest no longer has the adaptation set ${track.set.id ?: "at ${track.setIndex}"} " +
+            "with the representation ${track.representation.id ?: "at ${track.representationIndex}"}"
 
     /** The manifest fetched again when it is live and its minimum update period has passed. */
     private suspend fun refreshIfDue(now: Long) {
@@ -413,6 +542,7 @@ internal class DashHlsMediaIo(
         if (fresh.isDynamic && fresh.periods.isNotEmpty()) {
             manifest = fresh
             allowedLocation(fresh)?.let { manifestAddress = it }
+            onManifest(fresh)
         }
     }
 
@@ -617,11 +747,11 @@ internal class DashHlsMediaIo(
         /** The largest answer read from a live clock's address. A time of day is a few dozen bytes. */
         private const val MAX_TIME_BYTES: Long = 4096
 
-        /** How many converted subtitle segments a live reader remembers. */
-        private const val MAX_CONVERSIONS = 4096
-
-        /** How many segments and initializations of joined Periods a live reader remembers. */
-        private const val MAX_PIECES = 8192
+        /**
+         * How many bytes of initializations a reader keeps together. Each is usually a small `moov`
+         * box; one may be as large as [MAX_SUBTITLE_BYTES], and the one just read is always kept.
+         */
+        const val MAX_INIT_BYTES: Long = 32L shl 20
 
         /** How much of a WebM file is read to find its layout when the manifest gives no initialization range. */
         private const val WEBM_HEAD_BYTES = 64L * 1024
@@ -630,3 +760,6 @@ internal class DashHlsMediaIo(
         private const val EBML_HEADER_BYTES = 12L
     }
 }
+
+/** A live track's playlist was asked for after a refresh of the manifest dropped its set or its representation (#406). */
+internal class DashTrackGoneException(message: String) : IllegalStateException(message)

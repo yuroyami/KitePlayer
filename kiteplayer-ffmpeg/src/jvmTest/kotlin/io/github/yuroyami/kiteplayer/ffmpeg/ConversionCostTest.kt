@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import kotlin.test.assertNotNull
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.test.Test
@@ -70,11 +71,11 @@ class ConversionCostTest {
     fun measureTheSplitOnARealFrame() = runBlocking {
         val dir = System.getenv("KITEPLAYER_TESTMEDIA") ?: "testmedia"
         val file = File(dir, "sync1080p30.mp4")
-        if (!file.isFile) return@runBlocking println("SKIP: no ${file.path}")
+        requireTestMedia(file.isFile, "no ${file.path}; run scripts/testmedia.sh")
 
         val source = KiteFFmpegSourceFactory().open(MediaItem(file.absolutePath)) as KiteFFmpegSource
         try {
-            val stream = source.firstVideo ?: return@runBlocking println("SKIP: no video stream")
+            val stream = assertNotNull(source.firstVideo, "${file.name} has no video stream")
             source.selectStreams(setOf(stream.index))
             val decoder = source.videoDecoderFactories().first()
                 .create(stream, io.github.yuroyami.kiteplayer.HwdecPolicy.Off) ?: return@runBlocking
@@ -89,7 +90,7 @@ class ConversionCostTest {
                 packet.close()
                 if (decoded == null) decoded = decoder.receive()
             }
-            val frame = decoded as? KiteFFmpegVideoFrame ?: return@runBlocking println("SKIP: no frame")
+            val frame = assertNotNull(decoded as? KiteFFmpegVideoFrame, "no FFmpeg video frame was decoded: $decoded")
             try {
                 fun timed(label: String, block: () -> Unit) {
                     repeat(20) { block() }

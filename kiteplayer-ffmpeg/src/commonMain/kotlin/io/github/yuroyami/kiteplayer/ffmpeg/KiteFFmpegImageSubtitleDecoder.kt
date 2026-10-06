@@ -15,7 +15,8 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 /**
  * Image subtitles over FFmpeg's own decoders: Blu-ray (PGS), DVB, DVD and XSUB. Each decoded
  * subtitle becomes one bitmap cue whose regions are the subtitle's images, already premultiplied,
- * placed on the canvas the stream was authored for.
+ * placed on the canvas the stream was authored for, each carrying the forced mark FFmpeg read for
+ * it (#513).
  */
 internal class KiteFFmpegImageSubtitleDecoderFactory(
     private val source: KiteFFmpegSource,
@@ -48,14 +49,14 @@ internal class KiteFFmpegImageSubtitleDecoder(
 
     override suspend fun send(packet: PlayerPacket?): Boolean {
         check(!closed) { "the subtitle decoder is closed" }
-        if (packet == null) return true
         // A damaged packet costs its own subtitle and nothing more: the next display set decodes.
+        // The null packet at the end of the stream drains what the decoder still holds (#480).
         val subtitle = try {
-            decoder.decode((packet as KiteFFmpegPacket).native)
+            if (packet == null) decoder.drain() else decoder.decode((packet as KiteFFmpegPacket).native)
         } catch (damaged: io.github.yuroyami.kiteffmpeg.FFmpegException) {
             null
         } ?: return true
-        val start = mapper.mapTimestamp(subtitle.startMicros)?.micros ?: packet.pts?.micros ?: return true
+        val start = mapper.mapTimestamp(subtitle.startMicros)?.micros ?: packet?.pts?.micros ?: return true
         val end = mapper.mapTimestamp(subtitle.endMicros)?.micros?.takeIf { it > start } ?: SubtitleCue.OPEN_END
         val images = subtitle.images.filter { it.width > 0 && it.height > 0 }
         // A stream that states no canvas means the video's own picture; with no video either, the
@@ -81,6 +82,7 @@ internal class KiteFFmpegImageSubtitleDecoder(
                         canvasWidth = canvasWidth,
                         canvasHeight = canvasHeight,
                         bitmap = RgbaBitmap(image.width, image.height, image.rgba),
+                        forced = image.forced,
                     )
                 },
             ),

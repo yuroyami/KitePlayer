@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.compose
 
 import androidx.compose.ui.graphics.ImageBitmap
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
@@ -29,7 +30,8 @@ import kotlinx.coroutines.runBlocking
 
 /**
  * The frame published for [KiteVideo] to draw: an image plus the presentation facts the bitmap
- * itself cannot carry, the aspect-corrected display width, the quarter turn and the mirror.
+ * itself cannot carry, the aspect-corrected display width, the quarter turn, the mirror and the
+ * crop.
  */
 internal class KiteVideoFrame(
     val image: ImageBitmap,
@@ -39,7 +41,15 @@ internal class KiteVideoFrame(
     private val release: () -> Unit = {},
     /** Mirrored left to right before the turn. */
     val mirrored: Boolean = false,
+    /**
+     * The edges of [image] that are not part of the picture, taken off before the mirror and the
+     * turn (#497). Always one that fits [size]; null when the whole image is the picture.
+     */
+    val crop: PictureCrop? = null,
 ) : AutoCloseable {
+    /** The size of what is shown: [size] less [crop]. */
+    val shownSize: VideoSize get() = size.cropped(crop)
+
     private val closed = atomic(false)
 
     /** Set once when a converter refuses the backend's frame type; see [UnsupportedFrameType]. */
@@ -130,14 +140,17 @@ internal class KiteVideoRenderer(
 
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
         publishTransform(transform)
+        // The hardware tier sizes its images for the turned picture (#428); the draw turns it.
+        if (!closed.value) hardwareRenderer?.setTransform(transform)
     }
 
     /**
      * The render-quality ladder reaches TWO places from here, and it has to reach both.
      *
      * The scaler is Compose's own: the draw phase enlarges the published image, so the kernel is
-     * a `filterQuality` on that one call. Dithering and debanding are not Compose's to do, so
-     * they go on to the platform GPU tier, which is the only thing in this path holding a shader.
+     * a `filterQuality` on that one call. Dithering, debanding and the animation upscaler are not
+     * Compose's to do, so they go on to the platform GPU tier, which is the only thing in this path
+     * holding a shader.
      * Forgetting the second half is why a dither could be switched on and change nothing on the
      * Android GPU tier: the engine talks to THIS renderer, never to the one underneath it.
      */
@@ -169,6 +182,16 @@ internal class KiteVideoRenderer(
 
     /** The single frame waiting to be converted. Newest wins; the displaced one is closed here. */
     private val pending = atomic<VideoFrame?>(null)
+
+    /**
+     * Orders a conversion's take and publication against [clearPicture]. The worker takes the
+     * waiting frame and reads [pictureEpoch] in one hold, and publishes in another only if the
+     * epoch has not moved, so a frame accepted before a clear never reaches the screen after it.
+     */
+    private val pictureLock = kotlinx.atomicfu.locks.SynchronizedObject()
+
+    /** Moved on by each [clearPicture]. Read and written only under [pictureLock]. */
+    private var pictureEpoch = 0L
 
     /** Wakes the worker. Conflated, so a signal sent before it waits is kept rather than lost. */
     private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -211,7 +234,10 @@ internal class KiteVideoRenderer(
     /** Frames whose picture was published for drawing. */
     val presentedFrames: Long get() = presented.value + (hardwareRenderer?.presentedFrames ?: 0L)
 
-    /** Frames replaced in the waiting slot by a newer one before they could be converted. */
+    /**
+     * Frames replaced in the waiting slot by a newer one before they could be converted, or let go
+     * because the picture was taken off before they were published.
+     */
     val supersededFrames: Long get() = superseded.value + (hardwareRenderer?.supersededFrames ?: 0L)
 
     /** Frames that published nothing: a bad conversion, a failed image build, a close in flight. */
@@ -263,10 +289,15 @@ internal class KiteVideoRenderer(
 
     /** Converts and publishes whatever is waiting, if anything. Worker thread only. */
     private fun convertPending() {
-        val frame = pending.getAndSet(null) ?: return
+        var epoch = 0L
+        val frame = kotlinx.atomicfu.locks.synchronized(pictureLock) {
+            epoch = pictureEpoch
+            pending.getAndSet(null)
+        } ?: return
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         val mirrored = frame.mirrored
+        val crop = frame.crop?.takeIf { !it.isEmpty && it.fits(size.width, size.height) }
         // The cost clock starts before the conversion and stops after the image build, because
         // that pair is exactly the CPU work this software path pays per published frame.
         val started = kotlin.time.TimeSource.Monotonic.markNow()
@@ -319,17 +350,46 @@ internal class KiteVideoRenderer(
             return
         }
         cost.record(started.elapsedNow().inWholeNanoseconds)
-        publish(
-            KiteVideoFrame(
-                image = image.image,
-                size = size,
-                rotationDegrees = rotation,
-                requiresCommitFence = image.requiresCommitFence,
-                release = image.release,
-                mirrored = mirrored,
-            ),
+        val finished = KiteVideoFrame(
+            image = image.image,
+            size = size,
+            rotationDegrees = rotation,
+            requiresCommitFence = image.requiresCommitFence,
+            release = image.release,
+            mirrored = mirrored,
+            crop = crop,
         )
+        val current = kotlinx.atomicfu.locks.synchronized(pictureLock) {
+            if (pictureEpoch == epoch) publish(finished)
+            pictureEpoch == epoch
+        }
+        if (!current) {
+            // The picture was taken off while this frame was converted (#530).
+            finished.close()
+            superseded.incrementAndGet()
+            return
+        }
         presented.incrementAndGet()
+    }
+
+    /**
+     * Takes the picture off (#530). The GPU tier first makes sure nothing it accepted can still
+     * arrive, then the frame waiting for the worker goes, a conversion in flight is told its
+     * picture is gone, and null is published, so [KiteVideo] draws the subtitles alone over
+     * whatever lies behind it until the next frame.
+     */
+    override fun clearPicture() {
+        if (closed.value) return
+        hardwareRenderer?.clearPicture()
+        kotlinx.atomicfu.locks.synchronized(pictureLock) {
+            if (closed.value) return
+            pending.getAndSet(null)?.let { waiting ->
+                waiting.close()
+                superseded.incrementAndGet()
+            }
+            pictureEpoch += 1
+            publish(null)
+        }
     }
 
     /** Counts the frame and reports why. */

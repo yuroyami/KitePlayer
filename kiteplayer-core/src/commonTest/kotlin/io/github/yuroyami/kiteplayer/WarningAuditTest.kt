@@ -26,6 +26,7 @@ class WarningAuditTest {
         PlaybackWarning.TonemappingUnavailable("x"),
         PlaybackWarning.HdrToneMapped("PQ", 0),
         PlaybackWarning.ColorApproximated("x"),
+        PlaybackWarning.CropIgnored(0, "x"),
         PlaybackWarning.ChannelLayoutUnknown(6, "x"),
         PlaybackWarning.BadTimestamps("x"),
         PlaybackWarning.TrackDeselected(TrackId(0), "x"),
@@ -39,6 +40,7 @@ class WarningAuditTest {
         PlaybackWarning.ResourcesNotReleased("x"),
         PlaybackWarning.SubtitleCharsetGuessed("subs.srt", "windows-1252"),
         PlaybackWarning.SubtitleSourceUnreadable("subs.srt", "x"),
+        PlaybackWarning.ThumbnailsUnreadable("thumbs.vtt", "x"),
         PlaybackWarning.ContainerDeclarationDiverged(0, "Width", "1920", "1440"),
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
         PlaybackWarning.SubtitlesNotDrawn("x"),
@@ -46,13 +48,20 @@ class WarningAuditTest {
         PlaybackWarning.AudioTapFailed("x"),
         PlaybackWarning.RecordingStopped("x.mkv", "x"),
         PlaybackWarning.SourceReconnecting(1_024, 1, "x"),
+        PlaybackWarning.AddressRenewed("https://cdn.example/seg-1.ts", 403),
+        PlaybackWarning.GrowthUnavailable("live.ts"),
         PlaybackWarning.GaplessFallback(1, "x"),
         PlaybackWarning.SegmentSkipped("https://cdn.example/seg-1.ts", "x"),
         PlaybackWarning.ExternalClockSilent("x"),
         PlaybackWarning.VariantLowered(0, 1, "x"),
+        PlaybackWarning.QueueItemSkipped(1, "file:///music/x.flac", PlaybackError.NotMedia("file:///music/x.flac")),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
+        is PlaybackWarning.QueueItemSkipped -> listOf(
+            "PlaybackCore.openQueueItem, when a queue item fails to open under QueueItemFailure.Skip " +
+                "and the queue moves past it",
+        )
         is PlaybackWarning.VariantLowered -> listOf(
             "PlaybackCore.stepDownWhenStarved, after playback waited 4 s for data while playing an HLS " +
                 "variant the player chose itself",
@@ -67,8 +76,15 @@ class WarningAuditTest {
         )
         is PlaybackWarning.GaplessFallback -> listOf(
             "PlaybackCore's queue handoff, when the next item cannot follow the current one without a " +
-                "gap: its preload failed or was not ready, an item has no audio, its audio format differs, " +
-                "or it has a start position",
+                "gap: its preload failed or was not ready, an item has no audio, or its audio format differs",
+        )
+        is PlaybackWarning.GrowthUnavailable -> listOf(
+            "PlaybackCore.buildSession, when an item marked as still being written gets no reader from its " +
+                "own io, the configured resolver or an installed provider, and plays through the backend's own reader",
+        )
+        is PlaybackWarning.AddressRenewed -> listOf(
+            "PlaybackCore.renewIfRefused, when the item's reader reports through MediaIo.takeRefusal that a " +
+                "server answered 401 or 403 after the open, and the item opens again through its resolver",
         )
         is PlaybackWarning.SourceReconnecting -> listOf(
             "KtorMediaIo.read in :kiteplayer-network, before each reconnect after a failed read, a read " +
@@ -105,6 +121,10 @@ class WarningAuditTest {
         is PlaybackWarning.SubtitleSourceUnreadable -> listOf(
             "PlaybackCore.parseExternalSubtitles, when an external subtitle could not be reached, " +
                 "read or parsed, so the track was skipped and the open carried on without it",
+        )
+        is PlaybackWarning.ThumbnailsUnreadable -> listOf(
+            "PlaybackCore.readItemThumbnails, after an open, when the item's thumbnail file could not " +
+                "be reached, read or parsed, or held no picture, so the seek bar has none of its pictures",
         )
         is PlaybackWarning.SubtitleCharsetGuessed -> listOf(
             "PlaybackCore.parseExternalSubtitle, when an external subtitle file carries no " +
@@ -156,6 +176,10 @@ class WarningAuditTest {
         is PlaybackWarning.ColorApproximated -> listOf(
             "KiteFFmpegSource.warnIfColorIsApproximated in :kiteplayer-ffmpeg, once per stream, for " +
                 "BT.2020 constant luminance since 2026-08-25 and for ICtCp since 2026-09-23",
+        )
+        is PlaybackWarning.CropIgnored -> listOf(
+            "PlaybackCore.noteUnfittedCrop, once per open session, when the video stream's crop " +
+                "leaves nothing of a decoded frame, whichever decoder made it",
         )
         // DELIBERATELY NEVER EMITTED. Deprecated 2026-08-25: it conflated a true
         // BT.2020 CL claim with an HDR claim that was false on every built-in display path. Kept

@@ -84,4 +84,35 @@ class MediaIoResolutionTest {
         // Core's test runtime has no network dependency and no manually registered provider.
         assertNull(resolveMediaIo(MediaItem("https://host/media"), NetworkConfig()))
     }
+
+    @Test
+    fun aGrowingLocalFileIsReadThroughAProviderThatServesLocalFiles() = runTest {
+        val asked = mutableListOf<String>()
+        val local: suspend (String) -> MediaIo? = { path -> asked += path; reader }
+        val growing = io.github.yuroyami.kiteplayer.FileGrowth()
+        assertSame(reader, resolveMediaIo(MediaItem("/rec/live.ts", growth = growing), NetworkConfig(), local) { _, _ -> null })
+        assertSame(reader, resolveMediaIo(MediaItem("file:///rec/live.ts", growth = growing), NetworkConfig(), local) { _, _ -> null })
+        assertEquals(listOf("/rec/live.ts", "/rec/live.ts"), asked)
+        // A complete local file stays on the backend's own reader.
+        assertNull(resolveMediaIo(MediaItem("/rec/done.ts"), NetworkConfig(), local) { _, _ -> null })
+        // An address of another scheme is never a local file.
+        assertNull(resolveMediaIo(MediaItem("https://host/live.ts", growth = growing), NetworkConfig(), local) { _, _ -> null })
+        // An explicit resolver's answer stands, and so does turning automatic resolution off.
+        assertNull(resolveMediaIo(MediaItem("/rec/live.ts", growth = growing), NetworkConfig(ioResolver = MediaIoResolver { null }), local) { _, _ -> null })
+        assertNull(resolveMediaIo(MediaItem("/rec/live.ts", growth = growing), NetworkConfig(autoResolve = false), local) { _, _ -> null })
+        assertEquals(2, asked.size)
+    }
+
+    @Test
+    fun aLocalPathIsABarePathOrAFileAddress() {
+        assertEquals("/a/b.ts", localPathOf("/a/b.ts"))
+        assertEquals("b.ts", localPathOf("b.ts"))
+        assertEquals("/a/b.ts", localPathOf("file:/a/b.ts"))
+        assertEquals("/a/b.ts", localPathOf("file:///a/b.ts"))
+        assertEquals("C:\\v\\b.ts", localPathOf("C:\\v\\b.ts"))
+        assertNull(localPathOf("https://host/b.ts"))
+        assertNull(localPathOf("content://media/1"))
+        assertNull(localPathOf(""))
+    }
 }
+

@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
+import io.github.yuroyami.kiteplayer.internal.SubtitleEncodings
 import io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
@@ -82,6 +83,11 @@ public data class PlayerConfig(
     val hdrPolicy: HdrPolicy = HdrPolicy.Auto,
     /** How playback follows a clock set with [KitePlayer.setExternalClock]. See [ExternalClock]. */
     val externalClock: ExternalClockPolicy = ExternalClockPolicy(),
+    /**
+     * Which keyframe a [SeekMode.Keyframe] seek lands on. Change it live with
+     * [KitePlayer.setKeyframeChoice]; this is only the value a fresh player starts at.
+     */
+    val keyframeChoice: KeyframeChoice = KeyframeChoice.Before,
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive
@@ -222,7 +228,8 @@ public data class BufferPolicy(
  *
  * With the defaults the next item opens in the background five seconds before the current one
  * ends, and its sound follows the last sample of the current item on the same audio device, with
- * no silence between them. [PlaybackWarning.GaplessFallback] says when an item opened the old way.
+ * no silence between them. A repeat of the current item follows its own end the same way (#467).
+ * [PlaybackWarning.GaplessFallback] says when an item opened the old way.
  */
 public data class QueueConfig(
     /**
@@ -236,6 +243,20 @@ public data class QueueConfig(
      * at the end of an item, and the next item opens from scratch.
      */
     val gapless: Boolean = true,
+    /**
+     * With shuffle and [LoopMode.All] on, draw a fresh order each time the queue comes round
+     * instead of playing the first order again on every lap (#488). The new lap never starts with
+     * the item that ended the last one, and it comes from the shuffle's own random source, so a
+     * seeded shuffle stays reproducible. False keeps one order for every lap.
+     */
+    val reshuffleEachLap: Boolean = false,
+    /**
+     * What the queue does when an item cannot be opened, such as a moved file, an address that
+     * answers 404 or a format this build cannot decode (#487). [QueueItemFailure.Stop] keeps the
+     * player in [PlaybackStatus.Failed] on that item, for an application that handles the error
+     * itself. [QueueItemFailure.Skip] moves on, as mpv does: see there.
+     */
+    val onItemFailure: QueueItemFailure = QueueItemFailure.Stop,
 ) {
     init {
         require(!preloadNext.isNegative() && preloadNext.isFinite()) {
@@ -244,13 +265,37 @@ public data class QueueConfig(
     }
 }
 
+/** What a queue does with an item that cannot be opened. See [QueueConfig.onItemFailure]. */
+public enum class QueueItemFailure {
+    /** Stay on the item, in [PlaybackStatus.Failed] with its error, as a single open does. */
+    Stop,
+
+    /**
+     * Move on in the direction the queue was going: forward at the end of an item and on next,
+     * back on previous. Each item passed over is reported as [PlaybackWarning.QueueItemSkipped]
+     * and listed in [PlayerSnapshot.failedQueueItems] until it opens, and a queue that was playing
+     * keeps playing. Every item is tried again each time the queue reaches it, so with
+     * [LoopMode.All] a file that comes back plays on the next lap. The player stops in
+     * [PlaybackStatus.Failed], with the last error, when the queue has nowhere left to go, or when
+     * every item in it has failed in a row, so a queue of broken items does not go round for ever.
+     */
+    Skip,
+}
+
 /**
  * How the player handles sound: which track to pick, the pitch law, the downmix, the volume
  * ceiling, the equaliser, ReplayGain and the resampler. A fresh player starts from these values,
  * and the setters on [KitePlayer] change most of them while it plays.
  */
 public data class AudioConfig(
-    /** Preferred language tags, best first, matched against the container's track languages. */
+    /**
+     * Preferred languages, best first, as ISO 639 codes or BCP 47 tags.
+     *
+     * A track matches when it names the same language in any spelling: `ja` matches a track tagged
+     * `jpn` or `ja-JP`, and `de` one tagged `ger` or `deu`. The first preference any track matches
+     * decides. Among its tracks, one whose script and region also agree comes first, so `pt-BR`
+     * prefers a `pt-BR` track and takes a `pt-PT` one over nothing.
+     */
     val preferredLanguages: List<String> = emptyList(),
     /**
      * Play at a different rate without changing pitch. True stretches the sound in time; false
@@ -299,6 +344,22 @@ public data class AudioConfig(
      * default, because widening a mix is a matter of taste. See [UpmixMode] for the matrix.
      */
     val upmix: UpmixMode = UpmixMode.Off,
+    /**
+     * Choose between two mixes of one language by the speakers that play them (#466). Off by default.
+     *
+     * Films often carry a language twice, as a 5.1 mix and a 2.0 mix the studio made for stereo.
+     * On headphones or a phone the stereo mix is the better choice, because its dialogue level was
+     * set by ear, while a fold-down of the 5.1 often leaves voices quiet under the music. When this
+     * is on, the track the usual rules choose gives way to one in the same language, of the same
+     * accessibility, whose channel count is closer to the output's: stereo on two speakers and 5.1
+     * on six. A commentary track never takes the main mix's place. Off by default because it can
+     * overrule the track a file flags as default.
+     *
+     * The output's channel count is what [io.github.yuroyami.kiteplayer.spi.AudioSinkFactory.outputChannelCount]
+     * answers. Where it answers null, which on Android is a backend built without a `Context`,
+     * nothing changes.
+     */
+    val matchOutputChannels: Boolean = false,
 ) {
     init {
         require(volumeCeiling.isFinite() && volumeCeiling >= 1f && volumeCeiling <= GAIN_MAX) {
@@ -472,6 +533,29 @@ public data class DownmixConfig(
 )
 
 /**
+ * Where the second subtitle track sits on the picture (#494).
+ *
+ * Above or below the primary, the two tracks share one bottom stack, so the secondary moves down
+ * to the bottom while the primary shows nothing, as a second speaker's line does. A primary line its
+ * author placed elsewhere keeps its place. While the libass typesetter draws the primary, the
+ * secondary keeps to the top, because the stack cannot see the typeset lines. Picture subtitles keep
+ * the place their pictures carry.
+ */
+public enum class SecondarySubtitlePlacement {
+    /** At the top of the picture, apart from the primary track, so the two can never overlap. */
+    Top,
+
+    /**
+     * Directly above the primary track at the bottom, so the two read together and both follow
+     * the subtitle position.
+     */
+    AbovePrimary,
+
+    /** Directly below the primary track, the primary standing on it. */
+    BelowPrimary,
+}
+
+/**
  * Which subtitle track to pick, when to show its cues, and how large to draw them.
  *
  * Read by the session core: track selection uses the language preferences and the forced rule,
@@ -479,12 +563,20 @@ public data class DownmixConfig(
  * held for the session and pruned on flush.
  */
 public data class SubtitleConfig(
-    /** Select a subtitle track automatically when one matches these languages. */
+    /**
+     * Select a subtitle track automatically when one matches these languages, best first, given as
+     * ISO 639 codes or BCP 47 tags.
+     *
+     * Languages match as [AudioConfig.preferredLanguages] describes: `ja` matches a track tagged
+     * `jpn`, a region or a script in the preference picks the closer of several tracks in one
+     * language, and `zh-Hant` takes a plain Chinese track whose title says Traditional or 繁體.
+     */
     val preferredLanguages: List<String> = emptyList(),
     /**
      * Select a forced-subtitles track automatically: one in a preferred language when the audio
      * language is not preferred, and otherwise one matching the audio's own language, which is
-     * the audience a forced track is authored for.
+     * the audience a forced track is authored for. The choice is made again whenever the audio
+     * changes, until a subtitle is chosen by hand (#506).
      */
     val autoSelectForced: Boolean = true,
     /**
@@ -512,8 +604,78 @@ public data class SubtitleConfig(
      * Ignored by the Kotlin tier, which uses the platform's own font system.
      */
     val fonts: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont> = emptyList(),
+    /**
+     * What happens to the notes that subtitles for deaf and hard-of-hearing viewers carry, such as
+     * `[DOOR SLAMS]`, `(laughs)`, `JOHN:` and lines of `♪` music (#493). [HearingImpairedNotes.Keep]
+     * shows them as authored. The setting reads SubRip, WebVTT, MP4 and other text tracks, from the
+     * container or from a file; ASS signs, typesetting and karaoke are left alone.
+     */
+    val hearingImpairedNotes: HearingImpairedNotes = HearingImpairedNotes.Keep,
+    /**
+     * The encoding an external subtitle file is read in when it has no byte-order mark and is not
+     * UTF-8, in place of a guess from its bytes (#515). Null guesses.
+     *
+     * This is the standing preference a player's settings offer, as VLC's default subtitle encoding
+     * and mpv's `sub-codepage` are: a UTF-8 file, which most files now are, is still read as UTF-8.
+     * [SubtitleSource.encoding] is the other strength, a choice for one file that is used whatever
+     * its bytes say. The names are [SubtitleSource.ENCODINGS] and the labels for them. A file read
+     * this way raises no [PlaybackWarning.SubtitleCharsetGuessed], because nothing was guessed. An
+     * East Asian encoding the backend has no table for leaves the guess to decide.
+     */
+    val fallbackEncoding: String? = null,
+    /**
+     * What the player chooses by itself when the audio is in one of [preferredLanguages], a language
+     * the viewer reads and so understands (#506), as mpv's `subs-with-matching-audio`.
+     * [MatchingAudioSubtitles.All] chooses as ever, so a viewer who prefers English subtitles keeps
+     * them under English audio, which is mpv's default too. A viewer who wants subtitles only for
+     * what they do not understand asks for [MatchingAudioSubtitles.ForcedOnly], and gets the signs
+     * and foreign lines a forced track carries and no more. The choice is made again at each audio
+     * change, and a subtitle chosen by hand is never held back.
+     */
+    val withMatchingAudio: MatchingAudioSubtitles = MatchingAudioSubtitles.All,
+    /**
+     * Draw only the pictures an image subtitle track marks as forced (#513), as mpv's
+     * `sub-forced-events-only` does. A Blu-ray or DVD track often holds the full subtitles and a
+     * few forced captions together, and this shows a viewer only the captions for the lines in
+     * another language and the signs. A track the container flags as forced counts as forced
+     * whole, and a text track has no such mark, so both draw as ever. Applies to both subtitle
+     * slots, and [KitePlayer.setForcedPicturesOnly] changes it while playing.
+     */
+    val forcedPicturesOnly: Boolean = false,
+    /**
+     * While no subtitle is selected, draw the forced pictures of the Blu-ray or DVD subtitle track
+     * in the audio's language, as a disc player does with subtitles off (#513). The track is not
+     * selected by this: [Tracks.selectedSubtitle] stays null, and the choice follows the audio.
+     * Selecting any subtitle, a secondary one included, ends it; turning subtitles off brings it
+     * back. Off by default, so subtitles off draws nothing.
+     */
+    val forcedPicturesWhenOff: Boolean = false,
+    /**
+     * Match an ASS script's colours to the video the way its `YCbCr Matrix` header asks (#499), so a
+     * sign coloured to blend into the picture blends in here too. Typesetters pick such colours from
+     * a frame decoded with one matrix, and the header names it; a script with no header is an old
+     * VSFilter one, which counts as BT.601 at studio range. Each colour goes from RGB to YCbCr with
+     * the header's matrix and range, and back to RGB with the video's, as XySubFilter does and as
+     * libass recommends. `None` keeps the colours as they are, and so do RGB video and HDR video.
+     * Both the typesetting engine and the Kotlin tier follow it. False draws every colour as
+     * authored, for an application that wants exactly those.
+     */
+    val assColorMatching: Boolean = true,
+    /**
+     * A second subtitle track to select at each open, for a viewer who reads two (#494): a text
+     * track in the first of these languages that has one, other than the primary track, as mpv's
+     * `secondary-slang` picks it. Languages match as [preferredLanguages] do. Empty, the default,
+     * selects none, and an application can still choose one with `selectSecondarySubtitle`.
+     */
+    val secondaryLanguages: List<String> = emptyList(),
+    /** Where the second subtitle track sits. See [SecondarySubtitlePlacement]. */
+    val secondaryPlacement: SecondarySubtitlePlacement = SecondarySubtitlePlacement.Top,
 ) {
     init {
+        require(fallbackEncoding == null || SubtitleEncodings.canonical(fallbackEncoding) != null) {
+            "fallbackEncoding $fallbackEncoding is not an encoding a subtitle file can be read in; " +
+                "the names are ${SubtitleSource.ENCODINGS.joinToString()}"
+        }
         require(fontScale.isFinite() && fontScale > 0f) { "fontScale must be finite and positive, was $fontScale" }
         require(delay.isFinite() && delay.absoluteValue <= KitePlayer.DELAY_MAX) {
             "delay must be finite and at most ${KitePlayer.DELAY_MAX} either way, was $delay"
@@ -543,3 +705,35 @@ public data class Backends(
     val backend: MediaBackend? = null,
     val output: OutputBackend? = null,
 )
+
+/**
+ * The subtitles [SubtitleConfig.withMatchingAudio] lets the player choose by itself under audio in a
+ * preferred subtitle language (#506). Audio in any other language, or in none it names, is
+ * subtitled as ever.
+ */
+public enum class MatchingAudioSubtitles {
+    /** Any track the choice rules pick. */
+    All,
+
+    /** Only a forced track, which shows the lines that are not in the audio's language. */
+    ForcedOnly,
+
+    /** None, so subtitles show by themselves only under audio in another language. */
+    None,
+}
+
+/** What [SubtitleConfig.hearingImpairedNotes] does with the notes of hearing-impaired subtitles (#493). */
+public enum class HearingImpairedNotes {
+    /** The notes show as authored. */
+    Keep,
+
+    /**
+     * Sound descriptions in square brackets, a parenthesis that opens a line or fills it, a
+     * speaker's name in capitals before a colon at the start of a line, and lines of `♪` music go.
+     * A line left empty goes, and a cue left with no line is not shown.
+     */
+    Hide,
+
+    /** As [Hide], and every parenthesis within a line goes too. */
+    HideStrict,
+}

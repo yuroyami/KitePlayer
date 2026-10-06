@@ -26,7 +26,7 @@ import kotlin.time.Duration.Companion.seconds
  * is encoded to the JS object `postMessage` would copy and decoded from it, so a field that one
  * side writes under one name and the other reads under another fails here rather than in a browser.
  *
- * Every command, control, answer and failure is here, every event, all 36 warnings and all 10
+ * Every command, control, answer and failure is here, every event, all 37 warnings and all 11
  * errors, and a snapshot and statistics with every field off its default.
  */
 class WorkerProtocolTest {
@@ -51,11 +51,16 @@ class WorkerProtocolTest {
             maxBitrate = 5_000_000L,
             maxVideoHeight = 720,
             variant = 2,
+            program = 202,
         ),
         title = "Title",
         artist = "Artist",
         album = "Album",
         audioFilter = "volume=0.5",
+        audioContent = AudioContent.Speech,
+        clip = MediaClip(start = 61.seconds, end = 3.minutes),
+        growth = FileGrowth(endsAfter = 5.seconds),
+        thumbnails = ThumbnailSource("https://example.com/thumbs.vtt"),
     )
 
     private val tracks = Tracks(
@@ -64,6 +69,7 @@ class WorkerProtocolTest {
                 TrackId(0), TrackKind.Video, "h264", language = "und", title = "Main", isDefault = true,
                 bitrate = 4_000_000L, videoSize = VideoSize(1920, 1080, 4, 3), frameRate = 23.976,
                 metadata = mapOf("handler" to "VideoHandler"),
+                dolbyVision = DolbyVisionInfo(profile = 7, level = 6, baseLayerCompatibility = 6, hasEnhancementLayer = true),
             ),
             TrackInfo(
                 TrackId(1), TrackKind.Audio, "aac", language = "jpn", isForced = true, isAccessibility = true,
@@ -78,6 +84,12 @@ class WorkerProtocolTest {
         selectedSecondarySubtitle = TrackId(-1),
         variants = listOf(StreamVariant(0, 800_000L, 640, 360, 30.0, "avc1.4d401e"), StreamVariant(1, 3_000_000L)),
         selectedVariant = 1,
+        programs = listOf(
+            MediaProgram(101, listOf(TrackId(0), TrackId(1)), "ChannelA", "Kite", mapOf("service_name" to "ChannelA")),
+            MediaProgram(202, listOf(TrackId(2))),
+        ),
+        selectedProgram = 202,
+        thumbnails = ThumbnailSet(width = 160, height = 90, interval = 10.seconds),
     )
 
     private val style = SubtitleStyleOverride(
@@ -110,12 +122,13 @@ class WorkerProtocolTest {
         loop = LoopMode.All,
         videoScale = VideoScale.Fill,
         videoAdjustments = VideoAdjustments(0.1f, 1.2f, 0.8f, -30f, 1.5f),
-        renderQuality = RenderQuality(true, true, 32f, 8f, 16f, VideoScaler.CatmullRom, true),
-        videoTransform = VideoTransform(2.39f, 1.5f, -0.25f, 0.5f),
+        renderQuality = RenderQuality(true, true, 32f, 8f, 16f, VideoScaler.CatmullRom, true, AnimationUpscaler.Fast),
+        videoTransform = VideoTransform(2.39f, 1.5f, -0.25f, 0.5f, rotationDegrees = 270, mirrorHorizontal = true, mirrorVertical = true),
         subtitleDelay = (-1500).milliseconds,
         subtitleScale = 1.25f,
         subtitleStyle = style,
         subtitlePosition = 0.9f,
+        forcedPicturesOnly = true,
         subtitleTypesetter = "libass",
         audioDelay = 200.milliseconds,
         abLoopA = 10.seconds,
@@ -137,6 +150,14 @@ class WorkerProtocolTest {
         preloadedIndex = 1,
         hdrPolicy = HdrPolicy.ToneMap,
         videoDynamicRange = VideoDynamicRange.ToneMapped,
+        failedQueueItems = setOf(1),
+        durationIsEstimate = true,
+        stereoMode = StereoMode.Swapped,
+        nightMode = true,
+        dialogueLevelDb = 4.5f,
+        pitchSemitones = -2.5,
+        skipSilence = true,
+        lyrics = "A line\nAnother line",
     )
 
     private val stats = PlaybackStats(
@@ -147,7 +168,7 @@ class WorkerProtocolTest {
         audioLatencyQuality = LatencyQuality.Estimated, hardwareDecode = HwdecStatus.HardwareWithDownload(HwdecKind.WebCodecs),
         ioBytesTotal = 123_456_789L, ioBytesPerSecond = 1_000_000L, decodeTimeP50 = 3_100.microseconds,
         decodeTimeP95 = 9_800.microseconds, presentLatenessP95 = (-2).milliseconds, containerBitrate = 4_500_000L,
-        syncMode = SyncMode.AudioMaster, masterClock = MasterClock.Audio,
+        syncMode = SyncMode.AudioMaster, masterClock = MasterClock.Audio, audioLimitedFrames = 31L,
     )
 
     @Suppress("DEPRECATION")
@@ -160,6 +181,8 @@ class WorkerProtocolTest {
         PlaybackWarning.AudioDeviceChanged("device lost: headphones"),
         PlaybackWarning.AudioUnderrun(3L),
         PlaybackWarning.SourceReconnecting(1_048_576L, 2, "reset"),
+        PlaybackWarning.AddressRenewed("https://cdn.test/seg-3.ts", 403),
+        PlaybackWarning.GrowthUnavailable("recording.ts"),
         PlaybackWarning.AudioTapFailed("threw"),
         PlaybackWarning.AudioDeviceUnderrun("ran dry"),
         PlaybackWarning.AudioDrainIncomplete("bounded out"),
@@ -167,12 +190,14 @@ class WorkerProtocolTest {
         PlaybackWarning.AudioSourceFormatChanged(48_000, 2, 44_100, 6),
         PlaybackWarning.HdrToneMapped("smpte2084", 0),
         PlaybackWarning.ColorApproximated("bt2020c"),
+        PlaybackWarning.CropIgnored(1, "left 1920 of 1920 columns"),
         PlaybackWarning.TonemappingUnavailable("old"),
         PlaybackWarning.ChannelLayoutUnknown(3, "guessed"),
         PlaybackWarning.BadTimestamps("non monotonic"),
         PlaybackWarning.TrackDeselected(TrackId(-2), "unreadable"),
         PlaybackWarning.ContainerDeclarationDiverged(0, "width", "1920", "1440"),
         PlaybackWarning.SubtitleSourceUnreadable("https://example.com/a.srt", "404"),
+        PlaybackWarning.ThumbnailsUnreadable("https://example.com/thumbs.vtt", "404"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/a.srt", "windows-1252", "Shift_JIS"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/b.srt", "windows-1252"),
         PlaybackWarning.TypesetterUnavailable("libass", "no module"),
@@ -189,12 +214,15 @@ class WorkerProtocolTest {
         PlaybackWarning.SegmentSkipped("https://example.com/seg1.ts", "HTTP 500"),
         PlaybackWarning.ExternalClockSilent("none set"),
         PlaybackWarning.VariantLowered(2, 1, "waited 3s"),
+        PlaybackWarning.QueueItemSkipped(1, "https://example.com/gone.mp4", PlaybackError.SourceUnavailable("https://example.com/gone.mp4", null, "HTTP 404")),
     )
 
     private val errors = listOf(
         PlaybackError.SourceUnavailable("https://example.com/x", null, "HTTP 404"),
         PlaybackError.SourceUnavailable("https://example.com/y", null),
         PlaybackError.SourceStalled("https://example.com/x", 30.seconds),
+        PlaybackError.SchemeUnsupported("srt://example.com:9000", "srt", "SRT needs libsrt"),
+        PlaybackError.SchemeUnsupported("rtsp://camera/stream", "rtsp"),
         PlaybackError.NotMedia("https://example.com/x", "no stream"),
         PlaybackError.NoPlayableStream(tracks.all),
         PlaybackError.DecoderFailed("hevc", "no decoder"),
@@ -215,7 +243,7 @@ class WorkerProtocolTest {
         val commands = listOf(
             Command.Open(item),
             Command.Open(MediaItem("blob:https://example.com/0")),
-            Command.OpenQueue(listOf(item, MediaItem("https://example.com/b.mp4")), 1),
+            Command.OpenQueue(listOf(item, MediaItem("https://example.com/b.mp4", clip = MediaClip(start = 4.seconds))), 1),
             Command.Seek(9_007_199_254_740_991L.microseconds, SeekMode.Precise),
             Command.Seek(Duration.INFINITE, SeekMode.Keyframe),
             Command.Seek((-1).seconds, SeekMode.KeyframeThenRefine),
@@ -237,7 +265,12 @@ class WorkerProtocolTest {
             Command.SelectSecondarySubtitle(null),
             Command.SelectVariant(2),
             Command.SelectVariant(null),
+            Command.SelectProgram(202),
+            Command.SelectProgram(null),
             Command.AddExternalSubtitle(SubtitleSource("https://example.com/c.srt", "Commentary", "en", true)),
+            Command.AddExternalSubtitle(SubtitleSource("https://example.com/d.srt", encoding = "windows-1250")),
+            Command.ReloadExternalSubtitle(TrackId(-2), "windows-874"),
+            Command.ReloadExternalSubtitle(TrackId(-1), null),
             Command.DiagnosticsDump,
             Command.SupportBundle,
             Command.WarningHistory,
@@ -246,7 +279,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Call(id, command)
             assertEquals(message, message.roundTrip(), "the call ${command.member} changed on the way")
         }
-        assertEquals(21, commands.map { it.member }.distinct().size, "every command is here")
+        assertEquals(23, commands.map { it.member }.distinct().size, "every command is here")
     }
 
     @Test
@@ -259,9 +292,15 @@ class WorkerProtocolTest {
             Control.SetSpeed(1.5),
             Control.SetPreservePitch(false),
             Control.SetPreservePitch(true),
+            Control.SetKeyframeChoice(KeyframeChoice.Closest),
             Control.SetVolume(0.5f),
             Control.SetDuckLevel(0.2f),
             Control.SetBalance(-0.75f),
+            Control.SetStereoMode(StereoMode.LeftOnly),
+            Control.SetNightMode(true),
+            Control.SetDialogueLevel(-3.5f),
+            Control.SetPitch(7.0),
+            Control.SetSkipSilence(true),
             Control.SetMuted(true),
             Control.SetVideoEnabled(false),
             Control.SetLoop(LoopMode.One),
@@ -282,6 +321,8 @@ class WorkerProtocolTest {
             Control.SetSubtitleStyle(SubtitleStyleOverride(bold = false)),
             Control.SetSubtitleStyle(null),
             Control.SetSubtitlePosition(0.85f),
+            Control.SetForcedPicturesOnly(true),
+            Control.SetForcedPicturesOnly(false),
             Control.SetSubtitleSafeArea(SubtitleSafeArea(0.05f, 0.1f, 0.15f, 0.2f)),
             Control.SetAudioDelay(Duration.INFINITE),
             Control.SetSleepTimer(SleepTimer.After(30.minutes), 5.seconds),
@@ -296,7 +337,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Send(control)
             assertEquals(message, message.roundTrip(), "the control ${control.member} changed on the way")
         }
-        assertEquals(28, controls.map { it.member }.distinct().size, "every control is here")
+        assertEquals(30, controls.map { it.member }.distinct().size, "every control is here")
     }
 
     @Test
@@ -344,9 +385,12 @@ class WorkerProtocolTest {
             PlayerEvent.ChapterChanged(Chapter(2, 120.seconds, 180.seconds, "Middle")),
             PlayerEvent.ChapterChanged(null),
             PlayerEvent.MarkerReached(Marker(30.seconds, "intro-end")),
+            PlayerEvent.TracksAdded(tracks.all.takeLast(2)),
+            PlayerEvent.TrackChosenByPlayer(TrackKind.Audio, TrackId(3)),
+            PlayerEvent.TrackChosenByPlayer(TrackKind.Subtitle, null),
         )
         for (event in events) assertEquals(WorkerMessage.Event(event), WorkerMessage.Event(event).roundTrip())
-        assertEquals(11, events.map { it::class }.distinct().size, "every kind of event is here")
+        assertEquals(13, events.map { it::class }.distinct().size, "every kind of event is here")
     }
 
     @Test
@@ -355,7 +399,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(36, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(38, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test
@@ -364,7 +408,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Failed(error))
             assertEquals(message, message.roundTrip(), "the error $error changed on the way")
         }
-        assertEquals(10, errors.map { it::class }.distinct().size, "every kind of error is here")
+        assertEquals(11, errors.map { it::class }.distinct().size, "every kind of error is here")
     }
 
     @Test

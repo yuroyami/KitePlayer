@@ -32,8 +32,11 @@ internal class DashTimedPlan(
     val segments: List<DashTimedSegment>,
 )
 
-/** What a representation is to HLS: a variant with a picture, a sound rendition, or a subtitle rendition. */
-internal enum class DashHlsRole { Video, Audio, Subtitles }
+/**
+ * What a representation is to HLS: a variant with a picture, a sound rendition, a subtitle
+ * rendition, or the image stream of seek bar thumbnails (#433).
+ */
+internal enum class DashHlsRole { Video, Audio, Subtitles, Images }
 
 /**
  * How a subtitle set reaches FFmpeg, whose HLS reader takes subtitles only as WebVTT text: as it
@@ -111,8 +114,13 @@ internal object DashHls {
      * easy-to-read one, and `forced-subtitle` a forced rendition. The first audio set whose role is
      * `main` is the default, or else the first that is neither a description nor a commentary, and
      * an audio rendition states its channels.
+     *
+     * With [thumbnails], the first thumbnail set's representation of the largest tiles becomes an
+     * HLS image stream, as Roku's and Apple's packagers write one, with RESOLUTION the size of one
+     * tile (#433). A live presentation, or one of several Periods, offers none, because its images
+     * have no fixed place on the stream's timeline.
      */
-    fun presentation(period: DashPeriod, live: Boolean = false): DashHlsPresentation {
+    fun presentation(period: DashPeriod, live: Boolean = false, thumbnails: Boolean = !live): DashHlsPresentation {
         require(carries(period)) { "HLS cannot carry this Period" }
         val root = "https://$HOST"
         val tracks = mutableListOf<DashHlsTrack>()
@@ -147,9 +155,19 @@ internal object DashHls {
                 (format == DashSubtitleFormat.Mp4 && rep.segmentBase != null)
             if (live && !segmented) null else track(DashHlsRole.Subtitles, setIndex, set, 0, format)
         }
+        val images = if (thumbnails) {
+            sets.firstOrNull { roleOf(it.value) == DashHlsRole.Images }?.let { (setIndex, set) ->
+                set.representations.indices.filter { set.representations[it].tiles != null }
+                    .maxByOrNull { index -> tileSize(set.representations[index])?.let { (w, h) -> w.toLong() * h } ?: 0L }
+                    ?.let { track(DashHlsRole.Images, setIndex, set, it) }
+            }
+        } else {
+            null
+        }
         tracks += variants
         tracks += audio
         tracks += subtitles
+        images?.let { tracks += it }
 
         val master = buildString {
             append("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n")
@@ -173,10 +191,21 @@ internal object DashHls {
                 if (codecs.isNotEmpty()) attributes += "CODECS=\"${codecs.joinToString(",")}\""
                 if (rep.width != null && rep.height != null) attributes += "RESOLUTION=${rep.width}x${rep.height}"
                 rep.frameRate?.let { attributes += "FRAME-RATE=${decimal(it, 3)}" }
+                // The variant choice reads the range here as it does in an HLS master (#447).
+                rep.videoRange?.let { attributes += "VIDEO-RANGE=$it" }
                 if (audio.isNotEmpty()) attributes += "AUDIO=\"$AUDIO_GROUP\""
                 if (subtitles.isNotEmpty()) attributes += "SUBTITLES=\"$SUBTITLE_GROUP\""
                 append("#EXT-X-STREAM-INF:").append(attributes.joinToString(",")).append('\n')
                 append(variant.address).append('\n')
+            }
+            images?.let { image ->
+                val attributes = mutableListOf("BANDWIDTH=${image.representation.bandwidth}")
+                tileSize(image.representation)?.let { (w, h) -> attributes += "RESOLUTION=${w}x$h" }
+                image.representation.mimeType?.substringAfter("image/", "")?.takeIf { it.isNotEmpty() }?.let {
+                    attributes += "CODECS=\"$it\""
+                }
+                attributes += "URI=\"${image.address}\""
+                append("#EXT-X-IMAGE-STREAM-INF:").append(attributes.joinToString(",")).append('\n')
             }
         }
         return DashHlsPresentation("$root/master.m3u8", master, tracks)
@@ -186,13 +215,23 @@ internal object DashHls {
      * The media playlist of [plan]. A live one has no end, so FFmpeg loads it again for the
      * segments that arrive; [sequence] numbers its first segment.
      */
-    fun mediaPlaylist(plan: DashTimedPlan, live: Boolean, sequence: Long = plan.segments.firstOrNull()?.number ?: 0L): String =
+    fun mediaPlaylist(
+        plan: DashTimedPlan,
+        live: Boolean,
+        sequence: Long = plan.segments.firstOrNull()?.number ?: 0L,
+        images: DashRepresentation? = null,
+    ): String =
         buildString {
             val longest = plan.segments.maxOfOrNull { it.durationMicros } ?: 1_000_000L
             append("#EXTM3U\n#EXT-X-VERSION:7\n")
             append("#EXT-X-TARGETDURATION:").append((longest + 999_999) / 1_000_000).append('\n')
             append("#EXT-X-MEDIA-SEQUENCE:").append(sequence).append('\n')
             if (!live) append("#EXT-X-PLAYLIST-TYPE:VOD\n")
+            // A thumbnail set's playlist is an image playlist: each segment one grid image, whose
+            // tiles share its time evenly (#433).
+            val grid = images?.tiles
+            if (grid != null) append("#EXT-X-IMAGES-ONLY\n")
+            var tilesWritten: Long? = null
             fun map(url: String, range: LongRange?) {
                 append("#EXT-X-MAP:URI=\"").append(url).append('"')
                 range?.let { append(",BYTERANGE=\"").append(byteRange(it)).append('"') }
@@ -209,6 +248,17 @@ internal object DashHls {
                     map(init, segment.initializationRange)
                     current = "$init#${segment.initializationRange}"
                 }
+                // A tile stands for its share of the image's nominal length, which the last image
+                // keeps when the presentation's end cuts it short (DASH-IF IOP 6.2.6).
+                val nominal = images?.segmentTemplate?.duration?.takeIf { it > 0 }
+                    ?.let { it * 1_000_000L / images.segmentTemplate.timescale } ?: segment.durationMicros
+                if (grid != null && nominal != tilesWritten) {
+                    val tileMicros = nominal / (grid.columns * grid.rows)
+                    append("#EXT-X-TILES:")
+                    tileSize(images)?.let { (w, h) -> append("RESOLUTION=${w}x$h,") }
+                    append("LAYOUT=${grid.columns}x${grid.rows},DURATION=").append(seconds(tileMicros)).append('\n')
+                    tilesWritten = nominal
+                }
                 append("#EXTINF:").append(seconds(segment.durationMicros)).append(",\n")
                 segment.range?.let { append("#EXT-X-BYTERANGE:").append(byteRange(it)).append('\n') }
                 append(segment.url).append('\n')
@@ -216,7 +266,10 @@ internal object DashHls {
             if (!live) append("#EXT-X-ENDLIST\n")
         }
 
-    /** Which part [set] plays, or null for a set the stand-in does not carry, such as thumbnails. */
+    /**
+     * Which part [set] plays, or null for a set the stand-in does not carry. A thumbnail set is
+     * an image set whose grid the manifest states (#433).
+     */
     fun roleOf(set: DashAdaptationSet): DashHlsRole? {
         val types = listOfNotNull(set.contentType) +
             listOfNotNull(set.mimeType) + set.representations.mapNotNull { it.mimeType }
@@ -224,6 +277,7 @@ internal object DashHls {
             types.any { it == "video" || it.startsWith("video/") } -> DashHlsRole.Video
             types.any { it == "audio" || it.startsWith("audio/") } -> DashHlsRole.Audio
             subtitleFormat(set) != null -> DashHlsRole.Subtitles
+            types.any { it == "image" || it.startsWith("image/") } && set.representations.any { it.tiles != null } -> DashHlsRole.Images
             else -> null
         }
     }
@@ -314,6 +368,14 @@ internal object DashHls {
     private fun byteRange(range: LongRange): String = "${range.last - range.first + 1}@${range.first}"
 
     /** Microseconds as seconds with six decimals, with no locale anywhere near it. */
+    /** The size of one tile of a thumbnail [representation], from the size of its whole grid image. */
+    private fun tileSize(representation: DashRepresentation): Pair<Int, Int>? {
+        val grid = representation.tiles ?: return null
+        val width = representation.width?.takeIf { it > 0 } ?: return null
+        val height = representation.height?.takeIf { it > 0 } ?: return null
+        return width / grid.columns to height / grid.rows
+    }
+
     private fun seconds(micros: Long): String =
         "${micros / 1_000_000}.${(micros % 1_000_000).toString().padStart(6, '0')}"
 

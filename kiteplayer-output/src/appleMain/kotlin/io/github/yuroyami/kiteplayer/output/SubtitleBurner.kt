@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
@@ -49,6 +50,7 @@ import platform.CoreVideo.kCVPixelBufferPixelFormatTypeKey
 import platform.CoreVideo.kCVPixelBufferWidthKey
 import platform.CoreVideo.kCVPixelFormatType_32BGRA
 import platform.CoreVideo.kCVReturnSuccess
+import platform.Metal.MTLCommandBufferProtocol
 import platform.Metal.MTLCreateSystemDefaultDevice
 import platform.Metal.MTLDeviceProtocol
 import platform.Metal.MTLPixelFormatBGRA8Unorm
@@ -86,13 +88,37 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
     fun burn(pixels: CVPixelBufferRef, facts: PictureFacts, overlay: SubtitleOverlay?): CVPixelBufferRef? {
         val picture = MetalPicture.CorePixelBuffer(pixels)
         if (!composer.canEncode(picture)) return null
-        val storedWidth = facts.size.displayWidth.coerceAtLeast(1)
-        val storedHeight = facts.size.height.coerceAtLeast(1)
+        // The buffer takes the shape of what the crop leaves, and the composer reads only that.
+        val shown = facts.size.cropped(facts.crop)
+        val storedWidth = shown.displayWidth.coerceAtLeast(1)
+        val storedHeight = shown.height.coerceAtLeast(1)
         val quarterTurned = normalizedQuarterTurn(facts.rotationDegrees).let { it == 90 || it == 270 }
         val width = if (quarterTurned) storedHeight else storedWidth
         val height = if (quarterTurned) storedWidth else storedHeight
         val target = pooledBuffer(width, height) ?: return null
         val drawn = runCatching { draw(target, facts, picture, overlay, width, height) }.getOrDefault(false)
+        if (!drawn) {
+            CVPixelBufferRelease(target)
+            return null
+        }
+        return target
+    }
+
+    /**
+     * A new buffer the size of [overlay]'s viewport with [overlay] drawn on black, for a layer
+     * whose picture was taken off while its text stays. The caller owns one reference to it.
+     *
+     * Null when any step refuses, and the caller then shows nothing.
+     */
+    fun burnBackground(overlay: SubtitleOverlay): CVPixelBufferRef? {
+        val width = overlay.viewportWidth.coerceAtLeast(1)
+        val height = overlay.viewportHeight.coerceAtLeast(1)
+        val target = pooledBuffer(width, height) ?: return null
+        val drawn = runCatching {
+            drawInto(target, width, height) { texture ->
+                composer.encodeBackground(texture, overlay, width, height)
+            }
+        }.getOrDefault(false)
         if (!drawn) {
             CVPixelBufferRelease(target)
             return null
@@ -116,6 +142,29 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
         overlay: SubtitleOverlay?,
         width: Int,
         height: Int,
+    ): Boolean = drawInto(target, width, height) { texture ->
+        composer.encode(
+            target = texture,
+            frame = facts,
+            picture = picture,
+            overlay = overlay,
+            viewportWidth = width,
+            viewportHeight = height,
+            // Stretch fills the buffer edge to edge, and the buffer already has the turned shape.
+            scaleMode = VideoScale.Stretch,
+            toneMapped = true,
+        )
+    }
+
+    /**
+     * Wraps [target] as a texture and lets [encode] draw into it. Waited for, because the layer
+     * reads the buffer as soon as it has the sample.
+     */
+    private fun drawInto(
+        target: CVPixelBufferRef,
+        width: Int,
+        height: Int,
+        encode: (MTLTextureProtocol) -> MTLCommandBufferProtocol,
     ): Boolean = memScoped {
         val wrapped = alloc<CVMetalTextureRefVar>()
         val status = CVMetalTextureCacheCreateTextureFromImage(
@@ -136,18 +185,7 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
         }
         try {
             val texture = CVMetalTextureGetTexture(textureRef) as? MTLTextureProtocol ?: return@memScoped false
-            // Waited for, because the layer reads the buffer as soon as it has the sample.
-            composer.encode(
-                target = texture,
-                frame = facts,
-                picture = picture,
-                overlay = overlay,
-                viewportWidth = width,
-                viewportHeight = height,
-                // Stretch fills the buffer edge to edge, and the buffer already has the turned shape.
-                scaleMode = VideoScale.Stretch,
-                toneMapped = true,
-            ).waitUntilCompleted()
+            encode(texture).waitUntilCompleted()
             true
         } finally {
             CFRelease(textureRef)
@@ -188,9 +226,15 @@ internal class PictureFacts(
     override val colorSpace: ColorSpaceInfo,
     override val rotationDegrees: Int = 0,
     override val mirrored: Boolean = false,
+    override val crop: PictureCrop? = null,
 ) : VideoFrame {
-    /** True when the stored picture is not the way it is meant to be seen. */
-    val needsTurn: Boolean get() = mirrored || normalizedQuarterTurn(rotationDegrees) != 0
+    /**
+     * True when the stored picture is not the way it is meant to be seen: it is turned, mirrored,
+     * or has edges its container hides (#497).
+     */
+    val needsRedraw: Boolean get() =
+        mirrored || normalizedQuarterTurn(rotationDegrees) != 0 ||
+            crop?.let { !it.isEmpty && it.fits(size.width, size.height) } == true
 
     override val pts: Pts = Pts.Zero
     override val duration: Pts? = null
@@ -199,9 +243,16 @@ internal class PictureFacts(
     override val generation: Generation = Generation.Initial
     override fun close() = Unit
 
+    /** These facts with the viewer's turn and mirror folded into the frame's own (#428). */
+    fun orientedBy(transform: io.github.yuroyami.kiteplayer.VideoTransform): PictureFacts {
+        if (!transform.turnsOrMirrors) return this
+        val shown = transform.orient(rotationDegrees, mirrored)
+        return PictureFacts(size, colorSpace, shown.rotationDegrees, shown.mirrored, crop)
+    }
+
     companion object {
         fun of(frame: VideoFrame): PictureFacts =
-            PictureFacts(frame.size, frame.colorSpace, frame.rotationDegrees, frame.mirrored)
+            PictureFacts(frame.size, frame.colorSpace, frame.rotationDegrees, frame.mirrored, frame.crop)
     }
 }
 

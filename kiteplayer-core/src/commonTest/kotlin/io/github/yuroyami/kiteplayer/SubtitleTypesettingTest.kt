@@ -3,6 +3,10 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.fittedMargins
+import io.github.yuroyami.kiteplayer.spi.ColorMatrix
+import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
+import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
+import io.github.yuroyami.kiteplayer.spi.ColorTransfer
 import io.github.yuroyami.kiteplayer.spi.MediaAttachment
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
 import io.github.yuroyami.kiteplayer.spi.SubtitleTypesetter
@@ -43,6 +47,7 @@ class SubtitleTypesettingTest {
         val order = mutableListOf<String>()
         var clears = 0
         var renders = 0
+        var lastFrame: TypesetFrame? = null
         var closed = false
         private var lastKey: Long = Long.MIN_VALUE
 
@@ -72,6 +77,7 @@ class SubtitleTypesettingTest {
 
         override fun render(timeMillis: Long, frame: TypesetFrame): List<OverlayImage>? {
             renders++
+            lastFrame = frame
             // Visible from 1 s to 3 s of media, like the scripted cue; the key changes with time
             // only when animating, so a static line answers "unchanged" after its first frame.
             val visible = timeMillis in 1_000 until 3_000
@@ -111,16 +117,27 @@ class SubtitleTypesettingTest {
     private fun assScript(
         cues: List<SubtitleCue> = listOf(cue(1_000, 3_000, "typeset me")),
         attachments: List<MediaAttachment> = emptyList(),
+        videoColor: ColorSpaceInfo? = null,
     ) = MediaScript(
         durationUs = 6_000_000,
+        videoColor = videoColor,
         subtitleCues = cues,
         subtitleCodec = "ass",
         subtitleHeader = header,
         attachments = attachments,
     )
 
-    private fun config(typesetting: Boolean = true, fonts: List<SubtitleFont> = emptyList()) = PlayerConfig(
-        subtitles = SubtitleConfig(preferredLanguages = listOf("eng"), typesetting = typesetting, fonts = fonts),
+    private fun config(
+        typesetting: Boolean = true,
+        fonts: List<SubtitleFont> = emptyList(),
+        assColorMatching: Boolean = true,
+    ) = PlayerConfig(
+        subtitles = SubtitleConfig(
+            preferredLanguages = listOf("eng"),
+            typesetting = typesetting,
+            fonts = fonts,
+            assColorMatching = assColorMatching,
+        ),
         progressInterval = 50.milliseconds,
     )
 
@@ -154,6 +171,45 @@ class SubtitleTypesettingTest {
         assertTrue(last.images.isEmpty(), "the typeset image did not clear after its cue ended")
         harness.close()
         assertTrue(fake.closed, "closing the player did not close the typesetter")
+    }
+
+    // Reading an external script again in another encoding hands the typesetter the new text (#515).
+    @Test
+    fun aReloadedExternalScriptReachesTheTypesetterAgain() = runTest {
+        val fake = FakeTypesetter()
+        SubtitleTypesetters.register(FakeProvider { fake })
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 6_000_000), config = config())
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(300.milliseconds)
+        // "Dzień dobry" in windows-1250, whose ń the guess reads as the ñ of windows-1252.
+        val file = "[Script Info]\nScriptType: v4.00+\n\n[Events]\nDialogue: 0,0:00:00.50,0:00:02.00,Default,,0,0,0,,Dzie"
+            .encodeToByteArray() + byteArrayOf(0xF1.toByte()) + " dobry\n".encodeToByteArray()
+        val io = object : MediaIo {
+            private var at = 0
+            override val size: Long = file.size.toLong()
+            override val seekable: Boolean = true
+            override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
+                if (at >= file.size) return -1
+                val n = minOf(length, file.size - at)
+                file.copyInto(into, offset, at, at + n)
+                at += n
+                return n
+            }
+            override suspend fun seek(position: Long) {
+                at = position.toInt()
+            }
+            override fun close() = Unit
+        }
+        val id = harness.core.addExternalSubtitle(SubtitleSource(uri = "memory://pl.ass", io = { io.also { it.seek(0) } }))
+        harness.run(200.milliseconds)
+        assertTrue("Dzie\u00F1 dobry" in fake.documents.last().decodeToString(), "the first reading is the guess")
+
+        harness.core.reloadExternalSubtitle(id, "windows-1250")
+        harness.run(200.milliseconds)
+        assertEquals(2, fake.documents.size, "the typesetter never had the new reading")
+        assertTrue("Dzie\u0144 dobry" in fake.documents.last().decodeToString())
+        harness.close()
     }
 
     // A hardware decoder recovery rebuilds the session and must start a lane on it again (#212).
@@ -409,5 +465,47 @@ class SubtitleTypesettingTest {
         // Fill and Stretch cover the surface.
         assertContentEquals(intArrayOf(0, 0, 0, 0), fittedMargins(1280, 720, 640, 480, VideoScale.Fill))
         assertContentEquals(intArrayOf(0, 0, 0, 0), fittedMargins(1280, 720, 640, 480, VideoScale.Stretch))
+    }
+
+    /** The colour the typesetter is told it draws over, for a stream stating [videoColor] (#499). */
+    private suspend fun kotlinx.coroutines.test.TestScope.typesetColorFor(
+        videoColor: ColorSpaceInfo?,
+        assColorMatching: Boolean = true,
+    ): ColorSpaceInfo? {
+        val fake = FakeTypesetter()
+        SubtitleTypesetters.register(FakeProvider { fake })
+        val harness = CoreHarness(this, script = assScript(videoColor = videoColor), config = config(assColorMatching = assColorMatching))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1500.milliseconds)
+        val frame = assertNotNull(fake.lastFrame, "the typesetter was never asked to render")
+        harness.core.close()
+        SubtitleTypesetters.resetForTesting()
+        return frame.videoColor
+    }
+
+    @Test
+    fun theTypesetterIsToldTheColourOfTheVideoItDrawsOver() = runTest {
+        val bt709 = ColorSpaceInfo(ColorMatrix.Bt709, ColorPrimaries.Bt709, ColorTransfer.Bt709, fullRange = false)
+        assertEquals(bt709, typesetColorFor(bt709))
+        val fullRange601 = ColorSpaceInfo(ColorMatrix.Smpte170m, ColorPrimaries.Smpte170m, ColorTransfer.Bt709, fullRange = true)
+        assertEquals(fullRange601, typesetColorFor(fullRange601))
+        val sdr2020 = ColorSpaceInfo(ColorMatrix.Bt2020Ncl, ColorPrimaries.Bt2020, ColorTransfer.Bt2020Ten)
+        assertEquals(sdr2020, typesetColorFor(sdr2020))
+    }
+
+    @Test
+    fun aMatrixTheStreamLeavesUnstatedIsGuessedFromItsHeight() = runTest {
+        // The scripted picture is 1080 lines, so the guess is BT.709.
+        assertEquals(ColorMatrix.Bt709, typesetColorFor(ColorSpaceInfo.Unspecified)?.matrix)
+        assertEquals(ColorMatrix.Bt709, typesetColorFor(null)?.matrix)
+    }
+
+    @Test
+    fun nothingIsMatchedOverHdrOrRgbVideoOrWithTheSettingOff() = runTest {
+        assertNull(typesetColorFor(ColorSpaceInfo(ColorMatrix.Bt2020Ncl, ColorPrimaries.Bt2020, ColorTransfer.Pq)))
+        assertNull(typesetColorFor(ColorSpaceInfo(ColorMatrix.Bt2020Ncl, ColorPrimaries.Bt2020, ColorTransfer.Hlg)))
+        assertNull(typesetColorFor(ColorSpaceInfo(ColorMatrix.Identity, fullRange = true)))
+        assertNull(typesetColorFor(ColorSpaceInfo(ColorMatrix.Bt709), assColorMatching = false))
     }
 }

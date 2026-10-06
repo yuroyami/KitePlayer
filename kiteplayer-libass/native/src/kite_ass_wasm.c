@@ -66,6 +66,10 @@ EMSCRIPTEN_KEEPALIVE void kass_set_frame(kite_ass *self, int frame_w, int frame_
                        margin_t, margin_b, margin_l, margin_r, font_scale, line_position);
 }
 
+EMSCRIPTEN_KEEPALIVE void kass_set_video_color(kite_ass *self, int matrix, int full) {
+    kite_ass_set_video_color(self, matrix, full);
+}
+
 /* 1 changed (read kass_packed_ptr/size), 0 unchanged, -1 the buffer could not be built. */
 EMSCRIPTEN_KEEPALIVE int kass_render(kite_ass *self, double now_ms) {
     const unsigned char *packed = NULL;

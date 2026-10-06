@@ -44,6 +44,21 @@ class ReadRateTest {
     }
 
     @Test
+    fun theNewestTimeFollowsTheReadsAndARestartClearsIt() {
+        val rate = ReadRate()
+        assertNull(rate.newestUs())
+        val end = rate.readMedia(0, 2, 1_000_000)
+        assertEquals(end, rate.newestUs())
+        // An earlier packet in decode order, as a B-frame is, does not move it back.
+        rate.read(1_000_000, end - 80_000)
+        assertEquals(end, rate.newestUs())
+        rate.read(1_000_000, end + 3_600_000_000)
+        assertEquals(end + 3_600_000_000, rate.newestUs(), "a jump moves it with the jump")
+        rate.restart()
+        assertNull(rate.newestUs())
+    }
+
+    @Test
     fun aRestartForgetsTheMeasure() {
         val rate = ReadRate()
         rate.readMedia(0, 10, 20_000_000)

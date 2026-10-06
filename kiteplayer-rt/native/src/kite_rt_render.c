@@ -236,6 +236,152 @@ static float kprt_soft_clip(float x)
     return x < 0.0f ? -folded : folded;
 }
 
+/* The peak limiter (#504): turns the gain down ahead of any frame that would pass full scale, and
+ * leaves every other frame exactly as it was.
+ *
+ * `destination` holds `frames` frames already scaled by the volume, the first of them ring frame
+ * `start`. The frames after them that the ring already holds are the lookahead, read raw from the
+ * ring and scaled by `scale`, the loudest volume they can still be played at; a frame the ring
+ * does not hold yet counts as needing nothing until it arrives. See the limiter's fields in
+ * `kite_rt_ring_internal.h` for why the mean over the box reaches each frame's gain in time.
+ *
+ * The gain falls no faster than the box lets it, at most 1/lookahead of the range per frame, and
+ * rises no faster than the release. A frame the lookahead could not see coming, because it was not
+ * in the ring yet or the volume rose after it was read, is turned down on the spot instead, which
+ * is the only step this limiter can take. Whatever rounding leaves above full scale after the
+ * multiply is clamped, and only on a frame being limited.
+ *
+ * Runs before `consumed` moves, because the frames it reads must still be the feeder's to leave
+ * alone. Identical in order and arithmetic to `KotlinAudioRing.limit`, because the differential
+ * oracle compares the samples. */
+static void kprt_limit(kprt_ring *ring, float *destination, int64_t start, int32_t frames,
+                       int64_t written, float scale)
+{
+    int32_t channels = ring->channels;
+    int32_t lookahead = ring->lim_lookahead;
+    int32_t capacity = ring->capacity_frames;
+    float gain = ring->lim_gain;
+    int64_t limited = 0;
+    int32_t in_pos;
+    int32_t frame;
+    int32_t base = 0;
+
+    /* Acquire, paired with the release in `kprt_ring_flush`. */
+    if (atomic_load_explicit(&ring->lim_reset, memory_order_acquire) != 0) {
+        atomic_store_explicit(&ring->lim_reset, 0, memory_order_relaxed);
+        ring->lim_entered = start;
+        ring->lim_sum = (double)lookahead;
+        ring->lim_reduced = 0;
+        ring->lim_out_slot = 0;
+        ring->lim_in_slot = 0;
+        ring->lim_queue_head = 0;
+        ring->lim_queue_count = 0;
+        gain = 1.0f;
+    }
+    in_pos = (int32_t)(ring->lim_entered % capacity);
+
+    for (frame = 0; frame < frames; frame++) {
+        int64_t tail = start + frame + lookahead - 1;
+        float target;
+        float peak = 0.0f;
+        float leaving;
+        int32_t i;
+
+        /* Bring the box's last frame in, and any before it that arrived late. */
+        while (ring->lim_entered <= tail && ring->lim_entered < written) {
+            const float *x = ring->data + (size_t)in_pos * (size_t)channels;
+            int64_t entering = ring->lim_entered;
+            float level = 0.0f;
+            float held = 1.0f;
+            for (i = 0; i < channels; i++) {
+                float a = x[i] < 0.0f ? -x[i] : x[i];
+                if (a > level)
+                    level = a;
+            }
+            level = level * scale;
+            while (ring->lim_queue_count > 0
+                    && ring->lim_queue_frame[ring->lim_queue_head] <= entering - lookahead) {
+                ring->lim_queue_head = ring->lim_queue_head + 1 == lookahead ? 0 : ring->lim_queue_head + 1;
+                ring->lim_queue_count--;
+            }
+            if (level > 1.0f) {
+                float need = 1.0f / level;
+                int32_t back;
+                while (ring->lim_queue_count > 0) {
+                    back = ring->lim_queue_head + ring->lim_queue_count - 1;
+                    if (back >= lookahead)
+                        back -= lookahead;
+                    if (ring->lim_queue_gain[back] < need)
+                        break;
+                    ring->lim_queue_count--;
+                }
+                back = ring->lim_queue_head + ring->lim_queue_count;
+                if (back >= lookahead)
+                    back -= lookahead;
+                ring->lim_queue_gain[back] = need;
+                ring->lim_queue_frame[back] = entering;
+                ring->lim_queue_count++;
+            }
+            if (ring->lim_queue_count > 0)
+                held = ring->lim_queue_gain[ring->lim_queue_head];
+            ring->lim_held[ring->lim_in_slot] = held;
+            if (held < 1.0f) {
+                ring->lim_sum = ring->lim_sum + ((double)held - 1.0);
+                ring->lim_reduced++;
+            }
+            ring->lim_in_slot = ring->lim_in_slot + 1 == lookahead ? 0 : ring->lim_in_slot + 1;
+            in_pos = in_pos + 1 == capacity ? 0 : in_pos + 1;
+            ring->lim_entered = entering + 1;
+        }
+
+        if (ring->lim_reduced == 0) {
+            ring->lim_sum = (double)lookahead;
+            target = 1.0f;
+        } else {
+            target = (float)(ring->lim_sum / (double)lookahead);
+        }
+        gain = gain + ring->lim_release;
+        if (gain > target)
+            gain = target;
+        if (gain > 1.0f)
+            gain = 1.0f;
+        for (i = 0; i < channels; i++) {
+            float y = destination[base + i];
+            float a = y < 0.0f ? -y : y;
+            if (a > peak)
+                peak = a;
+        }
+        if (peak * gain > 1.0f)
+            gain = 1.0f / peak;
+        if (gain < 1.0f) {
+            for (i = 0; i < channels; i++) {
+                float y = destination[base + i] * gain;
+                if (y > 1.0f)
+                    y = 1.0f;
+                else if (y < -1.0f)
+                    y = -1.0f;
+                destination[base + i] = y;
+            }
+            limited++;
+        }
+        base += channels;
+
+        /* The frame leaves the box, and the frame after the box's end, not in it yet, counts as 1. */
+        leaving = ring->lim_held[ring->lim_out_slot];
+        if (leaving < 1.0f) {
+            ring->lim_sum = ring->lim_sum + (1.0 - (double)leaving);
+            ring->lim_reduced--;
+        }
+        ring->lim_out_slot = ring->lim_out_slot + 1 == lookahead ? 0 : ring->lim_out_slot + 1;
+    }
+    ring->lim_gain = gain;
+    if (limited > 0) {
+        atomic_store_explicit(&ring->limited_frames,
+            atomic_load_explicit(&ring->limited_frames, memory_order_relaxed) + limited,
+            memory_order_relaxed);
+    }
+}
+
 int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, int64_t deadline_nanos)
 {
     int64_t start;
@@ -243,11 +389,29 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
     int64_t available;
     int32_t to_read;
     int32_t channels;
+    int32_t holding;
+    float limit_scale = 1.0f;
 
     if (ring == NULL || destination == NULL || frames <= 0)
         return 0;
 
     channels = ring->channels;
+    /* Acquire, paired with the release in `kprt_ring_set_hold`. */
+    holding = atomic_load_explicit(&ring->hold, memory_order_acquire);
+    if (holding != 0) {
+        /* Nothing heard yet, so there is no level to walk down from. */
+        if (ring->gain_started == 0) {
+            ring->gain_started = 1;
+            ring->gain_current = 0.0f;
+        }
+        if (ring->gain_current == 0.0f) {
+            /* Held at silence: exact zeroes, nothing consumed, no anchor and no underrun, so the
+             * audio after the fade waits for the resume (#486). */
+            memset(destination, 0, (size_t)frames * (size_t)channels * sizeof(float));
+            atomic_store_explicit(&ring->silent, 1, memory_order_release);
+            return frames;
+        }
+    }
     start = atomic_load_explicit(&ring->consumed, memory_order_relaxed);
     /* Acquire, and this is the one that matters: it is paired with the release on `written` in
      * commit, so seeing a new value here guarantees seeing the samples and the segment too. */
@@ -283,10 +447,25 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
             int32_t total = to_read * channels;
             int32_t i;
             memcpy(&wanted, &bits, sizeof(wanted));
+            /* A hold walks to silence whatever the volume, and stops consuming at the frame that
+             * reaches it. The gain is above zero here, so the walk below is the one that runs. */
+            if (holding != 0)
+                wanted = 0.0f;
             if (ring->gain_started == 0) {
                 ring->gain_started = 1;
                 ring->gain_current = wanted;
                 gain = wanted;
+            }
+            /* The loudest the frames still waiting can leave here unfolded. The walk moves between
+             * this gain and the wanted one, and above unity the fold keeps every sample within full
+             * scale, so only the part of that span at or below unity counts, and a boost that stays
+             * a boost needs no limiting at all. */
+            if (gain > 1.0f && wanted > 1.0f) {
+                limit_scale = 0.0f;
+            } else {
+                limit_scale = gain > wanted ? gain : wanted;
+                if (limit_scale > 1.0f)
+                    limit_scale = 1.0f;
             }
             if (gain == wanted) {
                 if (wanted > 1.0f) {
@@ -325,10 +504,17 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
                             destination[base + i] *= gain;
                     }
                     base += channels;
+                    if (holding != 0 && gain == 0.0f) {
+                        /* The fade ends on this frame; the rest of the request is the silence
+                         * below, and the frames after it stay in the ring. */
+                        to_read = frame + 1;
+                        break;
+                    }
                 }
                 ring->gain_current = gain;
             }
         }
+        kprt_limit(ring, destination, start, to_read, written, limit_scale);
         atomic_store_explicit(&ring->consumed, start + to_read, memory_order_release);
     }
 
@@ -340,7 +526,12 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
         memset(destination + (size_t)to_read * (size_t)channels,
                0,
                (size_t)(frames - to_read) * (size_t)channels * sizeof(float));
-        if (atomic_load_explicit(&ring->ending, memory_order_relaxed) == 0)
+        /* A held ring that stops short is silent from here on purpose, or ran dry partway down
+         * the fade, and either way what follows is silence: the gain goes there too, so the next
+         * render does not step back up to the level the walk had reached. */
+        if (holding != 0)
+            ring->gain_current = 0.0f;
+        else if (atomic_load_explicit(&ring->ending, memory_order_relaxed) == 0)
             kprt_counter_bump(&ring->underruns);
     }
 
@@ -353,7 +544,11 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
         publish_anchor(ring, start + to_read - 1, boundary_nanos);
     }
 
-    return to_read;
+    /* After the anchor, with release, so a reader that sees silence also sees when the last faded
+     * frame reaches the speaker. */
+    atomic_store_explicit(&ring->silent, holding != 0 && ring->gain_current == 0.0f ? 1 : 0,
+                          memory_order_release);
+    return holding != 0 ? frames : to_read;
 }
 
 /* ---- The device callback's body ---- */

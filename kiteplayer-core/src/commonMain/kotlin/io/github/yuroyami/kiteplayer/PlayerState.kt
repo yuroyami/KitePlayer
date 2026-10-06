@@ -14,9 +14,16 @@ import kotlin.time.Duration.Companion.ZERO
 public data class PlayerSnapshot(
     val status: PlaybackStatus = PlaybackStatus.Idle,
     val media: MediaItem? = null,
-    /** Null when the duration is genuinely unknown, for example a live stream. */
+    /**
+     * Null when the duration is genuinely unknown, for example a live stream. Possibly only an
+     * estimate, which [durationIsEstimate] says.
+     */
     val duration: Duration? = null,
     val seekable: Boolean = false,
+    /**
+     * The size of the picture as it is shown, after any crop its container states (#497). See
+     * [PictureCrop].
+     */
     val videoSize: VideoSize? = null,
     val tracks: Tracks = Tracks.Empty,
     /**
@@ -54,6 +61,8 @@ public data class PlayerSnapshot(
     val subtitleStyle: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = null,
     /** Where the implicit subtitle stack anchors, as a fraction of the height. 1.0 is the bottom. */
     val subtitlePosition: Float = 1.0f,
+    /** True while only the forced pictures of an image subtitle track draw. See [KitePlayer.setForcedPicturesOnly]. */
+    val forcedPicturesOnly: Boolean = false,
     /**
      * The identifier of the typesetting engine drawing the selected subtitle track, or null when
      * the built-in styling draws it. Non-null only for an ASS or SSA track with `kiteplayer-libass`
@@ -129,6 +138,12 @@ public data class PlayerSnapshot(
      */
     val queueOrder: List<Int> = emptyList(),
     /**
+     * Positions into [queue] of the items the queue skipped because they could not be opened, as
+     * [QueueItemFailure.Skip] does (#487). An item leaves the set once it opens, and an edit of the
+     * queue carries the set along with the items it moves.
+     */
+    val failedQueueItems: Set<Int> = emptySet(),
+    /**
      * True while the player means to make sound: while it plays, while it buffers, and while a
      * queue that was playing opens its next item. [status] says whether sound comes out now; this
      * says whether it will once the pipeline can supply it. A guard that pauses for a call or for
@@ -137,7 +152,10 @@ public data class PlayerSnapshot(
     val playRequested: Boolean = false,
     /**
      * The position in [queue] of the next item while it is open in the background for the
-     * gapless handoff, or null. See [QueueConfig].
+     * gapless handoff, or null. Under a repeat it is the current item's own position, because its
+     * next pass is what opens, and null outside queue playback. A next item that is the next part
+     * of the current item's file opens nothing, because it joins on the current item's reads, so it
+     * reads null too (#456). See [QueueConfig].
      */
     val preloadedIndex: Int? = null,
     /** How HDR video reaches the screen. */
@@ -147,12 +165,53 @@ public data class PlayerSnapshot(
      * [VideoDynamicRange.Standard] at every open.
      */
     val videoDynamicRange: VideoDynamicRange = VideoDynamicRange.Standard,
+    /**
+     * True while [duration] is only an estimate, such as FFmpeg's guess from the bit rate of an
+     * ADTS AAC file or of an MP3 without its Xing header, which for variable bit rate audio can be
+     * minutes out (#422). A seek bar can draw it as approximate. Seeks are not cut at it, and once
+     * playback passes it [duration] follows what has played; once the item ends it is the real
+     * length and this goes false.
+     */
+    val durationIsEstimate: Boolean = false,
+    /** What the two front speakers play. See [KitePlayer.setStereoMode]. */
+    val stereoMode: StereoMode = StereoMode.Stereo,
+    /**
+     * The song's lyrics as its tags carry them without times, for an application to show beside
+     * the music, or null when it carries none (#443). An ID3 `USLT` frame, a Vorbis `LYRICS` or
+     * `UNSYNCEDLYRICS` comment, an MP4 `©lyr` atom and a Matroska `LYRICS` tag all arrive here.
+     *
+     * Lyrics whose lines carry LRC time stamps are a subtitle track instead, with the codec
+     * `tag/lrc`, so they show line by line through [KitePlayer.subtitleCues] and the delay and the
+     * selection work on them as on any track. They are not repeated here.
+     */
+    val lyrics: String? = null,
+    /** Whether the night mode is on. See [KitePlayer.setNightMode]. */
+    val nightMode: Boolean = false,
+    /** How far the dialogue is raised or lowered in a downmix, in decibels. See [KitePlayer.setDialogueLevel]. */
+    val dialogueLevelDb: Float = 0f,
+    /** How far the pitch is moved, in semitones. See [KitePlayer.setPitch]. */
+    val pitchSemitones: Double = 0.0,
+    /**
+     * Whether the silent stretches are shortened. See [KitePlayer.setSkipSilence]: the setting, which
+     * is true even while an item with a picture or a live stream plays uncut.
+     */
+    val skipSilence: Boolean = false,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a
      * [Duration] (#394).
      */
     public val durationMillis: Long? get() = duration?.inWholeMilliseconds
+
+    /**
+     * What [media]'s sound is, as the audio device is told it (#446): the item's own
+     * [MediaItem.audioContent], with [AudioContent.Automatic] already answered from the selected
+     * video track, so never [AudioContent.Automatic] itself. [AudioContent.Music] when nothing is
+     * open. An application that asks for audio focus or sets up its audio session itself reads this.
+     */
+    public val audioContent: AudioContent
+        get() = (media?.audioContent ?: AudioContent.Automatic)
+            .resolve(hasPicture = tracks.selectedTrack(TrackKind.Video)?.isCoverArt == false)
 }
 
 /**
@@ -367,6 +426,16 @@ public data class PlaybackStats(
     val containerBitrate: Long? = null,
     val syncMode: SyncMode = SyncMode.Auto,
     val masterClock: MasterClock = MasterClock.None,
+    /**
+     * Audio frames the output's peak limiter turned down because they would have passed full scale.
+     *
+     * A loud surround mix folded to stereo, or an equaliser boost, can add up past full scale, and a
+     * device clamps each such sample, which squares off the wave and is heard as crackle. The player
+     * lowers the gain smoothly for a few milliseconds around such a passage instead, and counts each
+     * frame it lowered here. Zero for anything that never passes full scale, so a rising figure says
+     * the mix is too hot for the output.
+     */
+    val audioLimitedFrames: Long = 0,
 )
 
 public data class VideoSize(
@@ -389,13 +458,60 @@ public data class VideoSize(
 
     public val displayAspect: Float
         get() = if (height == 0) 0f else displayWidth.toFloat() / height.toFloat()
+
+    /**
+     * What is left of this size once [crop]'s edges are taken away, with the same pixel aspect, or
+     * this size when [crop] is null or does not [fit][PictureCrop.fits] it. The display aspect of
+     * the result is the aspect of what is left, which is why a cropped 1920 by 1088 picture shows
+     * at exactly 16:9.
+     */
+    public fun cropped(crop: PictureCrop?): VideoSize {
+        if (crop == null || crop.isEmpty || !crop.fits(width, height)) return this
+        return copy(width = width - crop.left - crop.right, height = height - crop.top - crop.bottom)
+    }
+}
+
+/**
+ * Rows and columns at the edges of a stored picture that are not part of the image (#497).
+ *
+ * A container can say so: a Matroska track's `PixelCrop` elements, or an MP4 track's clean
+ * aperture. Encoders use it to show 1080 lines of a 1088-line coded picture, cameras to hide sensor
+ * margins, and remuxers to hide black bars without re-encoding. FFmpeg reads it and leaves applying
+ * it to the player, as mpv and the `ffmpeg` command line do. The crop inside the bitstream itself,
+ * such as an H.264 sequence parameter set's, is a different thing that the decoder has already
+ * applied, so a picture never carries that one.
+ *
+ * Each count is in stored pixels, taken from the picture as it is stored, before it is mirrored,
+ * turned or stretched by its pixel aspect. The size, the display aspect, the fit, the zoom and the
+ * subtitles all use what is left.
+ */
+public data class PictureCrop(
+    val top: Int = 0,
+    val bottom: Int = 0,
+    val left: Int = 0,
+    val right: Int = 0,
+) {
+    /** True when the crop takes nothing away. */
+    public val isEmpty: Boolean get() = top == 0 && bottom == 0 && left == 0 && right == 0
+
+    /**
+     * True when no count is negative and at least one pixel of a [width] by [height] picture is
+     * left each way. A crop that does not fit is ignored rather than trusted, with
+     * [PlaybackWarning.CropIgnored], because it comes from a file and a file can say anything.
+     */
+    public fun fits(width: Int, height: Int): Boolean =
+        top >= 0 && bottom >= 0 && left >= 0 && right >= 0 &&
+            top.toLong() + bottom < height && left.toLong() + right < width
 }
 
 public enum class LoopMode {
     /** Play once and stop. */
     Off,
 
-    /** Repeat the current media item. */
+    /**
+     * Repeat the current media item. Its next pass follows its end with no gap and no change of
+     * status, as a gapless queue item follows the one before it (#467); see [QueueConfig].
+     */
     One,
 
     /**

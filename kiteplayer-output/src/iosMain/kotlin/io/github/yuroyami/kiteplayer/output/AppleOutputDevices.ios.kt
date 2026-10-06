@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.AudioOutputDevice
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionPortDescription
 import platform.AVFAudio.currentRoute
+import platform.AVFAudio.maximumOutputNumberOfChannels
 
 /**
  * iOS has no device list and no default device of its own: the audio session owns the route, and
@@ -25,4 +26,8 @@ internal actual fun platformAppleOutputDevices(): AppleOutputDevices = object : 
 
     /** 0 for an output of the current route, which needs no binding, and null for anything else. */
     override fun deviceFor(id: String): UInt? = if (devices().any { it.id == id }) 0u else null
+
+    /** What the current route can carry: two for headphones or the speaker, more for a surround receiver. */
+    override fun outputChannelCount(): Int? =
+        AVAudioSession.sharedInstance().maximumOutputNumberOfChannels.toInt().takeIf { it > 0 }
 }

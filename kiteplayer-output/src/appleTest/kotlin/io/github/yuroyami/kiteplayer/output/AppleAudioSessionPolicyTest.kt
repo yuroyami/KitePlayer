@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.AudioContent
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.Dispatchers
@@ -20,19 +21,19 @@ class AppleAudioSessionPolicyTest {
         val first = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback)
         val second = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback)
 
-        assertEquals(listOf("category:playback:moviePlayback:none", "active:true:none"), controller.calls)
+        assertEquals(listOf("category:playback:moviePlayback:mixWithOthers", "active:true:none"), controller.calls)
         assertEquals(2, manager.activeLeaseCount)
 
         first.close()
         first.close()
-        assertEquals(listOf("category:playback:moviePlayback:none", "active:true:none"), controller.calls)
+        assertEquals(listOf("category:playback:moviePlayback:mixWithOthers", "active:true:none"), controller.calls)
         assertEquals(1, manager.activeLeaseCount)
 
         second.close()
         second.close()
         assertEquals(
             listOf(
-                "category:playback:moviePlayback:none",
+                "category:playback:moviePlayback:mixWithOthers",
                 "active:true:none",
                 "active:false:notifyOthers",
             ),
@@ -49,7 +50,12 @@ class AppleAudioSessionPolicyTest {
 
         lease.reactivate()
         assertEquals(
-            listOf("category:playback:moviePlayback:none", "active:true:none", "active:true:none"),
+            listOf(
+                "category:playback:moviePlayback:mixWithOthers",
+                "active:true:none",
+                "category:playback:moviePlayback:none",
+                "active:true:none",
+            ),
             controller.calls,
         )
 
@@ -59,11 +65,92 @@ class AppleAudioSessionPolicyTest {
     }
 
     @Test
+    fun aPausedOpenMixesWithOtherAppsAndTheFirstPlayStopsThem() {
+        val controller = RecordingAppleAudioSessionController()
+        val manager = AppleAudioSessionLeaseManager(controller)
+
+        val first = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie)
+        assertEquals(
+            listOf("category:playback:moviePlayback:mixWithOthers", "active:true:none"),
+            controller.calls,
+            "an open that has not played leaves other apps' sound playing",
+        )
+
+        first.reactivate()
+        first.reactivate()
+        val second = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Music)
+        first.close()
+        second.close()
+        val again = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie)
+        again.close()
+
+        assertEquals(
+            listOf(
+                "category:playback:moviePlayback:mixWithOthers",
+                "active:true:none",
+                "category:playback:moviePlayback:none",
+                "active:true:none",
+                "active:true:none",
+                "category:playback:default:none",
+                "active:false:notifyOthers",
+                "category:playback:moviePlayback:mixWithOthers",
+                "active:true:none",
+                "active:false:notifyOthers",
+            ),
+            controller.calls,
+        )
+    }
+
+    @Test
+    fun aRefusedStopOfMixingIsTriedAgainAtTheNextPlay() {
+        var refusals = 1
+        val categories = mutableListOf<Boolean>()
+        val controller = object : AppleAudioSessionController {
+            override fun setPlaybackCategory(content: AudioContent, mixesWithOthers: Boolean) {
+                categories += mixesWithOthers
+                if (!mixesWithOthers && refusals-- > 0) throw PlannedAppleAudioSessionFailure()
+            }
+            override fun setActive(active: Boolean, notifyOthers: Boolean) = Unit
+        }
+        val lease = AppleAudioSessionLeaseManager(controller).acquire(AppleAudioSessionPolicy.ManagedPlayback)
+        lease.reactivate()
+        lease.reactivate()
+        lease.reactivate()
+        assertEquals(listOf(true, false, false), categories)
+        lease.close()
+    }
+
+    @Test
+    fun theSessionModeFollowsTheContentOfTheItemThatOpenedLast() {
+        val controller = RecordingAppleAudioSessionController()
+        val manager = AppleAudioSessionLeaseManager(controller)
+
+        val speech = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Speech)
+        val alsoSpeech = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Speech)
+        val music = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Music)
+        listOf(speech, alsoSpeech, music).forEach { it.close() }
+        manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Music).close()
+
+        assertEquals(
+            listOf(
+                "category:playback:spokenAudio:mixWithOthers",
+                "active:true:none",
+                "category:playback:default:mixWithOthers",
+                "active:false:notifyOthers",
+                "category:playback:default:mixWithOthers",
+                "active:true:none",
+                "active:false:notifyOthers",
+            ),
+            controller.calls,
+        )
+    }
+
+    @Test
     fun aRefusedReactivationIsLeftForTheDeviceStartToReport() {
         // The first activation, at acquire, succeeds; the second, at resume, is refused.
         var activations = 0
         val controller = object : AppleAudioSessionController {
-            override fun setPlaybackCategory() = Unit
+            override fun setPlaybackCategory(content: AudioContent, mixesWithOthers: Boolean) = Unit
             override fun setActive(active: Boolean, notifyOthers: Boolean) {
                 if (active && ++activations == 2) throw PlannedAppleAudioSessionFailure()
             }
@@ -98,9 +185,9 @@ class AppleAudioSessionPolicyTest {
         retry.close()
         assertEquals(
             listOf(
-                "category:playback:moviePlayback:none",
+                "category:playback:moviePlayback:mixWithOthers",
                 "active:true:none",
-                "category:playback:moviePlayback:none",
+                "category:playback:moviePlayback:mixWithOthers",
                 "active:true:none",
                 "active:false:notifyOthers",
             ),
@@ -134,13 +221,13 @@ class AppleAudioSessionPolicyTest {
         }.awaitAll()
 
         assertEquals(64, manager.activeLeaseCount)
-        assertEquals(listOf("category:playback:moviePlayback:none", "active:true:none"), controller.calls)
+        assertEquals(listOf("category:playback:moviePlayback:mixWithOthers", "active:true:none"), controller.calls)
 
         leases.map { lease -> async(Dispatchers.Default) { lease.close() } }.awaitAll()
         assertEquals(0, manager.activeLeaseCount)
         assertEquals(
             listOf(
-                "category:playback:moviePlayback:none",
+                "category:playback:moviePlayback:mixWithOthers",
                 "active:true:none",
                 "active:false:notifyOthers",
             ),
@@ -160,8 +247,13 @@ internal class RecordingAppleAudioSessionController(
 
     val calls: List<String> get() = synchronized(lock) { recorded.toList() }
 
-    override fun setPlaybackCategory() {
-        record("category:playback:moviePlayback:none")
+    override fun setPlaybackCategory(content: AudioContent, mixesWithOthers: Boolean) {
+        val mode = when (content) {
+            AudioContent.Music -> "default"
+            AudioContent.Speech -> "spokenAudio"
+            AudioContent.Movie, AudioContent.Automatic -> "moviePlayback"
+        }
+        record("category:playback:$mode:${if (mixesWithOthers) "mixWithOthers" else "none"}")
     }
 
     override fun setActive(active: Boolean, notifyOthers: Boolean) {

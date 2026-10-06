@@ -531,7 +531,7 @@ abstract class BuildLibassWasmModuleTask @Inject constructor(
         val EXPORTS: List<String> = listOf(
             "_kass_library_version", "_kass_open", "_kass_close", "_kass_alloc", "_kass_free",
             "_kass_open_track", "_kass_open_document", "_kass_add_event", "_kass_clear_events",
-            "_kass_add_font", "_kass_set_frame", "_kass_render", "_kass_packed_ptr", "_kass_packed_size",
+            "_kass_add_font", "_kass_set_frame", "_kass_set_video_color", "_kass_render", "_kass_packed_ptr", "_kass_packed_size",
             "_malloc", "_free",
         )
     }

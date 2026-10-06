@@ -19,9 +19,9 @@ public sealed interface SubtitleCue {
      * The built-in sources give a text cue with no end one before it reaches the engine. The SubRip
      * and WebVTT parsers close it at the next cue's start, or 3 seconds later when no cue follows.
      * The FFmpeg backend holds a text cue from a packet with no duration for 10 seconds, and an ASS
-     * event for 5 seconds. An image cue from a stream that gives no end, as Blu-ray subtitles do,
-     * arrives as [OPEN_END], and the engine closes it at the start of the next cue of its track.
-     * A custom source sets its own end.
+     * event for 5 seconds. A cue from a stream that gives no end, as Blu-ray subtitles and teletext
+     * pages do, arrives as [OPEN_END], and the engine closes it at the start of the next cue of its
+     * track. A custom source sets its own end.
      */
     public val endMicros: Long
 
@@ -31,8 +31,8 @@ public sealed interface SubtitleCue {
     public companion object {
         /**
          * The end of a cue that lasts until the next cue of its track starts. A decoder uses it for
-         * a stream that states no end, such as a Blu-ray subtitle, which stays on screen until the
-         * next one replaces or clears it.
+         * a stream that states no end, such as a Blu-ray subtitle or a teletext page, which stays on
+         * screen until the next one replaces or clears it.
          */
         public const val OPEN_END: Long = Long.MAX_VALUE
     }
@@ -77,7 +77,7 @@ public data class StyledSpan(
  * | Field | Desktop | Apple | Android |
  * |---|---|---|---|
  * | [primaryColor], [bold], [italic], [underline], [strikeThrough] | per span | per span | per span |
- * | [fontSizePx], [outlineColor], [outlineWidthPx] | per span | per span | per span |
+ * | [fontSizePx], [relativeSize], [outlineColor], [outlineWidthPx] | per span | per span | per span |
  * | [fontFamily] | per span | per span | per span |
  * | [shadowColor], [shadowOffsetPx] | first span, whole cue | first span, whole cue | first span, whole cue |
  *
@@ -117,11 +117,17 @@ public data class CueStyle(
     val shadowOffsetPx: Float = 1f,
     /**
      * ARGB box behind each line of text, padded by [backgroundPaddingPx]. The default is fully
-     * transparent, which draws nothing and costs nothing; no subtitle format authors this field,
-     * it exists for the viewer's [SubtitleStyleOverride]. Taken from the cue's FIRST span.
+     * transparent, which draws nothing and costs nothing. WebVTT authors it with its `bg_` colour
+     * classes and its stylesheets, and the viewer's [SubtitleStyleOverride] sets it. Taken from
+     * the cue's FIRST span.
      */
     val backgroundColor: Int = 0x00000000,
     val backgroundPaddingPx: Float = 4f,
+    /**
+     * A factor on the size the text would otherwise have, from [fontSizePx] or the renderer's
+     * default, as a WebVTT stylesheet's `font-size: 120%` gives one. 1 leaves the size alone.
+     */
+    val relativeSize: Float = 1f,
 )
 
 /** Where a cue goes. */
@@ -164,7 +170,54 @@ public data class CueLayout(
      */
     val fadeInMicros: Long = 0,
     val fadeOutMicros: Long = 0,
+    /**
+     * The colour matrix an ASS script's `YCbCr Matrix` header names, which the player matches the
+     * cue's colours to the video through (#499). The engine converts the colours of the cues it
+     * publishes, so a cue arriving at a rasterizer is already matched. Null for every other format,
+     * which names none.
+     */
+    val scriptColorMatrix: ScriptColorMatrix? = null,
 )
+
+/**
+ * The value of an ASS script's `YCbCr Matrix` header (#499): the matrix and range its colours went
+ * through on the way into the video they were picked from, as libass reads it. `Tv` is studio range,
+ * 16 to 235, and `Pc` full range, 0 to 255. See [SubtitleConfig.assColorMatching][io.github.yuroyami.kiteplayer.SubtitleConfig.assColorMatching].
+ */
+public enum class ScriptColorMatrix {
+    /** No header, as in a script from before it existed, which VSFilter drew through BT.601 at studio range. */
+    Default,
+
+    /** A header whose value cannot be read, which converts nothing. */
+    Unknown,
+
+    /** `None`: the colours are meant as they stand, and nothing converts them. */
+    None,
+
+    /** `TV.601`. */
+    Bt601Tv,
+
+    /** `PC.601`. */
+    Bt601Pc,
+
+    /** `TV.709`. */
+    Bt709Tv,
+
+    /** `PC.709`. */
+    Bt709Pc,
+
+    /** `TV.240M`. */
+    Smpte240mTv,
+
+    /** `PC.240M`. */
+    Smpte240mPc,
+
+    /** `TV.FCC`. */
+    FccTv,
+
+    /** `PC.FCC`. */
+    FccPc,
+}
 
 /**
  * The order cues pile up in when more than one is on screen.
@@ -226,6 +279,13 @@ public data class BitmapRegion(
     val canvasWidth: Int,
     val canvasHeight: Int,
     val bitmap: RgbaBitmap,
+    /**
+     * True when the stream marks this picture as forced: a caption for a line in another language
+     * or a sign the viewer must read, which a disc player shows even with subtitles off (#513).
+     * Blu-ray (PGS) and DVD tracks can mix forced pictures with the ordinary ones in one track.
+     * [io.github.yuroyami.kiteplayer.SubtitleConfig.forcedPicturesOnly] draws only these.
+     */
+    val forced: Boolean = false,
 )
 
 /**

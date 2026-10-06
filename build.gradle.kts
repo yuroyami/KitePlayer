@@ -1,4 +1,5 @@
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
+import io.github.yuroyami.kiteplayer.buildtools.CheckDuplicateClassesTask
 import io.github.yuroyami.kiteplayer.buildtools.CheckKitertCouplingTask
 import io.github.yuroyami.kiteplayer.buildtools.CheckPublicationReadinessTask
 import org.gradle.api.artifacts.ProjectDependency
@@ -6,6 +7,7 @@ import org.gradle.api.publish.maven.tasks.GenerateMavenPom
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
@@ -111,6 +113,15 @@ val publicationReadiness = tasks.register<CheckPublicationReadinessTask>("checkP
     )
 }
 
+
+/**
+ * Reads the compiled classes of every published module for a class that two of them compile, which
+ * an Android build refuses at dex merging (#420). It compiles each module's JVM and Android code,
+ * so CI runs it in the Linux job that compiles the Android code anyway to package the sample.
+ */
+val duplicateClasses = tasks.register<CheckDuplicateClassesTask>("checkDuplicateClasses") {
+    repositoryRoot.set(layout.projectDirectory)
+}
 
 /**
  * One sentence per published module for its POM, which Maven Central, IDE tooltips and dependency
@@ -228,6 +239,27 @@ subprojects {
             publishingProjectDirectories.put(publishingPath, publishingDirectory)
             generatedPoms.from(pomTasks)
             generatedPoms.builtBy(pomTasks)
+        }
+        duplicateClasses.configure {
+            publishingProjectDirectories.put(publishingPath, publishingDirectory)
+        }
+        publishingProject.pluginManager.withPlugin("org.jetbrains.kotlin.multiplatform") {
+            publishingProject.extensions.configure<KotlinMultiplatformExtension> {
+                targets.configureEach {
+                    val platform = platformType
+                    if (platform != KotlinPlatformType.jvm && platform != KotlinPlatformType.androidJvm) return@configureEach
+                    compilations.matching { it.name == KotlinCompilation.MAIN_COMPILATION_NAME }.configureEach {
+                        val classes = output.classesDirs
+                        duplicateClasses.configure {
+                            if (platform == KotlinPlatformType.jvm) {
+                                jvmClassDirectories.from(classes)
+                            } else {
+                                androidClassDirectories.from(classes)
+                            }
+                        }
+                    }
+                }
+            }
         }
         publishingProject.configurations.configureEach {
             // Only the scopes a build file DECLARES into, which are the only ones a POM can come

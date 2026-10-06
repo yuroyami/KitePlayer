@@ -2,13 +2,17 @@
 
 A queue plays its items one after another. This page describes how the player moves from one
 item to the next without a silence between them, and when it opens the next item from scratch
-instead.
+instead. A repeat of one item follows its own end the same way, as [Repeat](#repeat) describes.
 
 Terms used on this page:
 
 - The **current item** is the queue item that plays now.
 - The **next item** is the item that `next()` would open. It follows the play order, so it
-  follows shuffle, and it wraps from the last item to the first under `LoopMode.All`.
+  follows shuffle, and it wraps from the last item to the first under `LoopMode.All`. With
+  `QueueConfig.reshuffleEachLap`, the wrap goes to the first item of a freshly drawn order
+  instead, which never begins with the item that ended the lap (#488). It is drawn once, when the
+  preload first asks, so the item preloaded is the item that plays. Under a repeat of the current
+  item, the next item is the next pass of the current item.
 - The **ring** is the audio buffer between the engine and the audio device. It holds at least
   200 ms of sound.
 - A **feeder** is the engine worker that converts decoded audio and writes it into the ring.
@@ -23,6 +27,8 @@ Terms used on this page:
 public data class QueueConfig(
     val preloadNext: Duration = 5.seconds,
     val gapless: Boolean = true,
+    val reshuffleEachLap: Boolean = false,
+    val onItemFailure: QueueItemFailure = QueueItemFailure.Stop,
 )
 ```
 
@@ -31,26 +37,38 @@ public data class QueueConfig(
 - `gapless` turns the handoff on. False keeps the old path for every item: the device stops at
   the end of an item, and the next item opens from scratch. With `gapless` false the player
   preloads nothing.
+- `onItemFailure` says what happens when the next item cannot be opened at all, from its
+  preload or from scratch. `Stop` leaves the player in `Failed` on that item. `Skip` warns
+  `PlaybackWarning.QueueItemSkipped`, lists the item in `PlayerSnapshot.failedQueueItems` and
+  opens the item after it, in the direction the queue was going; it stops in `Failed` when the
+  play order runs out or every item has failed in a row (#487).
 
 `PlayerSnapshot.preloadedIndex` is the queue position of the next item once it is open and its
-queues fill in the background. It is null at all other times.
+queues fill in the background. Under a repeat it is the position of the current item, and outside
+queue playback a repeat publishes none. It is null at all other times.
 
 ## Preload
 
 The player preloads the next item when all of these are true:
 
 - The current item plays or is paused, and no seek is in progress.
-- The position of the current item is within `preloadNext` of its duration.
-- A next item exists. `LoopMode` is not `One`, no A-B loop is set, and the sleep timer is not
-  `SleepTimer.EndOfItem`.
+- The position of the current item is within `preloadNext` of its duration, or of B when an A-B
+  loop's B is inside the item.
+- A next item exists, or the current item repeats, which an armed A-B loop makes it do. The sleep
+  timer is not `SleepTimer.EndOfItem`.
 - The current item is seekable, its duration is known, and it is not a still image.
-- The current item still has decoded sound to write into the ring.
+- The current item still has decoded sound to write into the ring. Under an A-B loop whose B is
+  inside the item, the turn that plays was given its end at B instead, as below.
 
 The preload opens the source and the decoders of the next item on a coroutine that does not block
 the session actor. It creates no audio device. It aligns the queues and the decoders of the item
 to the epoch the player is at, and then starts the demux and decode workers of the item. The first
 decoded audio buffers and the first video frames wait in the queues of the item. The feeder and
 the video schedule of the next item do not run yet.
+
+A next item with a clip or a start position starts where it asks to (#456). The preload moves its
+source to the keyframe at or before that place, and its lanes drop what comes before it, so its
+first sample and its first picture are the ones there, as on a precise seek.
 
 A renderer can supply its own video decoders, as the Android renderers do. Such a decoder draws
 into the renderer's surface, which the current item holds until the swap. So for a next item with
@@ -121,6 +139,119 @@ The status does not change: a playing player stays Playing, and the play request
 position after the swap is the position of the new item, within one audio buffer of its start.
 Video frames of the old item that were still queued at the crossing are dropped.
 
+## Repeat
+
+`LoopMode.One` repeats the current item, and so does `LoopMode.All` with a queue of one item or
+with media opened on its own. The next pass of the item takes the road a next queue item takes
+(#467):
+
+- The preload opens the item again, at its start, which for an item with a clip is the clip's
+  start, with the tracks that play now: the video, audio
+  and subtitle streams the viewer chose and the video decoder the item came to. It reads none of
+  the item's external subtitle files again. A start position applies to the first pass only, as it
+  did when a repeat sought back to zero.
+- The handoff is the one above, and so is the swap, with these differences. `PlayerEvent.Ended`
+  fires, as at each turn of a repeat that seeks back, and `Opened` does not, because the item
+  stays the current one. `media` and `queueIndex` do not change. The external subtitle files, both
+  subtitle selections and the reports made once for each item, such as `FirstFrameRendered`,
+  carry on. `VideoSizeChanged` does not fire again.
+- The status stays `Playing` and the device never stops. The position falls back to the start
+  of the item at the swap, markers fire again on each pass, and a chapter change fires when the
+  position returns to an earlier chapter.
+
+`setLoop`, a seek and the other actions in the list above drop the next pass as they drop a next
+item. `next` on a repeating queue of one opens the item afresh rather than from the preload,
+because the preload carries none of its external subtitle files.
+
+When the next pass cannot follow this way, the repeat falls back to the old path: the item ends,
+the status goes through `Ended` and `Buffering`, and the player seeks back to the start. It warns
+`GaplessFallback` for the reasons below, with the current item's own queue position, or -1 outside
+queue playback. A source that cannot seek repeats in neither way.
+
+### A-B loop
+
+An armed A-B loop owns the end of the item, as it did when it sought back: its next pass starts at
+A, and follows B when B is inside the item, or else the end of the item. The next pass takes the
+road of a repeat's, with these differences (#467):
+
+- The preload opens the item at A as a precise seek lands there. The source moves to the keyframe
+  at or before A, the video lane of the pass drops the pictures before A, and its feeder cuts the
+  sound at A to the sample.
+- Each turn of the loop is told where it stops before its first sample is written: at a seek, when
+  its pass opens, and when the loop is armed, moved or cleared. The turn that plays stops at B. Its
+  feeder writes the sound before B to the sample and holds the rest of the buffer that crosses B
+  unwritten, and its video lane holds the pictures at or after B, so nothing from past B is heard
+  or shown. Once the sound before B is all in the ring, the next pass takes the ring, and its first
+  sample at A follows the last one before B. A section shorter than the ring stops at B the same
+  way. The swap at such a B fires nothing, as the seek back to A fired nothing; at the end of the
+  item `Ended` fires, as before.
+- The preload starts when the turn that plays is within `preloadNext` of B. A turn that starts too
+  near B for a pass to open in time, less than a second before it or less than the whole section
+  when that is shorter, is given no end: it plays on past B and goes back by the seek, as every
+  turn did before passes, and the turns after it start at A with the whole section ahead of them.
+  So a seek that lands near B, or a B set just ahead of the position, costs that one turn. Such a
+  turn opens no pass, because the seek back to A drops every pass.
+- A turn whose sound already reached past B when it was given its end, which only a B set within a
+  ring's depth ahead of the position can cause, goes back by the seek the same way.
+- No turn is given an end when no pass can follow it: with the gapless handoff off, with the sleep
+  timer at `SleepTimer.EndOfItem`, after a fallback, and for a source that cannot seek. The turns
+  ask the same rule the preload follows, so none waits at B for a pass that never opens. Each turn
+  then goes back by the seek, and a source that cannot seek plays on past B.
+- Clearing the loop or a fallback lifts the end of the turn that plays, which carries on past B
+  from the sound its feeder held, with nothing lost. Moving B gives the turn the new B as its end in
+  the same way, unless the new B is too near or already behind its sound. When the next pass had
+  already taken the ring, the ring is cleared with it, and the turn carries on from where its sound
+  was heard, by a precise seek; its end stands until that seek lands, so nothing from past B is
+  heard or shown before it. An audio track chosen while the turn waits at B drops the pass, and the
+  turn's next pass opens with the new track.
+
+A fallback warns as a repeat's does, and the turns go back by the seek while the item stays open.
+
+## Items with no sound
+
+An item with video and no selected audio track has no ring to join, so its picture times the join
+instead (#524). This covers a repeat, an A-B loop and a queue whose items are all silent:
+
+- The preload opens and primes the next item or pass as for an item with sound.
+- The video lane of a pass that stops at B holds the first picture at or after B, and that marks
+  every picture before B as handed to the schedule.
+- The video schedule publishes the picture on screen and the wall time its slot ends, which is
+  when the picture after it is due. A last picture has none after it to measure against, so its
+  slot is the duration it carries, or the one the schedule settled on.
+- Once the last picture of the item, or the last before B, is on screen, the next item becomes the
+  current one, as at a swap, while the player plays. Its schedule waits for the end of that slot
+  and shows its first picture there, so the pictures keep one frame period between them across the
+  join and the status stays `Playing`. The position is the start of the new pass until its first
+  picture shows.
+- While paused, nothing swaps, and the join happens when play resumes.
+- A renderer that decodes its own video gets the next item's decoder at the swap, as with sound,
+  so its last picture stays on screen until that decoder gives its first one.
+
+## Parts of one file
+
+When the next item is the next part of the current item's file, as the tracks of an album in one
+file with a cue sheet are, it plays on the current item's reads and opens nothing (#456). The next
+item is such a part when it is the same item in every field but its clip, its start position and
+its title, artist and album, its clip starts exactly where the current item's ends, and it has no
+start position of its own.
+
+- The join is armed before the reads reach the current item's end: when the item's workers start,
+  after each seek and on every pass. The reads then go on past the end, through the same decoders,
+  so a lossy file joins without the seam a second open leaves. A run of such parts reads on to the
+  end of the run.
+- The sound of the next item follows in the ring, and its pictures follow on the video lane. The
+  items move when the sound heard crosses the end, or the picture shown does for an item with no
+  sound: `Ended` fires for the current item and `Opened` for the next, `media` and `queueIndex`
+  move, the length and the chapters become the next item's, and the position counts from its start.
+  The device, the tracks and every choice the viewer made carry on, and the status stays `Playing`.
+  `preloadedIndex` stays null, because nothing opens.
+- The join follows the rules of a preload: it is not armed with `gapless` off or `preloadNext` at
+  zero, under `LoopMode.One`, an armed A-B loop or `SleepTimer.EndOfItem`, or while the next item
+  is preloading. Whenever the next item stops being such a part, by a queue edit, a shuffle, a loop
+  or a timer, the join is withdrawn and the current item ends exactly at its end. If the next item's
+  sound is already in the ring by then, the player goes back to the sound heard by a precise seek,
+  and the item still ends there. The next item then opens the old way.
+
 ## Fallbacks
 
 When the handoff cannot run, the player warns `PlaybackWarning.GaplessFallback` with the queue
@@ -130,14 +261,18 @@ stops, `Ended` fires, and the next item opens with a device of its own. These ar
 - The preload failed to open, or a worker of the preload failed.
 - The preload was still opening or priming when the current item had written all its sound and
   the ring held less than 40 ms of it. Until then the player waits for the next item.
-- The current item or the next item has no selected audio track.
+- One of the two items has a selected audio track and the other has none.
+- The current item has no selected audio track and no picture to time the join, or its picture
+  was turned off during the handoff.
+- The current item has no selected audio track, and the preload was still opening or priming
+  when the slot of its last picture ended.
 - The sample rate or the channel count of the next item differs from the format that the device
   was opened for.
-- The next item has a start position.
 
 When the reason is the audio of the next item, its format or a missing track, the preload stays
 and the next item opens from it, without a second open of its source. For the other reasons the
-next item opens from scratch.
+next item opens from scratch. A repeat's next pass is released for every reason, because its old
+path seeks back rather than opening anything.
 
 After a fallback the player does not try the same two items again while the current item stays
 open.
@@ -154,7 +289,9 @@ Every action that drops a preload also cancels a handoff that has started:
 2. The device stops and the ring is cleared. The current item loses at most one ring depth of its
    end.
 3. The preload is released.
-4. The action runs against the current item, which is at its end.
+4. The action runs against the current item, which is at its end. When the next pass was an A-B
+   loop's at a B inside the item, the current pass is not at its end: it carries on from where its
+   sound was heard, by a precise seek.
 
 ## How the tests check it
 
@@ -169,3 +306,29 @@ Every action that drops a preload also cancels a handoff that has started:
   check: one open, and no stop, pause or drain between the items.
 - On the CI emulator, a video queue on the Compose GPU path plays on one AudioTrack, and the
   renderer shows the second item's pictures from its new decoder.
+- A scripted item of four seconds plays for 18 seconds under `LoopMode.One`. The device sees one
+  open and one start and nothing else, the status never leaves `Playing`, the position wraps four
+  times, `Ended` fires four times and `Opened` once. With the loop turned off during a pass, every
+  sample of each pass is heard and the last pass ends as an item ends. The chosen audio track, a
+  chosen container subtitle over the automatic one and an external subtitle file read once all
+  carry on across the join.
+- The same item loops from 1 s to 3 s for 10 seconds. The device sees one open and one start and
+  nothing else, the status never leaves `Playing`, the position wraps four times and `Ended` never
+  fires. With the loop cleared during a pass, the device has heard each section once, cut at A and
+  B to within a few samples of what a precise seek to A plays. A loop from 1 s with no B, or with
+  a B past the end, wraps at the end of the item and fires `Ended`. With video, no picture at or
+  after B shows, and none before A after a wrap. Each of these has a test of its own: a seek
+  inside the section, a seek past B, a section of a quarter second, a B between two decoded
+  buffers, a seek inside a section shorter than the ring, a section set behind the sound already
+  written, a turn that starts too near B, a pass still opening when the sound reaches B, the loop
+  cleared while the sound waits at B and after the next pass took the ring, an audio track chosen
+  at B, the player's own seek while the sound waits at B, a B moved during a pass, the end-of-item
+  sleep timer, the gapless handoff turned off, and a loop armed before a source that cannot seek
+  opens.
+- A scripted item of four seconds with video and no audio plays for 18 seconds under
+  `LoopMode.One`: the status never leaves `Playing`, the position wraps four times, each pass shows
+  every picture once, and every picture's target time is one frame period after the one before,
+  across each join too. The same holds for a loop from 1 s to 3 s, with no picture at or after B
+  and none before A after a wrap, and for a queue of two silent items. A pause on the last picture
+  joins on resume, a silent item followed by one with sound falls back, and so do a preload still
+  opening when the pictures run out and a silent item whose picture is off.

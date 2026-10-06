@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.internal
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import kotlin.math.min
+import kotlin.math.pow
 
 /**
  * A channel layout this mixer has a matrix for, identified by the native order mask.
@@ -216,6 +217,40 @@ internal class ChannelMixer(
     }
 
     /**
+     * The source channel of a centre that the matrix folds into other speakers, which the dialogue
+     * level scales (#442), or -1. A centre some output keeps whole is a centre speaker's, and stays.
+     */
+    private val foldedCenter: Int = foldedCenterOf(matrix, sourceMask, sourceChannels, targetChannels)
+
+    /** The dialogue level as a factor: where the centre stands, where it goes, and the frames of ramp left. */
+    private var dialogue = 1f
+    private var dialogueFrom = 1f
+    private var dialogueTarget = 1f
+    private var dialogueRampLeft = 0
+    private val dialogueRampFrames = (source.sampleRate / 100).coerceAtLeast(1)
+
+    /** True once audio has passed, after which a dialogue change ramps rather than jumps. */
+    private var started = false
+
+    /**
+     * Raises or lowers a folded centre by [db] decibels (#442), ramping over ten milliseconds once
+     * audio has passed, so a change never clicks. A mix with no folded centre ignores it.
+     */
+    fun setDialogueLevel(db: Float) {
+        if (foldedCenter < 0) return
+        val next = if (db == 0f) 1f else 10f.pow(db / 20f)
+        if (next == dialogueTarget) return
+        dialogueTarget = next
+        if (!started) {
+            dialogue = next
+            dialogueRampLeft = 0
+        } else {
+            dialogueFrom = dialogue
+            dialogueRampLeft = dialogueRampFrames
+        }
+    }
+
+    /**
      * Mixes [frames] sample frames of interleaved [input] into interleaved [output].
      *
      * The two arrays are never the same array: the channel count changes, so a mix in place would
@@ -230,9 +265,15 @@ internal class ChannelMixer(
             "$frames frames of $targetChannels channels need ${frames * targetChannels} values, got ${output.size}"
         }
 
+        started = true
         val rows = matrix
         if (rows == null) {
             passThrough(input, output, frames)
+            return
+        }
+        val center = foldedCenter
+        if (center >= 0 && (dialogue != 1f || dialogueRampLeft > 0)) {
+            mixWithDialogue(rows, center, input, output, frames)
             return
         }
 
@@ -244,6 +285,35 @@ internal class ChannelMixer(
                 var sum = 0f
                 for (channel in 0 until sourceChannels) {
                     sum += rows[row + channel] * input[inBase + channel]
+                }
+                output[outBase + out] = sum
+            }
+            if (lowPass != null) {
+                val at = outBase + lowPassChannel
+                output[at] = lowPass.step(output[at].toDouble(), lowPassState, 0).toFloat()
+            }
+            inBase += sourceChannels
+            outBase += targetChannels
+        }
+    }
+
+    /** [mix], with the folded centre's column scaled by the dialogue level as it ramps. */
+    private fun mixWithDialogue(rows: FloatArray, center: Int, input: FloatArray, output: FloatArray, frames: Int) {
+        var inBase = 0
+        var outBase = 0
+        for (frame in 0 until frames) {
+            if (dialogueRampLeft > 0) {
+                dialogueRampLeft--
+                val weight = 1f - dialogueRampLeft.toFloat() / dialogueRampFrames
+                dialogue = dialogueFrom + (dialogueTarget - dialogueFrom) * weight
+                if (dialogueRampLeft == 0) dialogue = dialogueTarget
+            }
+            for (out in 0 until targetChannels) {
+                val row = out * sourceChannels
+                var sum = 0f
+                for (channel in 0 until sourceChannels) {
+                    val sample = input[inBase + channel]
+                    sum += rows[row + channel] * (if (channel == center) sample * dialogue else sample)
                 }
                 output[outBase + out] = sum
             }
@@ -307,6 +377,18 @@ internal class ChannelMixer(
     internal companion object {
         /** -3 dB as an amplitude factor, which is `1 / sqrt(2)`. */
         const val MINUS_3_DB: Float = 0.70710678f
+
+        /**
+         * The source channel of the front centre in [sourceMask] when [matrix] folds it into other
+         * speakers rather than keeping it whole in one, or -1.
+         */
+        private fun foldedCenterOf(matrix: FloatArray?, sourceMask: Long?, sourceChannels: Int, targetChannels: Int): Int {
+            if (matrix == null || sourceMask == null || !has(sourceMask, FRONT_CENTER_BIT)) return -1
+            val center = (sourceMask and ((1L shl FRONT_CENTER_BIT) - 1)).countOneBits()
+            if (center >= sourceChannels) return -1
+            val kept = (0 until targetChannels).any { out -> matrix[out * sourceChannels + center] == 1f }
+            return if (kept) -1 else center
+        }
 
         /** A layout's name when it is one of the nine, and its mask otherwise. */
         private fun describe(mask: Long?): String =

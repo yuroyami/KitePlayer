@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import io.github.yuroyami.kiteplayer.spi.toneMapPeakNits
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
@@ -137,7 +138,7 @@ internal class MetalFrameComposer(
         pictureColor = frame.colorSpace
         val dstPeak = SDR_WHITE_NITS * (extendedRangeHeadroom?.coerceAtLeast(1f) ?: 1f)
         val toneUniforms = if (toneMapped) {
-            packToneUniforms(frame.colorSpace, dstPeak, frame.hdr?.peakNits)
+            packToneUniforms(frame.colorSpace, dstPeak, frame.toneMapPeakNits)
         } else {
             DISABLED_TONE_UNIFORMS
         }
@@ -192,19 +193,7 @@ internal class MetalFrameComposer(
                 }
                 encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
 
-                if (overlay != null && overlay.images.isNotEmpty()) {
-                    refreshOverlayTextures(overlay, viewportWidth, viewportHeight)
-                    encoder.setRenderPipelineState(
-                        if (extendedRangeHeadroom == null) overlayPipeline else pipelines.overlayLinear,
-                    )
-                    overlayTextures.forEach { (quadUniforms, texture) ->
-                        quadUniforms.usePinned { pinned ->
-                            encoder.setVertexBytes(pinned.addressOf(0), (quadUniforms.size * 4).toULong(), atIndex = 0u)
-                        }
-                        encoder.setFragmentTexture(texture, atIndex = 0u)
-                        encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
-                    }
-                }
+                drawOverlay(encoder, overlay, viewportWidth, viewportHeight, extendedRangeHeadroom)
             } finally {
                 encoder.endEncoding()
             }
@@ -224,6 +213,63 @@ internal class MetalFrameComposer(
 
     /** The most recently committed buffer; the serial queue makes waiting on it wait on all. */
     private var lastCommands: MTLCommandBufferProtocol? = null
+
+    /**
+     * Clears [target] to the black the bars are drawn in and draws [overlay] over it, with no
+     * picture: what a renderer shows while no picture plays. The arguments mean what they mean
+     * to [encode].
+     *
+     * @return the command buffer, already committed.
+     */
+    fun encodeBackground(
+        target: MTLTextureProtocol,
+        overlay: SubtitleOverlay?,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        presentDrawable: platform.QuartzCore.CAMetalDrawableProtocol? = null,
+        extendedRangeHeadroom: Float? = null,
+    ): MTLCommandBufferProtocol {
+        val commands = checkNotNull(queue.commandBuffer()) { "Metal refused a command buffer" }
+        val pass = MTLRenderPassDescriptor()
+        val attachment = pass.colorAttachments.objectAtIndexedSubscript(0u)
+        attachment.texture = target
+        attachment.loadAction = MTLLoadActionClear
+        attachment.storeAction = MTLStoreActionStore
+        val encoder = checkNotNull(commands.renderCommandEncoderWithDescriptor(pass)) {
+            "Metal refused a render encoder"
+        }
+        try {
+            drawOverlay(encoder, overlay, viewportWidth, viewportHeight, extendedRangeHeadroom)
+        } finally {
+            encoder.endEncoding()
+        }
+        if (presentDrawable != null) commands.presentDrawable(presentDrawable)
+        commands.commit()
+        lastCommands = commands
+        return commands
+    }
+
+    /** Draws [overlay]'s quads into the pass [encoder] belongs to, above whatever it drew before. */
+    private fun drawOverlay(
+        encoder: platform.Metal.MTLRenderCommandEncoderProtocol,
+        overlay: SubtitleOverlay?,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        extendedRangeHeadroom: Float?,
+    ) {
+        if (overlay == null || overlay.images.isEmpty()) return
+        refreshOverlayTextures(overlay, viewportWidth, viewportHeight)
+        encoder.setRenderPipelineState(
+            if (extendedRangeHeadroom == null) overlayPipeline else pipelines.overlayLinear,
+        )
+        overlayTextures.forEach { (quadUniforms, texture) ->
+            quadUniforms.usePinned { pinned ->
+                encoder.setVertexBytes(pinned.addressOf(0), (quadUniforms.size * 4).toULong(), atIndex = 0u)
+            }
+            encoder.setFragmentTexture(texture, atIndex = 0u)
+            encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
+        }
+    }
 
     /** Binds the picture's planes and the four uniform blocks that [picturePipeline] reads. */
     private fun bindPicture(
@@ -502,4 +548,4 @@ private const val KERNEL_FLAG = 4
 private const val LINEAR_LIGHT_FLAG = 8
 
 /** A quad over the whole target with the picture upright as stored: the light pass's geometry. */
-private val LIGHT_PASS_QUAD = floatArrayOf(1f, 1f, 1f, 0f, 0f, 1f, 0f, 0f)
+private val LIGHT_PASS_QUAD = floatArrayOf(1f, 1f, 1f, 0f, 0f, 1f, 0f, 0f, 0f, 0f)

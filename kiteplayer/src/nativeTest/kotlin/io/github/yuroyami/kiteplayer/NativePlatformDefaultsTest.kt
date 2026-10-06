@@ -10,6 +10,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * What `KitePlayer()` and the default stack answer on each Kotlin/Native target.
@@ -37,7 +38,8 @@ class NativePlatformDefaultsTest {
                 val refusal = assertFailsWith<PlaybackException> { KitePlayer() }
                 assertTrue(unavailable.reason in refusal.message.orEmpty(), "the refusal does not carry the reason: ${refusal.message}")
             }
-            else -> println("SKIP: no default stack is declared for ${Platform.osFamily}")
+            // A new target fails here until its answer is written down (#419).
+            else -> fail("no default stack is declared for ${Platform.osFamily}")
         }
     }
 
@@ -46,7 +48,8 @@ class NativePlatformDefaultsTest {
         when (Platform.osFamily) {
             OsFamily.LINUX, OsFamily.WINDOWS -> assertFalse(KitePlayer.supportsPictureInPicture)
             // Apple answers the system's own static; ApplePlatformDefaultsTest checks that answer.
-            else -> println("SKIP: ${Platform.osFamily} answers picture in picture from the system")
+            OsFamily.MACOSX, OsFamily.IOS -> Unit
+            else -> fail("no picture in picture answer is declared for ${Platform.osFamily}")
         }
     }
 }

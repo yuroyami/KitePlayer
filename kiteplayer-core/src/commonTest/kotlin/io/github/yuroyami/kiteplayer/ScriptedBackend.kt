@@ -68,6 +68,14 @@ internal data class ScriptedAudioTrack(
     val packetDurationKnown: Boolean = true,
     /** The stream's own tags, such as a ReplayGain gain that overrides the container's. */
     val metadata: Map<String, String> = emptyMap(),
+    /**
+     * When the stream first appears, as a live transport stream's sound can a few seconds in (#509).
+     * Null lists it at the open. A later one is listed by the first packet read at or past it, and
+     * its packets start there.
+     */
+    val appearsAtUs: Long? = null,
+    /** A multiplier per channel, so a test can tell the sides apart (#462). Null is 1 on every one. */
+    val channelMarkers: List<Float>? = null,
 ) {
     fun format(defaultSampleRate: Int, defaultChannels: Int): AudioFormat = AudioFormat(
         sampleRate = sampleRate ?: defaultSampleRate,
@@ -91,6 +99,19 @@ internal data class ScriptedSubtitleTrack(
     val isForced: Boolean = false,
     /** False makes the scripted decoder factory refuse this specific track. */
     val decoderAccepted: Boolean = true,
+    /** True makes this track's decoder refuse every packet, as a decoder that is full does. */
+    val refusesPackets: Boolean = false,
+    /**
+     * True makes this track's decoder hold its last cue until the null packet that ends the
+     * stream, as FFmpeg's caption decoder holds the caption on screen.
+     */
+    val holdsLastCue: Boolean = false,
+    /** True makes this track's decoder refuse that null packet every time it is offered. */
+    val refusesDrain: Boolean = false,
+    /** When the stream first appears, as [ScriptedAudioTrack.appearsAtUs] says for a sound (#509). */
+    val appearsAtUs: Long? = null,
+    /** The codec name this stream declares, in place of [MediaScript.subtitleCodec]. */
+    val codec: String? = null,
 ) {
     val cuesByStart: Map<Long, List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
         cues.groupBy { it.startMicros }
@@ -112,6 +133,22 @@ internal data class ScriptedSubtitleTrack(
 
 internal class MediaScript(
     val durationUs: Long = 4_000_000,
+    /**
+     * The length the scripted container declares, when it is not [durationUs], the length it
+     * really plays. With [durationIsEstimate] it models FFmpeg's guess from the bit rate (#422).
+     */
+    val declaredDurationUs: Long? = null,
+    val durationIsEstimate: Boolean = false,
+    /** The declared length as it stands at each read, for a file still being written (#430). Overrides [declaredDurationUs]. */
+    val declaredDurationNowUs: (() -> Long)? = null,
+    /** True models an HLS master whose sounds are renditions downloaded on their own (#455). */
+    val separateAudioRenditions: Boolean = false,
+    /**
+     * The closed captions each decoded picture carries, by its time, or null for none (#236). The
+     * scripted caption decoder reads the bytes as text: a cue that holds until the next, and
+     * [SCRIPTED_CAPTION_CLEAR] an empty one that clears the screen.
+     */
+    val videoCaptions: ((ptsUs: Long) -> String?)? = null,
     val hasVideo: Boolean = true,
     val hasAudio: Boolean = true,
     /** The chapter table the scripted container declares. */
@@ -135,6 +172,8 @@ internal class MediaScript(
     val videoIsCoverArt: Boolean = false,
     /** The quarter turn the scripted video stream declares, as a phone recording on its side does. */
     val videoRotationDegrees: Int = 0,
+    /** The video stream's colour as the container states it, or null for none stated (#499). */
+    val videoColor: io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo? = null,
     val seekable: Boolean = true,
     /** Extra container tags, for the suites that read them. Merged over the harness's own three. */
     val containerTags: Map<String, String> = emptyMap(),
@@ -174,6 +213,10 @@ internal class MediaScript(
     val attachments: List<io.github.yuroyami.kiteplayer.spi.MediaAttachment> = emptyList(),
     /** Counts the scripted decoder's work without putting timing assumptions into a virtual-time test. */
     val subtitleProbe: ScriptedSubtitleProbe = ScriptedSubtitleProbe(),
+    /** The scripted subtitle track's decoder holds its last cue until the end-of-stream drain. */
+    val subtitleHoldsLastCue: Boolean = false,
+    /** The scripted subtitle track's decoder refuses the end-of-stream drain every time. */
+    val subtitleRefusesDrain: Boolean = false,
     /** Extra container audio tracks. Explicit indices make identity assertions unambiguous. */
     val additionalAudioTracks: List<ScriptedAudioTrack> = emptyList(),
     /** Fields the container declares one way and the decoder answers another. */
@@ -184,8 +227,14 @@ internal class MediaScript(
     val recordable: Boolean = false,
     /** The first audio stream's own tags. */
     val audioMetadata: Map<String, String> = emptyMap(),
+    /** The default audio track's multiplier per channel, so a test can tell the sides apart (#462). */
+    val audioChannelMarkers: List<Float>? = null,
+    /** Stretches, in microseconds, whose audio buffers are digital silence, as a podcast's pauses are (#429). */
+    val audioSilentUs: List<LongRange> = emptyList(),
     /** The variants the source offers, as an HLS master playlist would. The item's choice picks one. */
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
+    /** The seek bar pictures the scripted stream carries, or null (#433). */
+    val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? = null,
     /** A read delay for one variant, in place of [readDelayUs]: a link too slow for that variant. */
     val readDelayUsByVariant: Map<Int, Long> = emptyMap(),
     /**
@@ -194,7 +243,80 @@ internal class MediaScript(
      * so the same link is fast for a low variant and slow for a high one. Null is no link.
      */
     val linkBitsPerSecond: ((clockUs: Long) -> Long)? = null,
+    /**
+     * True makes the source a sender that pushes in real time, as a camera does (#395): a packet
+     * arrives when the test's clock reaches its time, counted from the source's creation, and the
+     * source says it is real time and has no duration.
+     */
+    val live: Boolean = false,
+    /**
+     * Stretches of the test's clock, in microseconds from the source's creation, in which nothing
+     * arrives. The packets due inside one arrive together at its end, as they do from a network that
+     * stalls and then delivers.
+     */
+    val liveHolds: List<LongRange> = emptyList(),
+    /**
+     * True makes the live sender one that takes a pause, as an RTSP camera does (#441): the source's
+     * pauseReading answers true and stops the sender, and resumeReading starts it again at the live
+     * edge, so what was sent meanwhile is never read.
+     */
+    val livePause: Boolean = false,
+    /**
+     * How long, in microseconds, the live sender keeps a session it hears nothing from, as an RTSP
+     * server does. A read, a pause and a resume are each a request it hears. Past it the session is
+     * gone, and every call after that fails. Null keeps a session for ever.
+     */
+    val liveSessionTimeoutUs: Long? = null,
+    /**
+     * When the live sender ends the session whatever it hears, in microseconds of its own time, as a
+     * camera that restarts does. Every call after that fails. A source opened again starts its own
+     * time from zero.
+     */
+    val liveSessionEndsAtUs: Long? = null,
+    /** True makes the live sender refuse every resume, as a server that dropped the session does. */
+    val liveResumeRefused: Boolean = false,
+    /**
+     * True makes every other picture between keyframes one no other picture is built on, as the
+     * B-frames of a stream coded I, B, P, B, P are, and the scripted video decoder then skips those
+     * when the engine asks it to (#468).
+     */
+    val alternateFramesAreNonReference: Boolean = false,
+    /** What the scripted video decoder decoded and skipped, by packet time. */
+    val videoProbe: ScriptedVideoProbe = ScriptedVideoProbe(),
+    /** The channels the container declares, as a transport stream multiplex does (#505). */
+    val programs: List<io.github.yuroyami.kiteplayer.MediaProgram> = emptyList(),
+    /**
+     * The channels from a time on, as a live multiplex announces them in a new programme table
+     * (#509). Each applies from the first packet read at or past its time.
+     */
+    val programChanges: List<Pair<Long, List<io.github.yuroyami.kiteplayer.MediaProgram>>> = emptyList(),
+    /**
+     * The container's tags that change from a time on, as a radio station's next song does (#423).
+     * Each is merged over the tags before it and announced, whole, on the first packet read at or
+     * past its time.
+     */
+    val tagChanges: List<Pair<Long, Map<String, String>>> = emptyList(),
+    /**
+     * When the picture first appears, as [ScriptedAudioTrack.appearsAtUs] says for a sound (#527): a
+     * slideshow a radio service adds, or a channel joined during a break with no picture. Its first
+     * packet is the first frame on the grid at or past this time, which need not be a keyframe.
+     */
+    val videoAppearsAtUs: Long? = null,
+    /** Where the picture stops being carried, as a channel that moves it to a new stream does (#527). */
+    val videoEndUs: Long? = null,
+    /**
+     * The stream a channel's picture moves to at [videoEndUs] (#527), on the same grid and with the
+     * same keyframes from there on. Null is no second picture.
+     */
+    val movedVideoIndex: Int? = null,
 ) {
+    /** Whether the picture at [ptsUs] is one nothing is built on, under [alternateFramesAreNonReference]. */
+    fun isNonReferenceVideo(ptsUs: Long, isKeyframe: Boolean): Boolean {
+        if (!alternateFramesAreNonReference || isKeyframe) return false
+        val index = videoTimestampsUs?.indexOf(ptsUs)?.toLong() ?: (ptsUs / videoFrameDurationUs)
+        return index % 2 == 1L
+    }
+
     val videoIndex: Int = 0
     val audioIndex: Int = if (hasVideo) 1 else 0
     val subtitleIndex: Int = (if (hasVideo) 1 else 0) + (if (hasAudio) 1 else 0)
@@ -212,6 +334,7 @@ internal class MediaScript(
                     channels = channels,
                     isDefault = true,
                     metadata = audioMetadata,
+                    channelMarkers = audioChannelMarkers,
                 ),
             )
         }
@@ -227,6 +350,8 @@ internal class MediaScript(
                     language = subtitleLanguage,
                     title = "scripted subtitle A",
                     isDefault = true,
+                    holdsLastCue = subtitleHoldsLastCue,
+                    refusesDrain = subtitleRefusesDrain,
                 ),
             )
         }
@@ -255,6 +380,11 @@ internal class MediaScript(
     /** The first video timestamp: zero on the grid, the first listed one otherwise. */
     val firstVideoPtsUs: Long get() = videoTimestampsUs?.first() ?: 0L
 
+    /** The first video timestamp at or past [atUs]. */
+    fun firstVideoAtOrAfter(atUs: Long): Long =
+        videoTimestampsUs?.firstOrNull { it >= atUs }
+            ?: if (atUs <= firstVideoPtsUs) firstVideoPtsUs else (atUs + videoFrameDurationUs - 1) / videoFrameDurationUs * videoFrameDurationUs
+
     /** The video timestamp after [pts], or [durationUs] when [pts] is the last one. */
     fun videoPtsAfter(pts: Long): Long =
         videoTimestampsUs?.let { list -> list.firstOrNull { it > pts } ?: durationUs }
@@ -268,6 +398,13 @@ internal class MediaScript(
         videoKeyframesUs?.let { keys -> keys.filter { it <= aimedUs }.maxOrNull() ?: keys.min() }
             ?: (aimedUs / keyframeIntervalUs * keyframeIntervalUs)
 
+    /** The first keyframe at or after [aimedUs], or null when none follows it. */
+    fun keyframeAtOrAfter(aimedUs: Long): Long? {
+        val keys = videoKeyframesUs ?: return ((aimedUs + keyframeIntervalUs - 1) / keyframeIntervalUs * keyframeIntervalUs)
+            .takeIf { it < durationUs }
+        return keys.filter { it >= aimedUs }.minOrNull()
+    }
+
     init {
         videoTimestampsUs?.let { list ->
             require(list.isNotEmpty() && list.zipWithNext().all { (a, b) -> a < b } && list.last() < durationUs) {
@@ -278,8 +415,12 @@ internal class MediaScript(
                 "the keyframes $keys must be among the timestamps $list and include the first"
             }
         }
+        require(movedVideoIndex == null || (hasVideo && videoEndUs != null)) {
+            "a picture moves to a new stream only from one that ends"
+        }
         val streamIndices = buildList {
             if (hasVideo) add(videoIndex)
+            movedVideoIndex?.let(::add)
             addAll(audioTracks.map { it.index })
             addAll(subtitleTracks.map { it.index })
         }
@@ -315,7 +456,20 @@ internal class ScriptedSubtitlePacket(
  * [onPacketSent] also lets a test enqueue a real player command from inside the actor's subtitle
  * drain, reproducing a command that arrives concurrently on a device without thread races.
  */
+/** The packet times the scripted video decoder decoded and skipped, in microseconds, in order. */
+internal class ScriptedVideoProbe {
+    val decodedUs: MutableList<Long> = mutableListOf()
+    val skippedUs: MutableList<Long> = mutableListOf()
+
+    fun clear() {
+        decodedUs.clear()
+        skippedUs.clear()
+    }
+}
+
 internal class ScriptedSubtitleProbe {
+    /** How many end-of-stream drains the scripted subtitle decoders took. */
+    var drains: Int = 0
     var packetsSent: Int = 0
         private set
     var cueLookups: Int = 0
@@ -488,14 +642,23 @@ internal class ScriptedSubtitleDecoder(
     private val probe: ScriptedSubtitleProbe,
 ) : SubtitleDecoder {
     private val pending = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
+    private val held = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
+    private val lastStart = track.cues.maxOfOrNull { it.startMicros }
     var closed: Boolean = false
         private set
 
     override suspend fun send(packet: PlayerPacket?): Boolean {
-        if (packet == null) return true
+        if (packet == null) {
+            if (track.refusesDrain) return false
+            probe.drains++
+            pending.addAll(held)
+            held.clear()
+            return true
+        }
+        if (track.refusesPackets) return false
         val pts = packet.pts?.micros ?: return true
         val cues = track.cuesByStart[pts].orEmpty()
-        pending.addAll(cues)
+        if (track.holdsLastCue && pts == lastStart) held.addAll(cues) else pending.addAll(cues)
         probe.recordLookup(cues.size)
         return true
     }
@@ -509,10 +672,49 @@ internal class ScriptedSubtitleDecoder(
 
     override suspend fun flush(newGeneration: Generation) {
         pending.clear()
+        held.clear()
     }
 
     override fun close() {
         closed = true
+    }
+}
+
+/** What a scripted picture's captions say to clear the screen (#236). */
+internal const val SCRIPTED_CAPTION_CLEAR: String = "<clear>"
+
+/**
+ * The decoder of the captions inside a scripted picture (#236), answering in real time as the
+ * FFmpeg backend's does: each packet's text is the screen from the packet's time, until the next.
+ */
+internal object ScriptedCaptionDecoderFactory : SubtitleDecoderFactory {
+    override val name: String = "scripted-captions"
+
+    override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? {
+        if (stream.codec != io.github.yuroyami.kiteplayer.spi.CLOSED_CAPTIONS_CODEC) return null
+        return object : SubtitleDecoder {
+            private val pending = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
+
+            override suspend fun send(packet: PlayerPacket?): Boolean {
+                val pts = packet?.pts?.micros ?: return true
+                val text = packet.copyBytes().decodeToString()
+                val spans = if (text == SCRIPTED_CAPTION_CLEAR) emptyList() else listOf(io.github.yuroyami.kiteplayer.subtitle.StyledSpan(text))
+                pending.addLast(io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(pts, io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.OPEN_END, spans))
+                return true
+            }
+
+            override suspend fun receive(): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> {
+                val out = pending.toList()
+                pending.clear()
+                return out
+            }
+
+            override suspend fun flush(newGeneration: Generation) {
+                pending.clear()
+            }
+
+            override fun close() = Unit
+        }
     }
 }
 
@@ -538,6 +740,9 @@ internal class ScriptedBackend(
     /** Completed by a test to let a suspended [open] finish. Null means open does not wait. */
     var openGate: CompletableDeferred<Unit>? = null
 
+    /** How long each [open] takes on the test's clock, as a source slow to open does. */
+    var openDelay: Duration = Duration.ZERO
+
     /** Thrown by [open] instead of returning a session. */
     var openFailure: Throwable? = null
 
@@ -560,6 +765,9 @@ internal class ScriptedBackend(
      * with no tables. The real tables live in kiteplayer-subtitles, above this module's arrow.
      */
     var textDecoder: ((ByteArray, String) -> String?)? = null
+
+    /** The parser's reader of the other formats (#492), as the FFmpeg backend's asks FFmpeg. */
+    var otherSubtitleReader: (suspend (bytes: ByteArray, text: String, uri: String) -> io.github.yuroyami.kiteplayer.spi.SubtitleFileReading?)? = null
 
     /**
      * A ten-line SRT-only parser for the external-subtitle tests. The real WebVTT and
@@ -584,6 +792,22 @@ internal class ScriptedBackend(
                     }
                     .toList()
             }
+            // A one-stamp LRC branch for the engine's labelling of lyrics (#443): the real reader
+            // lives in kiteplayer-subtitles too.
+            val lrcLine = Regex("""^\[(\d{2}):(\d{2})\.(\d{2})\](.*)$""")
+            if (text.trimStart().startsWith("[")) {
+                val stamped = text.lines().mapNotNull { lrcLine.matchEntire(it.trim())?.groupValues }
+                if (stamped.isNotEmpty()) {
+                    return@SubtitleFileParser stamped.map { (_, min, s, cs, words) ->
+                        val start = ((min.toLong() * 60 + s.toLong()) * 100 + cs.toLong()) * 10_000
+                        io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(
+                            startMicros = start,
+                            endMicros = start + 1_000_000,
+                            spans = listOf(io.github.yuroyami.kiteplayer.subtitle.StyledSpan(words)),
+                        )
+                    }
+                }
+            }
             val timing = Regex("""(\d{2}):(\d{2}):(\d{2})[,.](\d{3}) --> (\d{2}):(\d{2}):(\d{2})[,.](\d{3})""")
             text.split(Regex("\r?\n\r?\n")).mapNotNull { block ->
                 val lines = block.trim().lines()
@@ -605,6 +829,9 @@ internal class ScriptedBackend(
         return object : io.github.yuroyami.kiteplayer.spi.SubtitleFileParser by parse {
             override fun decode(bytes: ByteArray, encoding: String): String? =
                 textDecoder?.invoke(bytes, encoding)
+
+            override suspend fun parseOther(bytes: ByteArray, text: String, uri: String) =
+                otherSubtitleReader?.invoke(bytes, text, uri)
         }
     }
 
@@ -615,6 +842,7 @@ internal class ScriptedBackend(
         openCalls++
         lastOpenedItem = media
         openGate?.await()
+        if (openDelay > Duration.ZERO) delay(openDelay)
         openFailure?.let { throw it }
         openFailureFor?.invoke(media)?.let { throw it }
         // A real demuxer reads bytes; this one is scripted and normally does not. When the item
@@ -624,15 +852,22 @@ internal class ScriptedBackend(
         val io = media.io?.open()
         repeat(readsDuringOpen) { io?.read(openScratch, 0, openScratch.size) }
         val itemScript = scriptFor?.invoke(media) ?: script
-        // The variant the item asks for, or else the highest bitrate within the item's caps, as the
-        // FFmpeg backend chooses.
+        // The variant the item asks for, or else the highest bitrate within the item's caps and its
+        // fit, in the dynamic range the fit prefers, as the FFmpeg backend chooses (#447).
         val variant = if (itemScript.variants.isEmpty()) {
             null
         } else {
+            val showsHdr = media.demux.fit?.showsHdr == true
+            val pool = itemScript.variants.filter { it.hdr == showsHdr }.ifEmpty { itemScript.variants }
+            val pixelCap = media.demux.fit?.pixelCap(pool.mapNotNull { variant ->
+                variant.width?.let { width -> variant.height?.let { VideoSize(width, it) } }
+            })
             media.demux.variant?.takeIf { it in itemScript.variants.indices }
-                ?: itemScript.variants.filter { candidate ->
+                ?: pool.filter { candidate ->
                     (media.demux.maxBitrate?.let { candidate.bitrate <= it } ?: true) &&
-                        (media.demux.maxVideoHeight?.let { cap -> candidate.height?.let { it <= cap } ?: true } ?: true)
+                        (media.demux.maxVideoHeight?.let { cap -> candidate.height?.let { it <= cap } ?: true } ?: true) &&
+                        (pixelCap == null || candidate.width == null || candidate.height == null ||
+                            candidate.width.toLong() * candidate.height <= pixelCap)
                 }.maxByOrNull { it.bitrate }?.index
                 ?: 0
         }
@@ -686,7 +921,10 @@ internal class ScriptedSession(
         )
 
     override val subtitleDecoders: List<SubtitleDecoderFactory> =
-        if (script.hasSubtitles) listOf(ScriptedSubtitleDecoderFactory(script, faults)) else emptyList()
+        listOfNotNull(
+            ScriptedSubtitleDecoderFactory(script, faults).takeIf { script.hasSubtitles },
+            ScriptedCaptionDecoderFactory.takeIf { script.videoCaptions != null },
+        )
 
     var closeCount: Int = 0
         private set
@@ -714,8 +952,12 @@ internal class ScriptedRecordingSource(private val inner: ScriptedSource) :
         recordingPath = path
     }
 
+    /** Runs inside every stop that ends a recording, before it does: a file whose trailer is slow to write. */
+    var finishing: (() -> Unit)? = null
+
     override fun stopRecording() {
         if (recordingPath == null) return
+        finishing?.invoke()
         calls += "stop"
         recordingPath = null
     }
@@ -742,6 +984,92 @@ internal class ScriptedSource(
 
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
 
+    override val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? get() = script.thumbnails
+
+    override var programs: List<io.github.yuroyami.kiteplayer.MediaProgram> = script.programs
+        private set
+
+    /** The streams that appear after the open which the reads have reached, and so listed (#509). */
+    private val lateListed = HashSet<Int>()
+
+    /** How many of [MediaScript.programChanges] the reads have reached. */
+    private var programChangesApplied = 0
+    private var tagChangesApplied = 0
+    private var currentTags: Map<String, String>? = null
+
+    private val lateAt: Map<Int, Long> = buildMap {
+        script.videoAppearsAtUs?.let { put(script.videoIndex, it) }
+        script.movedVideoIndex?.let { put(it, requireNotNull(script.videoEndUs)) }
+        script.audioTracks.forEach { track -> track.appearsAtUs?.let { put(track.index, it) } }
+        script.subtitleTracks.forEach { track -> track.appearsAtUs?.let { put(track.index, it) } }
+    }
+
+    /** When the live sender began, on the test's clock. */
+    val liveOriginNanos: Long = clock?.nanos() ?: 0L
+
+    /** Waits until the live sender's packet at [ptsUs] has arrived. */
+    private suspend fun waitForArrival(ptsUs: Long) {
+        if (!script.live) return
+        val clock = clock ?: return
+        val dueUs = script.liveHolds.firstOrNull { ptsUs in it }?.let { it.last + 1 } ?: ptsUs
+        val nowUs = (clock.nanos() - liveOriginNanos) / 1_000
+        if (dueUs > nowUs) delay((dueUs - nowUs).microseconds)
+    }
+
+    /** The live sender's own time, in microseconds since the source was created. */
+    private fun senderUs(): Long = clock?.let { (it.nanos() - liveOriginNanos) / 1_000 } ?: 0L
+
+    /** When the live sender last heard a request, by [senderUs]. */
+    private var heardAtUs = 0L
+
+    /** True once the live sender ended the session. */
+    private var sessionEnded = false
+
+    /** True while the live sender holds a pause. */
+    private var senderPaused = false
+
+    /** Calls of [pauseReading] and [resumeReading], whether or not they did anything. */
+    var pauseReadingCalls: Int = 0
+        private set
+    var resumeReadingCalls: Int = 0
+        private set
+
+    /** The live sender hears a request for [what], or fails it when the session is gone. */
+    private fun hear(what: String) {
+        if (!script.live) return
+        val nowUs = senderUs()
+        val timeoutUs = script.liveSessionTimeoutUs
+        if (timeoutUs != null && nowUs - heardAtUs > timeoutUs) sessionEnded = true
+        if (script.liveSessionEndsAtUs?.let { nowUs >= it } == true) sessionEnded = true
+        if (sessionEnded) error("the scripted sender ended the session before the $what")
+        heardAtUs = nowUs
+    }
+
+    override fun pauseReading(): Boolean {
+        pauseReadingCalls++
+        if (!script.live || !script.livePause) return false
+        hear("pause")
+        senderPaused = true
+        return true
+    }
+
+    override fun resumeReading(): Boolean {
+        resumeReadingCalls++
+        if (!senderPaused) return false
+        if (script.liveResumeRefused) error("the scripted sender refused to play on")
+        hear("resume")
+        senderPaused = false
+        // The sender sent nothing while paused, so the reads start again at its live edge.
+        val nowUs = senderUs()
+        videoCursorUs = maxOf(videoCursorUs, script.firstVideoAtOrAfter(nowUs))
+        script.audioTracks.forEach { track ->
+            val durationUs = audioDurationUs(track)
+            val cursorUs = audioCursorsUs.getValue(track.index)
+            if (cursorUs < nowUs) audioCursorsUs[track.index] = cursorUs + (nowUs - cursorUs + durationUs - 1) / durationUs * durationUs
+        }
+        return true
+    }
+
     /** How long [mediaUs] of the selected variant takes over the script's link. */
     private suspend fun waitForLink(mediaUs: Long) {
         val link = script.linkBitsPerSecond ?: return
@@ -752,7 +1080,11 @@ internal class ScriptedSource(
         if (waitUs > 0) delay(waitUs.microseconds)
     }
 
-    override val streams: List<PlayerStreamInfo> = buildList {
+    /** What the container lists now: every stream, less those that appear later and have not yet. */
+    override val streams: List<PlayerStreamInfo>
+        get() = allStreams.filter { stream -> stream.index !in lateAt || stream.index in lateListed }
+
+    private val allStreams: List<PlayerStreamInfo> = buildList {
         if (script.hasVideo) {
             add(
                 PlayerStreamInfo(
@@ -765,9 +1097,22 @@ internal class ScriptedSource(
                     frameRate = 1_000_000.0 / script.videoFrameDurationUs,
                     isCoverArt = script.videoIsCoverArt,
                     rotationDegrees = script.videoRotationDegrees,
+                    colorSpace = script.videoColor,
                     // A key with no TrackInfo field of its own, so a test can prove the raw tags
                     // travel and not just the two the type happens to parse.
                     metadata = mapOf("handler_name" to "scripted video handler"),
+                ),
+            )
+        }
+        script.movedVideoIndex?.let { index ->
+            add(
+                PlayerStreamInfo(
+                    index = index,
+                    kind = TrackKind.Video,
+                    codec = "scripted-video",
+                    startTime = Pts.Zero,
+                    videoSize = VideoSize(1920, 1080),
+                    frameRate = 1_000_000.0 / script.videoFrameDurationUs,
                 ),
             )
         }
@@ -776,7 +1121,7 @@ internal class ScriptedSource(
                 PlayerStreamInfo(
                     index = track.index,
                     kind = TrackKind.Subtitle,
-                    codec = script.subtitleCodec,
+                    codec = track.codec ?: script.subtitleCodec,
                     codecExtradata = script.subtitleHeader,
                     language = track.language,
                     title = track.title,
@@ -809,8 +1154,11 @@ internal class ScriptedSource(
         }
     }
 
-    override val duration: Pts = Pts(script.durationUs)
+    override val duration: Pts? get() = if (script.live) null else Pts(script.declaredDurationNowUs?.invoke() ?: script.declaredDurationUs ?: script.durationUs)
+    override val durationIsEstimate: Boolean get() = script.durationIsEstimate
+    override val separateAudioRenditions: Boolean get() = script.separateAudioRenditions
     override val seekable: Boolean = script.seekable
+    override val realTime: Boolean = script.live
     override val metadata: Map<String, String> =
         mapOf("title" to "scripted", "artist" to "the harness", "encoder" to "none") + script.containerTags
     override val chapters: List<Chapter> = script.chapters
@@ -823,9 +1171,10 @@ internal class ScriptedSource(
     override val timestampsMayJump: Boolean = false
 
     private var selected: Set<Int> = emptySet()
-    private var videoCursorUs = script.firstVideoPtsUs
+    private var videoCursorUs = script.firstVideoAtOrAfter(script.videoAppearsAtUs ?: script.firstVideoPtsUs)
+    private var movedVideoCursorUs = script.videoEndUs?.let(script::firstVideoAtOrAfter) ?: Long.MAX_VALUE
     private val audioCursorsUs: MutableMap<Int, Long> =
-        script.audioTracks.associate { it.index to 0L }.toMutableMap()
+        script.audioTracks.associate { it.index to (it.appearsAtUs ?: 0L) }.toMutableMap()
     private val subtitleCursors: MutableMap<Int, Int> =
         script.subtitleTracks.associate { it.index to 0 }.toMutableMap()
     private val subtitleSeekFloorsUs: MutableMap<Int, Long> =
@@ -840,6 +1189,9 @@ internal class ScriptedSource(
     var seeks: Int = 0
         private set
     val seekTargets: MutableList<Long> = mutableListOf()
+
+    /** The keyframe choice each seek asked for, beside [seekTargets]. */
+    val seekChoices: MutableList<KeyframeChoice> = mutableListOf()
     var selectCalls: Int = 0
         private set
     var interruptCalls: Int = 0
@@ -881,9 +1233,9 @@ internal class ScriptedSource(
     var closed: Boolean = false
         private set
 
+    /** Selects before the first read, and again between reads to add a stream that appeared (#509). */
     override fun selectStreams(indices: Set<Int>) {
         if (faults.failSelectStreams) error("scripted selectStreams failure")
-        check(selectCalls == 0) { "streams must be selected before the first read" }
         require(indices.isNotEmpty()) { "no selectable stream among $indices" }
         require(indices.all { wanted -> streams.any { it.index == wanted } }) {
             "unknown scripted stream in $indices"
@@ -941,6 +1293,25 @@ internal class ScriptedSource(
 
     private fun packetRead(packet: FakePacket): FakePacket {
         demuxFrontierUs = maxOf(demuxFrontierUs, packet.pts?.micros ?: demuxFrontierUs)
+        // A late stream and a new programme table are announced on the first packet that reaches them.
+        val at = packet.pts?.micros ?: return packet
+        val appeared = lateAt.filter { (index, from) -> index !in lateListed && from <= at }.keys
+        lateListed += appeared
+        var programsChanged = false
+        while (programChangesApplied < script.programChanges.size && script.programChanges[programChangesApplied].first <= at) {
+            programs = script.programChanges[programChangesApplied].second
+            programChangesApplied++
+            programsChanged = true
+        }
+        packet.newStreams = if (appeared.isNotEmpty()) streams else null
+        packet.newPrograms = if (programsChanged) programs else null
+        var tagsChanged = false
+        while (tagChangesApplied < script.tagChanges.size && script.tagChanges[tagChangesApplied].first <= at) {
+            currentTags = (currentTags ?: metadata) + script.tagChanges[tagChangesApplied].second
+            tagChangesApplied++
+            tagsChanged = true
+        }
+        packet.newContainerTags = if (tagsChanged) currentTags else null
         return packet
     }
 
@@ -950,6 +1321,8 @@ internal class ScriptedSource(
     override suspend fun readPacket(): PlayerPacket? {
         check(selectCalls > 0) { "selectStreams must be called before readPacket" }
         reads++
+        check(!senderPaused) { "read while the live sender was paused" }
+        hear("read")
         // What a real demuxer does and this one otherwise would not: pull bytes. Without it the
         // engine's byte cache is handed a reader nobody ever calls, and anything measuring what a
         // source delivered measures nothing at all.
@@ -961,12 +1334,19 @@ internal class ScriptedSource(
         val readDelayUs = selectedVariant?.let { script.readDelayUsByVariant[it] } ?: script.readDelayUs
         if (readDelayUs > 0) delay(readDelayUs / 1_000)
 
-        val video = script.videoIndex.takeIf {
-            script.hasVideo && it in selected && videoCursorUs < script.durationUs
+        val primaryVideo = script.hasVideo && script.videoIndex in selected &&
+            videoCursorUs < minOf(script.durationUs, script.videoEndUs ?: Long.MAX_VALUE)
+        val movedVideo = script.movedVideoIndex?.takeIf { it in selected && movedVideoCursorUs < script.durationUs }
+        // The picture that is due first, when two are read.
+        val video = when {
+            movedVideo != null && (!primaryVideo || movedVideoCursorUs < videoCursorUs) -> movedVideo
+            primaryVideo -> script.videoIndex
+            else -> null
         }
+        val videoAtUs = if (video == script.videoIndex) videoCursorUs else movedVideoCursorUs
         val audio = audioCandidate()
         val mediaCursor = minOf(
-            if (video != null) videoCursorUs else Long.MAX_VALUE,
+            if (video != null) videoAtUs else Long.MAX_VALUE,
             audio?.let { audioCursorsUs.getValue(it.index) } ?: Long.MAX_VALUE,
         )
         subtitleCandidate(mediaCursor)?.let { candidate ->
@@ -987,18 +1367,20 @@ internal class ScriptedSource(
             video == null -> false
             audio == null -> true
             script.badlyInterleaved -> true
-            else -> videoCursorUs <= audioCursorsUs.getValue(audio.index)
+            else -> videoAtUs <= audioCursorsUs.getValue(audio.index)
         }
         return when {
             pickVideo -> {
-                val pts = videoCursorUs
-                videoCursorUs = script.videoPtsAfter(pts)
-                waitForLink(videoCursorUs - pts)
+                val pts = videoAtUs
+                val next = script.videoPtsAfter(pts)
+                if (video == script.videoIndex) videoCursorUs = next else movedVideoCursorUs = next
+                waitForLink(next - pts)
+                waitForArrival(pts)
                 packetRead(
                     FakePacket(
-                        streamIndex = script.videoIndex,
+                        streamIndex = checkNotNull(video),
                         pts = Pts(pts),
-                        duration = Pts(videoCursorUs - pts),
+                        duration = Pts(next - pts),
                         isKeyframe = script.isVideoKeyframe(pts),
                         ledger = ledger,
                     ),
@@ -1008,6 +1390,7 @@ internal class ScriptedSource(
                 val pts = audioCursorsUs.getValue(audio.index)
                 val durationUs = audioDurationUs(audio)
                 audioCursorsUs[audio.index] = pts + durationUs
+                waitForArrival(pts)
                 packetRead(
                     FakePacket(
                         streamIndex = audio.index,
@@ -1023,14 +1406,24 @@ internal class ScriptedSource(
         }
     }
 
-    override suspend fun seekToKeyframe(target: Pts): Pts? {
+    override suspend fun seekToKeyframe(target: Pts): Pts? = seekToKeyframe(target, KeyframeChoice.Before)
+
+    override suspend fun seekToKeyframe(target: Pts, choice: KeyframeChoice): Pts? {
         check(selectCalls > 0) { "selectStreams must be called before seeking" }
+        check(choice != KeyframeChoice.InSeekDirection) { "the engine resolves the seek's direction itself" }
         seeks++
         if (faults.seekWedges && !wedgeReleased.isCompleted) wedge("seek")
         seekTargets += target.micros
+        seekChoices += choice
         trace.record("source.seek")
         val aimed = (target.micros + script.seekOvershootUs).coerceIn(0L, script.durationUs)
-        val landing = script.keyframeAtOrBefore(aimed)
+        val before = script.keyframeAtOrBefore(aimed)
+        val after = script.keyframeAtOrAfter(aimed)
+        val landing = when {
+            after == null || choice == KeyframeChoice.Before -> before
+            choice == KeyframeChoice.After -> after
+            else -> if (after - aimed < aimed - before) after else before
+        }
         for (track in script.subtitleTracks) {
             subtitleSeekFloorsUs[track.index] = landing
             // Redelivery starts at the landing in FILE order, exactly like a backward
@@ -1040,8 +1433,9 @@ internal class ScriptedSource(
                 it.startMicros >= landing
             }.takeIf { it >= 0 } ?: track.packets.size
         }
-        videoCursorUs = landing
-        script.audioTracks.forEach { audioCursorsUs[it.index] = landing }
+        videoCursorUs = maxOf(landing, script.videoAppearsAtUs?.let(script::firstVideoAtOrAfter) ?: Long.MIN_VALUE)
+        movedVideoCursorUs = script.videoEndUs?.let { maxOf(landing, script.firstVideoAtOrAfter(it)) } ?: Long.MAX_VALUE
+        script.audioTracks.forEach { audioCursorsUs[it.index] = maxOf(landing, it.appearsAtUs ?: 0L) }
         demuxFrontierUs = landing
         // Like libavformat, this cursor does not report where it landed. The engine finds out from the
         // first decoded frame, which is also how it detects an overshoot.
@@ -1123,12 +1517,18 @@ internal class ScriptedVideoDecoder(
         if (faults.videoDecodeSendDelay > Duration.ZERO) delay(faults.videoDecodeSendDelay)
         if (faults.emptyDecode() || faults.videoDecodeProducesNothing) return true
         val pts = packet.pts ?: Pts.Zero
+        if (skippingNonReference && script.isNonReferenceVideo(pts.micros, packet.isKeyframe)) {
+            script.videoProbe.skippedUs += pts.micros
+            return true
+        }
+        script.videoProbe.decodedUs += pts.micros
         pending.addLast(
             FakeVideoFrame(
                 pts = pts,
                 generation = generation,
                 duration = packet.duration ?: Pts(script.videoFrameDurationUs),
                 ledger = ledger,
+                closedCaptions = script.videoCaptions?.invoke(pts.micros)?.encodeToByteArray(),
             ),
         )
         return true
@@ -1146,6 +1546,14 @@ internal class ScriptedVideoDecoder(
             if (faults.videoDecodeReceiveDelay > Duration.ZERO) delay(faults.videoDecodeReceiveDelay)
         }
         return frame
+    }
+
+    /** What the engine last asked of [skipNonReferenceFrames]. A flush keeps it, as FFmpeg's does. */
+    var skippingNonReference: Boolean = false
+        private set
+
+    override fun skipNonReferenceFrames(skip: Boolean) {
+        skippingNonReference = skip
     }
 
     override suspend fun flush(newGeneration: Generation) {
@@ -1227,6 +1635,8 @@ internal class ScriptedAudioDecoder(
                 generation = generation,
                 trackMarker = track.marker,
                 ledger = ledger,
+                channelMarkers = track.channelMarkers,
+                silent = (packet.pts?.micros ?: 0L).let { at -> script.audioSilentUs.any { at in it } },
             ),
         )
         return true
@@ -1279,17 +1689,20 @@ internal class ScriptedAudioBuffer(
     override val generation: Generation,
     private val trackMarker: Float = 1f,
     private val ledger: LeakLedger? = null,
+    private val channelMarkers: List<Float>? = null,
+    private val silent: Boolean = false,
 ) : AudioBuffer {
 
     private var isClosed = false
-    private val value: Float = trackSample(generation, trackMarker)
+    private val value: Float = if (silent) 0f else trackSample(generation, trackMarker)
 
     init {
         ledger?.onOpen()
     }
 
     override fun copyChannel(channel: Int, into: FloatArray, offset: Int) {
-        for (i in 0 until frameCount) into[offset + i] = value
+        val sample = value * (channelMarkers?.getOrNull(channel) ?: 1f)
+        for (i in 0 until frameCount) into[offset + i] = sample
     }
 
     override fun close() {
@@ -1298,9 +1711,15 @@ internal class ScriptedAudioBuffer(
     }
 }
 
-/** The sample value one epoch's audio carries: magnitude names it, sign survives the gain stage. */
+/**
+ * The sample value one epoch's audio carries: magnitude names it, sign survives the gain stage.
+ *
+ * The magnitude is 1 / (epoch + 1), so the first epoch is a constant at full scale and every later
+ * one is a distinct value inside it. Anything past full scale would be turned down by the ring's peak
+ * limiter (#504) and no longer name its epoch.
+ */
 internal fun epochSample(generation: Generation): Float =
-    (generation.value + 1).toFloat() * if (generation.value % 2L == 0L) 1f else -1f
+    (1f / (generation.value + 1).toFloat()) * if (generation.value % 2L == 0L) 1f else -1f
 
 /** Audio identity that retains the epoch sign while giving each track a distinct magnitude. */
 internal fun trackSample(generation: Generation, marker: Float): Float = epochSample(generation) * marker
@@ -1364,6 +1783,13 @@ internal class ScriptedSink(
     var silenceFrames: Long = 0
         private set
     val isRunning: Boolean get() = running
+
+    /** What the engine declared the sound to be before each open, in order (#446). */
+    val declaredContents: MutableList<io.github.yuroyami.kiteplayer.AudioContent> = mutableListOf()
+
+    override fun setContent(content: io.github.yuroyami.kiteplayer.AudioContent) {
+        declaredContents += content
+    }
 
     /** Every call the engine made on the device, in order: open, start, stop, pause, resume, drain, close. */
     val calls: MutableList<String> = mutableListOf()
@@ -1570,9 +1996,14 @@ internal class ScriptedOutput(
     /** Thrown by every raster call while set, after the call is recorded, as a broken font engine would. */
     var rasterizeFailure: Exception? = null
 
+    /** What the scripted output says it carries, and how often the engine asked (#466). */
+    var outputChannels: Int? = null
+    var outputChannelQuestions: Int = 0
+
     override val audioSink: AudioSinkFactory = object : AudioSinkFactory {
         override val name: String = "scripted"
         override suspend fun create(): AudioSink = sink
+        override fun outputChannelCount(): Int? = outputChannels.also { outputChannelQuestions++ }
     }
 
     /** One 1x1 image per cue: enough to prove the raster call and count what was drawn. */

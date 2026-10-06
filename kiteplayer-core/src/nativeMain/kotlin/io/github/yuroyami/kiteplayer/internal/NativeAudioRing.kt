@@ -22,8 +22,11 @@ import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_create
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_destroy
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_flush
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_free_frames
+import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_is_silent
+import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_limited_frames
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_mark_ending
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_set_gain
+import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_set_hold
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_render
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_sample_rate
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_segment_giveups
@@ -110,6 +113,8 @@ internal class NativeAudioRing private constructor(
         get() = handle ?: error("this native audio ring is closed")
 
     override val underruns: Long get() = kprt_ring_underruns(ring)
+
+    override val limitedFrames: Long get() = kprt_ring_limited_frames(ring)
 
     override val bufferedFrames: Int get() = kprt_ring_buffered_frames(ring)
 
@@ -245,6 +250,12 @@ internal class NativeAudioRing private constructor(
         }
         kprt_ring_set_gain(ring, target)
     }
+
+    override fun hold(held: Boolean) {
+        kprt_ring_set_hold(ring, if (held) 1 else 0)
+    }
+
+    override val silent: Boolean get() = kprt_ring_is_silent(ring) != 0
 
     override fun markEnding() {
         kprt_ring_mark_ending(ring)

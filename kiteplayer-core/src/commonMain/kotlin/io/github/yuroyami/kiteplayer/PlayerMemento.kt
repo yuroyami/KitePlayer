@@ -10,11 +10,11 @@ import kotlin.time.Duration.Companion.microseconds
  * string form for applications that keep key-value text, and [fromProperties] reads it back.
  *
  * What the text form cannot carry: [MediaItem.io] factories, which nobody can store,
- * [MediaItem.externalSubtitles], [MediaItem.videoFilter] and [MediaItem.audioFilter].
- * [asProperties] drops all four, and an item that needs one is rebuilt by the application before
+ * [MediaItem.externalSubtitles], [MediaItem.thumbnails], [MediaItem.videoFilter] and
+ * [MediaItem.audioFilter]. [asProperties] drops all five, and an item that needs one is rebuilt by the application before
  * [KitePlayer.restore]. Headers, raw
- * open options, the format hint, the demux settings, the start position, and the title, artist
- * and album are strings and travel.
+ * open options, the format hint, the demux settings, the start position, the clip, and the title,
+ * artist and album are strings and travel.
  *
  * Tracks are remembered by LANGUAGE rather than by id, because ids belong to one open of one
  * container and a memento outlives both.
@@ -45,6 +45,8 @@ public data class PlayerMemento(
     /** Subtitle size, place and styling. Accessibility settings, so they travel. */
     val subtitleScale: Float = 1f,
     val subtitlePosition: Float = 1f,
+    /** Whether only the forced pictures of an image subtitle track drew (#513). */
+    val forcedPicturesOnly: Boolean = false,
     val subtitleStyle: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = null,
     val videoScale: VideoScale = VideoScale.Fit,
     val videoTransform: VideoTransform = VideoTransform.Identity,
@@ -59,12 +61,24 @@ public data class PlayerMemento(
      */
     val queueOrder: List<Int> = emptyList(),
     val hdrPolicy: HdrPolicy = HdrPolicy.Auto,
+    /** What the two front speakers played. An accessibility setting, so it travels (#462). */
+    val stereoMode: StereoMode = StereoMode.Stereo,
+    /** Whether the night mode was on (#442). A listening setting, so it travels. */
+    val nightMode: Boolean = false,
+    /** How far the dialogue was raised or lowered in a downmix, in decibels (#442). It travels. */
+    val dialogueLevelDb: Float = 0f,
+    /** How far the pitch was moved, in semitones (#465). It travels with the speed. */
+    val pitchSemitones: Double = 0.0,
+    /** Whether the silent stretches were shortened (#429). A listening setting, so it travels. */
+    val skipSilence: Boolean = false,
 ) {
 
     /**
      * Flat string pairs, version-stamped. Keys: `version`, `queue.size`, then per item
      * `queue.N.uri`, `queue.N.formatHint`, `queue.N.startPosition` (microseconds),
-     * `queue.N.title`, `queue.N.artist`, `queue.N.album`, `queue.N.header.<name>`,
+     * `queue.N.clipStart` and `queue.N.clipEnd` (microseconds) for a clipped item,
+     * `queue.N.title`, `queue.N.artist`, `queue.N.album`, `queue.N.audioContent` when it is not
+     * automatic, `queue.N.header.<name>`,
      * `queue.N.option.<key>` and `queue.N.demux.<field>`; then `queueOrder` as space-separated
      * positions when there is one, one key per setting, durations in microseconds, and
      * `audioLanguage` and `subtitleLanguage` only when known.
@@ -77,9 +91,14 @@ public data class PlayerMemento(
             put("queue.$n.uri", item.uri)
             item.formatHint?.let { put("queue.$n.formatHint", it) }
             item.startPosition?.let { put("queue.$n.startPosition", it.inWholeMicroseconds.toString()) }
+            item.clip?.let { clip ->
+                put("queue.$n.clipStart", clip.start.inWholeMicroseconds.toString())
+                clip.end?.let { put("queue.$n.clipEnd", it.inWholeMicroseconds.toString()) }
+            }
             item.title?.let { put("queue.$n.title", it) }
             item.artist?.let { put("queue.$n.artist", it) }
             item.album?.let { put("queue.$n.album", it) }
+            if (item.audioContent != AudioContent.Automatic) put("queue.$n.audioContent", item.audioContent.name)
             item.headers.forEach { (name, value) -> put("queue.$n.header.$name", value) }
             item.openOptions.forEach { (key, value) -> put("queue.$n.option.$key", value) }
             putDemux("queue.$n.demux.", item.demux)
@@ -100,16 +119,25 @@ public data class PlayerMemento(
         put("subtitlesOff", subtitlesOff.toString())
         secondarySubtitleLanguage?.let { put("secondarySubtitleLanguage", it) }
         put("balance", balance.toString())
+        put("stereoMode", stereoMode.name)
+        put("nightMode", nightMode.toString())
+        put("dialogueLevelDb", dialogueLevelDb.toString())
+        put("pitchSemitones", pitchSemitones.toString())
+        put("skipSilence", skipSilence.toString())
         put("equalizer.preampDb", equalizer.preampDb.toString())
         put("equalizer.gainsDb", equalizer.gainsDb.joinToString(" "))
         put("subtitleScale", subtitleScale.toString())
         put("subtitlePosition", subtitlePosition.toString())
+        put("forcedPicturesOnly", forcedPicturesOnly.toString())
         put("videoScale", videoScale.name)
         put("videoEnabled", videoEnabled.toString())
         put("transform.zoom", videoTransform.zoom.toString())
         put("transform.panX", videoTransform.panX.toString())
         put("transform.panY", videoTransform.panY.toString())
         videoTransform.aspectOverride?.let { put("transform.aspectOverride", it.toString()) }
+        put("transform.rotation", videoTransform.rotationDegrees.toString())
+        put("transform.mirrorHorizontal", videoTransform.mirrorHorizontal.toString())
+        put("transform.mirrorVertical", videoTransform.mirrorVertical.toString())
         put("adjust.brightness", videoAdjustments.brightness.toString())
         put("adjust.contrast", videoAdjustments.contrast.toString())
         put("adjust.saturation", videoAdjustments.saturation.toString())
@@ -122,6 +150,7 @@ public data class PlayerMemento(
         put("quality.debandGrain", renderQuality.debandGrain.toString())
         put("quality.scaler", renderQuality.scaler.name)
         put("quality.linearLight", renderQuality.linearLight.toString())
+        put("quality.animationUpscaler", renderQuality.animationUpscaler.name)
         put("hdrPolicy", hdrPolicy.name)
         subtitleStyle?.let { style ->
             put("subtitleStyle.present", "true")
@@ -141,7 +170,7 @@ public data class PlayerMemento(
 
     public companion object {
         /** The version [asProperties] stamps. [fromProperties] also reads every older one. */
-        public const val FORMAT_VERSION: Int = 5
+        public const val FORMAT_VERSION: Int = 8
 
         /**
          * Reads what [asProperties] wrote.
@@ -153,8 +182,9 @@ public data class PlayerMemento(
             val version = properties["version"]?.toIntOrNull()
             // Version 1 knew nothing about balance, the equaliser or any picture and subtitle
             // setting, version 2 nothing about the demux settings, version 3 nothing about the
-            // item titles or the shuffle order, and version 4 nothing about the variant limits or
-            // the HDR policy.
+            // item titles or the shuffle order, version 4 nothing about the variant limits or the
+            // HDR policy, version 5 nothing about an item's audio content, version 6 nothing
+            // about the programme an item plays, and version 7 nothing about an item's clip.
             // Each reads back with the defaults for those, which is what a player that had never
             // been told about them would have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
@@ -181,6 +211,10 @@ public data class PlayerMemento(
                     title = properties["queue.$n.title"],
                     artist = properties["queue.$n.artist"],
                     album = properties["queue.$n.album"],
+                    audioContent = properties["queue.$n.audioContent"]?.let(AudioContent::valueOf) ?: AudioContent.Automatic,
+                    clip = properties["queue.$n.clipStart"]?.let { start ->
+                        MediaClip(start.toLong().microseconds, properties["queue.$n.clipEnd"]?.toLong()?.microseconds)
+                    },
                 )
             }
             return PlayerMemento(
@@ -200,6 +234,11 @@ public data class PlayerMemento(
                 subtitlesOff = need("subtitlesOff").toBooleanStrict(),
                 secondarySubtitleLanguage = properties["secondarySubtitleLanguage"],
                 balance = properties["balance"]?.toFloat() ?: 0f,
+                stereoMode = properties["stereoMode"]?.let { StereoMode.valueOf(it) } ?: StereoMode.Stereo,
+                nightMode = properties["nightMode"]?.toBooleanStrict() ?: false,
+                dialogueLevelDb = properties["dialogueLevelDb"]?.toFloat() ?: 0f,
+                pitchSemitones = properties["pitchSemitones"]?.toDouble() ?: 0.0,
+                skipSilence = properties["skipSilence"]?.toBooleanStrict() ?: false,
                 equalizer = EqualizerSettings(
                     gainsDb = properties["equalizer.gainsDb"]
                         ?.split(" ")?.filter { it.isNotBlank() }?.map { it.toFloat() }
@@ -208,6 +247,7 @@ public data class PlayerMemento(
                 ),
                 subtitleScale = properties["subtitleScale"]?.toFloat() ?: 1f,
                 subtitlePosition = properties["subtitlePosition"]?.toFloat() ?: 1f,
+                forcedPicturesOnly = properties["forcedPicturesOnly"]?.toBooleanStrict() ?: false,
                 subtitleStyle = subtitleStyleFrom(properties),
                 videoScale = properties["videoScale"]?.let { VideoScale.valueOf(it) } ?: VideoScale.Fit,
                 videoTransform = VideoTransform(
@@ -215,6 +255,9 @@ public data class PlayerMemento(
                     zoom = properties["transform.zoom"]?.toFloat() ?: 1f,
                     panX = properties["transform.panX"]?.toFloat() ?: 0f,
                     panY = properties["transform.panY"]?.toFloat() ?: 0f,
+                    rotationDegrees = properties["transform.rotation"]?.toInt() ?: 0,
+                    mirrorHorizontal = properties["transform.mirrorHorizontal"]?.toBooleanStrict() ?: false,
+                    mirrorVertical = properties["transform.mirrorVertical"]?.toBooleanStrict() ?: false,
                 ),
                 videoAdjustments = VideoAdjustments(
                     brightness = properties["adjust.brightness"]?.toFloat() ?: 0f,
@@ -231,6 +274,8 @@ public data class PlayerMemento(
                     debandGrain = properties["quality.debandGrain"]?.toFloat() ?: 48f,
                     scaler = properties["quality.scaler"]?.let { VideoScaler.valueOf(it) } ?: VideoScaler.Bilinear,
                     linearLight = properties["quality.linearLight"]?.toBooleanStrict() ?: false,
+                    animationUpscaler = properties["quality.animationUpscaler"]
+                        ?.let { AnimationUpscaler.valueOf(it) } ?: AnimationUpscaler.Off,
                 ),
                 hdrPolicy = properties["hdrPolicy"]?.let { HdrPolicy.valueOf(it) } ?: HdrPolicy.Auto,
                 videoEnabled = properties["videoEnabled"]?.toBooleanStrict() ?: true,
@@ -282,6 +327,7 @@ private fun MutableMap<String, String>.putDemux(prefix: String, demux: DemuxPoli
     demux.maxBitrate?.let { put("${prefix}maxBitrate", it.toString()) }
     demux.maxVideoHeight?.let { put("${prefix}maxVideoHeight", it.toString()) }
     demux.variant?.let { put("${prefix}variant", it.toString()) }
+    demux.program?.let { put("${prefix}program", it.toString()) }
 }
 
 /** Reads what [putDemux] wrote. A missing key is the default for its field. */
@@ -303,5 +349,6 @@ private fun demuxFrom(properties: Map<String, String>, prefix: String): DemuxPol
         maxBitrate = properties["${prefix}maxBitrate"]?.toLong(),
         maxVideoHeight = properties["${prefix}maxVideoHeight"]?.toInt(),
         variant = properties["${prefix}variant"]?.toInt(),
+        program = properties["${prefix}program"]?.toInt(),
     )
 }

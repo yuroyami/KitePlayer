@@ -70,6 +70,45 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `description` are marked as accessibility tracks (#404). An encrypted manifest is refused with
   `DashUnsupportedException` instead of decoding to noise, and an encrypted set beside clear ones
   is left out.
+- KitePlayer builds on KiteFFmpeg 0.5.0. Its web module carries FFmpeg's HLS reader and the new
+  readers beside it, from the Dolby Vision RPU to Matroska editions, which makes `kite.wasm` and
+  `kite.mjs` 49,039 bytes bigger after gzip than 0.4.0's, 1,536,396 bytes in all, so the web size
+  check's budget for them rises from 1.42 MiB to 1.47 MiB (#523). KiteFFmpeg's own changelog lists
+  its changes.
+- A WebM DASH presentation that has been read to its end seeks again. FFmpeg's Matroska reader
+  used to answer end of file for ever after, so a seek returned and no packet followed, with one
+  Period or several. KiteFFmpeg 0.5.0 carries the FFmpeg fix.
+- The first cue of a DASH or HLS subtitle set arrives. FFmpeg starts a subtitle rendition where
+  the reading has got to and used to drop every cue that began before that moment, so the cue at
+  zero was lost even while it was still on screen. KiteFFmpeg 0.5.0 carries the FFmpeg fix, which
+  keeps a cue that is still showing.
+- A length FFmpeg guessed from the bit rate, for an ADTS AAC file or an MP3 without its Xing
+  header, no longer cuts seeks, start positions or the external clock, and once playback passes it
+  or the item ends, the snapshot's length is what really played (#422). `PlayerSnapshot` gains
+  `durationIsEstimate`, so a constructor or `copy` call compiled against 0.2.0 must be compiled
+  again, and `PlayerMediaSource` gains `durationIsEstimate`, false unless a source says otherwise,
+  so a source of your own keeps compiling. It needs KiteFFmpeg 0.5.0, which reads where the length
+  came from.
+- `PlaybackError` gains `SchemeUnsupported`, for an address whose scheme the build has no way to
+  open, so a `when` that lists every error needs the new branch (#395). `PlayerMediaSource` gains
+  `realTime`, which is false unless a source says otherwise, so a source of your own keeps
+  compiling.
+- An address plays live over `rtsp`, `rtmp`, `udp` and `rtp`, a `udp` or `rtp` multicast group
+  included, and a `.sdp` file plays the RTP session it describes, on every platform but the web
+  (#395). RTSP tries UDP and falls back to TCP, and `rtsp_transport` in `openOptions` chooses one.
+  A sender that goes silent fails the open within ten seconds, and the playback within ten over UDP
+  or twenty over a TCP connection, on which FFmpeg waits twice, instead of holding either for ever.
+  An address whose scheme FFmpeg here has no protocol for, such as `srt`, `rtmps` or `rtsps`, and
+  on the web every address with no reader, fails with `SchemeUnsupported` before anything goes
+  over the network, where it used to fail inside FFmpeg.
+- A live sender over `rtsp`, `rtmp`, `udp` or `rtp`, or a `.sdp` session, is followed at a bounded
+  delay (#395). The open starts the player as far behind as FFmpeg's stream discovery took, about
+  two seconds over RTSP, and a stall that the network later makes good leaves it that much
+  further behind for good. Now, whenever the delay is more than half a second past the buffer
+  policy's ready duration, the player plays 1.1 times faster, keeping the pitch, until it is
+  within a tenth of a second of it, so each second of extra delay clears in ten. It never does so
+  for a file or an HLS or DASH stream, at a speed the caller chose, with the pitch correction off,
+  or while it follows an external clock.
 - An HLS track with no title of its own takes its rendition's `NAME` as its title, unless the name
   only repeats its language (#404). FFmpeg files that name under the stream's `comment`, where
   `PlayerStreamInfo.metadata` still shows it.
@@ -77,6 +116,63 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   start with `#EXTM3U` plays through the HLS path when no format hint, HLS content type or `.m3u8`
   address says so, which an address with no extension sent as text or bytes never did. A format
   hint still wins.
+- An HLS playlist's variables play (#452). KiteFFmpeg 0.5.0 puts in what `EXT-X-DEFINE` gives by
+  `NAME` and `VALUE`, by `IMPORT` from the master playlist and by `QUERYPARAM` from the playlist's
+  own address, so a token in the master playlist's address reaches every address that names it.
+  The player now tells FFmpeg where a redirected playlist came from instead of rewriting the
+  playlist's addresses itself, which made a variable that holds a whole address resolve against
+  the redirect too and left `QUERYPARAM` reading the address before the redirect. A redirected
+  playlist therefore reaches FFmpeg exactly as its server sent it. A reference to a variable that
+  nothing defined fails the open with `NotMedia`, and the error names it.
+- An open that FFmpeg refuses as invalid data fails with `PlaybackError.NotMedia`, carrying FFmpeg's
+  reason as its detail, instead of `SourceUnavailable`, which said the bytes could not be reached
+  and invited a retry that fails the same way (#452). `NotMedia`'s message now ends with its detail.
+  Thumbnails, waveforms and loudness still throw FFmpeg's own exception.
+- The player tells the platform whether an item is music, speech or a film (#446), which some
+  devices use to pick their equaliser, their virtual surround or their dialogue processing. Every
+  item used to say film. `MediaItem.audioContent` is `AudioContent.Automatic` by default, which
+  says film when the item shows a picture and music when it plays sound alone or under cover art,
+  and `Music`, `Speech` or `Movie` says what the item is whatever it shows. On Android it is the
+  content type of the audio track and of the audio focus request, and on iOS it is the audio
+  session's mode: the default mode for music, `spokenAudio` for speech and `moviePlayback` for a
+  film. It is fixed when the device opens, so it follows each item and a change of audio track.
+  `PlayerSnapshot.audioContent` gives the answer, for an application that sets up its own audio
+  session, and an `AudioSink` hears it through its new `setContent`, which does nothing by default.
+- Opening or playing something silent leaves another app's music playing (#436). On Android an
+  item with no audio track selected, such as a muted preview, asks for no audio focus, and gives
+  back the focus an item before it held. On iOS the audio session is active from the open but
+  mixes with other apps until something first plays, so opening a paused video no longer stops
+  the Music app; the first play does. An item with no audio track already opened no device there.
+- `AudioConfig.matchOutputChannels` chooses between two mixes of one language by the speakers
+  that play them (#466). Off by default. When it is on, the track the usual rules choose gives way
+  to one in the same language and of the same accessibility whose channel count is closer to the
+  output's, so headphones get a film's stereo mix rather than its 5.1 folded down, and a 5.1
+  receiver gets the 5.1. A commentary never takes the main mix's place. The output's count comes
+  from the new `AudioSinkFactory.outputChannelCount`, null by default: iOS reads the route, the
+  desktop the widest line its mixer opens, the web says stereo, and Android reads the media route
+  once its backend has a `Context`, through `AndroidOutputBackend.withContext` or
+  `AudioTrackSinkFactory(context)`. `PlayerStreamInfo.isCommentary` carries the container's
+  commentary flag.
+- Pausing, resuming, seeking and stopping no longer click on Apple, the desktop and the web (#486).
+  The sound fades out over 5 ms before the device stops and fades in again after it starts, the way
+  a volume change already walks, and the paused position is where the fade ended, so the resume
+  carries on from the next sample. A volume or mute change made while paused is in place from the
+  first resumed sample. A sink declares that it needs this through the new
+  `AudioSink.cutsSoundOnStop`, false by default; Android's mixer fades a paused track itself.
+- Sound past full scale is turned down smoothly instead of being clamped by the device (#504). A
+  loud surround mix folded to stereo, or an equaliser boost, can add up past full scale, and the
+  device then squares off each such peak, which is heard as crackle. The output now lowers the gain
+  over 5 ms ahead of such a passage and gives it back gradually after it, reading ahead in the audio
+  it already holds, so it adds no delay. Audio that never passes full scale is untouched, sample for
+  sample. `PlaybackStats.audioLimitedFrames` counts the frames it lowered, and the diagnostics
+  report shows it beside the underruns.
+- A keyframe seek can land on the keyframe after its target, the nearer one, or the one in the
+  seek's direction, not only the one before it (#496). In a file whose keyframes are far apart, such
+  as a screen recording, a ten second skip forward used to land where it started or earlier.
+  `KeyframeChoice` picks the rule, set with `PlayerConfig.keyframeChoice` or live with
+  `KitePlayer.setKeyframeChoice`; `InSeekDirection` is what a skip button wants. The default stays
+  the keyframe before, and the precise modes are unchanged. A source receives the choice
+  through a new `seekToKeyframe` overload, whose default keeps the keyframe before.
 - `KitePlayerWorker` runs the player in a web worker, so opening, decoding and drawing leave the
   page's thread free, and it plays `http`, `https` and `blob` addresses, which the page's own player
   cannot (#100). It is opt-in: the page's own `KitePlayer` is unchanged. The page serves a third
@@ -105,11 +201,16 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - A Java app on Android or the desktop can use the player without writing Kotlin (#394).
   `KitePlayerJava` in `kiteplayer` adds listeners called on an `Executor`, a `CompletableFuture`
   version of every suspending call, and millisecond versions of the calls that take a `Duration`.
-  `MediaItemBuilder` builds an item, whose constructor Java cannot call. In `kiteplayer-core`,
-  `KitePlayer.create` is static on the JVM, the config builders have public constructors and a
-  public `build()`, and `Progress`, `PlayerSnapshot`, `PlayerEvent.SeekCompleted` and `Tracks`
-  gain Java-readable `positionMillis`, `bufferedAheadMillis`, `durationMillis`, `landedAtMillis`
-  and `selectedTrack(kind)`.
+  In `kiteplayer-core`, `KitePlayer.create` is static on the JVM, the config builders have public
+  constructors and a public `build()`, and `Progress`, `PlayerSnapshot`, `PlayerEvent.SeekCompleted`
+  and `Tracks` gain Java-readable `positionMillis`, `bufferedAheadMillis`, `durationMillis`,
+  `landedAtMillis` and `selectedTrack(kind)`. `MediaItemBuilder`, the builder behind
+  `mediaItem(uri) { }`, builds the item whose constructor Java cannot call: it has a public
+  constructor and a public `build()`, each of its calls returns the builder so that Java can chain
+  them, and it gains `headers(Map)`, `externalSubtitles(List)`, `startPositionMillis(Long)` and
+  `demux(DemuxPolicy)`, while `title`, `artist`, `album` and `formatHint` take null. A
+  `mediaItem { }` block compiles unchanged, but code compiled against 0.2.0 that calls the builder
+  must be compiled again, because its calls returned nothing there (#420).
 - The worker player's binary ships as `kiteplayer-wasm-js-<version>-web.zip` beside the wasmJs
   artifact, for a page to unpack beside `index.html` (#58). `KiteWebModules.codecModuleUrl` picks a
   multi-threaded codec module only on a cross-origin isolated page, before it is imported.
@@ -221,6 +322,188 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `MediaIo.networkBitsPerSecond` reports how fast the network delivers a reader's bytes. The
   default answers null. `KtorMediaIo` measures it on its downloads, with the time a response
   waits for the player left out, and the step up reads it (#376).
+- A TTML subtitle document resolves each named style once (#408). A style that named other styles
+  was followed nine levels deep for every element that used it, so a style naming itself ten times
+  took six seconds for one cue, in 155 bytes of input. A loop of style names is now cut at its first
+  repeat, as TTML2 counts it an error, and one document follows at most 100,000 style names.
+- `openQueue` and `addToQueue` take a copy of the list they are given (#409). The player kept the
+  caller's own list, so an edit to it afterwards changed the queue and every snapshot already
+  published, and `next()` then read past the end of the shorter list and failed the session.
+  `KitePlayerJava.openQueueAsync` and `addToQueueAsync` copy on the caller's thread, before the
+  call runs on another one. A snapshot's `queue` now refuses an edit, also through the
+  `java.util.List` a Java caller sees.
+- A long or multi-Period DASH presentation keeps every segment its playlists list (#405). The
+  reader dropped the oldest of its converted subtitle segments past 4,096 and of its joined-Period
+  segments past 8,192, counting every track together, while the playlists still listed them, so
+  two subtitle languages of 70 minutes lost the start of the first, and a one-hour two-Period
+  presentation lost a whole video bitrate. A static presentation now keeps every address for the
+  reader's life, and a live one keeps every address that a track's current or previous playlist
+  lists, and lets the rest go.
+- The DASH reader lets go of the initializations it read for joined Periods and MP4 subtitles
+  (#407). It kept every one until the reader was gone, close included, so a live session that kept
+  adding Periods grew without end. An initialization now goes once nothing still listed refers to
+  it, the oldest go when all of them pass 32 MB, one that went is read again when it is asked for,
+  and closing the reader lets go of all of them.
+- `RenderQuality.animationUpscaler` enlarges animation with a network trained on line art and flat
+  colour (#67): Anime4K v3.2's CNN x2 networks by bloc97, MIT, ported as two tiers. `Fast` runs the
+  small network, for phones, and `Quality` the medium one, for tablets and desktops. The Android
+  GPU renderer runs it when the picture is drawn at more than 1.2 times its own size, doubling the
+  picture before the scaler takes it the rest of the way, and skips it, with one log line, on a GPU
+  that cannot draw into half floats. It is off by default and costs memory, about 50 MB for a 720p
+  film with `Fast`. The Metal renderer does not run it yet (#421). `AnimationUpscaleDeviceTest`
+  checks both tiers against a CPU reference and logs what a frame costs on the device.
+- `PlayerStreamInfo` and `TrackInfo` gain `dolbyVision`, null for a stream that is not Dolby
+  Vision, so their constructors and `copy` change (#470). Its `DolbyVisionInfo` holds the profile,
+  the level and what the base layer is on its own, so an application can show "Dolby Vision 8.1"
+  and tell from `baseLayerPlaysAlone` whether every frame must be composed. `VideoFrame` gains
+  `sceneMaxNits`, null by default, so a frame class of your own keeps compiling, and the
+  `toneMapPeakNits` extension gives the peak a tone mapper should roll off from.
+- A Dolby Vision profile 5 or 10.0 picture plays in its real colours instead of green and purple
+  (#470). Its base layer is coded in Dolby's IPT colour space, so the FFmpeg decoder composes each
+  frame with its RPU into HDR10 on the processor, in bands of rows across the converter's threads,
+  before a filter or a renderer sees it, and every renderer that shows HDR10 shows it. That costs
+  about 70 ms of one core for a 1080p frame, so 4K waits for composition on the GPU (#459). A frame
+  decoded by VideoToolbox or D3D11VA is downloaded first. MediaCodec hands back the base layer
+  without its RPU, so FFmpeg's MediaCodec route stands down for such a stream with a
+  `HardwareDecodeUnavailable` warning and the direct MediaCodec decoder refuses it, and the
+  software decoder plays it. A profile 8, 7 or 10 stream whose base layer plays alone plays it as
+  before, hardware included. The HLS variant choice still prefers any other variant to profile 5.
+  This needs KiteFFmpeg 0.5.0 (yuroyami/KiteFFmpeg#137).
+- The software converter, which Compose's canvas and the desktop views draw through, and the Metal
+  renderer tone map each Dolby Vision scene from its own peak, the RPU's level 1 metadata, held at
+  most at the title's peak, instead of the title's peak alone, so a dark scene is not dimmed for
+  highlights it does not have (#470). Profile 8 streams get this with no composition. A renderer
+  that leaves HDR to the platform, such as Android's GPU renderer, is unchanged.
+- A DASH Period whose initialization is `dvh1`, `dvhe`, `dva1` or `dvav` carries its parameter sets
+  in band when Periods are joined, as `hvc1`, `hev1`, `avc1` and `avc3` already did (#470).
+- A recording never costs the media it records (#471). `startRecording` used to empty the file
+  at its path at once, so recording into the file playing, or into a link or another spelling of
+  it, destroyed that file. A file already at the path is now left whole until the first packet is
+  written, and the FFmpeg sink refuses to write over the file its source reads, so such a recording
+  ends at its first packet with `RecordingStopped` and the file plays on. This needs KiteFFmpeg
+  0.5.0 (yuroyami/KiteFFmpeg#146).
+- `close` answers within its deadline even while a recording's file is still being written
+  (#473). Finishing the recording, releasing a preloaded next item and waiting for preload builds
+  still unwinding used to run on the player's own thread before the deadline started, each build
+  with a deadline of its own, so a slow disk could hold `closeAndAwait` for as long as it took.
+  They now run in the release the one deadline covers, after the session's workers are joined, and
+  a close past the deadline reports `RuntimeCompromised` while the release goes on. A release step
+  that refuses, such as a renderer that cannot take the subtitles down, is a `ResourcesNotReleased`
+  warning and the rest of the session is still released (#472).
+- The last closed caption of a file is shown (#480). FFmpeg's caption decoder gives a caption only
+  when the screen next changes, so the caption on screen at the end of a stream stayed inside it.
+  The engine now sends every subtitle decoder the null packet the SPI defines once its track has
+  run out at the end of the stream, waits for what it gives before it ends the media, and offers it
+  again after a seek; the FFmpeg backend's caption and image decoders pass it to KiteFFmpeg's new
+  `SubtitleDecoder.drain` (yuroyami/KiteFFmpeg#149). A decoder that refuses it eight times running
+  counts as drained, so it cannot hold the end of the media.
+- A repeated item follows its own end with no gap (#467). Under `LoopMode.One`, or `LoopMode.All`
+  with a queue of one, the item's next pass opens in the background as a gapless queue item does,
+  with the tracks the viewer chose, and its first sample follows the last one on the same device.
+  The status stays `Playing` and the device never stops, where each turn used to drain it, pass
+  through `Ended` and `Buffering`, seek back and refill. `PlayerEvent.Ended` still fires at each
+  turn, `Opened` does not, and the external subtitle files are not read again. A repeat that
+  cannot take this road warns `GaplessFallback` with the item's own queue position, or -1 outside
+  queue playback, and seeks back as before. An A-B loop takes the same road: each turn opens at A
+  in the background and its first sample follows the last one before B in the ring, so the section
+  repeats with no silence, no `Buffering` and nothing heard or shown from past B, and `Ended` fires
+  only when a loop with no B wraps at the item's end. A seek inside the section, a new B or
+  clearing the loop drops the waiting turn quietly, a turn that starts too near B for its next pass
+  to open in time goes back to A by the seek once, and a loop that cannot take this road seeks back
+  to A as before. `docs/gapless-queue.md` has the details.
+- An item with video and no sound repeats, loops from A to B and joins the next silent queue item
+  with no gap too (#524). With no ring to join, the picture times it: the next pass's first
+  picture shows one frame period after the last picture of the one before, so a looping background
+  video no longer stands still, passes through `Buffering` and seeks back at every turn. A silent
+  item next to one with sound still falls back with `GaplessFallback`, as does a preload not ready
+  when the pictures run out.
+- A precise seek skips the frames nothing is predicted from on its way to the target, as mpv does
+  (#468). They are decoded only to be thrown away, and in a stream with B-frames they are most of
+  the run up from the keyframe: 12 s of H.264 with three B-frames between references decoded 78
+  frames instead of 285 to reach 9.5 s, in 28 ms instead of 58. The picture at the target and every one
+  after it are the same, byte for byte, and a backward step keeps decoding the frames near its
+  target so its landing is still the frame before. A decoder takes the request through the new
+  `VideoDecoder.skipNonReferenceFrames`, whose default skips nothing, so a platform codec decodes as
+  before; the FFmpeg decoder honours it in software, and not while it decodes in hardware or runs a
+  video filter.
+- A transport stream with several channels, such as a DVB recording or an IPTV multiplex, plays
+  one channel's picture, sound and subtitles together (#505). The player picks every track from one
+  channel, the first with a picture unless the item's new `DemuxPolicy.program` names another, so
+  a preferred language no longer pairs one channel's picture with another channel's sound.
+  `Tracks.programs` lists the channels as `MediaProgram`s, with their number, their name, their
+  provider and their tracks, `Tracks.selectedProgram` names the one that plays, and
+  `KitePlayer.selectProgram` switches channel, choosing every track again from the new one. Media
+  that can seek opens again at the same position, and a live sender, such as an IPTV multicast,
+  joins the new channel where it is now. Media with one channel or none chooses as before. A
+  `PlayerMediaSource` lists its channels through the new `programs`, empty by default, and a
+  memento carries the item's channel, which raises its format version to 7.
+- A `selectVariant` call that a stop or a failed recovery ended while the reopened stream refilled
+  now ends with `IllegalStateException` instead of never returning (#525).
+- A sound or subtitles that a transport stream starts carrying after the open join the tracks and
+  play (#509), as on a UDP multicast, an IPTV channel joined between programmes or a tuner
+  recording, and a channel that moves its sound to a new stream at a programme boundary keeps
+  playing it. A picture does the same, as the next entry says. The new
+  `PlayerEvent.TracksAdded` names the tracks that appeared. When nothing of its
+  kind plays, the player chooses one by the open's rules, as mpv does, and it follows a sound that
+  ran out to the stream that carries on, once the old one has played its last sample, so the
+  switch cuts nothing. A viewer who turned the sound or the subtitles off keeps them off. The new
+  `PlayerEvent.TrackChosenByPlayer` says each time the player chooses on its own. A
+  `PlayerMediaSource` announces such a change through the new `PlayerPacket.newStreams` and
+  `newPrograms`, null by default, so media whose streams never change plays exactly as before. A
+  sound whose rate FFmpeg does not know yet, such as AAC listed before its first packet, opens
+  instead of failing, and plays at the rate its decoder finds.
+- A picture that a transport stream starts carrying after the open plays (#527), as when a radio
+  service adds a slideshow or a channel joined during a break with no picture starts its programme,
+  and a channel that moves its picture to a new stream at a programme boundary keeps showing it, as
+  mpv does. The player chooses a picture by the open's rules when none plays, or when the one that
+  plays has shown its last frame while another carries on, and plays it in place from its keyframe
+  at the position, without opening the item again, so the sound and the subtitles play on untouched.
+  A seek either way across such a move shows the picture that played there. A viewer who turned the
+  picture off keeps it off, and choosing a picture that appeared after the open switches in place
+  too. Turning the picture off while none plays now answers at once instead of opening the item
+  again, so a live source, which refused it before, takes it as well.
+- Turning the picture off while a sound plays happens in place too (#529), as in mpv and VLC: the
+  item is not opened again, so the sound and the subtitles play on without a break, and a live
+  source, which refused the choice because it cannot seek back to the position, takes it as well.
+  The demux lane goes on reading the picture, so turning it back on also happens in place, from its
+  keyframe at the position. The last picture leaves the screen (#530). A picture with no sound
+  beside it carries the clock, so `selectTrack` now refuses to turn it off with `UnsupportedOperationException`, as it refuses to turn off the sound of a song; the
+  reopen it ran before failed the player for want of a stream.
+- The last picture leaves the screen when no picture plays any more (#530), as in mpv: when the
+  picture is turned off while the sound plays, when an item with no picture follows one with a
+  picture, when an open fails, when the player stops, and when a renderer is attached while no
+  picture plays. The screen shows its background with the subtitles still drawn over it until the
+  next picture arrives, and a picture that follows a picture replaces it with no blank between
+  them. An item that ended, or failed while it played, keeps its last picture, as mpv does when it
+  keeps a file open at its end. `VideoRenderer` gains `clearPicture`, which does nothing by
+  default, so a renderer of your own keeps compiling and keeps its last picture as before; a
+  renderer that throws from it is reported with `PlaybackWarning.RendererFailed` and stays
+  attached.
+- A file whose sound starts after its picture shows that picture, with silence, as mpv and VLC do
+  (#526). Before, it opened on the picture and then jumped to the first sound sample on play, so a
+  recording whose sound starts two seconds in lost its first two seconds of picture, and a seek into
+  that stretch landed where the sound starts. The sound then plays in step with the picture. A sound
+  that starts later than the point an in-place track change switches to is padded the same way, so
+  the clock does not jump there either.
+- A picture whose file says that some of its edges are not part of the image shows only the part
+  that is left (#497). Matroska states this with its `PixelCrop` elements, most often to hide the
+  eight padding rows of a 1088-line coded picture, and FFmpeg leaves applying it to the player, so
+  such a file used to show those rows and report itself as 1920 by 1088 rather than 16:9. The
+  snapshot's `videoSize`, the size event and the track list now report the size that is left, and
+  every renderer draws only that part: the Android canvas, MediaCodec straight into the view's
+  Surface, the GPU image path, the desktop, the web canvas, Compose, Metal, the sample buffer layer
+  and the AppKit and UIKit images. The new `PictureCrop` names the hidden edges in stored pixels.
+  `PlayerStreamInfo` gains `crop` and `visibleVideoSize`, so a constructor or `copy` call compiled
+  against 0.2.0 must be compiled again, and `VideoFrame` gains `crop`, null by default, with
+  `visibleSize` beside it, so a frame of your own keeps compiling and its picture is shown whole.
+  A frame keeps its stored `size`. `KiteFFmpegVideoFrame` and `CapturedFrame` carry the crop, and a
+  captured frame lays its burned-in text out for the part that was on screen. A crop that leaves
+  nothing of the decoded picture is ignored with the new `PlaybackWarning.CropIgnored`, once each
+  time the stream is opened. `AndroidPlayerViewRendererFactory.create` and the
+  `AndroidSurfaceVideoRenderer` constructor take a geometry callback with a third parameter, the
+  crop, because a decoder that writes into the Surface leaves only the view able to hide the edges,
+  so a factory or callback of your own needs that parameter. This needs KiteFFmpeg 0.5.0, which
+  reads the crop (yuroyami/KiteFFmpeg#147).
 
 ### Removed
 

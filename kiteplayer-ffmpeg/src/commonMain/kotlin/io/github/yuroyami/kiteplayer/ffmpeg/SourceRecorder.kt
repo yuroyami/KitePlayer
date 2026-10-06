@@ -36,7 +36,9 @@ internal class SourceRecorder(
         synchronized(lock) {
             recording?.let { error("a recording to ${it.path} already runs; stop it first") }
             // The muxer opens its file only at the first packet, so a bad path would otherwise fail
-            // later, as a warning, instead of here.
+            // later, as a warning, instead of here. A file already there is left whole until then:
+            // it may be the file playing, which the sink refuses when the first packet declares the
+            // streams, and nothing of it may be lost before that (#471).
             createEmptyFile(path)
             val sink = try {
                 MediaSink.open(path, format = "matroska")
@@ -65,7 +67,12 @@ internal class SourceRecorder(
             }
         }
         runCatching { ended.sink.close() }
-        warn(PlaybackWarning.RecordingStopped(ended.path, "a packet could not be written: ${failure.describe()}"))
+        val why = if (failure is SetupRefused) {
+            "the file could not be set up: ${(failure.cause ?: failure).describe()}"
+        } else {
+            "a packet could not be written: ${failure.describe()}"
+        }
+        warn(PlaybackWarning.RecordingStopped(ended.path, why))
     }
 
     /** Ends a recording before the read position jumps, because a file with a jump in it is not a recording. */
@@ -100,8 +107,7 @@ internal class SourceRecorder(
         private var startMicros: Long? = null
 
         fun copy(packet: Packet, source: MediaSource) {
-            val copies = this.copies ?: streams.associate { it.index to sink.addCopyStream(source, it) }
-                .also { this.copies = it }
+            val copies = this.copies ?: declare(source).also { this.copies = it }
             val copy = copies[packet.streamIndex] ?: return
             // The muxer refuses a packet with no time at all.
             val at = packet.ptsMicros ?: packet.dtsMicros ?: return
@@ -115,7 +121,20 @@ internal class SourceRecorder(
             if (at < start) return
             copy.write(packet)
         }
+
+        /**
+         * The copy streams of the file. The sink refuses them when [path] is the file [source]
+         * reads, through any link or spelling of it, before it writes anything there.
+         */
+        private fun declare(source: MediaSource): Map<Int, CopyStream> = try {
+            streams.associate { it.index to sink.addCopyStream(source, it) }
+        } catch (refusal: Exception) {
+            throw SetupRefused(refusal)
+        }
     }
+
+    /** A recording the sink would not set up, as opposed to a packet it could not write. */
+    private class SetupRefused(cause: Exception) : Exception(cause)
 }
 
 /**

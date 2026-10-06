@@ -81,7 +81,11 @@ internal class CachingMediaIo(
         if (upstreamEof && cursor == upstreamPos) return -1
         val chunk = ByteArray(policy.readChunkBytes)
         val pulled = upstream.read(chunk, 0, chunk.size)
-        if (pulled > 0) upstreamBytesRead.addAndGet(pulled.toLong())
+        if (pulled > 0) {
+            upstreamBytesRead.addAndGet(pulled.toLong())
+            // The tags belong at the first byte of this upstream read, which this read serves (#423).
+            upstream.takeTags()?.let { tags -> pendingTags = pendingTags?.plus(tags) ?: tags }
+        }
         if (pulled < 0) {
             upstreamEof = true
             return -1
@@ -94,6 +98,11 @@ internal class CachingMediaIo(
         cursor += served
         return served
     }
+
+    /** The tags of the upstream read whose first byte the last read served, once (#423). */
+    private var pendingTags: Map<String, String>? = null
+
+    override fun takeTags(): Map<String, String>? = pendingTags.also { pendingTags = null }
 
     override suspend fun seek(position: Long) {
         if (position in windowStart..windowEnd) {

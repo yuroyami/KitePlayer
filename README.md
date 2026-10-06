@@ -721,6 +721,22 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
 - Your own `MediaIo` can serve HLS too: report the address it read in `location`, and open the
   addresses the playlist names in `openRelated`.
 
+### Songs on a radio station
+
+A Shoutcast or Icecast station names each song as it starts, and the player shows it when it is
+heard rather than when it is read, seconds ahead
+([#423](https://github.com/yuroyami/KitePlayer/issues/423)). The network reader asks for the
+titles, takes the title blocks out of the bytes, and reads a title in windows-1251 or another
+legacy table as the player reads a subtitle file. A chained Ogg's next song and the other tags a
+stream changes while it plays arrive the same way.
+
+- `PlayerSnapshot.metadata` holds the song as `StreamTitle`, beside the station's `icy-name`.
+- The media session shows the song as the title and the station on the artist line.
+- `setItemDetails` replaces the playing item's title, artist and album without opening it again,
+  for a station that publishes its song list somewhere else. It and the station's next song replace
+  each other, whichever came last.
+- A reader of your own reports tags through `MediaIo.takeTags`.
+
 ### Lists of streams
 
 A radio station's link is often a list that names its stream rather than the stream itself, and

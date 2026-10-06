@@ -106,7 +106,20 @@ public class KtorMediaIo private constructor(
     private val redirects: RedirectRule?,
     /** How fast the network delivered this reader's bytes, shared with every reader it opened. */
     private val meter: DownloadMeter,
+    /** How many audio bytes the station puts between two title blocks, or null for no blocks (#423). */
+    icyInterval: Int?,
+    /** The station's own `icy-` headers, its name and genre, reported with the first read. */
+    stationTags: Map<String, String>,
 ) : MediaIo {
+
+    /** The song titles of the current response, or null when the server sends no title blocks. */
+    private var icy: IcyTitles? = icyInterval?.let(::IcyTitles)
+
+    /** The station's headers, until the first read hands them over. */
+    private var stationPending: Map<String, String>? = stationTags.takeIf { it.isNotEmpty() }
+
+    /** The block interval the last response of [openAt] named, written before it is awaited. */
+    private var answeredInterval: Int? = null
 
     // What messages name instead of the URI, whose query may carry a signature (#241).
     private val shown = shownUri(uri)
@@ -237,33 +250,90 @@ public class KtorMediaIo private constructor(
         return rule?.isRefusal(failure) != true
     }
 
+    /**
+     * The tags the last read brought (#423): the station's headers with the first, and then each
+     * change of a song's fields, from the title block the read began after.
+     */
+    override fun takeTags(): Map<String, String>? {
+        val station = stationPending
+        val song = icy?.take()
+        stationPending = null
+        return when {
+            station == null -> song
+            song == null -> station
+            else -> station + song
+        }
+    }
+
     /** One read from the current response, or from a new one at [position]. */
     private suspend fun readOnce(into: ByteArray, offset: Int, length: Int): Int {
         val knownSize = size
         if (knownSize != null && position >= knownSize) return -1
         val channel = body?.takeIf { bodyPosition == position } ?: openAt(position)
+        // A station's title block is taken out where it falls, before the audio after it, so the
+        // song it names belongs at this read's first byte (#423).
+        val titles = icy
+        val room = if (titles == null) {
+            length
+        } else {
+            if (titles.untilBlock == 0 && !readTitleBlock(channel, titles)) return endOfBody(knownSize)
+            minOf(length, titles.untilBlock)
+        }
         // A response that stops sending is a failure, not a wait for ever.
-        val pulled = withTimeoutOrNull(policy.readTimeout) { channel.readAvailable(into, offset, length) }
+        val pulled = withTimeoutOrNull(policy.readTimeout) { channel.readAvailable(into, offset, room) }
         if (pulled == null) {
             dropBody()
             throw KtorMediaIoException("no bytes for ${policy.readTimeout} at byte $position", retryable = true)
         }
-        if (pulled < 0) {
-            // A response that ends before the declared size is a dropped connection.
-            if (knownSize != null && position < knownSize) {
-                dropBody()
-                throw KtorMediaIoException("the response from $shown ended at byte $position of $knownSize", retryable = true)
-            }
-            // A live stream has no end of its own, so its server closed the connection (#508).
-            if (live) {
-                dropBody()
-                throw KtorMediaIoException("the server of the live stream $shown closed it at byte $position", retryable = true)
-            }
-            return -1
-        }
+        if (pulled < 0) return endOfBody(knownSize)
+        titles?.consumed(pulled)
         bodyPosition += pulled
         position += pulled
         return pulled
+    }
+
+    /** What the end of the current response means: the end of the file, or a dropped connection. */
+    private fun endOfBody(knownSize: Long?): Int {
+        // A response that ends before the declared size is a dropped connection.
+        if (knownSize != null && position < knownSize) {
+            dropBody()
+            throw KtorMediaIoException("the response from $shown ended at byte $position of $knownSize", retryable = true)
+        }
+        // A live stream has no end of its own, so its server closed the connection (#508).
+        if (live) {
+            dropBody()
+            throw KtorMediaIoException("the server of the live stream $shown closed it at byte $position", retryable = true)
+        }
+        return -1
+    }
+
+    /**
+     * Reads one title block from [channel] into [titles]: its length byte, then sixteen bytes for
+     * each it counts. False when the response ended first. A station that stops sending part way
+     * through a block is as silent as one that stops between them, and fails the same way.
+     */
+    private suspend fun readTitleBlock(channel: ByteReadChannel, titles: IcyTitles): Boolean {
+        val one = ByteArray(1)
+        if (!readExactly(channel, one)) return false
+        val block = ByteArray((one[0].toInt() and 0xFF) * 16)
+        if (!readExactly(channel, block)) return false
+        titles.block(block)
+        return true
+    }
+
+    /** Fills [into] from [channel], false when the response ended first. */
+    private suspend fun readExactly(channel: ByteReadChannel, into: ByteArray): Boolean {
+        var filled = 0
+        while (filled < into.size) {
+            val read = withTimeoutOrNull(policy.readTimeout) { channel.readAvailable(into, filled, into.size - filled) }
+            if (read == null) {
+                dropBody()
+                throw KtorMediaIoException("no bytes for ${policy.readTimeout} at byte $position", retryable = true)
+            }
+            if (read < 0) return false
+            filled += read
+        }
+        return true
     }
 
     /**
@@ -313,6 +383,7 @@ public class KtorMediaIo private constructor(
                     client.prepareGet(uri) {
                         mark()
                         requestHeaders.forEach { (key, value) -> header(key, value) }
+                        askForTitles(requestHeaders)
                         if (!live) {
                             // A rewind to zero asks for a range too, so its answer is checked like any other.
                             header(HttpHeaders.Range, "bytes=$target-")
@@ -327,6 +398,7 @@ public class KtorMediaIo private constructor(
                         } else {
                             checkRangedAnswer(response, target)
                         }
+                        answeredInterval = icyInterval(response.headers[ICY_METAINT_HEADER])
                         answered.complete(Unit)
                         copyMeasured(response.bodyAsChannel(), pipe, meter, sent)
                         pipe.close()
@@ -351,6 +423,13 @@ public class KtorMediaIo private constructor(
                 "no answer from $shown within ${policy.connectTimeout} for byte $target",
                 retryable = true,
             )
+        }
+        // A new response counts its interval from its own first byte (#423).
+        val interval = answeredInterval
+        icy = when {
+            interval == null -> null
+            icy?.interval == interval -> icy?.also { it.restart() }
+            else -> IcyTitles(interval)
         }
         return pipe
     }
@@ -503,6 +582,7 @@ public class KtorMediaIo private constructor(
                         http.prepareGet(uri) {
                             mark()
                             headers.forEach { (key, value) -> header(key, value) }
+                            askForTitles(headers)
                             header(HttpHeaders.Range, "bytes=0-")
                         }.execute { response ->
                             redirects?.refuseHidden(response, shown)
@@ -516,6 +596,10 @@ public class KtorMediaIo private constructor(
                             val radio = response.headers.names().any {
                                 it.startsWith("icy-", ignoreCase = true) || it.startsWith("ice-", ignoreCase = true)
                             }
+                            // A station that puts title blocks in its bytes cannot be read from a byte of
+                            // its choosing, so it is not seekable whatever it answered (#423).
+                            val interval = icyInterval(response.headers[ICY_METAINT_HEADER])
+                            val station = stationTagsOf(response.headers)
                             when (response.status) {
                                 HttpStatusCode.PartialContent -> {
                                     // Content-Range: bytes 0-last/total, total possibly "*". A range that
@@ -527,11 +611,15 @@ public class KtorMediaIo private constructor(
                                                 "${response.headers[HttpHeaders.ContentRange]}",
                                         )
                                     }
-                                    probe.complete(Probe(range.complete, seekable = true, tag, location, type, date))
+                                    probe.complete(
+                                        Probe(range.complete, seekable = interval == null, tag, location, type, date, live = false, interval, station),
+                                    )
                                 }
                                 HttpStatusCode.OK -> {
                                     val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                                    probe.complete(Probe(total, seekable = false, tag, location, type, date, live = total == null && radio))
+                                    probe.complete(
+                                        Probe(total, seekable = false, tag, location, type, date, live = total == null && radio, interval, station),
+                                    )
                                 }
                                 else -> throw KtorMediaIoException(
                                     "cannot open $shown: ${response.status}",
@@ -577,10 +665,35 @@ public class KtorMediaIo private constructor(
                 policy = policy,
                 redirects = redirects,
                 meter = meter,
+                icyInterval = answer.icyInterval,
+                stationTags = answer.stationTags,
             )
         }
     }
 }
+
+/**
+ * Asks a Shoutcast or Icecast station for its song titles (#423), unless the item's own headers
+ * already say whether to, as FFmpeg's `http` asks by default. A server that is no station ignores it.
+ */
+private fun io.ktor.client.request.HttpRequestBuilder.askForTitles(headers: Map<String, String>) {
+    if (headers.keys.none { it.equals(ICY_METADATA_HEADER, ignoreCase = true) }) header(ICY_METADATA_HEADER, "1")
+}
+
+/** The block interval an `icy-metaint` header names, or null for none or one that is not a positive count. */
+private fun icyInterval(value: String?): Int? = value?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+
+/**
+ * A station's own description from its headers (#423): its name, genre, description and web
+ * address, under the names FFmpeg's `http` gives them, `icy-name` and the rest.
+ */
+private fun stationTagsOf(headers: io.ktor.http.Headers): Map<String, String> = buildMap {
+    for (name in STATION_HEADERS) {
+        headers[name]?.trim()?.takeIf { it.isNotEmpty() }?.let { put(name, it) }
+    }
+}
+
+private val STATION_HEADERS = listOf("icy-name", "icy-genre", "icy-description", "icy-url")
 
 /**
  * The client a reader makes for itself when it is given none, as the automatic transport does for
@@ -642,6 +755,10 @@ private class Probe(
     val contentType: String?,
     val date: String?,
     val live: Boolean = false,
+    /** How many audio bytes come between two title blocks, or null for none (#423). */
+    val icyInterval: Int? = null,
+    /** The station's own headers (#423). */
+    val stationTags: Map<String, String> = emptyMap(),
 )
 
 /**

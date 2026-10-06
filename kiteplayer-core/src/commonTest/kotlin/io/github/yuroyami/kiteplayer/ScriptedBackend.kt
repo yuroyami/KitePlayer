@@ -277,6 +277,12 @@ internal class MediaScript(
      */
     val programChanges: List<Pair<Long, List<io.github.yuroyami.kiteplayer.MediaProgram>>> = emptyList(),
     /**
+     * The container's tags that change from a time on, as a radio station's next song does (#423).
+     * Each is merged over the tags before it and announced, whole, on the first packet read at or
+     * past its time.
+     */
+    val tagChanges: List<Pair<Long, Map<String, String>>> = emptyList(),
+    /**
      * When the picture first appears, as [ScriptedAudioTrack.appearsAtUs] says for a sound (#527): a
      * slideshow a radio service adds, or a channel joined during a break with no picture. Its first
      * packet is the first frame on the grid at or past this time, which need not be a keyframe.
@@ -931,6 +937,8 @@ internal class ScriptedSource(
 
     /** How many of [MediaScript.programChanges] the reads have reached. */
     private var programChangesApplied = 0
+    private var tagChangesApplied = 0
+    private var currentTags: Map<String, String>? = null
 
     private val lateAt: Map<Int, Long> = buildMap {
         script.videoAppearsAtUs?.let { put(script.videoIndex, it) }
@@ -1239,6 +1247,13 @@ internal class ScriptedSource(
         }
         packet.newStreams = if (appeared.isNotEmpty()) streams else null
         packet.newPrograms = if (programsChanged) programs else null
+        var tagsChanged = false
+        while (tagChangesApplied < script.tagChanges.size && script.tagChanges[tagChangesApplied].first <= at) {
+            currentTags = (currentTags ?: metadata) + script.tagChanges[tagChangesApplied].second
+            tagChangesApplied++
+            tagsChanged = true
+        }
+        packet.newContainerTags = if (tagsChanged) currentTags else null
         return packet
     }
 

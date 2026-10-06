@@ -75,6 +75,7 @@ internal class ListedStreamIo(private val stream: MediaIo) : MediaIo {
     override suspend fun openRelated(uri: String): MediaIo? = stream.openRelated(uri)
     override fun setWarningSink(sink: (io.github.yuroyami.kiteplayer.PlaybackWarning) -> Unit) = stream.setWarningSink(sink)
     override fun networkBitsPerSecond(): Long? = stream.networkBitsPerSecond()
+    override fun takeTags(): Map<String, String>? = stream.takeTags()
     override fun close() {
         if (closed) return
         closed = true

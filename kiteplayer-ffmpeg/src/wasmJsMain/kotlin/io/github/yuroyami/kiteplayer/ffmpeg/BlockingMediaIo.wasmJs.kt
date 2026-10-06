@@ -35,6 +35,7 @@ internal actual class BlockingMediaIo actual constructor(
     actual override val size: Long? get() = io.size
     actual override val seekable: Boolean get() = io.seekable
     actual override val location: String? get() = io.location
+    actual override fun takeTags(): Map<String, String>? = io.takeTags()
 
     private val interrupted: Boolean get() = lifetime.isCancelled
 

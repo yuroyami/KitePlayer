@@ -65,6 +65,9 @@ internal class ProgressReportingMediaIo(
 
     override suspend fun seek(position: Long) = upstream.seek(position)
 
+    /** Each read is the upstream's, so its tags are too (#423). */
+    override fun takeTags(): Map<String, String>? = upstream.takeTags()
+
     override suspend fun openRelated(uri: String): MediaIo? {
         val opened = upstream.openRelated(uri) ?: return null
         related.opens.incrementAndGet()

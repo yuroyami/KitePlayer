@@ -482,6 +482,14 @@ ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=6"
   -metadata "LYRICS=$(printf 'A plain first line\nA plain second line')" \
   -c:a flac audio-lyrics.flac
 
+echo "A chained Ogg, two songs one after the other as a station plays them, each with its own comments"
+ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=3" \
+  -metadata title="First Song" -metadata artist="The Band" -c:a libvorbis chain-1.ogg
+ffmpeg -v error -y -f lavfi -i "sine=frequency=660:sample_rate=48000:duration=3" \
+  -metadata title="Second Song" -metadata artist="The Band" -c:a libvorbis chain-2.ogg
+cat chain-1.ogg chain-2.ogg > audio-chained.ogg
+rm -f chain-1.ogg chain-2.ogg
+
 echo "Torture cases, from bytes rather than encoders, deterministic"
 # The first 40% of the sync clip. The default mp4 layout writes moov after mdat, so this
 # amputates the index entirely; a player must refuse it with a typed error or survive whatever

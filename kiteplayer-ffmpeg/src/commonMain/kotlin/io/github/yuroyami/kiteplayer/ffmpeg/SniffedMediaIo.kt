@@ -58,6 +58,9 @@ internal class SniffedMediaIo private constructor(
 
     override fun networkBitsPerSecond(): Long? = upstream.networkBitsPerSecond()
 
+    /** The upstream's tags, which the sniff's own reads leave for the read of the first byte (#423). */
+    override fun takeTags(): Map<String, String>? = upstream.takeTags()
+
     override fun close() = upstream.close()
 
     companion object {

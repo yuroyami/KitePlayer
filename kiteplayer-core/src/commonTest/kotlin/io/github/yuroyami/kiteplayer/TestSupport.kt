@@ -70,6 +70,7 @@ internal class FakePacket(
 
     override var newStreams: List<io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo>? = null
     override var newPrograms: List<io.github.yuroyami.kiteplayer.MediaProgram>? = null
+    override var newContainerTags: Map<String, String>? = null
 
     init {
         ledger?.onOpen()

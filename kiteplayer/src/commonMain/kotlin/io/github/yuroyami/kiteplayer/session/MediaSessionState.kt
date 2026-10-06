@@ -50,8 +50,11 @@ public enum class MediaSessionPhase { Playing, Paused, Buffering, Stopped }
  * actually hearing rather than for the list order, and looping the whole queue makes both true.
  * Opening counts as buffering, and idle, ended and failed all count as stopped.
  */
-public fun PlayerSnapshot.toMediaSessionState(progress: Progress): MediaSessionState =
-    MediaSessionState(
+public fun PlayerSnapshot.toMediaSessionState(progress: Progress): MediaSessionState {
+    // A radio station's song shows as the title, and the station moves to the artist line, as a
+    // phone's radio apps show it (#423). setItemDetails takes the song away again.
+    val song = metadata.tag("StreamTitle")
+    return MediaSessionState(
         phase = when (status) {
             PlaybackStatus.Playing -> MediaSessionPhase.Playing
             PlaybackStatus.Paused -> MediaSessionPhase.Paused
@@ -63,12 +66,17 @@ public fun PlayerSnapshot.toMediaSessionState(progress: Progress): MediaSessionS
         speed = speed,
         canSeek = seekable,
         hasVideo = videoSize != null,
-        title = media?.title ?: metadata.tag("title") ?: media?.label,
-        artist = media?.artist ?: metadata.tag("artist") ?: metadata.tag("album_artist"),
+        title = song ?: media?.title ?: metadata.tag("title") ?: media?.label,
+        artist = if (song != null) {
+            media?.title ?: metadata.tag("icy-name") ?: media?.artist
+        } else {
+            media?.artist ?: metadata.tag("artist") ?: metadata.tag("album_artist")
+        },
         album = media?.album ?: metadata.tag("album"),
         hasNext = hasNeighbourInPlayOrder(1),
         hasPrevious = hasNeighbourInPlayOrder(-1),
     )
+}
 
 /** Container tags are written in whatever case the muxer felt like, so match without it. */
 private fun Map<String, String>.tag(name: String): String? =

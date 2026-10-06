@@ -34,6 +34,9 @@ internal expect class BlockingMediaIo(io: MediaIo, lifetime: Job) : MediaByteSou
      */
     override val location: String?
 
+    /** The tags the reader's last read brought, a radio station's song (#423), which FFmpeg merges into its tags. */
+    override fun takeTags(): Map<String, String>?
+
     /**
      * Ends the read or seek in flight and makes every later one fail at once, by cancelling the
      * lifetime. Every bridge of one source shares that lifetime: the playlist's and those of the

@@ -1883,7 +1883,9 @@ internal class PlaybackCore(
 
     /** See [io.github.yuroyami.kiteplayer.KitePlayer.setItemDetails] (#423). */
     suspend fun setItemDetails(title: String?, artist: String?, album: String?) {
-        throw IllegalStateException("item details are not set yet")
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.SetItemDetails(title, artist, album, reply))
+        awaitReply(reply)
     }
 
     /**
@@ -2697,6 +2699,7 @@ internal class PlaybackCore(
                 publishSnapshot()
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetItemDetails -> applyItemDetails(command)
             is CoreCommand.SetPitch -> {
                 pitchSemitones = command.semitones
                 session?.audio?.pitchSemitones = command.semitones
@@ -5099,6 +5102,51 @@ internal class PlaybackCore(
         }
     }
 
+    /**
+     * Shows the tag changes the listener has now heard (#423): each one the demux lane read whose
+     * packet the published position has reached, the last of them standing. A change still ahead
+     * wakes the actor when it lands.
+     */
+    private fun showHeardTags(session: OpenSession) {
+        val waiting = session.tagChanges.value
+        if (waiting.isEmpty()) return
+        val heardUs = publishedPositionMicros.value
+        val ready = waiting.takeWhile { (atUs, _) -> atUs <= heardUs }
+        if (ready.isNotEmpty()) {
+            // Only the demux lane appends, so the first ones are still these.
+            session.tagChanges.update { it.drop(ready.size) }
+            session.shownTags = ready.last().second
+            publishSnapshot()
+        }
+        if (status == PlaybackStatus.Playing) {
+            waiting.getOrNull(ready.size)?.let { (atUs, _) ->
+                wakeIn(((atUs - heardUs) / wakeRate()).toLong().coerceAtLeast(0L).microseconds)
+            }
+        }
+    }
+
+    /**
+     * Replaces the playing item's title, artist and album (#423), in [media] and in the queue, and
+     * takes away the song title the stream last sent, so the two replace each other whichever came
+     * last. Nothing is opened again.
+     */
+    private fun applyItemDetails(command: CoreCommand.SetItemDetails) {
+        val active = session
+        val item = media
+        if (active == null || item == null) {
+            command.reply.completeExceptionally(IllegalStateException("setItemDetails needs an open media item"))
+            return
+        }
+        val changed = item.copy(title = command.title, artist = command.artist, album = command.album)
+        media = changed
+        if (queueIndex in queueItems.indices && queueItems[queueIndex] == item) {
+            queueItems = queueItems.toMutableList().also { it[queueIndex] = changed }
+        }
+        active.shownTags = active.shownTags.filterKeys { !it.equals("StreamTitle", ignoreCase = true) }
+        publishSnapshot()
+        command.reply.complete(Unit)
+    }
+
     private suspend fun applySecondarySubtitle(command: CoreCommand.SelectSecondarySubtitle) {
         val session = this.session
         if (session == null) {
@@ -6368,6 +6416,7 @@ internal class PlaybackCore(
             maskedSeekTargetMicros.value = NO_SEEK_MASK
             publishedPositionMicros.value = currentPosition().micros
         }
+        showHeardTags(session)
         // Chapter crossings: compared on the published reading, so a seek and ordinary
         // playback announce a boundary the same way. Media with no table emits nothing.
         // In the item's time, as the chapters and the markers are (#456).
@@ -10738,7 +10787,7 @@ internal class PlaybackCore(
             videoSize = session?.videoStream?.visibleVideoSize,
             tracks = tracks,
             chapters = session?.chapters ?: emptyList(),
-            metadata = session?.source?.metadata ?: emptyMap(),
+            metadata = session?.shownTags ?: emptyMap(),
             lyrics = if (session != null) tagLyricsText else null,
             speed = speed,
             volume = volume,
@@ -11369,6 +11418,11 @@ internal class PlaybackCore(
             // Read before the packet is handed on, which gives it away.
             val readIndex = packet.streamIndex
             val readAtUs = (packet.dts ?: packet.pts)?.micros
+            // A song's new tags show when this packet is heard, which the actor watches for (#423).
+            packet.newContainerTags?.let { tags ->
+                val atUs = packet.pts?.micros ?: readAtUs ?: Long.MIN_VALUE
+                session.tagChanges.update { it + (atUs to tags) }
+            }
             when (packet.streamIndex) {
                 session.videoStream?.index -> session.videoQueue?.offer(packet, epoch) ?: packet.close()
                 else -> {
@@ -12861,6 +12915,16 @@ internal class PlaybackCore(
         var heldPositionUs: Long = NO_POSITION
         /** What a paused player told the sender of a real-time stream (#441). */
         val liveHold = LiveHold()
+
+        /**
+         * The container's tags as the listener has heard them (#423): those of the open, replaced by
+         * a packet's new tags once that packet is heard. The snapshot shows these, not the source's
+         * own, which change as soon as a packet is read, seconds early. Actor only.
+         */
+        var shownTags: Map<String, String> = source.metadata
+
+        /** Tag changes the demux lane read, each with the media time it belongs at, until they are heard. */
+        val tagChanges = atomic(emptyList<Pair<Long, Map<String, String>>>())
         /** Set when the lane un-parks: packets are discarded until a keyframe the decoder can start from. */
         val videoWaitingForKeyframe = atomic(false)
         /** Audio-only precise boundary for a lane swap; video remains on the current epoch. */
@@ -13631,6 +13695,12 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetNightMode(val on: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setNightMode", reply)
     class SetDialogueLevel(val db: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setDialogueLevel", reply)
     class SetPitch(val semitones: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setPitch", reply)
+    class SetItemDetails(
+        val title: String?,
+        val artist: String?,
+        val album: String?,
+        val reply: CompletableDeferred<Unit>,
+    ) : CoreCommand("setItemDetails", reply)
     class SetVideoEnabled(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoEnabled", reply)
     class SetEqualizer(val settings: EqualizerSettings, val reply: CompletableDeferred<Unit>) : CoreCommand("setEqualizer", reply)
     class SetSleepTimer(

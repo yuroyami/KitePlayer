@@ -124,7 +124,7 @@ public class KiteFFmpegSource internal constructor(
     /** True when the URL fallback opened a scheme whose sender pushes media at the pace it plays. */
     realTimeScheme: Boolean = false,
     /** The title the list of streams the item named gave this stream (#450). */
-    listedTitle: String? = null,
+    private val listedTitle: String? = null,
 ) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null
@@ -213,13 +213,31 @@ public class KiteFFmpegSource internal constructor(
      */
     override val seekable: Boolean = if (source.formatName == "hls") duration != null else source.isSeekable
 
+    /**
+     * The container's tags as they stand, which a packet that brings new ones replaces (#423): a
+     * radio station's next song, a chained Ogg's next comments. Written by the demux lane, read by
+     * the engine's snapshot from any thread.
+     */
+    override val metadata: Map<String, String> get() = tags.value
+
+    /**
+     * The stream whose comments are the file's own tags, or null: an Ogg file keeps its title and
+     * artist in its first sound's comments, not in the container, and a chained Ogg brings the next
+     * song's there (#423).
+     */
+    private val commentStream: Int? =
+        if (source.formatName == "ogg") source.streams.firstOrNull { it.type == io.github.yuroyami.kiteffmpeg.MediaType.Audio }?.index else null
+
+    /** The container's own tags and the comment stream's, as they last stood. */
+    private var containerTags: Map<String, String> = source.metadata
+    private var commentTags: Map<String, String> =
+        commentStream?.let { index -> source.streams.firstOrNull { it.index == index }?.metadata }.orEmpty()
+
+    private val tags = kotlinx.atomicfu.atomic(withListedTitle(containerTags + commentTags))
+
     // The stream's own title wins; a list's title names a stream that names itself nothing.
-    override val metadata: Map<String, String> =
-        if (listedTitle == null || source.metadata.keys.any { it.equals("title", ignoreCase = true) }) {
-            source.metadata
-        } else {
-            source.metadata + ("title" to listedTitle)
-        }
+    private fun withListedTitle(found: Map<String, String>): Map<String, String> =
+        if (listedTitle == null || found.keys.any { it.equals("title", ignoreCase = true) }) found else found + ("title" to listedTitle)
 
     /** The container's own claim, read once at open. Null when it declares none. */
     override val containerBitrateBps: Long? = source.bitrateBps
@@ -362,12 +380,18 @@ public class KiteFFmpegSource internal constructor(
         }
         recorder.copy(packet)
         absorbLayout(packet)
+        // The whole new set, from this packet on (#423), with an Ogg's comments over its container's.
+        packet.newContainerTags?.let { containerTags = it }
+        val comments = packet.newStreamTags?.takeIf { packet.streamIndex == commentStream }
+        if (comments != null) commentTags = comments
+        val newTags = if (packet.newContainerTags != null || comments != null) withListedTitle(containerTags + commentTags) else null
+        if (newTags != null) tags.value = newTags
         val tracks = fanOut[packet.streamIndex]
         if (tracks != null) for (track in 1 until tracks.size) copies.addLast(KiteFFmpegPacket(packet.copy(), mapper, index = tracks[track]))
         val track = tracks?.first()
         val before = announced
         val after = layout
-        if (after === before) return KiteFFmpegPacket(packet, mapper, index = track)
+        if (after === before) return KiteFFmpegPacket(packet, mapper, index = track, newContainerTags = newTags)
         announced = after
         // Only what the engine sees: a change to a stream it is never shown is no change to it.
         return KiteFFmpegPacket(
@@ -376,6 +400,7 @@ public class KiteFFmpegSource internal constructor(
             index = track,
             newStreams = after.streams.takeIf { it != before.streams },
             newPrograms = after.programs.takeIf { it != before.programs },
+            newContainerTags = newTags,
         )
     }
 
@@ -879,6 +904,7 @@ internal class KiteFFmpegPacket(
     override val newPrograms: List<MediaProgram>? = null,
     /** The track this packet goes to when that is not its stream, as for a teletext page (#510). */
     private val index: Int? = null,
+    override val newContainerTags: Map<String, String>? = null,
 ) : PlayerPacket {
     override val streamIndex: Int get() = index ?: native.streamIndex
     override val pts: Pts? get() = mapper.mapTimestamp(native.ptsMicros)

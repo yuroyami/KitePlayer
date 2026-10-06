@@ -213,6 +213,21 @@ internal class PlaybackCore(
     private val heldCommands = ArrayDeque<CoreCommand>()
 
     /**
+     * The newest waiting value of each latest-value setting, by its kind (#483). A kind with a
+     * value here has exactly one [CoreCommand.ApplyLatest] in the mailbox, so a storm of volume
+     * changes holds one command, not one per call.
+     */
+    private val latestSettings = HashMap<kotlin.reflect.KClass<out CoreCommand>, CoreCommand>()
+    private val latestLock = kotlinx.atomicfu.locks.SynchronizedObject()
+
+    /** Requests of the public calls in the mailbox, which [MAX_WAITING_REQUESTS] bounds (#483). */
+    private val waitingRequests = atomic(0)
+
+    /** Waiting requests and settings, for a test that checks the mailbox stays bounded. */
+    internal val waitingInMailbox: Int
+        get() = waitingRequests.value + kotlinx.atomicfu.locks.synchronized(latestLock) { latestSettings.size }
+
+    /**
      * The reply of the request that built the session that is open or being opened, or null after a
      * stop. A cancelled request's stop names its reply, and only stops while it is still this (#410).
      * The queue's own advance builds with a reply nobody holds, so no earlier request owns the next item.
@@ -1722,7 +1737,7 @@ internal class PlaybackCore(
      */
     fun play() {
         check(!closedNow.value) { "the player is closed, so play cannot run" }
-        commands.trySend(CoreCommand.Play(CompletableDeferred()))
+        post(CoreCommand.Play(CompletableDeferred()))
     }
 
     /**
@@ -1733,7 +1748,7 @@ internal class PlaybackCore(
      */
     fun pause() {
         check(!closedNow.value) { "the player is closed, so pause cannot run" }
-        commands.trySend(CoreCommand.Pause(CompletableDeferred()))
+        post(CoreCommand.Pause(CompletableDeferred()))
     }
 
     /**
@@ -1782,7 +1797,7 @@ internal class PlaybackCore(
         // needs no session state to name it. A request the drain drops withdraws the mask there.
         maskedSeekTargetMicros.value = maskFor(to)
         val target = Pts(fileTime(to.micros))
-        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(target), mode, keyframe = keyframeChoice.value)))
+        post(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(target), mode, keyframe = keyframeChoice.value)))
     }
 
     /**
@@ -1812,7 +1827,7 @@ internal class PlaybackCore(
      */
     fun seekByLater(offset: Duration, mode: SeekMode) {
         checkOpenFor("requestSeek")
-        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Relative(offset), mode, keyframe = keyframeChoice.value)))
+        post(CoreCommand.SeekLater(SeekRequest(SeekTarget.Relative(offset), mode, keyframe = keyframeChoice.value)))
     }
 
     /** Seeks to a fraction of the duration. What dragging a seek bar produces. */
@@ -1821,7 +1836,7 @@ internal class PlaybackCore(
             "a seek bar position must be between 0 and 1, was $fraction"
         }
         checkOpenFor("requestSeek")
-        commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Factor(fraction), mode, keyframe = keyframeChoice.value)))
+        post(CoreCommand.SeekLater(SeekRequest(SeekTarget.Factor(fraction), mode, keyframe = keyframeChoice.value)))
     }
 
     suspend fun stop() {
@@ -2089,8 +2104,13 @@ internal class PlaybackCore(
         // The lifecycle check and the send are two steps; a close landing between them used to
         // drop the command silently. The failed send now completes the reply
         // exceptionally, so even a fire-and-forget caller that chooses to await learns the truth.
-        if (!commands.trySend(command).isSuccess) {
-            command.fail(closedCommand(command.name))
+        when (enqueue(command)) {
+            Enqueued.Queued -> Unit
+            Enqueued.Closed -> command.fail(closedCommand(command.name))
+            Enqueued.Overloaded -> overloaded(command.name).let { failure ->
+                command.fail(failure)
+                throw failure
+            }
         }
     }
 
@@ -2099,8 +2119,71 @@ internal class PlaybackCore(
             command.fail(closedCommand(command.name))
             return
         }
-        if (!commands.trySend(command).isSuccess) {
-            command.fail(closedCommand(command.name))
+        when (enqueue(command)) {
+            Enqueued.Queued -> Unit
+            Enqueued.Closed -> command.fail(closedCommand(command.name))
+            Enqueued.Overloaded -> command.fail(overloaded(command.name))
+        }
+    }
+
+    private enum class Enqueued { Queued, Closed, Overloaded }
+
+    /**
+     * Puts a command of a public call in the mailbox, bounded (#483).
+     *
+     * A latest-value setting, such as the volume or the speed, waits in its kind's slot, and a newer
+     * one of the same kind takes the slot: the older call is answered when the newer is, with the
+     * same outcome, because the newer value is what it set, and only the first of them puts a command in the channel, which applies
+     * whatever the slot holds when the actor reaches it. So a slider dragged while the actor is busy
+     * costs one command, and settings of different kinds still apply in the order they were first
+     * asked for. Every other request keeps its own place, and order, and counts against
+     * [MAX_WAITING_REQUESTS]; one past that is refused with [Enqueued.Overloaded] rather than kept
+     * or silently dropped, which no caller sending at a human pace ever meets.
+     *
+     * Close keeps its place too, so what was asked before it still applies first. That wait is
+     * bounded: at most [MAX_WAITING_REQUESTS] requests and one setting of each kind are ahead of it,
+     * every long one among them, an open or a seek, gives way to a waiting close, and each pass runs
+     * [MAX_COMMANDS_PER_PASS] of them.
+     */
+    private fun enqueue(command: CoreCommand): Enqueued {
+        if (command is LatestValueSetting) {
+            val kind = command::class
+            val displaced = kotlinx.atomicfu.locks.synchronized(latestLock) { latestSettings.put(kind, command) }
+            if (displaced != null) {
+                kotlinx.atomicfu.locks.synchronized(latestLock) { command.takeOver(displaced) }
+                return Enqueued.Queued
+            }
+            if (commands.trySend(CoreCommand.ApplyLatest(kind)).isSuccess) return Enqueued.Queued
+            kotlinx.atomicfu.locks.synchronized(latestLock) { if (latestSettings[kind] === command) latestSettings.remove(kind) }
+            return Enqueued.Closed
+        }
+        if (waitingRequests.incrementAndGet() > MAX_WAITING_REQUESTS) {
+            waitingRequests.decrementAndGet()
+            return Enqueued.Overloaded
+        }
+        command.counted = true
+        if (commands.trySend(command).isSuccess) return Enqueued.Queued
+        waitingRequests.decrementAndGet()
+        return Enqueued.Closed
+    }
+
+    private fun overloaded(command: String): IllegalStateException = IllegalStateException(
+        "the player has $MAX_WAITING_REQUESTS requests waiting, so $command was refused: they arrive faster than it applies them",
+    )
+
+    /**
+     * What a command taken from the mailbox stands for: itself, with its place in the bound given
+     * back, or, for a latest-value setting's command, the newest value its kind's slot holds now.
+     * Null when the slot is empty.
+     */
+    private fun fromMailbox(taken: CoreCommand): CoreCommand? {
+        if (taken.counted) {
+            taken.counted = false
+            waitingRequests.decrementAndGet()
+        }
+        if (taken !is CoreCommand.ApplyLatest) return taken
+        return kotlinx.atomicfu.locks.synchronized(latestLock) {
+            latestSettings.remove(taken.kind)?.also { it.answerReplacedWithThis() }
         }
     }
 
@@ -2258,8 +2341,17 @@ internal class PlaybackCore(
             handleWorkerOutcome(outcome)
             if (terminated) return
         }
+        // A pass runs at most a budget of commands, so a caller that never stops sending cannot starve
+        // the clock, the stall watch and the rest of the pass (#483). The next pass carries on at once.
+        var ran = 0
         while (true) {
-            val command = heldCommands.removeFirstOrNull() ?: commands.tryReceive().getOrNull() ?: break
+            if (ran == MAX_COMMANDS_PER_PASS) {
+                wakeIn(Duration.ZERO)
+                return
+            }
+            val taken = heldCommands.removeFirstOrNull() ?: commands.tryReceive().getOrNull() ?: break
+            val command = fromMailbox(taken) ?: continue
+            ran++
             snapshotDirty = true
             try {
                 execute(command)
@@ -2456,6 +2548,8 @@ internal class PlaybackCore(
         }
         if (pendingNext != null && dropsPreload(command)) dropPending(null)
         when (command) {
+            // Taken apart into the setting it stands for as it leaves the mailbox, so it never runs.
+            is CoreCommand.ApplyLatest -> fromMailbox(command)?.let { execute(it) }
             is CoreCommand.Open -> {
                 // A plain open is single-media by contract: whatever queue existed is replaced.
                 queueItems = emptyList()
@@ -10388,7 +10482,8 @@ internal class PlaybackCore(
         resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
         commands.close()
         while (true) {
-            val pending = heldCommands.removeFirstOrNull() ?: commands.tryReceive().getOrNull() ?: break
+            val taken = heldCommands.removeFirstOrNull() ?: commands.tryReceive().getOrNull() ?: break
+            val pending = fromMailbox(taken) ?: continue
             if (pending !is CoreCommand.Close) {
                 pending.fail(IllegalStateException("the player was closed before ${pending.name} could run"))
             }
@@ -13481,6 +13576,16 @@ private const val EXTERNAL_MOVED_US: Long = 1_000L
 private const val EXTERNAL_SILENT_NANOS: Long = 2_000_000_000L
 private const val EXTERNAL_TRIM_STEP: Double = 0.0005
 
+/**
+ * The most requests of the public calls that wait in the mailbox (#483), latest-value settings
+ * apart, which take one place per kind. A caller at a human pace keeps a handful waiting; one that
+ * sends faster than the player applies them is refused past this, and never silently dropped.
+ */
+private const val MAX_WAITING_REQUESTS: Int = 1024
+
+/** The most commands one pass of the actor runs before the rest of the pass, so nothing starves (#483). */
+private const val MAX_COMMANDS_PER_PASS: Int = 64
+
 /** How far playback must move past a renewal of the item's address before another may run (#453). */
 private const val RENEWAL_PROGRESS_US: Long = 2_000_000L
 
@@ -13723,11 +13828,51 @@ private data class TerminalCloseOutcome(
  * Ordinary awaited commands carry one reply each, fire-and-forget commands omit or discard theirs, and
  * the sole Close command carries the terminal result shared by every close route.
  */
+/**
+ * A setting whose newest value is all that applies, so a newer one of its kind takes an older one's
+ * place while both wait in the mailbox (#483). Only a setting with a plain Unit reply, whose handler
+ * sets a value and reads nothing a command of another kind changes, is one.
+ */
+internal interface LatestValueSetting
+
 internal sealed class CoreCommand(val name: String, private val deferred: CompletableDeferred<*>) {
 
     fun fail(cause: Throwable) {
         deferred.completeExceptionally(cause)
     }
+
+    /** True while this command holds a place in the bound on waiting requests (#483). */
+    var counted: Boolean = false
+
+    /** The settings of this kind that this one replaced while they waited, oldest first (#483). */
+    private var replaced: ArrayList<CoreCommand>? = null
+
+    /** Takes [older]'s place, and with it the calls [older] had replaced. Under the mailbox's lock. */
+    fun takeOver(older: CoreCommand) {
+        val list = replaced ?: ArrayList<CoreCommand>().also { replaced = it }
+        older.replaced?.let(list::addAll)
+        older.replaced = null
+        list += older
+    }
+
+    /**
+     * Answers every setting this one replaced when this one is answered, and the same way (#483):
+     * this value is what they set, so they applied, or failed, then. One handler for them all, so a
+     * long run of replaced calls is answered in a loop and not a chain.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun answerReplacedWithThis() {
+        val list = replaced ?: return
+        replaced = null
+        deferred.invokeOnCompletion { cause ->
+            for (older in list) {
+                if (cause == null) (older.deferred as CompletableDeferred<Unit>).complete(Unit) else older.deferred.completeExceptionally(cause)
+            }
+        }
+    }
+
+    /** Applies the newest waiting value of the latest-value setting [kind] (#483). */
+    class ApplyLatest(val kind: kotlin.reflect.KClass<out CoreCommand>) : CoreCommand("applyLatest", CompletableDeferred<Unit>())
 
     class Open(val media: MediaItem, val reply: CompletableDeferred<Unit>) : CoreCommand("open", reply)
 
@@ -13788,33 +13933,33 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
      */
     class Stop(val reply: CompletableDeferred<Unit>, val owner: Any? = null) : CoreCommand("stop", reply)
     class Close(val reply: CompletableDeferred<Unit>) : CoreCommand("close", reply)
-    class SetSpeed(val value: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setSpeed", reply)
-    class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply)
-    class SetBalance(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setBalance", reply)
-    class SetStereoMode(val mode: StereoMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setStereoMode", reply)
-    class SetNightMode(val on: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setNightMode", reply)
-    class SetDialogueLevel(val db: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setDialogueLevel", reply)
-    class SetPitch(val semitones: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setPitch", reply)
-    class SetSkipSilence(val on: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setSkipSilence", reply)
+    class SetSpeed(val value: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setSpeed", reply), LatestValueSetting
+    class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply), LatestValueSetting
+    class SetBalance(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setBalance", reply), LatestValueSetting
+    class SetStereoMode(val mode: StereoMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setStereoMode", reply), LatestValueSetting
+    class SetNightMode(val on: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setNightMode", reply), LatestValueSetting
+    class SetDialogueLevel(val db: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setDialogueLevel", reply), LatestValueSetting
+    class SetPitch(val semitones: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setPitch", reply), LatestValueSetting
+    class SetSkipSilence(val on: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setSkipSilence", reply), LatestValueSetting
     class SetItemDetails(
         val title: String?,
         val artist: String?,
         val album: String?,
         val reply: CompletableDeferred<Unit>,
     ) : CoreCommand("setItemDetails", reply)
-    class SetVideoEnabled(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoEnabled", reply)
-    class SetEqualizer(val settings: EqualizerSettings, val reply: CompletableDeferred<Unit>) : CoreCommand("setEqualizer", reply)
+    class SetVideoEnabled(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoEnabled", reply), LatestValueSetting
+    class SetEqualizer(val settings: EqualizerSettings, val reply: CompletableDeferred<Unit>) : CoreCommand("setEqualizer", reply), LatestValueSetting
     class SetSleepTimer(
         val timer: SleepTimer?,
         val fade: Duration,
         val reply: CompletableDeferred<Unit>,
     ) : CoreCommand("setSleepTimer", reply)
-    class SetMuted(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setMuted", reply)
-    class SetDuckLevel(val level: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setDuckLevel", reply)
-    class SetLoop(val mode: LoopMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setLoop", reply)
+    class SetMuted(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setMuted", reply), LatestValueSetting
+    class SetDuckLevel(val level: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setDuckLevel", reply), LatestValueSetting
+    class SetLoop(val mode: LoopMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setLoop", reply), LatestValueSetting
     class SetAbLoop(val a: Duration?, val b: Duration?, val reply: CompletableDeferred<Unit>) : CoreCommand("setAbLoop", reply)
-    class SetPreservePitch(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setPreservePitch", reply)
-    class SetVideoScale(val mode: VideoScale, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoScale", reply)
+    class SetPreservePitch(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setPreservePitch", reply), LatestValueSetting
+    class SetVideoScale(val mode: VideoScale, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoScale", reply), LatestValueSetting
     class RedrawPicture(val reply: CompletableDeferred<Unit>) : CoreCommand("redrawPicture", reply)
 
     /** The renderer took an overlay, which a subtitle setting may have asked to be seen at once (#463). */
@@ -13831,7 +13976,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         CoreCommand("setVideoAdjustments", reply)
     class SetVideoTransform(val value: VideoTransform, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setVideoTransform", reply)
-    class SetSubtitleDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleDelay", reply)
+    class SetSubtitleDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleDelay", reply), LatestValueSetting
 
     /**
      * The subtitle line [offset] lines from now (#491): where it starts in the item's time, or with
@@ -13839,7 +13984,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
      */
     class SubtitleLine(val offset: Int, val moveDelay: Boolean, val reply: CompletableDeferred<Long>) :
         CoreCommand(if (moveDelay) "stepSubtitleDelay" else "seekToSubtitleLine", reply)
-    class SetSubtitleScale(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleScale", reply)
+    class SetSubtitleScale(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleScale", reply), LatestValueSetting
     class SetSubtitleStyle(
         val value: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?,
         val reply: CompletableDeferred<Unit>,
@@ -13852,7 +13997,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         val value: io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea,
         val reply: CompletableDeferred<Unit>,
     ) : CoreCommand("setSubtitleSafeArea", reply)
-    class SetAudioDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setAudioDelay", reply)
+    class SetAudioDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setAudioDelay", reply), LatestValueSetting
     class AddExternalSubtitle(val source: SubtitleSource, val reply: CompletableDeferred<TrackId>) :
         CoreCommand("addExternalSubtitle", reply)
     class ReloadExternalSubtitle(val track: TrackId, val encoding: String?, val reply: CompletableDeferred<Unit>) :

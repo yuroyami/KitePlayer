@@ -1046,8 +1046,9 @@ private class KiteFFmpegVideoDecoder(
     private var generation: Generation = Generation.Initial
     private var skippingNonReference = false
 
-    /** The graph, built lazily from the FIRST decoded frame's own geometry and format. */
+    /** The graph, built from the first decoded frame's own geometry and format and rebuilt when that changes. */
     private var filterGraph: io.github.yuroyami.kiteffmpeg.FilterGraph? = null
+    private var graphInput: List<Any?>? = null
     private val filteredPending = ArrayDeque<DecodedPicture>()
     private var filterFlushed = false
 
@@ -1109,7 +1110,9 @@ private class KiteFFmpegVideoDecoder(
      *
      * The graph is built from the first frame's own width, height, format, time base and rate,
      * which is the only honest moment to build it: the container's declared parameters can lie
-     * and the decoder's output cannot. Timestamps pass through in the stream's own time base, so
+     * and the decoder's output cannot. A graph takes one input shape, so a picture whose size,
+     * format or pixel shape moves mid-stream gets a new graph, after the old one gave back what it
+     * held (#484), as the `ffmpeg` command line does. Timestamps pass through in the stream's own time base, so
      * the supported chains are the timebase-preserving ones (scale, crop, eq, format and
      * friends); fps-changing chains are the KD roadmap's own next step and refuse nothing today
      * because their output time base would silently disagree with the stream's.
@@ -1130,6 +1133,10 @@ private class KiteFFmpegVideoDecoder(
             val picture = readDolbyVision(decoded)
             val raw = picture.picture
             val info = raw.info
+            val input = listOf(info.width, info.height, info.pixelFormat, info.sampleAspectRatio)
+            if (filterGraph != null && input != graphInput) {
+                retireGraph { out -> filteredPending.addLast(DecodedPicture(out.copy(), scenePeakOf(out))) }
+            }
             val graph = filterGraph ?: try {
                 io.github.yuroyami.kiteffmpeg.FilterGraph.buildVideo(
                     description = description,
@@ -1144,7 +1151,10 @@ private class KiteFFmpegVideoDecoder(
                 // Only feedInput takes the frame, so a graph that cannot be built leaves it here (#263).
                 raw.close()
                 throw failure
-            }.also { filterGraph = it }
+            }.also {
+                filterGraph = it
+                graphInput = input
+            }
             scenePeaksInGraph.addLast(raw.ptsMicros to picture.sceneMaxNits)
             // feedInput owns and closes the raw frame; every output is copied out of the callback.
             graph.feedInput(0, raw) { out -> filteredPending.addLast(DecodedPicture(out.copy(), scenePeakOf(out))) }
@@ -1239,11 +1249,27 @@ private class KiteFFmpegVideoDecoder(
         return io.github.yuroyami.kiteffmpeg.Rational((rate * 1000).toInt(), 1000)
     }
 
+    /**
+     * Ends the graph's input, hands [output] every picture it still held, and closes it. The new
+     * graph's pictures follow these, so the order stays the order the decoder gave (#484).
+     */
+    private fun retireGraph(output: (KiteFrame) -> Unit) {
+        val graph = filterGraph ?: return
+        filterGraph = null
+        graphInput = null
+        try {
+            graph.flushInput(0, output)
+        } finally {
+            graph.close()
+        }
+    }
+
     private fun dropFilterState() {
         while (true) filteredPending.removeFirstOrNull()?.picture?.close() ?: break
         scenePeaksInGraph.clear()
         filterGraph?.close()
         filterGraph = null
+        graphInput = null
         filterFlushed = false
     }
 
@@ -1485,9 +1511,9 @@ private class KiteFFmpegAudioDecoder(
             val info = raw.info
             val input = listOf(info.sampleRate, info.sampleFormat, info.channelCount, info.channelLayoutMask)
             if (filterGraph != null && input != graphInput) {
-                // The decoder changed its format mid-stream, and a graph takes one input format.
-                filterGraph?.close()
-                filterGraph = null
+                // The decoder changed its format mid-stream, and a graph takes one input format. The
+                // old graph's tail, such as the window a tempo filter holds, comes out first (#484).
+                retireGraph { out -> filteredPending.addLast(out.copy()) }
             }
             val graph = filterGraph ?: try {
                 io.github.yuroyami.kiteffmpeg.FilterGraph.buildAudio(
@@ -1510,6 +1536,18 @@ private class KiteFFmpegAudioDecoder(
             graph.feedInput(0, raw) { out -> filteredPending.addLast(out.copy()) }
         }
         return filteredPending.removeFirst()
+    }
+
+    /** Ends the graph's input, hands [output] every frame it still held, and closes it (#484). */
+    private fun retireGraph(output: (KiteFrame) -> Unit) {
+        val graph = filterGraph ?: return
+        filterGraph = null
+        graphInput = null
+        try {
+            graph.flushInput(0, output)
+        } finally {
+            graph.close()
+        }
     }
 
     private fun dropFilterState() {

@@ -243,6 +243,13 @@ internal class PictureFacts(
     override val generation: Generation = Generation.Initial
     override fun close() = Unit
 
+    /** These facts with the viewer's turn and mirror folded into the frame's own (#428). */
+    fun orientedBy(transform: io.github.yuroyami.kiteplayer.VideoTransform): PictureFacts {
+        if (!transform.turnsOrMirrors) return this
+        val shown = transform.orient(rotationDegrees, mirrored)
+        return PictureFacts(size, colorSpace, shown.rotationDegrees, shown.mirrored, crop)
+    }
+
     companion object {
         fun of(frame: VideoFrame): PictureFacts =
             PictureFacts(frame.size, frame.colorSpace, frame.rotationDegrees, frame.mirrored, frame.crop)

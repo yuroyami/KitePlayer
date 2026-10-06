@@ -112,7 +112,8 @@ video decoder.
   1080p, and each scene's own brightness guides the tone mapping.
 - Picture-in-picture on Android, iOS, macOS and in the browser, and a floating window on the
   desktop JVM.
-- Rotation and mirroring from the file, on every renderer.
+- Rotation and mirroring from the file, on every renderer, and the viewer's own quarter turns and
+  mirrors on top.
 - Fit, fill and stretch, zoom, pan and a forced aspect ratio. Brightness, contrast, saturation and
   hue.
 - Dithering, debanding and a sharper scaler, on Apple's Metal renderer and Android's GPU renderer.
@@ -566,7 +567,7 @@ can read it back.
 | **Sound** | `setVolume`, `setMuted`, `setBalance`, `setStereoMode` (mono, one side only, or swapped), `setNightMode` (quiet speech up, loud effects down), `setDialogueLevel` (the centre of a downmix up or down), `setSkipSilence` (every pause longer than a fifth of a second cut down to that, for podcasts and audiobooks), `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), `setVideoEnabled(false)` for audio only |
 | **Loudness** | `PlayerConfig.audio.volumeCeiling` allows volume up to 2.0 through a limiter. `PlayerConfig.audio.replayGain` applies the file's own ReplayGain tags, off by default |
 | **Surround** | Multichannel audio folds into the speakers the device has. `PlayerConfig.audio.upmix = UpmixMode.Surround` also plays mono and stereo from the other speakers of a surround device, off by default |
-| **Picture** | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan) |
+| **Picture** | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan, quarter turns, mirrors) |
 | **HDR** | `setHdrPolicy`. HDR10 and HLG show as HDR on a display that can: through Metal on a Mac or an iPhone with extended range, and through `KitePlayerView` on an Android HDR display. Elsewhere they are tone mapped, and `PlaybackWarning.HdrToneMapped` says so. `HdrPolicy.ToneMap` tone maps everywhere, and `videoDynamicRange` says what the screen shows. `TrackInfo.dolbyVision` names a Dolby Vision track's profile, and a profile 5 or 10.0 track is composed into HDR10 on the processor |
 | **Subtitles** | `selectTrack`, `selectSecondarySubtitle`, `addExternalSubtitle`, `seekToSubtitleLine` (the line showing, the previous or the next), `stepSubtitleDelay` (a line forward or back), `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, `setSubtitleStyle`, `setSubtitleSafeArea`, `setForcedPicturesOnly`, and `subtitleCues` to draw the lines yourself. `PlayerConfig.subtitles.secondaryLanguages` shows a second track in another language at each open, at the top or, with `secondaryPlacement`, directly above or below the first |
 | **Sections** | `setAbLoop` repeats between two points. `setMarkers` fires an event when playback crosses a position |

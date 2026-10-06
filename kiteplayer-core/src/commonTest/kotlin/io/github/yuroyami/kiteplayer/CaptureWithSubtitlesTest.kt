@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -74,4 +75,24 @@ class CaptureWithSubtitlesTest {
         )
         harness.close()
     }
+
+    @Test
+    fun aCaptureIsTurnedAsTheViewerTurnedThePictureAndItsSubtitlesUpright() = runTest {
+        val harness = CoreHarness(this, script = script())
+        harness.openWithRenderer()
+        val turn = VideoTransform(rotationDegrees = 90, mirrorHorizontal = true)
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetVideoTransform(turn, CompletableDeferred()))
+        harness.core.play()
+        harness.run(800.milliseconds)
+
+        val captured = harness.core.captureFrame(withSubtitles = true)
+        assertEquals(90, captured.rotationDegrees, "the capture lost the viewer's turn")
+        assertEquals(true, captured.mirrored, "the capture lost the viewer's mirror")
+        val overlay = assertNotNull(captured.overlay)
+        // Laid out on the turned picture, so its width is the frame's height (#428).
+        assertEquals(captured.size.height, overlay.viewportWidth)
+        assertEquals(captured.size.displayWidth, overlay.viewportHeight)
+        harness.close()
+    }
 }
+

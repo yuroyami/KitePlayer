@@ -329,6 +329,9 @@ public class AndroidSurfaceVideoRenderer internal constructor(
                     outputAdmission = MediaCodecOutputAdmission { requirement ->
                         directSurfaceOutputContract(requirement, toneMap = hdrPolicy.value == HdrPolicy.ToneMap)
                     },
+                    // The viewer's turn reaches a MediaCodec picture through a new decoder, which the
+                    // engine builds when the turn changes (#428).
+                    viewerTransform = { videoTransform.value },
                 ),
             )
         }.orEmpty()
@@ -505,8 +508,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         val mirrored = frame.mirrored
         val crop = frame.crop
         // This renderer cuts the crop itself, so the view hears the shape of what is left and no
-        // crop of its own to apply.
-        geometryConsumer?.invoke(size.cropped(crop), rotation, null)
+        // crop of its own to apply, turned as the viewer turned it (#428).
+        geometryConsumer?.invoke(size.cropped(crop), videoTransform.value.orient(rotation, mirrored).rotationDegrees, null)
         if (toneMapped(frame)) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
         val converted = try {
             convert(frame)
@@ -548,6 +551,12 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         if (!softwareShowing.value) return
         val current = synchronized(pictureLock) { pictureEpoch == picture.epoch && !pictureCleared }
         if (!current) return
+        // A turn the viewer changed while the picture is held reshapes the Surface too (#428).
+        geometryConsumer?.invoke(
+            picture.size.cropped(picture.crop),
+            videoTransform.value.orient(picture.rotationDegrees, picture.mirrored).rotationDegrees,
+            null,
+        )
         draw(
             argb, picture.size, picture.rotationDegrees, picture.mirrored, picture.framePts, picture.crop,
             picture.epoch, redraw = true,

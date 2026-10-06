@@ -1068,7 +1068,10 @@ internal fun quadUniformsFor(
     val sarDen = size.pixelAspectDenominator.takeIf { it > 0 } ?: 1
     val storedWidth = size.width.toFloat() * sarNum / sarDen
     val storedHeight = size.height.toFloat()
-    val turn = normalizedQuarterTurn(frame.rotationDegrees)
+    // The viewer's turn and mirrors fold into the frame's own (#428), so the quad shows the picture
+    // as the viewer turned it and the fit is of that shape.
+    val shown = transform.orient(frame.rotationDegrees, frame.mirrored)
+    val turn = normalizedQuarterTurn(shown.rotationDegrees)
     val quarterTurn = turn == 90 || turn == 270
     // The forced aspect describes the picture AS PRESENTED, after the turn, and only its ratio
     // matters to the fit: the same words as the other two geometries, so no drift.
@@ -1107,7 +1110,7 @@ internal fun quadUniformsFor(
         else -> floatArrayOf(1f, 0f, 0f, 1f)
     }
     // A mirror comes before the turn, so it negates the stored x the turned point reads (#233).
-    val mirror = if (frame.mirrored) -1f else 1f
+    val mirror = if (shown.mirrored) -1f else 1f
     // The crop scales each texture axis down to the share it leaves and shifts the read onto it:
     // a texture coordinate t becomes origin + extent * t, which folds into the basis rows and a
     // shift of origin + extent / 2 - 1 / 2. Texture y runs down from the top, as the crop counts.

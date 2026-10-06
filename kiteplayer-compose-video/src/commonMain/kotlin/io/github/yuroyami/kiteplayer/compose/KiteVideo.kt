@@ -78,13 +78,14 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                         rotationDegrees = frame.rotationDegrees,
                         mode = mode,
                         transform = framing,
+                        mirrored = frame.mirrored,
                     ) ?: return@drawBehind
                     // Fill overhangs the component by design; the clip keeps the crop inside it.
                     // Fit and Stretch never overhang, so they keep the unclipped fast path.
                     val draw: DrawScope.() -> Unit = {
                         // The picture controls, on the VIDEO image only: subtitles below
                         // composite unfiltered, exactly like every platform renderer.
-                        drawVideoPicture(frame.image, layout, frame.mirrored, sampling, videoFilter, frame.crop)
+                        drawVideoPicture(frame.image, layout, layout.mirrored, sampling, videoFilter, frame.crop)
                     }
                     // Fill overhangs by design; zoom and pan can overhang under ANY mode. Both
                     // clip; the unzoomed Fit and Stretch keep the unclipped fast path.

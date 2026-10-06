@@ -86,6 +86,9 @@ internal data class FrameLayout(
  * centred with the remainder split in two, so the letterbox is symmetric to the pixel and the picture
  * never overhangs the canvas by a rounding error.
  *
+ * [rotationDegrees] and [mirrored] are the frame's own, and the layout's are those with the
+ * viewer's turn and mirrors of [transform] folded in (#428).
+ *
  * [size] is the stored size and [crop] the frame's own crop, so the fit is of what the crop leaves
  * and the source rectangle names it. A crop that does not fit the stored size is not applied, the
  * same rule as [VideoSize.cropped].
@@ -109,7 +112,10 @@ internal fun frameLayout(
     // drift. A nonsense aspect that scales the width away leaves the stored width, which shows the
     // picture slightly wrong instead of showing nothing at all.
     val displayWidth = shown.displayWidth.takeIf { it > 0 } ?: shown.width
-    val turn = quarterTurn(rotationDegrees)
+    // The viewer's turn and mirrors (#428) fold into the file's own here, so every renderer that
+    // draws by this layout follows them, and the fit below is of the picture as it is turned.
+    val orientation = transform.orient(rotationDegrees, mirrored)
+    val turn = quarterTurn(orientation.rotationDegrees)
     val quarterTurned = turn == 90 || turn == 270
     val aspect = transform.aspectOverride
     val contentWidth: Long
@@ -162,7 +168,7 @@ internal fun frameLayout(
         right = left + destinationWidth,
         bottom = top + destinationHeight,
         rotationDegrees = turn,
-        mirrored = mirrored,
+        mirrored = orientation.mirrored,
         sourceLeft = applied?.left ?: 0,
         sourceTop = applied?.top ?: 0,
         sourceRight = size.width - (applied?.right ?: 0),

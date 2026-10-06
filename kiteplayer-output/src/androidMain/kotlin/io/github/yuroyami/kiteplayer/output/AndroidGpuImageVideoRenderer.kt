@@ -223,6 +223,11 @@ public class AndroidGpuImageVideoRenderer(
         if (!closed.value) bridge.setViewport(width, height, scale)
     }
 
+    /** The viewer's turn reaches the picture where Compose draws it; here it only sizes the buffer (#428). */
+    override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
+        if (!closed.value) bridge.setQuarterTurned(transform.rotationDegrees == 90 || transform.rotationDegrees == 270)
+    }
+
     override suspend fun setOverlay(overlay: SubtitleOverlay?): Unit = Unit
 
     /**
@@ -556,9 +561,37 @@ private class OesRgbaBridge(
         runOnGlThread(GlState::clearPictures)
     }
 
+    // The view as it was last given, and whether the viewer turns the picture a quarter (#428).
+    private var viewWidth = 0
+    private var viewHeight = 0
+    private var viewScale = 1f
+    private var quarterTurned = false
+
     fun setViewport(width: Int, height: Int, scale: Float) {
+        viewWidth = width
+        viewHeight = height
+        viewScale = scale
+        requestViewport()
+    }
+
+    /**
+     * Takes whether the viewer turns the picture a quarter (#428). A picture turned a quarter fits
+     * a view as the unturned one fits the view with its sides swapped, so the buffer is sized for
+     * that and the turned picture is drawn from as many pixels as it shows.
+     */
+    fun setQuarterTurned(turned: Boolean) {
+        if (quarterTurned == turned) return
+        quarterTurned = turned
+        requestViewport()
+    }
+
+    private fun requestViewport() {
         if (closed) return
-        val viewport = physicalGpuViewport(width, height, scale)
+        val viewport = if (quarterTurned) {
+            physicalGpuViewport(viewHeight, viewWidth, viewScale)
+        } else {
+            physicalGpuViewport(viewWidth, viewHeight, viewScale)
+        }
         if (requestedViewport.getAndSet(viewport) == viewport) return
         if (!handler.post {
                 runCatching(state::viewportChanged).onFailure(reportFailure)

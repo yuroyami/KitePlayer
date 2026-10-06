@@ -194,7 +194,14 @@ public class AwtCanvasVideoRenderer(
     }
 
     override fun setTransform(transform: VideoTransform) {
-        synchronized(lock) { this.transform = transform }
+        val reshaped = synchronized(lock) {
+            val before = this.transform.orient(lastRotation, lastMirrored).rotationDegrees
+            this.transform = transform
+            val after = transform.orient(lastRotation, lastMirrored).rotationDegrees
+            lastSize?.takeIf { before != after }?.let { it to after }
+        }
+        // A turn changed while a picture is held reshapes the view at once, not with the next frame (#428).
+        reshaped?.let { (size, turn) -> onVideoGeometry(size, turn) }
         repaintRetained()
     }
 
@@ -259,7 +266,7 @@ public class AwtCanvasVideoRenderer(
             failed.incrementAndGet()
             return false
         }
-        synchronized(lock) {
+        val shownTurn = synchronized(lock) {
             if (closed) {
                 failed.incrementAndGet()
                 return false
@@ -268,8 +275,10 @@ public class AwtCanvasVideoRenderer(
             lastSize = size
             lastRotation = rotation
             lastMirrored = mirrored
+            transform.orient(rotation, mirrored).rotationDegrees
         }
-        onVideoGeometry(size, rotation)
+        // The view shapes itself for the picture as the viewer turned it (#428).
+        onVideoGeometry(size, shownTurn)
         // Counted and reported only once the strategy showed it. A canvas with no peer or no size
         // draws nothing, and the picture stays retained for the next repaint (#290).
         if (!paintNow()) {

@@ -32,7 +32,8 @@ outputY = y * outputHeight / viewportHeight
 Each axis scales on its own, and image sizes scale the same way.
 
 - The overlay is not mapped into the picture rectangle.
-- The overlay does not turn or mirror when the picture carries a rotation or a mirror.
+- The overlay does not turn or mirror when the picture carries a rotation or a mirror, the
+  file's or the viewer's. A quarter turn changes the shape of the picture the engine lays out for.
 - The scale mode, the aspect override, zoom and pan move the picture only. They do not move, crop
   or scale the overlay.
 - The overlay draws above the picture and above the bars, so a cue can sit in a bar.

@@ -23,6 +23,8 @@ internal data class VideoLayout(
     val right: Int,
     val bottom: Int,
     val rotationDegrees: Int,
+    /** Whether the picture is mirrored left to right before the turn: the frame's own and the viewer's together (#428). */
+    val mirrored: Boolean = false,
 ) {
     val width: Int get() = right - left
     val height: Int get() = bottom - top
@@ -51,6 +53,8 @@ internal fun videoLayout(
     rotationDegrees: Int,
     mode: VideoScale = VideoScale.Fit,
     transform: VideoTransform = VideoTransform.Identity,
+    /** The frame's own mirror; the layout's folds the viewer's into it, as its turn does (#428). */
+    mirrored: Boolean = false,
 ): VideoLayout? {
     if (areaWidth <= 0 || areaHeight <= 0) return null
     if (size.width <= 0 || size.height <= 0) return null
@@ -58,7 +62,9 @@ internal fun videoLayout(
     // A nonsense pixel aspect that scales the width away falls back to the stored width: a
     // slightly wrong picture beats no picture, the same choice the output renderers make.
     val displayWidth = size.displayWidth.takeIf { it > 0 } ?: size.width
-    val turn = quarterTurn(rotationDegrees)
+    // The viewer's turn and mirrors fold into the frame's own (#428), so the fit is of the turned picture.
+    val orientation = transform.orient(rotationDegrees, mirrored)
+    val turn = quarterTurn(orientation.rotationDegrees)
     val quarterTurned = turn == 90 || turn == 270
     val aspect = transform.aspectOverride
     val contentWidth: Long
@@ -109,6 +115,7 @@ internal fun videoLayout(
         right = left + destinationWidth,
         bottom = top + destinationHeight,
         rotationDegrees = turn,
+        mirrored = orientation.mirrored,
     )
 }
 

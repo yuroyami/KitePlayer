@@ -140,6 +140,8 @@ internal class KiteVideoRenderer(
 
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
         publishTransform(transform)
+        // The hardware tier sizes its images for the turned picture (#428); the draw turns it.
+        if (!closed.value) hardwareRenderer?.setTransform(transform)
     }
 
     /**

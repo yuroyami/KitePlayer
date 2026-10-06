@@ -90,7 +90,7 @@ import platform.posix.memcpy
  * small window shows only the layer. So while an overlay has text, the picture and the text are
  * composed on the GPU into a new pixel buffer, and that buffer is shown instead. A subtitle change
  * redraws the picture on screen, so a paused picture gains or loses its text at once. A picture
- * that its frame turns or mirrors is composed the same way, text or not, because the layer shows
+ * that its frame or the viewer turns or mirrors is composed the same way, text or not, because the layer shows
  * a buffer as it is stored. Without a Metal device the text is left out, and the picture shows as
  * it is stored.
  *
@@ -141,6 +141,9 @@ public class SampleBufferVideoRenderer internal constructor(
     /** True from a clear until the next frame, while the layer shows the text on black or nothing. */
     private var pictureCleared = false
 
+    /** The viewer's framing, of which this renderer draws the turn and mirror. Guarded by [lock]. */
+    private var viewerTransform = io.github.yuroyami.kiteplayer.VideoTransform.Identity
+
     /** Frames this renderer handed to the layer. */
     public val presentedFrames: Long get() = presented.value
 
@@ -179,6 +182,21 @@ public class SampleBufferVideoRenderer internal constructor(
 
     /** The layer's bounds and gravity belong to whoever owns it, as with the Core Graphics path. */
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
+
+    /**
+     * Takes the viewer's turn and mirror (#428), which are composed into the picture the same way
+     * as its frame's own, and redraws the picture on screen when they change what it shows. The
+     * zoom, pan and aspect are the layer owner's, as its bounds and gravity are.
+     */
+    override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
+        synchronized(lock) {
+            val before = viewerTransform
+            viewerTransform = transform
+            if (closed.value || pictureCleared) return
+            val last = lastPicture ?: return
+            if (before.orient(0, false) != transform.orient(0, false)) show(last)
+        }
+    }
 
     /**
      * Keeps [overlay] for every frame from now on, and redraws the picture on screen when its text
@@ -229,7 +247,8 @@ public class SampleBufferVideoRenderer internal constructor(
      */
     private fun show(picture: PlainPicture): Boolean {
         val text = overlay?.takeIf { it.hasText() }
-        val burned = if (text != null || picture.facts.needsRedraw) burn(picture, text) else null
+        val facts = picture.facts.orientedBy(viewerTransform)
+        val burned = if (text != null || facts.needsRedraw) burn(picture, facts, text) else null
         val sample = sampleBufferFor(burned ?: picture.buffer, picture.targetNanos)
         // The sample holds its own reference to the image, so the burned buffer's can go now.
         burned?.let { CVPixelBufferRelease(it) }
@@ -271,13 +290,13 @@ public class SampleBufferVideoRenderer internal constructor(
     }
 
     /** The composed picture, or null to show it as stored. Called under [lock]. */
-    private fun burn(picture: PlainPicture, text: SubtitleOverlay?): CVPixelBufferRef? {
+    private fun burn(picture: PlainPicture, facts: PictureFacts, text: SubtitleOverlay?): CVPixelBufferRef? {
         if (!burnerTried) {
             burnerTried = true
             burner = makeBurner()
         }
-        val composed = burner?.burn(picture.buffer, picture.facts, text) ?: return null
-        if (picture.facts.colorSpace.willToneMap()) hdrAnnouncer.announce(picture.facts.colorSpace.transfer.name)
+        val composed = burner?.burn(picture.buffer, facts, text) ?: return null
+        if (facts.colorSpace.willToneMap()) hdrAnnouncer.announce(facts.colorSpace.transfer.name)
         return composed
     }
 

@@ -411,6 +411,8 @@ public class AppKitVideoRenderer internal constructor(
         // a shader. Identity hands back the same array, so an untouched picture copies nothing.
         val pixels = adjustRgba(rgba, adjustSlot.value)
         val transform = transformSlot.value
+        // The viewer's turn and mirror fold into the frame's own, so one drawing applies both (#428).
+        val orientation = transform.orient(rotationDegrees, mirrored)
         val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
         try {
             return pixels.usePinned { pinned ->
@@ -435,7 +437,7 @@ public class AppKitVideoRenderer internal constructor(
                         // Sizing by the display width applies a non-square pixel aspect, so anamorphic
                         // content is not stretched. A quarter turn moves that stretch onto the other
                         // axis, because the picture's own width is vertical afterwards.
-                        val quarterTurned = rotationDegrees == 90 || rotationDegrees == 270
+                        val quarterTurned = orientation.isQuarterTurn
                         val presentedWidth = if (quarterTurned) shown.height else displayWidth
                         val presentedHeight = if (quarterTurned) displayWidth else shown.height
                         // An aspect override reshapes the picture AS PRESENTED,
@@ -448,13 +450,15 @@ public class AppKitVideoRenderer internal constructor(
                         // composite; an active overlay routes through the drawing pass at every
                         // rotation, and so does zoom or pan.
                         if (
-                            rotationDegrees == 0 && !mirrored && overlaySlot.value == null &&
+                            orientation.rotationDegrees == 0 && !orientation.mirrored && overlaySlot.value == null &&
                             !transform.needsDrawingPass()
                         ) {
                             NSImage(cGImage = stored, size = size)
                         } else {
-                            val turned = turn(stored, shown.width, shown.height, rotationDegrees, mirrored, transform, colorSpace)
-                                ?: return@usePinned null
+                            val turned = turn(
+                                stored, shown.width, shown.height, orientation.rotationDegrees, orientation.mirrored,
+                                transform, colorSpace,
+                            ) ?: return@usePinned null
                             try {
                                 NSImage(cGImage = turned, size = size)
                             } finally {

@@ -385,6 +385,8 @@ public class UIKitVideoRenderer internal constructor(
         // a shader. Identity hands back the same array, so an untouched picture copies nothing.
         val pixels = adjustRgba(rgba, adjustSlot.value)
         val videoTransform = transformSlot.value
+        // The viewer's turn and mirror fold into the frame's own, so one drawing applies both (#428).
+        val orientation = videoTransform.orient(rotationDegrees, mirrored)
         val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
         try {
             val context = CGBitmapContextCreate(
@@ -406,8 +408,8 @@ public class UIKitVideoRenderer internal constructor(
                 // With identity geometry and nothing to composite, the stored image
                 // IS the finished picture, so the second bitmap pass was pure waste.
                 if (
-                    rotationDegrees == 0 &&
-                    !mirrored &&
+                    orientation.rotationDegrees == 0 &&
+                    !orientation.mirrored &&
                     displayWidth == shown.width &&
                     overlaySlot.value == null &&
                     videoTransform.isIdentity
@@ -416,7 +418,8 @@ public class UIKitVideoRenderer internal constructor(
                 }
                 try {
                     return transform(
-                        stored, displayWidth, shown.height, rotationDegrees, mirrored, videoTransform, colorSpace,
+                        stored, displayWidth, shown.height, orientation.rotationDegrees, orientation.mirrored, videoTransform,
+                        colorSpace,
                     )
                 } finally {
                     CGImageRelease(stored)

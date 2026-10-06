@@ -189,4 +189,37 @@ class FrameLayoutTest {
         assertEquals(whole, frameLayout(1920, 1080, VideoSize(640, 480), 0, crop = PictureCrop(top = 240, bottom = 240)))
         assertEquals(whole, frameLayout(1920, 1080, VideoSize(640, 480), 0, crop = PictureCrop()))
     }
+
+    @Test
+    fun theViewersQuarterTurnFitsTheTurnedPicture() {
+        // A 16:9 picture the viewer turns a quarter is fitted as 9:16 and drawn turned (#428).
+        val layout = frameLayout(
+            1920, 1080, VideoSize(1920, 1080), 0,
+            transform = io.github.yuroyami.kiteplayer.VideoTransform(rotationDegrees = 90),
+        )!!
+        assertEquals(90, layout.rotationDegrees)
+        assertEquals(1080, layout.height)
+        assertEquals(607, layout.width, "9:16 at 1080 high, rounded down")
+        // The file's own quarter turn and the viewer's quarter turn back show it as stored.
+        val undone = frameLayout(
+            1920, 1080, VideoSize(1920, 1080), 90,
+            transform = io.github.yuroyami.kiteplayer.VideoTransform(rotationDegrees = 270),
+        )!!
+        assertEquals(0, undone.rotationDegrees)
+        assertEquals(1920, undone.width)
+    }
+
+    @Test
+    fun theViewersMirrorsFoldIntoTheFramesOwn() {
+        val mirror = io.github.yuroyami.kiteplayer.VideoTransform(mirrorHorizontal = true)
+        assertTrue(frameLayout(1920, 1080, VideoSize(1920, 1080), 0, transform = mirror)!!.mirrored)
+        assertFalse(frameLayout(1920, 1080, VideoSize(1920, 1080), 0, transform = mirror, mirrored = true)!!.mirrored)
+        // Top to bottom is a mirror and a half turn.
+        val flipped = frameLayout(
+            1920, 1080, VideoSize(1920, 1080), 0,
+            transform = io.github.yuroyami.kiteplayer.VideoTransform(mirrorVertical = true),
+        )!!
+        assertTrue(flipped.mirrored)
+        assertEquals(180, flipped.rotationDegrees)
+    }
 }

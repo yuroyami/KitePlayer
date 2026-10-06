@@ -1593,8 +1593,10 @@ internal class PlaybackCore(
         if (cues.isEmpty()) return null
         // What the screen showed of the picture, so the text sits where it did once the caller crops.
         val shown = captured.size.cropped(captured.crop)
-        val width = shown.displayWidth
-        val height = shown.height
+        // Laid out on the picture as it is turned, as the screen lays it out, so the text is upright (#428).
+        val quarterTurned = isQuarterTurn(captured.rotationDegrees)
+        val width = if (quarterTurned) shown.height else shown.displayWidth
+        val height = if (quarterTurned) shown.displayWidth else shown.height
         if (width <= 0 || height <= 0) return null
         val images = withContext(dispatchers.raster) {
             rasterizer.rasterizeWithinLimits(
@@ -1713,7 +1715,8 @@ internal class PlaybackCore(
         val reply = CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>()
         send(CoreCommand.CaptureFrame(reply))
         try {
-            val captured = reply.await()
+            // Turned as the viewer turned the picture (#428), so the subtitles are laid out on the turned one.
+            val captured = reply.await().turnedBy(snapshotState.value.videoTransform)
             if (!withSubtitles) return captured
             // Drawn AFTER the frame is in hand, because the layout depends on the frame's own
             // size, which nothing knows until the frame arrives. The raster lane owns every
@@ -2921,9 +2924,15 @@ internal class PlaybackCore(
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetVideoTransform -> {
+                val before = videoTransform
                 videoTransform = command.value
                 session?.renderer?.setTransform(command.value)
                 if (session == null) pendingRenderer?.setTransform(command.value)
+                session?.let { active ->
+                    // The subtitles are laid out for the turned picture (#428).
+                    if (before.orient(0, false) != command.value.orient(0, false)) active.publishedCueKey = null
+                    followTurnWithDecoder(active, before, command.value)
+                }
                 // A held picture shows the change now, not with a frame that is not coming (#463).
                 requestRedraw(forced = false)
                 command.reply.complete(Unit)
@@ -3052,6 +3061,37 @@ internal class PlaybackCore(
         watchRendererEvents(renderer)
         if (renderer != null && session.videoStream == null) clearRendererPicture()
         return true
+    }
+
+    /**
+     * Rebuilds a picture whose decoder writes straight to the renderer's surface when the viewer's
+     * turn or mirror changes what it shows (#428). Such a decoder, Android's MediaCodec on a direct
+     * Surface, is told its turn when it is made and cannot mirror at all, so the ordinary
+     * track-change rebuild makes a new one with the new turn, or decodes in software where the
+     * picture is to be mirrored. Every other path turns the picture where it draws it.
+     */
+    private fun followTurnWithDecoder(active: OpenSession, before: VideoTransform, after: VideoTransform) {
+        val stream = active.videoStream ?: return
+        if (active.videoDecoderOrigin != VideoDecoderOrigin.Renderer) return
+        if (before.orient(stream.rotationDegrees, stream.mirrored) == after.orient(stream.rotationDegrees, stream.mirrored)) return
+        if (TrackKind.Video in pendingSelections) return
+        if (!active.source.seekable) {
+            warn(
+                PlaybackWarning.CommandRefused(
+                    "setVideoTransform",
+                    "the picture's decoder turns it as it decodes and this source cannot seek, so the new " +
+                        "turn shows once the media is opened again",
+                ),
+            )
+            return
+        }
+        queueSelection(TrackKind.Video, TrackId(stream.index), CompletableDeferred())
+    }
+
+    /** True when the picture is shown turned a quarter, by the file's turn and the viewer's together (#428). */
+    private fun shownQuarterTurn(session: OpenSession): Boolean {
+        val stream = session.videoStream ?: return false
+        return videoTransform.orient(stream.rotationDegrees, stream.mirrored).isQuarterTurn
     }
 
     /**
@@ -7538,7 +7578,7 @@ internal class PlaybackCore(
         val width = size?.displayWidth?.takeIf { it > 0 }
         val height = size?.height?.takeIf { it > 0 }
         if (width == null || height == null) return DEFAULT_SUBTITLE_CANVAS_WIDTH to DEFAULT_SUBTITLE_CANVAS_HEIGHT
-        return if (isQuarterTurn(session.videoStream?.rotationDegrees)) height to width else width to height
+        return if (shownQuarterTurn(session)) height to width else width to height
     }
 
     /** The geometry the typesetter draws into, from the same canvas rule [publishOverlay] uses. */
@@ -7548,7 +7588,7 @@ internal class PlaybackCore(
         var videoWidth = size?.displayWidth?.takeIf { it > 0 } ?: width
         var videoHeight = size?.height?.takeIf { it > 0 } ?: height
         // The renderer turns a sideways recording upright, so the fitted picture is the turned one.
-        if (size != null && isQuarterTurn(session.videoStream?.rotationDegrees)) {
+        if (size != null && shownQuarterTurn(session)) {
             val turned = videoWidth
             videoWidth = videoHeight
             videoHeight = turned

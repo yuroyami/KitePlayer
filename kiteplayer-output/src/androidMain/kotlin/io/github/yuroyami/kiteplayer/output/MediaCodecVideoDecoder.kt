@@ -17,6 +17,7 @@ import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.VideoSize
+import io.github.yuroyami.kiteplayer.VideoTransform
 import io.github.yuroyami.kiteplayer.spi.ChromaLocation
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
@@ -95,12 +96,6 @@ internal fun directSurfaceOutputContract(
 }
 
 /**
- * Why a direct Surface cannot show [stream] the right way round, or null when it can. MediaCodec
- * turns what it writes to a Surface but has no way to mirror it, so a mirrored stream decodes in
- * software there. A target that turns the picture itself, with [applyCodecRotation] false, mirrors
- * it too.
- */
-/**
  * The crop the container states, when it leaves something of a [size] picture (#497). MediaCodec's
  * own crop is the bitstream's and is already out of [size]; this is the one on top that nothing in
  * the codec knows about. A crop that leaves nothing is dropped, and the engine says so.
@@ -108,8 +103,26 @@ internal fun directSurfaceOutputContract(
 internal fun PlayerStreamInfo.cropFitting(size: VideoSize): PictureCrop? =
     crop?.takeIf { !it.isEmpty && it.fits(size.width, size.height) }
 
-internal fun directSurfaceGeometryRefusal(stream: PlayerStreamInfo, applyCodecRotation: Boolean): String? =
-    if (applyCodecRotation && stream.mirrored) "the direct Surface cannot mirror a mirrored stream" else null
+/**
+ * Why a direct Surface cannot show [stream] the right way round under the viewer's [transform], or
+ * null when it can. MediaCodec turns what it writes to a Surface but has no way to mirror it, so a
+ * picture that ends up mirrored decodes in software there. A target that turns the picture itself,
+ * with [applyCodecRotation] false, mirrors it too.
+ */
+internal fun directSurfaceGeometryRefusal(
+    stream: PlayerStreamInfo,
+    applyCodecRotation: Boolean,
+    transform: VideoTransform = VideoTransform.Identity,
+): String? {
+    if (!applyCodecRotation) return null
+    // A mirrored stream that the viewer mirrors back shows unmirrored, and MediaCodec can draw that.
+    if (!transform.orient(stream.rotationDegrees, stream.mirrored).mirrored) return null
+    return if (transform.turnsOrMirrors) {
+        "the direct Surface cannot mirror the picture as the viewer asked"
+    } else {
+        "the direct Surface cannot mirror a mirrored stream"
+    }
+}
 
 /**
  * Why MediaCodec cannot decode [stream] into a picture that means anything, or null when it can.
@@ -129,6 +142,13 @@ internal class MediaCodecVideoDecoderFactory(
     private val target: MediaCodecSurfaceTarget,
     private val applyCodecRotation: Boolean = true,
     private val outputAdmission: MediaCodecOutputAdmission = DIRECT_SURFACE_ADMISSION,
+    /**
+     * The viewer's turn and mirrors (#428), read at each decoder's creation. Where MediaCodec turns
+     * the picture, it turns it by the file's turn and the viewer's together, and a picture that ends
+     * up mirrored, which MediaCodec cannot draw, decodes in software. A target that turns the
+     * picture itself draws the viewer's choice as it draws the file's.
+     */
+    private val viewerTransform: () -> VideoTransform = { VideoTransform.Identity },
 ) : VideoDecoderFactory {
     override val name: String = "Android MediaCodec direct Surface"
 
@@ -137,7 +157,14 @@ internal class MediaCodecVideoDecoderFactory(
             return refuseMediaCodec(hwdec, "direct MediaCodec output requires Android 10 or newer")
         }
         if (stream.kind != TrackKind.Video || !hwdec.allowsMediaCodec()) return null
-        directSurfaceGeometryRefusal(stream, applyCodecRotation)?.let { return refuseMediaCodec(hwdec, it) }
+        val viewer = viewerTransform()
+        directSurfaceGeometryRefusal(stream, applyCodecRotation, viewer)?.let { return refuseMediaCodec(hwdec, it) }
+        // What the Surface shows: the turn MediaCodec applies, or the file's own where the target turns.
+        val shownRotation = if (applyCodecRotation) {
+            viewer.orient(stream.rotationDegrees, stream.mirrored).rotationDegrees
+        } else {
+            normalizedQuarterTurn(stream.rotationDegrees)
+        }
         directSurfaceDolbyVisionRefusal(stream)?.let { return refuseMediaCodec(hwdec, it) }
         val size = stream.videoSize
             ?: return refuseMediaCodec(hwdec, "the stream has no coded video size")
@@ -179,6 +206,7 @@ internal class MediaCodecVideoDecoderFactory(
             configuredProfile = codec.androidProfile,
             applyCodecRotation = applyCodecRotation,
             includeOutputRequest = false,
+            codecRotation = shownRotation,
         )
         val decoderProbe = findHardwareDecoders(probeFormat, codec)
         if (decoderProbe.decoders.isEmpty()) return refuseMediaCodec(hwdec, decoderProbe.reason)
@@ -193,6 +221,7 @@ internal class MediaCodecVideoDecoderFactory(
                 configuredProfile = candidate.configuredProfile,
                 applyCodecRotation = applyCodecRotation,
                 includeOutputRequest = true,
+                codecRotation = shownRotation,
             )
             try {
                 val decoder = MediaCodecVideoDecoder(
@@ -208,9 +237,10 @@ internal class MediaCodecVideoDecoderFactory(
                     },
                     frameMirrored = !applyCodecRotation && stream.mirrored,
                     outputContract = outputContract,
+                    shownRotation = shownRotation,
                 )
                 return try {
-                    target.publishGeometry(size, normalizedQuarterTurn(stream.rotationDegrees), stream.cropFitting(size))
+                    target.publishGeometry(size, shownRotation, stream.cropFitting(size))
                     decoder
                 } catch (failure: Throwable) {
                     decoder.close()
@@ -240,6 +270,8 @@ private fun mediaCodecFormat(
     configuredProfile: Int,
     applyCodecRotation: Boolean,
     includeOutputRequest: Boolean,
+    /** The turn MediaCodec applies when [applyCodecRotation]: the file's and the viewer's together (#428). */
+    codecRotation: Int = normalizedQuarterTurn(stream.rotationDegrees),
 ): MediaFormat = MediaFormat.createVideoFormat(codec.mime, size.width, size.height).apply {
     setInteger(MediaFormat.KEY_PROFILE, configuredProfile)
     setInteger(MediaFormat.KEY_LEVEL, codec.androidLevel)
@@ -266,7 +298,7 @@ private fun mediaCodecFormat(
     }
     setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, codec.maxInputSize(size))
     setInteger(MediaFormat.KEY_ALLOW_FRAME_DROP, 0)
-    normalizedQuarterTurn(stream.rotationDegrees).takeIf { applyCodecRotation && it != 0 }?.let {
+    codecRotation.takeIf { applyCodecRotation && it != 0 }?.let {
         setInteger(MediaFormat.KEY_ROTATION, it)
     }
 }
@@ -517,6 +549,8 @@ private class MediaCodecVideoDecoder(
     private val frameRotationDegrees: Int,
     private val frameMirrored: Boolean,
     private val outputContract: MediaCodecOutputContract,
+    /** The turn the Surface shows, which the view sizes the Surface for (#428). */
+    private val shownRotation: Int,
 ) : VideoDecoder, MediaCodecFrameOwner, MediaCodecSurfaceTarget.Switcher {
     override val hardware: HwdecStatus = HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec)
 
@@ -960,7 +994,7 @@ private class MediaCodecVideoDecoder(
                 pixelAspectNumerator = configuredSize.pixelAspectNumerator,
                 pixelAspectDenominator = configuredSize.pixelAspectDenominator,
             )
-            target.publishGeometry(outputSize, normalizedQuarterTurn(stream.rotationDegrees), stream.cropFitting(outputSize))
+            target.publishGeometry(outputSize, shownRotation, stream.cropFitting(outputSize))
         }
     }
 

@@ -36,8 +36,9 @@ public class CapturedFrame internal constructor(
     private val heights: IntArray,
     private val planes: Array<ByteArray>,
     /**
-     * The subtitles that were on screen, laid out for THIS frame's own size after its [crop], or
-     * null.
+     * The subtitles that were on screen, laid out for THIS frame's own size after its [crop] and
+     * turned by [rotationDegrees], or null. Turn and mirror the planes as the frame says, then draw
+     * these on top, as the screen did (#428).
      *
      * Null when the capture did not ask for them and when nothing was showing. Laid out for the
      * frame rather than for the screen because a screenshot is the frame's size, not the phone's:
@@ -141,6 +142,29 @@ public class CapturedFrame internal constructor(
                 crop = frame.crop,
             )
         }
+    }
+
+    /**
+     * The same pixels as [transform] shows them (#428): its turn and mirrors folded into the frame's
+     * own, so a capture is the picture the viewer sees. Shares the plane arrays; nothing is copied.
+     */
+    internal fun turnedBy(transform: VideoTransform): CapturedFrame {
+        if (!transform.turnsOrMirrors) return this
+        val shown = transform.orient(rotationDegrees, mirrored)
+        return CapturedFrame(
+            pts = pts,
+            size = size,
+            pixelFormat = pixelFormat,
+            colorSpace = colorSpace,
+            rotationDegrees = shown.rotationDegrees,
+            mirrored = shown.mirrored,
+            generation = generation,
+            strides = strides,
+            heights = heights,
+            planes = planes,
+            overlay = overlay,
+            crop = crop,
+        )
     }
 
     /** The same pixels with [overlay] attached. Shares the plane arrays; nothing is copied. */

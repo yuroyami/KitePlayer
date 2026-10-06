@@ -221,6 +221,9 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
     /** See [SubtitleConfig.fonts]. */
     public var fonts: List<SubtitleFont> = from.fonts
 
+    /** See [SubtitleConfig.assColorMatching]. */
+    public var assColorMatching: Boolean = from.assColorMatching
+
     /** See [SubtitleConfig.hearingImpairedNotes]. */
     public var hearingImpairedNotes: HearingImpairedNotes = from.hearingImpairedNotes
 
@@ -246,6 +249,7 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
         style = style,
         typesetting = typesetting,
         fonts = fonts,
+        assColorMatching = assColorMatching,
         hearingImpairedNotes = hearingImpairedNotes,
         fallbackEncoding = fallbackEncoding,
         withMatchingAudio = withMatchingAudio,

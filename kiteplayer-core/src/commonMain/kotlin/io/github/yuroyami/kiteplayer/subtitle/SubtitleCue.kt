@@ -170,7 +170,54 @@ public data class CueLayout(
      */
     val fadeInMicros: Long = 0,
     val fadeOutMicros: Long = 0,
+    /**
+     * The colour matrix an ASS script's `YCbCr Matrix` header names, which the player matches the
+     * cue's colours to the video through (#499). The engine converts the colours of the cues it
+     * publishes, so a cue arriving at a rasterizer is already matched. Null for every other format,
+     * which names none.
+     */
+    val scriptColorMatrix: ScriptColorMatrix? = null,
 )
+
+/**
+ * The value of an ASS script's `YCbCr Matrix` header (#499): the matrix and range its colours went
+ * through on the way into the video they were picked from, as libass reads it. `Tv` is studio range,
+ * 16 to 235, and `Pc` full range, 0 to 255. See [SubtitleConfig.assColorMatching][io.github.yuroyami.kiteplayer.SubtitleConfig.assColorMatching].
+ */
+public enum class ScriptColorMatrix {
+    /** No header, as in a script from before it existed, which VSFilter drew through BT.601 at studio range. */
+    Default,
+
+    /** A header whose value cannot be read, which converts nothing. */
+    Unknown,
+
+    /** `None`: the colours are meant as they stand, and nothing converts them. */
+    None,
+
+    /** `TV.601`. */
+    Bt601Tv,
+
+    /** `PC.601`. */
+    Bt601Pc,
+
+    /** `TV.709`. */
+    Bt709Tv,
+
+    /** `PC.709`. */
+    Bt709Pc,
+
+    /** `TV.240M`. */
+    Smpte240mTv,
+
+    /** `PC.240M`. */
+    Smpte240mPc,
+
+    /** `TV.FCC`. */
+    FccTv,
+
+    /** `PC.FCC`. */
+    FccPc,
+}
 
 /**
  * The order cues pile up in when more than one is on screen.

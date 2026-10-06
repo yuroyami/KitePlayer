@@ -627,6 +627,17 @@ public data class SubtitleConfig(
      * back. Off by default, so subtitles off draws nothing.
      */
     val forcedPicturesWhenOff: Boolean = false,
+    /**
+     * Match an ASS script's colours to the video the way its `YCbCr Matrix` header asks (#499), so a
+     * sign coloured to blend into the picture blends in here too. Typesetters pick such colours from
+     * a frame decoded with one matrix, and the header names it; a script with no header is an old
+     * VSFilter one, which counts as BT.601 at studio range. Each colour goes from RGB to YCbCr with
+     * the header's matrix and range, and back to RGB with the video's, as XySubFilter does and as
+     * libass recommends. `None` keeps the colours as they are, and so do RGB video and HDR video.
+     * Both the typesetting engine and the Kotlin tier follow it. False draws every colour as
+     * authored, for an application that wants exactly those.
+     */
+    val assColorMatching: Boolean = true,
 ) {
     init {
         require(fallbackEncoding == null || SubtitleEncodings.canonical(fallbackEncoding) != null) {

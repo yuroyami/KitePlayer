@@ -1,12 +1,14 @@
 package io.github.yuroyami.kiteplayer.io
 
 import android.content.ContentResolver
+import android.content.Context
 import android.content.res.AssetFileDescriptor
 import android.content.res.AssetManager
 import android.net.Uri
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoFactory
 import java.io.FileInputStream
+import java.io.FileNotFoundException
 import java.nio.channels.FileChannel
 
 /**
@@ -26,6 +28,27 @@ public fun MediaIo.Companion.ofUri(resolver: ContentResolver, uri: Uri): MediaIo
  */
 public fun MediaIo.Companion.ofAsset(assets: AssetManager, name: String): MediaIoFactory = MediaIoFactory {
     assets.openFd(name).toMediaIo()
+}
+
+/**
+ * Plays the address a Compose Multiplatform resource has on Android (#457), the
+ * `file:///android_asset/composeResources/...` that `Res.getUri` returns there, from the app's
+ * assets through [context]. An asset stored uncompressed reads by position, as through [ofAsset];
+ * one stored compressed reads as a stream that seeks by opening it again, which costs little for a
+ * clip an app bundles. Null for any other address, which then plays as it is.
+ */
+public fun MediaIo.Companion.ofResourceUri(context: Context, uri: String): MediaIoFactory? {
+    val name = assetNameOf(uri) ?: return null
+    val assets = context.applicationContext.assets
+    return MediaIoFactory {
+        try {
+            assets.openFd(name).toMediaIo()
+        } catch (compressed: FileNotFoundException) {
+            // openFd answers so for an asset stored compressed, and open still reads it.
+            val size = assets.open(name).use { it.available().toLong() }
+            ReopeningStreamMediaIo({ assets.open(name) }, size)
+        }
+    }
 }
 
 /** Reads the window of this descriptor by position. Closing the reader closes the descriptor. */

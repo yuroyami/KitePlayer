@@ -262,6 +262,20 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The item is marked as still being written ([MediaItem.growth]), but it is a local path with no
+     * reader of its own and no installed provider serves local files, so it plays as the file stood
+     * when it opened (#430). Adding `kiteplayer-io`, or giving the item an `io` factory, cures it.
+     * [uri] is the file's name alone.
+     */
+    public data class GrowthUnavailable(val uri: String) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("uri" to uri)
+
+        override val message: String
+            get() = "$uri is still being written, but nothing installed reads a local file as it grows, so it plays as it stood at the open"
+    }
+
+    /**
      * The reader lost its connection to the source at byte [position] and is connecting again,
      * for the [attempt]-th time in one read. [detail] says what failed. Playback waits meanwhile,
      * and it fails only when the reader gives up or `BufferPolicy.stallTimeout` passes.

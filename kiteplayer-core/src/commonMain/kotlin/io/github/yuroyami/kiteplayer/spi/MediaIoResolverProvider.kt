@@ -21,6 +21,14 @@ public interface MediaIoResolverProvider {
 
     /** Creates the resolver lazily. Do not open clients or other closeable resources here. */
     public fun create(): MediaIoResolver
+
+    /**
+     * True for a provider whose resolver opens local paths, a bare path or a `file:` address (#430).
+     * Automatic resolution never asks such a provider, so a local file stays on the backend's own
+     * reader. The engine asks it only for an item that needs a Kotlin reader of a local file, which
+     * is one still being written ([io.github.yuroyami.kiteplayer.MediaItem.growth]). False by default.
+     */
+    public val servesLocalFiles: Boolean get() = false
 }
 
 /**

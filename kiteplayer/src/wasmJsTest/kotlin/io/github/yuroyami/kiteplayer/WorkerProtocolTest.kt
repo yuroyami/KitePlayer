@@ -59,6 +59,7 @@ class WorkerProtocolTest {
         audioFilter = "volume=0.5",
         audioContent = AudioContent.Speech,
         clip = MediaClip(start = 61.seconds, end = 3.minutes),
+        growth = FileGrowth(endsAfter = 5.seconds),
     )
 
     private val tracks = Tracks(
@@ -179,6 +180,7 @@ class WorkerProtocolTest {
         PlaybackWarning.AudioUnderrun(3L),
         PlaybackWarning.SourceReconnecting(1_048_576L, 2, "reset"),
         PlaybackWarning.AddressRenewed("https://cdn.test/seg-3.ts", 403),
+        PlaybackWarning.GrowthUnavailable("recording.ts"),
         PlaybackWarning.AudioTapFailed("threw"),
         PlaybackWarning.AudioDeviceUnderrun("ran dry"),
         PlaybackWarning.AudioDrainIncomplete("bounded out"),

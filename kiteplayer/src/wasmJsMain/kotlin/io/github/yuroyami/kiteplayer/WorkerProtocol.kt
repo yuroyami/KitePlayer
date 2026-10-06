@@ -470,6 +470,7 @@ private fun encodeItem(item: MediaItem): JsAny = record {
         put("clipStart", clip.start)
         put("clipEnd", clip.end)
     }
+    item.growth?.let { growth -> put("growthEndsAfter", growth.endsAfter) }
 }
 
 private fun encodeSubtitle(source: SubtitleSource): JsAny = record {
@@ -930,6 +931,10 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             put("uri", warning.uri)
             put("status", warning.status)
         }
+        is PlaybackWarning.GrowthUnavailable -> {
+            kind("GrowthUnavailable")
+            put("uri", warning.uri)
+        }
         is PlaybackWarning.SourceReconnecting -> {
             kind("SourceReconnecting")
             put("position", warning.position)
@@ -1258,6 +1263,7 @@ private fun decodeItem(o: JsAny): MediaItem = MediaItem(
     audioFilter = o.str("audioFilter"),
     audioContent = o.enum<AudioContent>("audioContent") ?: AudioContent.Automatic,
     clip = o.micros("clipStart")?.let { start -> MediaClip(start, o.micros("clipEnd")) },
+    growth = o.micros("growthEndsAfter")?.let(::FileGrowth),
 )
 
 private fun decodeSubtitle(o: JsAny): SubtitleSource = SubtitleSource(
@@ -1602,6 +1608,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "AudioDeviceChanged" -> PlaybackWarning.AudioDeviceChanged(detail)
         "AudioUnderrun" -> PlaybackWarning.AudioUnderrun(o.long("total") ?: missing("total"))
         "AddressRenewed" -> PlaybackWarning.AddressRenewed(o.str("uri") ?: missing("uri"), o.int("status") ?: missing("status"))
+        "GrowthUnavailable" -> PlaybackWarning.GrowthUnavailable(o.str("uri") ?: missing("uri"))
         "SourceReconnecting" -> PlaybackWarning.SourceReconnecting(
             o.long("position") ?: missing("position"),
             o.int("attempt") ?: missing("attempt"),

@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.internal.SubtitleEncodings
 import io.github.yuroyami.kiteplayer.internal.redactUri
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /** What to play. */
 public data class MediaItem(
@@ -158,6 +159,12 @@ public data class MediaItem(
      * counts from the clip's start. See [MediaClip].
      */
     val clip: MediaClip? = null,
+    /**
+     * Marks the file as still being written, as a recording in progress, a download that plays
+     * while it arrives or a TV recorder's file is (#430), or null, the default, for a file that is
+     * complete. See [FileGrowth].
+     */
+    val growth: FileGrowth? = null,
 ) {
     public companion object {}
 
@@ -269,6 +276,45 @@ public data class MediaClip(
         @kotlin.jvm.JvmOverloads
         public fun ofMillis(startMillis: Long, endMillis: Long? = null): MediaClip =
             MediaClip(startMillis.milliseconds, endMillis?.milliseconds)
+    }
+}
+
+/**
+ * How a [MediaItem] whose file is still being written is played (#430).
+ *
+ * The item plays to the file's current end and on as it grows. At what looks like the end, the
+ * player waits for more and reads again, and the item ends once the file has not grown for
+ * [endsAfter]. Its length follows the file: [PlayerSnapshot.duration] is an estimate that grows
+ * with it, as [PlayerSnapshot.durationIsEstimate] says, and a seek reaches any part already
+ * written, not only the part that existed at the open. While playback waits at the end it buffers,
+ * as it does for a slow network.
+ *
+ * The file is read through Kotlin rather than by FFmpeg's own file reader, which reports the end at
+ * the first read that finds no more bytes. The item's [MediaItem.io] does that reading when it has
+ * one. A local path with none needs a provider that serves local files, which `kiteplayer-io`
+ * installs on the JVM, Android, Apple and Linux; without one, the item plays as a complete file
+ * and the player says so with [PlaybackWarning.GrowthUnavailable].
+ *
+ * mpv's `appending://` protocol plays such files the same way, and waits about two seconds, the
+ * default here, before it calls the end.
+ *
+ * @throws IllegalArgumentException when [endsAfter] is not positive and finite.
+ */
+public data class FileGrowth(
+    /** How long the file must go without growing before the item ends. */
+    val endsAfter: Duration = 2.seconds,
+) {
+    init {
+        require(endsAfter.isFinite() && endsAfter > Duration.ZERO) { "a growing file must end after a positive wait, was $endsAfter" }
+    }
+
+    /** [endsAfter] in milliseconds. For Java, which cannot read a [Duration]. */
+    public val endsAfterMillis: Long get() = endsAfter.inWholeMilliseconds
+
+    public companion object {
+        /** Growth that ends after [endsAfterMillis] without new bytes. For Java, which cannot make a [Duration]. */
+        @kotlin.jvm.JvmStatic
+        public fun ofMillis(endsAfterMillis: Long): FileGrowth = FileGrowth(endsAfterMillis.milliseconds)
     }
 }
 

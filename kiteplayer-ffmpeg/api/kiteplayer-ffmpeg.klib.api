@@ -82,6 +82,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
     final fun audioDecoderFactories(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/AudioDecoderFactory> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.audioDecoderFactories|audioDecoderFactories(){}[0]
     final fun close() // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.close|close(){}[0]
     final fun interrupt(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.interrupt|interrupt(){}[0]
+    final fun pauseReading(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.pauseReading|pauseReading(){}[0]
+    final fun resumeReading(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.resumeReading|resumeReading(){}[0]
     final fun selectStreams(kotlin.collections/Set<kotlin/Int>) // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.selectStreams|selectStreams(kotlin.collections.Set<kotlin.Int>){}[0]
     final fun startRecording(kotlin/String) // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.startRecording|startRecording(kotlin.String){}[0]
     final fun stopRecording() // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.stopRecording|stopRecording(){}[0]

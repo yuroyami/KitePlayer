@@ -188,6 +188,14 @@ Each line is something that bit someone. Delete a line when it stops being true.
   line's RTP muxer sends a report only every 5 seconds, so a test relay must hand a joining player
   each stream's latest report at PLAY, as a camera does. Without that, RTSP over UDP played 300 ms
   out of sync, which reads like an engine bug (#395).
+- FFmpeg starts an RTSP stream's timestamps again at every PLAY, the one after a pause included,
+  from the Range and RTP-Info the reply carries. A test server that answers PLAY with neither sends
+  the position back near zero on resume, which reads like an engine bug. `RtspCamera` dates each
+  PLAY as a camera does (#441).
+- A test of a paused live player needs a pause that outlasts the read-ahead. FFmpeg sends the RTSP
+  keepalive from inside a read, and an audio-only stream takes far longer than a short pause to
+  fill the default 30 second budget, so the old reads kept the session alive and the test passed
+  with the fix taken out. `RtspPauseTest` reads two seconds ahead (#441).
 - The `ffmpeg` 6.1 command line's `-sdp_file` holds only the first stream of an RTP output with
   two. It prints a description to standard output as each stream starts, and only the last one
   names both, so a test takes that one (#395).

@@ -57,6 +57,12 @@ A `PlayerMediaSource` answers five questions and one command:
   suite's teardown asserts `liveCount == 0`, which is how the ownership law stays true.
 - `seekToKeyframe(target)`: move the cursor at or before the target. The engine handles discard
   and preroll; you only have to land on something decodable.
+- `pauseReading()` and `resumeReading()`, for a source that says `realTime`: a paused player calls
+  the first on the demux lane instead of reading, then again about once a second as the keepalive,
+  and calls the second on play. Answer false when the sender has no notion of a pause, and the
+  engine reads on as before. Answer true, and play drops what was buffered and plays the live edge;
+  throw, and play opens the stream again. The scripted source models an RTSP camera with
+  `livePause` and a session timeout.
 
 ## The decoders: `ScriptedVideoDecoder` and its audio sibling
 

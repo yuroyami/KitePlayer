@@ -238,6 +238,26 @@ internal class MediaScript(
      */
     val liveHolds: List<LongRange> = emptyList(),
     /**
+     * True makes the live sender one that takes a pause, as an RTSP camera does (#441): the source's
+     * pauseReading answers true and stops the sender, and resumeReading starts it again at the live
+     * edge, so what was sent meanwhile is never read.
+     */
+    val livePause: Boolean = false,
+    /**
+     * How long, in microseconds, the live sender keeps a session it hears nothing from, as an RTSP
+     * server does. A read, a pause and a resume are each a request it hears. Past it the session is
+     * gone, and every call after that fails. Null keeps a session for ever.
+     */
+    val liveSessionTimeoutUs: Long? = null,
+    /**
+     * When the live sender ends the session whatever it hears, in microseconds of its own time, as a
+     * camera that restarts does. Every call after that fails. A source opened again starts its own
+     * time from zero.
+     */
+    val liveSessionEndsAtUs: Long? = null,
+    /** True makes the live sender refuse every resume, as a server that dropped the session does. */
+    val liveResumeRefused: Boolean = false,
+    /**
      * True makes every other picture between keyframes one no other picture is built on, as the
      * B-frames of a stream coded I, B, P, B, P are, and the scripted video decoder then skips those
      * when the engine asks it to (#468).
@@ -897,6 +917,60 @@ internal class ScriptedSource(
         if (dueUs > nowUs) delay((dueUs - nowUs).microseconds)
     }
 
+    /** The live sender's own time, in microseconds since the source was created. */
+    private fun senderUs(): Long = clock?.let { (it.nanos() - liveOriginNanos) / 1_000 } ?: 0L
+
+    /** When the live sender last heard a request, by [senderUs]. */
+    private var heardAtUs = 0L
+
+    /** True once the live sender ended the session. */
+    private var sessionEnded = false
+
+    /** True while the live sender holds a pause. */
+    private var senderPaused = false
+
+    /** Calls of [pauseReading] and [resumeReading], whether or not they did anything. */
+    var pauseReadingCalls: Int = 0
+        private set
+    var resumeReadingCalls: Int = 0
+        private set
+
+    /** The live sender hears a request for [what], or fails it when the session is gone. */
+    private fun hear(what: String) {
+        if (!script.live) return
+        val nowUs = senderUs()
+        val timeoutUs = script.liveSessionTimeoutUs
+        if (timeoutUs != null && nowUs - heardAtUs > timeoutUs) sessionEnded = true
+        if (script.liveSessionEndsAtUs?.let { nowUs >= it } == true) sessionEnded = true
+        if (sessionEnded) error("the scripted sender ended the session before the $what")
+        heardAtUs = nowUs
+    }
+
+    override fun pauseReading(): Boolean {
+        pauseReadingCalls++
+        if (!script.live || !script.livePause) return false
+        hear("pause")
+        senderPaused = true
+        return true
+    }
+
+    override fun resumeReading(): Boolean {
+        resumeReadingCalls++
+        if (!senderPaused) return false
+        if (script.liveResumeRefused) error("the scripted sender refused to play on")
+        hear("resume")
+        senderPaused = false
+        // The sender sent nothing while paused, so the reads start again at its live edge.
+        val nowUs = senderUs()
+        videoCursorUs = maxOf(videoCursorUs, script.firstVideoAtOrAfter(nowUs))
+        script.audioTracks.forEach { track ->
+            val durationUs = audioDurationUs(track)
+            val cursorUs = audioCursorsUs.getValue(track.index)
+            if (cursorUs < nowUs) audioCursorsUs[track.index] = cursorUs + (nowUs - cursorUs + durationUs - 1) / durationUs * durationUs
+        }
+        return true
+    }
+
     /** How long [mediaUs] of the selected variant takes over the script's link. */
     private suspend fun waitForLink(mediaUs: Long) {
         val link = script.linkBitsPerSecond ?: return
@@ -1140,6 +1214,8 @@ internal class ScriptedSource(
     override suspend fun readPacket(): PlayerPacket? {
         check(selectCalls > 0) { "selectStreams must be called before readPacket" }
         reads++
+        check(!senderPaused) { "read while the live sender was paused" }
+        hear("read")
         // What a real demuxer does and this one otherwise would not: pull bytes. Without it the
         // engine's byte cache is handed a reader nobody ever calls, and anything measuring what a
         // source delivered measures nothing at all.

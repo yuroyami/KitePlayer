@@ -1134,8 +1134,14 @@ internal class PlaybackCore(
 
     private class ProgramRequest(val number: Int?, val reply: CompletableDeferred<Unit>)
 
-    /** True while a variant or programme change waits for its rebuild. */
-    private val reopenPending: Boolean get() = pendingVariant != null || pendingProgram != null
+    /**
+     * True when the sender of a live stream ended the session while the player was paused, so play
+     * opens the stream again, at the live edge, through the same rebuild (#441).
+     */
+    private var pendingRejoin = false
+
+    /** True while a variant or programme change, or a rejoin, waits for its rebuild. */
+    private val reopenPending: Boolean get() = pendingVariant != null || pendingProgram != null || pendingRejoin
 
     /** True when the item's variant is the player's own step down, which it may lower again. */
     private var variantChosenByPlayer = false
@@ -5280,6 +5286,8 @@ internal class PlaybackCore(
         pendingVariant = null
         val programRequest = pendingProgram
         pendingProgram = null
+        // A rejoin keeps every choice as it was: the stream is the same one, opened again.
+        pendingRejoin = false
         val reopening = variantRequest != null || programRequest != null
         val current = session
         val item = media?.let { open ->
@@ -5793,7 +5801,16 @@ internal class PlaybackCore(
         val session = session ?: return
         if (seekPhase.isRunning) return
         if (status == PlaybackStatus.Ended || status == PlaybackStatus.Failed) return
-        if (!playRequested) return
+        if (!playRequested) {
+            // A paused player tells the sender of a live stream, from the end of the open on, and the
+            // demux lane keeps the session alive meanwhile (#441). Level-triggered like the restart.
+            if (session.source.realTime && !reopenPending) session.liveHold.wanted.value = true
+            return
+        }
+        if (session.liveHold.wanted.value) {
+            resumeLiveSender(session)
+            return
+        }
         // After frame steps the picture can be ahead of the paused sound. Started as it stands, the
         // sound would restart where playback paused and the picture would stand still until the
         // sound caught up, so play first seeks to the frame on screen. The seek clears the flag.
@@ -5844,6 +5861,69 @@ internal class PlaybackCore(
         // The clocks run again, so they carry the position from here.
         session.pictureHoldsPosition = false
         session.schedulerMode.value = SCHEDULER_RUNNING
+    }
+
+    /**
+     * Plays a held live sender on (#441). The workers park first, so the demux lane is between two
+     * reads and holds no call on the source. A sender that took the pause is asked to play on, and
+     * what was buffered before the pause is dropped under a new epoch, as a seek drops it but with no
+     * container seek, because the sender plays on at the live edge. A sender that was never told
+     * goes on being read as it was. A session the sender ended, a resume it refused or that does not
+     * return, and workers that will not park while the sender is held, each open the stream again.
+     */
+    private suspend fun resumeLiveSender(session: OpenSession) {
+        val hold = session.liveHold
+        val unparked = unparkedWorkers(session)
+        // Lifted before the release, so the lane reads on rather than holding again.
+        hold.wanted.value = false
+        // A rejoin leaves the workers parked: released, the lane would read a sender that is paused or
+        // gone, and the rebuild that follows tears them down with the session.
+        if (unparked.isNotEmpty()) {
+            if (hold.held) {
+                val workers = if (unparked.size == 1) "the ${unparked[0]} worker" else "the ${unparked.joinToString()} workers"
+                rejoinLive(hold, "$workers did not park within $QUIESCE_DEADLINE to play the paused sender on")
+            } else {
+                releaseWorkers(session, requestedEpoch)
+            }
+            return
+        }
+        if (!hold.held) {
+            releaseWorkers(session, requestedEpoch)
+            return
+        }
+        hold.lost.value?.let { failure ->
+            rejoinLive(hold, "the sender ended the session while the player was paused${causeDetail(failure)}")
+            return
+        }
+        // A blocking call on the source, so it runs on the demux lane and is bounded as a seek is.
+        val resumeCall = scope.async(dispatchers.demux) { runCatching { session.source.resumeReading() } }
+        val prompt = withTimeoutOrNull(SEEK_NATIVE_DEADLINE) { resumeCall.await() }
+        val outcome = when {
+            prompt != null -> prompt
+            !session.source.interrupt() -> resumeCall.await()
+            else -> withTimeoutOrNull(SEEK_INTERRUPT_GRACE) { resumeCall.await() }
+                ?: Result.failure(IllegalStateException("the interrupted resume did not return within $SEEK_INTERRUPT_GRACE"))
+        }
+        outcome.exceptionOrNull()?.let { failure ->
+            rejoinLive(hold, "the sender would not play on after the pause${causeDetail(failure)}")
+            return
+        }
+        hold.lift()
+        // The sender plays on at the live edge, so nothing buffered before the pause is played.
+        requestedEpoch = requestedEpoch.next()
+        val epoch = requestedEpoch
+        flushDecoders(session, epoch)
+        clearBuffers(session, epoch)
+        releaseWorkers(session, epoch)
+        wakeIn(WORKER_POLL)
+    }
+
+    /** Opens the live stream again on its next pass, at the live edge, keeping every choice (#441). */
+    private fun rejoinLive(hold: LiveHold, reason: String) {
+        hold.lift()
+        warn(PlaybackWarning.SourceReconnecting(position = 0, attempt = 1, detail = "$reason; opening the stream again"))
+        pendingRejoin = true
+        wakeIn(WORKER_POLL)
     }
 
     /**
@@ -10772,6 +10852,8 @@ internal class PlaybackCore(
                 worker.nap(WORKER_POLL)
                 continue
             }
+            // A paused player holds a live sender instead of reading it (#441).
+            if (session.liveHold.wanted.value && holdLiveReads(session, worker)) continue
             if (overBudget(session)) {
                 // Waiting for room is the normal answer. It is the wrong answer when the reason there is no
                 // room is that one stream has read far ahead of another, because then the starved stream's
@@ -10834,6 +10916,36 @@ internal class PlaybackCore(
                 ended = true
             }
         }
+    }
+
+    /**
+     * The demux lane's half of a [LiveHold] (#441): tells the source the player paused, repeats the
+     * call every [LIVE_KEEPALIVE] as the keepalive, and naps between calls instead of reading. Answers
+     * false when the source has no notion of a pause, and the lane then reads as it always did. A
+     * call that fails means the session is gone; the lane stops calling and play opens it again.
+     */
+    private suspend fun holdLiveReads(session: OpenSession, worker: Worker): Boolean {
+        val hold = session.liveHold
+        if (hold.refused.value) return false
+        if (hold.lost.value == null) {
+            val now = clock.nanos()
+            if (!hold.told.value || now - hold.lastCallNanos >= LIVE_KEEPALIVE.inWholeNanoseconds) {
+                hold.lastCallNanos = now
+                try {
+                    if (!session.source.pauseReading()) {
+                        hold.refused.value = true
+                        return false
+                    }
+                    hold.told.value = true
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (failure: Throwable) {
+                    hold.lost.value = failure
+                }
+            }
+        }
+        worker.nap(WORKER_POLL)
+        return true
     }
 
     /**
@@ -12269,6 +12381,8 @@ internal class PlaybackCore(
          * performance bug report.
          */
         val videoParked = atomic(false)
+        /** What a paused player told the sender of a real-time stream (#441). */
+        val liveHold = LiveHold()
         /** Set when the lane un-parks: packets are discarded until a keyframe the decoder can start from. */
         val videoWaitingForKeyframe = atomic(false)
         /** Audio-only precise boundary for a lane swap; video remains on the current epoch. */
@@ -12471,6 +12585,13 @@ internal class PlaybackCore(
 
         /** How long an interrupted seek is given to actually return before the session fails. */
         val SEEK_INTERRUPT_GRACE = 2.seconds
+
+        /**
+         * How often a paused player calls a held live sender again (#441). The source sends a
+         * keepalive only when one is due, at half an RTSP session's timeout, so most calls send
+         * nothing, and a second keeps up with a timeout as short as two seconds.
+         */
+        val LIVE_KEEPALIVE = 1.seconds
 
         /**
          * Stand-in end for an audio packet whose duration FFmpeg left at zero. A compressed audio

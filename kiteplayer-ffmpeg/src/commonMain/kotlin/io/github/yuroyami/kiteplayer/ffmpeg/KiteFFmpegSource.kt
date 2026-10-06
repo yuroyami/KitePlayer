@@ -343,6 +343,15 @@ public class KiteFFmpegSource internal constructor(
         return true
     }
 
+    /**
+     * KiteFFmpeg's pause (#441): RTSP's PAUSE once and then its keepalive whenever one is due, or
+     * RTMP's pause command. Every other input answers false.
+     */
+    override fun pauseReading(): Boolean = source.pause()
+
+    /** KiteFFmpeg's resume, which asks the sender to play on only while a pause is in effect. */
+    override fun resumeReading(): Boolean = source.resume()
+
     override suspend fun readPacket(): PlayerPacket? {
         val reader = reader ?: error("selectStreams must be called before readPacket")
         copies.removeFirstOrNull()?.let { return it }

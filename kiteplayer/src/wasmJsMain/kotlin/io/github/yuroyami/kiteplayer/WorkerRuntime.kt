@@ -155,6 +155,7 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
             is Control.SetDuckLevel -> setDuckLevel(control.level)
             is Control.SetBalance -> setBalance(control.value)
             is Control.SetStereoMode -> setStereoMode(control.mode)
+            is Control.SetNightMode -> setNightMode(control.on)
             is Control.SetMuted -> setMuted(control.value)
             is Control.SetVideoEnabled -> setVideoEnabled(control.enabled)
             is Control.SetLoop -> setLoop(control.mode)

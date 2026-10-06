@@ -288,6 +288,9 @@ public class KitePlayerWorker private constructor(
     /** Sets what the two front speakers play (#462). */
     public fun setStereoMode(mode: StereoMode): Unit = send(Control.SetStereoMode(mode))
 
+    /** Turns the night mode on or off (#442). */
+    public fun setNightMode(on: Boolean): Unit = send(Control.SetNightMode(on))
+
     /** Silences the sound without losing the volume. */
     public fun setMuted(value: Boolean): Unit = send(Control.SetMuted(value))
 

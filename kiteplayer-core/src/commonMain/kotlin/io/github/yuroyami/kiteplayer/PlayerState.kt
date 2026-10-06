@@ -183,6 +183,8 @@ public data class PlayerSnapshot(
      * selection work on them as on any track. They are not repeated here.
      */
     val lyrics: String? = null,
+    /** Whether the night mode is on. See [KitePlayer.setNightMode]. */
+    val nightMode: Boolean = false,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

@@ -1168,6 +1168,9 @@ internal class PlaybackCore(
 
     /** What the two front speakers play (#462). A player property, like the balance. */
     private var stereoMode: StereoMode = StereoMode.Stereo
+
+    /** Whether the night mode is on (#442). A player property, like the stereo mode. */
+    private var nightMode: Boolean = false
     private var equalizer: EqualizerSettings = config.audio.equalizer
     private var videoEnabled: Boolean = config.videoEnabled
 
@@ -2677,6 +2680,12 @@ internal class PlaybackCore(
                 session?.audio?.stereoMode = command.mode
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetNightMode -> {
+                nightMode = command.on
+                session?.audio?.nightMode = command.on
+                publishSnapshot()
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetSleepTimer -> {
                 sleepTimer = command.timer
                 sleepFade = command.fade
@@ -3684,6 +3693,7 @@ internal class PlaybackCore(
                 createdPlayback.replayGain = replayGainFor(audioStream, source.metadata)
                 createdPlayback.balance = balance
                 createdPlayback.stereoMode = stereoMode
+                createdPlayback.nightMode = nightMode
                 createdPlayback.equalizer = equalizer
                 emitEvent(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
@@ -5299,6 +5309,7 @@ internal class PlaybackCore(
             playback.replayGain = replayGainFor(stream, session?.source?.metadata ?: emptyMap())
             playback.balance = balance
             playback.stereoMode = stereoMode
+            playback.nightMode = nightMode
             playback.equalizer = equalizer
             playback.flush(requestedEpoch)
             return PreparedAudioPath(playback, createdSink, negotiated, decoder.outputFormat)
@@ -8713,6 +8724,7 @@ internal class PlaybackCore(
             playback.replayGain = replayGainFor(lane.stream, target.source.metadata)
             playback.balance = balance
             playback.stereoMode = stereoMode
+            playback.nightMode = nightMode
             playback.equalizer = equalizer
             target.audio = playback
             target.sink = createdSink
@@ -10707,6 +10719,7 @@ internal class PlaybackCore(
             audioSessionId = session?.audio?.platformSessionId,
             balance = balance,
             stereoMode = stereoMode,
+            nightMode = nightMode,
             videoEnabled = videoEnabled,
             equalizer = equalizer,
             sleepTimer = sleepTimer,
@@ -13584,6 +13597,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply)
     class SetBalance(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setBalance", reply)
     class SetStereoMode(val mode: StereoMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setStereoMode", reply)
+    class SetNightMode(val on: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setNightMode", reply)
     class SetVideoEnabled(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoEnabled", reply)
     class SetEqualizer(val settings: EqualizerSettings, val reply: CompletableDeferred<Unit>) : CoreCommand("setEqualizer", reply)
     class SetSleepTimer(

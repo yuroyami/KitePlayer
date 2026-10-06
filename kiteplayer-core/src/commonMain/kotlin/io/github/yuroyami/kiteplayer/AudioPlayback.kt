@@ -151,6 +151,9 @@ public class AudioPlayback(
     /** What the two front speakers play (#462). */
     private val wantedStereoMode = atomic(StereoMode.Stereo)
 
+    /** Whether the night mode is on (#442). */
+    private val wantedNightMode = atomic(false)
+
     /** The equaliser the feeder applies. Held here so a pipeline rebuild cannot lose it. */
     private val wantedEqualizer = atomic(EqualizerSettings.Flat)
 
@@ -998,6 +1001,17 @@ public class AudioPlayback(
         get() = wantedStereoMode.value
         set(value) {
             wantedStereoMode.value = value
+        }
+
+    /**
+     * Whether the night mode narrows the distance between the quiet and the loud parts of the sound
+     * (#442). Applied as audio is written, after the downmix and the stereo mode, so it is heard
+     * after the ring's depth, as the balance is.
+     */
+    public var nightMode: Boolean
+        get() = wantedNightMode.value
+        set(value) {
+            wantedNightMode.value = value
         }
 
     /** The settings last written into the current pipeline, so an unchanged one is not rebuilt. */

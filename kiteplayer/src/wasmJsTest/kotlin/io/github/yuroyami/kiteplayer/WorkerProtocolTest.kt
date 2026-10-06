@@ -150,6 +150,7 @@ class WorkerProtocolTest {
         failedQueueItems = setOf(1),
         durationIsEstimate = true,
         stereoMode = StereoMode.Swapped,
+        nightMode = true,
         lyrics = "A line\nAnother line",
     )
 
@@ -287,6 +288,7 @@ class WorkerProtocolTest {
             Control.SetDuckLevel(0.2f),
             Control.SetBalance(-0.75f),
             Control.SetStereoMode(StereoMode.LeftOnly),
+            Control.SetNightMode(true),
             Control.SetMuted(true),
             Control.SetVideoEnabled(false),
             Control.SetLoop(LoopMode.One),

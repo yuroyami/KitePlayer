@@ -58,7 +58,7 @@ internal const val MAX_PLAYLIST_BYTES: Int = 16 * 1024 * 1024
 internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: String? = null): HlsOpen {
     val base = io.location ?: item.uri
     val text = read ?: readPlaylist(io, item.uri).decodeToString()
-    val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant)
+    val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant, item.demux.fit)
     val playlist = master?.playlist ?: text
     val ledger = HlsLedger(item.uri)
     val opener = if (io.location != null && nestedOpensSupported) {
@@ -74,6 +74,7 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
             height = variant.height,
             frameRate = variant.frameRate,
             codecs = variant.attributes["CODECS"],
+            hdr = variant.hdr,
         )
     }
     return HlsOpen(PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen)

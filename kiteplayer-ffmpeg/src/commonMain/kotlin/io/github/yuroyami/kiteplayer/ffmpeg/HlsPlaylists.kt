@@ -1,5 +1,8 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
+import io.github.yuroyami.kiteplayer.VariantFit
+import io.github.yuroyami.kiteplayer.VideoSize
+
 /**
  * The text work of the HLS path, with no FFmpeg and no network: recognising a playlist, keeping
  * one variant of a master playlist, and resolving the addresses a playlist names. RFC 8216 is the
@@ -95,6 +98,9 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
     /** The picture width in pixels, or null when the variant does not state its size. */
     val width: Int? = attributes["RESOLUTION"]?.substringBefore('x', "")?.trim()?.toIntOrNull()
 
+    /** The picture size, or null when the variant does not state both sides. */
+    val size: VideoSize? = if (width != null && height != null && width > 0 && height > 0) VideoSize(width, height) else null
+
     /** The highest frame rate, or null when the variant does not state it. */
     val frameRate: Double? = attributes["FRAME-RATE"]?.toDoubleOrNull()?.takeIf { it > 0.0 && it.isFinite() }
 
@@ -121,12 +127,18 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
 
 /**
  * Chooses the variant to play. A variant with a picture wins over one with sound only, one without
- * Dolby Vision profile 5 over one with it, because profile 5 is composed on the processor, and SDR
- * over HDR, because the renderers show HDR tone mapped. Among the rest, the variant with the
- * highest bitrate within [maxBitrate] and [maxVideoHeight] plays, and the first one listed wins a
- * tie. When none fits, the one with the lowest bitrate plays.
+ * Dolby Vision profile 5 over one with it, because profile 5 is composed on the processor, and HDR
+ * over SDR when [fit] says the output shows HDR, SDR over HDR otherwise (#447). Among the rest, the
+ * variant with the highest bitrate within [maxBitrate], [maxVideoHeight] and [fit]'s pixel cap
+ * plays, and the first one listed wins a tie.
+ * When none fits, the one with the lowest bitrate plays.
  */
-internal fun chooseHlsVariant(variants: List<HlsVariant>, maxBitrate: Long?, maxVideoHeight: Int?): HlsVariant {
+internal fun chooseHlsVariant(
+    variants: List<HlsVariant>,
+    maxBitrate: Long?,
+    maxVideoHeight: Int?,
+    fit: VariantFit? = null,
+): HlsVariant {
     require(variants.isNotEmpty()) { "a master playlist has at least one variant" }
     var pool = variants
     fun prefer(keep: (HlsVariant) -> Boolean) {
@@ -134,10 +146,13 @@ internal fun chooseHlsVariant(variants: List<HlsVariant>, maxBitrate: Long?, max
     }
     prefer { !it.audioOnly }
     prefer { !it.dolbyVisionOnly }
-    prefer { !it.hdr }
+    val showsHdr = fit?.showsHdr == true
+    prefer { it.hdr == showsHdr }
+    val pixelCap = fit?.pixelCap(pool.mapNotNull { it.size })
     val fitting = pool.filter { variant ->
         (maxBitrate == null || variant.bandwidth <= maxBitrate) &&
-            (maxVideoHeight == null || variant.height == null || variant.height <= maxVideoHeight)
+            (maxVideoHeight == null || variant.height == null || variant.height <= maxVideoHeight) &&
+            (pixelCap == null || variant.size == null || variant.size.width.toLong() * variant.size.height <= pixelCap)
     }
     if (fitting.isEmpty()) return pool.minBy { it.bandwidth }
     return fitting.maxWith(compareBy<HlsVariant> { it.bandwidth }.thenBy { it.height ?: 0 })
@@ -161,7 +176,13 @@ internal class HlsMaster(val playlist: String, val variants: List<HlsVariant>, v
  * variants, every `EXT-X-I-FRAME-STREAM-INF` tag, and the renditions of other groups. Relative
  * addresses stay as they are, so the playlist must be read against its own address.
  */
-internal fun keepOneHlsVariant(text: String, maxBitrate: Long?, maxVideoHeight: Int?, wanted: Int? = null): HlsMaster? {
+internal fun keepOneHlsVariant(
+    text: String,
+    maxBitrate: Long?,
+    maxVideoHeight: Int?,
+    wanted: Int? = null,
+    fit: VariantFit? = null,
+): HlsMaster? {
     val lines = text.removePrefix("﻿").split('\n').map { it.removeSuffix("\r") }
     val variants = mutableListOf<HlsVariant>()
     var index = 0
@@ -180,7 +201,7 @@ internal fun keepOneHlsVariant(text: String, maxBitrate: Long?, maxVideoHeight: 
         index++
     }
     if (variants.isEmpty()) return null
-    val chosen = wanted?.let(variants::getOrNull) ?: chooseHlsVariant(variants, maxBitrate, maxVideoHeight)
+    val chosen = wanted?.let(variants::getOrNull) ?: chooseHlsVariant(variants, maxBitrate, maxVideoHeight, fit)
     // The rendition group of each type that the chosen variant names, if any.
     val groups = listOf("AUDIO", "VIDEO", "SUBTITLES", "CLOSED-CAPTIONS").associateWith { chosen.attributes[it] }
     val dropped = HashSet<Int>()

@@ -173,6 +173,8 @@ internal object DashHls {
                 if (codecs.isNotEmpty()) attributes += "CODECS=\"${codecs.joinToString(",")}\""
                 if (rep.width != null && rep.height != null) attributes += "RESOLUTION=${rep.width}x${rep.height}"
                 rep.frameRate?.let { attributes += "FRAME-RATE=${decimal(it, 3)}" }
+                // The variant choice reads the range here as it does in an HLS master (#447).
+                rep.videoRange?.let { attributes += "VIDEO-RANGE=$it" }
                 if (audio.isNotEmpty()) attributes += "AUDIO=\"$AUDIO_GROUP\""
                 if (subtitles.isNotEmpty()) attributes += "SUBTITLES=\"$SUBTITLE_GROUP\""
                 append("#EXT-X-STREAM-INF:").append(attributes.joinToString(",")).append('\n')

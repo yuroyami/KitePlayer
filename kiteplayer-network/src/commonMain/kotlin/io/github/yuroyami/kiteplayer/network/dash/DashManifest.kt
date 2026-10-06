@@ -407,6 +407,8 @@ public object DashManifestParser {
             initializationUrl = initializationUrl,
             frameRate = (rep.attr("frameRate") ?: set.attr("frameRate"))?.let(::parseFrameRate),
             audioChannels = (rep.child("AudioChannelConfiguration") ?: set.child("AudioChannelConfiguration"))?.let(::channelCount),
+            // A representation that states its own transfer wins, standard range included.
+            videoRange = if (transferOf(rep) != null) videoRangeOf(rep) else videoRangeOf(set),
             segmentList = segmentList?.let { list ->
                 DashSegmentList(
                     timescale = positiveTimescale(list.attr("timescale")),
@@ -451,6 +453,27 @@ public object DashManifestParser {
             else -> null
         }
     }
+
+    /**
+     * The dynamic range [element]'s `urn:mpeg:mpegB:cicp:TransferCharacteristics` property states,
+     * as HLS names it (#447): 16 is PQ and 18 is HLG (ISO/IEC 23091-2), and any other value is
+     * standard range, as is no property at all. DASH-IF puts it in a `SupplementalProperty`, and
+     * some packagers in an `EssentialProperty`.
+     */
+    internal fun videoRangeOf(element: XmlElement): String? = when (transferOf(element)) {
+        16 -> "PQ"
+        18 -> "HLG"
+        else -> null
+    }
+
+    /** The transfer characteristics value [element] states, or null when it states none. */
+    private fun transferOf(element: XmlElement): Int? =
+        (element.children("SupplementalProperty") + element.children("EssentialProperty"))
+            .firstOrNull { it.attr("schemeIdUri")?.trim().equals(TRANSFER_SCHEME, ignoreCase = true) }
+            ?.attr("value")?.trim()?.toIntOrNull()
+
+    /** The CICP property scheme that names a picture's transfer characteristics. */
+    private const val TRANSFER_SCHEME: String = "urn:mpeg:mpegB:cicp:TransferCharacteristics"
 
     /** The DASH role scheme, whose values name what an adaptation set is for. */
     internal const val ROLE_SCHEME: String = "urn:mpeg:dash:role:2011"

@@ -545,6 +545,7 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("videoDynamicRange", snapshot.videoDynamicRange)
     put("failedQueueItems", numbers(snapshot.failedQueueItems.sorted().map(Int::toDouble)))
     put("durationIsEstimate", snapshot.durationIsEstimate)
+    put("lyrics", snapshot.lyrics)
 }
 
 private fun encodeVideoSize(size: VideoSize): JsAny = record {
@@ -1312,6 +1313,7 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         videoDynamicRange = o.enum<VideoDynamicRange>("videoDynamicRange") ?: default.videoDynamicRange,
         failedQueueItems = o.numbers("failedQueueItems")?.map(Double::toInt)?.toSet() ?: default.failedQueueItems,
         durationIsEstimate = o.flag("durationIsEstimate"),
+        lyrics = o.str("lyrics"),
     )
 }
 

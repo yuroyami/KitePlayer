@@ -173,6 +173,16 @@ public data class PlayerSnapshot(
     val durationIsEstimate: Boolean = false,
     /** What the two front speakers play. See [KitePlayer.setStereoMode]. */
     val stereoMode: StereoMode = StereoMode.Stereo,
+    /**
+     * The song's lyrics as its tags carry them without times, for an application to show beside
+     * the music, or null when it carries none (#443). An ID3 `USLT` frame, a Vorbis `LYRICS` or
+     * `UNSYNCEDLYRICS` comment, an MP4 `©lyr` atom and a Matroska `LYRICS` tag all arrive here.
+     *
+     * Lyrics whose lines carry LRC time stamps are a subtitle track instead, with the codec
+     * `tag/lrc`, so they show line by line through [KitePlayer.subtitleCues] and the delay and the
+     * selection work on them as on any track. They are not repeated here.
+     */
+    val lyrics: String? = null,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

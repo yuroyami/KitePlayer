@@ -150,6 +150,7 @@ class WorkerProtocolTest {
         failedQueueItems = setOf(1),
         durationIsEstimate = true,
         stereoMode = StereoMode.Swapped,
+        lyrics = "A line\nAnother line",
     )
 
     private val stats = PlaybackStats(

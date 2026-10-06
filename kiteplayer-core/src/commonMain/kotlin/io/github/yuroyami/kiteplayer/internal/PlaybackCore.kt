@@ -8402,6 +8402,13 @@ internal class PlaybackCore(
      * the end is lifted, when it carries on from [us] with nothing lost. A new end is a new object,
      * so the feeder tells a lifted end from one given again for the same B.
      */
+    /**
+     * The next queue item at [index], [item], which joins the current one on its reads (#456), and
+     * [chainEndUs], where the run of parts of the file that follow one another in the play order
+     * ends, which is where the reads go on to.
+     */
+    private class Join(val index: Int, val item: MediaItem, val chainEndUs: Long)
+
     private class PassEnd(val us: Long) {
         /** True once every sample before [us] is written and the feeder holds the rest. */
         val reached = atomic(false)
@@ -8480,8 +8487,169 @@ internal class PlaybackCore(
         // once, and the item a swap made current gets its own turn and preload (#467).
         val active = session ?: return
         if (pendingNext != null) return
+        if (stepJoin(active)) return
         settleTurn(active)
+        // A next item that joins on these reads needs no preload.
+        if (active.join != null) return
         maybeStartPreload(active)
+    }
+
+    /**
+     * The join of a next queue item that is the next part of the current item's file (#456), as the
+     * tracks of an album in one file are. Its sound and pictures follow on the same reads, through
+     * the same decoders, so nothing opens again and nothing restarts decoding: a lossy file joins
+     * without the seam a second open leaves, as foobar2000 plays a cue sheet's tracks. Armed as soon
+     * as the next item is known, and withdrawn whenever it stops being the one that follows, so a
+     * queue edit, a shuffle, a loop, an A-B loop or the end-of-item sleep timer each puts the end of
+     * the item back. The items move once the sound heard, or the picture shown for an item with no
+     * sound, crosses into the next one.
+     *
+     * @return true when the items moved.
+     */
+    private suspend fun stepJoin(active: OpenSession): Boolean {
+        if (pendingSeek != null || seekPhase.isRunning || pendingVideoRecovery != null) return false
+        val armed = active.join
+        if (armed != null && active.joinState.value == JOIN_COMMITTED) {
+            val aheadUs = active.joinAtUs.value - currentPosition().micros
+            if (aheadUs <= 0L) {
+                moveToJoined(active, armed)
+                return true
+            }
+            // The pass after the crossing moves the items, so the next item counts from its start.
+            if (status == PlaybackStatus.Playing) wakeIn((aheadUs / effectiveSpeed.coerceAtLeast(0.01)).toLong().microseconds)
+        }
+        if (armed == null) {
+            armJoin(active)
+            return false
+        }
+        val wanted = joinTarget(active)
+        // Reads that ended at the end before the join was armed cannot carry it.
+        val stranded = active.joinState.value == JOIN_ARMED && active.readsEndedAtUs.value <= active.joinAtUs.value
+        if (stranded || wanted == null || wanted.index != armed.index || wanted.item != armed.item) {
+            withdrawJoin(active)
+            return false
+        }
+        // A queue edit further on moves only where the reads go to.
+        if (wanted.chainEndUs != armed.chainEndUs) {
+            active.join = wanted
+            active.lanesEndUs.value = wanted.chainEndUs
+        }
+        return false
+    }
+
+    /**
+     * Arms the join of the next part of the file, when there is one (#456). Before the lanes read
+     * the item's end: at the start of the workers, after a seek's flush and on every pass, so the
+     * reads, which run seconds ahead, go on past the end rather than stop at it.
+     */
+    private fun armJoin(active: OpenSession) {
+        if (active !== session || pendingNext != null) return
+        if (active.joinState.value != JOIN_NONE || active.readsEndedAtUs.value <= active.clipEndUs) return
+        val wanted = joinTarget(active) ?: return
+        active.join = wanted
+        active.joinState.value = JOIN_ARMED
+        active.joinAtUs.value = active.clipEndUs
+        active.lanesEndUs.value = wanted.chainEndUs
+        snapshotDirty = true
+    }
+
+    /**
+     * The next item that joins the current one on its reads, or null (#456): the next in play order,
+     * when it is the same file with a clip that starts where the current one ends and asks to start
+     * nowhere else, and nothing ends the queue at the current item first. The gapless switches
+     * govern it as they govern a preload.
+     */
+    private fun joinTarget(active: OpenSession): Join? {
+        if (!config.queue.gapless || config.queue.preloadNext <= Duration.ZERO) return null
+        if (sleepTimer == SleepTimer.EndOfItem || abLoopA != null || loop == LoopMode.One) return null
+        if (queueItems.size <= 1 || active.preloading.value || active.clipEndUs == NO_CLIP_END) return null
+        val current = media ?: return null
+        val index = neighbourInOrder(1) ?: return null
+        val next = queueItems.getOrNull(index) ?: return null
+        if (!continuesInFile(current, next)) return null
+        // The parts after it in the play order that go on from it, within this lap.
+        var last = next
+        val at = queueOrder.indexOf(index)
+        if (at >= 0 && queueOrder.indexOf(queueIndex) < at) {
+            for (following in queueOrder.drop(at + 1)) {
+                val item = queueItems.getOrNull(following) ?: break
+                if (!continuesInFile(last, item)) break
+                last = item
+            }
+        }
+        return Join(index, next, last.clip?.end?.inWholeMicroseconds ?: NO_CLIP_END)
+    }
+
+    /**
+     * Puts the current item's end back (#456). A join not yet committed simply ends there, because
+     * no lane has let anything of the next item through. A committed one has the next item's sound
+     * in the ring already, so the player goes back to the sound heard by a precise seek, and the
+     * lanes then stop at the end, exactly.
+     */
+    private fun withdrawJoin(active: OpenSession) {
+        active.join = null
+        snapshotDirty = true
+        if (active.joinState.compareAndSet(JOIN_ARMED, JOIN_WITHDRAWN)) {
+            active.lanesEndUs.value = active.clipEndUs
+            return
+        }
+        active.joinState.value = JOIN_WITHDRAWN
+        active.lanesEndUs.value = active.clipEndUs
+        queueSeek(SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise), null)
+    }
+
+    /**
+     * Makes the joined item the current one, as [swapToNext] does for a preload, except that the
+     * session, the device, the tracks and every choice the viewer made carry on, because the file is
+     * the same (#456). [PlayerEvent.Ended] fires for the item that ended and [PlayerEvent.Opened]
+     * for the one that starts, and the position counts from its start.
+     */
+    private fun moveToJoined(active: OpenSession, joined: Join) {
+        emitEvent(PlayerEvent.Ended)
+        active.join = null
+        active.joinState.value = JOIN_NONE
+        active.joinAtUs.value = NO_CLIP_END
+        // The reads stay where they go to until the next join is armed or the item's own end is
+        // given, so the demux lane never sees an end below what it has read for the run.
+        media = joined.item
+        val from = queueIndex
+        queueIndex = joined.index
+        queueMoved(from)
+        lastChapterIndex = Int.MIN_VALUE
+        markerCursorUs = NO_POSITION
+        markerCursorEpoch = null
+        loopRefusalWarned = false
+        active.clipStartUs = joined.item.clip.startUs
+        active.clipEndUs = joined.item.clip.endUs
+        active.startUs = active.clipStartUs
+        armJoin(active)
+        if (active.join == null) active.lanesEndUs.value = active.clipEndUs
+        active.furthestPositionUs = maxOf(active.furthestPositionUs, active.clipStartUs)
+        progressState.value = Progress(position = itemTime(currentPosition().micros).microseconds, bufferedAhead = Duration.ZERO)
+        emitEvent(PlayerEvent.Opened(joined.item, tracks))
+        snapshotDirty = true
+    }
+
+    /**
+     * Where the feeder cuts the sound it writes up to [untilUs] (#456): the item's end, or, for a
+     * next item that joins, past it once the join commits. A withdrawn join cuts at the end.
+     */
+    private fun soundEndUs(session: OpenSession, untilUs: Long): Long {
+        val joinAt = session.joinAtUs.value
+        if (joinAt != NO_CLIP_END && untilUs > joinAt && !session.commitJoin()) return joinAt
+        return session.lanesEndUs.value
+    }
+
+    /**
+     * Where the video lane stops showing pictures, for the one at [ptsUs] (#456). With no sound, the
+     * picture is what commits a join; with sound, the feeder commits it, and the pictures stop at
+     * the end only once the join is withdrawn.
+     */
+    private fun pictureEndUs(session: OpenSession, ptsUs: Long): Long {
+        val joinAt = session.joinAtUs.value
+        if (joinAt == NO_CLIP_END || ptsUs < joinAt) return session.lanesEndUs.value
+        if (session.audioLane == null) return if (session.commitJoin()) session.lanesEndUs.value else joinAt
+        return if (session.joinState.value == JOIN_WITHDRAWN) joinAt else session.lanesEndUs.value
     }
 
     /** One step of the handoff to [next]: adopt it, give it the ring, or swap the items. */
@@ -10308,6 +10476,15 @@ internal class PlaybackCore(
 
     private suspend fun clearBuffers(session: OpenSession, epoch: Generation) {
         session.allPacketQueues.forEach { it.flushTo(epoch) }
+        // The ring and the queues no longer hold anything of a joined item, and the reads start
+        // over, so a committed join commits again and a withdrawn one may be armed again (#456).
+        if (!session.joinState.compareAndSet(JOIN_COMMITTED, JOIN_ARMED) &&
+            session.joinState.compareAndSet(JOIN_WITHDRAWN, JOIN_NONE)
+        ) {
+            session.joinAtUs.value = NO_CLIP_END
+        }
+        session.readsEndedAtUs.value = NO_CLIP_END
+        armJoin(session)
         session.lastSwitchCachePrunePositionUs = Long.MIN_VALUE
         // A retained subtitle packet belongs to the flushed position and is owned here alone.
         session.pendingSubtitlePacket?.close()
@@ -11582,6 +11759,7 @@ internal class PlaybackCore(
 
     private fun startWorkers(session: OpenSession) {
         tapsDiscontinuous(session)
+        armJoin(session)
         val epoch = requestedEpoch
         if (session.videoQueue != null && session.videoDecoder != null && session.video != null) {
             session.videoDecodeWorker = Worker(VIDEO_DECODE_WORKER)
@@ -11721,6 +11899,7 @@ internal class PlaybackCore(
                 // A seek moved the reads, so the rate starts over from where they land.
                 session.readRate.restart()
                 late.dropHeld()
+                session.readsEndedAtUs.value = NO_CLIP_END
             }
             session.readChange.getAndSet(null)?.let { change ->
                 if (changeReading(session, late, change, epoch, queueOf, lastRead, readAgainUpTo, ended)) ended = false
@@ -11813,6 +11992,7 @@ internal class PlaybackCore(
                 if (!late.idle) late.deliver(queueOf, epoch, ended = true)
                 session.demuxQueues.forEach { it.signalEndOfStream(epoch) }
                 ended = true
+                session.readsEndedAtUs.value = clipEndUs
             }
         }
     }
@@ -12378,8 +12558,9 @@ internal class PlaybackCore(
             // A picture at or after the A-B loop's end belongs to the pass after B, and waits here
             // while the end stands, so the pass that plays never shows it (#467).
             if (!awaitPassEnd(session, worker, frame)) return false
-            // A picture at or past the item's clip end is never shown (#456).
-            if (frame.pts.micros >= session.lanesEndUs.value) return true
+            // A picture at or past the item's clip end is never shown (#456), unless the next item
+            // joins on these reads.
+            if (frame.pts.micros >= pictureEndUs(session, frame.pts.micros)) return true
             // The first frame at or after a backward target: the held frame is the landing and goes
             // out first, and this one waits behind it at the head of the queue for a forward step.
             if (!handOverHeld(session, worker, video, epoch, held)) return false
@@ -12790,8 +12971,8 @@ internal class PlaybackCore(
                         }
                     }
                     // The item's clip end (#456): nothing at or past it is heard, and the rest of the
-                    // buffer goes with it.
-                    val clipEndUs = session.lanesEndUs.value
+                    // buffer goes with it. The sound of a next item that joins on these reads goes on.
+                    val clipEndUs = soundEndUs(session, pts.micros + buffer.format.durationOf(frames).micros)
                     if (!keep && clipEndUs != NO_CLIP_END && buffer.format.sampleRate > 0) {
                         val before = ((clipEndUs - pts.micros) * buffer.format.sampleRate / 1_000_000L)
                             .coerceIn(0L, frames.toLong()).toInt()
@@ -13088,6 +13269,35 @@ internal class PlaybackCore(
          * there on. The item's own end, read by the workers.
          */
         val lanesEndUs = atomic(NO_CLIP_END)
+
+        /**
+         * The next queue item, when it is the next part of this item's file and plays on these reads
+         * rather than from an open of its own (#456). Actor only.
+         */
+        var join: Join? = null
+
+        /**
+         * How far [join] has got: [JOIN_NONE], [JOIN_ARMED] while the reads go on past the item's
+         * end, [JOIN_COMMITTED] once the lanes let sound or a picture of the next item through, and
+         * [JOIN_WITHDRAWN] once the item ends at its end after all. The lane that commits and the
+         * actor that withdraws meet in a compare and set, so the item either ends exactly at its
+         * end or joins.
+         */
+        val joinState = atomic(JOIN_NONE)
+
+        /** Where the joined item starts, which is this item's end, or [NO_CLIP_END]. */
+        val joinAtUs = atomic(NO_CLIP_END)
+
+        /**
+         * Where the demux lane ended the queues at the item's end, as it stood then, or
+         * [NO_CLIP_END] while it reads on (#456). An end at the item's own end, before a join was
+         * armed, strands the join, because the next part's reads never came.
+         */
+        val readsEndedAtUs = atomic(NO_CLIP_END)
+
+        /** Commits [join], or answers that it stands committed. False once it was withdrawn. */
+        fun commitJoin(): Boolean =
+            joinState.compareAndSet(JOIN_ARMED, JOIN_COMMITTED) || joinState.value == JOIN_COMMITTED
 
         /** Takes [item]'s clip as this session's start and end. */
         fun applyClip(item: MediaItem) {

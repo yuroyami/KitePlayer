@@ -153,7 +153,9 @@ public data class PlayerSnapshot(
     /**
      * The position in [queue] of the next item while it is open in the background for the
      * gapless handoff, or null. Under a repeat it is the current item's own position, because its
-     * next pass is what opens, and null outside queue playback. See [QueueConfig].
+     * next pass is what opens, and null outside queue playback. A next item that is the next part
+     * of the current item's file opens nothing, because it joins on the current item's reads, so it
+     * reads null too (#456). See [QueueConfig].
      */
     val preloadedIndex: Int? = null,
     /** How HDR video reaches the screen. */

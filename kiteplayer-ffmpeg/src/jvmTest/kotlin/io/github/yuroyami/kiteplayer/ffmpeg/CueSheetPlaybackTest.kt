@@ -16,7 +16,8 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * An album in one FLAC file with its cue sheet, played as its tracks through the whole player and
- * FFmpeg (#456): the six seconds of the test media's FLAC as three tracks of two seconds.
+ * FFmpeg (#456): the six seconds of the test media's FLAC as three tracks of two seconds, each
+ * joining the one before on the same reads.
  */
 class CueSheetPlaybackTest {
 
@@ -44,9 +45,20 @@ class CueSheetPlaybackTest {
             val length = first.duration?.inWholeMilliseconds ?: -1
             assertTrue(length in 1_900..2_100, "the first track is $length ms long")
             player.play()
+            // The tracks are parts of one file, so each joins the one before on the same reads,
+            // and the player never opens, buffers or stops between them.
+            val seen = mutableListOf<PlaybackStatus>()
+            var preloaded = false
             withTimeout(20.seconds) {
-                while (player.state.value.queueIndex != 2) delay(20)
+                while (player.state.value.queueIndex != 2) {
+                    seen += player.state.value.status
+                    if (player.state.value.preloadedIndex != null) preloaded = true
+                    delay(20)
+                }
             }
+            assertTrue(!preloaded, "a track opened the file again rather than joining")
+            val between = seen.dropWhile { it != PlaybackStatus.Playing }.toSet()
+            assertEquals(setOf(PlaybackStatus.Playing), between, "the player left Playing between the tracks")
             assertEquals("Three", player.state.value.media?.title)
             val last = player.state.value.duration?.inWholeMilliseconds ?: -1
             assertTrue(last in 1_900..2_100, "the last track is $last ms long")

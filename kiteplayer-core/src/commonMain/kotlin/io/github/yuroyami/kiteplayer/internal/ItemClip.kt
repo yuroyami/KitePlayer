@@ -2,9 +2,11 @@ package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.Chapter
 import io.github.yuroyami.kiteplayer.MediaClip
+import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
 
 /** Where a session's item ends when no clip ends it before its file does (#456). */
@@ -82,3 +84,35 @@ internal val MediaClip?.endUs: Long get() = this?.end?.inWholeMicroseconds ?: NO
 
 /** Where this clip starts in its file, in microseconds, or zero for no clip. */
 internal val MediaClip?.startUs: Long get() = this?.start?.inWholeMicroseconds ?: 0L
+
+/** No next item joins the current one on its reads (#456). */
+internal const val JOIN_NONE: Int = 0
+
+/** A next item joins: the reads go on past the current item's end, and no lane has crossed it. */
+internal const val JOIN_ARMED: Int = 1
+
+/** A lane let sound or a picture of the joined item through, so the items move when it is heard. */
+internal const val JOIN_COMMITTED: Int = 2
+
+/** The join was given up, and the current item ends at its end. */
+internal const val JOIN_WITHDRAWN: Int = 3
+
+/**
+ * Whether [next] is the next part of [current]'s file (#456), as the tracks of an album in one file
+ * are: the same item in every field but its clip, its start position and its three titles, with a
+ * clip that starts exactly where [current]'s ends, and no start position of its own to start
+ * elsewhere.
+ */
+internal fun continuesInFile(current: MediaItem, next: MediaItem): Boolean {
+    val end = current.clip?.end ?: return false
+    if (next.clip?.start != end) return false
+    if ((next.startPosition ?: Duration.ZERO) > Duration.ZERO) return false
+    val alike = next.copy(
+        clip = current.clip,
+        startPosition = current.startPosition,
+        title = current.title,
+        artist = current.artist,
+        album = current.album,
+    )
+    return alike == current
+}

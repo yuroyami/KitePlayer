@@ -227,6 +227,31 @@ instead (#524). This covers a repeat, an A-B loop and a queue whose items are al
 - A renderer that decodes its own video gets the next item's decoder at the swap, as with sound,
   so its last picture stays on screen until that decoder gives its first one.
 
+## Parts of one file
+
+When the next item is the next part of the current item's file, as the tracks of an album in one
+file with a cue sheet are, it plays on the current item's reads and opens nothing (#456). The next
+item is such a part when it is the same item in every field but its clip, its start position and
+its title, artist and album, its clip starts exactly where the current item's ends, and it has no
+start position of its own.
+
+- The join is armed before the reads reach the current item's end: when the item's workers start,
+  after each seek and on every pass. The reads then go on past the end, through the same decoders,
+  so a lossy file joins without the seam a second open leaves. A run of such parts reads on to the
+  end of the run.
+- The sound of the next item follows in the ring, and its pictures follow on the video lane. The
+  items move when the sound heard crosses the end, or the picture shown does for an item with no
+  sound: `Ended` fires for the current item and `Opened` for the next, `media` and `queueIndex`
+  move, the length and the chapters become the next item's, and the position counts from its start.
+  The device, the tracks and every choice the viewer made carry on, and the status stays `Playing`.
+  `preloadedIndex` stays null, because nothing opens.
+- The join follows the rules of a preload: it is not armed with `gapless` off or `preloadNext` at
+  zero, under `LoopMode.One`, an armed A-B loop or `SleepTimer.EndOfItem`, or while the next item
+  is preloading. Whenever the next item stops being such a part, by a queue edit, a shuffle, a loop
+  or a timer, the join is withdrawn and the current item ends exactly at its end. If the next item's
+  sound is already in the ring by then, the player goes back to the sound heard by a precise seek,
+  and the item still ends there. The next item then opens the old way.
+
 ## Fallbacks
 
 When the handoff cannot run, the player warns `PlaybackWarning.GaplessFallback` with the queue

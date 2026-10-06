@@ -72,6 +72,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
         final fun <get-streamDivergences>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/StreamDivergence> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streamDivergences.<get-streamDivergences>|<get-streamDivergences>(){}[0]
     final val streams // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streams|{}streams[0]
         final fun <get-streams>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streams.<get-streams>|<get-streams>(){}[0]
+    final val thumbnails // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.thumbnails|{}thumbnails[0]
+        final fun <get-thumbnails>(): io.github.yuroyami.kiteplayer.spi/PlayerThumbnails? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.thumbnails.<get-thumbnails>|<get-thumbnails>(){}[0]
     final val timestampsMayJump // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.timestampsMayJump|{}timestampsMayJump[0]
         final fun <get-timestampsMayJump>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.timestampsMayJump.<get-timestampsMayJump>|<get-timestampsMayJump>(){}[0]
     final val variants // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.variants|{}variants[0]

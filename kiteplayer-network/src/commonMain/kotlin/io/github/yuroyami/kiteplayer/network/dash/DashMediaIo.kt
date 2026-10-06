@@ -538,7 +538,7 @@ public object Dash {
             // Built here, so a manifest whose playlists cannot be written is refused before any open.
             // Every Period plays, joined onto the first one's tracks (#403).
             manifest.periodTimings()
-            return DashRoute.Hls(mpdUrl, manifest, DashHls.presentation(period, live = manifest.isDynamic), policy)
+            return DashRoute.Hls(mpdUrl, manifest, DashHls.presentation(period, live = manifest.isDynamic, thumbnails = !manifest.isDynamic && manifest.periods.size == 1), policy)
         }
         // Refused, not truncated: the one-stream reader byte-concatenates ONE Period's segments,
         // and silently playing period one of an ad-stitched presentation looked like a player that

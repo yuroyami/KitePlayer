@@ -98,7 +98,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
  * own and left out the variants, so the player listed no quality to choose or step to (#543).
  */
 internal fun OpenedItem.toSource(): KiteFFmpegSource =
-    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing)
+    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing, thumbnails)
 
 /**
  * Applies [media]'s filter chains to this source. An audio chain on a build without filter graphs,
@@ -133,6 +133,8 @@ public class KiteFFmpegSource internal constructor(
     private val listedTitle: String? = null,
     /** The reader of a file still being written, when the item is one (#430). */
     private val growing: GrowingMediaIo? = null,
+    /** The seek bar pictures an HLS stream, or a DASH one through its stand-in, names (#433). */
+    override val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? = null,
 ) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null

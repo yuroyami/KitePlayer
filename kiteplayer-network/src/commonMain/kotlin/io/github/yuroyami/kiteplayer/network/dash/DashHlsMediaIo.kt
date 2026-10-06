@@ -196,7 +196,11 @@ internal class DashHlsMediaIo(
     private suspend fun playlist(track: DashHlsTrack): String = lock.withLock {
         if (!manifest.isDynamic) {
             return@withLock written.getOrPut(track.address) {
-                DashHls.mediaPlaylist(servedPlan(track, manifest, null), live = false)
+                DashHls.mediaPlaylist(
+                    servedPlan(track, manifest, null),
+                    live = false,
+                    images = track.representation.takeIf { track.role == DashHlsRole.Images },
+                )
             }
         }
         // The refresh follows the device's own clock, which only measures how long has passed.

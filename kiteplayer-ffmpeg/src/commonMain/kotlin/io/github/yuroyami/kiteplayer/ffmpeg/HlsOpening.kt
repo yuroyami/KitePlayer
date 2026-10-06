@@ -39,6 +39,8 @@ internal class HlsOpen(
     val variants: List<StreamVariant> = emptyList(),
     /** The index of the variant that plays, or null for a media playlist. */
     val selectedVariant: Int? = null,
+    /** The seek bar pictures of a master playlist that names an image stream, or null (#433). */
+    val thumbnails: HlsThumbnails? = null,
 ) {
     /**
      * The pre-open options this open adds. A segment address often has no file extension, so
@@ -79,7 +81,9 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
             hdr = variant.hdr,
         )
     }
-    return HlsOpen(PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen)
+    // The pictures are read through the item's own reader, as its segments are (#433).
+    val thumbnails = HlsThumbnails.choose(hlsImageStreams(text))?.let { HlsThumbnails(io, base, it) }
+    return HlsOpen(PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen, thumbnails)
 }
 
 /**

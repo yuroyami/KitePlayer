@@ -42,6 +42,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public fun getSeparateAudioRenditions ()Z
 	public fun getStreamDivergences ()Ljava/util/List;
 	public fun getStreams ()Ljava/util/List;
+	public fun getThumbnails ()Lio/github/yuroyami/kiteplayer/spi/PlayerThumbnails;
 	public fun getTimestampsMayJump ()Z
 	public fun getVariants ()Ljava/util/List;
 	public fun interrupt ()Z

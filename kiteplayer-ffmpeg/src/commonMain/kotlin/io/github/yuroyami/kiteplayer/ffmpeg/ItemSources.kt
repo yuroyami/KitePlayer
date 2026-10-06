@@ -35,9 +35,11 @@ internal class OpenedItem(
     val listedTitle: String? = null,
     /** The reader of a file still being written, which the source tells when to wait at its end (#430). */
     val growing: GrowingMediaIo? = null,
+    /** The seek bar pictures an HLS stream names (#433). */
+    val thumbnails: HlsThumbnails? = null,
 ) {
     fun withListedTitle(title: String?): OpenedItem =
-        OpenedItem(source, bridge, hls, variants, selectedVariant, realTimeScheme, title ?: listedTitle, growing)
+        OpenedItem(source, bridge, hls, variants, selectedVariant, realTimeScheme, title ?: listedTitle, growing, thumbnails)
 }
 
 /**
@@ -142,7 +144,7 @@ internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
                     )
                 }
             }
-            OpenedItem(source, bridge, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant, growing = growing)
+            OpenedItem(source, bridge, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant, growing = growing, thumbnails = hls?.thumbnails)
         }
         // No protocol reads the descriptor now, so no protocol is left to consume its key.
         descriptor != null ->

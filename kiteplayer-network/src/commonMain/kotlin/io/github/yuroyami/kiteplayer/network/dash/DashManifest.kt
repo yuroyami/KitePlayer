@@ -144,7 +144,16 @@ public data class DashRepresentation(
      * (#447), or null for standard range and for a manifest that states nothing.
      */
     val videoRange: String? = null,
+    /**
+     * The grid of a thumbnail image, columns by rows of tiles, from the DASH-IF
+     * `http://dashif.org/thumbnail_tile` property of the representation or else its set (#433), or
+     * null for a representation that is not one.
+     */
+    val tiles: DashTiles? = null,
 )
+
+/** The grid of a DASH thumbnail image: [columns] by [rows] tiles, in reading order (#433). */
+public data class DashTiles(val columns: Int, val rows: Int)
 
 /** A `SegmentTemplate`, merged from every level that declares one, the lowest level winning each attribute. */
 public data class DashSegmentTemplate(
@@ -444,6 +453,7 @@ public object DashManifestParser {
             audioChannels = (rep.child("AudioChannelConfiguration") ?: set.child("AudioChannelConfiguration"))?.let(::channelCount),
             // A representation that states its own transfer wins, standard range included.
             videoRange = if (transferOf(rep) != null) videoRangeOf(rep) else videoRangeOf(set),
+            tiles = tilesOf(rep) ?: tilesOf(set),
             segmentList = segmentList?.let { list ->
                 DashSegmentList(
                     timescale = positiveTimescale(list.attr("timescale")),
@@ -500,6 +510,23 @@ public object DashManifestParser {
         18 -> "HLG"
         else -> null
     }
+
+    /**
+     * The thumbnail grid [element]'s `thumbnail_tile` property states, `10x1` for ten columns of
+     * one row, or null (#433). DASH-IF names it in an `EssentialProperty`, and both its addresses
+     * are in use.
+     */
+    internal fun tilesOf(element: XmlElement): DashTiles? {
+        val value = (element.children("EssentialProperty") + element.children("SupplementalProperty"))
+            .firstOrNull { it.attr("schemeIdUri")?.trim()?.lowercase() in TILE_SCHEMES }
+            ?.attr("value")?.trim() ?: return null
+        val columns = value.substringBefore('x', "").trim().toIntOrNull()?.takeIf { it > 0 } ?: return null
+        val rows = value.substringAfter('x', "").trim().toIntOrNull()?.takeIf { it > 0 } ?: return null
+        return DashTiles(columns, rows)
+    }
+
+    /** The two addresses DASH-IF has given the thumbnail grid property. */
+    private val TILE_SCHEMES = setOf("http://dashif.org/thumbnail_tile", "http://dashif.org/guidelines/thumbnail_tile")
 
     /** The transfer characteristics value [element] states, or null when it states none. */
     private fun transferOf(element: XmlElement): Int? =

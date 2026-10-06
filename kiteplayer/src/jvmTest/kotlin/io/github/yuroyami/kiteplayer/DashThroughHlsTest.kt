@@ -25,6 +25,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * DASH played through the HLS path (#295), with the real FFmpeg backend reading the `dash/`
@@ -77,6 +78,12 @@ class DashThroughHlsTest {
                             """<Label>English, described</Label><Role schemeIdUri="urn:mpeg:dash:role:2011" value="description"/>""",
                     )
                     .replace("</Period>", FORCED_SET + "</Period>").encodeToByteArray()
+                // A thumbnail set beside the picture and the sound, by number and by a timeline far into its media's time (#433).
+                path == "thumbs.mpd" -> File(media, "separate.mpd").readText()
+                    .replace("</Period>", "$THUMBNAIL_SET</Period>").encodeToByteArray()
+                path == "thumbs-offset.mpd" -> File(media, "separate.mpd").readText()
+                    .replace("</Period>", "$OFFSET_THUMBNAIL_SET</Period>").encodeToByteArray()
+                path.startsWith("thumb-") -> thumbnailImage(path)
                 path == "periods.mpd" -> periodsManifest(listOf("a", "b", "c"), PeriodLayout.Mp4).encodeToByteArray()
                 path == "webm-periods.mpd" -> periodsManifest(listOf("a", "b"), PeriodLayout.Webm).encodeToByteArray()
                 path == "ts-periods.mpd" -> periodsManifest(listOf("a", "b"), PeriodLayout.Ts).encodeToByteArray()
@@ -112,6 +119,34 @@ class DashThroughHlsTest {
     fun stop() {
         client.close()
         server.stop(0)
+    }
+
+    @Test
+    fun aThumbnailSetGivesTheTileForAPosition() = thumbnailsOf("thumbs.mpd", "thumb-1.jpg")
+
+    @Test
+    fun aThumbnailSetFarIntoItsMediasTimeGivesTheSameTile() = thumbnailsOf("thumbs-offset.mpd", "thumb-86400.jpg")
+
+    /** The picture for 35 s of [manifest]'s ten tiles by one over 100 s: the fourth tile of [image] (#433). */
+    private fun thumbnailsOf(manifest: String, image: String) = runBlocking {
+        val session = io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend().open(Dash.mediaItemFor("$root/$manifest", client))
+        try {
+            val thumbnails = kotlin.test.assertNotNull(session.source.thumbnails, "the thumbnail set is not offered")
+            assertEquals(io.github.yuroyami.kiteplayer.ThumbnailSet(width = 160, height = 90), thumbnails.set)
+            assertTrue(asked.none { it.startsWith("thumb-") }, "an image was read before one was asked for")
+            val picture = kotlin.test.assertNotNull(thumbnails.at(Pts(35_000_000)))
+            kotlin.test.assertContentEquals(thumbnailImage(image), picture.image)
+            assertEquals(480, picture.x, "the fourth tile")
+            assertEquals(0, picture.y)
+            assertEquals(160, picture.width)
+            assertEquals(90, picture.height)
+            assertEquals(30.seconds, picture.start)
+            assertEquals(40.seconds, picture.end)
+            thumbnails.at(Pts(12_000_000))
+            assertEquals(1, asked.count { it == image }, "the image was read once")
+        } finally {
+            session.close()
+        }
     }
 
     @Test
@@ -515,6 +550,24 @@ class DashThroughHlsTest {
     }
 
     private companion object {
+        /** Ten tiles of 160x90 by one, each image 100 s, by number (#433). */
+        const val THUMBNAIL_SET = """<AdaptationSet id="9" contentType="image" mimeType="image/jpeg">
+            <SegmentTemplate media="thumb-${'$'}Number${'$'}.jpg" duration="100" startNumber="1" timescale="1"/>
+            <Representation id="thumbs" bandwidth="16000" width="1600" height="90">
+              <EssentialProperty schemeIdUri="http://dashif.org/thumbnail_tile" value="10x1"/>
+            </Representation>
+          </AdaptationSet>"""
+
+        /** The same tiles, by a timeline whose media time starts a day in (#433). */
+        const val OFFSET_THUMBNAIL_SET = """<AdaptationSet id="9" contentType="image" mimeType="image/jpeg">
+            <SegmentTemplate media="thumb-${'$'}Time${'$'}.jpg" timescale="1" presentationTimeOffset="86400">
+              <SegmentTimeline><S t="86400" d="100"/></SegmentTimeline>
+            </SegmentTemplate>
+            <Representation id="thumbs" bandwidth="16000" width="1600" height="90">
+              <EssentialProperty schemeIdUri="http://dashif.org/guidelines/thumbnail_tile" value="10x1"/>
+            </Representation>
+          </AdaptationSet>"""
+
         /** A WebVTT set of one file, as packagers write subtitles that need no segments. */
         const val SUBTITLE_SET = """<AdaptationSet contentType="text" mimeType="text/vtt" lang="de">
             <Representation id="de" bandwidth="1000"><BaseURL>subs.vtt</BaseURL></Representation>
@@ -680,6 +733,9 @@ class DashThroughHlsTest {
             source.close()
         }
     }
+
+    /** The bytes of a thumbnail image the server serves at [path]: a JPEG's first bytes, then the path. */
+    private fun thumbnailImage(path: String): ByteArray = byteArrayOf(0xFF.toByte(), 0xD8.toByte()) + path.encodeToByteArray()
 
     private fun withSource(
         manifest: String,

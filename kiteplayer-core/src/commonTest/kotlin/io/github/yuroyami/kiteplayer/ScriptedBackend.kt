@@ -233,6 +233,8 @@ internal class MediaScript(
     val audioSilentUs: List<LongRange> = emptyList(),
     /** The variants the source offers, as an HLS master playlist would. The item's choice picks one. */
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
+    /** The seek bar pictures the scripted stream carries, or null (#433). */
+    val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? = null,
     /** A read delay for one variant, in place of [readDelayUs]: a link too slow for that variant. */
     val readDelayUsByVariant: Map<Int, Long> = emptyMap(),
     /**
@@ -981,6 +983,8 @@ internal class ScriptedSource(
 ) : PlayerMediaSource {
 
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
+
+    override val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? get() = script.thumbnails
 
     override var programs: List<io.github.yuroyami.kiteplayer.MediaProgram> = script.programs
         private set

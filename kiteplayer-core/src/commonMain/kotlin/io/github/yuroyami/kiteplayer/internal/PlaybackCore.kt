@@ -1711,8 +1711,125 @@ internal class PlaybackCore(
         awaitReply(reply)
     }
 
-    /** The seek bar picture for [position] of the item that plays (#433). The next commit wires it. */
-    suspend fun thumbnailAt(position: Duration): io.github.yuroyami.kiteplayer.StreamThumbnail? = null
+    /**
+     * The seek bar picture for [position] of the item that plays (#433). The actor names where the
+     * pictures come from, and the image is read here, off the actor, so a slow download holds no
+     * command. The picture's times count from the item's start and stay within it.
+     */
+    suspend fun thumbnailAt(position: Duration): io.github.yuroyami.kiteplayer.StreamThumbnail? {
+        val reply = CompletableDeferred<ThumbnailTarget?>()
+        send(CoreCommand.ThumbnailQuery(reply))
+        val target = reply.await() ?: return null
+        val atUs = target.clipStartUs + position.inWholeMicroseconds.coerceAtLeast(0L)
+        if (target.itemEndUs != null && atUs >= target.itemEndUs) return null
+        val picture = target.thumbnails.at(Pts(atUs)) ?: return null
+        val lengthUs = target.itemEndUs?.let { it - target.clipStartUs }
+        fun itemTime(fileTime: Duration): Duration {
+            val us = (fileTime.inWholeMicroseconds - target.clipStartUs).coerceAtLeast(0L)
+            return (if (lengthUs != null) us.coerceAtMost(lengthUs) else us).microseconds
+        }
+        return io.github.yuroyami.kiteplayer.StreamThumbnail(
+            image = picture.image,
+            mimeType = picture.mimeType,
+            x = picture.x,
+            y = picture.y,
+            width = picture.width,
+            height = picture.height,
+            start = itemTime(picture.start),
+            end = itemTime(picture.end),
+        )
+    }
+
+    /** Where the pictures of the item that plays come from, and its clip, or null when it has none. Actor only. */
+    private fun thumbnailTarget(): ThumbnailTarget? {
+        val session = session ?: return null
+        val file = itemThumbnails?.takeIf { it.source == media?.thumbnails }?.file
+        val thumbnails = file ?: session.source.thumbnails ?: return null
+        return ThumbnailTarget(thumbnails, session.clipStartUs, session.itemEndUs)
+    }
+
+    /**
+     * The item's thumbnail file and what reading it gave: the pictures, or null while it is read and
+     * after it failed. Actor only.
+     */
+    private class ItemThumbnails(val source: io.github.yuroyami.kiteplayer.ThumbnailSource) {
+        var file: FileThumbnails? = null
+    }
+
+    private var itemThumbnails: ItemThumbnails? = null
+
+    /**
+     * Reads the thumbnail file of the item that now plays, when it names one that is not read yet
+     * (#433). The read runs off the actor, as an external subtitle file's does after an open, and a
+     * file that cannot be read, or holds no picture, warns [PlaybackWarning.ThumbnailsUnreadable].
+     */
+    private fun readItemThumbnails() {
+        val item = media
+        val wanted = item?.thumbnails
+        if (wanted == null) {
+            itemThumbnails = null
+            return
+        }
+        if (itemThumbnails?.source == wanted) return
+        val entry = ItemThumbnails(wanted)
+        itemThumbnails = entry
+        scope.launch {
+            val reason = when (val read = readSubtitleBytes(io.github.yuroyami.kiteplayer.SubtitleSource(wanted.uri, io = wanted.io), item)) {
+                is SubtitleBytes.Refused -> read.reason
+                is SubtitleBytes.Read -> {
+                    val cues = parseThumbnailVtt(read.bytes.decodeToString(), wanted.uri)
+                    if (cues.isEmpty()) {
+                        "it holds no cue that names an image"
+                    } else {
+                        val file = FileThumbnails(cues) { image -> readThumbnailImage(wanted, image, item) }
+                        commands.trySend(
+                            CoreCommand.ThumbnailsRead {
+                                if (itemThumbnails === entry) {
+                                    entry.file = file
+                                    snapshotDirty = true
+                                }
+                            },
+                        )
+                        null
+                    }
+                }
+            }
+            if (reason != null) warn(PlaybackWarning.ThumbnailsUnreadable(wanted.uri, reason))
+        }
+    }
+
+    /**
+     * The image at [address] that a cue of [file] names (#433): through the file's own reader's
+     * related reads when it has one, else as a subtitle file's address is read, with the item's
+     * headers on the item's own server. Null when it cannot be read.
+     */
+    private suspend fun readThumbnailImage(
+        file: io.github.yuroyami.kiteplayer.ThumbnailSource,
+        address: String,
+        item: MediaItem,
+    ): ByteArray? {
+        val factory = file.io
+        if (factory == null) {
+            return (readSubtitleBytes(io.github.yuroyami.kiteplayer.SubtitleSource(address), item) as? SubtitleBytes.Read)?.bytes
+        }
+        val root = try {
+            factory.open()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            null
+        } ?: return null
+        return try {
+            val related = root.openRelated(address) ?: return null
+            (readOrRefuse(related, address) { "" } as? SubtitleBytes.Read)?.bytes
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            null
+        } finally {
+            runCatching { root.close() }
+        }
+    }
 
     suspend fun captureFrame(withSubtitles: Boolean = false): io.github.yuroyami.kiteplayer.CapturedFrame {
         val reply = CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>()
@@ -2992,6 +3109,8 @@ internal class PlaybackCore(
             is CoreCommand.AddExternalSubtitle -> addExternalSubtitle(command)
             is CoreCommand.ReloadExternalSubtitle -> reloadExternalSubtitle(command)
             is CoreCommand.ExternalSubtitleRead -> command.adopt()
+            is CoreCommand.ThumbnailsRead -> command.adopt()
+            is CoreCommand.ThumbnailQuery -> command.reply.complete(thumbnailTarget())
             is CoreCommand.StreamsChanged -> command.adopt()
             is CoreCommand.SetLoop -> {
                 loop = command.mode
@@ -3575,6 +3694,7 @@ internal class PlaybackCore(
             if (built.videoStream == null) clearRendererPicture()
             setStatus(PlaybackStatus.Paused)
             emitEvent(PlayerEvent.Opened(command.media, tracks))
+            readItemThumbnails()
             command.reply.complete(Unit)
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -8630,6 +8750,7 @@ internal class PlaybackCore(
         active.furthestPositionUs = maxOf(active.furthestPositionUs, active.clipStartUs)
         progressState.value = Progress(position = itemTime(currentPosition().micros).microseconds, bufferedAhead = Duration.ZERO)
         emitEvent(PlayerEvent.Opened(joined.item, tracks))
+        readItemThumbnails()
         snapshotDirty = true
     }
 
@@ -9281,6 +9402,7 @@ internal class PlaybackCore(
             if (incoming.videoStream == null) clearRendererPicture()
             setStatus(PlaybackStatus.Paused)
             emitEvent(PlayerEvent.Opened(next.item, tracks))
+            readItemThumbnails()
             reply.complete(Unit)
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -9391,6 +9513,7 @@ internal class PlaybackCore(
         // The item before has closed with its lanes, so its last picture is the one on screen.
         if (incoming.videoStream == null) clearRendererPicture()
         emitEvent(PlayerEvent.Opened(next.item, tracks))
+        readItemThumbnails()
         snapshotDirty = true
     }
 
@@ -11309,7 +11432,9 @@ internal class PlaybackCore(
             durationIsEstimate = session?.let { durationStillEstimated(it) } ?: false,
             seekable = session?.source?.seekable ?: false,
             videoSize = session?.videoStream?.visibleVideoSize,
-            tracks = tracks,
+            // The item's own thumbnail file stands before the stream's pictures (#433).
+            tracks = itemThumbnails?.file?.takeIf { itemThumbnails?.source == media?.thumbnails }
+                ?.let { tracks.copy(thumbnails = it.set) } ?: tracks,
             chapters = session?.chapters ?: emptyList(),
             metadata = session?.shownTags ?: emptyMap(),
             lyrics = if (session != null) tagLyricsText else null,
@@ -14579,6 +14704,14 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class ExternalSubtitleRead(val adopt: suspend () -> Unit) :
         CoreCommand("addExternalSubtitle", CompletableDeferred(Unit))
 
+    /** The item's thumbnail file was read off the actor (#433); [adopt] runs on the actor. */
+    class ThumbnailsRead(val adopt: suspend () -> Unit) :
+        CoreCommand("thumbnailsRead", CompletableDeferred(Unit))
+
+    /** Asks the actor where the seek bar pictures of the item that plays come from (#433). */
+    class ThumbnailQuery(val reply: CompletableDeferred<ThumbnailTarget?>) :
+        CoreCommand("thumbnailQuery", reply)
+
     /**
      * The demux lane saw the source's streams or programmes change after the open (#509). Sent by
      * the lane, never by a caller, so its reply is a completed placeholder; [adopt] runs on the actor.
@@ -14679,7 +14812,7 @@ private fun Tracks.withLayout(listed: List<PlayerStreamInfo>?, programs: List<Me
 
 /** The track table of this source, with its variants and programmes. */
 private fun io.github.yuroyami.kiteplayer.spi.PlayerMediaSource.toTracks(): Tracks =
-    streams.toTracks().copy(variants = variants, selectedVariant = selectedVariant, programs = programs)
+    streams.toTracks().copy(variants = variants, selectedVariant = selectedVariant, programs = programs, thumbnails = thumbnails?.set)
 
 /**
  * The programme an open picks its tracks from (#505): the one [asked] names when the media has it,

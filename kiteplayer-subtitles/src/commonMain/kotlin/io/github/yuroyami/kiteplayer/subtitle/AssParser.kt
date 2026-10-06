@@ -79,6 +79,10 @@ internal class AssDocument(text: String) {
         private set
     var stacking: CueStacking = CueStacking.FirstAtBottom
         private set
+
+    /** The `YCbCr Matrix` header, which the engine matches every cue's colours through (#499). */
+    var colorMatrix: ScriptColorMatrix = ScriptColorMatrix.Default
+        private set
     private val styles = mutableMapOf<String, AssStyle>()
     val dialogueLines = mutableListOf<Map<String, String>>()
 
@@ -109,6 +113,7 @@ internal class AssDocument(text: String) {
                     "playresy" -> playResY = value.toIntOrNull() ?: playResY
                     // Anything that is not "reverse" means Normal, including a typo: ASS's own
                     // readers treat the field as a switch with one interesting value.
+                    "ycbcr matrix" -> colorMatrix = scriptColorMatrixOf(value)
                     "collisions" -> stacking = if (value.equals("reverse", ignoreCase = true)) {
                         CueStacking.LastAtBottom
                     } else {
@@ -188,6 +193,7 @@ internal class AssDocument(text: String) {
             stacking = stacking,
             fadeInMicros = parsed.fadeInMillis * 1000L,
             fadeOutMicros = parsed.fadeOutMillis * 1000L,
+            scriptColorMatrix = colorMatrix,
         )
         return SubtitleCue.Text(
             startMicros = startMicros,
@@ -390,4 +396,21 @@ internal fun parseAssTime(raw: String): Long? {
     val seconds = secondsParts[0].toLongOrNull() ?: return null
     val centis = secondsParts.getOrNull(1)?.padEnd(2, '0')?.take(2)?.toLongOrNull() ?: 0L
     return ((hours * 3600 + minutes * 60 + seconds) * 100 + centis) * 10_000
+}
+
+/**
+ * A `YCbCr Matrix` value as libass reads it (#499): one of nine words, in any case, and anything
+ * else is [ScriptColorMatrix.Unknown], which converts nothing.
+ */
+internal fun scriptColorMatrixOf(value: String): ScriptColorMatrix = when (value.trim().lowercase()) {
+    "none" -> ScriptColorMatrix.None
+    "tv.601" -> ScriptColorMatrix.Bt601Tv
+    "pc.601" -> ScriptColorMatrix.Bt601Pc
+    "tv.709" -> ScriptColorMatrix.Bt709Tv
+    "pc.709" -> ScriptColorMatrix.Bt709Pc
+    "tv.240m" -> ScriptColorMatrix.Smpte240mTv
+    "pc.240m" -> ScriptColorMatrix.Smpte240mPc
+    "tv.fcc" -> ScriptColorMatrix.FccTv
+    "pc.fcc" -> ScriptColorMatrix.FccPc
+    else -> ScriptColorMatrix.Unknown
 }

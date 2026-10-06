@@ -1417,7 +1417,8 @@ internal class PlaybackCore(
         val images = withContext(dispatchers.raster) {
             rasterizer.rasterizeWithinLimits(
                 io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea.None,
-                applyOverride(cues, subtitleStyle), width, height, subtitleScale, subtitlePosition,
+                applyOverride(matchAssColors(cues, assColorTargetOf(session)), subtitleStyle),
+                width, height, subtitleScale, subtitlePosition,
                 ::warnUndrawnSubtitles,
             )
         }
@@ -6599,7 +6600,7 @@ internal class PlaybackCore(
         // job list: one Job per cue edge appended for a whole film grew that list
         // by thousands of completed coroutines teardown then had to walk. The superseded raster
         // is cancelled outright, and teardown joins the one live slot.
-        val cues = active.toList()
+        val cues = matchAssColors(active.toList(), assColorTargetOf(session))
         session.rasterJob?.cancel()
         session.rasterJob = scope.launch(dispatchers.raster) {
             // A rasterizer that failed publishes the empty overlay, so the text it replaced goes.
@@ -6812,12 +6813,20 @@ internal class PlaybackCore(
             marginRight = margins[3],
             fontScale = subtitleScale,
             linePosition = subtitlePosition,
-            videoColor = if (config.subtitles.assColorMatching) {
-                assColorTarget(session.videoStream, size?.height ?: videoHeight)
-            } else {
-                null
-            },
+            videoColor = assColorTargetOf(session, fallbackHeight = videoHeight),
         )
+    }
+
+    /**
+     * The colour the ASS colours drawn over [session]'s picture are matched to (#499), or null to
+     * keep them as authored: with [SubtitleConfig.assColorMatching][io.github.yuroyami.kiteplayer.SubtitleConfig.assColorMatching]
+     * off, with no picture, and wherever [assColorTarget] says there is nothing to match to. A
+     * stream with no size guesses an unstated matrix from [fallbackHeight].
+     */
+    private fun assColorTargetOf(session: OpenSession?, fallbackHeight: Int = 0): io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo? {
+        if (!config.subtitles.assColorMatching) return null
+        val stream = session?.videoStream ?: return null
+        return assColorTarget(stream, stream.visibleVideoSize?.height ?: fallbackHeight)
     }
 
     /** One video frame of media time, bounded so a broken frame rate cannot spin or stall the lane. */
@@ -6916,7 +6925,7 @@ internal class PlaybackCore(
                 // safe area, rule 3 of docs/subtitle-placement.md.
                 output.subtitleRasterizer?.rasterizeWithinLimits(
                     request.otherSafeArea,
-                    applyOverride(request.otherCues, request.otherStyle),
+                    applyOverride(matchAssColors(request.otherCues, frame.videoColor), request.otherStyle),
                     frame.width,
                     frame.height,
                     frame.fontScale,

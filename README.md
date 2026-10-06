@@ -630,6 +630,11 @@ and labels it.
   ([#513](https://github.com/yuroyami/KitePlayer/issues/513)).
 - ASS and SSA tracks are drawn by libass as authored: moving signs, animated transforms, karaoke
   fills, clips and vector drawings. They re-render every video frame while they move.
+- An ASS script's colours are matched to the video through its `YCbCr Matrix` header, as
+  XySubFilter and libass's own notes ask, so a sign coloured to blend into the picture still blends
+  in. A script with no header counts as BT.601 at studio range, `None` keeps its colours, and so do
+  HDR and RGB video. The built-in styling does the same, and `SubtitleConfig.assColorMatching =
+  false` keeps every colour as authored ([#499](https://github.com/yuroyami/KitePlayer/issues/499)).
 - Fonts attached to a Matroska file load for the track, and `SubtitleConfig.fonts` adds your own.
   On Android and Linux, a bounded set of system fonts loads too.
 - `setSubtitleSafeArea` keeps the built-in text out of a display cutout, rounded corners or a

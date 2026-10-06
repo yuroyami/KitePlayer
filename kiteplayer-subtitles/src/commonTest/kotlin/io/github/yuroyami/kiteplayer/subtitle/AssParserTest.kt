@@ -26,6 +26,29 @@ class AssParserTest {
             events.joinToString("\n")
 
     @Test
+    fun theYCbCrMatrixHeaderReachesEveryCue() {
+        fun matrixOf(line: String?): ScriptColorMatrix? {
+            val scriptInfo = if (line == null) header else header.replace("Title: Test", "Title: Test\n$line")
+            val text = scriptInfo + "\n\n[Events]\n" +
+                "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n" +
+                "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hi"
+            return (AssParser.parse(text).single() as SubtitleCue.Text).layout.scriptColorMatrix
+        }
+        // No header is an old VSFilter script, which counts as BT.601 at studio range (#499).
+        assertEquals(ScriptColorMatrix.Default, matrixOf(null))
+        assertEquals(ScriptColorMatrix.Bt601Tv, matrixOf("YCbCr Matrix: TV.601"))
+        assertEquals(ScriptColorMatrix.Bt709Pc, matrixOf("YCbCr Matrix: pc.709"))
+        assertEquals(ScriptColorMatrix.Smpte240mTv, matrixOf("YCbCr Matrix:  TV.240M "))
+        assertEquals(ScriptColorMatrix.FccPc, matrixOf("YCbCr Matrix: PC.FCC"))
+        assertEquals(ScriptColorMatrix.None, matrixOf("YCbCr Matrix: None"))
+        assertEquals(ScriptColorMatrix.Unknown, matrixOf("YCbCr Matrix: BT.2020"))
+        // The embedded form reads the header the container carries.
+        val parser = AssParser.trackParser(header.replace("Title: Test", "Title: Test\nYCbCr Matrix: TV.709"))
+        val cue = assertNotNull(parser.parseEvent("1,0,Default,,0,0,0,,Hi", 0, 1_000_000))
+        assertEquals(ScriptColorMatrix.Bt709Tv, cue.layout.scriptColorMatrix)
+    }
+
+    @Test
     fun collisionsReverseReachesTheCue() {
         fun stackingOf(scriptInfo: String): CueStacking {
             val text = scriptInfo + "\n\n[Events]\n" +

@@ -41,6 +41,34 @@ public data class DashManifest(
      * time of day that a live manifest's clock counts against, rather than trusting the device's.
      */
     val utcTimings: List<DashUtcTiming> = emptyList(),
+    /**
+     * Every base address that the manifest names other locations for (#440): several `BaseURL`
+     * elements at one level, which ISO/IEC 23009-1, 5.6 makes alternative locations of the same
+     * segments, as broadcasters use them to fail over from one network to another. Empty for a
+     * manifest that names one location at every level, which is most of them.
+     */
+    val alternativeBaseUrls: List<DashBaseUrls> = emptyList(),
+)
+
+/**
+ * One base address and its other locations (#440). [primary] is the resolved base that the
+ * segments' addresses below it are built from, and [locations] every location of the same
+ * segments, [primary] first, in the order the manifest asks for: DVB's priority, the lowest first,
+ * then its weight, the highest first, then the document's order.
+ */
+public data class DashBaseUrls(val primary: String, val locations: List<DashBaseUrl>)
+
+/**
+ * One location of a manifest's segments, resolved. [serviceLocation] names the network it is on,
+ * so a player that loses one location leaves the others on the same network for last; [priority]
+ * and [weight] are DVB-DASH's (ETSI TS 103 285, 10.8.2.1), null when the manifest states none, which
+ * DVB reads as 1.
+ */
+public data class DashBaseUrl(
+    val url: String,
+    val serviceLocation: String? = null,
+    val priority: Int? = null,
+    val weight: Int? = null,
 )
 
 /**
@@ -242,6 +270,9 @@ public object DashManifestParser {
     /** The longest URL, and the longest SegmentTemplate, a manifest may use, in characters. */
     internal const val MAX_URL_LENGTH: Int = 8 * 1024
 
+    /** The most locations one base keeps, its own BaseURLs and those of the levels above it together. */
+    internal const val MAX_BASE_LOCATIONS: Int = 8
+
     /** The widest `%0Nd` a SegmentTemplate may ask for. */
     internal const val MAX_PAD_WIDTH: Int = 32
 
@@ -306,11 +337,12 @@ public object DashManifestParser {
         requireAllowedScheme(manifestUrl, policy)
         val budget = UrlBudget(urlLimits.parseUrls, urlLimits.parseChars, "the manifest")
         // The manifest's own URL is the base. Resolution drops its last path segment and its query.
-        val mpdBase = resolveBaseUrl(UrlBase(manifestUrl), root, policy, budget)
+        val alternatives = LinkedHashMap<String, DashBaseUrls>()
+        val mpdBase = resolveBaseUrl(UrlBase(manifestUrl), root, policy, budget, alternatives)
         val isDynamic = root.attr("type") == "dynamic"
         val duration = root.attr("mediaPresentationDuration")?.let(::parseIsoDurationMicros)
         val periods = root.children("Period").map { period ->
-            val periodBase = resolveBaseUrl(mpdBase, period, policy, budget)
+            val periodBase = resolveBaseUrl(mpdBase, period, policy, budget, alternatives)
             val periodTemplate = TemplateLevel.under(null, period)
             val periodSegmentBase = period.child("SegmentBase")
             DashPeriod(
@@ -319,7 +351,7 @@ public object DashManifestParser {
                 adaptationSets = period.children("AdaptationSet").map { set ->
                     // Each level's BaseURL resolves against the level above it: MPD, Period,
                     // AdaptationSet, Representation (ISO/IEC 23009-1, 5.6.4).
-                    val setBase = resolveBaseUrl(periodBase, set, policy, budget)
+                    val setBase = resolveBaseUrl(periodBase, set, policy, budget, alternatives)
                     // Read once per set, not once per representation: a set can hold many
                     // representations, and each lookup walks the set's children.
                     val setTemplate = TemplateLevel.under(periodTemplate, set)
@@ -332,6 +364,7 @@ public object DashManifestParser {
                         representations = set.children("Representation").map { rep ->
                             parseRepresentation(
                                 rep, setBase, set, setSegmentList, setSegmentBase, setTemplate, policy, budget, urlLimits,
+                                alternatives,
                             )
                         },
                         lang = set.attr("lang"),
@@ -366,6 +399,7 @@ public object DashManifestParser {
             utcTimings = root.children("UTCTiming").mapNotNull { timing ->
                 timing.attr("schemeIdUri")?.let { DashUtcTiming(it.trim(), timing.attr("value")?.trim().orEmpty()) }
             },
+            alternativeBaseUrls = alternatives.values.toList(),
         )
     }
 
@@ -379,8 +413,9 @@ public object DashManifestParser {
         policy: DashUrlPolicy,
         budget: UrlBudget,
         urlLimits: UrlLimits,
+        alternatives: MutableMap<String, DashBaseUrls>,
     ): DashRepresentation {
-        val repBase = resolveBaseUrl(setBase, rep, policy, budget)
+        val repBase = resolveBaseUrl(setBase, rep, policy, budget, alternatives)
         val segmentList = rep.child("SegmentList") ?: setSegmentList
         // A representation's SegmentList is its segment plan, so it has the same ceilings as one,
         // and it also counts against the manifest's.
@@ -1085,19 +1120,61 @@ public object DashManifestParser {
     }
 
     /**
-     * The element's BaseURL applied onto [parent], charged to [budget], or [parent] itself
+     * The element's BaseURLs applied onto [parent], charged to [budget], or [parent] itself
      * when the element has none. Each level's base is split once, however many elements below
      * resolve against it.
+     *
+     * Several BaseURLs are alternative locations (#440): each resolves against every location of
+     * the level above, in the order the manifest asks for, the first being the base that the
+     * addresses below are built from. A location the policy refuses is left out, and only when it
+     * refuses every one is the element refused. A base with more than one location is recorded in
+     * [alternatives], at most [MAX_BASE_LOCATIONS] locations of it.
      */
     private fun resolveBaseUrl(
         parent: UrlBase,
         element: XmlElement,
         policy: DashUrlPolicy,
         budget: UrlBudget,
+        alternatives: MutableMap<String, DashBaseUrls>,
     ): UrlBase {
-        val base = element.child("BaseURL")?.text?.trim()?.takeIf { it.isNotEmpty() } ?: return parent
-        return UrlBase(budget.resolve(parent, base, policy))
+        val own = element.children("BaseURL").mapNotNull { base ->
+            base.text.trim().takeIf { it.isNotEmpty() }?.let { base to it }
+        }
+        if (own.isEmpty()) return parent
+        // A stable sort, so the document's order decides between equals.
+        val ordered = own.sortedWith(compareBy({ dvbNumber(it.first, "priority") ?: 1 }, { -(dvbNumber(it.first, "weight") ?: 1) }))
+        val above = parent.locations.ifEmpty { listOf(DashBaseUrl(parent.url)) }
+        val locations = LinkedHashMap<String, DashBaseUrl>()
+        var refusal: DashUrlRefusedException? = null
+        for ((base, reference) in ordered) {
+            for (location in above) {
+                if (locations.size == MAX_BASE_LOCATIONS) break
+                val from = if (location.url == parent.url) parent else UrlBase(location.url)
+                val url = try {
+                    budget.resolve(from, reference, policy)
+                } catch (refused: DashUrlRefusedException) {
+                    refusal = refusal ?: refused
+                    continue
+                }
+                locations.getOrPut(url) {
+                    DashBaseUrl(
+                        url = url,
+                        serviceLocation = base.attr("serviceLocation")?.trim()?.takeIf { it.isNotEmpty() } ?: location.serviceLocation,
+                        priority = dvbNumber(base, "priority") ?: location.priority,
+                        weight = dvbNumber(base, "weight") ?: location.weight,
+                    )
+                }
+            }
+        }
+        val list = locations.values.toList()
+        if (list.isEmpty()) throw refusal ?: DashUrlRefusedException("no BaseURL of <${element.name}> resolves")
+        if (list.size > 1) alternatives.getOrPut(list.first().url) { DashBaseUrls(list.first().url, list) }
+        return UrlBase(list.first().url, if (list.size > 1) list else emptyList())
     }
+
+    /** The DVB attribute [name] of a BaseURL, under whatever prefix its namespace was given, or null. */
+    private fun dvbNumber(base: XmlElement, name: String): Int? =
+        base.attributes.entries.firstOrNull { (key, _) -> key == name || key.endsWith(":$name") }?.value?.trim()?.toIntOrNull()
 
     /**
      * RFC 3986 resolution (section 5.2), then [policy].
@@ -1118,7 +1195,7 @@ public object DashManifestParser {
      * A base URL, split on first use and then kept, for every reference resolved against it. A
      * reference with a scheme of its own never needs the split.
      */
-    private class UrlBase(val url: String) {
+    private class UrlBase(val url: String, val locations: List<DashBaseUrl> = emptyList()) {
         val parts: UriParts by lazy { split(url) }
         val scheme: String? by lazy { schemeOf(url) }
         val origin: String by lazy { originOf(url) }

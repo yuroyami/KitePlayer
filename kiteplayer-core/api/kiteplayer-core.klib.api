@@ -655,6 +655,7 @@ abstract fun interface io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory {
 abstract fun interface io.github.yuroyami.kiteplayer.spi/SubtitleFileParser { // io.github.yuroyami.kiteplayer.spi/SubtitleFileParser|null[0]
     abstract fun parse(kotlin/String, kotlin/Boolean): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue> // io.github.yuroyami.kiteplayer.spi/SubtitleFileParser.parse|parse(kotlin.String;kotlin.Boolean){}[0]
     open fun decode(kotlin/ByteArray, kotlin/String): kotlin/String? // io.github.yuroyami.kiteplayer.spi/SubtitleFileParser.decode|decode(kotlin.ByteArray;kotlin.String){}[0]
+    open suspend fun parseOther(kotlin/ByteArray, kotlin/String, kotlin/String): io.github.yuroyami.kiteplayer.spi/SubtitleFileReading? // io.github.yuroyami.kiteplayer.spi/SubtitleFileParser.parseOther|parseOther(kotlin.ByteArray;kotlin.String;kotlin.String){}[0]
 }
 
 abstract fun interface io.github.yuroyami.kiteplayer/AudioScanSink { // io.github.yuroyami.kiteplayer/AudioScanSink|null[0]
@@ -1932,6 +1933,17 @@ final class io.github.yuroyami.kiteplayer.spi/StreamDivergence { // io.github.yu
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/StreamDivergence.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/StreamDivergence.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/StreamDivergence.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.spi/SubtitleFileReading { // io.github.yuroyami.kiteplayer.spi/SubtitleFileReading|null[0]
+    constructor <init>(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/String, kotlin/Double? = ...) // io.github.yuroyami.kiteplayer.spi/SubtitleFileReading.<init>|<init>(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.String;kotlin.Double?){}[0]
+
+    final val assumedFrameRate // io.github.yuroyami.kiteplayer.spi/SubtitleFileReading.assumedFrameRate|{}assumedFrameRate[0]
+        final fun <get-assumedFrameRate>(): kotlin/Double? // io.github.yuroyami.kiteplayer.spi/SubtitleFileReading.assumedFrameRate.<get-assumedFrameRate>|<get-assumedFrameRate>(){}[0]
+    final val cues // io.github.yuroyami.kiteplayer.spi/SubtitleFileReading.cues|{}cues[0]
+        final fun <get-cues>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue> // io.github.yuroyami.kiteplayer.spi/SubtitleFileReading.cues.<get-cues>|<get-cues>(){}[0]
+    final val format // io.github.yuroyami.kiteplayer.spi/SubtitleFileReading.format|{}format[0]
+        final fun <get-format>(): kotlin/String // io.github.yuroyami.kiteplayer.spi/SubtitleFileReading.format.<get-format>|<get-format>(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer.spi/SubtitleOverlay { // io.github.yuroyami.kiteplayer.spi/SubtitleOverlay|null[0]

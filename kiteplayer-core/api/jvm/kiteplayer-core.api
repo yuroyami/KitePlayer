@@ -3726,10 +3726,20 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/SubtitleDecode
 public abstract interface class io/github/yuroyami/kiteplayer/spi/SubtitleFileParser {
 	public fun decode ([BLjava/lang/String;)Ljava/lang/String;
 	public abstract fun parse (Ljava/lang/String;Z)Ljava/util/List;
+	public fun parseOther ([BLjava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/SubtitleFileParser$DefaultImpls {
 	public static fun decode (Lio/github/yuroyami/kiteplayer/spi/SubtitleFileParser;[BLjava/lang/String;)Ljava/lang/String;
+	public static fun parseOther (Lio/github/yuroyami/kiteplayer/spi/SubtitleFileParser;[BLjava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/SubtitleFileReading {
+	public fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/Double;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/Double;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAssumedFrameRate ()Ljava/lang/Double;
+	public final fun getCues ()Ljava/util/List;
+	public final fun getFormat ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/SubtitleOverlay {

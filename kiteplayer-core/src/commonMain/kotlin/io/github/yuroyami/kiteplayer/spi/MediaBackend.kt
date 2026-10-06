@@ -69,7 +69,36 @@ public fun interface SubtitleFileParser {
      * single-byte text and the engine warns. An exception counts as null.
      */
     public fun decode(bytes: ByteArray, encoding: String): String? = null
+
+    /**
+     * Reads a file whose text [parse] found no cues in (#492): one in a format this parser's own
+     * readers do not know, such as SAMI, MicroDVD, SubViewer, or a Blu-ray or DVD image track.
+     *
+     * [bytes] are the file as it was read, [text] the engine's reading of them as text, in the
+     * encoding it decided, and [uri] the address the file came from, so a reader that needs the file
+     * beside it, as a VobSub index needs its `.sub`, can open that. Null, the default, when this
+     * parser cannot read the file either, and the engine then refuses it, naming the format its name
+     * suggests.
+     */
+    public suspend fun parseOther(bytes: ByteArray, text: String, uri: String): SubtitleFileReading? = null
 }
+
+/** What [SubtitleFileParser.parseOther] read from a subtitle file. */
+public class SubtitleFileReading(
+    /** The cues, sorted by start time. */
+    public val cues: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+    /**
+     * The format's short name, as FFmpeg names its reader: `sami`, `microdvd`, `vobsub`. The track's
+     * codec is `external/` and this name.
+     */
+    public val format: String,
+    /**
+     * The frame rate the cue times were counted at by assumption, because the file counts frames
+     * and does not say how fast they come, as a MicroDVD file without its frame-rate line does; null
+     * for a file whose times are times. The engine moves such cues onto the video's own frame rate.
+     */
+    public val assumedFrameRate: Double? = null,
+)
 
 /**
  * One opened media item: the cursor over its packets, and the decoders that can consume them.

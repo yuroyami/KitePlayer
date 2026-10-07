@@ -123,6 +123,14 @@ internal fun ColorInfo.toPlayerColorSpace(): ColorSpaceInfo = ColorSpaceInfo(
     transferSpecified = transferSpecified,
 )
 
+/**
+ * Whether this backend reads a frame of this kind through a downloaded copy in main memory, which
+ * every renderer that reads planes can then draw. VideoToolbox and Direct3D 11 frames download
+ * through FFmpeg; the other kinds have no download path here and need their own renderer.
+ */
+internal fun HwSurfaceKind.downloadsToMemory(): Boolean =
+    this == HwSurfaceKind.CoreVideoPixelBuffer || this == HwSurfaceKind.D3d11Texture
+
 internal fun hardwareKindFor(pixelFormatName: String): HwSurfaceKind? = when (pixelFormatName) {
     "videotoolbox_vld" -> HwSurfaceKind.CoreVideoPixelBuffer
     "mediacodec" -> HwSurfaceKind.MediaCodecBuffer

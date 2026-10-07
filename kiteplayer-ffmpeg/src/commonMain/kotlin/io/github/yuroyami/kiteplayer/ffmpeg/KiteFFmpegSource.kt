@@ -1022,7 +1022,14 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
         }
 
         if (selection.hardware == null) return source.newVideoDecoder(stream, filter = filter)
+        return openSelected(stream, selection, filter)
+    }
 
+    /**
+     * Opens [stream] on [selection]'s hardware route, with the software fallback its policy allows.
+     * Apart from [create] so that a test can hand it a route this platform would not choose.
+     */
+    internal suspend fun openSelected(stream: PlayerStreamInfo, selection: DecoderSelection, filter: String?): VideoDecoder? {
         val continuity = VideoDecoderContinuity()
 
         return openDecoderWithFallback(
@@ -1707,8 +1714,8 @@ public class KiteFFmpegVideoFrame internal constructor(
     }
 
     /**
-     * The software twin of a VideoToolbox frame, downloaded ONCE on first need and owned by this
-     * wrapper. Lazy on purpose: a newest-wins renderer supersedes most frames without ever
+     * The software twin of a VideoToolbox or Direct3D 11 frame, downloaded ONCE on first need and
+     * owned by this wrapper. Lazy on purpose: a newest-wins renderer supersedes most frames without ever
      * reading pixels, and an eager download would pay 3 to 25 MB of copying for every one of
      * them. A renderer that can draw the CVPixelBuffer itself never triggers this.
      */
@@ -1716,12 +1723,13 @@ public class KiteFFmpegVideoFrame internal constructor(
 
     /**
      * The frame whose planes may be read: the frame itself when it is software, its downloaded
-     * twin when it is a VideoToolbox frame. Other hardware kinds refuse here, because their
-     * pixels genuinely cannot be read back and pretending otherwise would hide a wiring bug.
+     * twin when it is a VideoToolbox or Direct3D 11 frame. Other hardware kinds refuse here,
+     * because nothing in this backend downloads them and pretending otherwise would hide a wiring
+     * bug.
      */
     internal fun readableFrame(): KiteFrame {
         if (!info.isHardware) return frame
-        check(hardwareSurface == HwSurfaceKind.CoreVideoPixelBuffer) {
+        check(hardwareSurface?.downloadsToMemory() == true) {
             "a $hardwareSurface frame needs its matching renderer"
         }
         return downloadedTwin ?: frame.downloadFromHardware().also { downloadedTwin = it }

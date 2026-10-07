@@ -44,6 +44,30 @@ hosts. A Compose app that draws video with `KiteVideo`, from `kiteplayer-compose
 adds itself, can open a second `Window(alwaysOnTop = true, undecorated = true)` that draws the same
 `KiteVideoState`.
 
+## Apple offscreen frame ownership
+
+Planned API contract for #476. The implementation and ABI update follow in a separate change.
+
+`MetalPictureReader`, in `kiteplayer-output`, will implement `AutoCloseable`. Its public
+constructor and `readRgba(frame, picture, toneMapped)` signature stay available. One worker
+thread constructs, uses and closes a reader; the reader does not support concurrent calls.
+
+The caller owns the reader and calls `close()` when finished. Close waits for submitted GPU work
+and its completion cleanup before releasing the CoreVideo texture cache and cached frame
+storage. A second close does nothing. `readRgba` after close throws `IllegalStateException`
+before allocating or submitting more work. Native resources require explicit close.
+
+The reader borrows the frame and picture for `readRgba`; it does not close either input. They must
+remain valid until the call returns. The returned RGBA byte array belongs to the caller and
+remains valid after the reader closes.
+
+Each Compose video renderer will own its frame converter. On iOS, that converter creates its
+Metal reader lazily on its worker when a hardware frame needs it. Separate renderers own separate
+readers. Renderer close stops accepting frames, waits for an in-flight conversion to finish, then
+closes the converter on that same worker before releasing the worker dispatcher. Closing a
+renderer before its first conversion still completes its converter's lifecycle, and closing one
+renderer does not retire another renderer's conversion state.
+
 ## Automatic network transport
 
 A consumer should gain HTTP/HTTPS transport by adding the network module, including when it

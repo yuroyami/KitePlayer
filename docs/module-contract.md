@@ -273,3 +273,54 @@ round-trips the new event; it does not invent a web noisy-route implementation. 
 ABI output is regenerated for affected published modules in the implementation commit. Native
 source/API checks, fake-HAL route tests, media-key behavior and physical headphone trials are
 separate evidence; none stands in for another.
+
+## Android media requests and playback resumption
+
+Planned API contract for #431. The implementation and ABI update follow in separate changes. All of
+it is Android-only, in `kiteplayer`'s `session` package, and with none of it set nothing changes.
+
+**Requests for specific media.** `KitePlayerMediaSession.setMediaRequestHandler(kinds:
+Set<MediaRequestKind>, handler: ((MediaRequest) -> Unit)?)` takes the requests the application
+answers. `MediaRequestKind` is `Search`, `MediaId`, `Address` and `Prepare`. The session offers the
+system exactly the matching actions: play and prepare from a search for `Search`, from an id for
+`MediaId`, from an address for `Address`, and plain prepare for `Prepare`. A null handler or an
+empty set offers none, as today. A later call replaces the earlier one.
+
+`MediaRequest` is a sealed class whose cases have internal constructors: `Search(query)`,
+`MediaId(mediaId)`, `Address(uri)` and `Prepare`. Each carries `play: Boolean`, false for a prepare,
+and `extras: Bundle`, empty when the system sent none. A search the system sends without words, for
+"play something", arrives as an empty query. The handler runs on the main thread and decides what to
+open; the session opens and plays nothing by itself, because only the application knows its
+catalogue. A request whose kind is not offered, which a stale controller can still send, is ignored.
+
+**Media keys first.** `setMediaButtonHandler(handler: ((KeyEvent) -> Boolean)?)` sees each key event
+of a media button intent on the main thread before the session's own rule from #437. True means the
+application handled it and the session does nothing more; false, or no handler, leaves today's
+behaviour, including play-pause acting at once and the headset's double press.
+
+**The resume card.** Android 11 and later show a media resume card after a reboot or after the
+application closed, for an application with an exported browser service that answers the recent
+root. `KitePlayerResumptionService` is an abstract `MediaBrowserService` the application subclasses
+and declares, exported, with the `android.media.browse.MediaBrowserService` intent filter.
+`KitePlayerMediaService` stays unexported.
+
+- `KitePlayerResumption.save(context, memento, title, subtitle = null)` keeps the state to resume
+  in the application's private preferences, as `PlayerMemento.asProperties()` text, and `clear`
+  removes it. The application decides when to save, for example at a pause and when the player
+  closes.
+- The service answers a root only for the recent hint, only when something is saved, and only to a
+  caller the media session manager trusts for media control, which is the system interface and
+  holders of the media control permission. Any other caller gets no root, so an exported service
+  hands nothing to an arbitrary application. Its one child is the saved item, playable, with the
+  saved title and subtitle.
+- The service owns a session of its own, whose token it publishes. A play on it, which is what
+  pressing the card sends, calls the abstract `onResume(memento: PlayerMemento)` on the main thread.
+  The application builds its player there, restores the memento, attaches its own session and
+  plays; the service then releases its own session, so the application's session is the only one.
+  A memento that cannot be read clears the saved state and offers no root.
+
+Tests: host tests of the offered actions for each kind set, of the request each callback turns into,
+of a media button handler that consumes a key and one that declines, and of the root answer for the
+recent hint, no hint, nothing saved and an untrusted caller. The device check, owed to the ASUS, is
+the resume card appearing after the application is closed and playing the saved item at its saved
+position.

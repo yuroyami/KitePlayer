@@ -39,7 +39,7 @@
   <a href="#where-it-runs"><b>Platforms</b></a>&ensp;·&ensp;
   <a href="#modules"><b>Modules</b></a>
   <br>
-  <sub><a href="docs/README.md">Guides</a>&ensp;·&ensp;<a href="CHANGELOG.md">Changelog</a>&ensp;·&ensp;<a href="CONTRIBUTING.md">Contributing</a></sub>
+  <sub><a href="docs/README.md">Guides</a>&ensp;·&ensp;<a href="https://yuroyami.github.io/KitePlayer/">API reference</a>&ensp;·&ensp;<a href="CHANGELOG.md">Changelog</a>&ensp;·&ensp;<a href="CONTRIBUTING.md">Contributing</a></sub>
 </p>
 
 ## What it is

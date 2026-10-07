@@ -11,9 +11,11 @@ import io.github.yuroyami.kiteplayer.AudioContent
 import io.github.yuroyami.kiteplayer.Chapter
 import io.github.yuroyami.kiteplayer.chapterHolding
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.HdrPolicy
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.LatencyQuality
+import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MasterClock
 import io.github.yuroyami.kiteplayer.MatchingAudioSubtitles

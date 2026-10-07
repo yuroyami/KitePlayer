@@ -8,7 +8,7 @@ import io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider
 
 /**
  * Plays a Compose Multiplatform resource's `jar:` address as it is (#457), through
- * [MediaIo.ofResourceUri], for every item with no reader of its own. Found by ServiceLoader, so a
+ * [MediaIo.ofResourceUri][ofResourceUri], for every item with no reader of its own. Found by ServiceLoader, so a
  * public class in bytecode with a constructor that takes nothing.
  */
 internal class ResourceUriResolverProvider : MediaIoResolverProvider {

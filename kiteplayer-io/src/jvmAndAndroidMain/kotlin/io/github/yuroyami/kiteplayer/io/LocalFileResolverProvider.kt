@@ -8,7 +8,7 @@ import io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider
 import java.nio.file.Paths
 
 /**
- * Reads a local file through [MediaIo.ofPath] for an item that needs a Kotlin reader of it, which is
+ * Reads a local file through [MediaIo.ofPath][ofPath] for an item that needs a Kotlin reader of it, which is
  * a file still being written (#430). It serves local files, so automatic resolution never asks it
  * and every other local file stays on FFmpeg's own reader. Found by ServiceLoader, so a public class
  * in bytecode with a constructor that takes nothing.

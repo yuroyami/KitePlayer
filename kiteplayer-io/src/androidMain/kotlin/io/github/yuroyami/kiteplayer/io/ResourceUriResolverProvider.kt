@@ -14,7 +14,7 @@ import kotlin.concurrent.Volatile
 
 /**
  * Plays a Compose Multiplatform resource's `android_asset` address as it is (#457), through
- * [MediaIo.ofResourceUri] with the application context [KiteIoContextProvider] keeps, for every
+ * [MediaIo.ofResourceUri][ofResourceUri] with the application context [KiteIoContextProvider] keeps, for every
  * item with no reader of its own. Found by ServiceLoader, so a public class in bytecode with a
  * constructor that takes nothing. Without the context, an app that removed the provider from its
  * manifest, the address plays as it is and fails as before.
@@ -34,7 +34,7 @@ internal class ResourceUriResolverProvider : MediaIoResolverProvider {
  * Keeps the application context from the moment the app starts (#457), as Compose Multiplatform's
  * own resources do, so a bundled asset's address plays with no context passed by hand. It serves
  * no data. An app that does not want it removes it in its manifest with `tools:node="remove"`, and
- * then passes a context to [MediaIo.ofResourceUri] itself.
+ * then passes a context to [MediaIo.ofResourceUri][ofResourceUri] itself.
  */
 internal class KiteIoContextProvider : ContentProvider() {
     override fun onCreate(): Boolean {

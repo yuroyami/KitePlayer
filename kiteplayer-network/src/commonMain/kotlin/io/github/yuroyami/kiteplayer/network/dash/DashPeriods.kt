@@ -31,7 +31,7 @@ internal fun DashManifest.periodTimings(): List<DashPeriodTiming> {
     }
 }
 
-/** The presentation time offset of [representation], in microseconds: the media time its Period starts at. */
+/** The presentation time offset of this [DashRepresentation], in microseconds: the media time its Period starts at. */
 internal fun DashRepresentation.offsetMicros(): Long {
     val (offset, timescale) = segmentTemplate?.let { it.presentationTimeOffset to it.timescale }
         ?: segmentList?.let { it.presentationTimeOffset to it.timescale }

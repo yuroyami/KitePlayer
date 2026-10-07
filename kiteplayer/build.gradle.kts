@@ -132,6 +132,16 @@ kotlin {
     }
 }
 
+// Dokka does not derive a JVM classpath for an intermediate source set shared by two JVM targets.
+// Give the Java facade the same dependencies as its JVM compilation so its types and links resolve.
+dokka {
+    dokkaSourceSets.named("jvmAndAndroidMain") {
+        classpath.from(kotlin.targets.named("jvm").map { target ->
+            target.compilations.getByName("main").compileDependencyFiles
+        })
+    }
+}
+
 /*
  * ── The worker binary, as the `web` zip of the wasmJs publication (#58) ───
  *

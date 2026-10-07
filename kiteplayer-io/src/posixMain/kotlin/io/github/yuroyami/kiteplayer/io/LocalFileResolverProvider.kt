@@ -10,7 +10,7 @@ import io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider
 import kotlin.native.EagerInitialization
 
 /**
- * Reads a local file through [MediaIo.ofPath] for an item that needs a Kotlin reader of it, which is
+ * Reads a local file through [MediaIo.ofPath][ofPath] for an item that needs a Kotlin reader of it, which is
  * a file still being written (#430). It serves local files, so automatic resolution never asks it
  * and every other local file stays on FFmpeg's own reader.
  */

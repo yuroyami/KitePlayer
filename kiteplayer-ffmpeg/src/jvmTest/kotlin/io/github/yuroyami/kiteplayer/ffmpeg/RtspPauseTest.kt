@@ -40,12 +40,22 @@ class RtspPauseTest {
             val player = player()
             try {
                 withTimeout(30.seconds) { player.open(MediaItem(camera.url, openOptions = mapOf("rtsp_transport" to "tcp"))) }
+                // Opening leaves playback paused. Exercise that startup hold before the first play,
+                // so this test includes the PAUSE/PLAY pair that otherwise depends on scheduling.
+                awaitPauses(camera, 1)
                 player.play()
                 awaitPlaying(player, camera.transcript)
                 delay(2.seconds)
+                val pausesBefore = camera.pauses.get()
+                val playsBefore = camera.plays.get()
                 player.pause()
+                awaitPauses(camera, pausesBefore + 1)
                 val pausedAt = player.position()
+                // The camera has accepted PAUSE, so earlier playing keepalives cannot count here.
+                val keepalivesBefore = camera.keepalives.get()
                 delay(PAUSE)
+                val pausedKeepalives = camera.keepalives.get() - keepalivesBefore
+                assertEquals(playsBefore, camera.plays.get(), "the camera played during the pause:\n${camera.transcript}")
                 player.play()
                 awaitPlaying(player, camera.transcript)
                 delay(1.seconds)
@@ -53,9 +63,9 @@ class RtspPauseTest {
                 val log = "status ${player.state.value.status}, error ${player.state.value.error}, moved $moved\n${camera.transcript}"
                 assertEquals(0, camera.expired.get(), "the camera ended the session: $log")
                 assertEquals(1, camera.connections, "the stream was opened again: $log")
-                assertEquals(1, camera.pauses.get(), "the camera was not told of the pause: $log")
-                assertTrue(camera.keepalives.get() >= 2, "the session was kept alive ${camera.keepalives.get()} times: $log")
-                assertEquals(2, camera.plays.get(), "the camera was not asked to play on: $log")
+                assertEquals(1, camera.pauses.get() - pausesBefore, "the camera was not told of the pause once: $log")
+                assertTrue(pausedKeepalives >= 2, "the paused session was kept alive $pausedKeepalives times: $log")
+                assertEquals(1, camera.plays.get() - playsBefore, "the camera was not asked to play on once: $log")
                 assertTrue(moved >= PAUSE, "play went on $moved from where the pause left it: $log")
                 assertEquals(PlaybackStatus.Playing, player.state.value.status, log)
             } finally {
@@ -106,6 +116,16 @@ class RtspPauseTest {
             progressInterval = 50.milliseconds,
         ),
     )
+
+    /** Waits for the camera to accept PAUSE; the player's pause reply can precede the demux call. */
+    private suspend fun awaitPauses(camera: RtspCamera, expected: Int) {
+        try {
+            withTimeout(5.seconds) { while (camera.pauses.get() < expected) delay(20) }
+        } catch (late: kotlinx.coroutines.TimeoutCancellationException) {
+            throw AssertionError("expected $expected PAUSE requests, got ${camera.pauses.get()}\n${camera.transcript}", late)
+        }
+        assertEquals(expected, camera.pauses.get(), "unexpected PAUSE requests:\n${camera.transcript}")
+    }
 
     private suspend fun awaitPlaying(player: KitePlayer, transcript: String) {
         try {

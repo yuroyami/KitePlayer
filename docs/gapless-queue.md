@@ -29,6 +29,7 @@ public data class QueueConfig(
     val gapless: Boolean = true,
     val reshuffleEachLap: Boolean = false,
     val onItemFailure: QueueItemFailure = QueueItemFailure.Stop,
+    val crossfade: Duration = Duration.ZERO,
 )
 ```
 
@@ -37,6 +38,8 @@ public data class QueueConfig(
 - `gapless` turns the handoff on. False keeps the old path for every item: the device stops at
   the end of an item, and the next item opens from scratch. With `gapless` false the player
   preloads nothing.
+- `crossfade` overlaps the end of an item with the start of the next one, as
+  [Crossfade](#crossfade) describes. Zero, the default, keeps the gapless join.
 - `onItemFailure` says what happens when the next item cannot be opened at all, from its
   preload or from scratch. `Stop` leaves the player in `Failed` on that item. `Skip` warns
   `PlaybackWarning.QueueItemSkipped`, lists the item in `PlayerSnapshot.failedQueueItems` and
@@ -206,6 +209,68 @@ road of a repeat's, with these differences (#467):
   turn's next pass opens with the new track.
 
 A fallback warns as a repeat's does, and the turns go back by the seek while the item stays open.
+
+## Crossfade
+
+Planned contract for #434. The implementation and the generated ABI follow in a separate change.
+
+`QueueConfig.crossfade` is a length, zero by default. Above zero, the end of one queue item and the
+start of the next sound together for that long, the first fading out while the second fades in.
+Zero keeps the gapless join above, sample after sample. It is at most 30 seconds.
+
+`MediaItem.runsIntoNext` is false by default. True says the item's sound runs into the next one's,
+as the tracks of an album can, and the queue joins those two gapless whatever the crossfade says.
+
+**When it applies.** The fade replaces the handoff above only when all of these hold. Otherwise
+the join is the gapless one, with nothing warned, because a missing fade is not a failure.
+
+- `gapless` is on and `preloadNext` is above zero, as for any handoff.
+- The current item does not run into the next one, by `runsIntoNext`.
+- The next item is the next queue item. A repeat's next pass and an A-B loop's join gapless.
+- Neither item shows a picture. Cover art is not a picture here. Items with pictures come later.
+- The current item's length is stated rather than guessed (#422), because the fade starts that
+  long before it.
+- The two items decode to the same sample rate and channel count, as the handoff needs anyway.
+- The next item is primed when the fade is due to start. A next item still opening keeps the
+  gapless join for this pair.
+
+The fade is shortened to half of the shorter item when an item is shorter than twice its length.
+
+**When it starts.** The preload starts `crossfade` plus two seconds before the end, or
+`preloadNext` before it, whichever is earlier. The fade starts `crossfade` before the current
+item's end, its clip's end for a clipped item. The first sample of the next item sounds together
+with the current item's sample at that moment.
+
+**How the two mix.** Before the ring, because the ring has one producer. The current item's feeder
+takes the next item's decoded sound, trimmed to its start position or clip as a feeder would trim
+it, and adds it to the current item's samples before they enter the shared conversion stages: the
+channel mix, the rate conversion, the tempo stage and the equaliser. So a speed change during a
+fade keeps it, and the volume, the mute and the balance apply to the mix. Each item's ReplayGain
+applies to its own share. The curves are equal power: the current item is scaled by
+cos(pi/2 x) and the next by sin(pi/2 x), with x running from 0 to 1 over the fade, so two unrelated
+sounds keep their loudness through it. Where the current item runs past the planned end, its
+share is silent; where it ends early, the next item's feeder finishes the fade-in on its own.
+
+**The defined point.** The next item becomes the current one at the end of the fade, when the last
+sample of the current item is heard. The current item's sound comes from its own reads until then,
+so it stays the current item, and the swap above runs as it does for a gapless join: `Ended` fires,
+then `Opened`, `media` and `queueIndex` move, the lock screen and the subtitles follow, and the
+position reads the next item's time, the fade's length into it. Until then the position, the
+clock and the taps are the current item's, and the taps hear the mix.
+
+**Actions during a fade.** A seek, `stop`, `open`, `previous` and `close` end it with the preload,
+as they end a handoff. `next` opens the next item from its start rather than from the preload,
+whose start the fade has used. Every other action that drops a preload stops the next item's
+share at once, and the current item finishes its fade-out to its end, after which the next item
+opens the old way. A pause keeps the fade, and play resumes it.
+
+**Tests.** Two 20 second tones of different pitch in a queue with a 5 second crossfade: the queue
+lasts 35 seconds, both pitches sound during the overlap, the loudness stays within a set bound
+through it, and the position moves to the second item at the end of the fade, 5 seconds into it.
+With the crossfade at zero, the device hears exactly the first item's samples followed by the
+second's, as it does today. An item that runs into the next, a next item with a picture, a seek
+and `next` during a fade, a queue edit during a fade, a pause during a fade, a speed change during
+a fade, and a next item that is not primed in time each have a test.
 
 ## Items with no sound
 

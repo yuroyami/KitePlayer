@@ -36,6 +36,8 @@ import platform.CoreVideo.kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
 import platform.CoreVideo.kCVReturnSuccess
 import platform.CoreFoundation.CFRelease
 import platform.Metal.MTLCommandBufferProtocol
+import platform.Metal.MTLCommandBufferStatusCompleted
+import platform.Metal.MTLCommandBufferStatusError
 import platform.Metal.MTLCommandQueueProtocol
 import platform.Metal.MTLDeviceProtocol
 import platform.Metal.MTLLoadActionClear
@@ -63,6 +65,8 @@ internal class MetalFrameComposer(
     internal val device: MTLDeviceProtocol,
     /** The render target's pixel format: BGRA for a CAMetalLayer, RGBA for an offscreen read. */
     private val targetFormat: ULong = MTLPixelFormatBGRA8Unorm,
+    /** Tests can hold real GPU work before its first pass or refuse command allocation. */
+    private val makeCommands: (MTLCommandQueueProtocol) -> MTLCommandBufferProtocol? = { it.commandBuffer() },
 ) {
     // Shared per device and target format. Compiling the library and both pipelines
     // per composer made every renderer pay for the same immutable, device-owned objects again.
@@ -76,9 +80,20 @@ internal class MetalFrameComposer(
     internal val queue: MTLCommandQueueProtocol =
         checkNotNull(device.newCommandQueue()) { "Metal refused a command queue" }
 
-    /** Reused plane textures, replaced when a frame's geometry or format changes. */
-    private var planeTextures: List<MTLTextureProtocol> = emptyList()
-    private var planeKey: String = ""
+    /**
+     * Oldest use first. The bound includes every format and size: changing geometry must not
+     * allocate a fresh pool while the GPU still reads the old one. Only the owner thread
+     * mutates these slots; each slot's exact command buffer fences its next CPU upload.
+     */
+    private val planeSets = mutableListOf<SoftwarePlaneSet>()
+
+    /** Submitted buffers whose completion handlers have not yet been fenced by this owner. */
+    private val submittedCommands = ArrayDeque<MTLCommandBufferProtocol>()
+
+    private var closed = false
+
+    /** The retained source storage, including obsolete geometry still in flight. */
+    internal val softwarePlaneSetCount: Int get() = planeSets.size
 
     /** The zero-copy wrap cache for VideoToolbox frames. Created on first hardware frame. */
     private var textureCache: CPointer<CVMetalTextureCacheRefVar>? = null
@@ -135,6 +150,11 @@ internal class MetalFrameComposer(
          */
         extendedRangeHeadroom: Float? = null,
     ): MTLCommandBufferProtocol {
+        check(!closed) { "the Metal frame composer is closed" }
+        retireCompletedCommands()
+        // Refuse before acquiring inputs: no software slot or CoreVideo wrapper belongs to a
+        // command buffer the queue could not create.
+        val commands = checkNotNull(makeCommands(queue)) { "Metal refused a command buffer" }
         pictureColor = frame.colorSpace
         val dstPeak = SDR_WHITE_NITS * (extendedRangeHeadroom?.coerceAtLeast(1f) ?: 1f)
         val toneUniforms = if (toneMapped) {
@@ -152,7 +172,6 @@ internal class MetalFrameComposer(
             is MetalPicture.CorePixelBuffer -> hardwareInputs(picture, frame)
         }
 
-        val commands = checkNotNull(queue.commandBuffer()) { "Metal refused a command buffer" }
         // Until the completed handler owns it, this function owns the wrapped textures' release:
         // a throw anywhere between wrapping and commit (an encoder refusal, a bad overlay bitmap)
         // must not orphan CVMetalTextureRefs the GPU will never read.
@@ -201,18 +220,19 @@ internal class MetalFrameComposer(
             // The wrapped CVMetalTextures must outlive the GPU's read of them: releasing on commit
             // was a use-after-free the first offscreen run crashed on. The completed handler is the
             // moment the GPU is provably done.
-            commands.addCompletedHandler { inputs.release() }
-            releaseHandedOff = true
+            // Capture only the release action. Capturing inputs would also retain the software
+            // slot, which keeps this buffer as its fence and would form a native/managed cycle.
+            val releaseInputs = inputs.release
+            commands.addCompletedHandler { releaseInputs() }
             commands.commit()
+            releaseHandedOff = true
+            inputs.softwareSet?.commands = commands
+            submittedCommands.addLast(commands)
         } finally {
             if (!releaseHandedOff) inputs.release()
         }
-        lastCommands = commands
         return commands
     }
-
-    /** The most recently committed buffer; the serial queue makes waiting on it wait on all. */
-    private var lastCommands: MTLCommandBufferProtocol? = null
 
     /**
      * Clears [target] to the black the bars are drawn in and draws [overlay] over it, with no
@@ -229,7 +249,9 @@ internal class MetalFrameComposer(
         presentDrawable: platform.QuartzCore.CAMetalDrawableProtocol? = null,
         extendedRangeHeadroom: Float? = null,
     ): MTLCommandBufferProtocol {
-        val commands = checkNotNull(queue.commandBuffer()) { "Metal refused a command buffer" }
+        check(!closed) { "the Metal frame composer is closed" }
+        retireCompletedCommands()
+        val commands = checkNotNull(makeCommands(queue)) { "Metal refused a command buffer" }
         val pass = MTLRenderPassDescriptor()
         val attachment = pass.colorAttachments.objectAtIndexedSubscript(0u)
         attachment.texture = target
@@ -245,7 +267,7 @@ internal class MetalFrameComposer(
         }
         if (presentDrawable != null) commands.presentDrawable(presentDrawable)
         commands.commit()
-        lastCommands = commands
+        submittedCommands.addLast(commands)
         return commands
     }
 
@@ -347,14 +369,17 @@ internal class MetalFrameComposer(
 
     /**
      * Releases what the composer owns natively: the CVMetalTextureCache and its nativeHeap
-     * holder. The GPU is fenced first by waiting on the last committed buffer,
-     * which on this serial queue proves every earlier buffer, and therefore every wrapped
-     * texture's completed handler, has run. Idempotent; encode after close is a caller bug the
-     * texture-cache check will surface.
+     * holder. Waiting on each submitted buffer fences both its GPU reads and its own completed
+     * handlers before dropping source storage. Idempotent; a closed composer refuses new work.
      */
     fun close() {
-        lastCommands?.waitUntilCompleted()
-        lastCommands = null
+        if (closed) return
+        closed = true
+        submittedCommands.forEach { it.waitUntilCompleted() }
+        submittedCommands.clear()
+        planeSets.forEach { it.commands = null }
+        planeSets.clear()
+        overlayTextures = emptyList()
         lightTexture = null
         textureCache?.let { holder ->
             CVMetalTextureCacheFlush(holder.pointed.value, 0uL)
@@ -364,10 +389,37 @@ internal class MetalFrameComposer(
         textureCache = null
     }
 
+    /** Only completed GPU work is retired here; CPU/GPU overlap is never stopped by this sweep. */
+    private fun retireCompletedCommands() {
+        while (submittedCommands.firstOrNull()?.hasFinished() == true) {
+            // A terminal status proves the GPU stopped. This additional fence proves the buffer's
+            // CPU handlers finished too, including the release of its CoreVideo wrappers.
+            submittedCommands.removeFirst().waitUntilCompleted()
+        }
+    }
+
+    private class SoftwarePlaneKey(
+        val format: io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat,
+        val width: Int,
+        val height: Int,
+    ) {
+        fun matches(picture: MetalPicture.SoftwarePlanes): Boolean =
+            format == picture.format && width == picture.width && height == picture.height
+    }
+
+    private class SoftwarePlaneSet(
+        var key: SoftwarePlaneKey,
+        var textures: List<MTLTextureProtocol>,
+        var commands: MTLCommandBufferProtocol? = null,
+    ) {
+        val available: Boolean get() = commands?.hasFinished() != false
+    }
+
     private class PictureInputs(
         val textures: List<MTLTextureProtocol>,
         val uniforms: FloatArray,
         val release: () -> Unit = {},
+        val softwareSet: SoftwarePlaneSet? = null,
     )
 
     private fun softwareInputs(picture: MetalPicture.SoftwarePlanes): PictureInputs {
@@ -377,9 +429,15 @@ internal class MetalFrameComposer(
         require(picture.planes.size >= recipe.formats.size) {
             "${picture.format} needs ${recipe.formats.size} planes, got ${picture.planes.size}"
         }
-        val key = "${picture.format}:${picture.width}x${picture.height}"
-        if (planeKey != key) {
-            planeTextures = recipe.formats.mapIndexed { index, format ->
+        // An idle matching set avoids allocation; otherwise recycle an idle set before growing.
+        // Once all three are busy, only the oldest exact buffer can make its storage writable.
+        var set = planeSets.firstOrNull { it.available && it.key.matches(picture) }
+            ?: planeSets.firstOrNull { it.available }
+        if (set == null && planeSets.size == MAX_SOFTWARE_PLANE_SETS) set = planeSets.first()
+        set?.commands?.waitUntilCompleted()
+        set?.commands = null
+        if (set == null || !set.key.matches(picture)) {
+            val textures = recipe.formats.mapIndexed { index, format ->
                 // Chroma planes are ceil-divided, matching how decoders size them: a 1279x719
                 // 4:2:0 picture carries 640x360 chroma, and a floor shift would drop the last
                 // column and row of every odd-sized frame.
@@ -389,9 +447,21 @@ internal class MetalFrameComposer(
                     else (picture.height + (1 shl recipe.chromaShiftY) - 1) shr recipe.chromaShiftY
                 device.makePlaneTexture(format, width.coerceAtLeast(1), height.coerceAtLeast(1))
             }
-            planeKey = key
+            val key = SoftwarePlaneKey(picture.format, picture.width, picture.height)
+            if (set == null) {
+                set = SoftwarePlaneSet(key, textures)
+                planeSets += set
+            } else {
+                set.key = key
+                set.textures = textures
+            }
         }
-        planeTextures.forEachIndexed { index, texture -> texture.uploadPlane(picture.planes[index]) }
+        // Moving a free set is safe even if upload or encoding fails: without a submitted
+        // command its partially written bytes remain private and the next upload replaces them.
+        val acquired = checkNotNull(set)
+        planeSets.remove(acquired)
+        planeSets += acquired
+        acquired.textures.forEachIndexed { index, texture -> texture.uploadPlane(picture.planes[index]) }
         val frameColor = MetalColorUniforms.of(pictureColor)
         val (offsetX, offsetY) = chromaSampleOffset(
             location = pictureColor.chromaLocation,
@@ -401,8 +471,9 @@ internal class MetalFrameComposer(
             height = picture.height,
         )
         return PictureInputs(
-            planeTextures,
+            acquired.textures,
             frameColor.packWith(recipe.sampleScale, recipe.mode, offsetX, offsetY),
+            softwareSet = acquired,
         )
     }
 
@@ -414,7 +485,7 @@ internal class MetalFrameComposer(
      * acquired. Refusing after nextDrawable left the drawable unpresented and
      * the command buffer uncommitted, and a layer only has about three drawables to starve.
      */
-    fun canEncode(picture: MetalPicture): Boolean = when (picture) {
+    fun canEncode(picture: MetalPicture): Boolean = !closed && when (picture) {
         is MetalPicture.SoftwarePlanes -> planeRecipeFor(picture.format) != null
         is MetalPicture.CorePixelBuffer -> {
             val buffer: CVPixelBufferRef? = interpretCPointer(picture.buffer.rawValue)
@@ -541,6 +612,13 @@ internal class MetalFrameComposer(
         overlayViewport = viewport
     }
 }
+
+/** Terminal GPU states permit reuse, including buffers the GPU stopped because of an error. */
+private fun MTLCommandBufferProtocol.hasFinished(): Boolean =
+    status == MTLCommandBufferStatusCompleted || status == MTLCommandBufferStatusError
+
+/** Bounded across every format and geometry, with room for CPU upload and GPU work to overlap. */
+private const val MAX_SOFTWARE_PLANE_SETS = 3
 
 /** The quality flag bits the composer reads. The shader's `QualityUniforms` lists them all. */
 private const val DITHER_FLAG = 1

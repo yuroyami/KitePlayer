@@ -324,3 +324,83 @@ of a media button handler that consumes a key and one that declines, and of the 
 recent hint, no hint, nothing saved and an untrusted caller. The device check, owed to the ASUS, is
 the resume card appearing after the application is closed and playing the saved item at its saved
 position.
+
+## Default player controls
+
+Planned API contract for #469. The implementation, the generated ABI and the size baseline follow
+in separate changes. Everything lives in `kiteplayer-compose-ui`, in the
+`io.github.yuroyami.kiteplayer.compose` package, beside `KitePlayerVideo`. The module gains
+`implementation(compose.foundation)`, which an application already receives through
+`kiteplayer-compose-video`, and no Material artifact: the owner decided on 2026-10-07 against
+both a Material dependency and a new module.
+
+**State holders.** Each is created with a `remember...State(player)` composable, reads the
+player's `state` and `progress`, and calls the player's own commands. An application that wants
+its own look builds it from these; the default controls use nothing else.
+
+- `TransportState`: `showsPlay`, `canGoPrevious`, `canGoNext`, `togglePlay()`, `previous()` and
+  `next()`. `showsPlay` is true unless the player was asked to play, so a buffering player shows
+  pause, the answer to the listener's own request.
+- `SeekBarState`: `position`, `duration`, `seekable`, `fraction` and `buffered`, the buffered
+  ranges as fractions of the duration. When `Progress.bufferedRanges` is empty, which it is for
+  HLS and with the byte cache off, one range runs from the position to `Progress.bufferedAhead`.
+  `startScrub(fraction)`, `scrubTo(fraction)`, `endScrub()` and `cancelScrub()` move a scrub
+  target without moving playback; each scrub step calls `requestSeek` with `KeyframeThenRefine`,
+  and the end asks the last target once more. `stepBy(delta)` jumps from the position.
+  `preview` is `KitePlayer.thumbnailAt` for the scrub target, or null.
+- `TrackMenuState`: a list of `TrackMenuOption`s, each with a `label` and `selected`, and
+  `select(option)`. Made by `rememberTrackMenuState(player, kind)` for audio or subtitles, where
+  subtitles have an off option first; by `rememberQualityMenuState(player)`, with an automatic
+  option first and the variants after it; and by `rememberSpeedMenuState(player, speeds)`. Every
+  track is listed with its title and language, never cycled one per press.
+- `VolumeState`: `level` in 0..1, `muted`, `setLevel(level)` and `toggleMute()`. The level
+  follows hearing through a cube, as mpv's volume does: the amplitude is the level cubed, so half
+  the slider is an eighth of the amplitude, about 18 dB down. A volume above 1 shows as a full
+  slider and is left alone until the slider moves.
+- `ControlsVisibility`: `visible`, `show()`, `hide()` and `toggle()`, from
+  `rememberControlsVisibility(player, timeout = 3.seconds)`. The controls hide after the timeout
+  only while the player plays, and any interaction, a key press or a scrub starts the timeout
+  again. A tap on the picture toggles them, and a tap and the timeout both hide them the same way.
+
+**The default controls.** `KitePlayerControls(player, modifier, visibility, style, labels,
+onFullScreen, onPictureInPicture)` draws play and pause, previous and next for a queue, the seek
+bar with its buffered ranges and the times, the volume, menus for audio, subtitles, quality and
+speed, and full screen and picture-in-picture buttons when their callbacks are given. It is made
+only from the state holders above, from Compose Foundation and `compose.ui`.
+
+- Look: `KitePlayerControlsStyle`, with colours and sizes and a default, in place of a theme.
+- Words: `KitePlayerControlsLabels`, with English defaults. Every string a listener or a screen
+  reader meets comes from it, the time and track names included, so an application translates it
+  whole.
+- Icons are our own vectors. Play, previous, next and the seek bar are never mirrored: the whole
+  transport row and the seek bar lay out left to right in a right-to-left layout too, as Media3
+  learned in androidx/media issue 227. Text still follows the layout direction.
+- Every control is focusable and reached by a D-pad and by the keyboard. Space and the media
+  play-pause key toggle playback, and the arrow keys step the focused seek bar by 10 seconds.
+  Focus draws a ring in the style's focus colour.
+- Every control has a role and a label. The seek bar and the volume, which Compose has no slider
+  role for, carry `progressBarRangeInfo` and a `setProgress` action, as the visualiser's panel
+  does (#326), and state the position and duration in words.
+- While the controls show, subtitles move up through `KitePlayer.setSubtitlePosition`, and settle
+  back when they hide, unless the application changed the position itself in between. It is the
+  same rule the session guards use for a pause they did not make.
+- On a touch screen, a horizontal drag over the picture scrubs, showing the target time, and
+  seeks where the finger lifts.
+
+**The option on `KitePlayerVideo`.** A new overload takes a required
+`controls: @Composable BoxScope.() -> Unit` after the existing parameters and draws it over the
+video, for example `controls = { KitePlayerControls(player) }`. The existing signature stays as it
+is, so no existing screen or compiled caller changes. On the desktop, a native view takes every
+click, so controls drawn over `KiteRenderPath.NativeView` receive none; such an application asks
+for `KiteRenderPath.ComposeCanvas` or places the controls beside the video, as the class already
+documents.
+
+Out of scope here: controls for the native views, which can follow once these settle, and a
+volume above 100 percent in the default controls.
+
+Tests: the state holders against a scripted player, including the scrub calls and their seek mode,
+the buffered fractions, the volume curve's ends and middle, and the visibility timeout. Compose UI
+tests on the JVM: every control's role and label, `setProgress` moving the player, Tab and the
+arrow keys reaching every control, a tap and the timeout hiding the controls alike, the
+unmirrored transport row in a right-to-left layout, and `KitePlayerVideo` without controls drawing
+exactly what it drew before.

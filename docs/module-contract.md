@@ -68,6 +68,34 @@ closes the converter on that same worker before releasing the worker dispatcher.
 renderer before its first conversion still completes its converter's lifecycle, and closing one
 renderer does not retire another renderer's conversion state.
 
+## Apple presentation color
+
+Planned behavior contract for #489. The current implementation does not yet satisfy these color
+and drawable-format guarantees; production and platform qualification follow separately.
+
+Apple SDR presentation preserves the source's encoding and uses the system's matching video
+profile, including the native ITU-R 709 interpretation for ordinary HD. This is the chosen native
+Apple/QuickTime appearance. Software sample buffers carry their source color metadata; shared
+hardware buffers retain their existing metadata. Explicit metadata wins over fallbacks. Generic
+BT.601 uses SMPTE170M for 480 and 486-line NTSC and EBU for 576-line PAL.
+
+Changing an SDR drawable from eight-bit storage to linear half-float storage must preserve that
+presentation intent. SDR adjustments and source-law linear filtering precede conversion through
+the chosen native profile to extended-linear BT.709. Native profile transfer curves and white
+adaptation must not be replaced by the source inverse OETF merely because the drawable is float.
+Tone-mapped HDR uses the shader's actual BT.709/gamma2.2 encoding; extended HDR remains linear BT.709.
+Subtitle source pixels are sRGB and are converted for their actual presentation target.
+
+A bounded GPU lookup may approximate the native SDR profile conversion. The proposed 65-cubed
+float table costs about 4.2 MiB per profile, with at most three owned or in-flight tables per
+composer. A fourth profile waits for the oldest table's last GPU read before reusing that texture.
+Creation uses two fixed-size float arrays, about 8.4 MiB combined, plus temporary Core Graphics image and
+conversion storage. No frame undergoes CPU color conversion. Tests must report measured error
+against direct native color matching, including nonneutral shadows/highlights, between-grid
+samples, different white points, negative wide-gamut components and effects that reach encoding
+bounds. These limits are implementation tradeoffs, not a claim of exact color equality or a
+replacement for the issue's actual P3 display and picture-in-picture checks.
+
 ## Automatic network transport
 
 A consumer should gain HTTP/HTTPS transport by adding the network module, including when it

@@ -121,7 +121,7 @@ session. Adaptive bitrate is not part of this scope.
 
 ## Waiting for the network to come back
 
-The contract for #461. The code follows in separate changes.
+The contract for #461.
 
 A drop shorter than the limits above is absorbed: the reader reconnects and the stall timeout
 waits. A longer one, a train in a tunnel or a phone between Wi-Fi and mobile data, fails the item,

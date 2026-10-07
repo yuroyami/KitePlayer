@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.network
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoResolver
+import io.github.yuroyami.kiteplayer.NetworkStatus
 import io.github.yuroyami.kiteplayer.network.dash.Dash
 import io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider
 
@@ -20,6 +21,9 @@ internal class KtorMediaIoResolverProvider : MediaIoResolverProvider {
             return playableReader(KtorMediaIo.open(uri, headers = headers))
         }
     }
+
+    // The platform's, for the player's wait after the network failed an item (#461).
+    override fun networkStatus(): NetworkStatus? = platformNetworkStatus()
 }
 
 /**

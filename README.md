@@ -706,7 +706,14 @@ point includes it. You do not build a resolver or a Ktor client.
 - Android and the JVM use OkHttp with the platform trust store, and Apple uses NSURLSession.
 - `MediaItem.headers` reach whichever transport is selected.
 - The Android artifact declares the `INTERNET` permission for you. Cleartext HTTP follows your app's
-  own policy.
+  own policy. It also declares `ACCESS_NETWORK_STATE`, which Android grants at install, and a
+  provider that keeps the application context, so a player waiting for the network hears at once
+  when it comes back.
+- A drop of the network longer than the reader's reconnects fails the item. Set
+  `NetworkConfig.recovery = NetworkRecovery()` and the player waits for the network instead, says
+  so with `PlayerSnapshot.reconnecting`, and opens the item again where it was, or at the live
+  edge, for up to `maxWait` ([#461](https://github.com/yuroyami/KitePlayer/issues/461)). It is off
+  by default.
 - In a browser, a player on the page's own thread cannot play network media, because a read cannot
   wait there. `KitePlayerWorker` plays it from a web worker
   ([#100](https://github.com/yuroyami/KitePlayer/issues/100)), see [Web setup](#web-setup). It
@@ -915,7 +922,8 @@ screen. A desktop app keeps playing without help, and a web page plays while its
 - From Android 12, Android can refuse a start from the background. `onForegroundRefused` tells you,
   and the notification still shows. Android 13 and later need no notification permission for it.
 - The library declares no service and no permission for background playback, so your manifest
-  carries every entry above. The one entry the library adds is `INTERNET`.
+  carries every entry above. The entries the library adds are `INTERNET` and
+  `ACCESS_NETWORK_STATE`.
 
 </details>
 

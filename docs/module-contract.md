@@ -112,7 +112,10 @@ an extension registry. Competing providers must have deterministic selection.
 
 JVM and Android use service metadata; Native and web use target initialisation/registration.
 The Android network artifact supplies the normal `android.permission.INTERNET` permission through
-manifest merging, so consumers do not need a separate permission declaration.
+manifest merging, so consumers do not need a separate permission declaration. It also supplies
+`android.permission.ACCESS_NETWORK_STATE` and a provider that keeps the application context, for
+the network status a player waits on (#461); both are normal, granted at install, and removable
+with `tools:node="remove"`, which leaves the wait on its timer.
 Kotlin's eager initialisation is experimental/deprecated, so dependency-presence activation must
 be verified against this pinned toolchain in optimised consumers before being claimed. A consumer
 proof references only core APIs: touching a network symbol would hide a missing registration root.

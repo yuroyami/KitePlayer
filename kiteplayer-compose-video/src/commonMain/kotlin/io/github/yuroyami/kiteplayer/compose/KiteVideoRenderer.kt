@@ -46,6 +46,11 @@ internal class KiteVideoFrame(
      * turn (#497). Always one that fits [size]; null when the whole image is the picture.
      */
     val crop: PictureCrop? = null,
+    /**
+     * The flash guard's factor for this picture (#500): 1, the usual case, draws it as the picture
+     * controls make it, and below 1 dims it while a flashing run lasts.
+     */
+    val dim: Float = 1f,
 ) : AutoCloseable {
     /** The size of what is shown: [size] less [crop]. */
     val shownSize: VideoSize get() = size.cropped(crop)
@@ -128,6 +133,8 @@ internal class KiteVideoRenderer(
     private val publishFilterQuality: (androidx.compose.ui.graphics.FilterQuality) -> Unit = {},
     /** Optional platform GPU tier. Software frames still use this renderer's worker. */
     private val hardwareRenderer: KiteVideoHardwareRenderer? = null,
+    /** The flash guard's clock, in nanoseconds: when each converted picture is about to show. */
+    private val guardNanos: () -> Long = monotonicGuardClock(),
 ) : VideoRenderer {
 
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
@@ -136,6 +143,39 @@ internal class KiteVideoRenderer(
 
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         publishAdjustments(adjustments)
+    }
+
+    /**
+     * The flash guard's mode (#500). This renderer guards the pictures it converts itself; it cannot
+     * read a system setting, so [io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem] is off here.
+     * The GPU tier's pictures are not guarded yet.
+     */
+    override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
+        // A change of mode starts the history afresh, as taking the picture off does.
+        if (flashGuard.getAndSet(mode) != mode) guardForgets.value = true
+    }
+
+    private val flashGuard = atomic(io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem)
+
+    /** The detector and its grid, the worker's alone. */
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+    private val guard = io.github.yuroyami.kiteplayer.spi.VideoFlashGuard()
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+    private val guardCells = FloatArray(io.github.yuroyami.kiteplayer.spi.VideoFlashGuard.CELLS)
+
+    /** Set when the picture is taken off or the mode changes, so the worker starts the guard afresh. */
+    private val guardForgets = atomic(false)
+
+    /**
+     * The flash guard's factor for [rgba], measured on a sparse lattice of it. Worker thread only.
+     * 1 when the guard is off.
+     */
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+    private fun dimFor(rgba: ByteArray, width: Int, height: Int): Float {
+        if (flashGuard.value != io.github.yuroyami.kiteplayer.FlashGuard.On) return 1f
+        if (guardForgets.getAndSet(false)) guard.reset()
+        io.github.yuroyami.kiteplayer.spi.VideoFlashGuard.cellsFromRgba(rgba, width, height, into = guardCells)
+        return guard.factorFor(guardCells, guardNanos())
     }
 
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
@@ -343,6 +383,8 @@ internal class KiteVideoRenderer(
             return
         }
 
+        // Measured before the image is built, so the picture that completes a run is already dimmed.
+        val dim = dimFor(rgba, width, height)
         val image = try {
             makeImage(rgba, width, height)
         } catch (failure: Throwable) {
@@ -358,6 +400,7 @@ internal class KiteVideoRenderer(
             release = image.release,
             mirrored = mirrored,
             crop = crop,
+            dim = dim,
         )
         val current = kotlinx.atomicfu.locks.synchronized(pictureLock) {
             if (pictureEpoch == epoch) publish(finished)
@@ -390,6 +433,7 @@ internal class KiteVideoRenderer(
             pictureEpoch += 1
             publish(null)
         }
+        guardForgets.value = true
     }
 
     /** Counts the frame and reports why. */
@@ -518,4 +562,10 @@ internal class KiteVideoRenderer(
     private companion object {
         private const val RGBA_BYTES_PER_PIXEL: Long = 4L
     }
+}
+
+/** A monotonic clock in nanoseconds from its first reading, for the flash guard. */
+private fun monotonicGuardClock(): () -> Long {
+    val start = kotlin.time.TimeSource.Monotonic.markNow()
+    return { start.elapsedNow().inWholeNanoseconds }
 }

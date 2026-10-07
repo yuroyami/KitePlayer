@@ -68,7 +68,7 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                     // sanctioned draw-phase reads: all change on a user's setting, so their
                     // invalidations are rarer than the overlay's.
                     val mode = state.scaleMode.value
-                    val videoFilter = state.videoColorFilter.value
+                    val videoFilter = state.pictureFilterFor(frame)
                     val framing = state.transform.value
                     val sampling = state.filterQuality.value
                     val layout = videoLayout(

@@ -87,6 +87,41 @@ public class KiteVideoState internal constructor(
     internal val videoColorFilter: MutableState<androidx.compose.ui.graphics.ColorFilter?> =
         mutableStateOf(null)
 
+    /** The picture controls [videoColorFilter] was baked from, for the flash guard's dimmed filter. */
+    @kotlin.concurrent.Volatile
+    private var pictureAdjustments: io.github.yuroyami.kiteplayer.VideoAdjustments =
+        io.github.yuroyami.kiteplayer.VideoAdjustments.Identity
+
+    /** The last dimmed filter, by the controls and the factor it was built for. Draw phase only. */
+    private var dimmedFilterFor: Pair<io.github.yuroyami.kiteplayer.VideoAdjustments, Float>? = null
+    private var dimmedFilter: androidx.compose.ui.graphics.ColorFilter? = null
+
+    /**
+     * The filter [frame] is drawn with: the picture controls, with the flash guard's factor folded
+     * in while a flashing run lasts (#500). Draw phase only; it reads [videoColorFilter] either way,
+     * so a change of the controls still redraws.
+     */
+    internal fun pictureFilterFor(frame: KiteVideoFrame): androidx.compose.ui.graphics.ColorFilter? {
+        val plain = videoColorFilter.value
+        return if (frame.dim < 1f) dimmedPictureFilter(frame.dim) else plain
+    }
+
+    /**
+     * The picture controls' filter with the flash guard's [dim] folded in (#500), for a frame drawn
+     * during a flashing run. Built in the draw phase and kept while the factor holds, which is most
+     * of a run; outside a run the draw uses [videoColorFilter] and pays nothing.
+     */
+    private fun dimmedPictureFilter(dim: Float): androidx.compose.ui.graphics.ColorFilter {
+        val key = pictureAdjustments to dim
+        dimmedFilter?.takeIf { dimmedFilterFor == key }?.let { return it }
+        val built = androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+            androidx.compose.ui.graphics.ColorMatrix(dimmedColorMatrix(key.first, dim)),
+        )
+        dimmedFilterFor = key
+        dimmedFilter = built
+        return built
+    }
+
     /**
      * How the draw phase samples the picture when it scales it, under the same law as
      * [videoColorFilter]: one setting, not one frame.
@@ -136,19 +171,14 @@ public class KiteVideoState internal constructor(
         publishScaleMode = { mode -> scaleMode.value = mode },
         publishTransform = { newest -> transform.value = newest },
         publishAdjustments = { adjustments ->
+            pictureAdjustments = adjustments
             videoColorFilter.value = if (adjustments.isIdentity) {
                 null
             } else {
                 // The engine's one matrix law, respelled into Compose's convention: same 4x5
                 // rows, translation column in the 0..255 domain instead of the unit domain.
-                val unit = adjustments.toColorMatrix()
-                val values = unit.copyOf()
-                values[4] *= 255f
-                values[9] *= 255f
-                values[14] *= 255f
-                values[19] *= 255f
                 androidx.compose.ui.graphics.ColorFilter.colorMatrix(
-                    androidx.compose.ui.graphics.ColorMatrix(values),
+                    androidx.compose.ui.graphics.ColorMatrix(dimmedColorMatrix(adjustments, 1f)),
                 )
             }
         },

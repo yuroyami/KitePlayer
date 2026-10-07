@@ -34,6 +34,9 @@ public class WebCanvasRendererFactory(
     private val canvas: JsAny,
     private val keepDisplayAwake: Boolean = true,
 ) : VideoRendererFactory {
+    /** Keeps the original canvas constructor with display wake enabled. */
+    public constructor(canvas: JsAny) : this(canvas, true)
+
     override val name: String = "web-canvas-kiteffmpeg"
     override suspend fun create(): VideoRenderer = KiteFFmpegWebCanvasRenderer(canvas, keepDisplayAwake)
 }

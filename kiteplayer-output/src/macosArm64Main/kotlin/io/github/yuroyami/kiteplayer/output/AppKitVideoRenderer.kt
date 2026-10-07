@@ -125,6 +125,13 @@ public class AppKitVideoRenderer internal constructor(
     private val showImage: (NSImage) -> Unit,
 ) : VideoRenderer {
 
+    /** The original constructor keeps the display awake while pictures are shown. */
+    public constructor(
+        window: AppKitWindow,
+        convert: (VideoFrame) -> ByteArray,
+        toneMapped: (VideoFrame) -> Boolean = { false },
+    ) : this(window, convert, toneMapped, true)
+
     /**
      * The renderer as a player uses it: finished images go into [window]'s image view, on the main
      * thread, through the main queue.

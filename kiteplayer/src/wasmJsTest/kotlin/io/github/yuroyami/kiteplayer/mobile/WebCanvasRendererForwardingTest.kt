@@ -18,9 +18,12 @@ import kotlin.test.assertEquals
 class WebCanvasRendererForwardingTest {
 
     /** The factory builds without suspending, and this module's tests have no coroutine test tools. */
-    private fun rendererOn(canvas: JsAny): VideoRenderer {
+    private fun rendererOn(canvas: JsAny, keepDisplayAwake: Boolean? = null): VideoRenderer {
         var made: Result<VideoRenderer>? = null
-        suspend { WebCanvasRendererFactory(canvas).create() }
+        suspend {
+            if (keepDisplayAwake == null) WebCanvasRendererFactory(canvas).create()
+            else WebCanvasRendererFactory(canvas, keepDisplayAwake).create()
+        }
             .startCoroutine(Continuation(EmptyCoroutineContext) { made = it })
         return checkNotNull(made) { "the factory suspended" }.getOrThrow()
     }
@@ -32,6 +35,19 @@ class WebCanvasRendererForwardingTest {
         renderer.clearPicture()
         assertEquals(1, clearsOf(canvas), "the picture was taken off the canvas (#530)")
         renderer.close()
+    }
+
+    @Test
+    fun theExplicitWakeOptionStillBuildsTheCanvasRenderer() {
+        val canvas = clearCountingCanvas()
+        val renderer = rendererOn(canvas, keepDisplayAwake = false)
+        try {
+            renderer.clearPicture()
+            assertEquals(1, clearsOf(canvas))
+            assertEquals(VideoSize(640, 360), renderer.outputSize)
+        } finally {
+            renderer.close()
+        }
     }
 
     @Test

@@ -77,6 +77,9 @@ public class WebCanvasVideoRenderer(
     private val keepDisplayAwake: Boolean = true,
 ) : VideoRenderer {
 
+    /** Keeps the original painter constructor, including trailing-lambda calls. */
+    public constructor(canvas: JsAny, painter: WebFramePainter) : this(canvas, painter, true)
+
     private val state: JsAny? = webRendererState(canvas)
 
     private var viewportWidth: Int = webCanvasWidth(canvas)
@@ -345,6 +348,9 @@ public class WebCanvasVideoRendererFactory(
     private val painter: WebFramePainter,
     private val keepDisplayAwake: Boolean = true,
 ) : VideoRendererFactory {
+    /** Keeps the original painter constructor, including trailing-lambda calls. */
+    public constructor(canvas: JsAny, painter: WebFramePainter) : this(canvas, painter, true)
+
     override val name: String = "web-canvas"
     override suspend fun create(): VideoRenderer = WebCanvasVideoRenderer(canvas, painter, keepDisplayAwake)
 }

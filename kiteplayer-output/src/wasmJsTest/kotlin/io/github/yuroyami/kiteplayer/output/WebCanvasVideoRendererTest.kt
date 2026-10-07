@@ -172,6 +172,59 @@ class WebCanvasVideoRendererTest {
         renderer.close()
     }
 
+    /** The original factory accepts a trailing painter lambda and passes it to its renderer. */
+    @Test
+    fun theFactoryKeepsItsTrailingPainterLambda() = runTest {
+        val installed = installStageCanvasIfMissing()
+        try {
+            var paints = 0
+            val factory = WebCanvasVideoRendererFactory(fakeCanvas()) { _, _ ->
+                paints++
+                false
+            }
+            val renderer = factory.create()
+            try {
+                val frame = CountingFrame()
+                assertFalse(renderer.present(frame, 0))
+                assertEquals(1, paints, "the supplied painter must reach the renderer")
+                assertEquals(1, frame.closes, "the refused frame still has one close owner")
+            } finally {
+                renderer.close()
+            }
+        } finally {
+            if (installed) removeStageCanvas()
+        }
+    }
+
+    /** The explicit wake option remains callable alongside the restored constructors. */
+    @Test
+    fun explicitWakeOptionsStillPassThePainterToBothEntryPoints() = runTest {
+        val installed = installStageCanvasIfMissing()
+        try {
+            var paints = 0
+            val refuses = WebFramePainter { _, _ -> paints++; false }
+            val renderer = WebCanvasVideoRenderer(fakeCanvas(), refuses, keepDisplayAwake = false)
+            try {
+                val frame = CountingFrame()
+                assertFalse(renderer.present(frame, 0))
+                assertEquals(1, frame.closes)
+            } finally {
+                renderer.close()
+            }
+            val factoryRenderer = WebCanvasVideoRendererFactory(fakeCanvas(), refuses, false).create()
+            try {
+                val frame = CountingFrame()
+                assertFalse(factoryRenderer.present(frame, 0))
+                assertEquals(1, frame.closes)
+                assertEquals(2, paints)
+            } finally {
+                factoryRenderer.close()
+            }
+        } finally {
+            if (installed) removeStageCanvas()
+        }
+    }
+
     /** The viewport is the canvas's BACKING STORE, scaled by the device pixel ratio. */
     @Test
     fun setViewportSizesTheBackingStoreByTheDevicePixelRatio() {

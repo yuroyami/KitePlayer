@@ -531,6 +531,14 @@ public class KitePlayerWorker private constructor(
     }
 
     public companion object {
+        /** Keeps the original startup entry point with display wake enabled. */
+        public suspend fun start(
+            canvas: JsAny?,
+            workerUrl: String = "./kiteplayer-web-worker.mjs",
+            codecUrl: String = "./kite.mjs",
+            libassUrl: String? = "./kiteass.mjs",
+        ): KitePlayerWorker = start(canvas, workerUrl, codecUrl, libassUrl, true)
+
         /**
          * Starts a worker player, hands it [canvas] and the page's audio, and returns once it can
          * play.

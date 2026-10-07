@@ -233,6 +233,7 @@ final enum class io.github.yuroyami.kiteplayer.output/AppKitSurface : kotlin/Enu
 
 // Targets: [macosArm64]
 final class io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.output/AppKitWindow, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/ByteArray>, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Boolean> = ...) // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppKitWindow;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.ByteArray>;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.Boolean>){}[0]
     constructor <init>(io.github.yuroyami.kiteplayer.output/AppKitWindow, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/ByteArray>, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Boolean> = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppKitWindow;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.ByteArray>;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.Boolean>;kotlin.Boolean){}[0]
 
     final val events // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.events|{}events[0]
@@ -281,6 +282,7 @@ abstract fun interface io.github.yuroyami.kiteplayer.output/WebFramePainter { //
 
 // Targets: [wasmJs]
 final class io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer|null[0]
+    constructor <init>(kotlin.js/JsAny, io.github.yuroyami.kiteplayer.output/WebFramePainter) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.<init>|<init>(kotlin.js.JsAny;io.github.yuroyami.kiteplayer.output.WebFramePainter){}[0]
     constructor <init>(kotlin.js/JsAny, io.github.yuroyami.kiteplayer.output/WebFramePainter, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.<init>|<init>(kotlin.js.JsAny;io.github.yuroyami.kiteplayer.output.WebFramePainter;kotlin.Boolean){}[0]
 
     final val events // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.events|{}events[0]
@@ -307,6 +309,7 @@ final class io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer : io.git
 
 // Targets: [wasmJs]
 final class io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory : io.github.yuroyami.kiteplayer.spi/VideoRendererFactory { // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory|null[0]
+    constructor <init>(kotlin.js/JsAny, io.github.yuroyami.kiteplayer.output/WebFramePainter) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory.<init>|<init>(kotlin.js.JsAny;io.github.yuroyami.kiteplayer.output.WebFramePainter){}[0]
     constructor <init>(kotlin.js/JsAny, io.github.yuroyami.kiteplayer.output/WebFramePainter, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory.<init>|<init>(kotlin.js.JsAny;io.github.yuroyami.kiteplayer.output.WebFramePainter;kotlin.Boolean){}[0]
 
     final val name // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory.name|{}name[0]

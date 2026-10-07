@@ -5,7 +5,9 @@ import android.media.AudioManager
 import io.github.yuroyami.kiteplayer.AudioContent
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Android's four focus codes, and everything else.
@@ -57,5 +59,16 @@ class AndroidInterruptionMappingTest {
         assertEquals(FocusResult.Delayed, focusResultFor(AudioManager.AUDIOFOCUS_REQUEST_DELAYED))
         assertEquals(FocusResult.Failed, focusResultFor(AudioManager.AUDIOFOCUS_REQUEST_FAILED))
         assertEquals(FocusResult.Failed, focusResultFor(12345))
+    }
+
+    /** Only a refusal that can be Android 15's background rule waits for the media service (#454). */
+    @Test
+    fun `a refusal waits for the foreground only where it can be the background rule`() {
+        val android15 = 35
+        assertTrue(waitsForForeground(android15, notificationAttached = true, inForeground = false))
+        assertTrue(waitsForForeground(android15 + 2, notificationAttached = true, inForeground = false))
+        assertFalse(waitsForForeground(android15 - 1, notificationAttached = true, inForeground = false), "Android 14 has no such rule")
+        assertFalse(waitsForForeground(android15, notificationAttached = false, inForeground = false), "no service will enter the foreground")
+        assertFalse(waitsForForeground(android15, notificationAttached = true, inForeground = true), "already there, so the refusal is real")
     }
 }

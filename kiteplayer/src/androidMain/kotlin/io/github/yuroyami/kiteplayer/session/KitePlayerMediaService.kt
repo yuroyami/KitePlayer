@@ -7,6 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Keeps the process alive while the player plays, and holds the media notification.
@@ -53,6 +56,7 @@ public class KitePlayerMediaService : Service() {
     }
 
     override fun onDestroy() {
+        MediaServiceForeground.left()
         MediaNotificationRegistry.onServiceDestroyed(this)
         super.onDestroy()
     }
@@ -62,9 +66,11 @@ public class KitePlayerMediaService : Service() {
     internal fun enterForeground(id: Int, notification: Notification) {
         val type = foregroundServiceTypeFor(Build.VERSION.SDK_INT)
         if (type != null) startForeground(id, notification, type) else startForeground(id, notification)
+        MediaServiceForeground.entered()
     }
 
     internal fun leaveForeground(removeNotification: Boolean) {
+        MediaServiceForeground.left()
         stopForeground(if (removeNotification) STOP_FOREGROUND_REMOVE else STOP_FOREGROUND_DETACH)
     }
 }
@@ -84,11 +90,15 @@ internal object MediaNotificationRegistry {
     fun attach(next: MediaNotificationHandle) {
         val previous = handle
         handle = next
+        MediaServiceForeground.notificationAttached = true
         previous?.close()
     }
 
     fun detach(leaving: MediaNotificationHandle) {
-        if (handle === leaving) handle = null
+        if (handle === leaving) {
+            handle = null
+            MediaServiceForeground.notificationAttached = false
+        }
     }
 
     fun onServiceCreated(created: KitePlayerMediaService) {
@@ -150,5 +160,29 @@ internal object MediaNotificationRegistry {
             .setSmallIcon(icon)
             .setCategory(Notification.CATEGORY_TRANSPORT)
             .build()
+    }
+}
+
+/**
+ * Whether the media service holds the application in the foreground, for the audio focus request
+ * that Android 15 refuses to an application in the background (#454). Written on the main thread by
+ * the service, read from the focus guard's thread.
+ */
+internal object MediaServiceForeground {
+    private val held = MutableStateFlow(false)
+
+    /** True from the service's entry into the foreground until it leaves or stops. */
+    val inForeground: StateFlow<Boolean> = held.asStateFlow()
+
+    /** A media notification is attached, so its service enters the foreground when playback starts. */
+    @Volatile
+    var notificationAttached: Boolean = false
+
+    fun entered() {
+        held.value = true
+    }
+
+    fun left() {
+        held.value = false
     }
 }

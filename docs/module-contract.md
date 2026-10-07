@@ -161,3 +161,63 @@ option remain available with their existing parameters and defaults; callers can
 Compatibility verification checks the restored exact symbols in compiler-generated ABI output and
 compiles old and new source call forms. This is not a claim that every combination of published
 Kotlin compiler, library and already-linked application versions is binary compatible.
+
+
+## Native Apple media sessions
+
+The `kiteplayer` Apple API declares `KitePlayerMediaSession(player, skipInterval = 15.seconds)`
+and `KitePlayer.attachMediaSession(background = ContinueAudio, interruptions = InterruptionPolicy(),
+pictureInPicture = null, skipInterval = 15.seconds)` in the shared Apple source set. The iOS actual
+keeps the existing `setArtwork(UIImage?)` member and constructor signature. The macOS actual adds
+`setArtwork(NSImage?)`. Both expose `platformToken: Any?` as null, `isAvailable: Boolean` as true,
+and idempotent `close()`. Construction, artwork updates and close belong to the main thread.
+An invalid nonpositive skip interval is refused before registering a system handler.
+
+One process has one Now Playing owner. A new successfully registered session takes ownership,
+retires the previous owner's command targets and policy subscriptions, and leaves the previous
+player's transport alone. Late callbacks and subsequent closes from a retired session cannot
+control or clear the new owner's card. A setup failure removes every handler acquired so far.
+The session returned by `attachMediaSession` closes with its player. Artwork supplied by the
+application wins over the item's embedded artwork; null restores the embedded picture.
+
+The shared controller uses MediaPlayer for metadata, position, buttons and command forwarding.
+The macOS adapter also writes `MPNowPlayingInfoCenter.playbackState`: Playing, Paused and Stopped
+map directly; Opening and Buffering map to Unknown with a zero playback rate, not to a fabricated
+OS interruption or continuing playback. The iOS audio-session and application-background adapters
+remain iOS-only. A macOS application losing focus can still have a visible window, so the mobile
+background argument has no effect there; picture in picture retains its own lifetime. The desktop
+JVM stub is unchanged. Sharing the existing view-module edge at `appleMain` makes the established
+picture-in-picture parameter available to both native Apple callers without a new external library.
+
+A noisy route is observed by the audio sink that actually owns the output binding. A default-bound
+sink follows that output; a pinned sink ignores unrelated default changes and retains its existing
+unavailable-device failure if its device disappears. A headphone-to-speaker transition pauses when
+`InterruptionPolicy.pauseWhenBecomingNoisy` is enabled. This includes a selected data-source change
+within the same built-in output ID. An unclassified Bluetooth or Bluetooth LE route becoming proven
+built-in speakers also pauses conservatively; an explicit speaker terminal overrides that fallback.
+Transport type alone does not label a device as headphones. Initial inspection, speaker-to-speaker
+changes, unknown non-Bluetooth endpoints and reconnection cause no transport action.
+
+The general output SPI gains `AudioSinkEvent.BecameNoisy(atNanos: Long)`. Its timestamp is captured
+when the route notice is received, in the owning output clock's domain, before any owner-queue
+refresh or asynchronous delivery. It describes the observed notice, not the unknowable exact physical
+unplug time. The latest pending occurrence is retained independently of lossy diagnostic notices,
+including across the engine's first subscription. Several undelivered noisy notices may coalesce to
+the newest because one pause suffices. No real-time render callback performs this work.
+
+The core gains `PlayerEvent.AudioOutputBecameNoisy(transportMark: Long)`. It forwards only a current
+session's current audio sink occurrence newer than the last explicit transport request. A tied
+monotonic tick favors the explicit request. The existing transport counter keeps its exact
+increment-before-validation behavior, including rejected requests. A session collects
+`losslessEvents` before attachment returns and compares the event's mark again when applying policy
+on the main lane. Thus an occurrence retained before a later play cannot be dated as a fresh
+interruption after that play, and a later request also supersedes an already-forwarded occurrence.
+Reconnection does not resume sound. Other backends may implement the typed SPI without Apple types.
+
+Both event subtypes are public sealed-hierarchy additions: callers with exhaustive `when` expressions
+must account for the new case when rebuilding. Existing event constructors and the existing iOS
+session signatures remain. The web worker encodes the transport mark as an exact decimal long and
+round-trips the new event; it does not invent a web noisy-route implementation. Compiler-generated
+ABI output is regenerated for affected published modules in the implementation commit. Native
+source/API checks, fake-HAL route tests, media-key behavior and physical headphone trials are
+separate evidence; none stands in for another.

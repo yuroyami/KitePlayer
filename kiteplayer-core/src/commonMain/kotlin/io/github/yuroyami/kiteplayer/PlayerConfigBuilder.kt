@@ -278,6 +278,9 @@ public class NetworkConfigBuilder(from: NetworkConfig = NetworkConfig()) {
     /** See [NetworkConfig.autoResolve]. */
     public var autoResolve: Boolean = from.autoResolve
 
+    /** See [NetworkConfig.recovery]. */
+    public var recovery: NetworkRecovery? = from.recovery
+
     /** Changes [ioCache] field by field. */
     public fun ioCache(build: IoCachePolicyBuilder.() -> Unit) {
         ioCache = IoCachePolicyBuilder(ioCache).apply(build).build()
@@ -288,6 +291,7 @@ public class NetworkConfigBuilder(from: NetworkConfig = NetworkConfig()) {
         ioResolver = ioResolver,
         ioCache = ioCache,
         autoResolve = autoResolve,
+        recovery = recovery,
     )
 }
 

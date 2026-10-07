@@ -532,6 +532,9 @@ internal class FaultPlan(
     /** True makes the source throw on the read after this many successful ones. */
     var failReadAfter: Int? = null
 
+    /** True makes every read fail, as a source does while the network is gone (#461). */
+    var readsFail: Boolean = false
+
     /** True makes every video decoder factory refuse, so the video stream has to be deselected. */
     var videoDecodersRefuse: Boolean = false
 
@@ -613,7 +616,7 @@ internal class FaultPlan(
     fun refuseSend(): Boolean = roll(refuseSendPercent)
     fun emptyDecode(): Boolean = roll(emptyDecodePercent)
     fun refusePresent(): Boolean = roll(refusePresentPercent)
-    fun failRead(reads: Int): Boolean = failReadAfter == reads || roll(readFailsPercent)
+    fun failRead(reads: Int): Boolean = readsFail || failReadAfter == reads || roll(readFailsPercent)
 
     private fun roll(percent: Int): Boolean = percent > 0 && random.nextInt(100) < percent
 

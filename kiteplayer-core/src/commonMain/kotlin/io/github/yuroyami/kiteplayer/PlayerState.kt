@@ -196,6 +196,12 @@ public data class PlayerSnapshot(
      * is true even while an item with a picture or a live stream plays uncut.
      */
     val skipSilence: Boolean = false,
+    /**
+     * True while the item failed for the network and the player waits to open it again, as
+     * [NetworkConfig.recovery] asks (#461). [status] is [PlaybackStatus.Buffering] meanwhile, or
+     * [PlaybackStatus.Paused] for a paused player, and [media], [duration] and the position stay.
+     */
+    val reconnecting: Boolean = false,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.MediaIo
+import io.github.yuroyami.kiteplayer.NetworkStatus
 import io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
@@ -36,6 +37,12 @@ internal class MediaIoProviderRegistry {
      * an item that needs one (#430).
      */
     suspend fun resolveLocalFile(path: String): MediaIo? = firstAnswer(localFiles = true, path, emptyMap())
+
+    /** The network status of the first provider, by identifier, that gives one (#461). */
+    fun networkStatus(): NetworkStatus? {
+        val snapshot = synchronized(lock) { entries.entries.sortedBy { it.key }.map { it.value } }
+        return snapshot.firstNotNullOfOrNull { it.provider.networkStatus() }
+    }
 
     private suspend fun firstAnswer(localFiles: Boolean, uri: String, headers: Map<String, String>): MediaIo? {
         val snapshot = synchronized(lock) {

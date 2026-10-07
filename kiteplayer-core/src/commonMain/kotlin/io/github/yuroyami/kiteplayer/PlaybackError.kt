@@ -262,6 +262,18 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The item failed with [error] for the network, and the player waits to open it again, as
+     * [NetworkConfig.recovery] asks (#461). Once for each wait; [PlayerSnapshot.reconnecting] is
+     * true while it lasts.
+     */
+    public data class Reconnecting(val error: PlaybackError) : PlaybackWarning() {
+        override val message: String get() = "the item failed for the network and will be opened again: ${error.message}"
+
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("error" to (error::class.simpleName ?: "PlaybackError"))
+    }
+
+    /**
      * The item is marked as still being written ([MediaItem.growth]), but nothing gave it a reader:
      * it has no `io` of its own, and no installed provider serves its address, which for a local
      * path is one that serves local files, so it plays as the file stood when it opened (#430).

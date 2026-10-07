@@ -158,6 +158,7 @@ class WorkerProtocolTest {
         dialogueLevelDb = 4.5f,
         pitchSemitones = -2.5,
         skipSilence = true,
+        reconnecting = true,
         lyrics = "A line\nAnother line",
     )
 
@@ -216,6 +217,7 @@ class WorkerProtocolTest {
         PlaybackWarning.ExternalClockSilent("none set"),
         PlaybackWarning.VariantLowered(2, 1, "waited 3s"),
         PlaybackWarning.QueueItemSkipped(1, "https://example.com/gone.mp4", PlaybackError.SourceUnavailable("https://example.com/gone.mp4", null, "HTTP 404")),
+        PlaybackWarning.Reconnecting(PlaybackError.SourceStalled("https://example.com/live.m3u8", 30.seconds)),
     )
 
     private val errors = listOf(
@@ -400,7 +402,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(41, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(42, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test

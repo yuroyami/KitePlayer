@@ -1329,6 +1329,15 @@ internal class PlaybackCore(
     /** Where the last renewal of the item's address (#453) opened it again, or null when none has. */
     private var renewedAtUs: Long? = null
 
+    /** The wait for the network after the item failed for it (#461), or null. Actor only. */
+    private var reconnect: Reconnect? = null
+
+    /** Set by the network status, from any thread, when it reports a network after reporting none (#461). */
+    private val networkBack = atomic(false)
+
+    /** Whether the network status reported no network during this wait, from any thread (#461). */
+    private val networkWasLost = atomic(false)
+
     /**
      * True while the primary subtitle is the one the open chose by its rules, which read the audio,
      * so an audio change chooses it again (#506). A selection by the viewer or the application, or a
@@ -1540,6 +1549,7 @@ internal class PlaybackCore(
         Handler("drainCommands") { drainCommands() },
         Handler("handleLateStreams") { handleLateStreams() },
         Handler("handleTrackChanges") { handleTrackChanges() },
+        Handler("handleReconnect") { handleReconnect() },
         Handler("handleAudioFill") { handleAudioFill() },
         Handler("handleQueueHandoff") { handleQueueHandoff() },
         Handler("handleVideoWrite") { handleVideoWrite() },
@@ -2693,6 +2703,8 @@ internal class PlaybackCore(
 
     private fun seekRejection(): Throwable? = when {
         pendingVideoRecovery != null -> null
+        // A wait for the network moves where the item opens again, for an item that could seek (#461).
+        reconnect?.atUs != null -> null
         session == null -> IllegalStateException("seek needs an open media item")
         session?.source?.seekable != true -> UnsupportedOperationException(
             "this source is not seekable, so there is no position to move the cursor to",
@@ -2791,21 +2803,29 @@ internal class PlaybackCore(
                 if (status == PlaybackStatus.Ended && session?.source?.seekable == true) {
                     restartFrom(Pts.Zero)
                 }
+                // Waiting for the network, the player buffers until the item is back (#461).
+                if (reconnect != null) setStatus(PlaybackStatus.Buffering)
                 command.reply.complete(Unit)
             }
             is CoreCommand.Pause -> {
                 playRequested = false
-                applyPause()
+                if (reconnect != null) setStatus(PlaybackStatus.Paused) else applyPause()
                 command.reply.complete(Unit)
             }
-            is CoreCommand.Seek -> queueSeek(command.request, command.reply)
-            is CoreCommand.SeekLater -> if (
-                session?.source?.seekable == true || pendingVideoRecovery != null
-            ) {
-                queueSeek(command.request, null)
-            } else {
-                // Dropped: the mask it set on the caller's thread goes with it (#255).
-                clearSeekMaskUnlessPending()
+            is CoreCommand.Seek -> {
+                val wait = reconnect
+                if (wait != null && session == null) seekWhileReconnecting(wait, command.request, command.reply) else queueSeek(command.request, command.reply)
+            }
+            is CoreCommand.SeekLater -> {
+                val wait = reconnect?.takeIf { it.atUs != null && session == null }
+                if (wait != null) {
+                    seekWhileReconnecting(wait, command.request, null)
+                } else if (session?.source?.seekable == true || pendingVideoRecovery != null) {
+                    queueSeek(command.request, null)
+                } else {
+                    // Dropped: the mask it set on the caller's thread goes with it (#255).
+                    clearSeekMaskUnlessPending()
+                }
             }
             is CoreCommand.Stop -> {
                 // A cancelled request's stop that finds another request's session leaves it alone.
@@ -3539,6 +3559,8 @@ internal class PlaybackCore(
      * a fresh open, and the player's own for a preload that was aligned to it (#306).
      */
     private fun resetForOpen(item: MediaItem, epoch: Generation) {
+        // An open ends a wait for the network, as it ends any item (#461).
+        endReconnect()
         media = item
         variantChosenByPlayer = false
         renewedAtUs = null
@@ -5498,6 +5520,189 @@ internal class PlaybackCore(
     }
 
     /**
+     * The wait of [io.github.yuroyami.kiteplayer.NetworkConfig.recovery] (#461): the error that
+     * started it, how to open the item again, and when to try next. See
+     * `docs/cancellation-and-bounded-waits.md`.
+     */
+    private class Reconnect(
+        val error: PlaybackError,
+        val startedNanos: Long,
+        /** Where the item opens again, in microseconds of its file, or null to open it at the live edge. */
+        var atUs: Long?,
+        val duration: Duration?,
+        val video: StreamChoice,
+        val audio: StreamChoice,
+        val subtitle: StreamChoice,
+        val secondary: TrackId?,
+    ) {
+        var attempts = 0
+        var nextAttemptNanos = 0L
+        var watch: AutoCloseable? = null
+    }
+
+    /**
+     * Turns [error], which ended [session], into a wait for the network when the recovery asks for
+     * one (#461): the item had opened, reads over the network and failed reading. The session is
+     * torn down as a failure tears it down, but the player does not fail.
+     *
+     * @return true when the wait began, and false when the caller fails as before.
+     */
+    private suspend fun startReconnect(session: OpenSession, error: PlaybackError): Boolean {
+        val recovery = config.network.recovery ?: return false
+        if (error !is PlaybackError.SourceStalled && error !is PlaybackError.SourceUnavailable) return false
+        if (media?.uri?.let(::readsOverNetwork) != true) return false
+        fun choice(index: Int?) = index?.let { StreamChoice.At(it) } ?: StreamChoice.None
+        val wait = Reconnect(
+            error = error,
+            startedNanos = clock.nanos(),
+            atUs = if (session.source.seekable) currentPosition().micros else null,
+            duration = publishedDuration(session),
+            video = choice(session.videoStream?.index),
+            audio = choice(session.audioStream?.index),
+            subtitle = choice(session.selectedSubtitleStream?.index),
+            secondary = tracks.selectedSecondarySubtitle,
+        )
+        teardownSession()
+        resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
+        pendingSeek = null
+        clearSeekMaskUnlessPending()
+        reconnect = wait
+        networkBack.value = false
+        networkWasLost.value = false
+        wait.watch = watchNetwork(recovery)
+        nextReconnectIn(wait)
+        warn(PlaybackWarning.Reconnecting(error))
+        setStatus(if (playRequested) PlaybackStatus.Buffering else PlaybackStatus.Paused)
+        publishSnapshot()
+        return true
+    }
+
+    /** Watches the network status of [recovery], or the installed one, for the wait (#461). */
+    private fun watchNetwork(recovery: io.github.yuroyami.kiteplayer.NetworkRecovery): AutoCloseable? {
+        val status = recovery.status ?: io.github.yuroyami.kiteplayer.spi.MediaIoProviders.networkStatus() ?: return null
+        return try {
+            status.watch { online ->
+                if (!online) {
+                    networkWasLost.value = true
+                } else if (networkWasLost.getAndSet(false)) {
+                    networkBack.value = true
+                }
+            }
+        } catch (failure: Exception) {
+            // The timer alone tries then, as on a platform with no status.
+            io.github.yuroyami.kiteplayer.KiteLog.log("kiteplayer", "the network status could not be watched: ${failure.message}")
+            null
+        }
+    }
+
+    /** Sets when [wait] tries next: 1, 2, 4 and 8 seconds after the attempt before, then every 10. */
+    private fun nextReconnectIn(wait: Reconnect) {
+        val delay = RECONNECT_DELAYS.getOrElse(wait.attempts) { RECONNECT_DELAY_MAX }
+        wait.nextAttemptNanos = clock.nanos() + delay.inWholeNanoseconds
+        wakeIn(delay)
+    }
+
+    /** Ends the wait and stops watching the network (#461). */
+    private fun endReconnect() {
+        val wait = reconnect ?: return
+        reconnect = null
+        runCatching { wait.watch?.close() }
+        snapshotDirty = true
+    }
+
+    /**
+     * Each pass of a wait for the network (#461): gives up at the limit, and otherwise opens the item
+     * again when its time has come or the network status reported a network again.
+     */
+    private suspend fun handleReconnect() {
+        val wait = reconnect ?: return
+        val now = clock.nanos()
+        val maxWait = config.network.recovery?.maxWait ?: Duration.ZERO
+        if (maxWait.isFinite() && now - wait.startedNanos >= maxWait.inWholeNanoseconds) {
+            endReconnect()
+            fail(wait.error)
+            return
+        }
+        if (!networkBack.getAndSet(false) && now < wait.nextAttemptNanos) {
+            wakeIn((wait.nextAttemptNanos - now).nanoseconds)
+            return
+        }
+        val item = media ?: run {
+            endReconnect()
+            return
+        }
+        wait.attempts++
+        try {
+            requestedEpoch = requestedEpoch.next()
+            val rebuilt = buildSession(item, wait.video, wait.audio, wait.subtitle)
+            session = rebuilt
+            // As a rebuild: fresh decoders stamp the first epoch, and the reposition aligns them.
+            flushDecoders(rebuilt, requestedEpoch)
+            clearBuffers(rebuilt, requestedEpoch)
+            rebuilt.videoParked.value = !videoEnabled
+            startWorkers(rebuilt)
+            when (awaitInitialFill(rebuilt)) {
+                FillOutcome.WorkerFinished -> throw workerOutcomeException(rebuilt, "before the item could refill after the network came back")
+                FillOutcome.TimedOut -> warn(
+                    PlaybackWarning.StartupIncomplete("no stream reached readiness within $OPEN_FILL_DEADLINE after the item was opened again"),
+                )
+                FillOutcome.Ready -> Unit
+                // A stop or a close is waiting, and it ends the wait.
+                FillOutcome.Preempted -> {
+                    teardownSession()
+                    return
+                }
+            }
+            wait.atUs?.let { at ->
+                if (pendingSeek == null && rebuilt.source.seekable) {
+                    pendingSeek = SeekRequest(SeekTarget.Absolute(Pts(at)), SeekMode.Precise)
+                }
+            }
+            endReconnect()
+            restoreSubtitleState(wait.secondary)
+            refreshTypesetting()
+            if (rebuilt.videoStream == null) clearRendererPicture()
+            setStatus(if (playRequested) PlaybackStatus.Buffering else PlaybackStatus.Paused)
+            publishSnapshot()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (preempted: OpenPreempted) {
+            teardownSession()
+        } catch (failure: Throwable) {
+            val error = classify(failure, item)
+            teardownSession()
+            if (error is PlaybackError.SourceStalled || error is PlaybackError.SourceUnavailable) {
+                nextReconnectIn(wait)
+                snapshotDirty = true
+            } else {
+                endReconnect()
+                fail(error)
+            }
+        }
+    }
+
+    /**
+     * A seek during a wait for the network (#461): it moves where the item opens again, and is
+     * answered at once. Only for an item that could seek, which [seekRejection] checks.
+     */
+    private fun seekWhileReconnecting(wait: Reconnect, request: SeekRequest, reply: CompletableDeferred<SeekResult>?) {
+        val from = wait.atUs ?: 0L
+        val origin = itemOriginMicros.value
+        val target = when (val to = request.target) {
+            is SeekTarget.Absolute -> to.position.micros
+            is SeekTarget.Relative -> from + to.offset.inWholeMicroseconds
+            is SeekTarget.Factor -> wait.duration?.let { origin + (it.inWholeMicroseconds * to.fraction).toLong() } ?: from
+        }
+        val endUs = wait.duration?.let { origin + it.inWholeMicroseconds }
+        val at = target.coerceAtLeast(origin).let { if (endUs != null) it.coerceAtMost(endUs) else it }
+        wait.atUs = at
+        publishedPositionMicros.value = at
+        maskedSeekTargetMicros.value = NO_SEEK_MASK
+        progressState.value = progressState.value.copy(position = itemTime(at).microseconds)
+        reply?.complete(SeekResult.Applied(Pts(at)))
+    }
+
+    /**
      * Whether [session]'s silent stretches are cut (#429): while the setting is on, no picture is
      * shown and the stream is not live. A picture would have to follow each cut, and a live stream
      * cut would only reach its live edge sooner and wait there. Turning a video back on seeks to
@@ -7184,6 +7389,8 @@ internal class PlaybackCore(
             return false
         }
         val error = PlaybackError.SourceStalled(media?.uri ?: "", stalledFor)
+        // A stall over the network waits for the network instead, when the recovery asks (#461).
+        if (startReconnect(session, error)) return true
         teardownSession()
         fail(error)
         resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
@@ -10933,6 +11140,7 @@ internal class PlaybackCore(
 
     private suspend fun runStop() {
         sessionOwner = null
+        endReconnect()
         cancelSubtitleAcquisitions { IllegalStateException("stop() ended the subtitle file's load before it finished") }
         playRequested = false
         pendingVideoRecovery = null
@@ -10972,6 +11180,7 @@ internal class PlaybackCore(
         playRequested = false
         pendingVideoRecovery = null
         pendingSeek = null
+        endReconnect()
         cancelSubtitleAcquisitions { IllegalStateException("close() ended the subtitle file's load before it finished") }
         // Nothing here may block before the release below starts, because the close deadline is
         // the release's: finishing a recording, releasing the preload and waiting for preload
@@ -11587,6 +11796,8 @@ internal class PlaybackCore(
                 audioFeedError(session, cause) { "the ${outcome.name} worker failed" }
             else -> PlaybackError.Internal("the ${outcome.name} worker failed", cause)
         }
+        // A read the network failed waits for the network instead, when the recovery asks (#461).
+        if (outcome.name == DEMUX_WORKER && startReconnect(session, error)) return
         // A dead worker is a handled failure and never a hang, which is why every worker reports here.
         teardownSession()
         fail(error)
@@ -11633,9 +11844,10 @@ internal class PlaybackCore(
         snapshotState.value = PlayerSnapshot(
             status = status,
             media = media,
-            duration = session?.let { publishedDuration(it) },
+            // A wait for the network keeps what the item had (#461).
+            duration = session?.let { publishedDuration(it) } ?: reconnect?.duration,
             durationIsEstimate = session?.let { durationStillEstimated(it) } ?: false,
-            seekable = session?.source?.seekable ?: false,
+            seekable = session?.source?.seekable ?: (reconnect?.atUs != null),
             videoSize = session?.videoStream?.visibleVideoSize,
             // The item's own thumbnail file stands before the stream's pictures (#433).
             tracks = itemThumbnails?.file?.takeIf { itemThumbnails?.source == media?.thumbnails }
@@ -11692,6 +11904,7 @@ internal class PlaybackCore(
             markers = markers,
             playRequested = publishedPlayIntent(),
             preloadedIndex = pendingNext?.takeIf { it.prepared != null && it.index >= 0 }?.index,
+            reconnecting = reconnect != null,
         )
         publishProgressAndStats()
     }
@@ -14632,6 +14845,21 @@ private const val MAX_COMMANDS_PER_PASS: Int = 64
 
 /** How far playback must move past a renewal of the item's address before another may run (#453). */
 private const val RENEWAL_PROGRESS_US: Long = 2_000_000L
+
+/** The waits before the first attempts to open an item again after the network failed it (#461). */
+private val RECONNECT_DELAYS: List<Duration> = listOf(1.seconds, 2.seconds, 4.seconds, 8.seconds)
+
+/** The wait between the attempts after [RECONNECT_DELAYS] (#461). */
+private val RECONNECT_DELAY_MAX: Duration = 10.seconds
+
+/** The address schemes read over a network, whose failures a wait for the network covers (#461). */
+private val NETWORK_SCHEMES: Set<String> = setOf("http", "https", "rtsp", "rtsps", "rtmp", "rtmps", "udp", "rtp", "srt", "tcp")
+
+/** True when [uri] is read over a network, by its scheme (#461). */
+internal fun readsOverNetwork(uri: String): Boolean {
+    val scheme = uri.substringBefore("://", missingDelimiterValue = "")
+    return scheme.isNotEmpty() && scheme.lowercase() in NETWORK_SCHEMES
+}
 
 // Holding the delay behind a live sender (#395).
 /** How much faster than the caller's speed the player catches up: a second of delay in ten. */

@@ -562,6 +562,7 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("failedQueueItems", numbers(snapshot.failedQueueItems.sorted().map(Int::toDouble)))
     put("durationIsEstimate", snapshot.durationIsEstimate)
     put("lyrics", snapshot.lyrics)
+    put("reconnecting", snapshot.reconnecting)
 }
 
 private fun encodeVideoSize(size: VideoSize): JsAny = record {
@@ -1098,6 +1099,10 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             put("to", warning.to)
             put("detail", warning.detail)
         }
+        is PlaybackWarning.Reconnecting -> {
+            kind("Reconnecting")
+            put("error", encodeError(warning.error))
+        }
         is PlaybackWarning.QueueItemSkipped -> {
             kind("QueueItemSkipped")
             put("index", warning.index)
@@ -1369,6 +1374,7 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         failedQueueItems = o.numbers("failedQueueItems")?.map(Double::toInt)?.toSet() ?: default.failedQueueItems,
         durationIsEstimate = o.flag("durationIsEstimate"),
         lyrics = o.str("lyrics"),
+        reconnecting = o.flag("reconnecting"),
     )
 }
 
@@ -1686,6 +1692,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "SegmentSkipped" -> PlaybackWarning.SegmentSkipped(o.str("uri").orEmpty(), detail)
         "ExternalClockSilent" -> PlaybackWarning.ExternalClockSilent(detail)
         "VariantLowered" -> PlaybackWarning.VariantLowered(o.int("from") ?: missing("from"), o.int("to") ?: missing("to"), detail)
+        "Reconnecting" -> PlaybackWarning.Reconnecting(o.child("error")?.let(::decodeError) ?: missing("error"))
         "QueueItemSkipped" -> PlaybackWarning.QueueItemSkipped(
             o.int("index") ?: missing("index"),
             o.str("uri").orEmpty(),

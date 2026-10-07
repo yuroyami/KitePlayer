@@ -23,6 +23,7 @@ import kotlin.test.assertTrue
  * `AndroidFilterQualityDeviceTest`, and the two do not agree.
  */
 class SkiaFilterQualityTest {
+    init { useSkiaGraphics() }
 
     private val low = 40
     private val high = 210

@@ -55,7 +55,7 @@ kotlin {
     }
     android {
         namespace = "io.github.yuroyami.kiteplayer.network"
-        compileSdk = 37
+        compileSdk { version = release(37) { minorApiLevel = 2 } }
         minSdk = 26
         withHostTest {}
         optimization {

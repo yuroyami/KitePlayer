@@ -26,7 +26,7 @@ plugins {
 
 android {
     namespace = "io.github.yuroyami.kiteplayer.sample.android"
-    compileSdk = 37
+    compileSdk { version = release(37) { minorApiLevel = 2 } }
 
     defaultConfig {
         applicationId = "io.github.yuroyami.kiteplayer.sample.android"

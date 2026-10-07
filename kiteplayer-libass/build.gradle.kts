@@ -198,7 +198,7 @@ kotlin {
     }
     android {
         namespace = "io.github.yuroyami.kiteplayer.libass"
-        compileSdk = 37
+        compileSdk { version = release(37) { minorApiLevel = 2 } }
         minSdk = 26
         withHostTest {}
         withDeviceTestBuilder {

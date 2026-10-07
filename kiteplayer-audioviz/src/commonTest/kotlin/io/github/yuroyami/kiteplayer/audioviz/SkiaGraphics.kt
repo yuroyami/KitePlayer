@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
 /**
- * Makes sure Compose's Skia graphics are registered before a test draws. Compose 1.12 registers
- * them by itself; from 1.13 on, no `Path` or `ImageBitmap` can be made until a test does it.
+ * Registers Compose's Skia graphics before a test draws. From 1.13, Compose registers them only when a
+ * window or a scene opens, so no `Path` or `ImageBitmap` can be made in a test until this runs.
  */
 internal expect fun useSkiaGraphics()

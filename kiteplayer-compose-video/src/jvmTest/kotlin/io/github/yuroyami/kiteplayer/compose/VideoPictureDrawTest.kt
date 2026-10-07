@@ -17,6 +17,7 @@ import kotlin.test.assertEquals
  * colour lands says which way the picture went.
  */
 class VideoPictureDrawTest {
+    init { useSkiaGraphics() }
 
     private val red = 0xFF0000
     private val green = 0x00FF00

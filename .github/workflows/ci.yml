@@ -1286,6 +1286,20 @@ jobs:
       - name: The web codec module's size
         run: ./scripts/check-web-size.sh
 
+      # The exact files the size step measured, kept whether it passed or not, so a budget failure
+      # can be traced to its bytes rather than rebuilt and guessed at (#554).
+      - name: Keep the measured web files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-size
+          path: |
+            kiteplayer/build/worker-zip/*.zip
+            kiteplayer-ffmpeg/build/kiteffmpeg-web/kite.wasm
+            kiteplayer-ffmpeg/build/kiteffmpeg-web/kite.mjs
+          retention-days: 14
+          if-no-files-found: ignore
+
       # The browser matrix cannot write a file, so it prints its conformance table into the test
       # result. This copies the table from there into the run summary, beside the macOS one, and
       # into the log, which a reader who is not signed in can see.

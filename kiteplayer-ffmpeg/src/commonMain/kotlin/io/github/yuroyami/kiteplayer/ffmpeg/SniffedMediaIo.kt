@@ -14,6 +14,7 @@ internal class SniffedMediaIo private constructor(
     private val upstream: MediaIo,
     /** The first bytes of [upstream], all of them when there were fewer than asked for. */
     val head: ByteArray,
+    private var upstreamEnded: Boolean,
 ) : MediaIo {
 
     /** Where the next read starts, in the bytes of [upstream]. */
@@ -21,6 +22,9 @@ internal class SniffedMediaIo private constructor(
 
     /** Where [upstream] stands, which is past [head] until a seek moves it. */
     private var upstreamPosition = head.size.toLong()
+
+    /** An explicit seek after EOF must reach a reader that keeps its end until a seek (#430). */
+    private var refreshAfterEnd = false
 
     override val size: Long? get() = upstream.size
     override val seekable: Boolean get() = upstream.seekable
@@ -35,21 +39,31 @@ internal class SniffedMediaIo private constructor(
             position += count
             return count
         }
-        if (upstreamPosition != position) {
+        if (upstreamPosition != position || refreshAfterEnd) {
             upstream.seek(position)
             upstreamPosition = position
+            upstreamEnded = false
+            refreshAfterEnd = false
         }
         val count = upstream.read(into, offset, length)
         if (count > 0) {
             position += count
             upstreamPosition += count
+            upstreamEnded = false
+        } else if (count < 0) {
+            upstreamEnded = true
         }
         return count
     }
 
-    /** Lazy: a target inside [head] needs no upstream seek, and one past it moves [upstream] at the next read. */
+    /**
+     * Lazy: replaying [head] needs no upstream seek. At its end, a changed position OR an
+     * explicit seek after EOF reaches [upstream], so the byte cache can retry a file that grew.
+     * A reader that cannot seek can still replay the head without being asked to seek itself.
+     */
     override suspend fun seek(position: Long) {
         this.position = position
+        if (upstreamEnded && upstream.seekable) refreshAfterEnd = true
     }
 
     override fun setWarningSink(sink: (PlaybackWarning) -> Unit) = upstream.setWarningSink(sink)
@@ -71,15 +85,16 @@ internal class SniffedMediaIo private constructor(
         suspend fun sniff(io: MediaIo, count: Int): SniffedMediaIo {
             val head = ByteArray(count)
             var filled = 0
+            var ended = false
             while (filled < count) {
                 val read = io.read(head, filled, count - filled)
                 when {
-                    read < 0 -> break
+                    read < 0 -> { ended = true; break }
                     read == 0 -> delay(1)
                     else -> filled += read
                 }
             }
-            return SniffedMediaIo(io, if (filled == count) head else head.copyOf(filled))
+            return SniffedMediaIo(io, if (filled == count) head else head.copyOf(filled), ended)
         }
     }
 }

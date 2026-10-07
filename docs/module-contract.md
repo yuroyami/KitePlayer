@@ -142,3 +142,22 @@ and reads it by position, so a reopen never moves a descriptor that the caller h
 a window inside the app package, and the door reads only that window. A provider that answers
 with a pipe plays forward only. An asset must be stored uncompressed; the Android build already
 stores common media extensions that way.
+
+## Display wake entry-point compatibility
+
+Display wake is enabled by default. Its opt-out must preserve the original public entry points
+as delegating overloads, so existing callers keep their constructor and startup signatures:
+
+- `WebCanvasVideoRenderer(canvas, painter)` and `WebCanvasVideoRendererFactory(canvas, painter)`
+  in `kiteplayer-output`, including a trailing `WebFramePainter` lambda.
+- `AppKitVideoRenderer(window, convert, toneMapped = { false })` in `kiteplayer-output`, including
+  a trailing tone-map lambda and the existing default callback.
+- `WebCanvasRendererFactory(canvas)` in `kiteplayer`.
+- `KitePlayerWorker.start(canvas, workerUrl = "./kiteplayer-web-worker.mjs", codecUrl = "./kite.mjs",
+  libassUrl = "./kiteass.mjs")` in `kiteplayer`, including the original parameter defaults.
+
+Each delegates with `keepDisplayAwake = true`. The newer forms that explicitly accept the wake
+option remain available with their existing parameters and defaults; callers can still pass false.
+Compatibility verification checks the restored exact symbols in compiler-generated ABI output and
+compiles old and new source call forms. This is not a claim that every combination of published
+Kotlin compiler, library and already-linked application versions is binary compatible.

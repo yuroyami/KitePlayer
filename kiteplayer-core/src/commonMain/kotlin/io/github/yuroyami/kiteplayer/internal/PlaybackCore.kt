@@ -71,11 +71,14 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSink
 import io.github.yuroyami.kiteplayer.spi.BackendSession
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.log10
 import kotlin.math.round
 import kotlin.math.roundToLong
 import kotlin.math.sign
+import kotlin.math.sin
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
@@ -89,6 +92,8 @@ import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.subtitle.CueSelector
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.atomicfu.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -8538,6 +8543,12 @@ internal class PlaybackCore(
         var handedOff: Boolean = false
 
         /**
+         * True once a crossfade into this item was armed (#434). The fade takes the item's first
+         * sound, so `next` opens it afresh rather than from here.
+         */
+        var fading: Boolean = false
+
+        /**
          * True when this item cannot take the current item's ring, so it follows the old way: the
          * current item ends and stops its device, and this item opens from the preload with a
          * device of its own (#306).
@@ -8548,6 +8559,69 @@ internal class PlaybackCore(
     private class PreparedNext(
         val session: OpenSession,
         val externals: List<ExternalSubtitleTrack>,
+    )
+
+    /**
+     * A crossfade from the current item into the next (#434): the next item's share, which the
+     * current item's feeder mixes into its own sound before the ring. See `docs/gapless-queue.md`.
+     *
+     * The actor arms it once the next item is primed, and the feeder mixes. [incoming] and the
+     * buffer it is mixed from are shared under [lock]: the actor takes the share back under it when
+     * the preload is dropped, without parking the feeder, because a park abandons the sound the
+     * feeder is writing, and this item goes on playing.
+     */
+    private class Crossfade(
+        /** The epoch the fade was armed in. A seek moves on from it, and the feeder leaves the fade. */
+        val epoch: Generation,
+        /** Where the fade starts, in microseconds of the current item's file. */
+        val startUs: Long,
+        /** Where it ends: the current item's end. */
+        val endUs: Long,
+        /**
+         * The next item's ReplayGain over the current one's. The current item's trim scales the
+         * whole mix, so the next item's share comes out at its own gain.
+         */
+        val gainRatio: Float,
+        incoming: OpenSession,
+    ) {
+        val lock = SynchronizedObject()
+
+        /** The next item, or null once its share was taken back and only the fade-out goes on. */
+        var incoming: OpenSession? = incoming
+
+        /** The fade's length in frames, set at its first frame, or zero before. The feeder's. */
+        var frames: Long = 0
+
+        /** How many of [frames] were written. The feeder's. */
+        var done: Long = 0
+
+        /** The next item's buffer being mixed in, its sound interleaved, and the frames of it used. */
+        var buffer: AudioBuffer? = null
+        var samples: FloatArray = FloatArray(0)
+        var used: Int = 0
+
+        val interleaver = Interleaver()
+
+        /** Closes the buffer being mixed, which the next item's lanes count as theirs. Under [lock]. */
+        fun dropBuffer() {
+            val held = buffer ?: return
+            buffer = null
+            used = 0
+            held.close()
+            incoming?.audioInFlight?.decrementAndGet()
+        }
+    }
+
+    /**
+     * Where the next item's feeder picks up after a crossfade gave it the ring (#434): the buffer
+     * the fade was mixing from, with the frames of it already heard, and the rest of the fade-in
+     * when the current item ended before the fade did.
+     */
+    private class FadeInRest(
+        val buffer: AudioBuffer?,
+        val skipFrames: Int,
+        val done: Long,
+        val frames: Long,
     )
 
     /**
@@ -8825,6 +8899,7 @@ internal class PlaybackCore(
             return
         }
         if (!next.handedOff) {
+            armCrossfade(active, next, prepared)
             if (!currentAudioFinished(active)) {
                 // With every packet decoded, the last sample is at most a ring depth and a few
                 // buffers away, and the next item's feeder must start well before the ring runs dry.
@@ -8832,7 +8907,9 @@ internal class PlaybackCore(
                 wakeIn(if (allDecoded) HANDOFF_POLL else WORKER_POLL)
                 return
             }
-            if (!pendingPrimed(prepared.session)) {
+            // A fade has been taking the next item's sound for seconds, so its queues are not full;
+            // its lanes run, and the ring covers what they owe.
+            if (!next.fading && !pendingPrimed(prepared.session)) {
                 // Waited for only while the ring still covers the wait.
                 if (ringRunsDry(active)) {
                     dropPending("the next item was not ready when the current one ran out of sound")
@@ -8994,7 +9071,11 @@ internal class PlaybackCore(
         if (!passMayFollow(active, index)) return
         val durationUs = active.itemEndUs ?: return
         val wrapUs = loopWrapUs(active)
-        val leadUs = config.queue.preloadNext.inWholeMicroseconds
+        // A crossfade starts that long before the end, so the next item opens earlier, with time to prime (#434).
+        val leadUs = maxOf(
+            config.queue.preloadNext.inWholeMicroseconds,
+            crossfadeOutUs(active, repeat)?.let { it + CROSSFADE_PRIME_US } ?: 0L,
+        )
         if (wrapUs != null) {
             if (!passBeforeBDue(active, wrapUs, leadUs)) return
         } else if (!passAtEndDue(active, durationUs, leadUs)) {
@@ -9330,6 +9411,89 @@ internal class PlaybackCore(
             active.audioInFlight.value == 0
     }
 
+    /**
+     * How long a crossfade out of [active] may last, in microseconds, or null when none may (#434):
+     * the configured length, cut to half the item. Only the current item's side of the rules in
+     * `docs/gapless-queue.md`; [crossfadeIntoUs] adds the next item's.
+     */
+    private fun crossfadeOutUs(active: OpenSession, repeat: Boolean): Long? {
+        val wanted = config.queue.crossfade.inWholeMicroseconds
+        if (wanted <= 0L || repeat || !config.queue.gapless || config.queue.preloadNext <= Duration.ZERO) return null
+        if (media?.runsIntoNext == true || active.audioLane == null || showsPicture(active)) return null
+        if (active.itemEndIsEstimate) return null
+        val endUs = active.itemEndUs ?: return null
+        return minOf(wanted, (endUs - active.clipStartUs) / 2).takeIf { it > 0L }
+    }
+
+    /** [crossfadeOutUs] with the next item's side: no picture, the same rate and channels, and half its length. */
+    private fun crossfadeIntoUs(active: OpenSession, next: PendingNext, incoming: OpenSession): Long? {
+        if (next.wrapUs != null) return null
+        val outUs = crossfadeOutUs(active, next.repeat) ?: return null
+        if (incoming.audioLane == null || showsPicture(incoming)) return null
+        val ours = active.audioLane?.decoder?.outputFormat ?: return null
+        val theirs = incoming.audioLane?.decoder?.outputFormat ?: return null
+        if (ours.sampleRate != theirs.sampleRate || ours.channels != theirs.channels) return null
+        val theirLengthUs = incoming.itemEndUs?.let { it - incoming.clipStartUs }
+        return (if (theirLengthUs != null) minOf(outUs, theirLengthUs / 2) else outUs).takeIf { it > 0L }
+    }
+
+    /** True when [target] shows a picture, which a crossfade does not mix (#434). Cover art is no picture here. */
+    private fun showsPicture(target: OpenSession): Boolean = target.videoStream?.let { !it.isCoverArt } == true
+
+    /**
+     * Arms the crossfade into [next] once one applies and the next item is primed (#434). Once an
+     * epoch: a fade armed too late for its start, or taken back, leaves the join gapless.
+     */
+    private fun armCrossfade(active: OpenSession, next: PendingNext, prepared: PreparedNext) {
+        if (next.fading || active.crossfadeEpoch == requestedEpoch) return
+        if (pendingSeek != null || seekPhase.isRunning) return
+        val incoming = prepared.session
+        val fadeUs = crossfadeIntoUs(active, next, incoming) ?: return
+        val endUs = active.itemEndUs ?: return
+        val audio = active.audio ?: return
+        if (!pendingPrimed(incoming)) return
+        val startUs = endUs - fadeUs
+        // Heard past the start already: the item ends gapless rather than with a fade cut short.
+        if (currentPosition().micros >= startUs) {
+            active.crossfadeEpoch = requestedEpoch
+            return
+        }
+        val ratio = replayGainFor(incoming.audioStream, incoming.source.metadata) / audio.replayGain
+        active.crossfadeEpoch = requestedEpoch
+        next.fading = true
+        active.crossfade.value = Crossfade(requestedEpoch, startUs, endUs, ratio, incoming)
+        snapshotDirty = true
+    }
+
+    /**
+     * Gives the next item's sound back from a fade whose preload is being dropped (#434). The
+     * feeder lets go of it under the fade's lock, and goes on fading the current item out alone.
+     */
+    private fun withdrawCrossfade(active: OpenSession, incoming: OpenSession) {
+        val fade = active.crossfade.value ?: return
+        synchronized(fade.lock) {
+            if (fade.incoming !== incoming) return
+            fade.dropBuffer()
+            fade.incoming = null
+        }
+    }
+
+    /**
+     * What the next item's feeder picks up from [fade] at the handoff (#434), with the current
+     * item's feeder parked: the buffer the mix was in, past the frames already heard, and the rest
+     * of the fade-in. Null when the fade had not started, which leaves an ordinary gapless join.
+     */
+    private fun takeFadeInRest(fade: Crossfade, incoming: OpenSession): FadeInRest? = synchronized(fade.lock) {
+        if (fade.incoming !== incoming || fade.done == 0L) {
+            fade.dropBuffer()
+            return@synchronized null
+        }
+        val buffer = fade.buffer?.takeIf { fade.used < it.frameCount }
+        if (buffer == null) fade.dropBuffer()
+        fade.buffer = null
+        FadeInRest(buffer, fade.used, fade.done, fade.frames)
+    }
+
     /** True when the ring holds too little of the current item to wait for the next one any longer. */
     private fun ringRunsDry(active: OpenSession): Boolean =
         (active.audio?.buffered ?: Duration.ZERO) <= HANDOFF_MARGIN
@@ -9353,6 +9517,8 @@ internal class PlaybackCore(
             dropPending("the current item's audio feeder did not stop within $QUIESCE_DEADLINE")
             return false
         }
+        // The fade's share of the next item goes on from where the mix left it (#434).
+        active.crossfade.getAndSet(null)?.let { fade -> incoming.fadeInRest = takeFadeInRest(fade, incoming) }
         // ReplayGain is applied on the way in, so the next item's own value holds from its first sample.
         audio.replayGain = replayGainFor(incoming.audioStream, incoming.source.metadata)
         audio.beginJoin()
@@ -9386,7 +9552,7 @@ internal class PlaybackCore(
      * subtitle files, so `next` opens the item afresh.
      */
     private fun primedFor(index: Int?): PendingNext? =
-        pendingNext?.takeIf { index != null && it.index == index && it.prepared != null && !it.handedOff && !it.repeat }
+        pendingNext?.takeIf { index != null && it.index == index && it.prepared != null && !it.handedOff && !it.repeat && !it.fading }
 
     /**
      * Opens a primed preload as the current item without opening it again (#306). The item before
@@ -9693,7 +9859,12 @@ internal class PlaybackCore(
                 retiringBuilds += next.job
             }
             next.handedOff && active != null -> takeRingBack(active, prepared.session, midItem = next.wrapUs != null)
-            else -> releaseSession(prepared.session)
+            else -> {
+                // A fade that took the next item's sound gives it back first, and the current item
+                // fades out on its own to its end (#434).
+                if (next.fading && active != null) withdrawCrossfade(active, prepared.session)
+                releaseSession(prepared.session)
+            }
         }
     }
 
@@ -13028,6 +13199,14 @@ internal class PlaybackCore(
         // The buffer that reaches past a taken pass end, kept unwritten from the end on.
         var held: AudioBuffer? = null
         var heldAt: PassEnd? = null
+        // After a crossfade gave this item the ring: the buffer the mix was in, the frames of it
+        // already heard, and the rest of a fade-in that the item before ended short of (#434).
+        val rest = session.fadeInRest
+        session.fadeInRest = null
+        var carried: AudioBuffer? = rest?.buffer
+        var carriedSkip = rest?.skipFrames ?: 0
+        var fadeInDone = rest?.done ?: 0L
+        val fadeInFrames = rest?.frames ?: 0L
         try {
             while (true) {
                 // Every park comes before the ring is cleared, by a seek or a track change, or before
@@ -13044,12 +13223,23 @@ internal class PlaybackCore(
                 worker.checkpoint()
                 if (worker.releases != restarts) {
                     restarts = worker.releases
-                    if (worker.epoch != epoch) fedUntilUs = Long.MIN_VALUE
+                    if (worker.epoch != epoch) {
+                        fedUntilUs = Long.MIN_VALUE
+                        // A seek leaves a fade-in behind with the sound it was for.
+                        fadeInDone = fadeInFrames
+                    }
                     epoch = worker.epoch
                 }
                 val waiting = held
                 var resumeFromUs = Long.MIN_VALUE
-                val buffer = if (waiting != null) {
+                var skipFrames = 0
+                val pickedUp = carried
+                val buffer = if (pickedUp != null) {
+                    carried = null
+                    skipFrames = carriedSkip
+                    carriedSkip = 0
+                    pickedUp
+                } else if (waiting != null) {
                     val end = heldAt ?: error("a held buffer has its end")
                     // Kept while the end stands: the next pass takes the ring from here, or the
                     // end is lifted and this pass carries on from it. A quiesce ends the nap, and
@@ -13109,6 +13299,14 @@ internal class PlaybackCore(
                     var interleaved = interleaver.interleave(buffer)
                     var pts = buffer.pts
                     var frames = buffer.frameCount
+                    // The frames of a crossfade's last buffer that the mix already played (#434).
+                    if (skipFrames > 0 && buffer.format.sampleRate > 0) {
+                        val cut = skipFrames.coerceAtMost(frames)
+                        val channels = buffer.format.channels
+                        interleaved = interleaved.copyOfRange(cut * channels, frames * channels)
+                        pts = Pts(pts.micros + buffer.format.durationOf(cut).micros)
+                        frames -= cut
+                    }
                     // Sample-exact trim of the one buffer that straddles the seek target. The decode
                     // side drops whole buffers that END before the target; this slices the leading
                     // pre-target samples off the survivor, so a precise seek starts its sound AT the
@@ -13154,6 +13352,14 @@ internal class PlaybackCore(
                         if (keep) end?.reached?.value = true
                         continue
                     }
+                    // A crossfade into the next item mixes its share in here, before the taps and the
+                    // ring, and the next item finishes a fade-in the item before ended short of (#434).
+                    session.crossfade.value?.takeIf { it.epoch == epoch }?.let { fade ->
+                        mixCrossfade(fade, pts, interleaved, frames, buffer.format, epoch)
+                    }
+                    if (fadeInDone < fadeInFrames) {
+                        fadeInDone = fadeIn(interleaved, frames, buffer.format.channels, fadeInDone, fadeInFrames)
+                    }
                     // The landing is the first sample that will be heard, so it is recorded after the trim.
                     session.firstAudio.record(epoch, pts)
                     session.landingArrived.trySend(Unit)
@@ -13188,7 +13394,114 @@ internal class PlaybackCore(
                 kept.close()
                 session.audioInFlight.decrementAndGet()
             }
+            carried?.let { left ->
+                left.close()
+                session.audioInFlight.decrementAndGet()
+            }
         }
+    }
+
+    /**
+     * Mixes the next item's share of [fade] into [out], [frames] frames of the current item's sound
+     * at [pts], in place (#434). From the fade's start, the current item is scaled by cos(pi/2 x)
+     * and the next item by sin(pi/2 x), with x the part of the fade written so far, so two unrelated
+     * sounds keep their loudness through it. Past the fade, the current item is silent.
+     */
+    private fun mixCrossfade(fade: Crossfade, pts: Pts, out: FloatArray, frames: Int, format: AudioFormat, epoch: Generation) {
+        val rate = format.sampleRate
+        val channels = format.channels
+        if (rate <= 0 || channels <= 0) return
+        synchronized(fade.lock) {
+            var at = 0
+            if (fade.frames == 0L) {
+                // The fade's first buffer: it starts at its start, or here, that much shorter, when
+                // this feeder had written past the start before the next item was ready.
+                val startsAt = (fade.startUs - pts.micros) * rate / 1_000_000L
+                if (startsAt >= frames) return
+                at = startsAt.coerceAtLeast(0L).toInt()
+                val left = (fade.endUs - maxOf(fade.startUs, pts.micros)) * rate / 1_000_000L
+                if (left <= 0L) {
+                    // Written past the end already: nothing is left to fade, and the join is gapless.
+                    fade.dropBuffer()
+                    fade.incoming = null
+                    fade.frames = -1L
+                    return
+                }
+                fade.frames = left
+            }
+            if (fade.frames < 0L) return
+            while (at < frames) {
+                val available = nextShare(fade, frames - at, format, epoch)
+                val count = if (available > 0) available else frames - at
+                for (i in 0 until count) {
+                    val x = (fade.done + i).toDouble() / fade.frames
+                    val outGain = if (x >= 1.0) 0f else cos(x * PI / 2).toFloat()
+                    val inGain = if (x >= 1.0) 1f else sin(x * PI / 2).toFloat()
+                    val o = (at + i) * channels
+                    if (available > 0) {
+                        val n = (fade.used + i) * channels
+                        val share = inGain * fade.gainRatio
+                        for (c in 0 until channels) out[o + c] = out[o + c] * outGain + fade.samples[n + c] * share
+                    } else {
+                        for (c in 0 until channels) out[o + c] *= outGain
+                    }
+                }
+                if (available > 0) fade.used += available
+                fade.done += count
+                at += count
+            }
+        }
+    }
+
+    /**
+     * How many frames of the next item's sound [fade] has ready, up to [max], pulling its next
+     * decoded buffer when the one being mixed is used up (#434). The next item's own start, a start
+     * position or a clip's, trims its first buffer to the sample, as its feeder would. Zero when its
+     * sound is taken back or not decoded yet. Under the fade's lock.
+     */
+    private fun nextShare(fade: Crossfade, max: Int, format: AudioFormat, epoch: Generation): Int {
+        val incoming = fade.incoming ?: return 0
+        while (true) {
+            val held = fade.buffer
+            if (held != null && fade.used < held.frameCount) return minOf(max, held.frameCount - fade.used)
+            fade.dropBuffer()
+            val next = incoming.decodedAudio.tryReceive().getOrNull() ?: return 0
+            val sameFormat = next.format.sampleRate == format.sampleRate && next.format.channels == format.channels
+            if (next.generation != epoch || !sameFormat) {
+                next.close()
+                incoming.audioInFlight.decrementAndGet()
+                if (!sameFormat) {
+                    // A sound that changed its format part way cannot be mixed sample for sample.
+                    fade.incoming = null
+                    return 0
+                }
+                continue
+            }
+            fade.buffer = next
+            fade.samples = fade.interleaver.interleave(next)
+            val discardBefore = incoming.discardBeforeUs.value
+            fade.used = if (discardBefore != Long.MIN_VALUE && next.pts.micros < discardBefore) {
+                ((discardBefore - next.pts.micros) * format.sampleRate / 1_000_000L).coerceIn(0L, next.frameCount.toLong()).toInt()
+            } else {
+                0
+            }
+        }
+    }
+
+    /**
+     * Scales [frames] frames of [out] by the rest of a crossfade's fade-in, sin(pi/2 x) from [done]
+     * of [total] frames on (#434), and returns how far it got.
+     */
+    private fun fadeIn(out: FloatArray, frames: Int, channels: Int, done: Long, total: Long): Long {
+        var at = done
+        for (frame in 0 until frames) {
+            if (at >= total) break
+            val gain = sin(at.toDouble() / total * PI / 2).toFloat()
+            val o = frame * channels
+            for (c in 0 until channels) out[o + c] *= gain
+            at++
+        }
+        return at
     }
 
     /**
@@ -13757,6 +14070,18 @@ internal class PlaybackCore(
          */
         val passEnd = atomic<PassEnd?>(null)
 
+        /** The crossfade into the next item that the feeder mixes, or null (#434). */
+        val crossfade = atomic<Crossfade?>(null)
+
+        /** The epoch a crossfade was armed in, so an item fades out once an epoch. Actor only. */
+        var crossfadeEpoch: Generation? = null
+
+        /**
+         * For a next item that a crossfade handed the ring to, where its feeder picks up (#434).
+         * Set before the feeder starts, and read by it once.
+         */
+        var fadeInRest: FadeInRest? = null
+
         /**
          * Whether this turn of an A-B loop was given its end, or none, and the B it was given for.
          * Actor-owned, but for a pass, whose build gives them before it is handed over.
@@ -14178,6 +14503,9 @@ internal class PlaybackCore(
 
         /** The least of the current item the ring must hold while the handoff waits for the next one. */
         val HANDOFF_MARGIN: Duration = 40.milliseconds
+
+        /** How long before a crossfade's start the next item opens, to be primed in time (#434). */
+        const val CROSSFADE_PRIME_US: Long = 2_000_000L
 
         /**
          * The least time before B that a turn of an A-B loop needs for its next pass to open,

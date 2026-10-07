@@ -61,6 +61,7 @@ class WorkerProtocolTest {
         clip = MediaClip(start = 61.seconds, end = 3.minutes),
         growth = FileGrowth(endsAfter = 5.seconds),
         thumbnails = ThumbnailSource("https://example.com/thumbs.vtt"),
+        runsIntoNext = true,
     )
 
     private val tracks = Tracks(

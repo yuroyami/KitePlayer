@@ -257,11 +257,32 @@ public data class QueueConfig(
      * itself. [QueueItemFailure.Skip] moves on, as mpv does: see there.
      */
     val onItemFailure: QueueItemFailure = QueueItemFailure.Stop,
+    /**
+     * How long the end of one queue item and the start of the next sound together, the first
+     * fading out while the second fades in, each on an equal power curve (#434). Zero, the default,
+     * keeps the gapless join, sample after sample. At most [MAX_CROSSFADE].
+     *
+     * It applies between two items with no picture, cover art aside, that decode to the same rate
+     * and channels, whose first item states its length and does not [MediaItem.runsIntoNext], and
+     * only when the next item is ready in time. Every other join stays gapless. The next item
+     * becomes the current one at the end of the fade, when the last sample of the item before it is
+     * heard, so its position then reads the fade's length into it. `docs/gapless-queue.md` has the
+     * whole rule.
+     */
+    val crossfade: Duration = Duration.ZERO,
 ) {
     init {
         require(!preloadNext.isNegative() && preloadNext.isFinite()) {
             "preloadNext must be zero or a finite positive duration, was $preloadNext"
         }
+        require(!crossfade.isNegative() && crossfade <= MAX_CROSSFADE) {
+            "crossfade must be between zero and $MAX_CROSSFADE, was $crossfade"
+        }
+    }
+
+    public companion object {
+        /** The longest [crossfade]. */
+        public val MAX_CROSSFADE: Duration = 30.seconds
     }
 }
 

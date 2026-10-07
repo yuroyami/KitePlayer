@@ -366,11 +366,15 @@ public class QueueConfigBuilder(from: QueueConfig = QueueConfig()) {
     /** See [QueueConfig.onItemFailure]. */
     public var onItemFailure: QueueItemFailure = from.onItemFailure
 
+    /** See [QueueConfig.crossfade]. */
+    public var crossfade: Duration = from.crossfade
+
     /** The [QueueConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): QueueConfig = QueueConfig(
         preloadNext = preloadNext,
         gapless = gapless,
         reshuffleEachLap = reshuffleEachLap,
         onItemFailure = onItemFailure,
+        crossfade = crossfade,
     )
 }

@@ -113,6 +113,8 @@ internal fun continuesInFile(current: MediaItem, next: MediaItem): Boolean {
         title = current.title,
         artist = current.artist,
         album = current.album,
+        // How a crossfade treats the join is no part of which file is played (#434).
+        runsIntoNext = current.runsIntoNext,
     )
     return alike == current
 }

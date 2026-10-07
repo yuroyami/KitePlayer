@@ -34,6 +34,7 @@ public class MediaItemBuilder(private val uri: String) {
     private var album: String? = null
     private var audioContent = AudioContent.Automatic
     private var clip: MediaClip? = null
+    private var runsIntoNext = false
 
     /** Adds one request header. See [MediaItem.headers]. */
     public fun header(name: String, value: String): MediaItemBuilder = apply {
@@ -170,6 +171,11 @@ public class MediaItemBuilder(private val uri: String) {
         thumbnails = source
     }
 
+    /** See [MediaItem.runsIntoNext]. */
+    public fun runsIntoNext(runs: Boolean): MediaItemBuilder = apply {
+        runsIntoNext = runs
+    }
+
     /** The item these settings describe, checked as its constructor checks it. */
     @OptIn(KitePlayerLowLevelApi::class)
     public fun build(): MediaItem = MediaItem(
@@ -189,6 +195,7 @@ public class MediaItemBuilder(private val uri: String) {
         audioContent = audioContent,
         clip = clip,
         thumbnails = thumbnails,
+        runsIntoNext = runsIntoNext,
     )
 }
 

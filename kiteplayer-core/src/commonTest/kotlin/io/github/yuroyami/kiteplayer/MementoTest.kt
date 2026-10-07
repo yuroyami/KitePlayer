@@ -206,6 +206,7 @@ class MementoTest {
             album = "An album",
             audioContent = AudioContent.Speech,
             clip = MediaClip(start = 4.seconds, end = 61.seconds),
+            runsIntoNext = true,
         )
         // A clip with no end runs to the end of the file, and must not come back with one.
         val toTheEnd = MediaItem("album.flac", clip = MediaClip(start = 61.seconds))

@@ -86,7 +86,7 @@ These actions drop a preload and release everything it opened:
 - `stop`, `open`, `openQueue`, `previous` and `close`
 - every queue edit, `setShuffle` and `restoreQueueOrder`
 - `setLoop`, `setSleepTimer` and `setAbLoop`
-- a seek and `stepFrame`. A change of speed or of the pitch law is not a seek and keeps the preload
+- a seek and `stepFrame`, and a change of speed or of the pitch law
 - a track selection, `setVideoEnabled` and a renderer attach or detach
 - a video decoder recovery and a failure of the current item
 
@@ -212,9 +212,7 @@ A fallback warns as a repeat's does, and the turns go back by the seek while the
 
 ## Crossfade
 
-Planned contract for #434. The implementation and the generated ABI follow in a separate change.
-
-`QueueConfig.crossfade` is a length, zero by default. Above zero, the end of one queue item and the
+`QueueConfig.crossfade` is a length, zero by default (#434). Above zero, the end of one queue item and the
 start of the next sound together for that long, the first fading out while the second fades in.
 Zero keeps the gapless join above, sample after sample. It is at most 30 seconds.
 
@@ -226,7 +224,9 @@ the join is the gapless one, with nothing warned, because a missing fade is not 
 
 - `gapless` is on and `preloadNext` is above zero, as for any handoff.
 - The current item does not run into the next one, by `runsIntoNext`.
-- The next item is the next queue item. A repeat's next pass and an A-B loop's join gapless.
+- The next item is the next queue item. A repeat's next pass and an A-B loop's join gapless, and
+  so does the next part of the same file, which plays on the current item's reads and opens
+  nothing (see [Parts of one file](#parts-of-one-file)).
 - Neither item shows a picture. Cover art is not a picture here. Items with pictures come later.
 - The current item's length is stated rather than guessed (#422), because the fade starts that
   long before it.
@@ -239,13 +239,15 @@ The fade is shortened to half of the shorter item when an item is shorter than t
 **When it starts.** The preload starts `crossfade` plus two seconds before the end, or
 `preloadNext` before it, whichever is earlier. The fade starts `crossfade` before the current
 item's end, its clip's end for a clipped item. The first sample of the next item sounds together
-with the current item's sample at that moment.
+with the current item's sample at that moment. The current item's sound is written a little ahead
+of what is heard, so a next item primed just before the start can find that moment already
+written: the fade then starts at the first sample still to be written and is that much shorter.
 
 **How the two mix.** Before the ring, because the ring has one producer. The current item's feeder
 takes the next item's decoded sound, trimmed to its start position or clip as a feeder would trim
 it, and adds it to the current item's samples before they enter the shared conversion stages: the
-channel mix, the rate conversion, the tempo stage and the equaliser. So a speed change during a
-fade keeps it, and the volume, the mute and the balance apply to the mix. Each item's ReplayGain
+channel mix, the rate conversion, the tempo stage and the equaliser. So the volume, the mute and
+the balance apply to the mix, and the speed applies to it as one sound. Each item's ReplayGain
 applies to its own share. The curves are equal power: the current item is scaled by
 cos(pi/2 x) and the next by sin(pi/2 x), with x running from 0 to 1 over the fade, so two unrelated
 sounds keep their loudness through it. Where the current item runs past the planned end, its
@@ -262,7 +264,8 @@ clock and the taps are the current item's, and the taps hear the mix.
 as they end a handoff. `next` opens the next item from its start rather than from the preload,
 whose start the fade has used. Every other action that drops a preload stops the next item's
 share at once, and the current item finishes its fade-out to its end, after which the next item
-opens the old way. A pause keeps the fade, and play resumes it.
+opens the old way. A change of speed or of the pitch law is one of those. A pause keeps the fade,
+and play resumes it.
 
 **Tests.** Two 20 second tones of different pitch in a queue with a 5 second crossfade: the queue
 lasts 35 seconds, both pitches sound during the overlap, the loudness stays within a set bound
@@ -270,7 +273,9 @@ through it, and the position moves to the second item at the end of the fade, 5 
 With the crossfade at zero, the device hears exactly the first item's samples followed by the
 second's, as it does today. An item that runs into the next, a next item with a picture, a seek
 and `next` during a fade, a queue edit during a fade, a pause during a fade, a speed change during
-a fade, and a next item that is not primed in time each have a test.
+a fade, a next item that is not primed in time, one primed just before the start, one with a start
+position, one that reads slower than it plays, and an item switched to a track of another rate
+each have a test.
 
 ## Items with no sound
 

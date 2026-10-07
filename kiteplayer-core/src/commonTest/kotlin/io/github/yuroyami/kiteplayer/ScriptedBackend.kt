@@ -241,6 +241,22 @@ internal class MediaScript(
      * with it, up to the duration.
      */
     val timeOfDayOriginMillis: Long? = null,
+    /**
+     * A sine tone of this frequency in place of the constant sound, its phase following each
+     * buffer's time, so two items of different pitch can be told apart where they overlap (#434).
+     * Null keeps the constant that names the epoch.
+     */
+    val audioToneHz: Double? = null,
+    /** How long the default audio track's decoder takes to create, as a slow one does. */
+    val audioDecoderCreateDelayUs: Long = 0,
+    /** The default audio track's level, which scales every sample it makes. */
+    val audioMarker: Float = 1f,
+    /**
+     * How long each of the first [slowStartReads] packet reads takes on top of [readDelayUs], as a
+     * server slow to answer at first: the source opens at once and fills its queues late (#434).
+     */
+    val slowStartReadUs: Long = 0,
+    val slowStartReads: Int = 0,
     /** A read delay for one variant, in place of [readDelayUs]: a link too slow for that variant. */
     val readDelayUsByVariant: Map<Int, Long> = emptyMap(),
     /**
@@ -333,7 +349,7 @@ internal class MediaScript(
             add(
                 ScriptedAudioTrack(
                     index = audioIndex,
-                    marker = 1f,
+                    marker = audioMarker,
                     language = "eng",
                     title = "scripted audio A",
                     sampleRate = sampleRate,
@@ -341,6 +357,7 @@ internal class MediaScript(
                     isDefault = true,
                     metadata = audioMetadata,
                     channelMarkers = audioChannelMarkers,
+                    decoderCreateDelayUs = audioDecoderCreateDelayUs,
                 ),
             )
         }
@@ -1350,6 +1367,7 @@ internal class ScriptedSource(
         if (faults.failRead(reads)) error("the scripted source failed on read $reads")
         val readDelayUs = selectedVariant?.let { script.readDelayUsByVariant[it] } ?: script.readDelayUs
         if (readDelayUs > 0) delay(readDelayUs / 1_000)
+        if (reads <= script.slowStartReads && script.slowStartReadUs > 0) delay(script.slowStartReadUs / 1_000)
 
         val primaryVideo = script.hasVideo && script.videoIndex in selected &&
             videoCursorUs < minOf(script.durationUs, script.videoEndUs ?: Long.MAX_VALUE)
@@ -1654,6 +1672,7 @@ internal class ScriptedAudioDecoder(
                 ledger = ledger,
                 channelMarkers = track.channelMarkers,
                 silent = (packet.pts?.micros ?: 0L).let { at -> script.audioSilentUs.any { at in it } },
+                toneHz = script.audioToneHz,
             ),
         )
         return true
@@ -1708,6 +1727,7 @@ internal class ScriptedAudioBuffer(
     private val ledger: LeakLedger? = null,
     private val channelMarkers: List<Float>? = null,
     private val silent: Boolean = false,
+    private val toneHz: Double? = null,
 ) : AudioBuffer {
 
     private var isClosed = false
@@ -1719,7 +1739,16 @@ internal class ScriptedAudioBuffer(
 
     override fun copyChannel(channel: Int, into: FloatArray, offset: Int) {
         val sample = value * (channelMarkers?.getOrNull(channel) ?: 1f)
-        for (i in 0 until frameCount) into[offset + i] = sample
+        val tone = toneHz
+        if (tone == null || format.sampleRate <= 0) {
+            for (i in 0 until frameCount) into[offset + i] = sample
+            return
+        }
+        val start = pts.micros / 1_000_000.0
+        for (i in 0 until frameCount) {
+            val at = start + i.toDouble() / format.sampleRate
+            into[offset + i] = sample * kotlin.math.sin(2 * kotlin.math.PI * tone * at).toFloat()
+        }
     }
 
     override fun close() {
@@ -1899,11 +1928,18 @@ internal class ScriptedSink(
         val written = callback.onRender(destination, deviceBufferFrames, deadline)
         framesPlayed += written
         silenceFrames += deviceBufferFrames - written
+        if (recordsSamples) destination.appendChannel(0, written, recorded)
         val heard = destination.distinctValues(written)
         audibleValues += heard
         heard.forEach { audibleSigns += if (it > 0f) 1 else if (it < 0f) -1 else 0 }
         recordChannelPeaks(destination, written)
     }
+
+    /** True makes the device keep every sample it plays of its first channel, in [recorded]. */
+    var recordsSamples: Boolean = false
+
+    /** Every sample of the first channel the device played while [recordsSamples] was true, in order. */
+    val recorded: SampleRecord = SampleRecord()
 
     /** The loudest magnitude heard in each channel, which is what a balance test measures. */
     val channelPeaks: MutableMap<Int, Float> = mutableMapOf()
@@ -1976,6 +2012,11 @@ private class ScriptedSinkBuffer(
             if (magnitude > peak) peak = magnitude
         }
         return peak
+    }
+
+    /** Appends [channel] of the first [frames] frames to [into]. */
+    fun appendChannel(channel: Int, frames: Int, into: SampleRecord) {
+        for (frame in 0 until frames) into.add(data[frame * format.channels + channel])
     }
 
     fun distinctValues(frames: Int): Set<Float> {
@@ -2069,4 +2110,21 @@ internal class LinkIo(private val script: MediaScript, private val clock: Monoto
     override fun close() {}
 
     override fun networkBitsPerSecond(): Long? = script.linkBitsPerSecond?.invoke(clock.nanos() / 1_000)
+}
+
+/** A growing run of samples, kept as floats without boxing, for a test that reads what was heard. */
+internal class SampleRecord {
+    private var data = FloatArray(1 shl 16)
+
+    var size: Int = 0
+        private set
+
+    fun add(sample: Float) {
+        if (size == data.size) data = data.copyOf(data.size * 2)
+        data[size++] = sample
+    }
+
+    operator fun get(index: Int): Float = data[index]
+
+    fun toFloatArray(): FloatArray = data.copyOf(size)
 }

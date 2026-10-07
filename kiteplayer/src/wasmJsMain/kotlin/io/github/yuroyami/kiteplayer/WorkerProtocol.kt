@@ -473,6 +473,7 @@ private fun encodeItem(item: MediaItem): JsAny = record {
     }
     item.growth?.let { growth -> put("growthEndsAfter", growth.endsAfter) }
     item.thumbnails?.let { put("thumbnails", it.uri) }
+    if (item.runsIntoNext) put("runsIntoNext", true)
 }
 
 private fun encodeSubtitle(source: SubtitleSource): JsAny = record {
@@ -1279,6 +1280,7 @@ private fun decodeItem(o: JsAny): MediaItem = MediaItem(
     clip = o.micros("clipStart")?.let { start -> MediaClip(start, o.micros("clipEnd")) },
     growth = o.micros("growthEndsAfter")?.let(::FileGrowth),
     thumbnails = o.str("thumbnails")?.let { ThumbnailSource(it) },
+    runsIntoNext = o.flag("runsIntoNext"),
 )
 
 private fun decodeSubtitle(o: JsAny): SubtitleSource = SubtitleSource(

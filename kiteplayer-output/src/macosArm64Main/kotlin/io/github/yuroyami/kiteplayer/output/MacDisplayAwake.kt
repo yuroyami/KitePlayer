@@ -9,6 +9,8 @@ import kotlinx.coroutines.launch
 import platform.Foundation.NSActivityIdleDisplaySleepDisabled
 import platform.Foundation.NSActivityUserInitiated
 import platform.Foundation.NSProcessInfo
+import platform.Foundation.beginActivityWithOptions
+import platform.Foundation.endActivity
 import platform.darwin.NSObjectProtocol
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds

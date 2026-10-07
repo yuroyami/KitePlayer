@@ -2,6 +2,8 @@
 
 package io.github.yuroyami.kiteplayer.libass
 
+import io.github.yuroyami.kiteplayer.spi.ColorMatrix
+import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.TypesetFrame
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -57,12 +59,20 @@ class LibassWebPendingTest {
         repeat(20) { typesetter.addEvent(ByteArray(8), it * 100L, 50) }
         typesetter.clearEvents()
         repeat(5) { typesetter.addEvent(ByteArray(8), it * 100L, 50) }
-        repeat(1_000) { assertNull(typesetter.render(it.toLong(), frame(1280 + it)), "a pending engine drew") }
+        repeat(1_000) {
+            val color = if (it == 999) {
+                ColorSpaceInfo(matrix = ColorMatrix.Bt2020Ncl, fullRange = true)
+            } else {
+                ColorSpaceInfo(matrix = ColorMatrix.Bt601, fullRange = false)
+            }
+            assertNull(typesetter.render(it.toLong(), frame(1280 + it).copy(videoColor = color)), "a pending engine drew")
+        }
 
         val fake = fakeLibassModule()
         resolvePromise(load, fake)
         promiseOf(load).await<JsAny>()
-        assertNull(typesetter.render(2_000, frame(1920)))
+        val liveFrame = frame(1920).copy(videoColor = ColorSpaceInfo(matrix = ColorMatrix.Bt709, fullRange = false))
+        assertNull(typesetter.render(2_000, liveFrame))
 
         val calls = callsOf(fake).split(',')
         assertEquals(1, calls.count { it.startsWith("font:") }, "fonts replayed: $calls")
@@ -71,6 +81,11 @@ class LibassWebPendingTest {
         assertEquals(5, calls.count { it.startsWith("event:") }, "only the events after the clear are current")
         // One frame is the kept one and one is this render's own, not one per pending render.
         assertEquals(2, calls.count { it.startsWith("frame:") }, "frames replayed: ${calls.count { it.startsWith("frame:") }}")
+        assertEquals(
+            listOf("frame:2279x720", "color:5:1", "frame:1920x720", "color:2:0"),
+            calls.filter { it.startsWith("frame:") || it.startsWith("color:") },
+            "the retained frame's current matrix/range must replay before this render's own",
+        )
         typesetter.close()
     }
 
@@ -187,6 +202,7 @@ private external fun callsOf(module: JsAny): String
             _kass_clear_events: () => { calls.push('clear'); },
             _kass_add_font: (s, name, p, n) => { calls.push('font:' + n); },
             _kass_set_frame: (s, fw, fh) => { calls.push('frame:' + fw + 'x' + fh); },
+            _kass_set_video_color: (s, matrix, full) => { calls.push('color:' + matrix + ':' + full); },
             _kass_render: () => { calls.push('render'); return 0; },
             _kass_packed_ptr: () => 0,
             _kass_packed_size: () => 0,

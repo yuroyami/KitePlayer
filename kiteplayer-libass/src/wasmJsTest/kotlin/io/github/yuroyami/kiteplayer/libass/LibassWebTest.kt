@@ -129,7 +129,8 @@ class LibassWebTest {
      * The web module matches a script's colours to the video as the hosts do (#499): a solid box in
      * 0x3080c0 under no header comes out 0x287dc4 over BT.709 video, the ffmpeg command line's answer
      * that `AssColorMatchingTest` and the C suite `test_ass_color` check too, and as authored with no
-     * video colour. A drawing needs no font, so this holds in a browser as well.
+     * video colour. Even a vector drawing needs font selection and metrics. The authored fixture
+     * supplies those in both Node and a browser, without installing a font or adding a build dependency.
      */
     @Test
     fun theWebModuleMatchesAScriptsColoursToTheVideo() = runTest {
@@ -142,13 +143,14 @@ class LibassWebTest {
 
             [V4+ Styles]
             Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-            Style: Default,Arial,20,&H00C08030,&H00C08030,&H00C08030,&H00C08030,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
+            Style: Default,KiteColorBox,20,&H00C08030,&H00C08030,&H00C08030,&H00C08030,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 
             [Events]
             Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{\pos(100,100)\p1}m 0 0 l 100 0 100 100 0 100{\p0}
         """.trimIndent() + "\n"
         fun middle(video: ColorSpaceInfo?): Int = LibassTypesetter().use { typesetter ->
+            typesetter.addFont("KiteColorBox.ttf", libassColorTestFont())
             typesetter.openDocument(script.encodeToByteArray())
             val images = assertNotNull(typesetter.render(1_000, frame.copy(videoColor = video)), "the first render answered unchanged")
             val box = assertNotNull(images.maxByOrNull { it.bitmap.width * it.bitmap.height }, "the box drew nothing")

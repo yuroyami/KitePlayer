@@ -13,7 +13,8 @@ import kotlin.math.pow
  * A renderer measures each frame as [CELLS] mean relative luminances, a grid of [COLUMNS] by
  * [ROWS] cells in reading order, in linear light from 0 for black to 1 for white, before any
  * adjustment, and hands them to [factorFor]. It multiplies its adjustment's colour matrix, offsets
- * included, by the answer. [cellsFromRgba] measures converted pixels on a sparse lattice.
+ * included, by the answer. [cellsFromRgba] and [cellsFromPackedRgb] measure converted pixels on a
+ * sparse lattice.
  *
  * One renderer's, on one thread: it keeps the history of the frames it was given.
  */
@@ -172,6 +173,25 @@ public class VideoFlashGuard {
          * linear light with the BT.709 weights. 2,304 pixels a frame, never the whole picture.
          */
         public fun cellsFromRgba(rgba: ByteArray, width: Int, height: Int, rowBytes: Int = width * 4, into: FloatArray) {
+            lattice(width, height, into) { x, y ->
+                val at = y * rowBytes + x * 4
+                luminance(rgba[at].toInt() and 0xFF, rgba[at + 1].toInt() and 0xFF, rgba[at + 2].toInt() and 0xFF)
+            }
+        }
+
+        /**
+         * Measures [pixels], packed `0xRRGGBB` integers with the top byte ignored, in rows of
+         * [width] pixels and [stride] entries each, into [into], as [cellsFromRgba] does.
+         */
+        public fun cellsFromPackedRgb(pixels: IntArray, width: Int, height: Int, stride: Int = width, into: FloatArray) {
+            lattice(width, height, into) { x, y ->
+                val pixel = pixels[y * stride + x]
+                luminance((pixel shr 16) and 0xFF, (pixel shr 8) and 0xFF, pixel and 0xFF)
+            }
+        }
+
+        /** Fills [into] with each cell's mean of [light] at [SAMPLES] by [SAMPLES] points. */
+        private inline fun lattice(width: Int, height: Int, into: FloatArray, light: (x: Int, y: Int) -> Float) {
             require(into.size == CELLS) { "a frame is $CELLS cells, was ${into.size}" }
             require(width > 0 && height > 0) { "the picture is empty: $width x $height" }
             for (row in 0 until ROWS) {
@@ -185,15 +205,16 @@ public class VideoFlashGuard {
                         val y = (top + (2 * sy + 1) * (bottom - top) / (2 * SAMPLES)).coerceIn(0, height - 1)
                         for (sx in 0 until SAMPLES) {
                             val x = (left + (2 * sx + 1) * (right - left) / (2 * SAMPLES)).coerceIn(0, width - 1)
-                            val at = y * rowBytes + x * 4
-                            sum += 0.2126f * linear[rgba[at].toInt() and 0xFF] +
-                                0.7152f * linear[rgba[at + 1].toInt() and 0xFF] +
-                                0.0722f * linear[rgba[at + 2].toInt() and 0xFF]
+                            sum += light(x, y)
                         }
                     }
                     into[row * COLUMNS + column] = sum / (SAMPLES * SAMPLES)
                 }
             }
         }
+
+        /** The relative luminance of one 8-bit sRGB colour, in linear light with the BT.709 weights. */
+        private fun luminance(red: Int, green: Int, blue: Int): Float =
+            0.2126f * linear[red] + 0.7152f * linear[green] + 0.0722f * linear[blue]
     }
 }

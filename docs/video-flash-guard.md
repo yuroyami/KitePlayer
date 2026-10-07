@@ -1,7 +1,8 @@
 # Dimming flashing video
 
-The contract for #500, built in the order at the end. Today the detector, the setting and the Compose
-canvas renderer carry it; every other renderer draws as before until its step lands.
+The contract for #500, built in the order at the end. Today the detector, the setting, the Compose
+canvas renderer and the AWT canvas carry it; every other renderer draws as before until its step
+lands.
 
 Repeated bright flashes can trigger seizures in people with photosensitive epilepsy and discomfort
 in many more. Since iOS 16.4 and macOS 13.3, Apple has a Dim Flashing Lights setting that
@@ -69,7 +70,9 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
   frame before drawing it, so the frame that completes a run is already dimmed. The Compose canvas
   renderer measures on its worker, hands each picture to the draw with its factor, and the draw
   folds the factor into the picture controls' colour filter; outside a run it draws with the
-  controls' own filter, or none, as before.
+  controls' own filter, or none, as before. The AWT canvas has no picture controls, so it lays black
+  over the picture at `1 - k` before the cues, which leaves `k` of each encoded value under it, and
+  a repaint of a held picture draws it at the factor it was shown with.
 - A GPU renderer (Metal, Android GL) draws a 16 by 9 reduced copy beside its adjustment pass and
   reads it back asynchronously, so it dims one frame late.
 - A renderer that draws no adjustments at all (the web canvas, Apple's sample buffer layer and
@@ -78,7 +81,8 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
 The engine tells each renderer the mode through `VideoRenderer.setFlashGuard(mode)`, defaulted to
 do nothing, on attach and on every change, as it does the adjustments. A change of mode, and taking
 the picture off, start a renderer's history afresh. Only an Apple renderer reads the system setting
-for `FollowSystem`, so on the Compose canvas renderer, which cannot, `FollowSystem` is off.
+for `FollowSystem`, so on the Compose canvas renderer and the AWT canvas, which cannot, `FollowSystem`
+is off.
 
 ## Order of work
 
@@ -86,7 +90,7 @@ for `FollowSystem`, so on the Compose canvas renderer, which cannot, `FollowSyst
 2. The detector, the setting and the engine's part, with the detector's tests. Done.
 3. The Compose canvas renderer, tested on the JVM with a strobe. Done for the pictures it converts;
    its Android hardware tier comes with step 6.
-4. The AWT canvas, the desktop default.
+4. The AWT canvas, the desktop default. Done.
 5. Metal and the Apple setting, on a Mac, then Core Graphics.
 6. Android GL, the Android software path and the Compose renderer's hardware tier, on a device.
 7. The web canvas, once it has an adjustment stage.

@@ -2078,6 +2078,7 @@ final class io.github.yuroyami.kiteplayer.spi/VideoFlashGuard { // io.github.yur
         final const val ROWS // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.ROWS|{}ROWS[0]
             final fun <get-ROWS>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.ROWS.<get-ROWS>|<get-ROWS>(){}[0]
 
+        final fun cellsFromPackedRgb(kotlin/IntArray, kotlin/Int, kotlin/Int, kotlin/Int = ..., kotlin/FloatArray) // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.cellsFromPackedRgb|cellsFromPackedRgb(kotlin.IntArray;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.FloatArray){}[0]
         final fun cellsFromRgba(kotlin/ByteArray, kotlin/Int, kotlin/Int, kotlin/Int = ..., kotlin/FloatArray) // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.cellsFromRgba|cellsFromRgba(kotlin.ByteArray;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.FloatArray){}[0]
     }
 }

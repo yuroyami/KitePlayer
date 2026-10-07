@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.FlashGuard
+import io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.VideoTransform
@@ -7,6 +9,7 @@ import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
+import io.github.yuroyami.kiteplayer.spi.VideoFlashGuard
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.coroutines.flow.Flow
@@ -103,6 +106,9 @@ public class AwtCanvasVideoRenderer(
     /** Holds the BufferStrategy's own size, which is why it is per renderer and not a singleton. */
     internal var presenter: CanvasPresenter = AwtCanvasPresenter()
 
+    /** The flash guard's clock, in nanoseconds: when each picture is painted. */
+    internal var guardNanos: () -> Long = System::nanoTime
+
     /**
      * Held for the whole of a paint, so one thread at a time draws into the one BufferStrategy
      * (#225). Fair, so a waiting fence goes before the next frame's paint.
@@ -145,9 +151,41 @@ public class AwtCanvasVideoRenderer(
     private var lastSize: VideoSize? = null
     private var lastRotation: Int = 0
     private var lastMirrored: Boolean = false
+    /** The flash guard's factor for [lastImage], so a repaint draws it as it was drawn. */
+    private var lastDim: Float = 1f
     private var overlay: SubtitleOverlay? = null
     private var scaleMode: VideoScale = VideoScale.Fit
     private var transform: VideoTransform = VideoTransform.Identity
+
+    private val flashGuard = java.util.concurrent.atomic.AtomicReference(FlashGuard.FollowSystem)
+
+    /** Set when the picture is taken off or the mode changes, so the next picture starts the guard afresh. */
+    private val guardForgets = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    @OptIn(KitePlayerLowLevelApi::class)
+    private val guard = VideoFlashGuard()
+    @OptIn(KitePlayerLowLevelApi::class)
+    private val guardCells = FloatArray(VideoFlashGuard.CELLS)
+
+    /**
+     * The flash guard's mode (#500). This renderer measures each picture it paints and dims it while
+     * a flashing run lasts. It cannot read a system setting, so [FlashGuard.FollowSystem] is off here.
+     */
+    override fun setFlashGuard(mode: FlashGuard) {
+        // A change of mode starts the history afresh, as taking the picture off does.
+        if (flashGuard.getAndSet(mode) != mode) guardForgets.set(true)
+    }
+
+    /** The flash guard's factor for [pixels], measured on a sparse lattice of them: 1 when the guard is off. */
+    @OptIn(KitePlayerLowLevelApi::class)
+    private fun dimFor(pixels: IntArray, width: Int, height: Int): Float {
+        if (flashGuard.get() != FlashGuard.On) return 1f
+        return synchronized(guard) {
+            if (guardForgets.getAndSet(false)) guard.reset()
+            VideoFlashGuard.cellsFromPackedRgb(pixels, width, height, into = guardCells)
+            guard.factorFor(guardCells, guardNanos())
+        }
+    }
 
     /** Says that this painter rolled HDR off to SDR while painting. */
     private fun announceToneMap(frame: VideoFrame) {
@@ -266,6 +304,8 @@ public class AwtCanvasVideoRenderer(
             failed.incrementAndGet()
             return false
         }
+        // Measured before it is shown, so the picture that completes a run is already dimmed.
+        val dim = dimFor(raster, width, height)
         val shownTurn = synchronized(lock) {
             if (closed) {
                 failed.incrementAndGet()
@@ -275,6 +315,7 @@ public class AwtCanvasVideoRenderer(
             lastSize = size
             lastRotation = rotation
             lastMirrored = mirrored
+            lastDim = dim
             transform.orient(rotation, mirrored).rotationDegrees
         }
         // The view shapes itself for the picture as the viewer turned it (#428).
@@ -310,6 +351,7 @@ public class AwtCanvasVideoRenderer(
             lastImage = null
             lastSize = null
         }
+        guardForgets.set(true)
         paintNow()
     }
 
@@ -345,6 +387,7 @@ public class AwtCanvasVideoRenderer(
         val mirrored: Boolean
         val mode: VideoScale
         val currentTransform: VideoTransform
+        val dim: Float
         synchronized(lock) {
             if (closed) return false
             target = canvas ?: return false
@@ -354,9 +397,10 @@ public class AwtCanvasVideoRenderer(
             mirrored = lastMirrored
             mode = scaleMode
             currentTransform = transform
+            dim = lastDim
         }
         if (!target.isDisplayable) return false
-        if (image == null || size == null) return presenter.present(target, null, null, overlaySnapshot())
+        if (image == null || size == null) return presenter.present(target, null, null, overlaySnapshot(), 1f)
         val layout = frameLayout(
             canvasWidth = target.width,
             canvasHeight = target.height,
@@ -366,7 +410,7 @@ public class AwtCanvasVideoRenderer(
             transform = currentTransform,
             mirrored = mirrored,
         ) ?: return false
-        return presenter.present(target, image, layout, overlaySnapshot())
+        return presenter.present(target, image, layout, overlaySnapshot(), dim)
     }
 
     private fun overlaySnapshot(): SubtitleOverlay? = synchronized(lock) { overlay }

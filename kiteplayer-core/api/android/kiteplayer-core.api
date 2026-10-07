@@ -4200,6 +4200,8 @@ public final class io/github/yuroyami/kiteplayer/spi/VideoFlashGuard {
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/VideoFlashGuard$Companion {
+	public final fun cellsFromPackedRgb ([IIII[F)V
+	public static synthetic fun cellsFromPackedRgb$default (Lio/github/yuroyami/kiteplayer/spi/VideoFlashGuard$Companion;[IIII[FILjava/lang/Object;)V
 	public final fun cellsFromRgba ([BIII[F)V
 	public static synthetic fun cellsFromRgba$default (Lio/github/yuroyami/kiteplayer/spi/VideoFlashGuard$Companion;[BIII[FILjava/lang/Object;)V
 }

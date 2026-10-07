@@ -142,6 +142,35 @@ class VideoFlashGuardTest {
     }
 
     @Test
+    fun packedPixelsMeasureAsTheirBytesDo() {
+        val width = 200
+        val height = 90
+        val stride = width + 6
+        fun red(x: Int, y: Int) = (x * 7 + y) and 0xFF
+        fun green(x: Int, y: Int) = (y * 13) and 0xFF
+        fun blue(x: Int, y: Int) = ((x + y) * 3) and 0xFF
+        val rgba = ByteArray(width * height * 4)
+        // The padding past each row is white, and the top byte is not alpha, so neither may count.
+        val packed = IntArray(stride * height) { 0xFFFFFF }
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val at = (y * width + x) * 4
+                rgba[at] = red(x, y).toByte()
+                rgba[at + 1] = green(x, y).toByte()
+                rgba[at + 2] = blue(x, y).toByte()
+                rgba[at + 3] = -1
+                packed[y * stride + x] = (0x5A shl 24) or (red(x, y) shl 16) or (green(x, y) shl 8) or blue(x, y)
+            }
+        }
+        val fromBytes = FloatArray(VideoFlashGuard.CELLS)
+        val fromInts = FloatArray(VideoFlashGuard.CELLS)
+        VideoFlashGuard.cellsFromRgba(rgba, width, height, into = fromBytes)
+        VideoFlashGuard.cellsFromPackedRgb(packed, width, height, stride, into = fromInts)
+        assertTrue(fromBytes.toSet().size > 20, "the picture varies from cell to cell")
+        assertTrue(fromBytes.indices.all { fromBytes[it] == fromInts[it] }, "${fromBytes.toList()} against ${fromInts.toList()}")
+    }
+
+    @Test
     fun theSettingIsPublishedAndReachesTheRendererOnAttachAndOnChange() = runTest {
         val harness = CoreHarness(this, config = PlayerConfig(flashGuard = FlashGuard.On))
         val player = KitePlayer(harness.core)

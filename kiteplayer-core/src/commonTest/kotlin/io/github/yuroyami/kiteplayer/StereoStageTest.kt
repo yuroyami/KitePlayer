@@ -74,10 +74,16 @@ class StereoStageTest {
         val stage = StereoStage(channels = 6, rampFrames = 0)
         stage.set(StereoMode.Swapped)
         val samples = frames(4, extra = 4)
+        val original = samples.copyOf()
         stage.apply(samples, 4)
-        assertEquals(right, samples[18])
-        assertEquals(left, samples[19])
-        assertTrue((20 until 24).all { samples[it] == 0.9f }, "a surround channel moved")
+        assertEquals(right, samples[18], 1e-6f)
+        assertEquals(left, samples[19], 1e-6f)
+        for (frame in 0 until 4) {
+            for (channel in 2 until 6) {
+                val index = frame * 6 + channel
+                assertEquals(original[index], samples[index], "surround channel $channel moved in frame $frame")
+            }
+        }
     }
 
     /** A change while playing crossfades over the ramp, so no frame jumps further than the ramp's step. */
@@ -92,7 +98,7 @@ class StereoStageTest {
         val largestStep = leftSide.zipWithNext { a, b -> abs(b - a) }.max()
         val swing = abs(right - left)
         assertTrue(largestStep <= swing / 480 * 1.01f, "the left side jumped $largestStep in one frame")
-        assertEquals(right, leftSide.last(), "the change never finished")
+        assertEquals(right, leftSide.last(), 1e-6f, "the change never finished")
         // A second change part way through turns back from where the first had got to.
         stage.set(StereoMode.Stereo)
         val back = frames(10)

@@ -14,6 +14,7 @@ import io.ktor.utils.io.ByteWriteChannel
 import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlin.concurrent.Volatile
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals

@@ -489,10 +489,16 @@ ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=4"
   -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" audio-cover.mp3
 
 echo "A chained Ogg, two songs one after the other as a station plays them, each with its own comments"
+# Some runner builds omit libvorbis. Keep this fixture on those builds with the built-in encoder,
+# which requires experimental opt-in and stereo input. Read the whole encoder list under pipefail.
+vorbis_options=(-c:a libvorbis)
+if ! ffmpeg -hide_banner -encoders 2>/dev/null | awk '$2 == "libvorbis" { found = 1 } END { exit !found }'; then
+    vorbis_options=(-c:a vorbis -strict -2 -ac 2)
+fi
 ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=3" \
-  -metadata title="First Song" -metadata artist="The Band" -c:a libvorbis chain-1.ogg
+  -metadata title="First Song" -metadata artist="The Band" "${vorbis_options[@]}" chain-1.ogg
 ffmpeg -v error -y -f lavfi -i "sine=frequency=660:sample_rate=48000:duration=3" \
-  -metadata title="Second Song" -metadata artist="The Band" -c:a libvorbis chain-2.ogg
+  -metadata title="Second Song" -metadata artist="The Band" "${vorbis_options[@]}" chain-2.ogg
 cat chain-1.ogg chain-2.ogg > audio-chained.ogg
 rm -f chain-1.ogg chain-2.ogg
 

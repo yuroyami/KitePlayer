@@ -166,7 +166,7 @@ class SessionFocusLifecycleTest {
     }
 
     @Test
-    fun `a wait is given back at idle and at close, and a play while waiting asks again`() {
+    fun aWaitIsGivenBackAtIdleAndAtCloseAndAPlayWhileWaitingAsksAgain() {
         val waitingAtIdle = SessionFocusLifecycle()
         waitingAtIdle.on(PlaybackStatus.Playing)
         waitingAtIdle.answered(FocusResult.Delayed)

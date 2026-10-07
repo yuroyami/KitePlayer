@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.AudioConfig
 import io.github.yuroyami.kiteplayer.Backends
 import io.github.yuroyami.kiteplayer.DemuxPolicy
+import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
@@ -19,10 +20,13 @@ import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -55,17 +59,18 @@ class ProgramSelectionTest {
                 assertEquals(TrackId(1), opened.selectedAudio, "ChannelA's French sound, not ChannelB's English")
 
                 player.play()
-                delay(600.milliseconds)
-                assertTrue(screen.lastRedness() < RED_V, "ChannelA's picture is not the red one: ${screen.lastRedness()}")
+                val first = screen.awaitFrame()
+                assertTrue(first.redness < RED_V, "ChannelA's actual picture is not the red one: $first")
 
                 withTimeout(30.seconds) { player.selectProgram(202) }
-                delay(600.milliseconds)
-                val switched = player.state.value.tracks
+                val second = screen.awaitFrame(after = first)
+                val playing = withTimeout(10.seconds) { player.state.first { it.status == PlaybackStatus.Playing } }
+                val switched = playing.tracks
                 assertEquals(202, switched.selectedProgram)
                 assertEquals(TrackId(2), switched.selectedVideo)
                 assertEquals(TrackId(3), switched.selectedAudio)
-                assertEquals(PlaybackStatus.Playing, player.state.value.status)
-                assertTrue(screen.lastRedness() > RED_V, "ChannelB's red picture shows: ${screen.lastRedness()}")
+                assertEquals(PlaybackStatus.Playing, playing.status)
+                assertTrue(second.redness > RED_V, "ChannelB's actual red picture shows in a new generation: $second")
             }
         }
     }
@@ -125,30 +130,79 @@ class ProgramSelectionTest {
         }
     }
 
+    /** One accepted picture, published atomically; no sentinel can stand in for a frame. */
+    private data class ObservedFrame(
+        val count: Long,
+        val generation: Generation,
+        val format: PlayerPixelFormat,
+        val redness: Double,
+    )
+
     /**
-     * A screen with no window that keeps how red the last picture was: the mean of its V plane over
-     * the left half of each row, which the fixture's 80 chroma columns always fill, so the padding
-     * past a row's end never counts.
+     * Samples the left half of the V chroma row, excluding padding. Software H.264 frames are
+     * planar YUV420P; VideoToolbox downloads can be NV12, where V is every other byte of plane 1.
+     * The frame's planeFormat describes that readable copy even when pixelFormat is Opaque.
      */
     private class RednessScreen : VideoRenderer {
-        @Volatile
-        private var redness = -1.0
+        private val accepted = AtomicLong()
 
-        fun lastRedness(): Double = redness
+        @Volatile
+        private var latest: ObservedFrame? = null
+
+        @Volatile
+        private var failure: String? = null
+
+        suspend fun awaitFrame(after: ObservedFrame? = null): ObservedFrame {
+            val observed = withTimeoutOrNull(10.seconds) {
+                var candidate = latest
+                while (candidate == null || (after != null &&
+                        (candidate.count <= after.count || candidate.generation <= after.generation))) {
+                    failure?.let { throw AssertionError(it) }
+                    delay(10.milliseconds)
+                    candidate = latest
+                }
+                failure?.let { throw AssertionError(it) }
+                candidate
+            }
+            return observed ?: throw AssertionError(
+                "no actual picture arrived after $after; accepted=${accepted.get()}, latest=$latest, failure=$failure",
+            )
+        }
 
         override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 
-        override fun supports(format: PlayerPixelFormat): Boolean = true
+        override fun supports(format: PlayerPixelFormat): Boolean =
+            format == PlayerPixelFormat.Yuv420p || format == PlayerPixelFormat.Nv12 || format == PlayerPixelFormat.Opaque
 
         override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean = frame.use {
-            if (frame !is SoftwareReadableFrame || frame.planeCount < 3) return false
-            val stride = frame.planeStride(2)
-            val rows = frame.planeHeight(2)
+            if (frame !is SoftwareReadableFrame) {
+                failure = "the test renderer received no readable planes: ${frame.pixelFormat}"
+                return false
+            }
+            val format = frame.planeFormat
+            val plane: Int
+            val step: Int
+            val offset: Int
+            when (format) {
+                PlayerPixelFormat.Yuv420p -> { plane = 2; step = 1; offset = 0 }
+                PlayerPixelFormat.Nv12 -> { plane = 1; step = 2; offset = 1 }
+                else -> {
+                    failure = "the test renderer cannot sample V from $format (${frame.planeCount} planes)"
+                    return false
+                }
+            }
+            val stride = frame.planeStride(plane)
+            val rows = frame.planeHeight(plane)
             val v = ByteArray(stride * rows)
-            frame.copyPlane(2, v, 0)
+            frame.copyPlane(plane, v, 0)
             var sum = 0L
-            for (row in 0 until rows) for (column in 0 until SAMPLED_COLUMNS) sum += v[row * stride + column].toInt() and 0xFF
-            redness = sum.toDouble() / (rows * SAMPLED_COLUMNS)
+            for (row in 0 until rows) for (column in 0 until SAMPLED_COLUMNS) {
+                sum += v[row * stride + column * step + offset].toInt() and 0xFF
+            }
+            latest = ObservedFrame(
+                accepted.incrementAndGet(), frame.generation, format,
+                sum.toDouble() / (rows * SAMPLED_COLUMNS),
+            )
             true
         }
 

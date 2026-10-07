@@ -78,6 +78,8 @@ class SeekRunUpSkipTest {
             val player = KitePlayer.create(
                 PlayerConfig(
                     backends = Backends(KiteFFmpegMediaBackend(), PacedOutput()),
+                    // The run-up oracle uses software decoding, and this test measures its skip work.
+                    hardwareDecode = HwdecPolicy.Off,
                     progressInterval = 50.milliseconds,
                     statsInterval = 20.milliseconds,
                 ),
@@ -208,14 +210,8 @@ class SeekRunUpSkipTest {
     }
 }
 
-/** Every plane of the frame, one after the other. */
+/** Active samples in the oracle's planar format, including every chroma sample and excluding row padding. */
 private fun SoftwareReadableFrame.pixels(): ByteArray {
-    val sizes = (0 until planeCount).map { planeStride(it) * planeHeight(it) }
-    val bytes = ByteArray(sizes.sum())
-    var offset = 0
-    sizes.forEachIndexed { index, size ->
-        copyPlane(index, bytes, offset)
-        offset += size
-    }
-    return bytes
+    assertEquals(PlayerPixelFormat.Yuv420p, planeFormat, "the byte oracle requires software-decoded planar YUV420")
+    return tightlyPackedPlanes()
 }

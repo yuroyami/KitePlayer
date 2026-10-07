@@ -242,6 +242,22 @@ public final class io/github/yuroyami/kiteplayer/session/KitePlayerMediaSession 
 	public final fun setSessionActivity (Landroid/app/PendingIntent;)V
 }
 
+public final class io/github/yuroyami/kiteplayer/session/KitePlayerResumption {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/session/KitePlayerResumption;
+	public final fun clear (Landroid/content/Context;)V
+	public final fun save (Landroid/content/Context;Lio/github/yuroyami/kiteplayer/PlayerMemento;Ljava/lang/String;Ljava/lang/String;)V
+	public static synthetic fun save$default (Lio/github/yuroyami/kiteplayer/session/KitePlayerResumption;Landroid/content/Context;Lio/github/yuroyami/kiteplayer/PlayerMemento;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)V
+}
+
+public abstract class io/github/yuroyami/kiteplayer/session/KitePlayerResumptionService : android/service/media/MediaBrowserService {
+	public fun <init> ()V
+	public fun onCreate ()V
+	public fun onDestroy ()V
+	public fun onGetRoot (Ljava/lang/String;ILandroid/os/Bundle;)Landroid/service/media/MediaBrowserService$BrowserRoot;
+	public fun onLoadChildren (Ljava/lang/String;Landroid/service/media/MediaBrowserService$Result;)V
+	public abstract fun onResume (Lio/github/yuroyami/kiteplayer/PlayerMemento;)V
+}
+
 public final class io/github/yuroyami/kiteplayer/session/MediaNotificationAction {
 	public fun <init> (Ljava/lang/String;Ljava/lang/CharSequence;I)V
 	public final fun component1 ()Ljava/lang/String;

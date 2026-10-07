@@ -347,6 +347,9 @@ public class KitePlayerWorker private constructor(
     /** Sets how HDR video reaches the screen. */
     public fun setHdrPolicy(value: HdrPolicy): Unit = send(Control.SetHdrPolicy(value))
 
+    /** See `KitePlayer.setFlashGuard`. The worker's canvas has no guard yet, so it changes nothing drawn. */
+    public fun setFlashGuard(mode: FlashGuard): Unit = send(Control.SetFlashGuard(mode))
+
     /** Shifts subtitle timing. Positive shows cues later. */
     public fun setSubtitleDelay(value: Duration): Unit = send(Control.SetSubtitleDelay(value))
 

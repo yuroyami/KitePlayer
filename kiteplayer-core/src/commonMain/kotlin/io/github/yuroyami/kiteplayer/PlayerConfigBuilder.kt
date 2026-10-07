@@ -94,6 +94,9 @@ public class PlayerConfigBuilder(from: PlayerConfig = PlayerConfig()) {
     /** See [PlayerConfig.keyframeChoice]. */
     public var keyframeChoice: KeyframeChoice = from.keyframeChoice
 
+    /** See [PlayerConfig.flashGuard]. */
+    public var flashGuard: FlashGuard = from.flashGuard
+
     /** Changes [audio] field by field. */
     public fun audio(build: AudioConfigBuilder.() -> Unit) {
         audio = AudioConfigBuilder(audio).apply(build).build()
@@ -139,6 +142,7 @@ public class PlayerConfigBuilder(from: PlayerConfig = PlayerConfig()) {
         hdrPolicy = hdrPolicy,
         externalClock = externalClock,
         keyframeChoice = keyframeChoice,
+        flashGuard = flashGuard,
     )
 }
 

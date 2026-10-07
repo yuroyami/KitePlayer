@@ -150,6 +150,7 @@ class WorkerProtocolTest {
         playRequested = true,
         preloadedIndex = 1,
         hdrPolicy = HdrPolicy.ToneMap,
+        flashGuard = FlashGuard.On,
         videoDynamicRange = VideoDynamicRange.ToneMapped,
         failedQueueItems = setOf(1),
         durationIsEstimate = true,
@@ -318,6 +319,7 @@ class WorkerProtocolTest {
             Control.SetVideoTransform(snapshot.videoTransform),
             Control.SetVideoTransform(VideoTransform.Identity),
             Control.SetHdrPolicy(HdrPolicy.ToneMap),
+            Control.SetFlashGuard(FlashGuard.On),
             Control.SetSubtitleDelay((-250).milliseconds),
             Control.SetSubtitleScale(1.25f),
             Control.SetSubtitleStyle(style),
@@ -340,7 +342,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Send(control)
             assertEquals(message, message.roundTrip(), "the control ${control.member} changed on the way")
         }
-        assertEquals(35, controls.map { it.member }.distinct().size, "every control is here")
+        assertEquals(36, controls.map { it.member }.distinct().size, "every control is here")
     }
 
     @Test

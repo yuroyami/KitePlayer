@@ -31,8 +31,8 @@ The rule is the general flash rule of ITU-R BT.1702 and WCAG 2.2, in relative lu
 - Each frame is measured as a grid of 16 by 9 cells, each the mean relative luminance of its part
   of the picture, in linear light with the BT.709 weights, from 0 for black to 1 for white.
 - A cell moves when its luminance has gone 0.10 or more from its last extreme the other way, and the
-  darker of the two is below 0.80. A move slower than 0.3 s from that extreme is a fade, not a flash
-  leg, and only resets the extreme.
+  darker of the two is below 0.80. As in both rules, how fast it went does not matter: a fade in and
+  out is a flash too, and only the count of them in a second makes a run.
 - The picture has a leg on a frame where cells that moved the same way, on that frame or the one
   before, cover at least a quarter of the picture. That is BT.1702's share of the screen; WCAG's
   10 degree field covers about the same on a phone or a television at viewing distance.
@@ -45,9 +45,10 @@ colour. That is a later step.
 ## How it dims
 
 - On the leg that makes the run, the guard dims the picture by a factor `k`, so that the largest
-  leg of the run comes out at most 0.08, under the 0.10 that makes a leg: `k = 0.08 / swing`, where
-  the swing is the mean change of the cells that moved. A black and white strobe comes out at a
-  little under a tenth of its light.
+  leg of the run comes out at most 0.08, under the 0.10 that makes a leg. The swing is the mean
+  change of the cells that moved. A renderer scales encoded values, and light goes about as their
+  power of 2.2, so `k = (0.08 / swing)^(1 / 2.2)`. A black and white strobe comes out at about a
+  third of its encoded level, which is 0.08 of its light.
 - A larger leg later in the run lowers `k` at once. While legs keep coming, `k` holds.
 - One second after the last leg, `k` rises back to 1 over 1.5 seconds, slower than any leg, and is
   exactly 1 at the end, after which frames are drawn untouched again.
@@ -88,8 +89,8 @@ the system setting for `FollowSystem`.
 
 - The detector: a full-picture strobe at 5 Hz runs undimmed for three flashes, then holds every
   output leg under 0.10 from its seventh leg; three flashes in a second are never touched; a fade
-  over half a second is not a flash; a strobe over a fifth of the picture is not a run; and after a
-  run the factor returns to exactly 1.
+  out and in is one flash; a strobe over a fifth of the picture is not a run; a strobe between two
+  bright greys, above 0.80, is not a run; and after a run the factor returns to exactly 1.
 - The setting: `setFlashGuard` reaches an attached renderer and one attached later, and the
   snapshot reads it back.
 - Each renderer: with the guard on, a strobe's drawn legs stay under 0.10 after the run starts, and

@@ -22,6 +22,7 @@ public final class io/github/yuroyami/kiteplayer/output/AwtCanvasVideoRenderer :
 	public fun present (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setAdjustments (Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public final fun setCanvas (Ljava/awt/Canvas;)V
+	public fun setFlashGuard (Lio/github/yuroyami/kiteplayer/FlashGuard;)V
 	public fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
 	public fun setOverlay (Lio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setRenderQuality (Lio/github/yuroyami/kiteplayer/RenderQuality;)V

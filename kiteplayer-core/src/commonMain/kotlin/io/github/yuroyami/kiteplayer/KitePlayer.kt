@@ -748,6 +748,22 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Sets whether flashing video is dimmed (#500): while the picture flashes more than three times
+     * in a second over a large part of it, the renderer dims it so each flash stays under the
+     * general flash threshold, and lets it back once the flashing stops. A frame outside such a run
+     * is never touched. [FlashGuard.FollowSystem], the default, follows Apple's Dim Flashing Lights
+     * and is off elsewhere.
+     *
+     * Delivered like [setVideoAdjustments]: the value belongs to the player and every renderer is
+     * told it on attach. A renderer with no guard ignores it; `docs/video-flash-guard.md` lists
+     * which have one. Published as [PlayerSnapshot.flashGuard].
+     */
+    @Throws(IllegalStateException::class)
+    public fun setFlashGuard(mode: FlashGuard) {
+        core.post(CoreCommand.SetFlashGuard(mode, CompletableDeferred()))
+    }
+
+    /**
      * Makes playback follow [clock], or nothing when it is null. Legal at any time, and it lasts
      * across items until it is replaced. See [ExternalClock] for how each answer is followed, and
      * [PlayerConfig.externalClock] for the largest speed change it may use.

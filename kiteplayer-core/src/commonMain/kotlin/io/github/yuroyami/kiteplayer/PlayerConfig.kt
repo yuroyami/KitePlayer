@@ -89,6 +89,11 @@ public data class PlayerConfig(
      * [KitePlayer.setKeyframeChoice]; this is only the value a fresh player starts at.
      */
     val keyframeChoice: KeyframeChoice = KeyframeChoice.Before,
+    /**
+     * Whether flashing video is dimmed (#500). Change it live with [KitePlayer.setFlashGuard]; this
+     * is only the value a fresh player starts at.
+     */
+    val flashGuard: FlashGuard = FlashGuard.FollowSystem,
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive

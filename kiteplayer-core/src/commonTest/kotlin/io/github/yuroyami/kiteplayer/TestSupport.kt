@@ -195,6 +195,14 @@ internal class RecordingRenderer(
         this.adjustments = adjustments
     }
 
+    /** The last flash guard mode the engine told this renderer, or null when it never did. */
+    var flashGuard: FlashGuard? = null
+        private set
+
+    override fun setFlashGuard(mode: FlashGuard) {
+        flashGuard = mode
+    }
+
     /** The last framing controls the engine told this renderer, or null when it never did. */
     var transform: VideoTransform? = null
         private set

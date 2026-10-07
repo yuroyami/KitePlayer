@@ -202,6 +202,8 @@ public data class PlayerSnapshot(
      * [PlaybackStatus.Paused] for a paused player, and [media], [duration] and the position stay.
      */
     val reconnecting: Boolean = false,
+    /** Whether flashing video is dimmed (#500). See [KitePlayer.setFlashGuard]. */
+    val flashGuard: FlashGuard = FlashGuard.FollowSystem,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

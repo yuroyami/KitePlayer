@@ -121,6 +121,7 @@ internal sealed class Control(val member: String) {
     data class SetRenderQuality(val value: RenderQuality) : Control("setRenderQuality")
     data class SetVideoTransform(val value: VideoTransform) : Control("setVideoTransform")
     data class SetHdrPolicy(val value: HdrPolicy) : Control("setHdrPolicy")
+    data class SetFlashGuard(val value: FlashGuard) : Control("setFlashGuard")
     data class SetSubtitleDelay(val value: Duration) : Control("setSubtitleDelay")
     data class SetSubtitleScale(val value: Float) : Control("setSubtitleScale")
     data class SetSubtitleStyle(val value: SubtitleStyleOverride?) : Control("setSubtitleStyle")
@@ -375,6 +376,7 @@ private fun encodeControl(control: Control): JsAny = record {
         is Control.SetRenderQuality -> put("value", encodeRenderQuality(control.value))
         is Control.SetVideoTransform -> put("value", encodeTransform(control.value))
         is Control.SetHdrPolicy -> put("value", control.value)
+        is Control.SetFlashGuard -> put("value", control.value)
         is Control.SetSubtitleDelay -> put("value", control.value)
         is Control.SetSubtitleScale -> put("value", control.value)
         is Control.SetSubtitleStyle -> put("value", control.value?.let(::encodeStyle))
@@ -558,6 +560,7 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("playRequested", snapshot.playRequested)
     put("preloadedIndex", snapshot.preloadedIndex)
     put("hdrPolicy", snapshot.hdrPolicy)
+    put("flashGuard", snapshot.flashGuard)
     put("videoDynamicRange", snapshot.videoDynamicRange)
     put("failedQueueItems", numbers(snapshot.failedQueueItems.sorted().map(Int::toDouble)))
     put("durationIsEstimate", snapshot.durationIsEstimate)
@@ -1235,6 +1238,7 @@ private fun decodeControl(o: JsAny): Control? = when (o.str("t")) {
     "setRenderQuality" -> Control.SetRenderQuality(decodeRenderQuality(o.child("value") ?: missing("value")))
     "setVideoTransform" -> Control.SetVideoTransform(decodeTransform(o.child("value") ?: missing("value")))
     "setHdrPolicy" -> Control.SetHdrPolicy(o.enum<HdrPolicy>("value") ?: missing("value"))
+    "setFlashGuard" -> Control.SetFlashGuard(o.enum<FlashGuard>("value") ?: missing("value"))
     "setSubtitleDelay" -> Control.SetSubtitleDelay(o.micros("value") ?: missing("value"))
     "setSubtitleScale" -> Control.SetSubtitleScale(o.float("value") ?: missing("value"))
     "setSubtitleStyle" -> Control.SetSubtitleStyle(o.child("value")?.let(::decodeStyle))
@@ -1370,6 +1374,7 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         playRequested = o.flag("playRequested"),
         preloadedIndex = o.int("preloadedIndex"),
         hdrPolicy = o.enum<HdrPolicy>("hdrPolicy") ?: default.hdrPolicy,
+        flashGuard = o.enum<FlashGuard>("flashGuard") ?: default.flashGuard,
         videoDynamicRange = o.enum<VideoDynamicRange>("videoDynamicRange") ?: default.videoDynamicRange,
         failedQueueItems = o.numbers("failedQueueItems")?.map(Double::toInt)?.toSet() ?: default.failedQueueItems,
         durationIsEstimate = o.flag("durationIsEstimate"),

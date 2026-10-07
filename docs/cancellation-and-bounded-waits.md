@@ -1,8 +1,9 @@
 # Cancellation and bounded waits
 
 This document is the design for issue #30 and the work under it: #31 (an open that hangs), #32 (a
-read that stalls), #33 (network waits) and the recovery scope of #96. It says how a cancellation
-reaches a read, where each limit lives and what each limit covers.
+read that stalls), #33 (network waits) and the recovery scope of #96, and it holds the contract for
+waiting out a lost network (#461). It says how a cancellation reaches a read, where each limit
+lives and what each limit covers.
 
 The rule is simple. Every wait for media bytes has a limit. A stop, a close or a cancelled `open()`
 call reaches every read that KitePlayer performs itself.
@@ -117,6 +118,102 @@ This is the recovery scope that #96 records.
 
 The stall timeout limits all of this. When no bytes arrive for that long, the engine ends the
 session. Adaptive bitrate is not part of this scope.
+
+## Waiting for the network to come back
+
+The contract for #461. The code follows in separate changes.
+
+A drop shorter than the limits above is absorbed: the reader reconnects and the stall timeout
+waits. A longer one, a train in a tunnel or a phone between Wi-Fi and mobile data, fails the item,
+and it stays failed until the user presses play again. `NetworkConfig.recovery` makes the player
+wait for the network instead and open the item again. It is null by default, and null changes
+nothing.
+
+```kotlin
+public data class NetworkRecovery(
+    val maxWait: Duration = 5.minutes,  // from the failure on; Duration.INFINITE never gives up
+    val status: NetworkStatus? = null,  // null takes the installed network module's
+)
+
+public fun interface NetworkStatus {
+    // Calls onChange with whether the device has a network now, and at every change after,
+    // from any thread, until the handle closes.
+    public fun watch(onChange: (online: Boolean) -> Unit): AutoCloseable
+}
+```
+
+**What starts a wait.** An item that had opened fails while it plays, buffers or is paused, with
+`SourceStalled`, or with `SourceUnavailable` from a read of its source, and its address has a
+network scheme: http, https, rtsp, rtsps, rtmp, rtmps, udp, rtp, srt or tcp. An item with a reader
+of its own counts by its address too. Nothing else starts one:
+
+- An open that fails before the item opened fails as before. Nothing was playing, and the caller of
+  the open has the error.
+- A local file, a decoder failure and every other error fail as before.
+- The end of a stream is an end, not a failure, and the item ends.
+- A server's refusal of an expired address goes to the renewal above (#453) first. A refusal that
+  the renewal could not cure starts a wait like any other failed read.
+
+**While it waits.** The item is closed as a failure closes it, so nothing reads and no device is
+open, but the player does not fail.
+
+- `PlayerSnapshot.reconnecting` is true. `status` is `Buffering` for a player that was playing and
+  `Paused` for one that was paused. `media`, `duration`, the queue and the position stay as they
+  were. `PlaybackWarning.Reconnecting` names the error that started the wait, once for each wait.
+- `play` and `pause` set what the player does once the item is back, as they do while it buffers.
+- A seek moves where the item opens again, for an item that could seek, and returns at once. For one
+  that could not, it is refused as when nothing is open.
+- `stop`, `open`, `openQueue`, `next`, `previous` and `close` end the wait, as they end any item.
+  A track, variant or programme selection is refused as when nothing is open.
+
+**When it tries.** One second after the failure, then 2, 4 and 8 seconds after the attempt before,
+and every 10 seconds from then on. The attempt is itself the probe: without a network an open fails
+within a moment. When the network status reports a network again after reporting none, the next
+attempt starts at once. The status only brings an attempt forward and never holds one back, so a
+status that is wrong costs an attempt every 10 seconds and nothing more. A live stream that drops
+while the network stays up, a camera that restarts or a server that ends the session, is tried on
+the same timer.
+
+Each attempt opens the item as the rejoin above does. It resolves the item again through its
+resolver or reader factory, keeps the tracks that were chosen, and goes back to the position it
+reached for an item that could seek, or opens at the live edge for one that could not.
+
+**How it ends.**
+
+- The item opens. `reconnecting` turns false, and playback goes on as after any buffering, to
+  `Playing` for a player that was playing.
+- An attempt fails as a failure above starts a wait: the wait goes on.
+- An attempt fails otherwise, for example because the address now answers with something that is
+  not media: the player fails with that error.
+- `maxWait` passes: the player fails with the error that started the wait, `PlayerEvent.Failed`
+  and all, as it would have failed at once without recovery.
+
+**Where the network status comes from.** `MediaIoResolverProvider.networkStatus()` returns a
+`NetworkStatus`, null by default, and the player watches the first one an installed provider gives,
+only while it waits. `NetworkRecovery.status` takes the place of that, for a test or an application
+with its own. The network module gives one for each platform:
+
+- Android: a `ConnectivityManager` callback on the default network. The module keeps the
+  application context through a provider in its manifest, as `kiteplayer-io` does (#457), and its
+  manifest adds the `ACCESS_NETWORK_STATE` permission, which Android grants at install. An app that
+  removes either gets the timer alone.
+- JVM: a look at the network interfaces every 2 seconds while the player waits. A network is an
+  interface that is up, is not the loopback, and has an address.
+- Web: the `online` and `offline` events of the page or the worker.
+- Apple: none yet, so the timer alone. `NWPathMonitor` is the plan, and it needs a Mac to build.
+
+A worker player on the web (#100) builds its player on the default configuration, so it never
+waits; the web worker still carries `reconnecting` and the warning to the page, as it carries every
+field and warning.
+
+**Tests.** In the core, with a scripted source and a fake status: a read that fails during
+playback waits, says so, and opens again at its position when the status reports the network
+back; with recovery off it fails at once; a live item comes back at the live edge; the wait gives
+up with the original error at `maxWait`; a local file fails at once; an attempt that fails for
+another reason fails; a seek during the wait moves where the item opens; `stop` ends the wait; and
+without a status the timer tries. In the network module, against a local server that goes silent
+for longer than the stall timeout, the item fails, waits, and opens again at its position once the
+server answers. Each platform's status has a test where its platform can run one.
 
 ## What each limit covers
 

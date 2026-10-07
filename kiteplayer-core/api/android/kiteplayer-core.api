@@ -784,6 +784,9 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer$Companion {
 	public final fun getDELAY_MAX-UwyO8pc ()J
 }
 
+public abstract interface annotation class io/github/yuroyami/kiteplayer/KitePlayerInternalApi : java/lang/annotation/Annotation {
+}
+
 public abstract interface annotation class io/github/yuroyami/kiteplayer/KitePlayerLowLevelApi : java/lang/annotation/Annotation {
 }
 

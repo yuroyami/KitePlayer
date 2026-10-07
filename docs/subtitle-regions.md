@@ -152,9 +152,11 @@ canvas is the last step below.
 ## Order of work
 
 1. This contract.
-2. The annotation, and the XML and TTML readers moved into `kiteplayer-subtitles`, with the network
-   module using them and its tests unchanged.
-3. The model, `TtmlParser`'s cues with their regions and styles, and the external file path.
+2. The annotation, and the XML reader moved into `kiteplayer-subtitles`, with the network module
+   using it and its tests unchanged. Done.
+3. The model, `TtmlParser` in `kiteplayer-subtitles` with its cues' regions and styles, the network
+   module's WebVTT conversion built on it in place of its own TTML reader, and the external file
+   path.
 4. Region layout in the shared rasterizer loop, tested on the desktop rasterizer.
 5. A browser raster path for text cues, regions included.
 

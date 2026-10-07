@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
+import io.github.yuroyami.kiteplayer.network.xml.XmlLimits
 import io.github.yuroyami.kiteplayer.network.xml.XmlMini
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,7 +24,7 @@ class DashSegmentPlanLimitsTest {
             template + representations + "</AdaptationSet></Period></MPD>",
         manifestUrl,
         DashUrlPolicy.Default,
-        XmlMini.Limits(),
+        XmlLimits(),
         limits,
     )
 

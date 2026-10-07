@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
 import io.github.yuroyami.kiteplayer.network.xml.XmlElement
+import io.github.yuroyami.kiteplayer.network.xml.XmlLimits
 import io.github.yuroyami.kiteplayer.network.xml.XmlMini
 import io.github.yuroyami.kiteplayer.network.xml.XmlText
 import kotlin.math.roundToLong
@@ -31,7 +32,7 @@ internal object Ttml {
 
     /** The cues of [xml], in time order, their times plus [offsetMicros]. */
     fun cues(xml: String, offsetMicros: Long = 0, work: TtmlWork = TtmlWork()): List<TimedCue> {
-        val root = XmlMini.parse(xml, XmlMini.Limits(keepContent = true))
+        val root = XmlMini.parse(xml, XmlLimits(keepContent = true))
         require(root.name == "tt") { "not a TTML document: the root element is <${root.name}>" }
         val clock = Clock(root)
         val styles = Styles(

@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
 import io.github.yuroyami.kiteplayer.network.xml.XmlElement
+import io.github.yuroyami.kiteplayer.network.xml.XmlLimits
 import io.github.yuroyami.kiteplayer.network.xml.XmlMini
 
 /**
@@ -328,7 +329,7 @@ public object DashManifestParser {
         xml: String,
         manifestUrl: String,
         policy: DashUrlPolicy = DashUrlPolicy.Default,
-    ): DashManifest = parse(xml, manifestUrl, policy, XmlMini.Limits())
+    ): DashManifest = parse(xml, manifestUrl, policy, XmlLimits())
 
     /**
      * [parse] under [limits], which the DASH door widens to match its own byte ceiling, and
@@ -338,7 +339,7 @@ public object DashManifestParser {
         xml: String,
         manifestUrl: String,
         policy: DashUrlPolicy,
-        limits: XmlMini.Limits,
+        limits: XmlLimits,
         urlLimits: UrlLimits = UrlLimits.forDocument(limits.maxLength),
     ): DashManifest {
         val root = XmlMini.parse(xml, limits)

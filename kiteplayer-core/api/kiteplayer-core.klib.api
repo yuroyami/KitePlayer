@@ -7,6 +7,10 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-core>
+open annotation class io.github.yuroyami.kiteplayer/KitePlayerInternalApi : kotlin/Annotation { // io.github.yuroyami.kiteplayer/KitePlayerInternalApi|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer/KitePlayerInternalApi.<init>|<init>(){}[0]
+}
+
 open annotation class io.github.yuroyami.kiteplayer/KitePlayerLowLevelApi : kotlin/Annotation { // io.github.yuroyami.kiteplayer/KitePlayerLowLevelApi|null[0]
     constructor <init>() // io.github.yuroyami.kiteplayer/KitePlayerLowLevelApi.<init>|<init>(){}[0]
 }

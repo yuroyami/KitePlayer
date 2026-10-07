@@ -65,9 +65,12 @@ kotlin {
     }
 
     sourceSets {
+        // The bounded XML reader is shared with kiteplayer-subtitles behind this marker (#492).
+        all { languageSettings.optIn("io.github.yuroyami.kiteplayer.KitePlayerInternalApi") }
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
             api(libs.ktor.client.core)
+            implementation(project(":kiteplayer-subtitles"))
         }
         val jvmAndAndroidMain = maybeCreate("jvmAndAndroidMain").apply {
             dependsOn(getByName("commonMain"))

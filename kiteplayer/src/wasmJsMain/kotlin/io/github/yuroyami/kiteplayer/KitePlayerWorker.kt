@@ -59,6 +59,8 @@ import kotlin.time.Duration
  * - `subtitleCues`: the worker draws the subtitles on the canvas itself.
  * - `coverArt`: the media session of the page's own player shows it, and a worker has none.
  * - `position()` and `audioClock()`: read [progress] instead. `transportMark` and `awaitClose`.
+ * - `timeOfDayAt`, `positionAtTimeOfDay`, `seekToTimeOfDay` and `timeOfDayClock`: read the time
+ *   of day of the position, and the first and last moments the stream dates, from [progress].
  * - `inspect`, `scanAudio`, `captureFrame`, `thumbnailAt`, recording, `memento` and `restore`.
  * - Attaching or detaching a renderer or an audio tap, and `setExternalClock`.
  * - An item, or an external subtitle or a thumbnail file, with its own reader: it is refused with

@@ -421,6 +421,14 @@ class WorkerProtocolTest {
             WorkerMessage.State(snapshot),
             WorkerMessage.State(PlayerSnapshot()),
             WorkerMessage.Progressed(Progress(12_345_678L.microseconds, 2.seconds, listOf(0.seconds..30.seconds))),
+            WorkerMessage.Progressed(
+                Progress(
+                    position = 7.seconds,
+                    timeOfDayMillis = 1_791_408_847_123L,
+                    firstTimeOfDayMillis = 1_791_408_840_000L,
+                    lastTimeOfDayMillis = 1_791_408_870_000L,
+                ),
+            ),
             WorkerMessage.Progressed(Progress()),
             WorkerMessage.Stats(stats),
             WorkerMessage.Stats(stats.copy(hardwareDecode = HwdecStatus.HardwareZeroCopy(HwdecKind.VideoToolbox), containerBitrate = null)),

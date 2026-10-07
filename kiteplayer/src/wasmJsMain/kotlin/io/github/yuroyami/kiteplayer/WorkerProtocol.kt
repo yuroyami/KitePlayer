@@ -726,6 +726,10 @@ private fun encodeProgress(progress: Progress): JsAny = record {
             }
         },
     )
+    // Unix time in milliseconds, well inside the 2^53 a number holds exactly (#444).
+    put("timeOfDay", progress.timeOfDayMillis)
+    put("firstTimeOfDay", progress.firstTimeOfDayMillis)
+    put("lastTimeOfDay", progress.lastTimeOfDayMillis)
 }
 
 private fun encodeStats(stats: PlaybackStats): JsAny = record {
@@ -1511,6 +1515,9 @@ private fun decodeProgress(o: JsAny): Progress = Progress(
     bufferedRanges = o.list("bufferedRanges") { range ->
         (range.micros("start") ?: missing("start"))..(range.micros("end") ?: missing("end"))
     }.orEmpty(),
+    timeOfDayMillis = o.long("timeOfDay"),
+    firstTimeOfDayMillis = o.long("firstTimeOfDay"),
+    lastTimeOfDayMillis = o.long("lastTimeOfDay"),
 )
 
 private fun decodeStats(o: JsAny): PlaybackStats {

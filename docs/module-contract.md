@@ -412,3 +412,64 @@ tests on the JVM: every control's role and label, `setProgress` moving the playe
 arrow keys reaching every control, a tap and the timeout hiding the controls alike, the
 unmirrored transport row in a right-to-left layout, and `KitePlayerVideo` without controls drawing
 exactly what it drew before.
+
+## Time of day for live streams
+
+Planned API contract for #444. The implementation and the generated ABI follow in a separate
+change.
+
+**Where the times come from.**
+
+- HLS: each media playlist's `EXT-X-PROGRAM-DATE-TIME`. FFmpeg's HLS reader ignores the tag, so
+  the player reads it from every media playlist its own reader hands FFmpeg: the one opened, and
+  each reload of a live one. A segment without a tag of its own takes the date of the segment
+  before it plus that segment's length. After `EXT-X-DISCONTINUITY`, a segment with no tag of its
+  own has no date. A playlist FFmpeg reads with its own protocols, because the item's reader opens
+  no related address, gives the dates of the playlist opened and no reload.
+- DASH: the HLS playlists the player writes for FFmpeg carry the same tag, the manifest's
+  `availabilityStartTime` plus the Period's start plus the segment's time, whenever the manifest
+  states `availabilityStartTime`.
+- A stream that states neither publishes nothing, and every call below answers null.
+
+**How a position gets its time.** The first segment FFmpeg opens starts the position timeline,
+because FFmpeg's start time is the first timestamp it reads. Each later segment of the same
+playlist starts where the one before it ends; across a gap in the sequence numbers, which a late
+reload of a live playlist leaves, it starts as far after the last known one as their dates say. A
+position's time of day is its segment's date plus the offset into the segment.
+
+**Type.** A time of day is milliseconds since 1970 UTC, in a `Long`. `kotlin.time.Instant` still
+needs an opt-in in this Kotlin, which every application calling the API would inherit, and a
+`Long` reads the same from Java.
+
+**API.**
+
+- `Progress.timeOfDayMillis: Long?`: the time of day of `Progress.position`.
+- `Progress.firstTimeOfDayMillis` and `Progress.lastTimeOfDayMillis`, both `Long?`: the earliest
+  and the latest moment the stream lists, the start and the end of the latest playlist. For a
+  recording they are the edges of its seekable range. A live stream cannot seek in this player, so
+  for it they say how far the listed window reaches, and the last one is the live edge.
+- `KitePlayer.timeOfDayAt(position: Duration): Long?`, for any position.
+- `KitePlayer.positionAtTimeOfDay(epochMillis: Long): Duration?`, its inverse.
+- `suspend KitePlayer.seekToTimeOfDay(epochMillis: Long, mode: SeekMode = SeekMode.Precise)`. It
+  throws `IllegalArgumentException` for a moment the stream gives no position for, and otherwise
+  what `seek` throws, `UnsupportedOperationException` for a source that cannot seek included.
+- `KitePlayer.timeOfDayClock(moment: (atNanos: Long) -> Long?): ExternalClock`, a clock that
+  answers the position whose time of day `moment` names for each question. Two players on one live
+  stream that follow it with the same `moment`, such as a shared wall clock less a fixed delay, line
+  up on the same broadcast moment rather than on media time, which differs between two joins of
+  one stream. On a stream that cannot seek, the clock's speed trim closes a difference up to 150 ms,
+  and a larger one stays, because the seek it would take is refused.
+- `KitePlayerJava`: `timeOfDayAtMillis(positionMillis)`, `positionAtTimeOfDayMillis(epochMillis)`
+  and `seekToTimeOfDayAsync(epochMillis, mode)`.
+- The SPI: `PlayerMediaSource.timeOfDayAt(position: Pts): Long?`,
+  `PlayerMediaSource.positionAtTimeOfDay(epochMillis: Long): Pts?` and
+  `PlayerMediaSource.timeOfDaySpan: LongRange?`, defaulted to null so an existing source keeps
+  compiling. The engine calls them from its own thread and from the callers' threads, while the
+  demux lane reads, so a source keeps what they answer behind a lock.
+
+Tests: a local HLS event playlist with `EXT-X-PROGRAM-DATE-TIME` on its segments, served by the
+test HTTP server: the published time of day equals the tag of the segment that plays plus the
+offset into it, and a seek to a time of day lands in the segment that holds it. A live DASH
+manifest gives its segments' dates through `availabilityStartTime`. A stream without dates
+publishes none. The playlist reading and the time map have their own tests: the carried dates,
+the discontinuity, the gap of a late reload, and both directions of the map.

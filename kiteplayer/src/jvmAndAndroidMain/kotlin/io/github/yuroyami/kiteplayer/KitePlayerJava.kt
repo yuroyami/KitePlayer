@@ -103,6 +103,14 @@ public class KitePlayerJava(
         registrations.remove(listener)?.cancel()
     }
 
+    // ---- Times of day ---------------------------------------------------------------------------
+
+    /** `KitePlayer.timeOfDayAt` for [positionMillis]: milliseconds since 1970 UTC, or null (#444). */
+    public fun timeOfDayAtMillis(positionMillis: Long): Long? = player.timeOfDayAt(positionMillis.milliseconds)
+
+    /** `KitePlayer.positionAtTimeOfDay` in milliseconds, or null where the stream states no time (#444). */
+    public fun positionAtTimeOfDayMillis(epochMillis: Long): Long? = player.positionAtTimeOfDay(epochMillis)?.inWholeMilliseconds
+
     // ---- Futures --------------------------------------------------------------------------------
 
     /** `KitePlayer.open`. Completes once [media] is open and paused on its first frame. */
@@ -112,6 +120,11 @@ public class KitePlayerJava(
     @JvmOverloads
     public fun seekAsync(positionMillis: Long, mode: SeekMode = SeekMode.Precise): CompletableFuture<Void?> =
         launchCall { player.seek(positionMillis.milliseconds, mode) }
+
+    /** `KitePlayer.seekToTimeOfDay`: the moment broadcast at [epochMillis], milliseconds since 1970 UTC (#444). */
+    @JvmOverloads
+    public fun seekToTimeOfDayAsync(epochMillis: Long, mode: SeekMode = SeekMode.Precise): CompletableFuture<Void?> =
+        launchCall { player.seekToTimeOfDay(epochMillis, mode) }
 
     /** `KitePlayer.stop`. */
     public fun stopAsync(): CompletableFuture<Void?> = launchCall { player.stop() }

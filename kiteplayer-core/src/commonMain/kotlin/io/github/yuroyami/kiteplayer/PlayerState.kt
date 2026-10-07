@@ -270,6 +270,24 @@ public data class Progress(
      * from other addresses. [bufferedAhead] still says how far ahead the demuxer has read.
      */
     val bufferedRanges: List<ClosedRange<Duration>> = emptyList(),
+    /**
+     * The time of day at which [position] was broadcast, in milliseconds since 1970 UTC, for a
+     * stream that states it: HLS with `EXT-X-PROGRAM-DATE-TIME` on its segments, and DASH with
+     * the manifest's `availabilityStartTime` (#444). Null for a stream that states nothing.
+     * [KitePlayer.timeOfDayAt] answers for any other position.
+     */
+    val timeOfDayMillis: Long? = null,
+    /**
+     * The earliest moment the stream lists, in milliseconds since 1970 UTC, or null when it states
+     * no time. For a recording it is the time of day of its start.
+     */
+    val firstTimeOfDayMillis: Long? = null,
+    /**
+     * The latest moment the stream lists, in milliseconds since 1970 UTC, or null when it states no
+     * time. For a recording it is the time of day of its end, and for a live stream the live edge
+     * as the latest playlist lists it.
+     */
+    val lastTimeOfDayMillis: Long? = null,
 ) {
     /** [position] in milliseconds. For Java, which cannot read a [Duration] (#394). */
     public val positionMillis: Long get() = position.inWholeMilliseconds

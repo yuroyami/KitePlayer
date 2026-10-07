@@ -231,6 +231,57 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.seekLater(Pts.ofDuration(validPosition(to, "requestSeek")), mode)
     }
 
+    /**
+     * The time of day at which [position] of the current item was broadcast, in milliseconds since
+     * 1970 UTC, for a stream that states it: HLS with `EXT-X-PROGRAM-DATE-TIME` on its segments,
+     * and DASH with the manifest's `availabilityStartTime` (#444). Null for a stream that states
+     * nothing, or nothing for [position]. [Progress.timeOfDayMillis] publishes the answer for the
+     * position as it moves, and [Progress.firstTimeOfDayMillis] and [Progress.lastTimeOfDayMillis]
+     * the moments the stream lists.
+     *
+     * Answers at once, from any thread. The first segment the player reads starts the timeline of
+     * positions, and a position's time of day is its segment's date plus the offset into it.
+     */
+    public fun timeOfDayAt(position: Duration): Long? = core.timeOfDayAt(position)
+
+    /**
+     * The position of the current item broadcast at [epochMillis], milliseconds since 1970 UTC, or
+     * null when the stream states no time for that moment. The inverse of [timeOfDayAt].
+     */
+    public fun positionAtTimeOfDay(epochMillis: Long): Duration? = core.positionAtTimeOfDay(epochMillis)
+
+    /**
+     * Seeks to the moment broadcast at [epochMillis], milliseconds since 1970 UTC, as [seek] does to
+     * the position [positionAtTimeOfDay] gives for it. A recording of a live stream, or an HLS event
+     * playlist that has ended, can go to a time of day this way.
+     *
+     * @throws IllegalArgumentException when the stream states no position for [epochMillis].
+     * @throws UnsupportedOperationException when the source cannot seek, which a live stream cannot.
+     * @throws IllegalStateException as [seek] does.
+     */
+    @Throws(Exception::class)
+    public suspend fun seekToTimeOfDay(epochMillis: Long, mode: SeekMode = SeekMode.Precise) {
+        val position = requireNotNull(positionAtTimeOfDay(epochMillis)) {
+            "the stream states no position for the time of day $epochMillis"
+        }
+        seek(position, mode)
+    }
+
+    /**
+     * A clock for [setExternalClock] that follows a time of day (#444): for each question, [moment]
+     * names the time of day, in milliseconds since 1970 UTC, whose broadcast should be heard at that
+     * instant, and the clock answers its position. [moment] is asked on the session thread, with the
+     * instant of the question on the player's own clock, and must return at once.
+     *
+     * Two players on one live stream that follow the same [moment], such as a shared wall clock less
+     * a fixed delay, line up on the same broadcast moment rather than on media time, which differs
+     * between two joins of one stream. On a stream that cannot seek, the clock's speed trim closes a
+     * difference up to 150 ms, and a larger one stays, because the seek it would take is refused.
+     */
+    public fun timeOfDayClock(moment: (atNanos: Long) -> Long?): ExternalClock = ExternalClock { atNanos ->
+        moment(atNanos)?.let(core::positionAtTimeOfDay)
+    }
+
     /** The old name of [requestSeek]. It never waited, which the name did not say. */
     @Deprecated("Renamed to requestSeek: it asks for a seek and returns at once.", ReplaceWith("requestSeek(to, mode)"))
     @Throws(IllegalStateException::class, IllegalArgumentException::class)

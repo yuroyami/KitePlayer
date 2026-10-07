@@ -41,6 +41,8 @@ internal class HlsOpen(
     val selectedVariant: Int? = null,
     /** The seek bar pictures of a master playlist that names an image stream, or null (#433). */
     val thumbnails: HlsThumbnails? = null,
+    /** The time of day of the stream's positions, from its playlists' dates (#444). */
+    val times: HlsTimeOfDay = HlsTimeOfDay(),
 ) {
     /**
      * The pre-open options this open adds. A segment address often has no file extension, so
@@ -65,9 +67,14 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
     val ledger = HlsLedger(item.uri)
     // The kept variant's backups stand in for it when an address fails (#440).
     val failover = HlsFailover(master?.backups.orEmpty(), base)
+    val times = HlsTimeOfDay()
+    // FFmpeg reloads a media playlist from its own address, which is the base it reads it under.
+    if (master == null) times.read(base, text)
     val opener = if (io.location != null && nestedOpensSupported) {
-        MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger, failover) }
+        MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger, failover, times) }
     } else {
+        // No segment open will say where FFmpeg starts, which for a playlist that has ended is its first.
+        times.anchorAtStart(base)
         null
     }
     val variants = master?.variants.orEmpty().mapIndexed { index, variant ->
@@ -83,7 +90,7 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
     }
     // The pictures are read through the item's own reader, as its segments are (#433).
     val thumbnails = HlsThumbnails.choose(hlsImageStreams(text))?.let { HlsThumbnails(io, base, it) }
-    return HlsOpen(PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen, thumbnails)
+    return HlsOpen(PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen, thumbnails, times)
 }
 
 /**
@@ -92,7 +99,14 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
  * addresses against it after it has put in the playlist's variables, exactly as it does after a
  * redirect its own `http` follows. The playlist reaches FFmpeg as the server sent it.
  */
-private fun openRelatedBridge(io: MediaIo, address: String, lifetime: Job, ledger: HlsLedger, failover: HlsFailover): MediaByteSource? =
+private fun openRelatedBridge(
+    io: MediaIo,
+    address: String,
+    lifetime: Job,
+    ledger: HlsLedger,
+    failover: HlsFailover,
+    times: HlsTimeOfDay,
+): MediaByteSource? =
     blockingIn(lifetime) {
         val related = try {
             if (failover.isEmpty) io.openRelated(address) else failover.open(address) { target -> io.openRelated(target) }
@@ -105,7 +119,10 @@ private fun openRelatedBridge(io: MediaIo, address: String, lifetime: Job, ledge
             ledger.failed(address, "the reader refused the address")
             return@blockingIn null
         }
-        BlockingMediaIo(LedgeredMediaIo(related, address, ledger), lifetime)
+        times.opened(address)
+        // A playlist among the addresses, a variant's or a live reload, gives its dates (#444).
+        val dated = PlaylistDates(LedgeredMediaIo(related, address, ledger), address, related.location ?: address, times)
+        BlockingMediaIo(dated, lifetime)
     }
 
 /** Reads [io] to its end, refusing a playlist larger than [MAX_PLAYLIST_BYTES]. */
@@ -187,6 +204,70 @@ private class LedgeredMediaIo(
     }
 
     override suspend fun seek(position: Long) = upstream.seek(position)
+
+    override fun close() = upstream.close()
+}
+
+/**
+ * A related reader that hands [times] the text it delivers when that text is an HLS playlist
+ * (#444): a copy is kept from the first bytes, if they start one, until the end of the reader, and
+ * read there. Anything else passes through with nothing kept. [base] is where the playlist's
+ * addresses resolve, the address FFmpeg asked for after any redirect.
+ */
+internal class PlaylistDates(
+    private val upstream: MediaIo,
+    private val address: String,
+    private val base: String,
+    private val times: HlsTimeOfDay,
+) : MediaIo {
+    /** The text so far while it may be a playlist, and null once it is not or once it was read. */
+    private var copy: ByteArray? = ByteArray(0)
+    private var copied = 0
+
+    override val size: Long? get() = upstream.size
+    override val seekable: Boolean get() = upstream.seekable
+    override val location: String? get() = upstream.location
+    override val contentType: String? get() = upstream.contentType
+
+    override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
+        val count = upstream.read(into, offset, length)
+        val kept = copy ?: return count
+        when {
+            count < 0 -> {
+                copy = null
+                times.read(address, kept.decodeToString(0, copied), base)
+            }
+            count > 0 -> keep(kept, into, offset, count)
+        }
+        return count
+    }
+
+    private fun keep(kept: ByteArray, from: ByteArray, offset: Int, count: Int) {
+        if (copied < HLS_SNIFF_BYTES) {
+            // Decided on the first bytes, so a segment costs a copy of those alone.
+            val head = ByteArray(minOf(HLS_SNIFF_BYTES, copied + count))
+            kept.copyInto(head, 0, 0, copied)
+            from.copyInto(head, copied, offset, offset + head.size - copied)
+            if (head.size == HLS_SNIFF_BYTES && !startsLikeHls(head)) {
+                copy = null
+                return
+            }
+        }
+        if (copied + count > MAX_PLAYLIST_BYTES) {
+            copy = null
+            return
+        }
+        val target = if (copied + count > kept.size) kept.copyOf(maxOf(copied + count, kept.size * 2, 4_096)) else kept
+        from.copyInto(target, copied, offset, offset + count)
+        copied += count
+        copy = target
+    }
+
+    override suspend fun seek(position: Long) {
+        // FFmpeg reads a playlist from its start to its end; a reader it moves is not one.
+        if (position != copied.toLong()) copy = null
+        upstream.seek(position)
+    }
 
     override fun close() = upstream.close()
 }

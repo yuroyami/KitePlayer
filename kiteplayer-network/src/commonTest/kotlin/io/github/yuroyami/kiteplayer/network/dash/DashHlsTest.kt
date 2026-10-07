@@ -343,6 +343,47 @@ class DashHlsTest {
     }
 
     @Test
+    fun aLivePlaylistDatesEachSegmentFromTheAvailabilityStart() = runTest {
+        // 2026-10-07T21:00:00Z, and a Period that starts ten seconds after it.
+        val start = 1_791_406_800_000_000L
+        val manifest = parse(live.replace("1970-01-01T00:00:00Z", "2026-10-07T21:00:00Z").replace("<Period start=\"PT0S\">", "<Period start=\"PT10S\">"))
+        val presentation = DashHls.presentation(manifest.periods.single(), live = true)
+        val io = DashHlsMediaIo(presentation, manifest, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default, { BytesMediaIo(ByteArray(0)) }, null, { start + 71_000_000L })
+        val playlist = io.openRelated(presentation.tracks.single().address)!!.readAll().decodeToString()
+        // 61 s into the Period, segments 125 to 129 start at 50 to 58 s of it, 60 to 68 s after the start (#444).
+        val dates = Regex("#EXT-X-PROGRAM-DATE-TIME:(.*)").findAll(playlist).map { it.groupValues[1] }.toList()
+        assertEquals((0..8 step 2).map { "2026-10-07T21:01:0$it.000Z" }, dates, playlist)
+        assertTrue(playlist.indexOf("#EXT-X-PROGRAM-DATE-TIME") < playlist.indexOf("v-125.m4s"), "a date comes before its segment")
+    }
+
+    @Test
+    fun aManifestWithoutAnAvailabilityStartDatesNothing() = runTest {
+        val manifest = parse(separateSets)
+        val presentation = DashHls.presentation(manifest.periods.single())
+        val io = DashHlsMediaIo(presentation, manifest, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default, { BytesMediaIo(ByteArray(0)) }, null, { 0L })
+        val playlist = io.openRelated(presentation.tracks.first().address)!!.readAll().decodeToString()
+        assertFalse("#EXT-X-PROGRAM-DATE-TIME" in playlist, playlist)
+    }
+
+    @Test
+    fun aRecordingThatStatesItsAvailabilityStartIsDatedToo() = runTest {
+        // A finished presentation that keeps the live one's clock, as a recording of a broadcast does.
+        val manifest = parse(separateSets.replace("<MPD type=\"static\"", "<MPD type=\"static\" availabilityStartTime=\"2026-10-07T21:00:00Z\""))
+        val presentation = DashHls.presentation(manifest.periods.single())
+        val io = DashHlsMediaIo(presentation, manifest, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default, { BytesMediaIo(ByteArray(0)) }, null, { 0L })
+        val playlist = io.openRelated(presentation.tracks.first().address)!!.readAll().decodeToString()
+        val dates = Regex("#EXT-X-PROGRAM-DATE-TIME:(.*)").findAll(playlist).map { it.groupValues[1] }.toList()
+        assertEquals(listOf("2026-10-07T21:00:00.000Z", "2026-10-07T21:00:04.000Z", "2026-10-07T21:00:08.000Z"), dates, playlist)
+    }
+
+    @Test
+    fun aDateIsWrittenAsTheManifestReaderReadsIt() {
+        for (written in listOf("1970-01-01T00:00:00.000Z", "2026-10-07T21:34:05.123Z", "2000-02-29T23:59:59.999Z", "1969-12-31T23:59:59.500Z")) {
+            assertEquals(written, DashHls.dateTime(DashManifestParser.parseDateTimeMicros(written)))
+        }
+    }
+
+    @Test
     fun aLiveTimelineThatRepeatsToTheEdgeStopsThere() {
         val manifest = parse(
             """

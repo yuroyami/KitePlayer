@@ -757,6 +757,14 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
   reference to a variable that nothing defined fails the open, and the error names it.
 - A segment that cannot be read is skipped, and `PlaybackWarning.SegmentSkipped` says so. A stream
   that ends while its last segments fail ends with `PlaybackError.SourceUnavailable`.
+- `EXT-X-PROGRAM-DATE-TIME` gives each position the time of day it was broadcast
+  ([#444](https://github.com/yuroyami/KitePlayer/issues/444)), in milliseconds since 1970 UTC.
+  `Progress.timeOfDayMillis` publishes it for the position, and `firstTimeOfDayMillis` and
+  `lastTimeOfDayMillis` for the moments the playlist lists, the last of a live one being its edge.
+  `KitePlayer.timeOfDayAt` and `positionAtTimeOfDay` map both ways, `seekToTimeOfDay` goes to one
+  in a stream that can seek, and `timeOfDayClock` makes two players on one live stream follow the
+  same broadcast moment. A DASH manifest's `availabilityStartTime` gives the same. A playlist that
+  names its segments through variables gives no time of day yet.
 - `MediaItem.headers` go only to the scheme, host and port of the item's own address, because a
   playlist can name segments on any server.
 - Your own `MediaIo` can serve HLS too: report the address it read in `location`, and open the

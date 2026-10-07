@@ -235,6 +235,12 @@ internal class MediaScript(
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
     /** The seek bar pictures the scripted stream carries, or null (#433). */
     val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? = null,
+    /**
+     * The time of day of the stream's start, in milliseconds since 1970 UTC, as an HLS stream's
+     * dates state it (#444), or null for a stream that states none. Positions then run in step
+     * with it, up to the duration.
+     */
+    val timeOfDayOriginMillis: Long? = null,
     /** A read delay for one variant, in place of [readDelayUs]: a link too slow for that variant. */
     val readDelayUsByVariant: Map<Int, Long> = emptyMap(),
     /**
@@ -985,6 +991,17 @@ internal class ScriptedSource(
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
 
     override val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? get() = script.thumbnails
+
+    override fun timeOfDayAt(position: Pts): Long? =
+        script.timeOfDayOriginMillis?.takeIf { position.micros in 0..script.durationUs }?.let { it + position.micros / 1_000 }
+
+    override fun positionAtTimeOfDay(epochMillis: Long): Pts? {
+        val origin = script.timeOfDayOriginMillis ?: return null
+        return Pts((epochMillis - origin) * 1_000).takeIf { it.micros in 0..script.durationUs }
+    }
+
+    override val timeOfDaySpan: LongRange?
+        get() = script.timeOfDayOriginMillis?.let { it..(it + script.durationUs / 1_000) }
 
     override var programs: List<io.github.yuroyami.kiteplayer.MediaProgram> = script.programs
         private set

@@ -415,8 +415,9 @@ exactly what it drew before.
 
 ## Time of day for live streams
 
-Planned API contract for #444. The implementation and the generated ABI follow in a separate
-change.
+The contract for #444. A playlist that names its segments through variables, `EXT-X-DEFINE`,
+gives no time of day yet, because the addresses FFmpeg opens are matched against the playlist's
+text as written.
 
 **Where the times come from.**
 

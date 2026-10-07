@@ -690,6 +690,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun pause ()V
 	public final fun play ()V
 	public final fun position-UwyO8pc ()J
+	public final fun positionAtTimeOfDay-LV8wdWc (J)Lkotlin/time/Duration;
 	public final fun previous (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun previousChapter (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun readPlaylist (Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -710,6 +711,8 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun seekToChapter (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun seekToSubtitleLine-3nIYWDw (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun seekToSubtitleLine-3nIYWDw$default (Lio/github/yuroyami/kiteplayer/KitePlayer;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun seekToTimeOfDay (JLio/github/yuroyami/kiteplayer/SeekMode;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun seekToTimeOfDay$default (Lio/github/yuroyami/kiteplayer/KitePlayer;JLio/github/yuroyami/kiteplayer/SeekMode;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun selectProgram (Ljava/lang/Integer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun selectSecondarySubtitle-Cr4VdJg (Lio/github/yuroyami/kiteplayer/TrackId;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun selectTrack-rt36JlU (Lio/github/yuroyami/kiteplayer/TrackKind;Lio/github/yuroyami/kiteplayer/TrackId;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -758,6 +761,8 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun stopRecording (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun supportBundle ()Ljava/lang/String;
 	public final fun thumbnailAt-VtjQ1oo (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun timeOfDayAt-LRDsOJo (J)Ljava/lang/Long;
+	public final fun timeOfDayClock (Lkotlin/jvm/functions/Function1;)Lio/github/yuroyami/kiteplayer/ExternalClock;
 	public final fun warningHistory ()Ljava/util/List;
 }
 
@@ -2424,19 +2429,25 @@ public final class io/github/yuroyami/kiteplayer/ProbeDepth$Thorough : io/github
 
 public final class io/github/yuroyami/kiteplayer/Progress {
 	public fun <init> ()V
-	public synthetic fun <init> (JJLjava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (JJLjava/util/List;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JJLjava/util/List;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JJLjava/util/List;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1-UwyO8pc ()J
 	public final fun component2-UwyO8pc ()J
 	public final fun component3 ()Ljava/util/List;
-	public final fun copy-NqJ4yvY (JJLjava/util/List;)Lio/github/yuroyami/kiteplayer/Progress;
-	public static synthetic fun copy-NqJ4yvY$default (Lio/github/yuroyami/kiteplayer/Progress;JJLjava/util/List;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/Progress;
+	public final fun component4 ()Ljava/lang/Long;
+	public final fun component5 ()Ljava/lang/Long;
+	public final fun component6 ()Ljava/lang/Long;
+	public final fun copy-xImDYq4 (JJLjava/util/List;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;)Lio/github/yuroyami/kiteplayer/Progress;
+	public static synthetic fun copy-xImDYq4$default (Lio/github/yuroyami/kiteplayer/Progress;JJLjava/util/List;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/Progress;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getBufferedAhead-UwyO8pc ()J
 	public final fun getBufferedAheadMillis ()J
 	public final fun getBufferedRanges ()Ljava/util/List;
+	public final fun getFirstTimeOfDayMillis ()Ljava/lang/Long;
+	public final fun getLastTimeOfDayMillis ()Ljava/lang/Long;
 	public final fun getPosition-UwyO8pc ()J
 	public final fun getPositionMillis ()J
+	public final fun getTimeOfDayMillis ()Ljava/lang/Long;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -3656,15 +3667,18 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerMediaSou
 	public fun getStreamDivergences ()Ljava/util/List;
 	public abstract fun getStreams ()Ljava/util/List;
 	public fun getThumbnails ()Lio/github/yuroyami/kiteplayer/spi/PlayerThumbnails;
+	public fun getTimeOfDaySpan ()Lkotlin/ranges/LongRange;
 	public abstract fun getTimestampsMayJump ()Z
 	public fun getVariants ()Ljava/util/List;
 	public fun interrupt ()Z
 	public fun pauseReading ()Z
+	public fun positionAtTimeOfDay-iQ5BAKg (J)Lio/github/yuroyami/kiteplayer/Pts;
 	public abstract fun readPacket (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun resumeReading ()Z
 	public abstract fun seekToKeyframe-HwpeAyI (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seekToKeyframe-h5-aQVI (JLio/github/yuroyami/kiteplayer/KeyframeChoice;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun selectStreams (Ljava/util/Set;)V
+	public fun timeOfDayAt-gzNCz5I (J)Ljava/lang/Long;
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/PlayerMediaSource$DefaultImpls {
@@ -3677,11 +3691,14 @@ public final class io/github/yuroyami/kiteplayer/spi/PlayerMediaSource$DefaultIm
 	public static fun getSeparateAudioRenditions (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Z
 	public static fun getStreamDivergences (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Ljava/util/List;
 	public static fun getThumbnails (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Lio/github/yuroyami/kiteplayer/spi/PlayerThumbnails;
+	public static fun getTimeOfDaySpan (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Lkotlin/ranges/LongRange;
 	public static fun getVariants (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Ljava/util/List;
 	public static fun interrupt (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Z
 	public static fun pauseReading (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Z
+	public static fun positionAtTimeOfDay-iQ5BAKg (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;J)Lio/github/yuroyami/kiteplayer/Pts;
 	public static fun resumeReading (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Z
 	public static fun seekToKeyframe-h5-aQVI (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;JLio/github/yuroyami/kiteplayer/KeyframeChoice;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun timeOfDayAt-gzNCz5I (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;J)Ljava/lang/Long;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerPacket : java/lang/AutoCloseable {

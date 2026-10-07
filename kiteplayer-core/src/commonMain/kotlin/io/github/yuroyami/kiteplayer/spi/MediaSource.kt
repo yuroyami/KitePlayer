@@ -129,6 +129,27 @@ public interface PlayerMediaSource : AutoCloseable {
     public val separateAudioRenditions: Boolean get() = false
 
     /**
+     * The time of day at which [position] was broadcast, in milliseconds since 1970 UTC, for a
+     * stream that states it, such as HLS with `EXT-X-PROGRAM-DATE-TIME` (#444). Null when the
+     * stream states nothing, or nothing for that position.
+     *
+     * The engine calls this and the two members below from its own thread and from the callers'
+     * threads while the demux lane reads, so a source keeps what they answer behind a lock. They
+     * must return at once. Defaulted to null, so an existing source keeps compiling and states no
+     * time.
+     */
+    public fun timeOfDayAt(position: Pts): Long? = null
+
+    /** The position broadcast at [epochMillis], milliseconds since 1970 UTC, or null where the stream states none. */
+    public fun positionAtTimeOfDay(epochMillis: Long): Pts? = null
+
+    /**
+     * The earliest and the latest moment the stream lists, in milliseconds since 1970 UTC, or null
+     * when it states no time. For a live stream, the latest is the live edge.
+     */
+    public val timeOfDaySpan: LongRange? get() = null
+
+    /**
      * Tells the sender of a [realTime] stream that the player has stopped reading because it is
      * paused (#441), and says whether the source has any notion of that: true when it has and is
      * now paused, false when it has none, in which case nothing was sent and the source reads on.

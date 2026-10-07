@@ -2156,6 +2156,38 @@ internal class PlaybackCore(
         return itemTime(if (masked != NO_SEEK_MASK) masked else publishedPositionMicros.value).microseconds
     }
 
+    /**
+     * The source whose positions have a time of day (#444), published by the actor on every pass,
+     * so a caller on any thread asks the one that is open. A source answers these behind its own
+     * lock, and a closed one still answers from what it read.
+     */
+    private val timeOfDaySource = atomic<PlayerMediaSource?>(null)
+
+    /** The time of day of [position], a position of the current item, or null where none is stated. */
+    fun timeOfDayAt(position: Duration): Long? {
+        val source = timeOfDaySource.value ?: return null
+        return askSource { source.timeOfDayAt(Pts(fileTime(position.inWholeMicroseconds))) }
+    }
+
+    /** The position of the current item broadcast at [epochMillis], or null where none is stated. */
+    fun positionAtTimeOfDay(epochMillis: Long): Duration? {
+        val source = timeOfDaySource.value ?: return null
+        return askSource { source.positionAtTimeOfDay(epochMillis) }?.let { itemTime(it.micros).microseconds }
+    }
+
+    private fun timeOfDaySpan(): LongRange? {
+        val source = timeOfDaySource.value ?: return null
+        return askSource { source.timeOfDaySpan }
+    }
+
+    /** A question about the time of day that the source cannot answer is no answer, never a failure of the player. */
+    private inline fun <T> askSource(question: () -> T?): T? = try {
+        question()
+    } catch (refused: Exception) {
+        if (refused is CancellationException) throw refused
+        null
+    }
+
     /** One atomic mapping read, projected to the host instant of this call. */
     fun audioClock(): AudioClockSnapshot {
         val snapshot = publishedAudioClock.value
@@ -11523,15 +11555,22 @@ internal class PlaybackCore(
         val session = session
         val now = clock.nanos()
         publishAudioClock(session, now)
+        // Every pass, so a caller's question about the time of day reaches the open source at once.
+        timeOfDaySource.value = session?.source
         if (force || (now - lastProgressAtNanos).nanoseconds >= config.progressInterval) {
             lastProgressAtNanos = now
             if (session != null) noteFurthestPosition(session)
+            // The masked read, deliberately: the progress flow feeds the same seek bars that
+            // poll position(), and the two must never disagree about which timeline is current.
+            val shown = position()
+            val span = timeOfDaySpan()
             progressState.value = Progress(
-                // The masked read, deliberately: the progress flow feeds the same seek bars that
-                // poll position(), and the two must never disagree about which timeline is current.
-                position = position(),
+                position = shown,
                 bufferedAhead = bufferedAhead(session),
                 bufferedRanges = bufferedRanges(session),
+                timeOfDayMillis = timeOfDayAt(shown),
+                firstTimeOfDayMillis = span?.first,
+                lastTimeOfDayMillis = span?.last,
             )
         }
         if (force || (now - lastStatsAtNanos).nanoseconds >= config.statsInterval) {

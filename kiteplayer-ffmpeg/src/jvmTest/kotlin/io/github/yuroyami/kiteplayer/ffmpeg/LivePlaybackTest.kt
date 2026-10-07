@@ -18,6 +18,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -82,9 +83,12 @@ class LivePlaybackTest {
         val local = multicastLoopAddress()
         assumeTrue("no interface here loops multicast back to this host", local != null)
         checkNotNull(local)
-        val port = freePort()
-        playsInSync("udp multicast on $local", MediaItem("udp://$GROUP:$port?localaddr=$local")) {
-            sender(clip, "multicast", listOf("-f", "mpegts", "udp://$GROUP:$port?localaddr=$local&ttl=1&pkt_size=1316"))
+        val port = DatagramSocket(0).use { it.localPort }
+        playsInSync("udp multicast on $local:$port", MediaItem("udp://$GROUP:$port?localaddr=$local")) {
+            MulticastTestSender.start(
+                clip, local, GROUP, port,
+                File(MarkerClip.dir, "sender-multicast-${System.nanoTime()}.log"),
+            )
         }
     }
 
@@ -369,14 +373,15 @@ class LivePlaybackTest {
         name: String,
         item: MediaItem,
         retryOpen: Boolean = false,
-        startSender: (() -> FFmpegProcess)? = null,
+        startSender: (() -> AutoCloseable)? = null,
     ) {
         val output = PacedOutput()
         val renderer = FlashRecorder()
         val player = KitePlayer.create(
             PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), output), progressInterval = 50.milliseconds),
         )
-        var sender: FFmpegProcess? = null
+        var sender: AutoCloseable? = null
+        var failure: Throwable? = null
         try {
             player.attachRendererAndAwait(renderer)
             withTimeout(30.seconds) {
@@ -400,9 +405,28 @@ class LivePlaybackTest {
             assertTrue(offsets.all { it in -40.0..60.0 }, "$name: sound behind the picture by $offsets ms, outside -40 to 60")
             val unused = warnings.filterIsInstance<PlaybackWarning.OptionsUnused>()
             assertTrue(unused.isEmpty(), "$name: options went unused: $unused")
+        } catch (caught: Throwable) {
+            failure = caught
+            throw caught
         } finally {
-            player.closeAndAwait()
-            sender?.close()
+            var cleanupFailure: Throwable? = null
+            try {
+                player.closeAndAwait()
+            } catch (caught: Throwable) {
+                cleanupFailure = caught
+            }
+            try {
+                sender?.close()
+            } catch (caught: Throwable) {
+                val previous = cleanupFailure
+                if (previous == null) cleanupFailure = caught
+                else if (previous !== caught) previous.addSuppressed(caught)
+            }
+            cleanupFailure?.let { caught ->
+                val original = failure
+                if (original == null) throw caught
+                if (original !== caught) original.addSuppressed(caught)
+            }
         }
     }
 

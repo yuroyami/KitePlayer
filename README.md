@@ -401,6 +401,18 @@ LaunchedEffect(Unit) {
 > video are painted but never pressed. Use the canvas path there, or keep the controls beside the
 > video.
 
+The video has no controls until you ask for them. `KitePlayerControls` draws a default set over
+it: play and pause, previous and next for a queue, the seek bar, the volume, and menus for the
+audio and subtitle tracks, the quality and the speed. A tap on the picture shows or hides them.
+
+```kotlin
+KitePlayerVideo(player, Modifier.fillMaxSize()) { KitePlayerControls(player) }
+```
+
+Its words come from `KitePlayerControlsLabels`, in English unless you pass your own, and its look
+from `KitePlayerControlsStyle`. For controls of your own, build them from the same state holders,
+such as `rememberSeekBarState(player)` and `rememberTrackMenuState(player, TrackKind.Audio)`.
+
 </details>
 
 <details name="show">
@@ -1041,7 +1053,7 @@ flowchart LR
 | `kiteplayer-compose` | Everything in `kiteplayer`, plus both Compose video paths and the switch between them. The complete Compose entry point. |
 | `kiteplayer` | The default playback stack for native views: engine, FFmpeg decoders, audio output, view adapters, HTTP and HTTPS, libass, input doors. |
 | `kiteplayer-audioviz` | Optional. An audio visualiser for files with no picture: presets, palettes, and a director that changes drawings with the music. |
-| `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo` and both video paths. No player factory, no network. |
+| `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo`, both video paths and the default controls, `KitePlayerControls`. No player factory, no network. |
 | `kiteplayer-compose-interop` | Compose hosting the platform's native video view: `KitePlayerSurface`. `KitePlayerVideo` uses it at runtime; add it yourself only to call `KitePlayerSurface` directly. |
 | `kiteplayer-compose-video` | Video drawn by Compose itself: `KiteVideo`. `KitePlayerVideo` uses it at runtime; add it yourself only to draw with `KiteVideo` directly, for example in a second window. |
 | `kiteplayer-view` | The native views: `KitePlayerView` on Android, `KitePlayerUIView` on iOS, `KitePlayerAwtView` on the desktop JVM. |

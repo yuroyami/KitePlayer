@@ -10,7 +10,7 @@ found.
 |---|---|
 | `kiteplayer` | Default playback assembly: core, FFmpeg, output, native view bindings and HTTP/HTTPS transport. No Compose dependency. |
 | `kiteplayer-compose` | Complete playback, `KitePlayerVideo` with both Compose video paths and the runtime path switcher, and `rememberKitePlayer`. One dependency for a Compose app, including apps also using XML. |
-| `kiteplayer-compose-ui` | `KitePlayerVideo`, which accepts an existing player. Does not depend on the playback assembly or automatically add networking. It depends on the two path modules with `implementation`, so their composables are not on a consumer's compile classpath; an app that calls `KitePlayerSurface` or `KiteVideo` directly depends on that module itself. |
+| `kiteplayer-compose-ui` | `KitePlayerVideo`, which accepts an existing player, and `KitePlayerControls`, default controls drawn over it. Does not depend on the playback assembly or automatically add networking. It depends on the two path modules with `implementation`, so their composables are not on a consumer's compile classpath; an app that calls `KitePlayerSurface` or `KiteVideo` directly depends on that module itself. |
 | `kiteplayer-core` | Engine and service contracts. Does not depend on FFmpeg, Ktor or Compose. |
 
 The individual backend, network, view and Compose renderer modules remain available for custom
@@ -327,8 +327,7 @@ position.
 
 ## Default player controls
 
-Planned API contract for #469. The implementation, the generated ABI and the size baseline follow
-in separate changes. Everything lives in `kiteplayer-compose-ui`, in the
+The contract for #469. Everything lives in `kiteplayer-compose-ui`, in the
 `io.github.yuroyami.kiteplayer.compose` package, beside `KitePlayerVideo`. The module gains
 `implementation(compose.foundation)`, which an application already receives through
 `kiteplayer-compose-video`, and no Material artifact: the owner decided on 2026-10-07 against
@@ -345,9 +344,11 @@ its own look builds it from these; the default controls use nothing else.
   ranges as fractions of the duration. When `Progress.bufferedRanges` is empty, which it is for
   HLS and with the byte cache off, one range runs from the position to `Progress.bufferedAhead`.
   `startScrub(fraction)`, `scrubTo(fraction)`, `endScrub()` and `cancelScrub()` move a scrub
-  target without moving playback; each scrub step calls `requestSeek` with `KeyframeThenRefine`,
-  and the end asks the last target once more. `stepBy(delta)` jumps from the position.
-  `preview` is `KitePlayer.thumbnailAt` for the scrub target, or null.
+  target, which the bar shows in place of the position while the scrub lasts. Each step calls
+  `requestSeek` with `KeyframeThenRefine`, and the engine merges the steps and refines the last
+  one, so the end asks for nothing more; a cancel seeks back to where the scrub started.
+  `stepBy(delta)` jumps from the position. `preview` is `KitePlayer.thumbnailAt` for the scrub
+  target, or null.
 - `TrackMenuState`: a list of `TrackMenuOption`s, each with a `label` and `selected`, and
   `select(option)`. Made by `rememberTrackMenuState(player, kind)` for audio or subtitles, where
   subtitles have an off option first; by `rememberQualityMenuState(player)`, with an automatic
@@ -356,11 +357,12 @@ its own look builds it from these; the default controls use nothing else.
 - `VolumeState`: `level` in 0..1, `muted`, `setLevel(level)` and `toggleMute()`. The level
   follows hearing through a cube, as mpv's volume does: the amplitude is the level cubed, so half
   the slider is an eighth of the amplitude, about 18 dB down. A volume above 1 shows as a full
-  slider and is left alone until the slider moves.
+  slider and is left alone until the slider moves. Moving the slider above 0 takes the mute off.
 - `ControlsVisibility`: `visible`, `show()`, `hide()` and `toggle()`, from
   `rememberControlsVisibility(player, timeout = 3.seconds)`. The controls hide after the timeout
-  only while the player plays, and any interaction, a key press or a scrub starts the timeout
-  again. A tap on the picture toggles them, and a tap and the timeout both hide them the same way.
+  only while the player was asked to play, and any interaction, a key press or a scrub starts the
+  timeout again; a scrub or an open menu holds them up. A tap on the picture toggles them, and a
+  tap and the timeout both hide them the same way.
 
 **The default controls.** `KitePlayerControls(player, modifier, visibility, style, labels,
 onFullScreen, onPictureInPicture)` draws play and pause, previous and next for a queue, the seek
@@ -376,8 +378,13 @@ only from the state holders above, from Compose Foundation and `compose.ui`.
   transport row and the seek bar lay out left to right in a right-to-left layout too, as Media3
   learned in androidx/media issue 227. Text still follows the layout direction.
 - Every control is focusable and reached by a D-pad and by the keyboard. Space and the media
-  play-pause key toggle playback, and the arrow keys step the focused seek bar by 10 seconds.
-  Focus draws a ring in the style's focus colour.
+  play-pause key toggle playback from whichever control has focus, the arrow keys step the
+  focused seek bar by 10 seconds and the focused volume by a tenth, and Escape closes a menu and
+  gives focus back to its button. While the controls are hidden, the first arrow, D-pad centre
+  or Enter only shows them and focuses play, as a television player does. Focus draws a ring in
+  the style's focus colour.
+- A menu button shows only when there is something to choose: two audio tracks, one subtitle
+  track, two qualities. Below 480 dp of width the volume shows as its mute button alone.
 - Every control has a role and a label. The seek bar and the volume, which Compose has no slider
   role for, carry `progressBarRangeInfo` and a `setProgress` action, as the visualiser's panel
   does (#326), and state the position and duration in words.
@@ -385,7 +392,8 @@ only from the state holders above, from Compose Foundation and `compose.ui`.
   back when they hide, unless the application changed the position itself in between. It is the
   same rule the session guards use for a pause they did not make.
 - On a touch screen, a horizontal drag over the picture scrubs, showing the target time, and
-  seeks where the finger lifts.
+  seeks where the finger lifts. The width of the picture stands for the whole item, or for ten
+  minutes of a longer one. A mouse drag does not scrub.
 
 **The option on `KitePlayerVideo`.** A new overload takes a required
 `controls: @Composable BoxScope.() -> Unit` after the existing parameters and draws it over the

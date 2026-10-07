@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.compose
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -87,6 +89,42 @@ public fun KitePlayerVideo(
             }
             KiteRenderPath.Auto -> error("resolveRenderPath must never return Auto")
         }
+    }
+}
+
+/**
+ * [KitePlayerVideo] with [controls] drawn over the video, for example
+ * `KitePlayerVideo(player) { KitePlayerControls(player) }`. Every other parameter is the one of
+ * the overload without controls, and [modifier] sizes the video and the controls together.
+ *
+ * On the desktop a native view takes every click, so controls drawn over
+ * [KiteRenderPath.NativeView] receive none there. Ask for [KiteRenderPath.ComposeCanvas] when the
+ * controls sit on the picture, or place them beside it.
+ */
+@Composable
+public fun KitePlayerVideo(
+    player: KitePlayer?,
+    modifier: Modifier = Modifier,
+    path: KiteRenderPath = KiteRenderPath.Auto,
+    onEffectivePath: ((KiteRenderPath) -> Unit)? = null,
+    onRendererAttached: ((KitePlayer) -> Unit)? = null,
+    keepDisplayAwake: Boolean = true,
+    accessibilityVideoLabel: String? = null,
+    accessibilityStateFormat: ((PlaybackStatus, Duration, Duration?) -> String)? = null,
+    controls: @Composable BoxScope.() -> Unit,
+) {
+    Box(modifier) {
+        KitePlayerVideo(
+            player,
+            Modifier.matchParentSize(),
+            path,
+            onEffectivePath,
+            onRendererAttached,
+            keepDisplayAwake,
+            accessibilityVideoLabel,
+            accessibilityStateFormat,
+        )
+        controls()
     }
 }
 

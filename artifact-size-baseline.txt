@@ -48,8 +48,8 @@ kiteplayer-compose-interop iosArm64 15548
 kiteplayer-compose-video jvm 91394
 kiteplayer-compose-video android 119852
 kiteplayer-compose-video iosArm64 93282
-kiteplayer-compose-ui jvm 24481
-kiteplayer-compose-ui android 28814
+kiteplayer-compose-ui jvm 212908
+kiteplayer-compose-ui android 207528
 kiteplayer-compose-ui iosArm64 30509
 kiteplayer-compose jvm 4376
 kiteplayer-compose android 3800

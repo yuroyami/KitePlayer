@@ -212,11 +212,14 @@ jobs:
       #
       # This job generated the clips above, so a test that finds one missing, or finds no ffmpeg,
       # fails here rather than skipping (#419). A missing device, such as an audio mixer, still skips.
+      # These wall-clock gates must not compete with other modules' tests or compilation (#549).
+      # Configuration caching enables parallel tasks even with --no-parallel, so this invocation
+      # disables it as well and limits Gradle to two workers. The measured bounds stay unchanged.
       - name: JVM tests, every module that has them
         env:
           KITEPLAYER_REQUIRE_TESTMEDIA: "1"
         run: |
-          ./gradlew --stacktrace \
+          ./gradlew --no-configuration-cache --no-parallel --max-workers=2 --stacktrace \
             :kiteplayer-core:jvmTest \
             :kiteplayer-subtitles:jvmTest \
             :kiteplayer-io:jvmTest \

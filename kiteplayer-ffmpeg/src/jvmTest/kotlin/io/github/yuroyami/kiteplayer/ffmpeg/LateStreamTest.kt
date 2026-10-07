@@ -23,6 +23,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -31,8 +32,8 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * A transport stream whose sound starts after the open, and then moves to a new stream, plays that
  * sound with real FFmpeg on the JVM (#509). The fixture joins three recordings of one channel end to
- * end, as a tuner recording of a live channel looks: six seconds of picture alone, longer than
- * FFmpeg's five seconds of analysis at the open, then three with a French sound beeping at 600 Hz,
+ * end, as a tuner recording of a live channel looks: six seconds without audio packets, then three
+ * with a French sound beeping at 600 Hz,
  * then three where the sound has moved to a new stream that beeps at 1000 Hz. The written file has
  * the picture as stream 0, the French sound as stream 1 and the moved sound as stream 2. The fixture
  * is written by the `ffmpeg` command line, and the test skips where there is none, as the live tests
@@ -54,10 +55,19 @@ class LateStreamTest {
     @Test
     fun aRecordingWhoseSoundIsListedBeforeItsFormatIsKnownPlaysIt() = runBlocking {
         val ffmpeg = requireTestMedia(ffmpegCli, "no ffmpeg on PATH")
-        withFixture(ffmpeg) { file, _ ->
-            // A file FFmpeg can seek in is scanned 5 MB ahead for programme tables at the open, so
-            // both sounds are listed then, before any of their packets said a rate or a channel count.
-            playsTheSoundsInTurn(MediaItem(file.absolutePath), listedAtTheOpen = true)
+        withFixture(ffmpeg, declareSoundsAtTheOpen = true) { file, _ ->
+            // Both sounds are in the first programme table, but their packets start six seconds
+            // later. Bound this test's analysis to the prefix and disable the seekable duration
+            // scan, which otherwise can learn an audio format before playback begins (#552).
+            val item = MediaItem(
+                file.absolutePath,
+                openOptions = mapOf(
+                    "analyzeduration" to "500000",
+                    "probesize" to "32768",
+                    "skip_estimate_duration_from_pts" to "1",
+                ),
+            )
+            playsTheSoundsInTurn(item, listedAtTheOpen = true)
         }
     }
 
@@ -76,7 +86,11 @@ class LateStreamTest {
             val opened = player.state.value.tracks
             if (listedAtTheOpen) {
                 assertEquals(listOf(TrackKind.Video, TrackKind.Audio, TrackKind.Audio), opened.all.map { it.kind })
-                assertEquals(null, opened.find(TrackId(1))?.sampleRate, "a rate FFmpeg does not know yet is no rate")
+                for (id in listOf(TrackId(1), TrackId(2))) {
+                    val sound = assertNotNull(opened.find(id))
+                    assertEquals(null, sound.sampleRate, "sound $id has no rate before its packets arrive")
+                    assertEquals(null, sound.channels, "sound $id has no channel count before its packets arrive")
+                }
             } else {
                 assertEquals(listOf(TrackKind.Video), opened.all.map { it.kind }, "the open found the picture alone")
                 assertEquals(null, opened.selectedAudio)
@@ -154,15 +168,24 @@ class LateStreamTest {
         override fun close() = Unit
     }
 
-    /** Writes the fixture and hands [block] the file and the length of its part with the picture alone. */
-    private suspend fun withFixture(ffmpeg: String, block: suspend (File, Int) -> Unit) {
+    /** Writes the fixture and hands [block] the file and the length of its prefix without audio packets. */
+    private suspend fun withFixture(
+        ffmpeg: String,
+        declareSoundsAtTheOpen: Boolean = false,
+        block: suspend (File, Int) -> Unit,
+    ) {
         val directory = Files.createTempDirectory("late").toFile()
         try {
             val video = arrayOf("-c:v", "libx264", "-preset", "veryfast", "-g", "25", "-pix_fmt", "yuv420p")
             fun picture(seconds: Int) = arrayOf("-f", "lavfi", "-i", "testsrc2=size=160x90:rate=25:duration=$seconds")
             fun beep(hertz: Int) = arrayOf("-f", "lavfi", "-i", "aevalsrc='0.8*sin(2*PI*$hertz*t)*lt(mod(t,1),0.1)':s=48000:c=stereo:d=3")
             val parts = listOf(
-                arrayOf(*picture(6), *video, "-output_ts_offset", "0"),
+                if (declareSoundsAtTheOpen) arrayOf(
+                    *picture(6), "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo:d=0",
+                    "-map", "0:v", "-map", "1:a", "-map", "1:a", *video, "-c:a", "aac",
+                    "-metadata:s:a", "language=fre", "-streamid", "1:0x101", "-streamid", "2:0x102",
+                    "-output_ts_offset", "0",
+                ) else arrayOf(*picture(6), *video, "-output_ts_offset", "0"),
                 arrayOf(
                     *picture(3), *beep(FRENCH_HZ), "-map", "0:v", "-map", "1:a", *video, "-c:a", "aac",
                     "-metadata:s:a:0", "language=fre", "-output_ts_offset", "6",
@@ -182,7 +205,19 @@ class LateStreamTest {
                         .start()
                     val log = process.inputStream.readBytes().decodeToString()
                     assertEquals(0, process.waitFor(), "ffmpeg could not write part $index: $log")
-                    if (index == 0) pictureAlone = part.length().toInt()
+                    if (index == 0) {
+                        val prefix = part.readBytes()
+                        pictureAlone = prefix.size
+                        if (declareSoundsAtTheOpen) {
+                            assertTrue(prefix.isNotEmpty(), "the declared-audio prefix must contain video")
+                            assertEquals(0, prefix.size % 188, "the prefix consists of complete TS packets")
+                            assertTrue(prefix.indices.step(188).none { offset ->
+                                val pid = ((prefix[offset + 1].toInt() and 0x1f) shl 8) or
+                                    (prefix[offset + 2].toInt() and 0xff)
+                                pid == 0x101 || pid == 0x102
+                            }, "the declared sounds must have no audio packets in the prefix")
+                        }
+                    }
                     part.inputStream().use { it.copyTo(joined) }
                 }
             }

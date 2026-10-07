@@ -26,8 +26,8 @@ import kotlin.time.Duration.Companion.seconds
  * is encoded to the JS object `postMessage` would copy and decoded from it, so a field that one
  * side writes under one name and the other reads under another fails here rather than in a browser.
  *
- * Every command, control, answer and failure is here, every event, all 37 warnings and all 11
- * errors, and a snapshot and statistics with every field off its default.
+ * Every command, control, answer and failure is here, every event, warning and error, and a
+ * snapshot and statistics with every field off its default.
  */
 class WorkerProtocolTest {
 
@@ -337,7 +337,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Send(control)
             assertEquals(message, message.roundTrip(), "the control ${control.member} changed on the way")
         }
-        assertEquals(30, controls.map { it.member }.distinct().size, "every control is here")
+        assertEquals(35, controls.map { it.member }.distinct().size, "every control is here")
     }
 
     @Test
@@ -399,7 +399,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(38, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(41, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test

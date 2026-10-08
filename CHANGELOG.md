@@ -513,6 +513,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `KitePlayerWorker.close` ends a worker that has not answered within three seconds, and the
   commands still waiting on it fail. Before, a worker inside a read that never returned, such as
   one of a live stream that stopped growing, could not be closed (#568).
+- On Android, a state change as the Activity ends no longer crashes the app from
+  `keepPictureInPictureParamsCurrent`. An update for an Activity that is finishing or destroyed,
+  or for a handle that was closed, does nothing (#569).
 
 ### Removed
 

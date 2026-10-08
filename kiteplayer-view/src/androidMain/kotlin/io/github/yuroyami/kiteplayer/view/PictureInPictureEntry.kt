@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.view
 import android.app.Activity
 import android.os.Handler
 import android.os.Looper
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +44,7 @@ public fun KitePlayerView.keepPictureInPictureParamsCurrent(
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val main = Handler(Looper.getMainLooper())
     val pump = PipUpdatePump(autoEnterWhilePlaying)
+    val closed = AtomicBoolean(false)
     scope.launch {
         player.state.collect { snapshot ->
             val size = snapshot.videoSize
@@ -53,9 +55,17 @@ public fun KitePlayerView.keepPictureInPictureParamsCurrent(
                 status = snapshot.status,
             ) != null
             if (changed) {
-                main.post { activity.setPictureInPictureParams(pictureInPictureParams(autoEnterWhilePlaying)) }
+                main.post {
+                    // An update posted before the close can run after it, and the OS throws for an
+                    // Activity it has let go of.
+                    if (closed.get() || activity.isFinishing || activity.isDestroyed) return@post
+                    activity.setPictureInPictureParams(pictureInPictureParams(autoEnterWhilePlaying))
+                }
             }
         }
     }
-    return AutoCloseable { scope.cancel() }
+    return AutoCloseable {
+        closed.set(true)
+        scope.cancel()
+    }
 }

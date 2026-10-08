@@ -215,6 +215,59 @@ class KitePlayerWorkerBrowserTest {
     }
 
     /**
+     * A DASH presentation plays in the worker (#546). `dash/separate.mpd` is 70 seconds long, with
+     * a 320x180 and a 640x360 picture in one set and the sound in a set of its own, each in
+     * fragmented MP4 segments of two seconds that a template names. The worker's reader recognises
+     * the manifest by its address, and the DASH door serves it to the codec module as HLS, with
+     * every segment read by a synchronous request.
+     *
+     * The seek goes to the last ten seconds, which is segment 31 of 35.
+     */
+    @Test
+    fun aDashPresentationWithSeparateSoundPlaysAndSeeksInTheWorker() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        withContext(Dispatchers.Default) {
+            val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+            val events = Channel<PlayerEvent>(Channel.UNLIMITED)
+            val subscribed = CompletableDeferred<Unit>()
+            val collector = launch {
+                player.events.onSubscription { subscribed.complete(Unit) }.collect { events.send(it) }
+            }
+            try {
+                subscribed.await()
+                player.setViewport(320, 180, 1f)
+                player.open(MediaItem("$media/dash/separate.mpd"))
+                val opened = withTimeout(30.seconds) { player.state.first { it.duration != null } }
+                val duration = assertNotNull(opened.duration)
+                assertTrue(duration in 69.seconds..71.seconds, "the worker reports the presentation's 70 seconds, not $duration")
+                assertTrue(opened.seekable, "a presentation that has ended can seek")
+                assertEquals(listOf(180, 360), opened.tracks.variants.map { it.height }, "both pictures of the manifest are listed")
+                assertEquals(setOf(TrackKind.Video, TrackKind.Audio), opened.tracks.all.map { it.kind }.toSet(), "the picture and the sound of the two sets")
+                assertEquals(2, opened.tracks.all.size, "one picture and one sound, whatever the number of variants")
+
+                player.play()
+                withTimeout(30.seconds) {
+                    while (events.receive() !is PlayerEvent.FirstFrameRendered) Unit
+                }
+                withTimeout(60.seconds) { player.progress.first { it.position >= 1.seconds } }
+
+                player.seek(60.seconds)
+                val after = withTimeout(60.seconds) { player.progress.first { it.position >= 61.seconds } }
+                assertTrue(after.position < 66.seconds, "the position after the seek is on the presentation's own timeline, not ${after.position}")
+                assertNull(player.state.value.error, "the presentation plays on after the seek")
+            } finally {
+                collector.cancel()
+                player.closeAndAwait()
+            }
+        }
+    }
+
+    /**
      * The calls past open, play, pause and seek reach the worker's player and answer as
      * `KitePlayer` does: tracks, a track selection, an external subtitle, setters seen in the
      * state, a setter the player refuses, a queue, and a dump. `subbed.mkv` holds h264, AAC and an

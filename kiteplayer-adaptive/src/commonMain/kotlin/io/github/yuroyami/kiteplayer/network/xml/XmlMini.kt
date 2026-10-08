@@ -21,8 +21,8 @@ internal typealias XmlText = io.github.yuroyami.kiteplayer.subtitle.xml.XmlText
 internal typealias XmlLimits = io.github.yuroyami.kiteplayer.subtitle.xml.XmlMini.Limits
 
 /**
- * The bounded XML reader of `kiteplayer-subtitles`, which this module used to hold, with each of its
- * refusals thrown as this module's public [XmlException], with the same message and offset (#492).
+ * The bounded XML reader of `kiteplayer-subtitles`, with each of its refusals thrown as the public
+ * [XmlException] of the DASH parser, with the same message and offset (#492).
  */
 internal object XmlMini {
     const val MAX_DEPTH: Int = io.github.yuroyami.kiteplayer.subtitle.xml.XmlMini.MAX_DEPTH

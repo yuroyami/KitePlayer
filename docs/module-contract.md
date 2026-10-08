@@ -124,10 +124,10 @@ lazy-created client, so reader close also releases the client.
 ## Subtitles and compatibility
 
 Default playback continues to include the Kotlin subtitle parsers through the FFmpeg backend,
-with cue timing in core and text rasterisation in output. `kiteplayer-network` depends on
-`kiteplayer-subtitles` for the bounded XML reader that DASH manifests and TTML subtitles share
-(#492), through `KitePlayerInternalApi`, which is not for applications, and for `TtmlParser`, which
-reads the TTML of DASH and HLS subtitles as it reads a TTML file. `kiteplayer-libass` joins the default
+with cue timing in core and text rasterisation in output. `kiteplayer-adaptive`, which holds
+the DASH reader, depends on `kiteplayer-subtitles` for the bounded XML reader that DASH manifests
+and TTML subtitles share (#492), through `KitePlayerInternalApi`, which is not for applications, and
+for `TtmlParser`, which reads the TTML of DASH and HLS subtitles as it reads a TTML file. `kiteplayer-libass` joins the default
 assembly the way the network module does: `kiteplayer` depends on it, so
 `kiteplayer-compose` inherit it, and `kiteplayer-compose-ui` does not. Discovery mirrors the
 transport providers exactly: `SubtitleTypesetterProvider` through service metadata on the JVM and

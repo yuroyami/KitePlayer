@@ -141,6 +141,8 @@ val moduleDescriptions: Map<String, String> = mapOf(
     ":kiteplayer-core" to "KitePlayer's playback engine and its service interfaces, in Kotlin, depending on coroutines only.",
     ":kiteplayer-ffmpeg" to "KitePlayer's media source and decoders over KiteFFmpeg, with snapshots, thumbnails and waveforms.",
     ":kiteplayer-network" to "HTTP and HTTPS transport for KitePlayer through Ktor. It registers itself.",
+    ":kiteplayer-adaptive" to "KitePlayer's DASH reader and its TTML subtitles for HLS, in Kotlin, with no HTTP client. " +
+        "It comes with kiteplayer-network.",
     ":kiteplayer-io" to "Input doors for KitePlayer: JVM files, paths, channels and streams, Android content URIs " +
         "and assets, and file paths and URLs on Apple and Linux.",
     ":kiteplayer-libass" to "The libass typesetter for ASS and SSA subtitles in KitePlayer. It registers itself.",
@@ -295,6 +297,7 @@ dependencies {
     dokka(project(":kiteplayer-compose-interop"))
     dokka(project(":kiteplayer-compose-video"))
     dokka(project(":kiteplayer-compose-ui"))
+    dokka(project(":kiteplayer-adaptive"))
     dokka(project(":kiteplayer-network"))
     dokka(project(":kiteplayer-compose"))
     dokka(project(":kiteplayer-audioviz"))

@@ -125,6 +125,9 @@ kotlin {
         // The web carries the same two, now that both have a wasmJs target, and the view module for
         // the picture in picture class.
         wasmJsMain.dependencies {
+            // Named here as well as through the network transport: the player in a Web Worker reads
+            // DASH with requests of its own, and a worker binary leaves the transport out (#546).
+            implementation(project(":kiteplayer-adaptive"))
             api(project(":kiteplayer-ffmpeg"))
             api(project(":kiteplayer-output"))
             api(project(":kiteplayer-view"))

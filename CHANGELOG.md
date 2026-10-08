@@ -504,6 +504,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   crop, because a decoder that writes into the Surface leaves only the view able to hide the edges,
   so a factory or callback of your own needs that parameter. This needs KiteFFmpeg 0.5.0, which
   reads the crop (yuroyami/KiteFFmpeg#147).
+- The DASH reader moved from `kiteplayer-network` to the new `kiteplayer-adaptive` artifact, which
+  has no HTTP client, so that `KitePlayerWorker` plays DASH in a browser with its own requests
+  (#546). Every public name keeps its package, `io.github.yuroyami.kiteplayer.network.dash`, and
+  `kiteplayer-network` brings the new artifact, so an application changes nothing. A build that
+  names every KitePlayer artifact by hand, for a version alignment or an exclusion, needs the new
+  name. `Dash.manifest` and `Dash.mediaItemFor` stay in `kiteplayer-network`.
 
 ### Removed
 

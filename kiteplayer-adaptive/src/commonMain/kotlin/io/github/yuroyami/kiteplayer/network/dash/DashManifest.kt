@@ -12,7 +12,7 @@ import io.github.yuroyami.kiteplayer.network.xml.XmlMini
  * chains, and the clock of a live presentation.
  *
  * Honest scope, stated where it is true: static (VOD) presentations resolve fully. A dynamic
- * (live) manifest parses with its clock, and [Dash.mediaItemFor] plays it when HLS can carry its
+ * (live) manifest parses with its clock, and the DASH door plays it when HLS can carry its
  * segments; [DashManifestParser.segmentPlan] still refuses it. Several Periods play joined when
  * HLS can carry every one of them (#403). Xlink is out of this tier, and an encrypted set is
  * parsed for its `ContentProtection` schemes only, so the door can refuse it (#404).
@@ -239,9 +239,9 @@ public data class DashSegmentPlan(
  * addresses, filter them where the client connects, for example with OkHttp's `Dns` on Android and
  * the JVM.
  *
- * Redirects are judged where Ktor follows them. The OkHttp and Darwin engines that this module
- * brings leave every redirect to Ktor. An engine configured to follow redirects by itself hides
- * them from the policy. A browser follows a redirect by itself and does not show where it leads, so
+ * Redirects are judged where Ktor follows them. The OkHttp and Darwin engines that
+ * `kiteplayer-network` brings leave every redirect to Ktor. An engine configured to follow
+ * redirects by itself hides them from the policy. A browser follows a redirect by itself and does not show where it leads, so
  * in a browser [SameOrigin] refuses every redirect and [Default] lets the browser follow them.
  */
 public data class DashUrlPolicy(
@@ -1364,7 +1364,8 @@ public object DashManifestParser {
         checkAgainst(UrlBase(manifestUrl), url, policy)
 
     /** The manifest URL itself goes through the scheme half of the policy before it is fetched. */
-    internal fun requireAllowedScheme(url: String, policy: DashUrlPolicy) {
+    @io.github.yuroyami.kiteplayer.KitePlayerInternalApi
+    public fun requireAllowedScheme(url: String, policy: DashUrlPolicy) {
         val scheme = schemeOf(url)
             ?: throw DashUrlRefusedException("$url has no scheme, so nothing can vouch for it")
         if (scheme !in policy.allowedSchemes) {

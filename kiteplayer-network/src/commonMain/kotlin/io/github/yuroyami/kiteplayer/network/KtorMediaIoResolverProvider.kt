@@ -33,8 +33,8 @@ internal class KtorMediaIoResolverProvider : MediaIoResolverProvider {
  * is HLS is never taken for a manifest. [io] is closed when this fails.
  */
 internal suspend fun playableReader(io: KtorMediaIo): MediaIo = try {
-    if (HlsTtmlMediaIo.declaredHls(io.contentType, io.location)) {
-        HlsTtmlMediaIo.readerIfTtml(io) ?: io
+    if (HlsTtml.declaredHls(io.contentType, io.location)) {
+        HlsTtml.readerIfTtml(io, io::peek) ?: io
     } else {
         Dash.readerIfManifest(io) ?: io
     }

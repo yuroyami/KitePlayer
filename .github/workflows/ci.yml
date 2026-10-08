@@ -225,6 +225,7 @@ jobs:
             :kiteplayer-io:jvmTest \
             :kiteplayer-output:jvmTest \
             :kiteplayer-view:jvmTest \
+            :kiteplayer-adaptive:jvmTest \
             :kiteplayer-network:jvmTest \
             :kiteplayer-ffmpeg:jvmTest \
             :kiteplayer-libass:jvmTest \
@@ -271,6 +272,7 @@ jobs:
             :kiteplayer-output:macosArm64Test \
             :kiteplayer-rt:macosArm64Test \
             :kiteplayer-libass:macosArm64Test \
+            :kiteplayer-adaptive:macosArm64Test \
             :kiteplayer-network:macosArm64Test \
             :kiteplayer-ffmpeg:macosArm64Test \
             :kiteplayer:macosArm64Test
@@ -362,6 +364,7 @@ jobs:
             :kiteplayer-io:iosSimulatorArm64Test \
             :kiteplayer-rt:iosSimulatorArm64Test \
             :kiteplayer-view:iosSimulatorArm64Test \
+            :kiteplayer-adaptive:iosSimulatorArm64Test \
             :kiteplayer-network:iosSimulatorArm64Test \
             :kiteplayer-libass:iosSimulatorArm64Test \
             :kiteplayer-output:iosSimulatorArm64Test \
@@ -523,6 +526,7 @@ jobs:
             :kiteplayer-io:jvmTest \
             :kiteplayer-output:jvmTest \
             :kiteplayer-view:jvmTest \
+            :kiteplayer-adaptive:jvmTest \
             :kiteplayer-network:jvmTest
 
       # One line per hot path gate (HotPathGate.kt in the core and FFmpeg JVM tests). A slow drift
@@ -552,6 +556,7 @@ jobs:
             :kiteplayer-output:testAndroidHostTest \
             :kiteplayer-compose-video:testAndroidHostTest \
             :kiteplayer-view:testAndroidHostTest \
+            :kiteplayer-adaptive:testAndroidHostTest \
             :kiteplayer-network:testAndroidHostTest \
             :kiteplayer-audioviz:testAndroidHostTest \
             :kiteplayer-sample-shared:testAndroidHostTest \
@@ -1280,7 +1285,7 @@ jobs:
       # changed to fix it, so what actually cured it is not known. It is wired in rather than left
       # skipped precisely because of that: if it comes back, this job is what says so.
       - name: wasmJs tests, network (node and browser)
-        run: ./gradlew --stacktrace :kiteplayer-network:wasmJsTest
+        run: ./gradlew --stacktrace :kiteplayer-adaptive:wasmJsTest :kiteplayer-network:wasmJsTest
 
       # The codec module a web page downloads, gzipped, held to its budget (#58).
       - name: The web codec module's size
@@ -1363,6 +1368,7 @@ jobs:
             :kiteplayer-core:jsNodeTest \
             :kiteplayer-subtitles:jsNodeTest \
             :kiteplayer-io:jsNodeTest \
+            :kiteplayer-adaptive:jsNodeTest \
             :kiteplayer-network:jsNodeTest \
             :kiteplayer:jsNodeTest \
             :kiteplayer-libass:jsNodeTest

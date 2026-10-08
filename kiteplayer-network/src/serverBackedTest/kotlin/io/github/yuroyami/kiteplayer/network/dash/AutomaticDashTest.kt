@@ -93,7 +93,7 @@ class AutomaticDashTest {
             KtorMediaIoResolver().use { resolver ->
                 for (address in listOf("$root/typed", "$root/vod/manifest.mpd?token=x")) {
                     val io = assertNotNull(resolver.resolve(address))
-                    io.use { assertEquals(DashHlsMediaIo.HLS_MEDIA_TYPE, it.contentType, "$address did not play as DASH") }
+                    io.use { assertEquals("application/vnd.apple.mpegurl", it.contentType, "$address did not play as DASH") }
                 }
             }
         }
@@ -133,7 +133,7 @@ class AutomaticDashTest {
 
     /** The reader is the HLS stand-in of [MANIFEST], and its segments are the server's. */
     private suspend fun checkPresentation(root: String, io: MediaIo) {
-        assertEquals(DashHlsMediaIo.HLS_MEDIA_TYPE, io.contentType, "the manifest did not play as DASH")
+        assertEquals("application/vnd.apple.mpegurl", io.contentType, "the manifest did not play as DASH")
         val master = readAll(io).decodeToString()
         assertTrue("#EXT-X-STREAM-INF" in master, "not a master playlist: $master")
         assertTrue("#EXT-X-MEDIA:TYPE=AUDIO" in master, "the sound set is missing: $master")

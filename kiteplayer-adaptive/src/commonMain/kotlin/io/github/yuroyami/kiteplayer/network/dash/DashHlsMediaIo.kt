@@ -5,8 +5,6 @@ import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.mp4.Fmp4
 import io.github.yuroyami.kiteplayer.mp4.Fmp4Rewrite
-import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
-import io.github.yuroyami.kiteplayer.network.shownUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -126,7 +124,7 @@ internal class DashHlsMediaIo(
     override val contentType: String get() = HLS_MEDIA_TYPE
 
     override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
-        if (closed) throw KtorMediaIoException("read after close")
+        if (closed) throw IllegalStateException("read after close")
         if (length == 0) return 0
         if (position >= master.size) return -1
         val count = minOf(length, master.size - position)
@@ -149,7 +147,7 @@ internal class DashHlsMediaIo(
     override fun takeRefusal(): io.github.yuroyami.kiteplayer.SourceRefusal? = refusal()
 
     override suspend fun openRelated(uri: String): MediaIo? {
-        if (closed) throw KtorMediaIoException("openRelated after close")
+        if (closed) throw IllegalStateException("openRelated after close")
         if (uri == presentation.masterAddress) return MemoryMediaIo(master, uri)
         presentation.track(uri)?.let { track -> return MemoryMediaIo(playlist(track).encodeToByteArray(), uri) }
         lock.withLock { conversions[uri] }?.let { conversion ->

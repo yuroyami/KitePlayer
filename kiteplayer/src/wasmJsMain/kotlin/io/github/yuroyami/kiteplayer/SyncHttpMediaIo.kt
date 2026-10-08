@@ -1,7 +1,10 @@
-@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class, KitePlayerInternalApi::class)
 
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.network.HlsTtml
+import io.github.yuroyami.kiteplayer.network.dash.DashDoor
+import io.github.yuroyami.kiteplayer.network.dash.DashUrlPolicy
 import kotlin.js.JsAny
 import kotlin.math.pow
 import kotlin.time.Duration
@@ -10,6 +13,10 @@ import kotlin.time.TimeSource
 /**
  * Answers an `http`, `https` or `blob` address in a player that runs in a Web Worker (#100) with a
  * [SyncHttpMediaIo], and every other address with null, which leaves it to the backend.
+ *
+ * An address that answers with a DASH manifest gets the reader of that presentation, and an HLS
+ * master playlist with TTML subtitles gets the reader that serves them as WebVTT, as the player's
+ * other network transport gives them (#546).
  */
 internal class SyncHttpResolver(private val timeout: Duration) : MediaIoResolver {
 
@@ -18,8 +25,47 @@ internal class SyncHttpResolver(private val timeout: Duration) : MediaIoResolver
     override suspend fun resolve(uri: String, headers: Map<String, String>): MediaIo? {
         val scheme = uri.substringBefore(':', missingDelimiterValue = "").lowercase()
         if (scheme != "http" && scheme != "https" && scheme != "blob") return null
-        return SyncHttpMediaIo(uri, headers, timeout).also { it.start() }
+        val io = SyncHttpMediaIo(uri, headers, timeout).also { it.start() }
+        return try {
+            playable(io)
+        } catch (failure: Throwable) {
+            io.close()
+            throw failure
+        }
     }
+
+    private suspend fun playable(io: SyncHttpMediaIo): MediaIo {
+        val location = io.location ?: return io
+        if (HlsTtml.declaredHls(io.contentType, location)) return HlsTtml.readerIfTtml(io, io::peek) ?: io
+        val policy = DashUrlPolicy.Default
+        return DashDoor.readerIfManifest(
+            io = io,
+            peek = io::peek,
+            // Not asked for until something reads it: the door opens a file and then seeks to the
+            // range it wants, and a request made at the open would download the file's start first.
+            open = { url -> io.openRelated(url, eager = false) { asked, answered -> requireRedirect(policy, location, asked, answered) } },
+            dateOf = { (it as SyncHttpMediaIo).date },
+            policy = policy,
+        ) ?: io
+    }
+
+    /**
+     * Refuses a request for [asked] that was answered from [answered], when [policy] does not let
+     * a request of the manifest at [manifest] be redirected there. A synchronous request follows a
+     * redirect by itself, so this is known only after the answer, and it stops the answer being used.
+     */
+    private fun requireRedirect(policy: DashUrlPolicy, manifest: String, asked: String, answered: String) {
+        DashDoor.requireRedirectAllowed(
+            policy = policy,
+            shown = MediaItem(asked).label,
+            manifestScheme = schemeOf(manifest),
+            manifestOrigin = originOf(manifest),
+            toScheme = schemeOf(answered),
+            toOrigin = originOf(answered),
+        )
+    }
+
+    private fun schemeOf(address: String): String = address.substringBefore(':', missingDelimiterValue = "").lowercase()
 }
 
 /**
@@ -44,6 +90,8 @@ internal class SyncHttpMediaIo(
     private val timeout: Duration,
     /** Shared with the readers that [openRelated] makes, so the rate counts an HLS stream's segments. */
     private val meter: SyncDownloadMeter = SyncDownloadMeter(),
+    /** Called with the address asked for and the address that answered, when a redirect made them differ. */
+    private val redirected: ((asked: String, answered: String) -> Unit)? = null,
 ) : MediaIo {
 
     private val state: JsAny = xhrState(headers.toJsObject(), timeout.inWholeMilliseconds.toDouble())
@@ -51,32 +99,59 @@ internal class SyncHttpMediaIo(
     private var nextWindow = FIRST_WINDOW_BYTES
     private var closed = false
 
+    /** False until the first request was made, which [start] or the first use of the answer does. */
+    private var asked = false
+
     private val windowStart: Long get() = xhrWindowStart(state).toLong()
     private val windowEnd: Long get() = windowStart + xhrWindowLength(state)
 
     /** The size the server stated, or the length of a whole body sent for a range it ignored. */
-    override val size: Long? get() = xhrTotal(state).takeIf { it >= 0.0 }?.toLong()
+    override val size: Long? get() = answered { xhrTotal(state).takeIf { it >= 0.0 }?.toLong() }
 
     override val seekable: Boolean get() = true
 
-    override val location: String? get() = xhrLocation(state)
+    override val location: String? get() = answered { xhrLocation(state) }
 
-    override val contentType: String? get() = xhrContentType(state)
+    override val contentType: String? get() = answered { xhrContentType(state) }
+
+    /** The `Date` header of the newest answer, or null when the server or its origin does not show one. */
+    val date: String? get() = answered { xhrDate(state) }
 
     /**
-     * Fetches the first window, so a failure to reach the address fails the open, as other readers
-     * do. The web backend stages a source only when it knows the size. A server on another origin
-     * may hide `Content-Range` from the page, so a size it did not state is asked for once more,
-     * as the `Content-Length` of a `HEAD` request, which every origin may read.
+     * The first [count] bytes of the answer, or all of it when it is shorter, with the position
+     * left at the start. Only before the first read.
+     */
+    fun peek(count: Int): ByteArray {
+        start()
+        check(position == 0L && windowStart == 0L) { "a reader can only peek before its first read" }
+        val length = minOf(count.toLong(), windowEnd).toInt()
+        val bytes = xhrSlice(state, 0, length)
+        return ByteArray(length) { bytes[it].code.toByte() }
+    }
+
+    /**
+     * Makes the first request, from the position the reader is at, so a failure to reach the
+     * address fails here. The resolver calls it at the open, as other readers fail theirs. The web
+     * backend stages a source only when it knows the size. A server on another origin may hide
+     * `Content-Range` from the page, so a size it did not state is asked for once more, as the
+     * `Content-Length` of a `HEAD` request, which every origin may read.
      */
     fun start() {
-        fetch(0L)
-        if (size == null) xhrHeadLength(state, url)
+        if (asked || closed) return
+        asked = true
+        fetch(position)
+        if (xhrTotal(state) < 0.0) xhrHeadLength(state, url)
+    }
+
+    private inline fun <T> answered(read: () -> T): T {
+        start()
+        return read()
     }
 
     override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
         check(!closed) { "the reader for $url is closed" }
         if (length == 0) return 0
+        start()
         size?.let { if (position >= it) return -1 }
         if (position < windowStart || position >= windowEnd) {
             fetch(position)
@@ -101,12 +176,25 @@ internal class SyncHttpMediaIo(
      * because another origin was never meant to see them. Null for any scheme but `http`, `https`
      * and `blob`.
      */
-    override suspend fun openRelated(uri: String): MediaIo? {
+    override suspend fun openRelated(uri: String): MediaIo? = openRelated(uri, eager = true, redirected)
+
+    /**
+     * [openRelated], with [rule] told of every redirect of the new reader's requests. With [eager]
+     * false the new reader makes no request until something reads its answer.
+     */
+    fun openRelated(uri: String, eager: Boolean, rule: ((asked: String, answered: String) -> Unit)?): SyncHttpMediaIo? {
         check(!closed) { "the reader for $url is closed" }
         val scheme = uri.substringBefore(':', missingDelimiterValue = "").lowercase()
         if (scheme != "http" && scheme != "https" && scheme != "blob") return null
         val own = originOf(uri) == originOf(url)
-        return SyncHttpMediaIo(uri, if (own) headers else emptyMap(), timeout, meter).also { it.start() }
+        val related = SyncHttpMediaIo(uri, if (own) headers else emptyMap(), timeout, meter, rule)
+        try {
+            if (eager) related.start()
+        } catch (failure: Throwable) {
+            related.close()
+            throw failure
+        }
+        return related
     }
 
     override fun networkBitsPerSecond(): Long? = meter.bitsPerSecond()
@@ -121,8 +209,20 @@ internal class SyncHttpMediaIo(
         nextWindow = if (from == windowEnd && from > 0) (nextWindow * 2).coerceAtMost(MAX_WINDOW_BYTES) else FIRST_WINDOW_BYTES
         val asked = TimeSource.Monotonic.markNow()
         when (val status = xhrFetch(state, url, from.toDouble(), nextWindow.toDouble())) {
-            // The whole request waits for the network, so all of its time counts.
-            200, 206 -> meter.add(xhrWindowLength(state), asked.elapsedNow())
+            200, 206 -> {
+                // The whole request waits for the network, so all of its time counts.
+                meter.add(xhrWindowLength(state), asked.elapsedNow())
+                val answered = xhrLocation(state)
+                if (redirected != null && answered != null && !sameAddress(url, answered)) {
+                    try {
+                        redirected(url, answered)
+                    } catch (refused: Throwable) {
+                        // The bytes of a refused answer are never read.
+                        xhrRelease(state)
+                        throw refused
+                    }
+                }
+            }
             416 -> Unit
             TIMED_OUT -> throw PlaybackException(PlaybackError.SourceStalled(url, timeout))
             0 -> throw PlaybackException(PlaybackError.SourceUnavailable(url, null, xhrError(state) ?: "the request failed"))
@@ -142,6 +242,18 @@ internal class SyncHttpMediaIo(
 /** The scheme, host and port of [address], which a browser resolves against the worker's own. */
 @JsFun("(address) => { try { return new URL(address, self.location.href).origin; } catch (e) { return address; } }")
 private external fun originOf(address: String): String
+
+/** True when [asked] and [answered] are one address once a browser resolves both, fragments apart. */
+@JsFun(
+    """(asked, answered) => {
+      try {
+        const a = new URL(asked, self.location.href); const b = new URL(answered, self.location.href);
+        a.hash = ''; b.hash = '';
+        return a.href === b.href;
+      } catch (e) { return asked === answered; }
+    }""",
+)
+private external fun sameAddress(asked: String, answered: String): Boolean
 
 /**
  * How fast the network delivered a reader's bytes and those of the readers it opened, as the
@@ -179,7 +291,7 @@ internal class SyncDownloadMeter {
 @JsFun(
     """(headers, timeout) => ({
       headers: headers, timeout: timeout, buf: new Uint8Array(0), start: 0, total: -1,
-      url: null, type: null, error: null,
+      url: null, type: null, error: null, last: null,
     })""",
 )
 private external fun xhrState(headers: JsAny, timeoutMillis: Double): JsAny
@@ -205,6 +317,7 @@ private external fun xhrState(headers: JsAny, timeoutMillis: Double): JsAny
         s.buf = new Uint8Array(xhr.response || new ArrayBuffer(0));
         s.url = xhr.responseURL || url;
         s.type = xhr.getResponseHeader('Content-Type');
+        s.last = xhr;
         if (status === 200) {
           s.start = 0;
           s.total = s.buf.length;
@@ -258,6 +371,11 @@ private external fun xhrContentType(state: JsAny): String?
 @JsFun("(s) => s.error")
 private external fun xhrError(state: JsAny): String?
 
+// Asked of the answer only when a live DASH clock wants it: a browser logs a refusal for each
+// header that another origin does not show.
+@JsFun("(s) => { try { return s.last ? s.last.getResponseHeader('Date') : null; } catch (e) { return null; } }")
+private external fun xhrDate(state: JsAny): String?
+
 // Latin-1 by construction: each byte becomes one code unit below 0x100, in slices small enough for
 // the argument limit of a call.
 @JsFun(
@@ -271,5 +389,5 @@ private external fun xhrError(state: JsAny): String?
 )
 private external fun xhrSlice(state: JsAny, at: Int, count: Int): String
 
-@JsFun("(s) => { s.buf = new Uint8Array(0); }")
+@JsFun("(s) => { s.buf = new Uint8Array(0); s.last = null; }")
 private external fun xhrRelease(state: JsAny)

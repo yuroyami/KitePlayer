@@ -69,6 +69,9 @@ kotlin {
         all { languageSettings.optIn("io.github.yuroyami.kiteplayer.KitePlayerInternalApi") }
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
+            // The DASH door, whose public names this module held before the browser worker needed
+            // them without Ktor (#546).
+            api(project(":kiteplayer-adaptive"))
             api(libs.ktor.client.core)
             implementation(project(":kiteplayer-subtitles"))
         }

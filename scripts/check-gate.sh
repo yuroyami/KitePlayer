@@ -93,7 +93,7 @@ publication() {
 macos() {
     gradle :kiteplayer-core:macosArm64Test :kiteplayer-subtitles:macosArm64Test :kiteplayer-io:macosArm64Test \
         :kiteplayer-output:macosArm64Test :kiteplayer-rt:macosArm64Test \
-        :kiteplayer-libass:macosArm64Test :kiteplayer-network:macosArm64Test \
+        :kiteplayer-libass:macosArm64Test :kiteplayer-adaptive:macosArm64Test :kiteplayer-network:macosArm64Test \
         :kiteplayer-ffmpeg:macosArm64Test :kiteplayer:macosArm64Test
 }
 ios_simulator() {
@@ -115,7 +115,7 @@ c_sanitizers() {
     run kiteplayer-libass/native/scripts/run-c-tests.sh wasm32
 }
 jvm() {
-    gradle :kiteplayer-output:jvmTest :kiteplayer-view:jvmTest :kiteplayer-network:jvmTest \
+    gradle :kiteplayer-output:jvmTest :kiteplayer-view:jvmTest :kiteplayer-adaptive:jvmTest :kiteplayer-network:jvmTest \
         :kiteplayer-ffmpeg:jvmTest :kiteplayer:jvmTest \
         :kiteplayer-compose-video:jvmTest :kiteplayer-compose-ui:jvmTest :kiteplayer-audioviz:jvmTest \
         :kiteplayer-sample-shared:jvmTest
@@ -123,12 +123,12 @@ jvm() {
 web() {
     gradle :kiteplayer-core:wasmJsNodeTest :kiteplayer-subtitles:wasmJsNodeTest \
         :kiteplayer-output:wasmJsNodeTest :kiteplayer-ffmpeg:wasmJsNodeTest \
-        :kiteplayer-network:wasmJsNodeTest :kiteplayer-libass:wasmJsNodeTest \
+        :kiteplayer-adaptive:wasmJsNodeTest :kiteplayer-network:wasmJsNodeTest :kiteplayer-libass:wasmJsNodeTest \
         :kiteplayer:wasmJsNodeTest
     # The Kotlin/JS half compiles the same code to a different engine, with JavaScript's own regular
     # expressions and numbers, so the wasm run above says nothing about it (#537).
     gradle :kiteplayer-core:jsNodeTest :kiteplayer-subtitles:jsNodeTest :kiteplayer-io:jsNodeTest \
-        :kiteplayer-network:jsNodeTest :kiteplayer:jsNodeTest :kiteplayer-libass:jsNodeTest
+        :kiteplayer-adaptive:jsNodeTest :kiteplayer-network:jsNodeTest :kiteplayer:jsNodeTest :kiteplayer-libass:jsNodeTest
 }
 linux() {
     run ./scripts/linux-tests.sh
@@ -143,7 +143,7 @@ windows() {
 cross_compile() {
     # Device builds are compile evidence only. The simulator view suite executes tests.
     gradle :kiteplayer-core:compileKotlinIosArm64 :kiteplayer-output:compileKotlinIosArm64 \
-        :kiteplayer-view:compileKotlinIosArm64 :kiteplayer-network:compileKotlinIosArm64 \
+        :kiteplayer-view:compileKotlinIosArm64 :kiteplayer-adaptive:compileKotlinIosArm64 :kiteplayer-network:compileKotlinIosArm64 \
         :kiteplayer:compileKotlinIosArm64 :kiteplayer-compose-ui:compileKotlinIosArm64 \
         :kiteplayer-audioviz:compileKotlinIosArm64 :kiteplayer-audioviz:compileAndroidMain \
         :kiteplayer-core:compileKotlinAndroidNativeArm32 :kiteplayer-sample-android:assembleDebug

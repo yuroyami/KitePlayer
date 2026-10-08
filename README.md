@@ -1003,7 +1003,7 @@ already listening when a song starts. Album art does not count as a picture.
 | **Android** | Plays real media on phones, checked by hand. CI runs the host tests, and an emulator job runs the device tests of five modules and the sample app on every push. A failure there does not fail the run yet. |
 | **iOS** | Plays real media on devices, checked by hand. CI runs the tests of every iOS module on the simulator. |
 | **macOS arm64**, native and desktop JVM | Plays real media. CI runs every module's tests on both, the format matrix included. |
-| **Web**, wasmJs | Plays through the FFmpeg WebAssembly module with browser audio, from memory. `KitePlayerWorker` runs the player in a web worker, which plays single files and HLS streams from the network too. CI runs the web tests under Node and in a headless browser. |
+| **Web**, wasmJs | Plays through the FFmpeg WebAssembly module with browser audio, from memory. `KitePlayerWorker` runs the player in a web worker, which plays single files, HLS streams and DASH manifests from the network too. CI runs the web tests under Node and in a headless browser. |
 | **Linux and Windows**, native | No audio output and no HTTPS, so `KitePlayer()` throws and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own `OutputBackend` to `KitePlayer.create`. CI runs the media-free tests. |
 | **Linux and Windows**, desktop JVM | The native libraries are linked. The Linux FFmpeg backend decodes in a container, and neither has played sound on a real machine. |
 | **tvOS, watchOS, iOS x64, Android native** | Only the engine modules build there; CI runs the tvOS and watchOS tests on their simulators. |
@@ -1026,7 +1026,7 @@ native targets. ✓ marks a target the artifact publishes, and · one it does no
 | `kiteplayer-rt` | · | ✓ | ✓ | · | ✓ | ✓ | · | · | ✓ |
 | `kiteplayer`, `-libass` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | · |
 | `kiteplayer-ffmpeg`, `-output` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | · | · |
-| `kiteplayer-network` | ✓ | ✓ | ✓ | ✓ | · | · | ✓ | ✓ | · |
+| `kiteplayer-network`, `-adaptive` | ✓ | ✓ | ✓ | ✓ | · | · | ✓ | ✓ | · |
 | `kiteplayer-view` | ✓ | ✓ | ✓ | ✓ | · | · | ✓ | · | · |
 | `kiteplayer-compose-interop` | ✓ | ✓ | · | ✓ | · | · | ✓ | ✓ | · |
 | `kiteplayer-compose`, `-compose-ui`, `-compose-video`, `-view-bindings`, `-audioviz` | ✓ | ✓ | · | ✓ | · | · | · | · | · |
@@ -1042,7 +1042,7 @@ summary.
 
 | Topic | What to expect |
 | --- | --- |
-| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time, in `KitePlayerWorker` too. `selectVariant` changes it, and the player steps down and up by itself with the measured network rate. A stream of MPEG-TS segments, or of fMP4 segments in H.264, HEVC, AV1 or VP9, changes in place, with no pause, and so does a DASH manifest of one Period. Any other stream opens again for the change, which holds the picture for a moment.<br><br>A DASH manifest of fMP4, MPEG-TS or WebM segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`, and a manifest of several Periods plays as one presentation. A persistent cache does not work yet.<br><br>A seek bar's preview pictures come from the stream, an HLS image playlist or a DASH thumbnail set, or from a WebVTT thumbnail file that `MediaItem.thumbnails` names: `thumbnailAt` gives the grid image and the region of the tile for a position, downloaded only when asked ([#433](https://github.com/yuroyami/KitePlayer/issues/433)). |
+| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time, in `KitePlayerWorker` too. `selectVariant` changes it, and the player steps down and up by itself with the measured network rate. A stream of MPEG-TS segments, or of fMP4 segments in H.264, HEVC, AV1 or VP9, changes in place, with no pause, and so does a DASH manifest of one Period. Any other stream opens again for the change, which holds the picture for a moment.<br><br>A DASH manifest of fMP4, MPEG-TS or WebM segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`, and a manifest of several Periods plays as one presentation. `KitePlayerWorker` plays a DASH manifest from its address too. A persistent cache does not work yet.<br><br>A seek bar's preview pictures come from the stream, an HLS image playlist or a DASH thumbnail set, or from a WebVTT thumbnail file that `MediaItem.thumbnails` names: `thumbnailAt` gives the grid image and the region of the tile for a position, downloaded only when asked ([#433](https://github.com/yuroyami/KitePlayer/issues/433)). |
 | **Native Linux and Windows** | No audio output and no HTTPS. Use the desktop JVM target, or pass your own `OutputBackend`. |
 | **Desktop JVM sound** | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | **AV1 on the web** | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |
@@ -1075,6 +1075,7 @@ flowchart LR
     bindings --> view[kiteplayer-view]
     kp --> output[kiteplayer-output]
     kp -- not on Linux and Windows native --> network[kiteplayer-network]
+    network --> adaptive[kiteplayer-adaptive]
     kp --> libass[kiteplayer-libass]
     kp --> io[kiteplayer-io]
     kp --> ffmpeg[kiteplayer-ffmpeg]
@@ -1101,6 +1102,7 @@ flowchart LR
 | `kiteplayer-core` | The engine and its service interfaces. Depends on kotlinx.coroutines and atomicfu, and on `kiteplayer-rt` on native targets. |
 | `kiteplayer-ffmpeg` | Media source and decoders over KiteFFmpeg, plus snapshots, thumbnails, waveforms and the subtitle parsers. |
 | `kiteplayer-network` | HTTP and HTTPS through Ktor. Registers itself. |
+| `kiteplayer-adaptive` | The DASH reader and the TTML subtitles of HLS, in Kotlin, with no HTTP client. Comes with `kiteplayer-network`. |
 | `kiteplayer-io` | Input doors for platform types. Comes with `kiteplayer`. |
 | `kiteplayer-libass` | The libass typesetter for ASS and SSA. Registers itself. |
 | `kiteplayer-output` | Platform audio output, render support and the subtitle rasterisers. |

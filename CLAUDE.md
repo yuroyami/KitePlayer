@@ -607,6 +607,14 @@ turns automatic discovery off. The automatic provider uses reader-owned clients;
 a player allocates no HTTP client. Native/web eager registration is toolchain-sensitive, so test
 optimized consumers that reference no network symbol.
 
+`kiteplayer-adaptive` holds the DASH reader and the reader of TTML subtitles in HLS, with no HTTP
+client (#546). Its packages are still `network.dash`, `network.xml` and `network`, so the public
+names did not move. `kiteplayer-network` gives it Ktor's requests and keeps the `Dash` object. The
+player in a Web Worker gives it synchronous requests, and names the module itself on wasmJs,
+because the worker binary excludes `kiteplayer-network` and everything that only it brings. What
+the two transports call is behind `KitePlayerInternalApi`: `DashDoor`, `DashTransport`, `HlsTtml`.
+Keep Ktor out of this module, or the worker binary grows by a quarter again.
+
 `kiteplayer-libass` rides `kiteplayer` the same way and is discovered the same way, through
 `SubtitleTypesetterProvider`. The engine typesets only the primary ASS/SSA track, on the raster
 lane, at video frame cadence, and publishes only when libass reports a change. On the web the

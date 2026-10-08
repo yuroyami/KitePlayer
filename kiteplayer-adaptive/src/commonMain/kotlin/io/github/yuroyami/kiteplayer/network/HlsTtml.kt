@@ -7,6 +7,7 @@ import io.github.yuroyami.kiteplayer.Playlists
 import io.github.yuroyami.kiteplayer.network.dash.DashSubtitles
 import io.github.yuroyami.kiteplayer.network.dash.Ttml
 import io.github.yuroyami.kiteplayer.network.dash.readAllBounded
+import io.github.yuroyami.kiteplayer.network.dash.shownUri
 import io.github.yuroyami.kiteplayer.network.dash.webVtt
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -55,7 +56,7 @@ internal class HlsTtmlMediaIo(
 
     /** The rendition's playlist at [uri], its segments named under this reader's host. */
     private suspend fun playlist(uri: String): MediaIo {
-        val io = upstream.openRelated(uri) ?: throw KtorMediaIoException("${shownUri(uri)} could not be opened")
+        val io = upstream.openRelated(uri) ?: throw IllegalStateException("${shownUri(uri)} could not be opened")
         val text = try {
             readAllBounded(io, MAX_PLAYLIST_BYTES, "the subtitle playlist at ${shownUri(uri)}").decodeToString()
         } finally {
@@ -112,7 +113,7 @@ internal class HlsTtmlMediaIo(
         val bytes = read(segment.url, segment.range, MAX_SEGMENT_BYTES)
         if (looksLikeWebVtt(bytes)) return bytes.decodeToString()
         val cues = if (looksLikeMp4(bytes)) {
-            val initUrl = segment.initUrl ?: throw KtorMediaIoException("the MP4 subtitle segment ${shownUri(segment.url)} names no initialization")
+            val initUrl = segment.initUrl ?: throw IllegalStateException("the MP4 subtitle segment ${shownUri(segment.url)} names no initialization")
             DashSubtitles.mp4Cues(initOf(initUrl, segment.initRange), bytes)
         } else {
             Ttml.cues(bytes.decodeToString())
@@ -133,11 +134,11 @@ internal class HlsTtmlMediaIo(
 
     /** The bytes of [url], or of its [range] of it, at most [limit] of them. */
     private suspend fun read(url: String, range: LongRange?, limit: Long): ByteArray {
-        val io = upstream.openRelated(url) ?: throw KtorMediaIoException("${shownUri(url)} could not be opened")
+        val io = upstream.openRelated(url) ?: throw IllegalStateException("${shownUri(url)} could not be opened")
         try {
             if (range == null) return readAllBounded(io, limit, "the subtitle segment at ${shownUri(url)}")
             val wanted = range.last - range.first + 1
-            if (wanted > limit) throw KtorMediaIoException("${shownUri(url)} asks for $wanted bytes, and the ceiling is $limit")
+            if (wanted > limit) throw IllegalStateException("${shownUri(url)} asks for $wanted bytes, and the ceiling is $limit")
             if (range.first > 0) io.seek(range.first)
             val out = ByteArray(wanted.toInt())
             var filled = 0
@@ -196,13 +197,14 @@ internal class HlsTtmlMediaIo(
          * `stpp`, or null, when [io] then reads on from its first byte as before. Only a response
          * that says it is HLS, by its type or its address, is looked at.
          */
-        suspend fun readerIfTtml(io: KtorMediaIo): MediaIo? {
-            if (!declaredHls(io.contentType, io.location)) return null
-            val head = io.peek(MAX_MASTER_BYTES + 1)
+        suspend fun readerIfTtml(io: MediaIo, peek: suspend (bytes: Int) -> ByteArray): MediaIo? {
+            val location = io.location ?: return null
+            if (!declaredHls(io.contentType, location)) return null
+            val head = peek(MAX_MASTER_BYTES + 1)
             if (head.size > MAX_MASTER_BYTES) return null
-            val renditions = ttmlRenditions(head.decodeToString(), io.location)
+            val renditions = ttmlRenditions(head.decodeToString(), location)
             if (renditions.isEmpty()) return null
-            KiteLog.log("KiteHls", "${renditions.size} TTML subtitle rendition(s) of ${shownUri(io.location)} are served as WebVTT")
+            KiteLog.log("KiteHls", "${renditions.size} TTML subtitle rendition(s) of ${shownUri(location)} are served as WebVTT")
             return HlsTtmlMediaIo(io, renditions)
         }
 
@@ -275,4 +277,19 @@ internal class HlsTtmlMediaIo(
             return attributes
         }
     }
+}
+
+/**
+ * The door to the reader that serves the TTML subtitles of an HLS stream as WebVTT (#439), for a
+ * transport: `kiteplayer-network` asks it about every reader it opens. The `peek` a transport
+ * gives reads the start of the answer, which its reader then keeps for the backend.
+ */
+@io.github.yuroyami.kiteplayer.KitePlayerInternalApi
+public object HlsTtml {
+    /** True when a response says it is an HLS playlist, by its type or by an address ending in `.m3u8`. */
+    public fun declaredHls(contentType: String?, address: String): Boolean = HlsTtmlMediaIo.declaredHls(contentType, address)
+
+    /** The reader that serves the TTML renditions of the master playlist [io] answers with as WebVTT, or null. */
+    public suspend fun readerIfTtml(io: MediaIo, peek: suspend (bytes: Int) -> ByteArray): MediaIo? =
+        HlsTtmlMediaIo.readerIfTtml(io, peek)
 }

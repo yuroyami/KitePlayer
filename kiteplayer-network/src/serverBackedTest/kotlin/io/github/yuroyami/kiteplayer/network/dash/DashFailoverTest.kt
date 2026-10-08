@@ -103,7 +103,7 @@ class DashFailoverTest {
     private suspend fun readSegments(mpdUrl: String): String {
         val io = checkNotNull(Dash.mediaItemFor(mpdUrl, client).io).open()
         try {
-            if (io.contentType != DashHlsMediaIo.HLS_MEDIA_TYPE) return readAll(io).decodeToString()
+            if (io.contentType != "application/vnd.apple.mpegurl") return readAll(io).decodeToString()
             val master = readAll(io).decodeToString()
             val playlist = master.lines().first { it.startsWith("https://") }
             val media = readAll(checkNotNull(io.openRelated(playlist))).decodeToString()

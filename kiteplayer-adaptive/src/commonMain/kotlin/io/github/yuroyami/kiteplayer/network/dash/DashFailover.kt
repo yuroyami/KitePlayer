@@ -1,7 +1,6 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
 import io.github.yuroyami.kiteplayer.KiteLog
-import io.github.yuroyami.kiteplayer.network.shownUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

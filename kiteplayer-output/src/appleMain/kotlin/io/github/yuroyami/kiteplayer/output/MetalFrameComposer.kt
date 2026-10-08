@@ -156,6 +156,12 @@ internal class MetalFrameComposer(
          * display's headroom, rather than at reference white itself. Null draws standard range.
          */
         extendedRangeHeadroom: Float? = null,
+        /**
+         * Set by a renderer with the flash guard on (#500): the same commands also draw the whole
+         * stored picture into this small `BGRA8Unorm` texture, tone mapped to standard range when
+         * [toneMapped], with no picture controls and no quality pass. Null draws nothing extra.
+         */
+        measureTarget: MTLTextureProtocol? = null,
     ): MTLCommandBufferProtocol {
         check(!closed) { "the Metal frame composer is closed" }
         retireCompletedCommands()
@@ -185,6 +191,15 @@ internal class MetalFrameComposer(
         var releaseHandedOff = false
         try {
             val flags = qualityUniforms[0].toRawBits()
+            if (measureTarget != null) {
+                // The guard counts standard range light, whatever the target's own range is.
+                val measureTone = when {
+                    extendedRangeHeadroom == null -> toneUniforms
+                    toneMapped -> packToneUniforms(frame.colorSpace, SDR_WHITE_NITS, frame.toneMapPeakNits)
+                    else -> DISABLED_TONE_UNIFORMS
+                }
+                encodeMeasurePass(commands, inputs, measureTone, measureTarget)
+            }
             // Linear light: first the picture as light, at its own size, into a half-float
             // texture, and then that texture scaled onto the target by the second pass.
             val light = if ((flags and LINEAR_LIGHT_FLAG) != 0) {
@@ -372,6 +387,33 @@ internal class MetalFrameComposer(
             encoder.endEncoding()
         }
         return texture
+    }
+
+    /** Draws the whole stored picture, upright as stored and unadjusted, over all of [target]. */
+    private fun encodeMeasurePass(
+        commands: MTLCommandBufferProtocol,
+        inputs: PictureInputs,
+        toneUniforms: FloatArray,
+        target: MTLTextureProtocol,
+    ) {
+        val pass = MTLRenderPassDescriptor()
+        val attachment = pass.colorAttachments.objectAtIndexedSubscript(0u)
+        attachment.texture = target
+        attachment.loadAction = platform.Metal.MTLLoadActionDontCare
+        attachment.storeAction = MTLStoreActionStore
+        val encoder = checkNotNull(commands.renderCommandEncoderWithDescriptor(pass)) {
+            "Metal refused a render encoder for the flash guard's pass"
+        }
+        try {
+            encoder.setRenderPipelineState(pipelines.measure)
+            LIGHT_PASS_QUAD.usePinned { pinned ->
+                encoder.setVertexBytes(pinned.addressOf(0), (LIGHT_PASS_QUAD.size * 4).toULong(), atIndex = 0u)
+            }
+            bindPicture(encoder, inputs, toneUniforms, DISABLED_ADJUST_UNIFORMS, DISABLED_QUALITY_UNIFORMS)
+            encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
+        } finally {
+            encoder.endEncoding()
+        }
     }
 
     /**

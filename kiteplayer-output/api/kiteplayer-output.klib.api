@@ -108,6 +108,7 @@ final class io.github.yuroyami.kiteplayer.output/MetalVideoRenderer : io.github.
     final fun clearPicture() // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.clearPicture|clearPicture(){}[0]
     final fun close() // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.close|close(){}[0]
     final fun setAdjustments(io.github.yuroyami.kiteplayer/VideoAdjustments) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setAdjustments|setAdjustments(io.github.yuroyami.kiteplayer.VideoAdjustments){}[0]
+    final fun setFlashGuard(io.github.yuroyami.kiteplayer/FlashGuard) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setFlashGuard|setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard){}[0]
     final fun setHdrPolicy(io.github.yuroyami.kiteplayer/HdrPolicy) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setHdrPolicy|setHdrPolicy(io.github.yuroyami.kiteplayer.HdrPolicy){}[0]
     final fun setRenderQuality(io.github.yuroyami.kiteplayer/RenderQuality) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setRenderQuality|setRenderQuality(io.github.yuroyami.kiteplayer.RenderQuality){}[0]
     final fun setScaleMode(io.github.yuroyami.kiteplayer/VideoScale) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setScaleMode|setScaleMode(io.github.yuroyami.kiteplayer.VideoScale){}[0]

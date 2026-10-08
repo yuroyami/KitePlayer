@@ -1,8 +1,8 @@
 # Dimming flashing video
 
 The contract for #500, built in the order at the end. Today the detector, the setting, the Compose
-canvas renderer and the AWT canvas carry it; every other renderer draws as before until its step
-lands.
+canvas renderer, the AWT canvas and the Metal renderer carry it; every other renderer draws as
+before until its step lands.
 
 Repeated bright flashes can trigger seizures in people with photosensitive epilepsy and discomfort
 in many more. Since iOS 16.4 and macOS 13.3, Apple has a Dim Flashing Lights setting that
@@ -73,8 +73,13 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
   controls' own filter, or none, as before. The AWT canvas has no picture controls, so it lays black
   over the picture at `1 - k` before the cues, which leaves `k` of each encoded value under it, and
   a repaint of a held picture draws it at the factor it was shown with.
-- A GPU renderer (Metal, Android GL) draws a 16 by 9 reduced copy beside its adjustment pass and
-  reads it back asynchronously, so it dims one frame late.
+- A GPU renderer (Metal, Android GL) draws a reduced copy beside its adjustment pass and reads it
+  back when the next picture is about to draw, so it dims one frame late. The copy is 64 by 36
+  texels, one for each point of the lattice above, so the detector reads the same points as on a
+  CPU renderer. An HDR picture is measured as it looks tone mapped to standard range. The Metal
+  renderer draws the copy in the same commands as the picture, so the planes are uploaded once. On
+  its extended-range layer the picture is light, so it scales by `k` to the power of 2.2. A picture
+  drawn again while paused is not measured again and keeps the factor it was shown with.
 - A renderer that draws no adjustments at all (the web canvas, Apple's sample buffer layer and
   Android's direct MediaCodec surface) has no guard until it has an adjustment stage.
 
@@ -82,7 +87,8 @@ The engine tells each renderer the mode through `VideoRenderer.setFlashGuard(mod
 do nothing, on attach and on every change, as it does the adjustments. A change of mode, and taking
 the picture off, start a renderer's history afresh. Only an Apple renderer reads the system setting
 for `FollowSystem`, so on the Compose canvas renderer and the AWT canvas, which cannot, `FollowSystem`
-is off.
+is off. The Metal renderer looks the setting up by name at run time, so an application still loads
+on a system older than the setting, where `FollowSystem` is off.
 
 ## Order of work
 
@@ -91,7 +97,8 @@ is off.
 3. The Compose canvas renderer, tested on the JVM with a strobe. Done for the pictures it converts;
    its Android hardware tier comes with step 6.
 4. The AWT canvas, the desktop default. Done.
-5. Metal and the Apple setting, on a Mac, then Core Graphics.
+5. Metal and the Apple setting, on a Mac. Done, tested offscreen on a Mac; the check by eye on a
+   Mac and on an iPhone is owed. Core Graphics is next.
 6. Android GL, the Android software path and the Compose renderer's hardware tier, on a device.
 7. The web canvas, once it has an adjustment stage.
 

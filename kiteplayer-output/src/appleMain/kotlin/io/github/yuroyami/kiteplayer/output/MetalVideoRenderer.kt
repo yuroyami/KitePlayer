@@ -61,16 +61,23 @@ import platform.QuartzCore.CAMetalLayer
  * the picture's size. Tone mapped HDR is named as what the shader writes, gamma 2.2 on BT.709
  * primaries. Subtitles are blended in the picture's encoding without a conversion from sRGB. iOS
  * treats a layer with no colour space as sRGB, and the renderer leaves it so.
+ *
+ * Flashing (#500). With the flash guard on, or following the system's Dim Flashing Lights setting
+ * while that is on, the renderer draws a small copy of each picture beside it, counts flashes on
+ * the copy, and dims the picture while a flashing run lasts. The copy is read one frame later, so
+ * the dimming starts one frame after the run does. Subtitles are not dimmed.
  */
 public class MetalVideoRenderer internal constructor(
     private val layer: CAMetalLayer,
     private val resolver: MetalPictureResolver,
+    /** Reads the system's Dim Flashing Lights setting; a test passes its own. */
+    private val dimFlashingLights: () -> Boolean = { AppleDimFlashingLights.enabled },
     /** Makes the display's headroom reader; a test passes a fixed one. */
     headroomSource: ((onChange: () -> Unit) -> HeadroomSource)?,
 ) : VideoRenderer {
 
     /** Draws into [layer], whose display the renderer reads for its HDR headroom. */
-    public constructor(layer: CAMetalLayer, resolver: MetalPictureResolver) : this(layer, resolver, null)
+    public constructor(layer: CAMetalLayer, resolver: MetalPictureResolver) : this(layer, resolver, headroomSource = null)
 
     // CAMetalLayer speaks the forward-declared protocol type; the casts bridge the two names of
     // the same ObjC protocol.
@@ -108,6 +115,46 @@ public class MetalVideoRenderer internal constructor(
 
     /** Linear light in BT.709 primaries, with values above 1 for HDR. Made at the first use. */
     private var extendedColorspace: platform.CoreGraphics.CGColorSpaceRef? = null
+
+    private val flashGuardMode = atomic(io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem)
+
+    /** Set when the mode changes, so the next picture starts the guard afresh. */
+    private val guardForgets = atomic(false)
+
+    /** Made at the first picture drawn with the guard on. Render thread only. */
+    private var flashGuard: MetalFlashGuard? = null
+    private var guarding = false
+
+    /** The factor the last picture was drawn with, for a reader on any thread. */
+    private val shownFlashFactor = atomic(1f)
+
+    /** The flash guard's factor for the picture on the layer: 1 outside a flashing run. */
+    internal val flashFactor: Float get() = shownFlashFactor.value
+
+    /** True when the mode, or the system setting it follows, asks for the guard now. */
+    private fun guardWanted(): Boolean = when (flashGuardMode.value) {
+        io.github.yuroyami.kiteplayer.FlashGuard.On -> true
+        io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem -> dimFlashingLights()
+        io.github.yuroyami.kiteplayer.FlashGuard.Off -> false
+    }
+
+    /**
+     * The factor to draw the next new picture with, after the guard has read the copy of the last
+     * one. Starts the guard afresh when it goes on or off or the mode changed. Render thread only.
+     */
+    private fun flashFactorForNext(): Float {
+        val wanted = guardWanted()
+        val forget = guardForgets.getAndSet(false)
+        if (wanted != guarding || forget) flashGuard?.reset()
+        guarding = wanted
+        if (!wanted) return 1f
+        val guard = flashGuard ?: MetalFlashGuard(device).also { flashGuard = it }
+        return guard.factorForNext()
+    }
+
+    /** The factor a picture already shown is drawn again with. Render thread only. */
+    private fun heldFlashFactor(): Float =
+        if (guarding && !guardForgets.value && guardWanted()) flashGuard?.current ?: 1f else 1f
 
     private val presented = atomic(0L)
     private val failed = atomic(0L)
@@ -356,7 +403,10 @@ public class MetalVideoRenderer internal constructor(
             // Picked by the drawable's own format, not by the request: a drawable made before the
             // layer changed format still has the old one.
             val target = drawable.texture as platform.Metal.MTLTextureProtocol
-            composerFor(target).encode(
+            val extendedHeadroom = headroomFor(target)
+            val factor = flashFactorForNext()
+            val guard = flashGuard.takeIf { guarding }
+            val commands = composerFor(target).encode(
                 target = target,
                 frame = frame,
                 picture = picture,
@@ -366,11 +416,14 @@ public class MetalVideoRenderer internal constructor(
                 presentDrawable = drawable,
                 scaleMode = scaleMode.value,
                 videoTransform = videoTransform.value,
-                adjustUniforms = adjustUniforms.value,
+                adjustUniforms = dimAdjustUniforms(adjustUniforms.value, factor, linearLight = extendedHeadroom != null),
                 qualityUniforms = qualityUniformsFor(frame),
                 toneMapped = true,
-                extendedRangeHeadroom = headroomFor(target),
+                extendedRangeHeadroom = extendedHeadroom,
+                measureTarget = guard?.target,
             )
+            guard?.submitted(commands, AppleHostClock.nanos())
+            shownFlashFactor.value = factor
             announceRange(frame, target)
             presented.incrementAndGet()
             pictureCleared = false
@@ -447,6 +500,9 @@ public class MetalVideoRenderer internal constructor(
             val height = viewportHeight.value.takeIf { it > 0 }
                 ?: layer.drawableSize.useContents { height }.toInt().coerceAtLeast(1)
             val target = drawable.texture as platform.Metal.MTLTextureProtocol
+            val extendedHeadroom = headroomFor(target)
+            // A held picture is not measured again: it is drawn at the factor it was shown with.
+            val factor = heldFlashFactor()
             composerFor(target).encode(
                 target = target,
                 frame = meta,
@@ -457,11 +513,12 @@ public class MetalVideoRenderer internal constructor(
                 presentDrawable = drawable,
                 scaleMode = scaleMode.value,
                 videoTransform = videoTransform.value,
-                adjustUniforms = adjustUniforms.value,
+                adjustUniforms = dimAdjustUniforms(adjustUniforms.value, factor, linearLight = extendedHeadroom != null),
                 qualityUniforms = qualityUniformsFor(meta),
                 toneMapped = true,
-                extendedRangeHeadroom = headroomFor(target),
+                extendedRangeHeadroom = extendedHeadroom,
             )
+            shownFlashFactor.value = factor
         } catch (failure: Throwable) {
             eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "Metal redraw failed"))
         }
@@ -474,6 +531,9 @@ public class MetalVideoRenderer internal constructor(
     private fun takeOffPicture() {
         releaseRetained()
         pictureCleared = true
+        // Taking the picture off starts the guard's history afresh.
+        flashGuard?.reset()
+        shownFlashFactor.value = 1f
         drawBackground()
     }
 
@@ -535,6 +595,19 @@ public class MetalVideoRenderer internal constructor(
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         adjustUniforms.value = packAdjustUniforms(adjustments)
         requestRedraw()
+    }
+
+    /**
+     * The flash guard's mode (#500). `On` guards every picture, and `FollowSystem`, the default,
+     * guards while the system's Dim Flashing Lights setting is on. A paused picture re-encodes, so
+     * turning the guard off undims it at once.
+     */
+    override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
+        // A change of mode starts the history afresh, as taking the picture off does.
+        if (flashGuardMode.getAndSet(mode) != mode) {
+            guardForgets.value = true
+            requestRedraw()
+        }
     }
 
     /**
@@ -611,6 +684,7 @@ public class MetalVideoRenderer internal constructor(
         // After the join the render thread is out; the retained picture's release cannot race
         // a redraw, which is the ownership half.
         releaseRetained()
+        flashGuard = null
         // After the join no draw is in flight from this renderer, so the composer can fence the
         // GPU and give back its texture cache and native holder.
         composer.close()

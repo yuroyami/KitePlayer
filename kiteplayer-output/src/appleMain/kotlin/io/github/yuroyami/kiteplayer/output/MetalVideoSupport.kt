@@ -25,6 +25,7 @@ import platform.Metal.MTLBlendFactorOneMinusSourceAlpha
 import platform.Metal.MTLDeviceProtocol
 import platform.Metal.MTLLibraryProtocol
 import platform.Metal.MTLPixelFormatBGRA8Unorm
+import kotlin.math.pow
 import platform.Metal.MTLPixelFormatR16Unorm
 import platform.Metal.MTLPixelFormatR8Unorm
 import platform.Metal.MTLPixelFormatRG16Unorm
@@ -696,6 +697,33 @@ internal fun packAdjustUniforms(adjustments: io.github.yuroyami.kiteplayer.Video
     )
 }
 
+/**
+ * [uniforms] with the flash guard's [factor] folded in (#500): the colour matrix and its offsets
+ * times the factor, or the factor alone when the picture controls are neutral. A factor of 1 gives
+ * [uniforms] back, so a picture outside a flashing run is drawn exactly as before.
+ *
+ * The factor scales encoded values. [linearLight] is true for an extended-range target, where the
+ * matrix works on light, and light goes as an encoded value's power of 2.2.
+ */
+internal fun dimAdjustUniforms(uniforms: FloatArray, factor: Float, linearLight: Boolean): FloatArray {
+    if (factor >= 1f) return uniforms
+    val k = if (linearLight) factor.pow(FLASH_ENCODING_POWER) else factor
+    val dimmed = uniforms.copyOf()
+    if (uniforms[12].toRawBits() == 0) {
+        for (i in 0 until 12) dimmed[i] = 0f
+        dimmed[0] = k
+        dimmed[4] = k
+        dimmed[8] = k
+        dimmed[12] = Float.fromBits(1)
+    } else {
+        for (i in 0 until 12) dimmed[i] *= k
+    }
+    return dimmed
+}
+
+/** How light goes with an encoded value, as the flash guard counts it. */
+private const val FLASH_ENCODING_POWER = 2.2f
+
 /** The colour uniforms, mirrored from SoftwareConverter so both paths agree numerically. */
 internal class MetalColorUniforms private constructor(
     val lumaOffset: Float,
@@ -794,6 +822,8 @@ internal class MetalPipelines private constructor(
     val lightScale: MTLRenderPipelineStateProtocol,
     /** The overlay for an extended-range target, which decodes the bitmap's sRGB to light. */
     val overlayLinear: MTLRenderPipelineStateProtocol,
+    /** The picture into the flash guard's small eight bit copy, whatever the target's format. */
+    val measure: MTLRenderPipelineStateProtocol,
 ) {
     companion object {
         private val lock = kotlinx.atomicfu.locks.SynchronizedObject()
@@ -803,12 +833,15 @@ internal class MetalPipelines private constructor(
             kotlinx.atomicfu.locks.synchronized(lock) {
                 cache.getOrPut(device.registryID to targetFormat) {
                     val library = device.compileKitePlayerLibrary()
+                    val picture = device.makePicturePipeline(library, targetFormat)
                     MetalPipelines(
-                        picture = device.makePicturePipeline(library, targetFormat),
+                        picture = picture,
                         overlay = device.makeOverlayPipeline(library, targetFormat),
                         lightPicture = device.makePicturePipeline(library, MTLPixelFormatRGBA16Float),
                         lightScale = device.makeLightScalePipeline(library, targetFormat),
                         overlayLinear = device.makePipeline(library, "kp_overlay_linear", targetFormat, blended = true),
+                        measure = if (targetFormat == MTLPixelFormatBGRA8Unorm) picture
+                            else device.makePicturePipeline(library, MTLPixelFormatBGRA8Unorm),
                     )
                 }
             }

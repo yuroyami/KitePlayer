@@ -200,7 +200,8 @@ with its own. The network module gives one for each platform:
 - JVM: a look at the network interfaces every 2 seconds while the player waits. A network is an
   interface that is up, is not the loopback, and has an address.
 - Web: the `online` and `offline` events of the page or the worker.
-- Apple: none yet, so the timer alone. `NWPathMonitor` is the plan, and it needs a Mac to build.
+- Apple: the system's path monitor (`nw_path_monitor`). A network is a path that is satisfied, or
+  one the system can bring up when a connection asks for it, such as a VPN on demand.
 
 A worker player on the web (#100) builds its player on the default configuration, so it never
 waits; the web worker still carries `reconnecting` and the warning to the page, as it carries every

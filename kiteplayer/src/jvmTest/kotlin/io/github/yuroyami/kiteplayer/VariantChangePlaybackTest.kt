@@ -35,6 +35,11 @@ class VariantChangePlaybackTest {
         stepsUpAndDown("hls", "ladder.m3u8", startHeight = 720, up = 2, down = 1, master = "ladder.m3u8", segments = Regex("ladder-(\\d)-(\\d+)\\.m4s"))
 
     @Test
+    fun anEncryptedMp4LadderStepsUpAndDownWithNoHeldPictureAndNoGapInSound() =
+        // The same two variants under AES-128, each with a key of its own (#565).
+        stepsUpAndDown("hls", "ladder-aes.m3u8", startHeight = 720, up = 2, down = 1, master = "ladder-aes.m3u8", segments = Regex("ladder-aes-(\\d)-(\\d+)\\.m4s"))
+
+    @Test
     fun anMpegTsStreamStepsUpAndDownWithNoHeldPictureAndNoGapInSound() =
         stepsUpAndDown("hls", "ts.m3u8", startHeight = 180, up = 1, down = 0, master = "ts.m3u8", segments = Regex("ts-(\\d)-(\\d+)\\.ts"))
 

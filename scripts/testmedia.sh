@@ -703,6 +703,37 @@ ffmpeg -v error -y \
   "${hls_vod[@]}" -hls_segment_type fmp4 -hls_fmp4_init_filename "ladder-%v-init.mp4" \
   -hls_segment_filename "hls/ladder-%v-%d.m4s" -master_pl_name ladder.m3u8 \
   -var_stream_map "v:0,a:0 v:1,a:1 v:2,a:2" "hls/ladder-%v.m3u8"
+# The ladder again under AES-128, which ffmpeg cannot write for fMP4, so openssl encrypts the
+# files above (#565). Each variant shows another way a playlist may state its key: the first after
+# the EXT-X-MAP and with no IV, so the initialization is plain and each segment's IV is its
+# number; the second before the EXT-X-MAP with an IV, so the initialization is encrypted too; the
+# third the same with a key of its own.
+command -v openssl >/dev/null 2>&1 || { echo "testmedia.sh: openssl is missing, and the encrypted fMP4 ladder needs it." >&2; exit 1; }
+printf 'ladder key no. 1' > hls/ladder-aes-a.key
+printf 'ladder key no. 2' > hls/ladder-aes-b.key
+ladder_iv=0f0e0d0c0b0a09080706050403020100
+key_hex() { od -An -v -tx1 "$1" | tr -d ' \n'; }
+for variant in 0 1 2; do
+  if [ "$variant" = "2" ]; then ladder_key=ladder-aes-b.key; else ladder_key=ladder-aes-a.key; fi
+  for number in 0 1 2 3 4 5; do
+    if [ "$variant" = "0" ]; then segment_iv="$(printf '%032x' "$number")"; else segment_iv="$ladder_iv"; fi
+    openssl aes-128-cbc -e -K "$(key_hex "hls/$ladder_key")" -iv "$segment_iv" \
+      -in "hls/ladder-$variant-$number.m4s" -out "hls/ladder-aes-$variant-$number.m4s"
+  done
+  if [ "$variant" = "0" ]; then
+    cp "hls/ladder-0-init.mp4" "hls/ladder-aes-0-init.mp4"
+    sed -e "s/ladder-0-/ladder-aes-0-/" -e "/^#EXT-X-MAP/a\\
+#EXT-X-KEY:METHOD=AES-128,URI=\"$ladder_key\"
+" hls/ladder-0.m3u8 > hls/ladder-aes-0.m3u8
+  else
+    openssl aes-128-cbc -e -K "$(key_hex "hls/$ladder_key")" -iv "$ladder_iv" \
+      -in "hls/ladder-$variant-init.mp4" -out "hls/ladder-aes-$variant-init.mp4"
+    sed -e "s/ladder-$variant-/ladder-aes-$variant-/" -e "/^#EXT-X-MAP/i\\
+#EXT-X-KEY:METHOD=AES-128,URI=\"$ladder_key\",IV=0x$ladder_iv
+" "hls/ladder-$variant.m3u8" > "hls/ladder-aes-$variant.m3u8"
+  fi
+done
+sed -e "s/^ladder-/ladder-aes-/" hls/ladder.m3u8 > hls/ladder-aes.m3u8
 # The same master in AV1 and in VP9, 256x144, 640x360 and 1280x720. A key frame of either codec
 # states its own picture size, so a variant change needs nothing added to the samples (#564).
 ladder_av1=(-c:v libsvtav1 -preset 12 -svtav1-params "keyint=30:scd=0")

@@ -747,10 +747,10 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
   AV1 or VP9: the player writes each fragment again for the initialization the stream began with.
   H.264 and HEVC fragments get the variant's own parameter sets. AV1 and VP9 need nothing added,
   because their key frames state the picture size. A DASH manifest of one Period changes the same
-  way.
-- Any other change opens the stream again, so the picture holds for a moment: encrypted fMP4
-  segments, WebM segments, a DASH manifest of several Periods, a variant of another codec, profile,
-  bit depth or dynamic range, and a stream in the browser.
+  way. The player decrypts AES-128 fMP4 segments itself, so each variant may have its own key.
+- Any other change opens the stream again, so the picture holds for a moment: WebM segments, a
+  DASH manifest of several Periods, a variant of another codec, profile, bit depth or dynamic
+  range, and a stream in the browser.
 - The choice follows the screen ([#447](https://github.com/yuroyami/KitePlayer/issues/447)). An
   HDR version plays on a display that shows HDR as HDR, under `HdrPolicy.Auto`, and the SDR one
   elsewhere. Nothing larger plays than the smallest variant that fills the view the picture is

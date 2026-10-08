@@ -28,6 +28,10 @@ import kotlin.math.abs
  * first initialization, with its own variant's parameter sets in band, as [Fmp4Rewrite] says. The
  * first variant's segments are written that way too, because a decoder that has played another
  * variant keeps that one's parameter sets until it is given others.
+ *
+ * A segment can only be written again from its plain bytes. So the switch decrypts the AES-128
+ * segments of an MP4 stream itself, from the first one, and shows FFmpeg a playlist with no key.
+ * FFmpeg still decrypts MPEG-TS segments, which are never written again.
  */
 
 /** One segment of a media playlist: where its bytes are, when it plays, and what must match to stand in for another. */
@@ -45,10 +49,25 @@ internal class HlsSegment(
     val discontinuity: Boolean,
     /** The `EXT-X-KEY` attributes that decrypt the segment, its address resolved, or empty for none. */
     val key: String,
+    /** Where the key of [key] is, and its IV when the tag states one. */
+    val keyAddress: String? = null,
+    val keyIv: ByteArray? = null,
 )
 
-/** The initialization a playlist's `EXT-X-MAP` names. */
-internal class HlsInit(val address: String, val offset: Long, val length: Long?)
+/**
+ * The initialization a playlist's `EXT-X-MAP` names. [key], [keyAddress] and [keyIv] are those of
+ * the `EXT-X-KEY` before the tag, as in [HlsSegment], and [sequence] is the number of the segment
+ * after it, which is the IV of a key that states none.
+ */
+internal class HlsInit(
+    val address: String,
+    val offset: Long,
+    val length: Long?,
+    val key: String = "",
+    val keyAddress: String? = null,
+    val keyIv: ByteArray? = null,
+    val sequence: Long = 0,
+)
 
 /** A media playlist the variant switch understands, and the text FFmpeg reads in its place. */
 internal class HlsMediaPlaylist(
@@ -58,8 +77,6 @@ internal class HlsMediaPlaylist(
     /** The playlist with every segment at an address of the switch, see [HlsVariantSwitch]. */
     val served: String,
 ) {
-    val encrypted: Boolean get() = segments.any { it.key.isNotEmpty() }
-
     fun at(sequence: Long): HlsSegment? {
         val first = segments.firstOrNull()?.sequence ?: return null
         return segments.getOrNull((sequence - first).toInt())?.takeIf { it.sequence == sequence }
@@ -72,6 +89,9 @@ internal class HlsMediaPlaylist(
  * or a `{$name}`), more than one `EXT-X-MAP`, a segment before the `EXT-X-MAP`, or a key method other than
  * AES-128. Such a playlist reaches FFmpeg as the server sent it, and a variant change opens the
  * stream again.
+ *
+ * The served text of a playlist with an `EXT-X-MAP` names no key: the switch decrypts those
+ * segments itself, because it must hold their plain bytes to write them again (#565).
  */
 internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylist? {
     // A variable may come from the master or the address, which only FFmpeg puts in.
@@ -84,6 +104,8 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
     var discontinuity = false
     var ended = false
     var key = ""
+    var keyAddress: String? = null
+    var keyIv: ByteArray? = null
     var init: HlsInit? = null
     var range: Pair<Long, Long?>? = null
     var start = 0L
@@ -124,14 +146,17 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
                 if (method != "NONE" && method != "AES-128") return null
                 val uri = attributes["URI"]?.let { Playlists.resolve(base, it) }
                 key = if (method == "NONE") "" else (attributes - "URI").entries.joinToString(",") { "${it.key}=${it.value}" } + ",URI=$uri"
-                served.append(if (uri == null) line else withUri(line, uri)).append('\n')
+                keyAddress = uri.takeIf { method != "NONE" }
+                keyIv = attributes["IV"].takeIf { method != "NONE" }?.let { parseIv(it) ?: return null }
+                // Marked, so that the line can be left out once the playlist shows an `EXT-X-MAP`.
+                served.append(KEY_MARK).append(if (uri == null) line else withUri(line, uri)).append('\n')
             }
             line.startsWith("#EXT-X-MAP:") -> {
                 if (init != null || segments.isNotEmpty()) return null
                 val attributes = parseHlsAttributes(line.substringAfter(':'))
                 val address = Playlists.resolve(base, attributes["URI"] ?: return null)
                 val bytes = attributes["BYTERANGE"]?.let { parseByteRange(it) ?: return null }
-                init = HlsInit(address, bytes?.second ?: 0L, bytes?.first)
+                init = HlsInit(address, bytes?.second ?: 0L, bytes?.first, key, keyAddress, keyIv, sequence)
                 served.append("#EXT-X-MAP:URI=\"").append(HlsVariantSwitch.INIT).append(extensionOf(address)).append("\"\n")
             }
             line == "#EXT-X-DISCONTINUITY" -> {
@@ -149,7 +174,7 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
                 val offset = if (bytes == null) 0L else bytes.second ?: rangeEnds[address] ?: 0L
                 if (bytes != null) rangeEnds[address] = offset + bytes.first
                 val ownDate = date ?: carried.takeIf { !discontinuity }
-                segments += HlsSegment(sequence, address, offset, bytes?.first, duration, start, ownDate, discontinuity, key)
+                segments += HlsSegment(sequence, address, offset, bytes?.first, duration, start, ownDate, discontinuity, key, keyAddress, keyIv)
                 served.append(HlsVariantSwitch.SEGMENT).append(sequence).append(extensionOf(address)).append('\n')
                 carried = ownDate?.plus(duration)
                 start += duration
@@ -162,7 +187,24 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
         }
     }
     if (!started) return null
-    return HlsMediaPlaylist(segments, init, ended, served.toString())
+    val text = served.toString()
+    val shown = if (init == null) {
+        text.replace(KEY_MARK.toString(), "")
+    } else {
+        text.lineSequence().filter { !it.startsWith(KEY_MARK) }.joinToString("\n")
+    }
+    return HlsMediaPlaylist(segments, init, ended, shown)
+}
+
+/** Starts an `EXT-X-KEY` line while a playlist is read. No playlist line holds it. */
+private const val KEY_MARK = '\u0000'
+
+/** The sixteen bytes of an `IV` attribute, `0x` and up to 32 hexadecimal digits of one number, or null for anything else. */
+private fun parseIv(value: String): ByteArray? {
+    if (!value.startsWith("0x", ignoreCase = true) || value.length !in 3..34) return null
+    val digits = value.substring(2).padStart(32, '0')
+    if (digits.any { it !in '0'..'9' && it.lowercaseChar() !in 'a'..'f' }) return null
+    return ByteArray(16) { digits.substring(2 * it, 2 * it + 2).toInt(16).toByte() }
 }
 
 /** `n[@o]` of an `EXT-X-BYTERANGE`: the length, and the offset when it is stated. */
@@ -191,8 +233,9 @@ private fun extensionOf(address: String): String {
 
 /**
  * True when a reader that plays [from] can go on with the segments of [to]: the same segments by
- * number, each as long, cut and encrypted the same way. An ended playlist must match whole. A
- * live one must match where the two overlap, and by date too where both state one.
+ * number, each as long and cut the same way, and encrypted the same way where FFmpeg decrypts
+ * them, which is in a playlist with no `EXT-X-MAP`. An ended playlist must match whole. A live one
+ * must match where the two overlap, and by date too where both state one.
  */
 internal fun sameSegments(from: HlsMediaPlaylist, to: HlsMediaPlaylist): Boolean {
     if (from.ended != to.ended || (from.init == null) != (to.init == null)) return false
@@ -204,7 +247,8 @@ internal fun sameSegments(from: HlsMediaPlaylist, to: HlsMediaPlaylist): Boolean
         shared++
         if (abs(segment.durationMicros - other.durationMicros) > SEGMENT_TOLERANCE_MICROS) return false
         if (from.ended && abs(segment.startMicros - other.startMicros) > SEGMENT_TOLERANCE_MICROS) return false
-        if (segment.discontinuity != other.discontinuity || segment.key != other.key) return false
+        if (segment.discontinuity != other.discontinuity) return false
+        if (from.init == null && segment.key != other.key) return false
         if (segment.dateMicros != null && other.dateMicros != null &&
             abs(segment.dateMicros - other.dateMicros) > SEGMENT_TOLERANCE_MICROS
         ) {
@@ -259,6 +303,10 @@ internal class HlsVariantSwitch(
     /** The segment served last and its variant, or null when it was served as it is. */
     private var written: Pair<Long, Int>? = null
 
+    /** The keys read so far, by address, under a lock of their own: a move reads one while it holds [lock]. */
+    private val keys = HashMap<String, ByteArray>()
+    private val keyLock = Mutex()
+
     private class Loaded(val variant: Int, val playlist: HlsMediaPlaylist)
 
     /** The variant whose segments FFmpeg is given from the next one it asks for. */
@@ -270,7 +318,7 @@ internal class HlsVariantSwitch(
     /** Opens [address], one of this switch's own, or answers null when it names nothing. */
     suspend fun open(address: String): MediaIo? = when {
         address == PLAYLIST -> playlist()
-        address.startsWith(INIT) -> lock.withLock { init }?.let { slice(openAddress(it.address), it.offset, it.length) }
+        address.startsWith(INIT) -> lock.withLock { init }?.let { opened(it) }
         address.startsWith(SEGMENT) -> segment(address)
         else -> null
     }
@@ -292,8 +340,8 @@ internal class HlsVariantSwitch(
      * Moves the stream to the variant at [index], or to the one the player would choose for null.
      * True when the next segment FFmpeg asks for is that variant's. False when the stream must
      * open again for it: the variants do not share their segments, their codecs or their sound
-     * differ, the playlist is one this switch does not serve, or the segments are MP4 and
-     * encrypted, in another codec than H.264, HEVC, AV1 and VP9, or laid out in other tracks.
+     * differ, the playlist is one this switch does not serve, or the segments are MP4 in another
+     * codec than H.264, HEVC, AV1 and VP9, or laid out in other tracks.
      */
     suspend fun request(index: Int?): Boolean = lock.withLock {
         val current = listed ?: return false
@@ -331,8 +379,6 @@ internal class HlsVariantSwitch(
      * yet, for the first initialization. False when either cannot be written for it.
      */
     private suspend fun planned(current: Loaded, next: Loaded): Boolean {
-        // An encrypted segment is decrypted inside FFmpeg, after this switch has served it.
-        if (current.playlist.encrypted || next.playlist.encrypted) return false
         val base = baseTracks ?: tracksOf(init ?: return false).also { baseTracks = it }
         for (loaded in listOf(current, next)) {
             if (plans[loaded.variant] != null) continue
@@ -345,12 +391,52 @@ internal class HlsVariantSwitch(
 
     /** The tracks of the initialization [of], read whole. */
     private suspend fun tracksOf(of: HlsInit): List<Fmp4.Track> {
-        val reader = slice(openAddress(of.address), of.offset, of.length) ?: return emptyList()
+        val reader = opened(of) ?: return emptyList()
         return try {
             Fmp4.tracks(readWhole(reader, MAX_INIT_BYTES, of.address))
         } finally {
             reader.close()
         }
+    }
+
+    /** A reader of the initialization [of], in plain bytes. */
+    private suspend fun opened(of: HlsInit): MediaIo? {
+        val reader = slice(openAddress(of.address), of.offset, of.length) ?: return null
+        if (of.key.isEmpty()) return reader
+        val bytes = try {
+            readWhole(reader, MAX_INIT_BYTES, of.address)
+        } finally {
+            reader.close()
+        }
+        return BytesMediaIo(decrypted(bytes, of.keyAddress, of.keyIv, of.sequence, of.address) ?: return null, of.address)
+    }
+
+    /**
+     * [bytes] of [name] decrypted with the key at [address] and [iv], or with the IV that
+     * [sequence] is when the tag stated none (RFC 8216, section 5.2). Null when the key cannot be read.
+     */
+    private suspend fun decrypted(bytes: ByteArray, address: String?, iv: ByteArray?, sequence: Long, name: String): ByteArray? {
+        val key = keyAt(address ?: return null) ?: return null
+        val vector = iv ?: ByteArray(16) { if (it < 8) 0 else (sequence ushr (8 * (15 - it))).toByte() }
+        return try {
+            Aes128Cbc.decrypt(bytes, key, vector)
+        } catch (failure: IllegalArgumentException) {
+            throw IllegalStateException("$name cannot be decrypted: ${failure.message}", failure)
+        }
+    }
+
+    /** The sixteen bytes of the key at [address], read once. */
+    private suspend fun keyAt(address: String): ByteArray? {
+        keyLock.withLock { keys[address] }?.let { return it }
+        val reader = openAddress(address) ?: return null
+        val key = try {
+            readWhole(reader, MAX_KEY_BYTES, address)
+        } finally {
+            reader.close()
+        }
+        check(key.size == 16) { "the key at $address has ${key.size} bytes, and an AES-128 key has 16" }
+        keyLock.withLock { keys[address] = key }
+        return key
     }
 
     private suspend fun playlist(): MediaIo? = lock.withLock {
@@ -394,6 +480,7 @@ internal class HlsVariantSwitch(
     private suspend fun segment(address: String): MediaIo? {
         val sequence = sequenceOf(address) ?: return null
         var plan: List<Fmp4Rewrite.Plan>? = null
+        var encrypted = false
         val segment = lock.withLock {
             val variant = target.value
             val found = loaded[variant]?.playlist?.at(sequence)?.let { variant to it }
@@ -407,16 +494,24 @@ internal class HlsVariantSwitch(
                 plan = (plans[found.first] ?: return null).map { Fmp4Rewrite.Plan(it.source, it.target, it.shiftMicros, it.endMicros, joined) }
                 written = sequence to found.first
             }
+            // FFmpeg decrypts a segment of a playlist with no initialization, whose key it was shown.
+            encrypted = init != null && found.second.key.isNotEmpty()
             found.second
         }
         val reader = slice(openAddress(segment.address), segment.offset, segment.length) ?: return null
-        val plans = plan ?: return reader
+        val plans = plan
+        if (plans == null && !encrypted) return reader
         val bytes = try {
             readWhole(reader, MAX_SEGMENT_BYTES, segment.address)
         } finally {
             reader.close()
         }
-        return BytesMediaIo(Fmp4Rewrite.rewrite(bytes, plans), segment.address)
+        val plain = if (encrypted) {
+            decrypted(bytes, segment.keyAddress, segment.keyIv, segment.sequence, segment.address) ?: return null
+        } else {
+            bytes
+        }
+        return BytesMediaIo(if (plans == null) plain else Fmp4Rewrite.rewrite(plain, plans), segment.address)
     }
 
     /** The playlist of [variant] read again, kept as its newest, or null when it cannot be read now. */
@@ -485,6 +580,9 @@ internal class HlsVariantSwitch(
 
         /** The most an initialization may hold. One is a few kilobytes. */
         private const val MAX_INIT_BYTES: Long = 4L shl 20
+
+        /** A key is sixteen bytes. */
+        private const val MAX_KEY_BYTES: Long = 16
 
         /** The most one segment may hold to be written again, as much as the DASH path reads. */
         private const val MAX_SEGMENT_BYTES: Long = 64L shl 20

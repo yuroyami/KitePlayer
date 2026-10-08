@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.mp4.Fmp4
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -63,10 +64,35 @@ class HlsSwitchingTest {
         val text = vod("seg", extra = "#EXT-X-KEY:METHOD=AES-128,URI=\"../key.bin\",IV=0x01\n")
         val playlist = assertNotNull(readSwitchablePlaylist(text, base))
         assertTrue("#EXT-X-KEY:METHOD=AES-128,URI=\"https://cdn.test/hls/key.bin\",IV=0x01" in playlist.served, playlist.served)
-        assertTrue(playlist.encrypted)
+        assertTrue(playlist.segments.all { it.keyAddress == "https://cdn.test/hls/key.bin" && it.keyIv?.last() == 1.toByte() })
         val other = assertNotNull(readSwitchablePlaylist(vod("seg", extra = "#EXT-X-KEY:METHOD=AES-128,URI=\"other.bin\",IV=0x01\n"), base))
         assertFalse(sameSegments(playlist, other), "another key cannot decrypt the same address of the switch")
         assertTrue(sameSegments(playlist, assertNotNull(readSwitchablePlaylist(text, "https://cdn.test/hls/high/index.m3u8"))))
+    }
+
+    @Test
+    fun aPlaylistWithAnInitializationIsServedWithNoKey() {
+        // The switch decrypts MP4 segments itself, so FFmpeg must not decrypt them again.
+        val before = assertNotNull(readSwitchablePlaylist(mp4Vod("low", "#EXT-X-KEY:METHOD=AES-128,URI=\"k\",IV=0x0A0b\n"), base))
+        assertFalse("EXT-X-KEY" in before.served, before.served)
+        assertTrue(before.served.endsWith("#EXT-X-ENDLIST\n"), before.served)
+        val init = assertNotNull(before.init)
+        assertEquals("https://cdn.test/hls/low/k", init.keyAddress)
+        assertEquals(ByteArray(14).toList() + listOf<Byte>(0x0A, 0x0B), init.keyIv?.toList())
+        assertEquals(7, init.sequence, "the number of the segment after it, for a key with no IV")
+        assertTrue(before.segments.all { it.keyAddress == init.keyAddress })
+
+        val after = "#EXTM3U\n#EXT-X-MAP:URI=\"i.mp4\"\n#EXT-X-KEY:METHOD=AES-128,URI=\"k\"\n#EXTINF:2,\na.m4s\n#EXT-X-KEY:METHOD=NONE\n#EXTINF:2,\nb.m4s\n"
+        val late = assertNotNull(readSwitchablePlaylist(after, base))
+        assertEquals("", assertNotNull(late.init).key, "a key after the tag leaves the initialization plain")
+        assertEquals(listOf("https://cdn.test/hls/low/k", null), late.segments.map { it.keyAddress })
+        assertEquals(null, late.segments[0].keyIv)
+        assertFalse("EXT-X-KEY" in late.served, late.served)
+
+        // Variants of an MP4 stream may each have a key of their own.
+        val other = assertNotNull(readSwitchablePlaylist(mp4Vod("low", "#EXT-X-KEY:METHOD=AES-128,URI=\"other\"\n"), base))
+        assertTrue(sameSegments(before, other))
+        assertNull(readSwitchablePlaylist(mp4Vod("low", "#EXT-X-KEY:METHOD=AES-128,URI=\"k\",IV=0xNO\n"), base), "an IV that is no number")
     }
 
     @Test
@@ -158,6 +184,8 @@ class HlsSwitchingTest {
     )
 
     private class Stream(val files: MutableMap<String, String>) {
+        /** Files that are no text. */
+        val bytes = mutableMapOf<String, ByteArray>()
         val asked = mutableListOf<String>()
         val closed = mutableListOf<String>()
     }
@@ -169,7 +197,7 @@ class HlsSwitchingTest {
         choose = { choose },
         openAddress = { address ->
             stream.asked += address
-            stream.files[address]?.let { Text(it, address, stream.closed) }
+            stream.files[address]?.let { Text(it, address, stream.closed) } ?: stream.bytes[address]?.let { BytesMediaIo(it, address) }
         },
     )
 
@@ -326,7 +354,43 @@ class HlsSwitchingTest {
     }
 
     @Test
-    fun anMp4ChangeIsRefusedForEncryptedSegmentsAndForAnInitializationThatIsNotMp4() = runTest {
+    fun encryptedMp4SegmentsReachFfmpegInPlainBytes() = runTest {
+        fun bytes(hex: String) = ByteArray(hex.length / 2) { hex.substring(2 * it, 2 * it + 2).toInt(16).toByte() }
+        // Both made by `openssl aes-128-cbc -e` with the key below: the first with the IV 7, which
+        // is the number of the playlist's first segment, the second with the IV the playlist states.
+        val numbered = bytes("0ad24560e1d7cb2518ea8b33a15bc68bdd55653692dd0d82f9d716228ad5f005")
+        val stated = bytes("b966ed4454734ffdf516aca94970b5e7da574a5178fc40b19b5cc9e85d67edcc")
+        val stream = Stream(files())
+        stream.files["https://cdn.test/low.m3u8"] = mp4Vod("low", "#EXT-X-KEY:METHOD=AES-128,URI=\"key\"\n")
+        stream.files["https://cdn.test/high.m3u8"] = mp4Vod("high", "#EXT-X-KEY:METHOD=AES-128,URI=\"key\",IV=0x000102030405060708090a0b0c0d0e0f\n")
+        stream.files["https://cdn.test/key"] = "0123456789abcdef"
+        stream.bytes["https://cdn.test/low-init.mp4"] = numbered
+        stream.bytes["https://cdn.test/low-0.m4s"] = numbered
+        stream.bytes["https://cdn.test/high-1.m4s"] = stated
+        val low = switchOver(stream)
+        val served = assertNotNull(low.open(HlsVariantSwitch.PLAYLIST)).text()
+        assertFalse("EXT-X-KEY" in served, served)
+        assertEquals("0123456789abcdef", assertNotNull(low.open("https://kite-hls.invalid/init.mp4")).text(), "an initialization after the key is encrypted too")
+        assertEquals("0123456789abcdef", assertNotNull(low.open("https://kite-hls.invalid/segment/7.m4s")).text())
+        val high = switchOver(stream, initial = 1)
+        assertNotNull(high.open(HlsVariantSwitch.PLAYLIST)).close()
+        assertEquals("a segment of an HLS stream", assertNotNull(high.open("https://kite-hls.invalid/segment/8.m4s")).text())
+        assertEquals(2, stream.asked.count { it == "https://cdn.test/key" }, "each of the two switches reads the key once")
+
+        // A key that is not there, and a key that is another one.
+        stream.files.remove("https://cdn.test/key")
+        val keyless = switchOver(stream)
+        assertNotNull(keyless.open(HlsVariantSwitch.PLAYLIST)).close()
+        assertNull(keyless.open("https://kite-hls.invalid/segment/7.m4s"), "a segment whose key cannot be read is one that cannot be read")
+        stream.files["https://cdn.test/key"] = "fedcba9876543210"
+        val wrong = switchOver(stream)
+        assertNotNull(wrong.open(HlsVariantSwitch.PLAYLIST)).close()
+        val failure = assertFailsWith<IllegalStateException> { wrong.open("https://kite-hls.invalid/segment/7.m4s") }
+        assertTrue("https://cdn.test/low-0.m4s cannot be decrypted" in failure.message.orEmpty(), failure.message)
+    }
+
+    @Test
+    fun anMp4ChangeIsRefusedForAnInitializationThatIsNotMp4() = runTest {
         val stream = Stream(files())
         stream.files["https://cdn.test/low.m3u8"] = mp4Vod("low")
         stream.files["https://cdn.test/high.m3u8"] = mp4Vod("high")
@@ -339,14 +403,5 @@ class HlsSwitchingTest {
         assertTrue("https://cdn.test/low-init.mp4" in stream.asked, "which was read to find that out")
         assertEquals(0, switch.selected)
         assertEquals("low 0", assertNotNull(switch.open("https://kite-hls.invalid/segment/7.m4s")).text(), "the stream goes on as it was")
-
-        val key = "#EXT-X-KEY:METHOD=AES-128,URI=\"key\"\n"
-        val locked = Stream(files())
-        locked.files["https://cdn.test/low.m3u8"] = mp4Vod("low", key)
-        locked.files["https://cdn.test/high.m3u8"] = mp4Vod("high", key)
-        val other = switchOver(locked)
-        assertNotNull(other.open(HlsVariantSwitch.PLAYLIST)).close()
-        assertFalse(other.request(1), "an encrypted segment is decrypted after the switch served it")
-        assertFalse(locked.asked.any { it.endsWith(".mp4") }, "so no initialization is even read")
     }
 }

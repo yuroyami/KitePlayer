@@ -17,7 +17,8 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
  * `CueAlignment.isBottom` with exactly one caller, which is three chances for this rule to drift.
  */
 internal val CueLayout.usesImplicitBottomStack: Boolean
-    get() = positionY == null &&
+    // A cue in a TTML region is placed by its region and stands in no stack (#492).
+    get() = positionY == null && region == null &&
         (
             alignment == CueAlignment.BottomLeft ||
                 alignment == CueAlignment.BottomCenter ||

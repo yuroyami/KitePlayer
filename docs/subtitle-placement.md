@@ -86,6 +86,9 @@ changes shape, for example after a rotation.
   not move typeset text.
 - A bitmap cue keeps its authored pixel size. Its origin maps from its authored canvas onto the
   area that the Kotlin tier lays out in, each axis on its own.
+- A cue in a TTML region is placed by its region, whose box is a fraction of the area that the
+  Kotlin tier lays out in, and stands in no bottom stack. [TTML regions](subtitle-regions.md) has
+  the rule.
 
 ## Rule 5: when the output changes size
 

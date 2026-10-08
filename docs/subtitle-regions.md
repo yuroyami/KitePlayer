@@ -1,8 +1,8 @@
 # TTML regions
 
 The contract for the TTML and DFXP half of #492, built in the order at the end. Every other format
-of that issue already loads, and TTML and DFXP files now load too, with their regions in the cues;
-the shared layout that places those regions is the next step.
+of that issue already loads, and TTML and DFXP files now load too, and are drawn in their regions
+on the desktop, Android and Apple. The web's text drawing is the step left.
 
 TTML is the subtitle format broadcasters and streaming services hand out, and DFXP is its older
 name. Unlike SubRip or WebVTT, a TTML file places its text in regions: boxes on the screen with a
@@ -160,8 +160,9 @@ canvas is the last step below.
    using it and its tests unchanged. Done.
 3. The model, `TtmlParser` in `kiteplayer-subtitles` with its cues' regions and styles, the network
    module's WebVTT conversion built on it in place of its own TTML reader, and the external file
-   path. Done. Until step 4 a cue with a region is drawn at the top of the picture.
-4. Region layout in the shared rasterizer loop, tested on the desktop rasterizer.
+   path. Done.
+4. Region layout in the shared rasterizer loop, tested on the desktop rasterizer. Done. The Android
+   and Apple rasterizers go through the same loop; a device or a Mac has not drawn one yet.
 5. A browser raster path for text cues, regions included.
 
 ## Tests

@@ -64,7 +64,7 @@ internal fun regionImage(
 }
 
 /** The [width] by [height] block of [source] whose top left pixel is at [fromX], [fromY]. */
-private fun crop(source: RgbaBitmap, fromX: Int, fromY: Int, width: Int, height: Int): ByteArray {
+internal fun crop(source: RgbaBitmap, fromX: Int, fromY: Int, width: Int, height: Int): ByteArray {
     val output = ByteArray(width * height * 4)
     for (row in 0 until height) {
         val from = ((fromY + row) * source.width + fromX) * 4

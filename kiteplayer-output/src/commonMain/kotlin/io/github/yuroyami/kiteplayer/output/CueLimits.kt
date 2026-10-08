@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.spi.OverlayImage
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlayLimitException
 import io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer
 import io.github.yuroyami.kiteplayer.subtitle.CueLayout
+import io.github.yuroyami.kiteplayer.subtitle.CueRegion
 import io.github.yuroyami.kiteplayer.subtitle.CueStyle
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import kotlin.math.ceil
@@ -60,17 +61,26 @@ internal fun rasterizeCues(
     // order, which is the draw order, and only the stack offsets change.
     val reversed = admitted.stacksLastAtBottom
     val order = if (reversed) admitted.asReversed() else admitted
+    // Each TTML region is laid out once, as one group, at the place of the first of its cues (#492).
+    val placedRegions = HashSet<CueRegion>()
     for ((index, cue) in order.withIndex()) {
-        when (cue) {
-            is SubtitleCue.Text -> drawText(cue, stackedBottom, budget)?.let { image ->
+        val region = (cue as? SubtitleCue.Text)?.layout?.region
+        when {
+            region != null -> if (placedRegions.add(region)) {
+                val members = order.filter { it is SubtitleCue.Text && it.layout.region == region }.map { it as SubtitleCue.Text }
+                val group = regionImages(region, members, viewportWidth, viewportHeight, budget, drawText)
+                // Turned now so that the final turn of a reversed pile leaves the group in its own order.
+                images += if (reversed) group.asReversed() else group
+            }
+            cue is SubtitleCue.Text -> drawText(cue, stackedBottom, budget)?.let { image ->
                 images += image
                 if (cue.layout.usesImplicitBottomStack) {
                     stackedBottom += image.bitmap.height + STACK_GAP_PX
                 }
             }
-            is SubtitleCue.Bitmap -> for (region in cue.regions) {
+            cue is SubtitleCue.Bitmap -> for (picture in cue.regions) {
                 // Origin and extent both scale from the authored canvas to the viewport.
-                regionImage(region, viewportWidth, viewportHeight, budget)?.let { images += it }
+                regionImage(picture, viewportWidth, viewportHeight, budget)?.let { images += it }
                 if (budget.exhausted) break
             }
         }

@@ -55,14 +55,79 @@ internal interface AppleOutputDevices {
     fun outputLatencyNanos(device: UInt): Long? = null
 
     /**
-     * Calls [onChange] each time [outputLatencyNanos] may answer differently for [device]: the
-     * route changed, or the device changed its latency or its sample rate. [onChange] runs on a
-     * notification thread, never on the device's render thread.
+     * What the route that [device] plays through is now: headphones, speakers or something this
+     * cannot tell (#503). 0 for [device] is the route the system already plays through. iOS
+     * answers unknown, because its audio session reports headphones leaving by itself.
+     */
+    fun outputRoute(device: UInt): OutputRoute = OutputRoute.Unknown
+
+    /**
+     * Calls [onChange] each time [outputLatencyNanos] or [outputRoute] may answer differently for
+     * [device]: the route changed, the device switched between its speaker and its headphone
+     * jack, or it changed its latency or its sample rate. [onChange] runs on a notification
+     * thread, never on the device's render thread.
      *
      * @return the registration, which `close` releases, or null when the platform has no such notice.
      */
-    fun watchOutputLatency(device: UInt, onChange: () -> Unit): AutoCloseable? = null
+    fun watchRoute(device: UInt, onChange: () -> Unit): AutoCloseable? = null
 }
+
+/** Where the sound comes out, as far as the system's description of the device tells. */
+internal enum class OutputRouteKind {
+    /** Headphones or earphones, by the device's own word. */
+    Headphones,
+
+    /** A Bluetooth device that does not say what it is. Most are headphones, so losing one counts. */
+    UnnamedBluetooth,
+
+    /** Speakers, by the device's own word. */
+    Speakers,
+
+    /** Anything else: HDMI, USB, AirPlay, or no description at all. */
+    Unknown,
+}
+
+/** One route: its [kind], and the device's [name] for a sentence about it. */
+internal data class OutputRoute(val kind: OutputRouteKind, val name: String? = null) {
+    companion object {
+        val Unknown = OutputRoute(OutputRouteKind.Unknown)
+    }
+}
+
+/**
+ * Classifies a CoreAudio output from three of its properties, each null when the device does not
+ * answer it. The terminal type and the data source say what the device is, so they come first. The
+ * transport says only how it is connected: a Bluetooth device that names itself a speaker is a
+ * speaker, and one that names nothing is taken for headphones.
+ *
+ * @param transport `kAudioDevicePropertyTransportType`
+ * @param terminal `kAudioStreamPropertyTerminalType` of the first output stream
+ * @param dataSource `kAudioDevicePropertyDataSource`, which a built-in device with a jack changes
+ */
+internal fun classifyOutput(transport: UInt?, terminal: UInt?, dataSource: UInt?): OutputRouteKind = when {
+    terminal == TERMINAL_HEADPHONES || dataSource == SOURCE_HEADPHONES -> OutputRouteKind.Headphones
+    terminal == TERMINAL_SPEAKER || dataSource == SOURCE_INTERNAL_SPEAKER -> OutputRouteKind.Speakers
+    transport == TRANSPORT_BLUETOOTH || transport == TRANSPORT_BLUETOOTH_LE -> OutputRouteKind.UnnamedBluetooth
+    else -> OutputRouteKind.Unknown
+}
+
+/**
+ * Whether a change of route made private sound loud: headphones, or a Bluetooth device that may be
+ * headphones, gave way to speakers. Speakers to speakers, and anything to or from an unknown
+ * route, is not that.
+ */
+internal fun becameNoisy(from: OutputRouteKind, to: OutputRouteKind): Boolean =
+    (from == OutputRouteKind.Headphones || from == OutputRouteKind.UnnamedBluetooth) && to == OutputRouteKind.Speakers
+
+/** A CoreAudio four-character code as its number. */
+private fun fourCharacters(code: String): UInt = code.fold(0u) { value, character -> (value shl 8) or character.code.toUInt() }
+
+private val TERMINAL_HEADPHONES = fourCharacters("hdph")
+private val TERMINAL_SPEAKER = fourCharacters("spkr")
+private val SOURCE_HEADPHONES = fourCharacters("hdpn")
+private val SOURCE_INTERNAL_SPEAKER = fourCharacters("ispk")
+private val TRANSPORT_BLUETOOTH = fourCharacters("blue")
+private val TRANSPORT_BLUETOOTH_LE = fourCharacters("blea")
 
 /**
  * [frames] sample frames at [sampleRate] in nanoseconds, or null for a rate that is not a rate.

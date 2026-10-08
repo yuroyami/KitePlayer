@@ -32,9 +32,11 @@ import platform.CoreAudio.AudioObjectPropertyAddress
 import platform.CoreAudio.AudioObjectRemovePropertyListener
 import platform.CoreAudio.kAudioDevicePropertyDeviceIsAlive
 import platform.CoreAudio.kAudioDevicePropertyDeviceUID
+import platform.CoreAudio.kAudioDevicePropertyDataSource
 import platform.CoreAudio.kAudioDevicePropertyLatency
 import platform.CoreAudio.kAudioDevicePropertyNominalSampleRate
 import platform.CoreAudio.kAudioDevicePropertyStreams
+import platform.CoreAudio.kAudioDevicePropertyTransportType
 import platform.CoreAudio.kAudioHardwarePropertyDefaultOutputDevice
 import platform.CoreAudio.kAudioHardwarePropertyDevices
 import platform.CoreAudio.kAudioObjectPropertyElementMain
@@ -43,6 +45,7 @@ import platform.CoreAudio.kAudioObjectPropertyScopeGlobal
 import platform.CoreAudio.kAudioObjectPropertyScopeOutput
 import platform.CoreAudio.kAudioObjectSystemObject
 import platform.CoreAudio.kAudioStreamPropertyLatency
+import platform.CoreAudio.kAudioStreamPropertyTerminalType
 import platform.CoreFoundation.CFRelease
 import platform.CoreFoundation.CFStringGetCString
 import platform.CoreFoundation.CFStringGetLength
@@ -200,15 +203,29 @@ internal object MacOutputDevices : AppleOutputDevices {
         return latencyFramesToNanos(deviceFrames.toLong() + streamFrames.toLong(), rate)
     }
 
+    /** What the device says it is, from its transport, its first stream's terminal and its data source. */
+    override fun outputRoute(device: UInt): OutputRoute {
+        val target = if (device == 0u) defaultOutputDevice() else device
+        if (target == 0u) return OutputRoute.Unknown
+        val kind = classifyOutput(
+            transport = uintProperty(target, kAudioDevicePropertyTransportType, kAudioObjectPropertyScopeGlobal),
+            terminal = firstOutputStream(target)
+                ?.let { uintProperty(it, kAudioStreamPropertyTerminalType, kAudioObjectPropertyScopeGlobal) },
+            dataSource = uintProperty(target, kAudioDevicePropertyDataSource, kAudioObjectPropertyScopeOutput),
+        )
+        return OutputRoute(kind, deviceName(target))
+    }
+
     /**
-     * Watches the latency and the sample rate of the device in use. For the default output (0) it
-     * also watches which device that is, and moves its two listeners to the new one.
+     * Watches the latency, the sample rate and the data source of the device in use. For the
+     * default output (0) it also watches which device that is, and moves its listeners to the
+     * new one.
      */
-    override fun watchOutputLatency(device: UInt, onChange: () -> Unit): AutoCloseable? {
-        if (device != 0u) return deviceLatencyListeners(device, onChange)
+    override fun watchRoute(device: UInt, onChange: () -> Unit): AutoCloseable? {
+        if (device != 0u) return deviceRouteListeners(device, onChange)
         val lock = SynchronizedObject()
         var closed = false
-        var onDevice: AutoCloseable? = deviceLatencyListeners(defaultOutputDevice(), onChange)
+        var onDevice: AutoCloseable? = deviceRouteListeners(defaultOutputDevice(), onChange)
         val onDefault = HardwareListener.register(
             objectId = kAudioObjectSystemObject.toUInt(),
             selector = kAudioHardwarePropertyDefaultOutputDevice,
@@ -216,7 +233,7 @@ internal object MacOutputDevices : AppleOutputDevices {
             synchronized(lock) {
                 if (closed) return@synchronized
                 onDevice?.close()
-                onDevice = deviceLatencyListeners(defaultOutputDevice(), onChange)
+                onDevice = deviceRouteListeners(defaultOutputDevice(), onChange)
             }
             onChange()
         }
@@ -230,15 +247,16 @@ internal object MacOutputDevices : AppleOutputDevices {
         }
     }
 
-    private fun deviceLatencyListeners(device: UInt, onChange: () -> Unit): AutoCloseable? {
+    private fun deviceRouteListeners(device: UInt, onChange: () -> Unit): AutoCloseable? {
         if (device == 0u) return null
-        val latency = HardwareListener.register(device, kAudioDevicePropertyLatency, kAudioObjectPropertyScopeOutput, onChange)
-        val rate = HardwareListener.register(device, kAudioDevicePropertyNominalSampleRate, onNotice = onChange)
-        if (latency == null && rate == null) return null
-        return AutoCloseable {
-            latency?.close()
-            rate?.close()
-        }
+        val listeners = listOfNotNull(
+            HardwareListener.register(device, kAudioDevicePropertyLatency, kAudioObjectPropertyScopeOutput, onChange),
+            HardwareListener.register(device, kAudioDevicePropertyNominalSampleRate, onNotice = onChange),
+            // A built-in device with a jack stays one device and changes its data source.
+            HardwareListener.register(device, kAudioDevicePropertyDataSource, kAudioObjectPropertyScopeOutput, onChange),
+        )
+        if (listeners.isEmpty()) return null
+        return AutoCloseable { listeners.forEach { it.close() } }
     }
 
     /** The first output stream of [device], or null when it has none. */

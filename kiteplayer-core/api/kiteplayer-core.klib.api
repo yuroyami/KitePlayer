@@ -1111,6 +1111,19 @@ abstract interface io.github.yuroyami.kiteplayer/MonotonicClock { // io.github.y
 }
 
 sealed interface io.github.yuroyami.kiteplayer.spi/AudioSinkEvent { // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent|null[0]
+    final class BecameNoisy : io.github.yuroyami.kiteplayer.spi/AudioSinkEvent { // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.BecameNoisy|null[0]
+        constructor <init>(kotlin/Long) // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.BecameNoisy.<init>|<init>(kotlin.Long){}[0]
+
+        final val atNanos // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.BecameNoisy.atNanos|{}atNanos[0]
+            final fun <get-atNanos>(): kotlin/Long // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.BecameNoisy.atNanos.<get-atNanos>|<get-atNanos>(){}[0]
+
+        final fun component1(): kotlin/Long // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.BecameNoisy.component1|component1(){}[0]
+        final fun copy(kotlin/Long = ...): io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.BecameNoisy // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.BecameNoisy.copy|copy(kotlin.Long){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.BecameNoisy.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.BecameNoisy.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.BecameNoisy.toString|toString(){}[0]
+    }
+
     final class DeviceChanged : io.github.yuroyami.kiteplayer.spi/AudioSinkEvent { // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.DeviceChanged|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent.DeviceChanged.<init>|<init>(kotlin.String){}[0]
 
@@ -1400,6 +1413,19 @@ sealed interface io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.AudioFormatChanged.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerEvent.AudioFormatChanged.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerEvent.AudioFormatChanged.toString|toString(){}[0]
+    }
+
+    final class AudioOutputBecameNoisy : io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroyami.kiteplayer/PlayerEvent.AudioOutputBecameNoisy|null[0]
+        constructor <init>(kotlin/Long) // io.github.yuroyami.kiteplayer/PlayerEvent.AudioOutputBecameNoisy.<init>|<init>(kotlin.Long){}[0]
+
+        final val transportMark // io.github.yuroyami.kiteplayer/PlayerEvent.AudioOutputBecameNoisy.transportMark|{}transportMark[0]
+            final fun <get-transportMark>(): kotlin/Long // io.github.yuroyami.kiteplayer/PlayerEvent.AudioOutputBecameNoisy.transportMark.<get-transportMark>|<get-transportMark>(){}[0]
+
+        final fun component1(): kotlin/Long // io.github.yuroyami.kiteplayer/PlayerEvent.AudioOutputBecameNoisy.component1|component1(){}[0]
+        final fun copy(kotlin/Long = ...): io.github.yuroyami.kiteplayer/PlayerEvent.AudioOutputBecameNoisy // io.github.yuroyami.kiteplayer/PlayerEvent.AudioOutputBecameNoisy.copy|copy(kotlin.Long){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.AudioOutputBecameNoisy.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerEvent.AudioOutputBecameNoisy.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerEvent.AudioOutputBecameNoisy.toString|toString(){}[0]
     }
 
     final class ChapterChanged : io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroyami.kiteplayer/PlayerEvent.ChapterChanged|null[0]

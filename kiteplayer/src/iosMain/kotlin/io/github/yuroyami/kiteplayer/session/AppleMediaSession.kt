@@ -33,19 +33,19 @@ import kotlin.time.Duration.Companion.seconds
  * @param skipInterval how far the skip back and skip forward buttons move, on the lock screen, the
  *        control centre, CarPlay and a headset. Positive.
  */
-public class KitePlayerMediaSession(
+public actual class KitePlayerMediaSession actual constructor(
     private val player: KitePlayer,
-    skipInterval: Duration = 15.seconds,
+    skipInterval: Duration,
 ) : AutoCloseable {
 
     /** The card and the buttons, which iOS shares with macOS. */
     private val card = AppleNowPlaying(player, skipInterval, ::coverArtwork)
 
     /** Apple has no token to hand out; the card is process-wide. Always null. */
-    public val platformToken: Any? = null
+    public actual val platformToken: Any? = null
 
     /** Always true here. Other platforms answer false when they have no session, so one check works everywhere. */
-    public val isAvailable: Boolean = true
+    public actual val isAvailable: Boolean = true
 
     /**
      * The picture the card shows. Without one the card shows the item's own cover, the picture a
@@ -74,7 +74,7 @@ public class KitePlayerMediaSession(
     private var closed = false
 
     /** Closes what this session owns, newest first, then the card. Only the first call does anything. */
-    override fun close() {
+    actual override fun close() {
         if (closed) return
         closed = true
         try {
@@ -103,11 +103,11 @@ public class KitePlayerMediaSession(
  * The session owns all of it and closes it with the player, so most apps never close it by hand.
  * Call this on the main thread.
  */
-public fun KitePlayer.attachMediaSession(
-    background: BackgroundPolicy? = BackgroundPolicy.ContinueAudio,
-    interruptions: InterruptionPolicy? = InterruptionPolicy(),
-    pictureInPicture: KitePlayerPictureInPicture? = null,
-    skipInterval: Duration = 15.seconds,
+public actual fun KitePlayer.attachMediaSession(
+    background: BackgroundPolicy?,
+    interruptions: InterruptionPolicy?,
+    pictureInPicture: KitePlayerPictureInPicture?,
+    skipInterval: Duration,
 ): KitePlayerMediaSession {
     val session = KitePlayerMediaSession(this, skipInterval)
     try {

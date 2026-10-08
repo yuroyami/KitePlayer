@@ -136,6 +136,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
   runner's per-test default is 2000 ms and Kotlin does not raise it. Every module that runs browser
   tests needs a timeout config file; copy the one that has it. Wiring a module's browser half into
   CI without it is how a green suite becomes an intermittent red.
+- `merge` and `channelFlow` collect their sources in coroutines they launch, so a collector started
+  undispatched is not subscribed when its start returns. Wrapping a sink's event flow in `merge`
+  lost the first device notice in `CoreAudioSinkDeviceWatchTest`. Add to such a flow with
+  `onSubscription` and `transform`, which stay on the collector (#503).
 - A no-replay shared flow drops what it emits before anyone subscribes. Every renderer's event flow
   is one, so a test that launches a collector and then makes the renderer emit is racing its own
   subscription: it passes on a quiet machine and times out under a full suite. Wait for the

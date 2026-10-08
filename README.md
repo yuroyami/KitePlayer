@@ -897,7 +897,8 @@ player.attachMediaSession(context, MediaNotificationOptions(smallIcon = R.drawab
 
 On iOS, declare `UIBackgroundModes` with `audio` and call `player.attachMediaSession()` for the lock
 screen. A native Mac app calls `player.attachMediaSession()` too: the player then shows in Now
-Playing, and the media keys and an AirPods tap control it. A desktop app keeps playing without
+Playing, the media keys and an AirPods tap control it, and it pauses when headphones disconnect
+and the speakers take over. A desktop app keeps playing without
 help, and a web page plays while its tab is open.
 
 <details>

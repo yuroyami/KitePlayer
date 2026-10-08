@@ -37,6 +37,7 @@ import io.github.yuroyami.kiteplayer.spi.NativeRingHandoff
 import io.github.yuroyami.kiteplayer.spi.RawRingApi
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.update
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.cinterop.CPointer
@@ -52,6 +53,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.onSubscription
+import kotlinx.coroutines.flow.transform
 
 /**
  * Test seam around C's void teardown call. Production implementations must not throw and return only
@@ -258,7 +260,8 @@ public class CoreAudioSink private constructor(
     /** The notice about the output device, held while the sink is open. See the class note. */
     private var deviceWatch: AutoCloseable? = null
 
-    private val eventFlow = MutableSharedFlow<AudioSinkEvent>(
+    /** Carries each [AudioSinkEvent], and [RouteTick] to make a collector look at [pendingNoisy]. */
+    private val eventFlow = MutableSharedFlow<Any>(
         replay = 0,
         extraBufferCapacity = 16,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -269,8 +272,23 @@ public class CoreAudioSink private constructor(
 
     // The subscription is in place before the kept failure is read, so a failure reaches every collector
     // at least once: from the emission, from the read, or from both.
+    /**
+     * When headphones last gave way to speakers, until a collector takes it (#503). Kept apart from
+     * [eventFlow], which replays nothing and drops under load: this notice pauses a player, so it
+     * must reach the engine even when it came before the engine subscribed. One pause is enough, so
+     * a newer one replaces an older one nobody took.
+     */
+    private val pendingNoisy = atomic<Long?>(null)
+
+    // The subscription is in place before the kept failure and the kept notice are read, so each
+    // reaches a collector at least once. Every event that passes also looks for a kept notice, so
+    // a tick the buffer dropped under load costs nothing.
     override val events: Flow<AudioSinkEvent> = eventFlow.onSubscription {
         failedWith.value?.let { emit(AudioSinkEvent.Failed(it)) }
+        emit(RouteTick)
+    }.transform { event ->
+        pendingNoisy.getAndSet(null)?.let { emit(AudioSinkEvent.BecameNoisy(it)) }
+        if (event is AudioSinkEvent) emit(event)
     }
 
     /**
@@ -305,15 +323,34 @@ public class CoreAudioSink private constructor(
     /** The route's latency the anchors include now, in nanoseconds: 0 when the system reports none. */
     internal val outputLatencyNanos: Long get() = reportedOutputLatency.value ?: 0L
 
+    /** What the route was when it was last read, to tell headphones giving way to speakers. */
+    private var route: OutputRoute = OutputRoute.Unknown
+
     /**
-     * Reads the route's latency again and hands it to the C sink. Runs at open and from the latency
-     * watch, on a notification thread, under [lock] so that it never reaches a sink being destroyed.
+     * Reads the route again: its latency goes to the C sink, and headphones that gave way to
+     * speakers are reported as [AudioSinkEvent.BecameNoisy] (#503). Runs from the route watch, on a
+     * notification thread, under [lock] so that it never reaches a sink being destroyed.
+     *
+     * @param noticedAt when the notice arrived, read before anything else was done with it.
      */
-    private fun refreshOutputLatency(deviceId: UInt) {
-        synchronized(lock) {
+    private fun refreshRoute(deviceId: UInt, noticedAt: Long) {
+        val noisy = synchronized(lock) {
             val sink = handle ?: return
             applyOutputLatency(sink, deviceId)
+            val before = route
+            val now = readRoute(deviceId)
+            route = now
+            becameNoisy(before.kind, now.kind)
         }
+        if (!noisy) return
+        pendingNoisy.update { held -> if (held == null || noticedAt > held) noticedAt else held }
+        eventFlow.tryEmit(RouteTick)
+    }
+
+    private fun readRoute(deviceId: UInt): OutputRoute = try {
+        outputDevices.outputRoute(deviceId)
+    } catch (_: Throwable) {
+        OutputRoute.Unknown
     }
 
     private fun applyOutputLatency(sink: CPointer<kprt_sink>, deviceId: UInt) {
@@ -459,11 +496,12 @@ public class CoreAudioSink private constructor(
                 }
             }
 
-            // The route's latency, read after its watch is in place so that no change falls between
+            // The route and its latency, read after their watch is in place so that no change falls between
             // the two. A notice that arrives before the handle is published finds none and does
             // nothing, and the read below then answers the same figure.
-            val latencyWatch = outputDevices.watchOutputLatency(deviceId) { refreshOutputLatency(deviceId) }
+            val latencyWatch = outputDevices.watchRoute(deviceId) { refreshRoute(deviceId, clock.nanos()) }
             applyOutputLatency(created.sink, deviceId)
+            val openedOn = readRoute(deviceId)
 
             // Published inside the lock, so a diagnostic read from another thread sees either nothing
             // or the complete device/ring/session transaction. Opening itself belongs to the session
@@ -473,6 +511,7 @@ public class CoreAudioSink private constructor(
                 ring = attachedRing
                 negotiated = created.format
                 sessionLease = acquiredLease
+                route = openedOn
                 deviceWatch = if (latencyWatch == null) watch else AutoCloseable {
                     try {
                         watch?.close()
@@ -578,6 +617,8 @@ public class CoreAudioSink private constructor(
             sessionLease = null
             deviceWatch = null
             reportedOutputLatency.value = null
+            route = OutputRoute.Unknown
+            pendingNoisy.value = null
             OwnedLifecycle(currentSink, currentLease, currentWatch)
         }
         // The notice goes first, so that no notice reaches a sink whose device is going. A notice
@@ -748,3 +789,6 @@ public class CoreAudioSinkFactory private constructor(
     /** The current route's count on iOS (#466); macOS does not say yet. */
     override fun outputChannelCount(): Int? = runCatching { platformAppleOutputDevices().outputChannelCount() }.getOrNull()
 }
+
+/** Tells a collector of the sink's events to look for a kept route notice. Never leaves the sink. */
+private object RouteTick

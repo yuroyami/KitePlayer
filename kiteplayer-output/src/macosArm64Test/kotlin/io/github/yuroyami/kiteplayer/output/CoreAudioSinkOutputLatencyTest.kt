@@ -5,14 +5,21 @@ package io.github.yuroyami.kiteplayer.output
 import io.github.yuroyami.kiteplayer.AudioOutputDevice
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
+import io.github.yuroyami.kiteplayer.spi.AudioSinkEvent
 import io.github.yuroyami.kiteplayer.spi.RawRingApi
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The sink dates its sound at the ear, not at the device (#495).
@@ -20,7 +27,8 @@ import kotlin.test.assertTrue
  * The render callback's timestamp ends at the device. The route from there to the ear takes a few
  * milliseconds on a built-in speaker and far more on a Bluetooth route, and the system reports
  * how long. These cases replace that report with a fake one, to drive a route change on demand,
- * and then read the real one from this Mac.
+ * and then read the real one from this Mac. The same watch tells the sink when headphones give
+ * way to speakers (#503).
  */
 class CoreAudioSinkOutputLatencyTest {
 
@@ -91,6 +99,62 @@ class CoreAudioSinkOutputLatencyTest {
     }
 
     @Test
+    fun headphonesGivingWayToSpeakersIsKeptForACollectorThatComesLaterAndGivenOnce() = runBlocking {
+        val devices = FakeLatency(reported = BLUETOOTH, route = OutputRoute(OutputRouteKind.Headphones, "AirPods"))
+        val sink = sinkWith(devices)
+        sink.openWithRing(format) { it.sampleRate / 4 }
+        try {
+            // Nobody collects yet, as when the notice comes before the engine subscribed.
+            val before = AppleHostClock.nanos()
+            devices.route = OutputRoute(OutputRouteKind.Speakers, "MacBook Air Speakers")
+            devices.fire()
+            val after = AppleHostClock.nanos()
+            val first = withTimeout(2.seconds) { sink.events.filterIsInstance<AudioSinkEvent.BecameNoisy>().first() }
+            assertTrue(first.atNanos in before..after, "the notice is dated when it arrived, on the sink's clock, and waits for its collector")
+
+            // Taken once. The same route again, a second speaker and headphones coming back are not noisy.
+            devices.fire()
+            devices.route = OutputRoute(OutputRouteKind.Speakers, "Studio Display Speakers")
+            devices.fire()
+            devices.route = OutputRoute(OutputRouteKind.Headphones, "AirPods")
+            devices.fire()
+            assertNull(
+                withTimeoutOrNull(300.milliseconds) { sink.events.filterIsInstance<AudioSinkEvent.BecameNoisy>().first() },
+                "only headphones giving way to speakers is reported",
+            )
+
+            // Two that nobody took arrive as one, the newest: one pause is enough.
+            devices.route = OutputRoute(OutputRouteKind.Speakers, "MacBook Air Speakers")
+            devices.fire()
+            devices.route = OutputRoute(OutputRouteKind.Headphones, "AirPods")
+            devices.fire()
+            val second = AppleHostClock.nanos()
+            devices.route = OutputRoute(OutputRouteKind.Speakers, "MacBook Air Speakers")
+            devices.fire()
+            val newest = withTimeout(2.seconds) { sink.events.filterIsInstance<AudioSinkEvent.BecameNoisy>().first() }
+            assertTrue(newest.atNanos >= second, "the newest of the two is the one kept")
+            assertNull(
+                withTimeoutOrNull(300.milliseconds) { sink.events.filterIsInstance<AudioSinkEvent.BecameNoisy>().first() },
+                "and the older one is gone",
+            )
+        } finally {
+            sink.close()
+        }
+        assertNull(
+            withTimeoutOrNull(100.milliseconds) { sink.events.filterIsInstance<AudioSinkEvent.BecameNoisy>().first() },
+            "a closed sink keeps no notice",
+        )
+    }
+
+    @Test
+    fun thisMacSaysWhatItsDefaultOutputIs() {
+        if (MacOutputDevices.defaultOutputDevice() == 0u) return println("skipped: this Mac has no default output")
+        val route = MacOutputDevices.outputRoute(0u)
+        println("the default output is ${route.name}, taken for ${route.kind}")
+        assertNotNull(route.name, "a default output has a name")
+    }
+
+    @Test
     fun thisMacReportsALatencyForItsDefaultOutput() {
         if (MacOutputDevices.defaultOutputDevice() == 0u) return println("skipped: this Mac has no default output")
         val latency = assertNotNull(MacOutputDevices.outputLatencyNanos(0u), "the default output must answer its latency")
@@ -102,7 +166,7 @@ class CoreAudioSinkOutputLatencyTest {
     fun thePlatformLatencyWatchRegistersAndCloseReleasesIt() {
         if (MacOutputDevices.defaultOutputDevice() == 0u) return println("skipped: this Mac has no default output")
         val before = HardwareListener.liveCount
-        val watch = assertNotNull(MacOutputDevices.watchOutputLatency(0u) { })
+        val watch = assertNotNull(MacOutputDevices.watchRoute(0u) { })
         assertTrue(HardwareListener.liveCount > before + 1, "the default output and its device are both watched")
         watch.close()
         assertEquals(before, HardwareListener.liveCount, "close must remove every listener")
@@ -126,7 +190,7 @@ class CoreAudioSinkOutputLatencyTest {
     )
 
     /** Answers the latency a test sets, and fires the route notice when the test says so. */
-    private class FakeLatency(var reported: Long?) : AppleOutputDevices {
+    private class FakeLatency(var reported: Long?, var route: OutputRoute = OutputRoute.Unknown) : AppleOutputDevices {
         var listener: (() -> Unit)? = null
         var releases = 0
 
@@ -135,8 +199,9 @@ class CoreAudioSinkOutputLatencyTest {
         override fun devices(): List<AudioOutputDevice> = emptyList()
         override fun deviceFor(id: String): UInt? = null
         override fun outputLatencyNanos(device: UInt): Long? = reported
+        override fun outputRoute(device: UInt): OutputRoute = route
 
-        override fun watchOutputLatency(device: UInt, onChange: () -> Unit): AutoCloseable {
+        override fun watchRoute(device: UInt, onChange: () -> Unit): AutoCloseable {
             listener = onChange
             return AutoCloseable {
                 releases++

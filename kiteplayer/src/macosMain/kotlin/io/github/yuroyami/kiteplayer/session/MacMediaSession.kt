@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.session
 
 import io.github.yuroyami.kiteplayer.CoverArt
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
@@ -34,9 +35,9 @@ import kotlin.time.Duration.Companion.seconds
  *
  * @param skipInterval how far the skip back and skip forward buttons move. Positive.
  */
-public class KitePlayerMediaSession(
+public actual class KitePlayerMediaSession actual constructor(
     private val player: KitePlayer,
-    skipInterval: Duration = 15.seconds,
+    skipInterval: Duration,
 ) : AutoCloseable {
 
     private val infoCenter = MPNowPlayingInfoCenter.defaultCenter()
@@ -46,15 +47,15 @@ public class KitePlayerMediaSession(
         player = player,
         skipInterval = skipInterval,
         coverArtwork = ::coverArtwork,
-        onPlayback = { state -> infoCenter.playbackState = playbackStateFor(state.phase) },
+        onPlayback = { state -> infoCenter.playbackState = playbackStateFor(state.phase, player.state.value.playRequested) },
         onRelease = { infoCenter.playbackState = MPNowPlayingPlaybackStateStopped },
     )
 
     /** Apple has no token to hand out; Now Playing is process-wide. Always null. */
-    public val platformToken: Any? = null
+    public actual val platformToken: Any? = null
 
     /** Always true here. Other platforms answer false when they have no session, so one check works everywhere. */
-    public val isAvailable: Boolean = true
+    public actual val isAvailable: Boolean = true
 
     /**
      * The picture Now Playing shows. Without one it shows the item's own cover, the picture a music
@@ -89,7 +90,7 @@ public class KitePlayerMediaSession(
     private var closed = false
 
     /** Closes what this session owns, newest first, then Now Playing. Only the first call does anything. */
-    override fun close() {
+    actual override fun close() {
         if (closed) return
         closed = true
         try {
@@ -106,11 +107,13 @@ public class KitePlayerMediaSession(
 }
 
 /**
- * What macOS is told the player does. Buffering counts as playing: the listener asked for sound,
- * so the keys must keep coming to this application while a stream stalls.
+ * What macOS is told the player does. Waiting for data counts as playing when the listener asked
+ * for sound, so the keys keep coming to this application while a stream stalls. An item that
+ * opens without a play is paused.
  */
-internal fun playbackStateFor(phase: MediaSessionPhase): MPNowPlayingPlaybackState = when (phase) {
-    MediaSessionPhase.Playing, MediaSessionPhase.Buffering -> MPNowPlayingPlaybackStatePlaying
+internal fun playbackStateFor(phase: MediaSessionPhase, playRequested: Boolean): MPNowPlayingPlaybackState = when (phase) {
+    MediaSessionPhase.Playing -> MPNowPlayingPlaybackStatePlaying
+    MediaSessionPhase.Buffering -> if (playRequested) MPNowPlayingPlaybackStatePlaying else MPNowPlayingPlaybackStatePaused
     MediaSessionPhase.Paused -> MPNowPlayingPlaybackStatePaused
     MediaSessionPhase.Stopped -> MPNowPlayingPlaybackStateStopped
 }
@@ -119,10 +122,29 @@ internal fun playbackStateFor(phase: MediaSessionPhase): MPNowPlayingPlaybackSta
  * Creates the media session for this player and returns it: Now Playing and its buttons follow
  * the player, and the session closes with it, so most apps never close it by hand.
  *
+ * - [interruptions] pauses the player when its sound moves from headphones to speakers, for
+ *   example when AirPods disconnect. Null turns that off. A Mac has no phone call that takes the
+ *   sound away, so the other fields of the policy do nothing here.
+ * - [background] does nothing on a Mac: an application that lost the focus can still show its
+ *   window, so there is no background to react to. It is here so shared Apple code compiles.
+ * - [pictureInPicture] needs nothing from the session on a Mac and keeps its own lifetime.
+ *
  * Call this on the main thread.
  */
-public fun KitePlayer.attachMediaSession(skipInterval: Duration = 15.seconds): KitePlayerMediaSession {
+@Suppress("UNUSED_PARAMETER")
+public actual fun KitePlayer.attachMediaSession(
+    background: BackgroundPolicy?,
+    interruptions: InterruptionPolicy?,
+    pictureInPicture: KitePlayerPictureInPicture?,
+    skipInterval: Duration,
+): KitePlayerMediaSession {
     val session = KitePlayerMediaSession(this, skipInterval)
+    try {
+        interruptions?.let { session.parts.add(interruptionHandling(this, it)) }
+    } catch (failure: Throwable) {
+        session.close()
+        throw failure
+    }
     session.closeWithPlayer()
     return session
 }

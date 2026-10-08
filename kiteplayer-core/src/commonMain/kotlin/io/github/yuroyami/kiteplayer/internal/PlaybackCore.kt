@@ -1876,6 +1876,23 @@ internal class PlaybackCore(
      * playback to start as soon as the pipeline can supply it, and the start rendezvous decides that. A
      * caller that wants to know watches the status.
      */
+    /** How many transport commands callers gave, and when the newest one came. */
+    private class TransportStamp(val mark: Long, val atNanos: Long)
+
+    private val transport = atomic(TransportStamp(0L, Long.MIN_VALUE))
+
+    /** See `KitePlayer.transportMark`. */
+    val transportMark: Long get() = transport.value.mark
+
+    /**
+     * Counts one transport command a caller gave, before the command is checked, so a refused one
+     * counts too. The time lets a late notice of headphones leaving be told from a fresh one (#503).
+     */
+    fun noteTransport() {
+        val now = clock.nanos()
+        transport.update { TransportStamp(it.mark + 1, maxOf(now, it.atNanos)) }
+    }
+
     fun play() {
         check(!closedNow.value) { "the player is closed, so play cannot run" }
         post(CoreCommand.Play(CompletableDeferred()))
@@ -12369,6 +12386,12 @@ internal class PlaybackCore(
                         warn(PlaybackWarning.AudioDeviceChanged("device lost: " + event.detail))
                     is io.github.yuroyami.kiteplayer.spi.AudioSinkEvent.DeviceChanged ->
                         warn(PlaybackWarning.AudioDeviceChanged(event.detail))
+                    // Passed on and nothing else: pausing is the media session's policy.
+                    is io.github.yuroyami.kiteplayer.spi.AudioSinkEvent.BecameNoisy -> {
+                        // A notice from before the last transport command is stale: a tie goes to the command.
+                        val stamp = transport.value
+                        if (event.atNanos > stamp.atNanos) emitEvent(PlayerEvent.AudioOutputBecameNoisy(stamp.mark))
+                    }
                     // The sink was already reporting these and the engine threw
                     // them away. An underrun warns once per session; a format request is a
                     // device condition the caller must hear about even though the engine cannot

@@ -33,6 +33,8 @@ tasks.matching { it.name == "compileJvmTestJava" }.configureEach {
 kotlin {
     explicitApi()
     jvmToolchain(21)
+    // The Apple media session is one declaration with an iOS and a macOS class behind it.
+    compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
 
     // Kept explicit because networkMain below adds edges of its own.
     applyDefaultHierarchyTemplate()
@@ -106,12 +108,13 @@ kotlin {
             api(project(":kiteplayer-ffmpeg"))
             api(project(":kiteplayer-output"))
         }
+        // The media session's shared entry point names the picture in picture class of the view module.
+        appleMain.dependencies {
+            api(project(":kiteplayer-view"))
+        }
+        // macOS has no view bindings.
         iosMain.dependencies {
             api(project(":kiteplayer-view-bindings"))
-        }
-        // macOS has no view bindings. It takes the view module for the picture in picture class.
-        macosMain.dependencies {
-            api(project(":kiteplayer-view"))
         }
         // The desktop default includes the JNI media backend, audio output and native-view adapter.
         jvmMain.dependencies {

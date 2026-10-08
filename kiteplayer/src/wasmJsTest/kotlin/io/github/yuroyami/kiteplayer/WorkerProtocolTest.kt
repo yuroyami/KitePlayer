@@ -384,6 +384,7 @@ class WorkerProtocolTest {
             PlayerEvent.AudioFormatChanged(44_100, 6),
             PlayerEvent.FirstFrameRendered(41.milliseconds),
             PlayerEvent.FramePresented(Pts(1_001_000L), Long.MAX_VALUE - 7, 3.milliseconds, true),
+            PlayerEvent.AudioOutputBecameNoisy(Long.MAX_VALUE - 11),
             PlayerEvent.Ended,
             PlayerEvent.Warning(warnings.first()),
             PlayerEvent.Failed(errors.first()),
@@ -395,7 +396,7 @@ class WorkerProtocolTest {
             PlayerEvent.TrackChosenByPlayer(TrackKind.Subtitle, null),
         )
         for (event in events) assertEquals(WorkerMessage.Event(event), WorkerMessage.Event(event).roundTrip())
-        assertEquals(13, events.map { it::class }.distinct().size, "every kind of event is here")
+        assertEquals(14, events.map { it::class }.distinct().size, "every kind of event is here")
     }
 
     @Test

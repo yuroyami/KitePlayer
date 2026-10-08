@@ -39,7 +39,7 @@ internal actual fun platformAppleOutputDevices(): AppleOutputDevices = object : 
         latencySecondsToNanos(AVAudioSession.sharedInstance().outputLatency)
 
     /** The session's route notice: headphones connecting or leaving change the latency. */
-    override fun watchOutputLatency(device: UInt, onChange: () -> Unit): AutoCloseable? {
+    override fun watchRoute(device: UInt, onChange: () -> Unit): AutoCloseable? {
         val center = NSNotificationCenter.defaultCenter
         val observer = center.addObserverForName(AVAudioSessionRouteChangeNotification, null, null) { _ -> onChange() }
         return AutoCloseable { center.removeObserver(observer) }

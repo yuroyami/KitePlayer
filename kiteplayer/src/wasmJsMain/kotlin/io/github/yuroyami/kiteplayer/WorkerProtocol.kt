@@ -813,6 +813,11 @@ private fun encodeEvent(event: PlayerEvent): JsAny = record {
             put("latency", event.latency)
             put("exact", event.exact)
         }
+        // No web output reports it; coded so the list stays complete. The mark is an exact long.
+        is PlayerEvent.AudioOutputBecameNoisy -> {
+            kind("AudioOutputBecameNoisy")
+            putExact("transportMark", event.transportMark)
+        }
         PlayerEvent.Ended -> kind("Ended")
         is PlayerEvent.Warning -> {
             kind("Warning")
@@ -1589,6 +1594,7 @@ private fun decodeEvent(o: JsAny): PlayerEvent? = when (o.str("t")) {
         latency = o.micros("latency") ?: missing("latency"),
         exact = o.flag("exact"),
     )
+    "AudioOutputBecameNoisy" -> PlayerEvent.AudioOutputBecameNoisy(o.exact("transportMark") ?: missing("transportMark"))
     "Ended" -> PlayerEvent.Ended
     "Warning" -> PlayerEvent.Warning(decodeWarning(o.child("warning") ?: missing("warning")) ?: return null)
     "Failed" -> PlayerEvent.Failed(decodeError(o.child("error") ?: missing("error")) ?: return null)

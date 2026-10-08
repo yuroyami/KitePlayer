@@ -43,6 +43,53 @@ class AudioSinkEventTest {
         harness.close()
     }
 
+    /** The engine passes the notice on with the transport mark and leaves the pause to the media session (#503). */
+    @Test
+    fun `sound that became loud is passed on with the transport mark and playback goes on`() = runTest {
+        val harness = CoreHarness(this, publishesSinkEvents = true)
+        harness.openWithRenderer()
+        harness.core.noteTransport()
+        harness.core.play()
+        harness.run(200.milliseconds)
+        val mark = harness.core.transportMark
+
+        harness.sink.publish(AudioSinkEvent.BecameNoisy(atNanos = harness.clock.nanos()))
+        harness.run(50.milliseconds)
+
+        assertEquals(listOf(mark), harness.events.filterIsInstance<PlayerEvent.AudioOutputBecameNoisy>().map { it.transportMark })
+        assertTrue(harness.core.snapshots.value.playRequested, "pausing is the policy of the session and the engine keeps playing")
+        assertTrue(harness.deviceWarnings().isEmpty(), "it is an event, not a warning")
+        harness.close()
+    }
+
+    /**
+     * The sink's notice can arrive late. One from before the listener's last play or pause would
+     * pause a play the listener made after the headphones left, so it is dropped, and a tie goes
+     * to the listener.
+     */
+    @Test
+    fun `a notice that is not newer than the last transport command is dropped`() = runTest {
+        val harness = CoreHarness(this, publishesSinkEvents = true)
+        harness.openWithRenderer()
+        harness.run(100.milliseconds)
+        val unplugged = harness.clock.nanos()
+        harness.run(100.milliseconds)
+        harness.core.noteTransport()
+        harness.core.play()
+        val pressed = harness.clock.nanos()
+        harness.run(100.milliseconds)
+
+        harness.sink.publish(AudioSinkEvent.BecameNoisy(atNanos = unplugged))
+        harness.sink.publish(AudioSinkEvent.BecameNoisy(atNanos = pressed))
+        harness.run(50.milliseconds)
+        assertTrue(harness.events.none { it is PlayerEvent.AudioOutputBecameNoisy }, "an older notice and a tie are both stale")
+
+        harness.sink.publish(AudioSinkEvent.BecameNoisy(atNanos = pressed + 1))
+        harness.run(50.milliseconds)
+        assertEquals(1, harness.events.count { it is PlayerEvent.AudioOutputBecameNoisy }, "a newer one is passed on")
+        harness.close()
+    }
+
     /**
      * The other half of the contract, closed on 2026-08-27: the sink was already
      * telling the engine these things and the engine threw them away with `else -> Unit`. A

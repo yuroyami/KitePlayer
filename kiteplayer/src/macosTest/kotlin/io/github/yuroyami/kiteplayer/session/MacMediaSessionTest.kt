@@ -20,10 +20,15 @@ class MacMediaSessionTest {
     /** macOS gives the media keys to the application that says it plays, so a stall must still say so. */
     @Test
     fun bufferingTellsTheSystemThePlayerPlays() {
-        assertEquals(MPNowPlayingPlaybackStatePlaying, playbackStateFor(MediaSessionPhase.Playing))
-        assertEquals(MPNowPlayingPlaybackStatePlaying, playbackStateFor(MediaSessionPhase.Buffering))
-        assertEquals(MPNowPlayingPlaybackStatePaused, playbackStateFor(MediaSessionPhase.Paused))
-        assertEquals(MPNowPlayingPlaybackStateStopped, playbackStateFor(MediaSessionPhase.Stopped))
+        assertEquals(MPNowPlayingPlaybackStatePlaying, playbackStateFor(MediaSessionPhase.Playing, playRequested = true))
+        assertEquals(MPNowPlayingPlaybackStatePlaying, playbackStateFor(MediaSessionPhase.Buffering, playRequested = true))
+        assertEquals(
+            MPNowPlayingPlaybackStatePaused,
+            playbackStateFor(MediaSessionPhase.Buffering, playRequested = false),
+            "an item that opens without a play does not claim the keys",
+        )
+        assertEquals(MPNowPlayingPlaybackStatePaused, playbackStateFor(MediaSessionPhase.Paused, playRequested = false))
+        assertEquals(MPNowPlayingPlaybackStateStopped, playbackStateFor(MediaSessionPhase.Stopped, playRequested = false))
     }
 
     @Test

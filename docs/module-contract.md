@@ -226,16 +226,20 @@ and idempotent `close()`. Construction, artwork updates and close belong to the 
 An invalid nonpositive skip interval is refused before registering a system handler.
 
 One process has one Now Playing owner. A new successfully registered session takes ownership,
-retires the previous owner's command targets and policy subscriptions, and leaves the previous
-player's transport alone. Late callbacks and subsequent closes from a retired session cannot
+retires the previous owner's command targets, and leaves the previous player's transport alone.
+The previous session keeps its policy subscriptions until it closes: its player can still make
+sound, so it must still pause when its headphones leave. Late callbacks and subsequent closes from a retired session cannot
 control or clear the new owner's card. A setup failure removes every handler acquired so far.
 The session returned by `attachMediaSession` closes with its player. Artwork supplied by the
 application wins over the item's embedded artwork; null restores the embedded picture.
 
 The shared controller uses MediaPlayer for metadata, position, buttons and command forwarding.
 The macOS adapter also writes `MPNowPlayingInfoCenter.playbackState`: Playing, Paused and Stopped
-map directly; Opening and Buffering map to Unknown with a zero playback rate, not to a fabricated
-OS interruption or continuing playback. The iOS audio-session and application-background adapters
+map directly. Opening and Buffering map to Playing with a zero playback rate when a play was
+asked for, and to Paused when it was not. macOS sends the media keys to
+the application that says it plays, and the listener asked for sound, so a stalled stream must
+keep the keys; the zero rate stops the card walking its position on. mpv and VLC report a stall
+the same way. The iOS audio-session and application-background adapters
 remain iOS-only. A macOS application losing focus can still have a visible window, so the mobile
 background argument has no effect there; picture in picture retains its own lifetime. The desktop
 JVM stub is unchanged. Sharing the existing view-module edge at `appleMain` makes the established

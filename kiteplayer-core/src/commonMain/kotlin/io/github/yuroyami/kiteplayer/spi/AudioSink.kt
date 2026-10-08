@@ -236,6 +236,23 @@ public sealed interface AudioSinkEvent {
     public data class DeviceChanged(val detail: String) : AudioSinkEvent
 
     /**
+     * The sound moved from a private output to a loud one while the sink kept playing: headphones
+     * were unplugged or went out of range, and the system's speakers took over (#503).
+     *
+     * A sink reports this only where the platform does not report it by another road, which today
+     * is macOS. The engine passes it on as `PlayerEvent.AudioOutputBecameNoisy` and does nothing
+     * else: whether to pause is the application's policy, and the media session applies it.
+     *
+     * A sink keeps the newest one until a collector takes it, so the engine hears of a change that
+     * came before it subscribed. Several that nobody took yet may arrive as one, the newest.
+     *
+     * @param atNanos when the sink received the route notice, on the clock of its output backend.
+     *        It is the time of the notice, not of the unplugging, which nobody can know. The engine
+     *        drops a notice that is not newer than the last play, pause, stop or open a caller made.
+     */
+    public data class BecameNoisy(val atNanos: Long) : AudioSinkEvent
+
+    /**
      * The device wants a different format than the one negotiated.
      *
      * The engine warns (`AudioDeviceChanged`, naming the request) and keeps the sink: it cannot

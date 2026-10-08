@@ -70,6 +70,23 @@ public sealed interface PlayerEvent {
         val exact: Boolean,
     ) : PlayerEvent
 
+    /**
+     * The sound moved from a private output to a loud one, and playback went on: headphones were
+     * unplugged or went out of range, and the system's speakers took over.
+     *
+     * Emitted where the audio output reports it, which today is a native Mac app. The player does
+     * not pause by itself: the media session does, by its `pauseWhenBecomingNoisy` policy. iOS and
+     * Android tell the media session directly and emit nothing here.
+     *
+     * The output's notice can arrive late. One that is not newer than the last play, pause, stop or
+     * open a caller made is not emitted, so it cannot undo what the listener did after the change.
+     *
+     * @param transportMark the player's `transportMark` when the notice was passed on. A receiver
+     *        that pauses compares it with the mark of now, and does nothing when a caller gave a
+     *        transport command in between.
+     */
+    public data class AudioOutputBecameNoisy(val transportMark: Long) : PlayerEvent
+
     /** Playback reached the end. Emitted once, before the status becomes Ended. */
     public data object Ended : PlayerEvent
 

@@ -2095,6 +2095,17 @@ public final class io/github/yuroyami/kiteplayer/PlayerEvent$AudioFormatChanged 
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/PlayerEvent$AudioOutputBecameNoisy : io/github/yuroyami/kiteplayer/PlayerEvent {
+	public fun <init> (J)V
+	public final fun component1 ()J
+	public final fun copy (J)Lio/github/yuroyami/kiteplayer/PlayerEvent$AudioOutputBecameNoisy;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlayerEvent$AudioOutputBecameNoisy;JILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlayerEvent$AudioOutputBecameNoisy;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getTransportMark ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/PlayerEvent$ChapterChanged : io/github/yuroyami/kiteplayer/PlayerEvent {
 	public fun <init> (Lio/github/yuroyami/kiteplayer/Chapter;)V
 	public final fun component1 ()Lio/github/yuroyami/kiteplayer/Chapter;
@@ -3352,6 +3363,17 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioSinkBuffe
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioSinkEvent {
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/AudioSinkEvent$BecameNoisy : io/github/yuroyami/kiteplayer/spi/AudioSinkEvent {
+	public fun <init> (J)V
+	public final fun component1 ()J
+	public final fun copy (J)Lio/github/yuroyami/kiteplayer/spi/AudioSinkEvent$BecameNoisy;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/spi/AudioSinkEvent$BecameNoisy;JILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/spi/AudioSinkEvent$BecameNoisy;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAtNanos ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/AudioSinkEvent$DeviceChanged : io/github/yuroyami/kiteplayer/spi/AudioSinkEvent {

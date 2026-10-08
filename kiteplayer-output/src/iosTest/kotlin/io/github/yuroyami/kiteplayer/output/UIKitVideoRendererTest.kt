@@ -137,6 +137,45 @@ class UIKitVideoRendererTest {
         assertEquals(0, ledger.liveCount)
     }
 
+    // The flash guard (#500): the renderer measures what it converts and dims a flashing run.
+    @Test
+    fun `a strobe is dimmed once its run starts`() = runBlocking {
+        val shade = atomic(0)
+        val clock = atomic(0L)
+        val red = atomic(-1)
+        val draws = atomic(0)
+        val renderer = UIKitVideoRenderer(
+            convert = { ByteArray(16 * 16 * 4) { if (it % 4 == 3) -1 else shade.value.toByte() } },
+            enqueueOnMain = { block -> block() },
+            deliverImage = { image ->
+                if (image != null) {
+                    red.value = readBack(image).redAndGreenAt(8, 8).first
+                    draws.incrementAndGet()
+                }
+            },
+            flashGuard = CpuFlashGuard(systemSetting = { false }, nanos = { clock.value }),
+        )
+        try {
+            renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+            // Black and white, three pictures each at 30 a second: five flashes a second.
+            val reds = (0 until 60).map { index ->
+                shade.value = if (index / 3 % 2 == 0) 0 else 255
+                clock.value = index * 1_000_000_000L / 30
+                val before = draws.value
+                assertTrue(renderer.present(FakeVideoFrame(Pts(index.toLong()), ledger = LeakLedger()), 0L))
+                awaitTrue("picture $index was drawn") { draws.value > before }
+                red.value
+            }
+            // The seventh leg is on picture 21, and from there white comes out at about a third.
+            assertEquals(List(21) { if (it / 3 % 2 == 0) 0 else 255 }, reds.take(21), "whole before the run")
+            val after = reds.drop(21)
+            assertTrue(after.max() in 40..95, "white came out as ${after.max()} once the run started")
+            assertEquals(0, after.min())
+        } finally {
+            renderer.close()
+        }
+    }
+
     @Test
     fun `quarter turns swap dimensions and move every source pixel`() = runBlocking {
         val width = 4

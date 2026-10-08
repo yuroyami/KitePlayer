@@ -79,6 +79,8 @@ public class UIKitVideoRenderer internal constructor(
     private val toneMapped: (VideoFrame) -> Boolean = { false },
     private val enqueueOnMain: (block: () -> Unit) -> Unit,
     private val deliverImage: (CGImageRef?) -> Unit,
+    /** The flash guard; a test passes one with its own setting and clock. */
+    private val flashGuard: CpuFlashGuard = CpuFlashGuard(),
 ) : VideoRenderer {
 
     public constructor(
@@ -233,6 +235,8 @@ public class UIKitVideoRenderer internal constructor(
             retainedMirrored = mirrored
             retainedCrop = crop
             pictureCleared = false
+            // Measured before it is drawn, so the picture that completes a run is already dimmed.
+            flashFactor = flashGuard.factorFor(rgba, size.width, size.height)
             makeImage(rgba, size, rotation, mirrored, crop)
         } catch (_: Throwable) {
             null
@@ -257,6 +261,9 @@ public class UIKitVideoRenderer internal constructor(
     /** True from a clear until the next frame converts, so a redraw shows the background. */
     private var pictureCleared: Boolean = false
 
+    /** The flash guard's factor for the retained picture: 1 outside a flashing run. Worker only. */
+    private var flashFactor: Float = 1f
+
     /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
     private fun redrawRetained() {
         // Nobody will ever see a picture drawn after the close began.
@@ -264,6 +271,8 @@ public class UIKitVideoRenderer internal constructor(
         if (pictureCleared) return deliverBackground()
         val rgba = retainedRgba ?: return
         val size = retainedSize ?: return
+        // A held picture is not measured again: it keeps the factor it was shown with.
+        flashFactor = flashGuard.held(flashFactor)
         val image = try {
             makeImage(rgba, size, retainedRotation, retainedMirrored, retainedCrop)
         } catch (_: Throwable) {
@@ -281,6 +290,8 @@ public class UIKitVideoRenderer internal constructor(
         retainedSize = null
         retainedCrop = null
         pictureCleared = true
+        flashGuard.forget()
+        flashFactor = 1f
         deliverBackground()
     }
 
@@ -383,7 +394,7 @@ public class UIKitVideoRenderer internal constructor(
 
         // The engine's one colour-matrix law, applied to bytes here instead of in
         // a shader. Identity hands back the same array, so an untouched picture copies nothing.
-        val pixels = adjustRgba(rgba, adjustSlot.value)
+        val pixels = adjustRgba(rgba, adjustSlot.value, flashFactor)
         val videoTransform = transformSlot.value
         // The viewer's turn and mirror fold into the frame's own, so one drawing applies both (#428).
         val orientation = videoTransform.orient(rotationDegrees, mirrored)
@@ -618,6 +629,15 @@ public class UIKitVideoRenderer internal constructor(
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         adjustSlot.value = adjustments
         requestRedraw()
+    }
+
+    /**
+     * The flash guard's mode (#500). This renderer measures each picture it converts and dims it
+     * while a flashing run lasts. `FollowSystem`, the default, guards while the system's Dim
+     * Flashing Lights setting is on. A paused picture re-draws, so turning the guard off undims it.
+     */
+    override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
+        if (flashGuard.setMode(mode)) requestRedraw()
     }
 
     /** The framing half. Same delivery law as [setAdjustments]. */

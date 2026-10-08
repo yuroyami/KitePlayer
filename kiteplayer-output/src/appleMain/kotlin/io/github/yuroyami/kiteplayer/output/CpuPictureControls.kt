@@ -17,10 +17,14 @@ import kotlin.math.pow
  *
  * Returns [rgba] itself for the neutral value, so an untouched picture copies nothing. Alpha is
  * carried through: the matrix's alpha row is identity and these buffers are opaque anyway.
+ *
+ * [flashFactor] is the flash guard's (#500): below 1 it multiplies the matrix, offsets included,
+ * before the gamma curve. At 1, the usual case, it changes nothing.
  */
-internal fun adjustRgba(rgba: ByteArray, adjustments: VideoAdjustments): ByteArray {
-    if (adjustments.isIdentity) return rgba
+internal fun adjustRgba(rgba: ByteArray, adjustments: VideoAdjustments, flashFactor: Float = 1f): ByteArray {
+    if (adjustments.isIdentity && flashFactor >= 1f) return rgba
     val m = adjustments.toColorMatrix()
+    if (flashFactor < 1f) for (row in 0 until 3) for (column in 0 until 5) m[row * 5 + column] *= flashFactor
     // toColorMatrix offsets in 0..1; these bytes are in 0..255, so the fifth column scales.
     val offsetR = m[4] * 255f
     val offsetG = m[9] * 255f

@@ -1,8 +1,8 @@
 # Dimming flashing video
 
 The contract for #500, built in the order at the end. Today the detector, the setting, the Compose
-canvas renderer, the AWT canvas and the Metal renderer carry it; every other renderer draws as
-before until its step lands.
+canvas renderer, the AWT canvas, the Metal renderer and the Core Graphics renderers on Apple carry
+it; every other renderer draws as before until its step lands.
 
 Repeated bright flashes can trigger seizures in people with photosensitive epilepsy and discomfort
 in many more. Since iOS 16.4 and macOS 13.3, Apple has a Dim Flashing Lights setting that
@@ -72,7 +72,9 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
   folds the factor into the picture controls' colour filter; outside a run it draws with the
   controls' own filter, or none, as before. The AWT canvas has no picture controls, so it lays black
   over the picture at `1 - k` before the cues, which leaves `k` of each encoded value under it, and
-  a repaint of a held picture draws it at the factor it was shown with.
+  a repaint of a held picture draws it at the factor it was shown with. The Core Graphics
+  renderers, AppKit's and UIKit's, measure on their conversion worker and fold the factor into the
+  matrix they apply to the bytes.
 - A GPU renderer (Metal, Android GL) draws a reduced copy beside its adjustment pass and reads it
   back when the next picture is about to draw, so it dims one frame late. The copy is 64 by 36
   texels, one for each point of the lattice above, so the detector reads the same points as on a
@@ -87,7 +89,7 @@ The engine tells each renderer the mode through `VideoRenderer.setFlashGuard(mod
 do nothing, on attach and on every change, as it does the adjustments. A change of mode, and taking
 the picture off, start a renderer's history afresh. Only an Apple renderer reads the system setting
 for `FollowSystem`, so on the Compose canvas renderer and the AWT canvas, which cannot, `FollowSystem`
-is off. The Metal renderer looks the setting up by name at run time, so an application still loads
+is off. The Apple renderers look the setting up by name at run time, so an application still loads
 on a system older than the setting, where `FollowSystem` is off.
 
 ## Order of work
@@ -98,7 +100,8 @@ on a system older than the setting, where `FollowSystem` is off.
    its Android hardware tier comes with step 6.
 4. The AWT canvas, the desktop default. Done.
 5. Metal and the Apple setting, on a Mac. Done, tested offscreen on a Mac; the check by eye on a
-   Mac and on an iPhone is owed. Core Graphics is next.
+   Mac and on an iPhone is owed. Core Graphics is done too, tested on a Mac and on the iOS
+   simulator.
 6. Android GL, the Android software path and the Compose renderer's hardware tier, on a device.
 7. The web canvas, once it has an adjustment stage.
 

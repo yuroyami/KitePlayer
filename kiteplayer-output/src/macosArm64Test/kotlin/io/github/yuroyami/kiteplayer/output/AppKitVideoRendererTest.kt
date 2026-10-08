@@ -608,6 +608,48 @@ class AppKitVideoRendererTest {
         }
     }
 
+    // The flash guard (#500): the renderer measures what it converts and dims a flashing run.
+    @Test
+    fun `the CPU fallback dims a strobe once its run starts`() = runBlocking {
+        val shade = atomic(0)
+        val clock = atomic(0L)
+        val drawn = atomic<NSImage?>(null)
+        val draws = atomic(0)
+        val renderer = AppKitVideoRenderer(
+            convert = { ByteArray(16 * 16 * 4) { if (it % 4 == 3) -1 else shade.value.toByte() } },
+            enqueueOnMain = { block -> block() },
+            showImage = { image ->
+                drawn.value = image
+                draws.incrementAndGet()
+            },
+            flashGuard = CpuFlashGuard(systemSetting = { false }, nanos = { clock.value }),
+        )
+        try {
+            renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+            // Black and white, three pictures each at 30 a second: five flashes a second.
+            val reds = (0 until 60).map { index ->
+                shade.value = if (index / 3 % 2 == 0) 0 else 255
+                clock.value = index * 1_000_000_000L / 30
+                val before = draws.value
+                assertTrue(
+                    renderer.present(
+                        FakeVideoFrame(pts = Pts(index.toLong()), size = VideoSize(16, 16), rotationDegrees = 0, ledger = LeakLedger()),
+                        targetNanos = 0L,
+                    ),
+                )
+                awaitTrue("picture $index was drawn") { draws.value > before }
+                readBack(assertNotNull(drawn.value)).redAndGreenAt(8, 8).first
+            }
+            // The seventh leg is on picture 21, and from there white comes out at about a third.
+            assertEquals(List(21) { if (it / 3 % 2 == 0) 0 else 255 }, reds.take(21), "whole before the run")
+            val after = reds.drop(21)
+            assertTrue(after.max() in 40..95, "white came out as ${after.max()} once the run started")
+            assertEquals(0, after.min())
+        } finally {
+            renderer.close()
+        }
+    }
+
     // The framing half: an aspect override reshapes the PRESENTED picture.
     @Test
     fun `the CPU fallback honours an aspect override`() = runBlocking {

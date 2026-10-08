@@ -175,8 +175,16 @@ int main(void)
                 KT_EQ_I64(accepted.channel_layout_mask, 0x70F);
             if (accepted.channels == 2 && accepted.channel_layout_mask != 0)
                 KT_EQ_I64(accepted.channel_layout_mask, 0x3);
+            /* The question a route change asks, answered with no sink, agrees with the open. */
+            KT_EQ_INT(kprt_sink_route_channels(0, 8), accepted.channels);
+            KT_EQ_INT(kprt_sink_route_channels(0, 1), 1);
             KT_EQ_INT(kprt_sink_destroy(sink), KPRT_SINK_OK);
         }
+    }
+
+    kt_case("a device that is not there has no channels to report");
+    {
+        KT_EQ_INT(kprt_sink_route_channels(0x7FFFFFF0u, 6), 0);
     }
 
     return kt_suite_end();

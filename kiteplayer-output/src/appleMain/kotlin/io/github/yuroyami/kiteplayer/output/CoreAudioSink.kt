@@ -161,7 +161,9 @@ private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
  * opens as stereo and the engine folds the surround into it. On iOS, a session this sink manages
  * tells the system that an item has more than two channels and asks the route for that many, and
  * the sink then opens with what the route gave. The count is decided at the open and kept until
- * the sink closes.
+ * the sink closes. When the route changes and a sink opened now would get another count, this one
+ * reports `AudioSinkEvent.FormatChangeRequested`, and the engine opens a new sink in its place
+ * (#563).
  *
  * ### Threading
  *
@@ -290,6 +292,17 @@ public class CoreAudioSink private constructor(
      */
     private val pendingNoisy = atomic<Long?>(null)
 
+    /**
+     * What the route changed to, when a sink opened now would get another channel count than this
+     * one has, until a collector takes it (#563). Kept like [pendingNoisy], because the engine opens
+     * a new output on it and a dropped one would leave surround playing into two speakers.
+     */
+    private val pendingFormat = atomic<String?>(null)
+
+    /** The channels asked for at the open, and the count of the last change reported. Under [lock]. */
+    private var requestedChannels = 0
+    private var reportedChannels = 0
+
     // The subscription is in place before the kept failure and the kept notice are read, so each
     // reaches a collector at least once. Every event that passes also looks for a kept notice, so
     // a tick the buffer dropped under load costs nothing.
@@ -298,6 +311,7 @@ public class CoreAudioSink private constructor(
         emit(RouteTick)
     }.transform { event ->
         pendingNoisy.getAndSet(null)?.let { emit(AudioSinkEvent.BecameNoisy(it)) }
+        pendingFormat.getAndSet(null)?.let { emit(AudioSinkEvent.FormatChangeRequested(it)) }
         if (event is AudioSinkEvent) emit(event)
     }
 
@@ -344,16 +358,46 @@ public class CoreAudioSink private constructor(
      * @param noticedAt when the notice arrived, read before anything else was done with it.
      */
     private fun refreshRoute(deviceId: UInt, noticedAt: Long) {
-        val noisy = synchronized(lock) {
+        val (noisy, lease) = synchronized(lock) {
             val sink = handle ?: return
             applyOutputLatency(sink, deviceId)
             val before = route
             val now = readRoute(deviceId)
             route = now
-            becameNoisy(before.kind, now.kind)
+            becameNoisy(before.kind, now.kind) to sessionLease
         }
-        if (!noisy) return
-        pendingNoisy.update { held -> if (held == null || noticedAt > held) noticedAt else held }
+        if (noisy) {
+            pendingNoisy.update { held -> if (held == null || noticedAt > held) noticedAt else held }
+            eventFlow.tryEmit(RouteTick)
+        }
+        // A route that offers more channels than the one before is asked for them first.
+        lease?.routeChanged()
+        checkChannels(deviceId)
+    }
+
+    /**
+     * Asks what a sink opened now would get, and reports it when that is not what this one has
+     * (#563). One change is reported once, and a route that fits again takes the report back.
+     * Runs from the device and route watches, under [lock] like [refreshRoute].
+     */
+    private fun checkChannels(deviceId: UInt) {
+        synchronized(lock) {
+            val opened = negotiated?.channels ?: return
+            val now = try {
+                outputDevices.routeChannels(deviceId, requestedChannels)
+            } catch (_: Throwable) {
+                0
+            }
+            if (now <= 0) return
+            if (now == opened) {
+                reportedChannels = 0
+                pendingFormat.value = null
+                return
+            }
+            if (now == reportedChannels) return
+            reportedChannels = now
+            pendingFormat.value = "the output now takes $now channels, and this sink opened with $opened"
+        }
         eventFlow.tryEmit(RouteTick)
     }
 
@@ -497,6 +541,7 @@ public class CoreAudioSink private constructor(
             val watch = if (bound == null) {
                 outputDevices.watchDefaultOutput { detail ->
                     eventFlow.tryEmit(AudioSinkEvent.DeviceChanged(detail))
+                    checkChannels(deviceId)
                 }
             } else {
                 outputDevices.watchDevice(deviceId) { detail ->
@@ -520,6 +565,8 @@ public class CoreAudioSink private constructor(
                 handle = created.sink
                 ring = attachedRing
                 negotiated = created.format
+                requestedChannels = request.channels
+                reportedChannels = 0
                 sessionLease = acquiredLease
                 route = openedOn
                 deviceWatch = if (latencyWatch == null) watch else AutoCloseable {
@@ -629,6 +676,9 @@ public class CoreAudioSink private constructor(
             reportedOutputLatency.value = null
             route = OutputRoute.Unknown
             pendingNoisy.value = null
+            pendingFormat.value = null
+            requestedChannels = 0
+            reportedChannels = 0
             OwnedLifecycle(currentSink, currentLease, currentWatch)
         }
         // The notice goes first, so that no notice reaches a sink whose device is going. A notice

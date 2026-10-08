@@ -2057,13 +2057,19 @@ internal class ScriptedOutput(
     /** Thrown by every raster call while set, after the call is recorded, as a broken font engine would. */
     var rasterizeFailure: Exception? = null
 
+    /**
+     * Sinks the factory hands out before it hands out [sink] again, in order. A test of an output
+     * that is replaced puts the replacement here and drives it with [ScriptedSink.runDevice] (#563).
+     */
+    val laterSinks: ArrayDeque<ScriptedSink> = ArrayDeque()
+
     /** What the scripted output says it carries, and how often the engine asked (#466). */
     var outputChannels: Int? = null
     var outputChannelQuestions: Int = 0
 
     override val audioSink: AudioSinkFactory = object : AudioSinkFactory {
         override val name: String = "scripted"
-        override suspend fun create(): AudioSink = sink
+        override suspend fun create(): AudioSink = laterSinks.removeFirstOrNull() ?: sink
         override fun outputChannelCount(): Int? = outputChannels.also { outputChannelQuestions++ }
     }
 

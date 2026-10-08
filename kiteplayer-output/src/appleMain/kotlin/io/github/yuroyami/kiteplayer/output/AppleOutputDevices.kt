@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.AudioOutputDevice
+import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_route_channels
 
 /**
  * The questions about Apple output devices that are not the audio unit's own lifecycle.
@@ -45,6 +46,14 @@ internal interface AppleOutputDevices {
 
     /** How many channels the current output route carries, or null when this platform does not say (#466). */
     fun outputChannelCount(): Int? = null
+
+    /**
+     * How many channels a sink opened now on [device] for [requested] channels would get, or zero
+     * when the output does not say (#563). 0 for [device] is the route the system already plays
+     * through. A sink asks after a route change, to learn whether it still fits its output.
+     */
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    fun routeChannels(device: UInt, requested: Int): Int = kprt_sink_route_channels(device, requested)
 
     /**
      * How long a frame takes from the device to the ear on the route that [device] plays through,

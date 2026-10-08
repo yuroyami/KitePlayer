@@ -225,9 +225,11 @@ public sealed class PlaybackWarning {
      * The audio device restarted, changed or was replaced.
      *
      * Emitted when the sink reports `AudioSinkEvent.DeviceLost` (detail prefixed "device lost: ") or
-     * `AudioSinkEvent.DeviceChanged`. **It reports; it does not mean the engine recovered.** Nothing
-     * rebuilds the sink or reopens the device yet, so treat this as an observation rather than a
-     * repair. `AudioSinkEventTest` pins exactly which events reach here and which are dropped.
+     * `AudioSinkEvent.DeviceChanged`. **It reports; it does not mean the engine recovered.** Treat
+     * it as an observation, not a repair. It is also emitted when a sink asked for another format
+     * and no new output could be opened, with the old one still playing. A new output that did
+     * open is `PlayerEvent.AudioFormatChanged` and no warning. `AudioSinkEventTest` pins exactly
+     * which events reach here and which are dropped.
      */
     public data class AudioDeviceChanged(val detail: String) : PlaybackWarning() {
         override val message: String get() = "audio device changed: $detail"

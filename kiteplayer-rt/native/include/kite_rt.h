@@ -609,6 +609,15 @@ KPRT_API int32_t kprt_sink_set_paused(kprt_sink *sink, int32_t paused, int32_t *
  * KPRT_SINK_TEARDOWN_UNPROVEN. KPRT_SINK_OK means everything was released. */
 KPRT_API int32_t kprt_sink_destroy(kprt_sink *sink);
 
+/* How many channels a sink created now on `device_id` for `channels` channels would open with.
+ *
+ * The answer is the one `kprt_sink_create_on_device` would report in `kprt_sink_format.channels`,
+ * with no sink made: the count asked for, inside one to eight, bounded by the channels the output
+ * has and by the speakers its layout names. An owner compares it with the count its sink opened
+ * with when the route changes, and makes a new sink when the two differ. Zero means no answer:
+ * the output would not open, or this platform has none. Any thread may call this. */
+KPRT_API int32_t kprt_sink_route_channels(uint32_t device_id, int32_t channels);
+
 /* Sets the time between a frame reaching the device and being heard, which every later anchor and
  * deadline then includes. The callback's timestamp ends at the device, so without this a Bluetooth
  * route plays its sound later than the clock says, by the route's whole delay.

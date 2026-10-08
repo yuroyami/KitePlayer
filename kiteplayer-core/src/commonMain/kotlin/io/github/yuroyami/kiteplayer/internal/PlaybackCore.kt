@@ -1550,6 +1550,7 @@ internal class PlaybackCore(
         Handler("drainCommands") { drainCommands() },
         Handler("handleLateStreams") { handleLateStreams() },
         Handler("handleTrackChanges") { handleTrackChanges() },
+        Handler("handleOutputChange") { handleOutputChange() },
         Handler("handleReconnect") { handleReconnect() },
         Handler("handleAudioFill") { handleAudioFill() },
         Handler("handleQueueHandoff") { handleQueueHandoff() },
@@ -1880,6 +1881,11 @@ internal class PlaybackCore(
     private class TransportStamp(val mark: Long, val atNanos: Long)
 
     private val transport = atomic(TransportStamp(0L, Long.MIN_VALUE))
+
+    /** An output that asked to be opened again, and why. The sink's lane sets it and the actor takes it (#563). */
+    private class OutputChange(val playback: AudioPlayback, val detail: String)
+
+    private val outputChangeAsked = atomic<OutputChange?>(null)
 
     /** See `KitePlayer.transportMark`. */
     val transportMark: Long get() = transport.value.mark
@@ -6329,6 +6335,93 @@ internal class PlaybackCore(
         request.reply.complete(TrackChange.Applied(TrackKind.Audio, request.track))
         if (request.automatic) emitEvent(PlayerEvent.TrackChosenByPlayer(TrackKind.Audio, request.track))
         return true
+    }
+
+    /**
+     * Opens a new audio output after the one that plays said its format no longer fits (#563): the
+     * sound moved from a receiver to two speakers, or the other way.
+     *
+     * The sink is replaced, never changed in place. The new one opens first, so a route that still
+     * takes the same format costs nothing, and a refusal leaves the old one playing. Only the two
+     * sound lanes park. The decoder, its queue and the picture go on, and the sound the old ring
+     * held and nobody heard becomes silence of the same length, so the clock does not jump. mpv
+     * and VLC restart their output the same way.
+     */
+    private suspend fun handleOutputChange() {
+        val asked = outputChangeAsked.value ?: return
+        val active = session
+        val old = active?.audio
+        val lane = active?.audioLane
+        if (active == null || old == null || lane == null || asked.playback !== old) {
+            // The output that asked is gone, and whatever replaced it opened on the new route.
+            outputChangeAsked.compareAndSet(asked, null)
+            return
+        }
+        // Each of these owns the sound lanes for now. The request waits for a later pass.
+        if (seekPhase.isRunning || pendingSeek != null || pendingVideoRecovery != null || reopenPending) return
+        if (TrackKind.Audio in pendingSelections || pendingNext != null || !active.ownsAudio) return
+        if (active.crossfade.value != null) return
+        outputChangeAsked.compareAndSet(asked, null)
+        // The last sound of the item is already in the ring, and a new ring would never get it.
+        if (active.audioEosRequested.value || endOfStream.draining) return
+
+        fun refused(why: String) =
+            warn(PlaybackWarning.AudioDeviceChanged("the device requested a format change: ${asked.detail}, $why"))
+
+        val prepared = try {
+            prepareAudioPath(lane.decoder, lane.stream)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            refused("and no new output opened${causeDetail(failure)}")
+            return
+        }
+        if (prepared.negotiated == active.negotiatedFormat) {
+            prepared.playback.close()
+            return
+        }
+
+        val audioWorkers = listOfNotNull(active.audioDecodeWorker, active.audioFeedWorker)
+        if (!audioWorkers.all { it.quiesce(QUIESCE_DEADLINE) }) {
+            audioWorkers.forEach { it.release(requestedEpoch) }
+            prepared.playback.close()
+            refused("and the sound did not reach a safe boundary within $QUIESCE_DEADLINE")
+            return
+        }
+
+        old.anchorClock()
+        val commitAt = currentPosition()
+        publishedPositionMicros.value = commitAt.micros
+        retiredUnderruns += old.underruns
+        retiredLimited += old.limitedFrames
+        active.audioEventJob?.let { job ->
+            job.cancel()
+            active.jobs -= job
+        }
+        active.audioEventJob = null
+        withContext(NonCancellable) {
+            runCatching { old.stopDevice() }
+            runCatching { old.close() }.exceptionOrNull()?.let { failure ->
+                warn(PlaybackWarning.ResourcesNotReleased("retired audio output: ${failure.message}"))
+            }
+        }
+        active.audio = prepared.playback
+        active.sink = prepared.sink
+        active.negotiatedFormat = prepared.negotiated
+        active.deviceRequest = prepared.request
+        // The feed lane fills from here to its next buffer with silence, as after a track change.
+        active.audioSwitchDiscardBeforeUs.value = commitAt.micros
+        active.firstAudio.clear()
+        active.audioStatus = StreamStatus.Syncing
+        demuxUnderrunSeen = false
+        // A paused output has no clock reading until it plays, and the position would fall back to
+        // the last picture. It stays where the listener paused, and the next play lets go of it.
+        if (!playRequested && active.heldPositionUs == NO_POSITION) active.heldPositionUs = commitAt.micros
+        audioWorkers.forEach { it.release(requestedEpoch) }
+        emitEvent(PlayerEvent.AudioFormatChanged(prepared.negotiated.sampleRate, prepared.negotiated.channels))
+        startAudioEventCollector(active)
+        active.audioDeviceNeedsStart = playRequested
+        publishSnapshot()
     }
 
     /** Audio/subtitle are live transactions; only video selection rebuilds the session. */
@@ -12392,22 +12485,17 @@ internal class PlaybackCore(
                         val stamp = transport.value
                         if (event.atNanos > stamp.atNanos) emitEvent(PlayerEvent.AudioOutputBecameNoisy(stamp.mark))
                     }
-                    // The sink was already reporting these and the engine threw
-                    // them away. An underrun warns once per session; a format request is a
-                    // device condition the caller must hear about even though the engine cannot
-                    // renegotiate yet.
+                    // An underrun warns once per session.
                     is io.github.yuroyami.kiteplayer.spi.AudioSinkEvent.Underrun -> {
                         if (!session.warnedAboutDeviceUnderrun) {
                             session.warnedAboutDeviceUnderrun = true
                             warn(PlaybackWarning.AudioDeviceUnderrun(event.detail))
                         }
                     }
+                    // The actor opens a new output at its next pass, which comes within its wake
+                    // floor. This lane may not touch the session (#563).
                     is io.github.yuroyami.kiteplayer.spi.AudioSinkEvent.FormatChangeRequested ->
-                        warn(
-                            PlaybackWarning.AudioDeviceChanged(
-                                "the device requested a format change: " + event.detail,
-                            ),
-                        )
+                        outputChangeAsked.value = OutputChange(audio, event.detail)
                     // The actor stops the session, the same way it handles a dead worker. This lane
                     // may not touch the session itself.
                     is io.github.yuroyami.kiteplayer.spi.AudioSinkEvent.Failed -> {

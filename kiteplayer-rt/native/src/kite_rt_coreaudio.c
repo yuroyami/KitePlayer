@@ -468,40 +468,18 @@ __attribute__((noinline)) static AudioComponent kprt_hal_output_component(void)
 }
 #endif
 
-int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_sink,
-                         kprt_sink_format *out_format, int32_t *out_os_status)
-{
-    return kprt_sink_create_on_device(0, sample_rate, channels, out_sink, out_format, out_os_status);
-}
-
-int32_t kprt_sink_create_on_device(uint32_t device_id, int32_t sample_rate, int32_t channels,
-                                   kprt_sink **out_sink, kprt_sink_format *out_format,
-                                   int32_t *out_os_status)
+/* Makes the output unit for `device_id` and binds it, with no format set and nothing started.
+ *
+ * Zero is the system default output: the DefaultOutput unit on macOS, which follows the default
+ * device, and RemoteIO on iOS, where the audio session owns the route. Any other value is a macOS
+ * AudioDeviceID. On a refusal nothing is left behind. */
+static int32_t kprt_make_unit(uint32_t device_id, AudioComponentInstance *out_instance,
+                              int32_t *out_os_status)
 {
     AudioComponentDescription description;
     AudioComponent component;
     AudioComponentInstance instance = NULL;
-    AudioStreamBasicDescription asbd;
-    AURenderCallbackStruct callback;
-    mach_timebase_info_data_t timebase;
-    kprt_sink *sink;
     OSStatus status;
-    int32_t accepted_channels;
-    int64_t layout_mask;
-    UInt32 bytes_per_frame;
-
-    report_status(out_os_status, 0);
-    if (out_sink == NULL || out_format == NULL)
-        return KPRT_SINK_BAD_ARGUMENT;
-    *out_sink = NULL;
-    memset(out_format, 0, sizeof(*out_format));
-
-    accepted_channels = kprt_sink_bound_channels(channels, 0, -1);
-
-    /* The sample rate is deliberately NOT validated here. A rate the device refuses must be refused
-     * BY THE DEVICE, after the instance exists, because that is the window in which a half open used
-     * to leave things behind, and `CoreAudioSinkTest` forces exactly that failure to prove the
-     * cleanup path runs. Validating it early would delete the test's subject. */
 
     memset(&description, 0, sizeof(description));
     description.componentType = kAudioUnitType_Output;
@@ -528,10 +506,8 @@ int32_t kprt_sink_create_on_device(uint32_t device_id, int32_t sample_rate, int3
         return KPRT_SINK_INSTANCE_REFUSED;
     }
 
-    /* From here on every failure disposes the instance before returning. */
-
 #if !(defined(TARGET_OS_IOS) && TARGET_OS_IOS)
-    /* Bound before any format is set, so the formats and the channel query below are the named
+    /* Bound before any format is set, so the formats and the channel queries are the named
      * device's. */
     if (device_id != 0) {
         AudioDeviceID device = (AudioDeviceID)device_id;
@@ -544,6 +520,65 @@ int32_t kprt_sink_create_on_device(uint32_t device_id, int32_t sample_rate, int3
         }
     }
 #endif
+    *out_instance = instance;
+    return KPRT_SINK_OK;
+}
+
+int32_t kprt_sink_route_channels(uint32_t device_id, int32_t channels)
+{
+    AudioComponentInstance instance = NULL;
+    int32_t answer;
+
+    if (kprt_make_unit(device_id, &instance, NULL) != KPRT_SINK_OK)
+        return 0;
+    /* A unit made now, and not the one that plays: a playing DefaultOutput unit moves to a new
+     * default device in its own time, and this one starts on it. */
+    answer = kprt_sink_bound_channels(channels, kprt_device_channels(instance),
+                                      kprt_device_speakers(instance));
+    AudioComponentInstanceDispose(instance);
+    return answer;
+}
+
+int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_sink,
+                         kprt_sink_format *out_format, int32_t *out_os_status)
+{
+    return kprt_sink_create_on_device(0, sample_rate, channels, out_sink, out_format, out_os_status);
+}
+
+int32_t kprt_sink_create_on_device(uint32_t device_id, int32_t sample_rate, int32_t channels,
+                                   kprt_sink **out_sink, kprt_sink_format *out_format,
+                                   int32_t *out_os_status)
+{
+    AudioComponentInstance instance = NULL;
+    AudioStreamBasicDescription asbd;
+    AURenderCallbackStruct callback;
+    mach_timebase_info_data_t timebase;
+    kprt_sink *sink;
+    OSStatus status;
+    int32_t accepted_channels;
+    int64_t layout_mask;
+    UInt32 bytes_per_frame;
+
+    report_status(out_os_status, 0);
+    if (out_sink == NULL || out_format == NULL)
+        return KPRT_SINK_BAD_ARGUMENT;
+    *out_sink = NULL;
+    memset(out_format, 0, sizeof(*out_format));
+
+    accepted_channels = kprt_sink_bound_channels(channels, 0, -1);
+
+    /* The sample rate is deliberately NOT validated here. A rate the device refuses must be refused
+     * BY THE DEVICE, after the instance exists, because that is the window in which a half open used
+     * to leave things behind, and `CoreAudioSinkTest` forces exactly that failure to prove the
+     * cleanup path runs. Validating it early would delete the test's subject. */
+
+    {
+        int32_t verdict = kprt_make_unit(device_id, &instance, out_os_status);
+        if (verdict != KPRT_SINK_OK)
+            return verdict;
+    }
+
+    /* From here on every failure disposes the instance before returning. */
 
     /* The device bounds the accepted count. Asking is the whole point: the input scope would take
      * six channels on a two channel route without complaint, and the engine reads the accepted

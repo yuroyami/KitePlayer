@@ -35,10 +35,10 @@ internal interface AppleAudioSessionController {
     /** Tells the system whether this app's sound has more than two channels (#502). */
     fun setMultichannelContent(offered: Boolean) = Unit
 
-    /**
-     * Asks the active route for [channels] output channels, or for as many as it offers when that
-     * is fewer (#502). The route decides, and the output unit reports what it gave.
-     */
+    /** The most output channels the active route offers, or zero when the session does not say. */
+    fun maximumOutputChannels(): Int = 0
+
+    /** Asks the active route for [channels] output channels (#502). The route decides what it gives. */
     fun preferOutputChannels(channels: Int) = Unit
 }
 
@@ -52,6 +52,12 @@ internal fun interface AppleAudioSessionLease {
      * app's session off and nothing turns it back on by itself.
      */
     fun reactivate() = Unit
+
+    /**
+     * Asks the new route for the channels the item has (#563). The route was asked at the open for
+     * no more than it offered then, so a receiver that joins later is asked again.
+     */
+    fun routeChanged() = Unit
 }
 
 internal expect fun platformAppleAudioSessionController(): AppleAudioSessionController
@@ -89,8 +95,11 @@ internal class AppleAudioSessionLeaseManager(
     /* True while the system has been told this app plays more than two channels. */
     private var multichannel = false
 
-    /* True while the route has been asked for more than two channels. */
-    private var widened = false
+    /* The channels of the item that opened last, which a new route is asked for again. */
+    private var wanted = 2
+
+    /* What the route was last asked for, or zero when it was asked for nothing. */
+    private var asked = 0
 
     internal val activeLeaseCount: Int get() = synchronized(lock) { leases }
 
@@ -131,11 +140,30 @@ internal class AppleAudioSessionLeaseManager(
         if (runCatching { controller.setMultichannelContent(surround) }.isSuccess) multichannel = surround
     }
 
-    /* After the activation, because only an active session knows what its route offers. */
+    /*
+     * After the activation, because only an active session knows what its route offers. A surround
+     * item asks for its own count or for the most the route offers, and a stereo item that follows
+     * one asks for two again. The same answer is not asked for twice, so a route notice that this
+     * call itself caused ends here.
+     */
     private fun askRouteFor(channels: Int) {
+        wanted = channels
         val surround = channels > 2
-        if (!surround && !widened) return
-        if (runCatching { controller.preferOutputChannels(if (surround) channels else 2) }.isSuccess) widened = surround
+        if (!surround && asked == 0) return
+        val target = if (surround) {
+            val offered = runCatching { controller.maximumOutputChannels() }.getOrDefault(0)
+            if (offered <= 0) return
+            minOf(channels, offered)
+        } else {
+            2
+        }
+        if (surround && target == asked) return
+        if (runCatching { controller.preferOutputChannels(target) }.isSuccess) asked = if (surround) target else 0
+    }
+
+    /** Asks the route again for the channels of the item that opened last, while a lease is held. */
+    fun routeChanged() {
+        synchronized(lock) { if (leases > 0) askRouteFor(wanted) }
     }
 
     /**
@@ -163,9 +191,10 @@ internal class AppleAudioSessionLeaseManager(
                 mode = null
                 claimed = false
                 // The next app on this route must not inherit a width or a claim nobody holds.
-                if (widened) runCatching { controller.preferOutputChannels(2) }
+                if (asked != 0) runCatching { controller.preferOutputChannels(2) }
                 if (multichannel) runCatching { controller.setMultichannelContent(false) }
-                widened = false
+                asked = 0
+                wanted = 2
                 multichannel = false
                 controller.setActive(active = false, notifyOthers = true)
             }
@@ -189,6 +218,10 @@ internal class AppleAudioSessionLeaseManager(
 
         override fun reactivate() {
             if (!synchronized(this) { closed }) manager.reactivate()
+        }
+
+        override fun routeChanged() {
+            if (!synchronized(this) { closed }) manager.routeChanged()
         }
     }
 

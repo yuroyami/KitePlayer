@@ -63,12 +63,11 @@ private object IosAppleAudioSessionController : AppleAudioSessionController {
         }
     }
 
+    override fun maximumOutputChannels(): Int = session.maximumOutputNumberOfChannels.toInt()
+
     override fun preferOutputChannels(channels: Int) {
-        // Zero is a session that will not say what its route offers, and is asked for nothing.
-        val offered = session.maximumOutputNumberOfChannels.toInt()
-        if (offered <= 0) return
         call("asking AVAudioSession for output channels") { error ->
-            session.setPreferredOutputNumberOfChannels(minOf(channels, offered).toLong(), error = error)
+            session.setPreferredOutputNumberOfChannels(channels.toLong(), error = error)
         }
     }
 

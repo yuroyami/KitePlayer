@@ -227,6 +227,42 @@ class AppleAudioSessionPolicyTest {
     }
 
     @Test
+    fun aRouteIsAskedForNoMoreThanItOffersAndAskedAgainWhenItChanges() {
+        val controller = RecordingAppleAudioSessionController(routeChannels = 2)
+        val manager = AppleAudioSessionLeaseManager(controller)
+        fun asked() = controller.calls.filter { it.startsWith("channels") }
+
+        val lease = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie, channels = 8)
+        assertEquals(listOf("channels:2"), asked(), "headphones offer two")
+
+        lease.routeChanged()
+        assertEquals(listOf("channels:2"), asked(), "a notice that changes nothing asks for nothing")
+
+        controller.routeChannels = 6
+        lease.routeChanged()
+        assertEquals(listOf("channels:2", "channels:6"), asked(), "a 5.1 receiver joined")
+
+        controller.routeChannels = 8
+        lease.routeChanged()
+        lease.routeChanged()
+        assertEquals(listOf("channels:2", "channels:6", "channels:8"), asked(), "and a 7.1 one after it")
+
+        lease.close()
+        lease.routeChanged()
+        assertEquals(listOf("channels:2", "channels:6", "channels:8", "channels:2"), asked(), "a closed lease asks for nothing more")
+    }
+
+    @Test
+    fun aStereoItemAsksNothingOfANewRoute() {
+        val controller = RecordingAppleAudioSessionController()
+        val manager = AppleAudioSessionLeaseManager(controller)
+        val lease = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie, channels = 2)
+        lease.routeChanged()
+        lease.close()
+        assertEquals(emptyList(), controller.calls.filter { it.startsWith("channels") })
+    }
+
+    @Test
     fun anApplicationManagedLeaseDeclaresNoChannels() {
         val controller = RecordingAppleAudioSessionController()
         AppleAudioSessionLeaseManager(controller)
@@ -331,6 +367,8 @@ class AppleAudioSessionPolicyTest {
 internal class RecordingAppleAudioSessionController(
     private var failActivationCount: Int = 0,
     private val refuseChannels: Boolean = false,
+    /** What the route offers, which a test moves to stand for a receiver that joins or leaves. */
+    var routeChannels: Int = 8,
     private val observe: (String) -> Unit = {},
 ) : AppleAudioSessionController {
     private val lock = SynchronizedObject()
@@ -363,6 +401,8 @@ internal class RecordingAppleAudioSessionController(
         record("multichannel:$offered")
         if (refuseChannels) throw PlannedAppleAudioSessionFailure()
     }
+
+    override fun maximumOutputChannels(): Int = routeChannels
 
     override fun preferOutputChannels(channels: Int) {
         record("channels:$channels")

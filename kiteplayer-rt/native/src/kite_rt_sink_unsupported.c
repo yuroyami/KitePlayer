@@ -54,6 +54,13 @@ int32_t kprt_sink_create_on_device(uint32_t device_id, int32_t sample_rate, int3
     return kprt_sink_create(sample_rate, channels, out_sink, out_format, out_os_status);
 }
 
+int32_t kprt_sink_route_channels(uint32_t device_id, int32_t channels)
+{
+    (void)device_id;
+    (void)channels;
+    return 0;
+}
+
 int32_t kprt_sink_attach_ring(kprt_sink *sink, int32_t capacity_frames)
 {
     (void)sink;

@@ -1,6 +1,9 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSinkEvent
+import io.github.yuroyami.kiteplayer.spi.SampleFormat
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -90,15 +93,9 @@ class AudioSinkEventTest {
         harness.close()
     }
 
-    /**
-     * The other half of the contract, closed on 2026-08-27: the sink was already
-     * telling the engine these things and the engine threw them away with `else -> Unit`. A
-     * device-reported underrun now warns once per session, typed; a format-change request is
-     * surfaced as a device warning; and neither fails the player or tears the sink down, because
-     * the engine still cannot renegotiate a device, which stays open.
-     */
+    /** A device-reported underrun warns once per session, typed, and neither fails the player nor stops the sink. */
     @Test
-    fun `underrun and format-change requests are surfaced rather than dropped`() = runTest {
+    fun `a device underrun warns once and the sink keeps playing`() = runTest {
         val harness = CoreHarness(this, publishesSinkEvents = true)
         harness.openWithRenderer()
         harness.core.play()
@@ -107,8 +104,6 @@ class AudioSinkEventTest {
         harness.sink.publish(AudioSinkEvent.Underrun("ran dry"))
         harness.run(50.milliseconds)
         harness.sink.publish(AudioSinkEvent.Underrun("ran dry again"))
-        harness.run(50.milliseconds)
-        harness.sink.publish(AudioSinkEvent.FormatChangeRequested("wants 48000 stereo"))
         harness.run(100.milliseconds)
 
         val deviceUnderruns = harness.events
@@ -121,13 +116,187 @@ class AudioSinkEventTest {
             deviceUnderruns,
             "the first device-reported underrun warns once per session, repeats stay silent",
         )
+        assertTrue(harness.core.snapshots.value.status != PlaybackStatus.Failed, "it does not fail the player")
+        assertEquals(0, harness.sink.stopCount, "and the sink is not torn down for it")
+        harness.close()
+    }
+
+    private val stereo = AudioFormat(48_000, 2, SampleFormat.F32)
+
+    /** A 5.1 item whose centre alone carries sound, which is where a film keeps its dialogue. */
+    private fun centreOnly() =
+        MediaScript(durationUs = 10_000_000, channels = 6, audioChannelMarkers = listOf(0f, 0f, 0.1f, 0f, 0f, 0f))
+
+    private fun CoreHarness.formats(): List<Int> =
+        events.filterIsInstance<PlayerEvent.AudioFormatChanged>().map { it.channels }
+
+    /**
+     * The sound moves from a receiver to two speakers (#563). The six channel output is replaced by
+     * a two channel one, and the centre, which had a speaker of its own, is folded into both.
+     */
+    @Test
+    fun `an output that asks for another format is replaced and the surround folds into the new one`() = runTest {
+        val harness = CoreHarness(this, script = centreOnly(), publishesSinkEvents = true)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(500.milliseconds)
+        assertTrue(harness.sink.channelPeak(2) > 0f, "the centre plays from its own speaker on the receiver")
+        assertEquals(0f, harness.sink.channelPeak(0))
+
+        val speakers = ScriptedSink(accepts = stereo, publishesEvents = true)
+        speakers.recordsSamples = true
+        harness.output.laterSinks += speakers
+        backgroundScope.launch { speakers.runDevice(harness.clock) }
+        val before = harness.core.position().inWholeMilliseconds
+        val picturesBefore = harness.renderer!!.presentations.size
+        harness.sink.publish(AudioSinkEvent.FormatChangeRequested("the output now takes 2 channels"))
+        harness.run(1_000.milliseconds)
+
+        assertTrue(harness.sink.closed, "the old output is closed, not changed in place")
+        assertEquals(1, speakers.openCount)
+        assertEquals(6, speakers.openRequests.single().channels, "the new output is asked for what the sound has")
+        assertTrue(speakers.isRunning, "the new output plays")
+        assertEquals(listOf(6, 2), harness.formats(), "the application hears of the new format")
+        assertEquals(0.0707f, speakers.channelPeak(0), absoluteTolerance = 0.001f, message = "the centre folds into the left speaker at 3 dB down")
+        assertEquals(0.0707f, speakers.channelPeak(1), absoluteTolerance = 0.001f, message = "and into the right one")
+        val moved = harness.core.position().inWholeMilliseconds - before
+        assertTrue(moved in 900..1_100, "the clock runs on through the change, and moved $moved ms in one second")
+        assertTrue(harness.renderer!!.presentations.size > picturesBefore + 10, "the picture plays on")
+        // The old ring held sound nobody heard. The new one starts with a silence of that length,
+        // written by the engine and not an underrun, and then the sound goes on.
+        val heard = speakers.recorded.toFloatArray()
+        val quiet = heard.indexOfFirst { it != 0f }
+        assertTrue(quiet in 2_400..24_000, "the new output starts with a short silence, and it was $quiet frames")
+        assertTrue(heard.drop(quiet + 480).all { it != 0f }, "and no hole follows it")
+        assertEquals(0L, speakers.silenceFrames, "the new output never ran dry")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        assertTrue(harness.deviceWarnings().isEmpty(), "a change that worked is an event and no warning")
+        harness.close()
+    }
+
+    /** The other way: headphones first, then a receiver, and the centre gets its own speaker back. */
+    @Test
+    fun `an output with more speakers gets the channels a stereo one had folded`() = runTest {
+        val harness = CoreHarness(this, script = centreOnly(), publishesSinkEvents = true, sinkAccepts = stereo)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(500.milliseconds)
+        assertTrue(harness.sink.channelPeak(0) > 0f, "the centre is folded into the headphones")
+
+        val receiver = ScriptedSink(publishesEvents = true)
+        harness.output.laterSinks += receiver
+        backgroundScope.launch { receiver.runDevice(harness.clock) }
+        harness.sink.publish(AudioSinkEvent.FormatChangeRequested("the output now takes 6 channels"))
+        harness.run(1_000.milliseconds)
+
+        assertTrue(harness.sink.closed)
+        assertEquals(listOf(2, 6), harness.formats())
+        assertEquals(0.1f, receiver.channelPeak(2), absoluteTolerance = 0.001f, message = "the centre plays whole from its own speaker")
+        assertEquals(0f, receiver.channelPeak(0), "and no longer from the front pair")
+        harness.close()
+    }
+
+    /** A second request reaches the output that replaced the first, so the sound can move twice. */
+    @Test
+    fun `the new output is listened to and can be replaced in turn`() = runTest {
+        val harness = CoreHarness(this, script = centreOnly(), publishesSinkEvents = true)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(300.milliseconds)
+
+        val speakers = ScriptedSink(accepts = stereo, publishesEvents = true)
+        val receiver = ScriptedSink(publishesEvents = true)
+        harness.output.laterSinks += speakers
+        backgroundScope.launch { speakers.runDevice(harness.clock) }
+        backgroundScope.launch { receiver.runDevice(harness.clock) }
+        harness.sink.publish(AudioSinkEvent.FormatChangeRequested("the output now takes 2 channels"))
+        harness.run(600.milliseconds)
+        harness.output.laterSinks += receiver
+        speakers.publish(AudioSinkEvent.FormatChangeRequested("the output now takes 6 channels"))
+        harness.run(600.milliseconds)
+
+        assertEquals(listOf(6, 2, 6), harness.formats())
+        assertTrue(speakers.closed)
+        assertTrue(receiver.isRunning)
+        harness.close()
+    }
+
+    /** A request while paused opens the new output and leaves it silent until play. */
+    @Test
+    fun `a paused player changes its output and stays paused`() = runTest {
+        val harness = CoreHarness(this, script = centreOnly(), publishesSinkEvents = true)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(400.milliseconds)
+        harness.core.pause()
+        harness.run(200.milliseconds)
+        val at = harness.core.position().inWholeMilliseconds
+
+        val speakers = ScriptedSink(accepts = stereo, publishesEvents = true)
+        harness.output.laterSinks += speakers
+        backgroundScope.launch { speakers.runDevice(harness.clock) }
+        harness.sink.publish(AudioSinkEvent.FormatChangeRequested("the output now takes 2 channels"))
+        harness.run(500.milliseconds)
+
+        assertEquals(listOf(6, 2), harness.formats())
+        assertTrue(!speakers.isRunning, "nothing plays while the player is paused")
+        assertEquals(at, harness.core.position().inWholeMilliseconds, "and the position stays where it was")
+
+        harness.core.play()
+        harness.run(600.milliseconds)
+        assertTrue(speakers.isRunning)
+        assertTrue(speakers.channelPeak(0) > 0f, "play is heard from the new output")
+        assertTrue(harness.core.position().inWholeMilliseconds > at + 400)
+        harness.close()
+    }
+
+    /** A route that still takes the format the output opened with costs a look and nothing else. */
+    @Test
+    fun `a new output that takes the same format is closed again and nothing changes`() = runTest {
+        val harness = CoreHarness(this, script = centreOnly(), publishesSinkEvents = true)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(300.milliseconds)
+
+        val same = ScriptedSink(publishesEvents = true)
+        harness.output.laterSinks += same
+        harness.sink.publish(AudioSinkEvent.FormatChangeRequested("the output now takes 6 channels"))
+        harness.run(300.milliseconds)
+
+        assertEquals(1, same.openCount, "the new output was opened to see what it takes")
+        assertTrue(same.closed, "and closed, because it takes what the old one took")
+        assertTrue(!harness.sink.closed && harness.sink.isRunning, "the old output plays on")
+        assertEquals(0, harness.sink.stopCount)
+        assertEquals(listOf(6), harness.formats())
+        assertTrue(harness.deviceWarnings().isEmpty())
+        harness.close()
+    }
+
+    /** No new output opens: the old one keeps playing, and the application is told. */
+    @Test
+    fun `a new output that does not open leaves the old one playing and warns`() = runTest {
+        val harness = CoreHarness(this, script = centreOnly(), publishesSinkEvents = true)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(300.milliseconds)
+
+        val broken = FaultPlan().apply { sinkOpenFails = true }
+        harness.output.laterSinks += ScriptedSink(accepts = stereo, faults = broken, publishesEvents = true)
+        val before = harness.core.position().inWholeMilliseconds
+        harness.sink.publish(AudioSinkEvent.FormatChangeRequested("the output now takes 2 channels"))
+        harness.run(500.milliseconds)
+
         assertEquals(
-            listOf("the device requested a format change: wants 48000 stereo"),
+            listOf(
+                "the device requested a format change: the output now takes 2 channels, " +
+                    "and no new output opened: the scripted device refuses to open",
+            ),
             harness.deviceWarnings(),
-            "a format-change request is a device condition the caller must hear about",
         )
-        assertTrue(harness.core.snapshots.value.status != PlaybackStatus.Failed, "neither event fails the player")
-        assertEquals(0, harness.sink.stopCount, "and the sink is not torn down for either")
+        assertTrue(harness.sink.isRunning, "the old output plays on")
+        assertEquals(listOf(6), harness.formats())
+        assertTrue(harness.core.position().inWholeMilliseconds - before in 400..600)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
         harness.close()
     }
 

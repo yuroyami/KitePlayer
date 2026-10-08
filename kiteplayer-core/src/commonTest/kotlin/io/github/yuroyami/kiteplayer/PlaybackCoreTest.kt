@@ -56,6 +56,8 @@ class PlaybackCoreTest {
             // the open switches in the same pass.
             "handleLateStreams",
             "handleTrackChanges",
+            // After the track changes, so a new sound is chosen before its output is replaced (#563).
+            "handleOutputChange",
             // Right after the rebuild a track change runs, because a wait for the network opens
             // the item again the same way (#461).
             "handleReconnect",

@@ -40,7 +40,10 @@ public sealed interface PlayerEvent {
      */
     public data class VideoSizeChanged(val size: VideoSize) : PlayerEvent
 
-    /** The audio output format changed, at the start or after a device change. */
+    /**
+     * The audio output format changed: at the start, with a new sound, or because the sound moved
+     * to an output with other speakers and the player opened a new one for it.
+     */
     public data class AudioFormatChanged(val sampleRate: Int, val channels: Int) : PlayerEvent
 
     /**

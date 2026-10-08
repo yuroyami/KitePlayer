@@ -12,14 +12,18 @@ import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -152,6 +156,52 @@ class CoreAudioSinkDeviceWatchTest {
         }
     }
 
+    /**
+     * The default output moves to a device with other speakers (#563). The sink keeps playing and
+     * says that a sink opened now would get another channel count, so the engine can replace it.
+     */
+    @Test
+    fun aNewDefaultOutputWithOtherChannelsIsReportedOnceAndWaitsForItsCollector() = runBlocking {
+        val devices = FakeOutputDevices()
+        val sink = sinkWith(devices)
+        val opened = sink.openWithRing(format) { it.sampleRate / 4 }.format.channels
+        fun nextRequest() = async { withTimeoutOrNull(300.milliseconds) { sink.events.filterIsInstance<AudioSinkEvent.FormatChangeRequested>().first() } }
+        try {
+            // Nobody collects yet, as when the notice comes before the engine subscribed.
+            devices.channelsNow = opened + 4
+            devices.fire("the default output changed to a receiver")
+            assertEquals(
+                AudioSinkEvent.FormatChangeRequested("the output now takes ${opened + 4} channels, and this sink opened with $opened"),
+                nextRequest().await(),
+                "the request is kept for a collector that comes later",
+            )
+
+            // The same answer again is the same change, and is said once.
+            devices.fire("the default output changed again")
+            assertNull(nextRequest().await(), "one change is reported once")
+
+            // An output that fits again takes the request back, and the next change is a new one.
+            devices.channelsNow = opened + 6
+            devices.fire("the default output changed to a larger receiver")
+            devices.channelsNow = opened
+            devices.fire("the default output changed back")
+            assertNull(nextRequest().await(), "an output that fits needs no new sink")
+            devices.channelsNow = opened + 4
+            devices.fire("the default output changed to a receiver")
+            assertNotNull(nextRequest().await(), "the same receiver again is a new change")
+
+            // An output that does not say what it takes is no reason to replace anything.
+            devices.channelsNow = 0
+            devices.fire("the default output changed to something silent")
+            assertNull(nextRequest().await())
+            assertEquals(6, devices.channelQuestions, "each notice asks the output once")
+        } finally {
+            sink.close()
+        }
+        devices.channelsNow = opened + 4
+        assertNull(nextRequest().await(), "a closed sink keeps no request")
+    }
+
     private fun sinkWith(devices: AppleOutputDevices, device: String? = null) = CoreAudioSink(
         policy = AppleAudioSessionPolicy.ApplicationManaged,
         leaseManager = sharedAppleAudioSessionLeaseManager,
@@ -208,5 +258,14 @@ class CoreAudioSinkDeviceWatchTest {
         override fun devices(): List<AudioOutputDevice> = emptyList()
 
         override fun deviceFor(id: String): UInt? = boundDevice
+
+        /** What a sink opened now would get, or null to ask this Mac's real output. */
+        var channelsNow: Int? = null
+        var channelQuestions = 0
+
+        override fun routeChannels(device: UInt, requested: Int): Int {
+            channelQuestions++
+            return channelsNow ?: super.routeChannels(device, requested)
+        }
     }
 }

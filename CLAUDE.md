@@ -294,6 +294,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A parked video lane is not a selected queue. Its packets are thrown away as they arrive, so its
   queue is always empty; counted, it made the open wait 10 s for a picture and the interleaving
   relief cut the audio until the end of the file (#374).
+- A sink that reports `FormatChangeRequested` only sets a flag; the actor reopens the output in
+  `handleOutputChange`. The reopen parks the two sound lanes, keeps the decoder and the queue, and
+  pads silence from the commit point, so the position does not jump. Flushing there would bring
+  back the Buffering blink, and reopening from the sink's own lane mutates the session off the
+  actor (#563).
 - All session mutation happens on the actor, in a command execution or a pass handler. Never mutate
   session fields from another coroutine.
 - A decoder belongs to its worker's dispatcher. Park the worker, mutate, release. A refusal to park

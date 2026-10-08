@@ -253,12 +253,17 @@ public sealed interface AudioSinkEvent {
     public data class BecameNoisy(val atNanos: Long) : AudioSinkEvent
 
     /**
-     * The device wants a different format than the one negotiated.
+     * The device wants a different format than the one negotiated: the sound moved to an output
+     * with fewer speakers, or with more.
      *
-     * The engine warns (`AudioDeviceChanged`, naming the request) and keeps the sink: it cannot
-     * renegotiate a device yet. When it does act it will recreate the sink rather than
-     * reconfigure in place, because in-place reconfiguration is where every player's device-change
-     * bugs live.
+     * The engine opens a new sink from the same factory and plays on through it (#563). It never
+     * reconfigures this one, because in-place reconfiguration is where every player's
+     * device-change bugs live. The picture plays on, and the sound this sink held and never played
+     * becomes a silence of the same length. A new sink that negotiates the same format is closed
+     * again and nothing changes, so report this only when a new open would really differ. When no
+     * new sink opens, this one keeps playing and the engine warns `AudioDeviceChanged`.
+     *
+     * @param detail what changed, for the warning. For example "the output now takes 2 channels".
      */
     public data class FormatChangeRequested(val detail: String) : AudioSinkEvent
 

@@ -1,5 +1,6 @@
 // Klib ABI Dump
 // Targets: [iosArm64, iosSimulatorArm64, js, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs]
+// Alias: apple => [iosArm64, iosSimulatorArm64, macosArm64]
 // Alias: ios => [iosArm64, iosSimulatorArm64]
 // Rendering settings:
 // - Signature version: 2
@@ -183,7 +184,7 @@ final fun io.github.yuroyami.kiteplayer.mobile/mobileBackends(): io.github.yuroy
 final fun io.github.yuroyami.kiteplayer/KitePlayer(io.github.yuroyami.kiteplayer/PlayerConfig = ...): io.github.yuroyami.kiteplayer/KitePlayer // io.github.yuroyami.kiteplayer/KitePlayer|KitePlayer(io.github.yuroyami.kiteplayer.PlayerConfig){}[0]
 final fun io.github.yuroyami.kiteplayer/KitePlayer(kotlin/Function1<io.github.yuroyami.kiteplayer/PlayerConfigBuilder, kotlin/Unit>): io.github.yuroyami.kiteplayer/KitePlayer // io.github.yuroyami.kiteplayer/KitePlayer|KitePlayer(kotlin.Function1<io.github.yuroyami.kiteplayer.PlayerConfigBuilder,kotlin.Unit>){}[0]
 
-// Targets: [ios, wasmJs]
+// Targets: [apple, wasmJs]
 final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession|null[0]
     final val isAvailable // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.isAvailable|{}isAvailable[0]
         final fun <get-isAvailable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.isAvailable.<get-isAvailable>|<get-isAvailable>(){}[0]
@@ -192,11 +193,14 @@ final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotli
 
     final fun close() // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.close|close(){}[0]
 
-    // Targets: [ios]
+    // Targets: [apple]
     constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer, kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer;kotlin.time.Duration){}[0]
 
     // Targets: [ios]
     final fun setArtwork(platform.UIKit/UIImage?) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.setArtwork|setArtwork(platform.UIKit.UIImage?){}[0]
+
+    // Targets: [macosArm64]
+    final fun setArtwork(platform.AppKit/NSImage?) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.setArtwork|setArtwork(platform.AppKit.NSImage?){}[0]
 
     // Targets: [wasmJs]
     constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer, kotlin.js/JsAny? = ..., kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer;kotlin.js.JsAny?;kotlin.time.Duration){}[0]
@@ -216,6 +220,9 @@ final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.
 
 // Targets: [ios]
 final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.kiteplayer.session/attachInterruptionHandling(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.session/InterruptionPolicy = ...): kotlin/AutoCloseable // io.github.yuroyami.kiteplayer.session/attachInterruptionHandling|attachInterruptionHandling@io.github.yuroyami.kiteplayer.KitePlayerPlatform(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.session.InterruptionPolicy){}[0]
+
+// Targets: [macosArm64, wasmJs]
+final fun (io.github.yuroyami.kiteplayer/KitePlayer).io.github.yuroyami.kiteplayer.session/attachMediaSession(kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession // io.github.yuroyami.kiteplayer.session/attachMediaSession|attachMediaSession@io.github.yuroyami.kiteplayer.KitePlayer(kotlin.time.Duration){}[0]
 
 // Targets: [wasmJs]
 final class io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory : io.github.yuroyami.kiteplayer.spi/VideoRendererFactory { // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory|null[0]
@@ -317,9 +324,6 @@ final object io.github.yuroyami.kiteplayer/KiteWebModules { // io.github.yuroyam
 
     final fun codecModuleUrl(kotlin/String = ..., kotlin/String? = ...): kotlin/String // io.github.yuroyami.kiteplayer/KiteWebModules.codecModuleUrl|codecModuleUrl(kotlin.String;kotlin.String?){}[0]
 }
-
-// Targets: [wasmJs]
-final fun (io.github.yuroyami.kiteplayer/KitePlayer).io.github.yuroyami.kiteplayer.session/attachMediaSession(kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession // io.github.yuroyami.kiteplayer.session/attachMediaSession|attachMediaSession@io.github.yuroyami.kiteplayer.KitePlayer(kotlin.time.Duration){}[0]
 
 // Targets: [wasmJs]
 final fun io.github.yuroyami.kiteplayer/runKitePlayerWorker() // io.github.yuroyami.kiteplayer/runKitePlayerWorker|runKitePlayerWorker(){}[0]

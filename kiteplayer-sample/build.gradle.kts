@@ -39,6 +39,8 @@ kotlin {
             implementation(project(":kiteplayer-output"))
             // The picture in picture class, for the --pip window.
             implementation(project(":kiteplayer-view"))
+            // The media session, for Now Playing and the media keys in the --window mode.
+            implementation(project(":kiteplayer"))
         }
         iosMain.dependencies {
             // The standard runtime carries the default backend, output, network and native view.

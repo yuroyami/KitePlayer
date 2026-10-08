@@ -27,6 +27,7 @@ import io.github.yuroyami.kiteplayer.output.MetalVideoRenderer
 import io.github.yuroyami.kiteplayer.output.AppleHostClock
 import io.github.yuroyami.kiteplayer.output.AppleOutputBackend
 import io.github.yuroyami.kiteplayer.output.SampleBufferVideoRenderer
+import io.github.yuroyami.kiteplayer.session.attachMediaSession
 import io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -43,6 +44,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import platform.AppKit.NSEvent
 import platform.AppKit.NSEventMaskKeyDown
+import platform.MediaPlayer.MPMediaItemPropertyTitle
+import platform.MediaPlayer.MPNowPlayingInfoCenter
 import kotlin.system.exitProcess
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -169,6 +172,8 @@ fun main(args: Array<String>) {
         val sampleBuffer = if (sampleBufferLayer == null) null else SampleBufferVideoRenderer(sampleBufferLayer, resolver)
         val renderer = metal ?: checkNotNull(sampleBuffer) { "the window was built with the sample buffer surface" }
         player.attachRenderer(renderer)
+        // Now Playing and the media keys, as a native Mac app gets them. It closes with the player.
+        player.attachMediaSession()
         val smallWindow = sampleBufferLayer?.let { KitePlayerPictureInPicture.createOrNull(player, it) }
         // A local monitor sees the key before the window does, so the plain layer view needs no
         // key handling of its own.
@@ -227,6 +232,9 @@ fun main(args: Array<String>) {
                     )
                     holdVerdict = if (held) 0 else 1
                 }
+                // What the system's Now Playing item was last given, read back from its info centre.
+                val shown = MPNowPlayingInfoCenter.defaultCenter().nowPlayingInfo?.get(MPMediaItemPropertyTitle)
+                println("  now playing       ${shown ?: "nothing"}")
                 window.stop()
             }
         }

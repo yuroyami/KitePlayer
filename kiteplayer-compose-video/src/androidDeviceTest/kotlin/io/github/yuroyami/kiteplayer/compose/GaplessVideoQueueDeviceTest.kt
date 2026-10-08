@@ -128,7 +128,9 @@ internal class GaplessVideoQueueDeviceTest {
                     )
                 }
             } finally {
-                runBlocking { withTimeout(15_000) { player.closeAndAwait() } }
+                // The emulator can hold a stop for 16 s inside MediaCodec.stop (#301), so the close
+                // gets the room the playback above has.
+                runBlocking { withTimeout(60_000) { player.closeAndAwait() } }
                 state.renderer.close()
             }
         } finally {

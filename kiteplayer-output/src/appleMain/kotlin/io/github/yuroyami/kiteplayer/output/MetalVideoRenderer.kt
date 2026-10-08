@@ -51,6 +51,16 @@ import platform.QuartzCore.CAMetalLayer
  * display's current headroom, and the renderer reports `RendererEvent.HdrShown`. Anywhere else HDR
  * is tone mapped to standard range, as before, and the renderer reports
  * `RendererEvent.ToneMapEngaged`. The layer goes back to its standard format for SDR frames.
+ *
+ * Colour on macOS (#489). A Metal layer with no colour space gets no colour matching there, and on
+ * a P3 display BT.709 video then looks oversaturated. So for standard range the renderer names the
+ * layer's colour space after the picture: the space Core Video makes for the picture's primaries
+ * and transfer, which for BT.709 is the one QuickTime Player and AVFoundation show it in. That was
+ * chosen over sRGB, mpv's look, so that this renderer, the sample buffer renderer and picture in
+ * picture show one stream alike. What the stream states wins, and a field it leaves out follows
+ * the picture's size. Tone mapped HDR is named as what the shader writes, gamma 2.2 on BT.709
+ * primaries. Subtitles are blended in the picture's encoding without a conversion from sRGB. iOS
+ * treats a layer with no colour space as sRGB, and the renderer leaves it so.
  */
 public class MetalVideoRenderer internal constructor(
     private val layer: CAMetalLayer,
@@ -85,8 +95,16 @@ public class MetalVideoRenderer internal constructor(
     private val layerExtended = atomic(false)
 
     /** The layer's own settings, kept at the first change so standard range restores them exactly. */
+    private var hostSettingsKept = false
     private var standardPixelFormat: ULong = 0uL
     private var standardColorspace: platform.CoreGraphics.CGColorSpaceRef? = null
+
+    /**
+     * The colour spaces named on the layer for standard range, by the tags of the picture (#489),
+     * and the tags the layer has now. Render thread only; released at close.
+     */
+    private val taggedColorspaces = HashMap<ColorTags, platform.CoreGraphics.CGColorSpaceRef?>()
+    private var layerTags: ColorTags? = null
 
     /** Linear light in BT.709 primaries, with values above 1 for HDR. Made at the first use. */
     private var extendedColorspace: platform.CoreGraphics.CGColorSpaceRef? = null
@@ -167,25 +185,44 @@ public class MetalVideoRenderer internal constructor(
      * explicit transaction, because this thread has no run loop to commit an implicit one. The next
      * drawable has the new format.
      */
-    private fun configureLayer(extended: Boolean) {
-        if (extended == layerExtended.value) return
-        if (extended && extendedColorspace == null) {
+    private fun configureLayer(extended: Boolean, tags: ColorTags? = null) {
+        // A draw with no picture, the cleared background, keeps the tags the layer last had.
+        val wanted = if (tagsStandardRangeLayer) tags ?: layerTags else null
+        if (extended == layerExtended.value && (extended || wanted == layerTags)) return
+        if (!hostSettingsKept) {
+            hostSettingsKept = true
             standardPixelFormat = layer.pixelFormat
             standardColorspace = layer.colorspace
+        }
+        if (extended && extendedColorspace == null) {
             extendedColorspace = platform.CoreGraphics.CGColorSpaceCreateWithName(
                 platform.CoreGraphics.kCGColorSpaceExtendedLinearSRGB,
             )
         }
+        val standard = if (wanted == null) standardColorspace else taggedColorspaces.getOrPut(wanted) { createColorSpace(wanted) }
         platform.QuartzCore.CATransaction.begin()
         platform.QuartzCore.CATransaction.setDisableActions(true)
         try {
             layer.pixelFormat = if (extended) platform.Metal.MTLPixelFormatRGBA16Float else standardPixelFormat
-            layer.colorspace = if (extended) extendedColorspace else standardColorspace
+            layer.colorspace = if (extended) extendedColorspace else standard
             setExtendedRangeContent(layer, extended)
         } finally {
             platform.QuartzCore.CATransaction.commit()
         }
         layerExtended.value = extended
+        if (!extended) layerTags = wanted
+    }
+
+    /** Sets the layer up for [frame]: extended range for HDR it shows as HDR, else its own colour. */
+    private fun configureLayerFor(frame: VideoFrame) {
+        val extended = wantsExtendedRange(frame.colorSpace)
+        val tags = when {
+            extended -> null
+            // HDR on a standard-range target is tone mapped, and the shader's output has its own tags.
+            frame.colorSpace.willToneMap() -> toneMappedColorTags
+            else -> colorTagsOf(frame.colorSpace, frame.size.width, frame.size.height)
+        }
+        configureLayer(extended, tags)
     }
 
     /** The composer whose pipelines match [target], which a drawable of either format may be. */
@@ -294,7 +331,7 @@ public class MetalVideoRenderer internal constructor(
                 )
                 return
             }
-            configureLayer(wantsExtendedRange(frame.colorSpace))
+            configureLayerFor(frame)
             val drawable = layer.nextDrawable()
             if (drawable == null) {
                 // The layer has no backing store right now (offscreen, zero size, teardown).
@@ -403,7 +440,7 @@ public class MetalVideoRenderer internal constructor(
         val picture = retainedPicture ?: return
         val meta = retainedMeta ?: return
         try {
-            configureLayer(wantsExtendedRange(meta.colorSpace))
+            configureLayerFor(meta)
             val drawable = layer.nextDrawable() ?: return
             val width = viewportWidth.value.takeIf { it > 0 }
                 ?: layer.drawableSize.useContents { width }.toInt().coerceAtLeast(1)
@@ -581,6 +618,8 @@ public class MetalVideoRenderer internal constructor(
         headroom.close()
         extendedColorspace?.let { platform.CoreGraphics.CGColorSpaceRelease(it) }
         extendedColorspace = null
+        taggedColorspaces.values.forEach { it?.let { space -> platform.CoreGraphics.CGColorSpaceRelease(space) } }
+        taggedColorspaces.clear()
         dispatcher.close()
     }
 

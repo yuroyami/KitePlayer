@@ -67,31 +67,28 @@ renderer does not retire another renderer's conversion state.
 
 ## Apple presentation color
 
-Planned behavior contract for #489. The current implementation does not yet satisfy these color
-and drawable-format guarantees; production and platform qualification follow separately.
+The behavior contract of #489.
 
-Apple SDR presentation preserves the source's encoding and uses the system's matching video
-profile, including the native ITU-R 709 interpretation for ordinary HD. This is the chosen native
-Apple/QuickTime appearance. Software sample buffers carry their source color metadata; shared
-hardware buffers retain their existing metadata. Explicit metadata wins over fallbacks. Generic
-BT.601 uses SMPTE170M for 480 and 486-line NTSC and EBU for 576-line PAL.
+Apple SDR presentation keeps the source's encoding and names it to the system, which matches it to
+the display. The name is the color space Core Video makes for the picture's primaries and transfer.
+For BT.709 that is the space QuickTime Player and AVFoundation show it in. This was chosen over
+sRGB so that the Metal renderer, the sample buffer renderer and picture in picture show one stream
+alike.
 
-Changing an SDR drawable from eight-bit storage to linear half-float storage must preserve that
-presentation intent. SDR adjustments and source-law linear filtering precede conversion through
-the chosen native profile to extended-linear BT.709. Native profile transfer curves and white
-adaptation must not be replaced by the source inverse OETF merely because the drawable is float.
-Tone-mapped HDR uses the shader's actual BT.709/gamma2.2 encoding; extended HDR remains linear BT.709.
-Subtitle source pixels are sRGB and are converted for their actual presentation target.
-
-A bounded GPU lookup may approximate the native SDR profile conversion. The proposed 65-cubed
-float table costs about 4.2 MiB per profile, with at most three owned or in-flight tables per
-composer. A fourth profile waits for the oldest table's last GPU read before reusing that texture.
-Creation uses two fixed-size float arrays, about 8.4 MiB combined, plus temporary Core Graphics image and
-conversion storage. No frame undergoes CPU color conversion. Tests must report measured error
-against direct native color matching, including nonneutral shadows/highlights, between-grid
-samples, different white points, negative wide-gamut components and effects that reach encoding
-bounds. These limits are implementation tradeoffs, not a claim of exact color equality or a
-replacement for the issue's actual P3 display and picture-in-picture checks.
+- On macOS the Metal renderer sets that color space on its layer for each standard range picture.
+  A Metal layer with no color space gets no color matching there. iOS treats such a layer as sRGB,
+  and the renderer leaves it so.
+- A software frame copied into a pixel buffer carries its matrix, primaries and transfer
+  attachments. A hardware buffer keeps the attachments it came with.
+- What the stream states wins. A field it leaves out follows the picture's size: BT.709 for high
+  definition, and for standard definition the 601 matrix with EBU primaries at 576 lines and
+  SMPTE C primaries at any other height.
+- HDR that is tone mapped to standard range is named as what the shader writes: gamma 2.2 on
+  BT.709 primaries. HDR shown as HDR stays extended linear BT.709.
+- Subtitle pixels are sRGB and are blended in the picture's encoding with no conversion. Their
+  primaries equal BT.709's, so only mid tones differ slightly.
+- A standard range picture that reaches a half-float drawable during a change of the layer's
+  format is drawn as linear light from its source curve. That lasts a frame or two.
 
 ## Automatic network transport
 

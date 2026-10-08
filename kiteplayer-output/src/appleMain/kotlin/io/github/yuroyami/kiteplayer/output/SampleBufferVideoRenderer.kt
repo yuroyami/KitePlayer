@@ -2,6 +2,10 @@
 
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.spi.ColorMatrix
+import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
+import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
+import io.github.yuroyami.kiteplayer.spi.ColorTransfer
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
@@ -304,7 +308,7 @@ public class SampleBufferVideoRenderer internal constructor(
     private fun pixelBufferFor(frame: VideoFrame): CVPixelBufferRef? =
         when (val picture = resolve.resolve(frame)) {
             is MetalPicture.CorePixelBuffer -> CVPixelBufferRetain(picture.buffer.reinterpret())
-            is MetalPicture.SoftwarePlanes -> copyIntoPixelBuffer(picture, frame.colorSpace.fullRange)
+            is MetalPicture.SoftwarePlanes -> copyIntoPixelBuffer(picture, frame.colorSpace.fullRange, frame.colorSpace)
             null -> null
         }
 
@@ -412,10 +416,18 @@ internal fun sampleSinkFor(layer: AVSampleBufferDisplayLayer): SampleSink =
  * Planar 4:2:0 arrives as three planes and leaves as two: Core Video's 8-bit 4:2:0 is bi-planar,
  * so the two chroma planes are interleaved on the way in. That interleave is the whole reason a
  * software frame costs a pass here.
+ *
+ * The buffer carries the colour tags of [colorSpace] (#489), as a hardware frame carries its own,
+ * so the layer that shows it does not have to guess the matrix or the primaries.
  */
 internal fun copyIntoPixelBuffer(
     picture: MetalPicture.SoftwarePlanes,
     fullRange: Boolean,
+    colorSpace: ColorSpaceInfo = ColorSpaceInfo(
+        matrix = ColorMatrix.Unspecified,
+        primaries = ColorPrimaries.Unspecified,
+        transfer = ColorTransfer.Unspecified,
+    ),
 ): CVPixelBufferRef? {
     val type = when (picture.format) {
         PlayerPixelFormat.Nv12, PlayerPixelFormat.Yuv420p ->
@@ -471,6 +483,13 @@ internal fun copyIntoPixelBuffer(
             }
         }.isSuccess
         CVPixelBufferUnlockBaseAddress(buffer, 0uL)
+        if (filled) {
+            tagPixelBuffer(
+                buffer,
+                colorTagsOf(colorSpace, picture.width, picture.height),
+                withMatrix = picture.format != PlayerPixelFormat.Bgra,
+            )
+        }
         if (filled) buffer else { CVPixelBufferRelease(buffer); null }
     }
 }

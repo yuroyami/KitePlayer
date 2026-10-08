@@ -15,6 +15,8 @@ internal actual fun readScreenHeadroom(layer: CAMetalLayer): Pair<Float, Float> 
     return screen.potentialEDRHeadroom.toFloat() to screen.currentEDRHeadroom.toFloat()
 }
 
+internal actual val tagsStandardRangeLayer: Boolean = false
+
 internal actual fun setExtendedRangeContent(layer: CAMetalLayer, extended: Boolean) {
     if (layer.respondsToSelector(NSSelectorFromString("setWantsExtendedDynamicRangeContent:"))) {
         layer.wantsExtendedDynamicRangeContent = extended

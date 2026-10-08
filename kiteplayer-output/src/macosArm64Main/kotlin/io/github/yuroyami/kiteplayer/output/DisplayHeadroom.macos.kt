@@ -16,6 +16,8 @@ internal actual fun readScreenHeadroom(layer: CAMetalLayer): Pair<Float, Float> 
         screen.maximumExtendedDynamicRangeColorComponentValue.toFloat()
 }
 
+internal actual val tagsStandardRangeLayer: Boolean = true
+
 internal actual fun setExtendedRangeContent(layer: CAMetalLayer, extended: Boolean) {
     layer.wantsExtendedDynamicRangeContent = extended
 }

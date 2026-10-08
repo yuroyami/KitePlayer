@@ -45,6 +45,12 @@ internal expect fun readScreenHeadroom(layer: CAMetalLayer): Pair<Float, Float>
  */
 internal expect fun setExtendedRangeContent(layer: CAMetalLayer, extended: Boolean)
 
+/**
+ * True where a Metal layer with no colour space gets no colour matching at all, so the renderer
+ * names the picture's own (#489). That is macOS. iOS treats such a layer as sRGB.
+ */
+internal expect val tagsStandardRangeLayer: Boolean
+
 private class ScreenHeadroom(private val layer: CAMetalLayer, private val onChange: () -> Unit) : HeadroomSource {
     private val potentialBits = atomic(1f.toRawBits())
     private val currentBits = atomic(1f.toRawBits())

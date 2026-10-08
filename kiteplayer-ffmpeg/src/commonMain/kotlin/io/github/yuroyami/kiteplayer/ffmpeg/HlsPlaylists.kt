@@ -109,6 +109,18 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
     /** True when the variant names its codecs and none of them is a video codec. */
     val audioOnly: Boolean = height == null && codecs.isNotEmpty() && codecs.none { it.substringBefore('.') in VIDEO_CODECS }
 
+    /**
+     * The family of the variant's video codec, `avc`, `hevc` or the RFC 6381 name of another, or
+     * null when the variant names no video codec. A decoder follows a change inside one family.
+     */
+    val videoCodec: String? = codecs.map { it.substringBefore('.') }.firstOrNull { it in VIDEO_CODECS }?.let {
+        when (it) {
+            "avc1", "avc3", "dva1", "dvav" -> "avc"
+            "hvc1", "hev1", "dvh1", "dvhe" -> "hevc"
+            else -> it
+        }
+    }
+
     /** True for a PQ or HLG picture. */
     val hdr: Boolean = attributes["VIDEO-RANGE"].let { it == "PQ" || it == "HLG" }
 
@@ -167,7 +179,18 @@ internal class HlsMaster(
     val variants: List<HlsVariant>,
     val chosen: Int,
     val backups: List<HlsBackup> = emptyList(),
-)
+    /** The address of each variant's playlist, as the master writes it, in the order of [variants]. */
+    val addresses: List<String> = emptyList(),
+) {
+    /** [playlist] with the kept variant's playlist at [address] (#464). */
+    fun servedFrom(address: String): String {
+        val lines = playlist.split('\n').toMutableList()
+        val tag = lines.indexOfFirst { it.startsWith("#EXT-X-STREAM-INF:") }
+        val uri = (tag + 1 until lines.size).firstOrNull { lines[it].isNotBlank() && !lines[it].startsWith("#") } ?: return playlist
+        lines[uri] = address
+        return lines.joinToString("\n")
+    }
+}
 
 /**
  * A playlist the kept master names, by its address as written, and the playlists of its backup
@@ -269,5 +292,6 @@ internal fun keepOneHlsVariant(
         variants,
         variants.indexOf(chosen),
         backupsOf(chosen, variants, lines),
+        variants.map { lines[it.uriLine].trim() },
     )
 }

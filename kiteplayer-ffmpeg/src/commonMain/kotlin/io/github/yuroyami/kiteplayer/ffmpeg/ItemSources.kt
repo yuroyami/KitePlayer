@@ -39,6 +39,8 @@ internal class OpenedItem(
     val thumbnails: HlsThumbnails? = null,
     /** The time of day of an HLS stream's positions, from its playlists' dates (#444). */
     val times: HlsTimeOfDay? = null,
+    /** Moves an HLS stream to another variant in place (#464). */
+    val switch: HlsVariantSwitch? = null,
 ) {
     fun withListedTitle(title: String?): OpenedItem =
         OpenedItem(source, bridge, hls, variants, selectedVariant, realTimeScheme, title ?: listedTitle, growing, thumbnails, times)
@@ -148,7 +150,7 @@ internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
             }
             OpenedItem(
                 source, bridge, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant,
-                growing = growing, thumbnails = hls?.thumbnails, times = hls?.times,
+                growing = growing, thumbnails = hls?.thumbnails, times = hls?.times, switch = hls?.switch,
             )
         }
         // No protocol reads the descriptor now, so no protocol is left to consume its key.

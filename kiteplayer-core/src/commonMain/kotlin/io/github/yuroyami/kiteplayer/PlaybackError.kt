@@ -718,8 +718,9 @@ public sealed class PlaybackWarning {
     /**
      * The player stepped an HLS stream down from the variant at [from] to the one at [to], with a
      * lower bitrate. Either playback waited too long for data, or the link read less media per
-     * second than playback uses. [detail] says which, with the wait or the measured rate. The stream
-     * opens again on the lower variant at the current position.
+     * second than playback uses. [detail] says which, with the wait or the measured rate. The warning
+     * comes once the step has applied: the stream moved to the lower variant in place, or it opened
+     * again on it at the current position.
      */
     public data class VariantLowered(val from: Int, val to: Int, val detail: String) : PlaybackWarning() {
         override val message: String get() = "stepped down from variant $from to variant $to: $detail"

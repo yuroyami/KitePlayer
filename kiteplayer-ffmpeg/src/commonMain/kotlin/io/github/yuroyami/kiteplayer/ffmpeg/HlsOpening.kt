@@ -10,6 +10,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackWarning
+import io.github.yuroyami.kiteplayer.Playlists
 import io.github.yuroyami.kiteplayer.StreamVariant
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
@@ -43,6 +44,8 @@ internal class HlsOpen(
     val thumbnails: HlsThumbnails? = null,
     /** The time of day of the stream's positions, from its playlists' dates (#444). */
     val times: HlsTimeOfDay = HlsTimeOfDay(),
+    /** Moves a master playlist's stream to another variant in place, or null when it cannot (#464). */
+    val switch: HlsVariantSwitch? = null,
 ) {
     /**
      * The pre-open options this open adds. A segment address often has no file extension, so
@@ -63,15 +66,34 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
     val base = io.location ?: item.uri
     val text = read ?: readPlaylist(io, item.uri).decodeToString()
     val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant, item.demux.fit)
-    val playlist = master?.playlist ?: text
     val ledger = HlsLedger(item.uri)
     // The kept variant's backups stand in for it when an address fails (#440).
     val failover = HlsFailover(master?.backups.orEmpty(), base)
     val times = HlsTimeOfDay()
     // FFmpeg reloads a media playlist from its own address, which is the base it reads it under.
     if (master == null) times.read(base, text)
-    val opener = if (io.location != null && nestedOpensSupported) {
-        MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger, failover, times) }
+    val nested = io.location != null && nestedOpensSupported
+    // With two variants or more, the kept one is served by a switch that can move to another (#464).
+    val switch = if (master != null && nested && master.variants.size > 1) {
+        HlsVariantSwitch(
+            addresses = master.addresses.map { Playlists.resolve(base, it) },
+            traits = master.variants,
+            initial = master.chosen,
+            choose = {
+                master.variants.indexOf(chooseHlsVariant(master.variants, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.fit))
+            },
+            openAddress = { address -> if (failover.isEmpty) io.openRelated(address) else failover.open(address) { io.openRelated(it) } },
+        )
+    } else {
+        null
+    }
+    val playlist = when {
+        master == null -> text
+        switch != null -> master.servedFrom(HlsVariantSwitch.PLAYLIST)
+        else -> master.playlist
+    }
+    val opener = if (nested) {
+        MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger, failover, times, switch) }
     } else {
         // No segment open will say where FFmpeg starts, which for a playlist that has ended is its first.
         times.anchorAtStart(base)
@@ -90,7 +112,9 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
     }
     // The pictures are read through the item's own reader, as its segments are (#433).
     val thumbnails = HlsThumbnails.choose(hlsImageStreams(text))?.let { HlsThumbnails(io, base, it) }
-    return HlsOpen(PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen, thumbnails, times)
+    return HlsOpen(
+        PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen, thumbnails, times, switch,
+    )
 }
 
 /**
@@ -106,22 +130,31 @@ private fun openRelatedBridge(
     ledger: HlsLedger,
     failover: HlsFailover,
     times: HlsTimeOfDay,
+    switch: HlsVariantSwitch?,
 ): MediaByteSource? =
     blockingIn(lifetime) {
+        // The kept variant's playlist and segments are at addresses the switch gave them (#464).
+        val owner = switch?.takeIf { it.owns(address) }
+        // The address a warning names is the stream's, never one the switch made up.
+        suspend fun named(): String = owner?.nameOf(address) ?: address
         val related = try {
-            if (failover.isEmpty) io.openRelated(address) else failover.open(address) { target -> io.openRelated(target) }
+            when {
+                owner != null -> owner.open(address)
+                failover.isEmpty -> io.openRelated(address)
+                else -> failover.open(address) { target -> io.openRelated(target) }
+            }
         } catch (failure: Throwable) {
             if (failure is CancellationException) throw failure
-            ledger.failed(address, failure.message ?: failure.toString())
+            ledger.failed(named(), failure.message ?: failure.toString())
             throw failure
         }
         if (related == null) {
-            ledger.failed(address, "the reader refused the address")
+            ledger.failed(named(), "the reader refused the address")
             return@blockingIn null
         }
         times.opened(address)
         // A playlist among the addresses, a variant's or a live reload, gives its dates (#444).
-        val dated = PlaylistDates(LedgeredMediaIo(related, address, ledger), address, related.location ?: address, times)
+        val dated = PlaylistDates(LedgeredMediaIo(related, named(), ledger), address, related.location ?: address, times)
         BlockingMediaIo(dated, lifetime)
     }
 

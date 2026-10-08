@@ -1305,10 +1305,24 @@ internal class PlaybackCore(
      */
     private val pendingSelections = mutableMapOf<TrackKind, SelectionRequest>()
 
-    /** A variant choice waiting for the rebuild that reopens the item on it, or null (#376). */
+    /**
+     * A variant choice waiting for the source to take it in place (#464), or for the rebuild that
+     * reopens the item on it (#376), or null.
+     */
     private var pendingVariant: VariantRequest? = null
 
-    private class VariantRequest(val index: Int?, val reply: CompletableDeferred<Unit>)
+    /** [lowered] is what the player says once its own step down has applied. */
+    private class VariantRequest(
+        val index: Int?,
+        val reply: CompletableDeferred<Unit>,
+        val lowered: PlaybackWarning.VariantLowered? = null,
+    )
+
+    /** The variant choice the source is asked to make in place, with no new open, or null (#464). */
+    private var variantInPlace: VariantRequest? = null
+
+    /** The variant choice the source could not make in place, so the rebuild takes it (#464). */
+    private var variantReopens: VariantRequest? = null
 
     /** A programme choice waiting for the rebuild that reopens the item on it, or null (#505). */
     private var pendingProgram: ProgramRequest? = null
@@ -2612,9 +2626,6 @@ internal class PlaybackCore(
             }
             is CoreCommand.SelectVariant -> when {
                 session == null -> IllegalStateException("selectVariant needs an open media item")
-                session?.source?.seekable != true -> UnsupportedOperationException(
-                    "this source is not seekable, so a variant change cannot reopen and seek back to where playback was",
-                )
                 command.index != null && tracks.variants.none { it.index == command.index } ->
                     IllegalArgumentException("the media has no variant ${command.index}")
                 else -> null
@@ -3201,6 +3212,7 @@ internal class PlaybackCore(
             is CoreCommand.ReloadExternalSubtitle -> reloadExternalSubtitle(command)
             is CoreCommand.ExternalSubtitleRead -> command.adopt()
             is CoreCommand.ThumbnailsRead -> command.adopt()
+            is CoreCommand.VariantMoved -> command.adopt()
             is CoreCommand.ThumbnailQuery -> command.reply.complete(thumbnailTarget())
             is CoreCommand.StreamsChanged -> command.adopt()
             is CoreCommand.SetLoop -> {
@@ -5402,6 +5414,10 @@ internal class PlaybackCore(
     /** What a picture taken in place tells the caller: the selection and the picture's size. */
     private fun pictureChanged(session: OpenSession, stream: PlayerStreamInfo) {
         tracks = tracks.withSelection(TrackKind.Video, TrackId(stream.index))
+        // Another stream's frames come next, at a size of their own.
+        session.renderer.forgetPresentedSize()
+        session.presentedSize = null
+        session.changedVideoSize = null
         stream.visibleVideoSize?.let { emitEvent(PlayerEvent.VideoSizeChanged(it)) }
         publishSnapshot()
     }
@@ -6448,6 +6464,29 @@ internal class PlaybackCore(
                 if (pendingSelections.keys == setOf(TrackKind.Audio) && soundArriving(active)) return
             }
         }
+        // A variant change with nothing beside it is first asked of the source, which may make it
+        // between two segments, with no new open (#464).
+        pendingVariant?.let { request ->
+            val active = session
+            val alone = pendingSelections.isEmpty() && pendingProgram == null && !pendingRejoin
+            if (active != null && alone && variantReopens !== request) {
+                if (variantInPlace !== request) startVariantInPlace(active, request)
+                return
+            }
+        }
+        // A source that cannot seek cannot come back to the position after a new open, so a
+        // variant it would not take in place is refused.
+        pendingVariant?.let { request ->
+            if (session?.source?.seekable == false) {
+                pendingVariant = null
+                request.reply.completeExceptionally(UnsupportedOperationException(VARIANT_NEEDS_SEEK))
+                if (pendingSelections.isEmpty() && !reopenPending) {
+                    variantReopens = null
+                    return
+                }
+            }
+        }
+        variantReopens = null
         // Taken and cleared together: everything asked for so far rides ONE rebuild, and a request
         // arriving during it belongs to the next one.
         val requested = pendingSelections.values.toList()
@@ -6568,6 +6607,7 @@ internal class PlaybackCore(
             // stays Paused, so a caller on another thread read the old selection on return.
             publishSnapshot()
             requested.forEach { it.reply.complete(TrackChange.Applied(it.kind, it.track)) }
+            variantRequest?.lowered?.let(::warn)
             variantRequest?.reply?.complete(Unit)
             programRequest?.reply?.complete(Unit)
         } catch (cancellation: CancellationException) {
@@ -6603,6 +6643,49 @@ internal class PlaybackCore(
     }
 
     /**
+     * Asks [session]'s source to move to the variant of [request] while it plays (#464). The source
+     * may read a playlist for that, so it is asked off the actor, and the answer comes back as a
+     * command. Playback goes on meanwhile.
+     */
+    private fun startVariantInPlace(session: OpenSession, request: VariantRequest) {
+        variantInPlace = request
+        scope.launch {
+            val moved = try {
+                session.source.switchVariant(request.index)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                false
+            }
+            commands.trySend(CoreCommand.VariantMoved { finishVariantInPlace(session, request, moved) })
+        }
+    }
+
+    /**
+     * Takes the source's answer to [startVariantInPlace]. A source that [moved] already reads the
+     * new variant, so the track table and the item say so even when a later choice replaced
+     * [request]. A source that did not leaves [request] to the rebuild, which opens the item again.
+     */
+    private fun finishVariantInPlace(from: OpenSession, request: VariantRequest, moved: Boolean) {
+        if (variantInPlace === request) variantInPlace = null
+        if (session !== from) return
+        if (moved) {
+            tracks = tracks.copy(selectedVariant = from.source.selectedVariant)
+            media = media?.let { it.copy(demux = it.demux.copy(variant = request.index)) }
+            publishSnapshot()
+        }
+        if (pendingVariant !== request) return
+        if (!moved) {
+            from.variantMoveRefused = true
+            variantReopens = request
+            return
+        }
+        pendingVariant = null
+        request.lowered?.let(::warn)
+        request.reply.complete(Unit)
+    }
+
+    /**
      * Anchors the audio clock once per pass, at one known point.
      *
      * Doing it here rather than wherever the first reader happens to be is what makes the pass's
@@ -6624,10 +6707,33 @@ internal class PlaybackCore(
                 PlayerEvent.FirstFrameRendered((clock.nanos() - openedAtNanos).nanoseconds),
             )
         }
+        notePictureSize(session)
         if (video.queuedFrames > 0 && session.schedulerMode.value == SCHEDULER_RUNNING) {
             wakeIn(FRAME_WAKE)
         }
     }
+
+    /**
+     * Reports a picture whose size changed while its stream played (#464): another variant of an
+     * HLS stream taken in place, or the next Period of a DASH one. The stream table still holds the
+     * size the stream opened with, so the size shown comes from the frames.
+     */
+    private fun notePictureSize(session: OpenSession) {
+        val stored = session.renderer.presentedSize ?: return
+        val before = session.presentedSize
+        if (stored == before) return
+        session.presentedSize = stored
+        // The first frame is the size the open reported.
+        if (before == null) return
+        val shown = stored.cropped(session.videoStream?.crop)
+        session.changedVideoSize = shown
+        emitEvent(PlayerEvent.VideoSizeChanged(shown))
+        publishSnapshot()
+    }
+
+    /** The size of the picture as it is shown now: the stream's, or the one its frames changed to. */
+    private fun shownVideoSize(session: OpenSession): VideoSize? =
+        session.changedVideoSize ?: session.videoStream?.visibleVideoSize
 
     private data class VideoRecovery(
         val item: MediaItem,
@@ -7354,7 +7460,7 @@ internal class PlaybackCore(
         starvedSinceNanos = NO_POSITION
         val item = media ?: return
         if (item.demux.variant != null && !variantChosenByPlayer) return
-        if (!session.source.seekable) return
+        if (!mayChangeVariant(session)) return
         val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
         val lower = lowerVariants(current).maxByOrNull { it.bitrate } ?: return
         lowerVariant(current, lower, "playback waited ${waited.inWholeMilliseconds} ms for data at ${current.bitrate} bits per second")
@@ -7374,7 +7480,7 @@ internal class PlaybackCore(
         if (pendingSeek != null || reopenPending) return
         val item = media ?: return
         if (item.demux.variant != null && !variantChosenByPlayer) return
-        if (!session.source.seekable) return
+        if (!mayChangeVariant(session)) return
         val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
         val read = session.readRate.mediaPerReadSecond(VARIANT_STEP_DOWN_SAMPLE.inWholeMicroseconds) ?: return
         if (read >= speed) return
@@ -7392,6 +7498,12 @@ internal class PlaybackCore(
     }
 
     /**
+     * True while a step may be tried: the source can seek, so it can open again on another
+     * variant, or it has not yet refused to move to one in place (#464).
+     */
+    private fun mayChangeVariant(session: OpenSession): Boolean = session.source.seekable || !session.variantMoveRefused
+
+    /**
      * The variants a step down from [current] may take: those of lower bitrate in the range that
      * plays, or of any range when that one has none, because a stall outranks the range (#447).
      */
@@ -7407,9 +7519,8 @@ internal class PlaybackCore(
         if (lastStepWasUp) stepUpWait = (stepUpWait * 2).coerceAtMost(VARIANT_STEP_UP_WAIT_MAX)
         lastStepWasUp = false
         stepUpNotBeforeNanos = clock.nanos() + stepUpWait.inWholeNanoseconds
-        warn(PlaybackWarning.VariantLowered(current.index, target.index, detail))
         // Nobody waits on this reply: the variant change is the player's own.
-        pendingVariant = VariantRequest(target.index, CompletableDeferred())
+        pendingVariant = VariantRequest(target.index, CompletableDeferred(), PlaybackWarning.VariantLowered(current.index, target.index, detail))
     }
 
     /**
@@ -7420,8 +7531,8 @@ internal class PlaybackCore(
      * reader that fetches ahead serves its reads at once, however slow the link.
      *
      * Only while the player chooses the variant itself, and never past the item's
-     * `DemuxPolicy.maxBitrate` or `maxVideoHeight`. Each change opens the stream again, so the
-     * picture holds for a moment: after a step down this waits [VARIANT_STEP_UP_WAIT], and twice as
+     * `DemuxPolicy.maxBitrate` or `maxVideoHeight`. A change may open the stream again, which holds
+     * the picture for a moment: after a step down this waits [VARIANT_STEP_UP_WAIT], and twice as
      * long each time a step up was followed by another step down.
      */
     private fun stepUpWhenFast(session: OpenSession) {
@@ -7429,7 +7540,7 @@ internal class PlaybackCore(
         if (pendingSeek != null || reopenPending) return
         val item = media ?: return
         if (item.demux.variant != null && !variantChosenByPlayer) return
-        if (!session.source.seekable) return
+        if (!mayChangeVariant(session)) return
         if (stepUpNotBeforeNanos != NO_POSITION && clock.nanos() < stepUpNotBeforeNanos) return
         val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
         // Within the range that plays: a step is a matter of bitrate, never of SDR or HDR (#447).
@@ -8184,7 +8295,7 @@ internal class PlaybackCore(
         session.renderer.outputSize?.let { output ->
             if (output.width > 0 && output.height > 0) return output.width to output.height
         }
-        val size = session.videoStream?.visibleVideoSize
+        val size = shownVideoSize(session)
         val width = size?.displayWidth?.takeIf { it > 0 }
         val height = size?.height?.takeIf { it > 0 }
         if (width == null || height == null) return DEFAULT_SUBTITLE_CANVAS_WIDTH to DEFAULT_SUBTITLE_CANVAS_HEIGHT
@@ -8194,7 +8305,7 @@ internal class PlaybackCore(
     /** The geometry the typesetter draws into, from the same canvas rule [publishOverlay] uses. */
     private fun typesetFrame(session: OpenSession): io.github.yuroyami.kiteplayer.spi.TypesetFrame {
         val (width, height) = subtitleCanvas(session)
-        val size = session.videoStream?.visibleVideoSize
+        val size = shownVideoSize(session)
         var videoWidth = size?.displayWidth?.takeIf { it > 0 } ?: width
         var videoHeight = size?.height?.takeIf { it > 0 } ?: height
         // The renderer turns a sideways recording upright, so the fitted picture is the turned one.
@@ -11969,7 +12080,7 @@ internal class PlaybackCore(
             duration = session?.let { publishedDuration(it) } ?: reconnect?.duration,
             durationIsEstimate = session?.let { durationStillEstimated(it) } ?: false,
             seekable = session?.source?.seekable ?: (reconnect?.atUs != null),
-            videoSize = session?.videoStream?.visibleVideoSize,
+            videoSize = session?.let(::shownVideoSize),
             // The item's own thumbnail file stands before the stream's pictures (#433).
             tracks = itemThumbnails?.file?.takeIf { itemThumbnails?.source == media?.thumbnails }
                 ?.let { tracks.copy(thumbnails = it.set) } ?: tracks,
@@ -14065,6 +14176,15 @@ internal class PlaybackCore(
         /** The sound a switch is fetching, and the clock reading by which it must cover the position (#455). Actor only. */
         var arrivingSound: ArrivingSound? = null
 
+        /** True once the source refused to move to another variant in place (#464). Actor only. */
+        var variantMoveRefused = false
+
+        /** The stored size of the last frame the actor saw presented (#464). Actor only. */
+        var presentedSize: VideoSize? = null
+
+        /** The shown size the frames changed to while the stream played, or null while it is the stream's (#464). Actor only. */
+        var changedVideoSize: VideoSize? = null
+
         /**
          * True once the source answered that it cannot interrupt a stalled read. The session then
          * keeps waiting, because a teardown around a read that never returns would hang. Actor only.
@@ -14732,6 +14852,11 @@ internal class PlaybackCore(
 
         /** No seek in flight: [maskedSeekTargetMicros] defers to the published clock. */
         const val NO_SEEK_MASK: Long = Long.MIN_VALUE
+
+        /** Why a source that cannot seek refuses a variant it would not take in place (#464). */
+        const val VARIANT_NEEDS_SEEK: String =
+            "this source cannot move to that variant while it plays, and it cannot seek, so it " +
+                "cannot open again and come back to where playback was"
 
         /** Said once, by every path where a stop or a close ends a selection before it applies. */
         const val PREEMPTED_SELECTION: String =
@@ -15429,6 +15554,10 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     /** The item's thumbnail file was read off the actor (#433); [adopt] runs on the actor. */
     class ThumbnailsRead(val adopt: suspend () -> Unit) :
         CoreCommand("thumbnailsRead", CompletableDeferred(Unit))
+
+    /** The source answered a variant change it was asked to make in place (#464); [adopt] runs on the actor. */
+    class VariantMoved(val adopt: suspend () -> Unit) :
+        CoreCommand("variantMoved", CompletableDeferred(Unit))
 
     /** Asks the actor where the seek bar pictures of the item that plays come from (#433). */
     class ThumbnailQuery(val reply: CompletableDeferred<ThumbnailTarget?>) :

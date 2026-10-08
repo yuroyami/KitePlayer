@@ -289,6 +289,16 @@ internal class AttachableRenderer : VideoRenderer {
     /** Frames presented with nothing attached to draw them. */
     val headlessFrames: Long get() = headlessCount.value
 
+    private val lastSize = atomic<io.github.yuroyami.kiteplayer.VideoSize?>(null)
+
+    /** The stored size of the last frame presented, attached or not, or null before the first (#464). */
+    val presentedSize: io.github.yuroyami.kiteplayer.VideoSize? get() = lastSize.value
+
+    /** Forgets [presentedSize], when another stream's frames come next. */
+    fun forgetPresentedSize() {
+        lastSize.value = null
+    }
+
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> =
         delegate?.supportedHardwareSurfaces() ?: emptySet()
 
@@ -297,6 +307,8 @@ internal class AttachableRenderer : VideoRenderer {
     override fun accepts(shape: io.github.yuroyami.kiteplayer.spi.FrameShape): Boolean = delegate?.accepts(shape) ?: true
 
     override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
+        // Read first: presenting hands the frame over.
+        lastSize.value = frame.size
         val target = delegate
         if (target == null) {
             frame.close()

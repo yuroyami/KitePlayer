@@ -253,8 +253,23 @@ public interface PlayerMediaSource : AutoCloseable {
      */
     public val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = emptyList()
 
-    /** The [io.github.yuroyami.kiteplayer.StreamVariant.index] of the variant this source reads, or null. */
+    /**
+     * The [io.github.yuroyami.kiteplayer.StreamVariant.index] of the variant this source reads, or
+     * null. After [switchVariant] answered true it is the new variant, from that moment.
+     */
     public val selectedVariant: Int? get() = null
+
+    /**
+     * Moves this source to the variant at [index], or to the one it would open by itself for null,
+     * while it plays (#464). True means that the packets change to that variant at the next point
+     * where the media allows it, on the same streams and the same timestamps, and that a decoder
+     * finds the new picture size in the packets. False means that this source cannot do that for
+     * this variant, and the engine opens the item again on it.
+     *
+     * The engine calls this off its own loop while packets are read, so it may wait for the
+     * network. The default answers false.
+     */
+    public suspend fun switchVariant(index: Int?): Boolean = false
 
     /**
      * The seek bar pictures the media carries, such as a DASH thumbnail set or an HLS image

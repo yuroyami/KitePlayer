@@ -98,7 +98,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
  * own and left out the variants, so the player listed no quality to choose or step to (#543).
  */
 internal fun OpenedItem.toSource(): KiteFFmpegSource =
-    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing, thumbnails, times)
+    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing, thumbnails, times, switch)
 
 /**
  * Applies [media]'s filter chains to this source. An audio chain on a build without filter graphs,
@@ -126,7 +126,7 @@ public class KiteFFmpegSource internal constructor(
     /** What happened to the addresses of an HLS stream read through the item's reader. */
     private val hls: HlsLedger? = null,
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
-    override val selectedVariant: Int? = null,
+    private val openedVariant: Int? = null,
     /** True when the URL fallback opened a scheme whose sender pushes media at the pace it plays. */
     realTimeScheme: Boolean = false,
     /** The title the list of streams the item named gave this stream (#450). */
@@ -137,7 +137,13 @@ public class KiteFFmpegSource internal constructor(
     override val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? = null,
     /** The time of day of an HLS stream's positions, or a DASH one's through its stand-in (#444). */
     private val times: HlsTimeOfDay? = null,
+    /** Moves an HLS stream to another variant without a new open, when it has one (#464). */
+    private val switch: HlsVariantSwitch? = null,
 ) : PlayerMediaSource, RecordingCapable {
+
+    override val selectedVariant: Int? get() = switch?.selected ?: openedVariant
+
+    override suspend fun switchVariant(index: Int?): Boolean = switch?.request(index) ?: false
 
     private var reader: PacketReader? = null
 

@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlin.math.abs
 import kotlin.test.Test
@@ -44,6 +45,126 @@ class SelectVariantTest {
         assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
         val after = harness.core.position()
         assertTrue(abs((after - before).inWholeMilliseconds) < 1_500, "it went on near $before, not from $after")
+        harness.close()
+    }
+
+    @Test
+    fun aVariantTheSourceMovesToInPlaceDoesNotOpenAgain() = runTest {
+        val script = MediaScript(durationUs = 30_000_000, variants = variants, variantsMovedInPlace = setOf(0, 1), variantMoveUs = 200_000)
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(3.seconds)
+        val opensBefore = harness.backend.openCalls
+        val presentedBefore = harness.renderer!!.presentations.size
+
+        val change = async { harness.core.selectVariant(1) }
+        harness.run(100.milliseconds)
+        assertTrue(change.isActive, "the source has not answered yet")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status, "playback goes on while it is asked")
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant)
+        harness.run(400.milliseconds)
+        change.await()
+
+        assertEquals(opensBefore, harness.backend.openCalls, "the item did not open again")
+        assertEquals(listOf<Int?>(1), harness.source.variantMoves)
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        assertTrue(harness.renderer!!.presentations.size - presentedBefore >= 12, "pictures kept coming through the change")
+
+        // Back to the player's own choice: the source is asked for that too, and moves.
+        harness.core.selectVariant(null)
+        harness.run(500.milliseconds)
+        assertEquals(opensBefore, harness.backend.openCalls)
+        assertEquals(listOf(1, null), harness.source.variantMoves)
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant)
+        harness.close()
+    }
+
+    @Test
+    fun aStreamThatCannotSeekChangesVariantInPlaceAndRefusesTheOneItCannotMoveTo() = runTest {
+        val three = variants + StreamVariant(index = 2, bitrate = 300_000, width = 320, height = 180)
+        val script = MediaScript(durationUs = 30_000_000, seekable = false, variants = three, variantsMovedInPlace = setOf(0, 1))
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(2.seconds)
+        val opensBefore = harness.backend.openCalls
+
+        harness.core.selectVariant(1)
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "a live stream moves in place")
+
+        val refused = async { runCatching { harness.core.selectVariant(2) } }
+        harness.run(500.milliseconds)
+        assertIs<UnsupportedOperationException>(refused.await().exceptionOrNull(), "it cannot open again and seek back")
+        assertEquals(opensBefore, harness.backend.openCalls, "and it did not open again")
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    @Test
+    fun aPictureThatChangesSizeWhileItPlaysIsReportedAtItsNewSize() = runTest {
+        val small = VideoSize(640, 360)
+        val script = MediaScript(
+            durationUs = 30_000_000,
+            variants = variants,
+            videoFrameSize = { at -> if (at < 4_000_000) VideoSize(1920, 1080) else small },
+        )
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        val sizes = mutableListOf<VideoSize>()
+        val events = launch { harness.core.events.collect { if (it is PlayerEvent.VideoSizeChanged) sizes += it.size } }
+        harness.core.play()
+        harness.run(3.seconds)
+        assertEquals(VideoSize(1920, 1080), harness.core.snapshots.value.videoSize)
+        assertEquals(emptyList(), sizes, "the first frame is the size the open reported")
+        harness.run(2.seconds)
+        assertEquals(small, harness.core.snapshots.value.videoSize, "the snapshot follows the frames")
+        assertEquals(listOf(small), sizes, "one event for the one change")
+        events.cancel()
+        harness.close()
+    }
+
+    @Test
+    fun aVariantTheSourceCannotMoveToOpensAgainAfterItSaidSo() = runTest {
+        val script = MediaScript(durationUs = 30_000_000, variants = variants, variantsMovedInPlace = setOf(0), variantMoveUs = 200_000)
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(3.seconds)
+        val first = harness.source
+        val opensBefore = harness.backend.openCalls
+
+        harness.core.selectVariant(1)
+        harness.run(700.milliseconds)
+
+        assertEquals(listOf<Int?>(1), first.variantMoves, "the source was asked once")
+        assertEquals(opensBefore + 1, harness.backend.openCalls, "and the item opened again when it refused")
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    @Test
+    fun aLaterChoiceReplacesOneTheSourceIsStillAskedFor() = runTest {
+        val three = variants + StreamVariant(index = 2, bitrate = 300_000, width = 320, height = 180)
+        val script = MediaScript(durationUs = 30_000_000, variants = three, variantsMovedInPlace = setOf(0, 1, 2), variantMoveUs = 200_000)
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(3.seconds)
+        val opensBefore = harness.backend.openCalls
+
+        val first = async { runCatching { harness.core.selectVariant(1) } }
+        harness.run(50.milliseconds)
+        val second = async { harness.core.selectVariant(2) }
+        harness.run(1.seconds)
+
+        assertTrue(first.await().isFailure, "the first choice is told it was replaced")
+        second.await()
+        assertEquals(opensBefore, harness.backend.openCalls)
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant)
         harness.close()
     }
 

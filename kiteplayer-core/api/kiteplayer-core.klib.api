@@ -882,6 +882,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/
     open fun resumeReading(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.resumeReading|resumeReading(){}[0]
     open fun timeOfDayAt(io.github.yuroyami.kiteplayer/Pts): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.timeOfDayAt|timeOfDayAt(io.github.yuroyami.kiteplayer.Pts){}[0]
     open suspend fun seekToKeyframe(io.github.yuroyami.kiteplayer/Pts, io.github.yuroyami.kiteplayer/KeyframeChoice): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.seekToKeyframe|seekToKeyframe(io.github.yuroyami.kiteplayer.Pts;io.github.yuroyami.kiteplayer.KeyframeChoice){}[0]
+    open suspend fun switchVariant(kotlin/Int?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.switchVariant|switchVariant(kotlin.Int?){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/PlayerPacket : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/PlayerPacket|null[0]

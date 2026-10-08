@@ -99,6 +99,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
     final suspend fun readPacket(): io.github.yuroyami.kiteplayer.spi/PlayerPacket? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.readPacket|readPacket(){}[0]
     final suspend fun seekToKeyframe(io.github.yuroyami.kiteplayer/Pts): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.seekToKeyframe|seekToKeyframe(io.github.yuroyami.kiteplayer.Pts){}[0]
     final suspend fun seekToKeyframe(io.github.yuroyami.kiteplayer/Pts, io.github.yuroyami.kiteplayer/KeyframeChoice): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.seekToKeyframe|seekToKeyframe(io.github.yuroyami.kiteplayer.Pts;io.github.yuroyami.kiteplayer.KeyframeChoice){}[0]
+    final suspend fun switchVariant(kotlin/Int?): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.switchVariant|switchVariant(kotlin.Int?){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSourceFactory : io.github.yuroyami.kiteplayer.spi/MediaSourceFactory { // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSourceFactory|null[0]

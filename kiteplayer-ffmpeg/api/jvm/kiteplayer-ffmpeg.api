@@ -57,6 +57,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public final fun setOnWarning (Lkotlin/jvm/functions/Function1;)V
 	public fun startRecording (Ljava/lang/String;)V
 	public fun stopRecording ()V
+	public fun switchVariant (Ljava/lang/Integer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun timeOfDayAt-gzNCz5I (J)Ljava/lang/Long;
 	public final fun videoDecoderFactories ()Ljava/util/List;
 }

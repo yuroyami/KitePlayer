@@ -259,6 +259,12 @@ internal class MediaScript(
     val slowStartReads: Int = 0,
     /** A read delay for one variant, in place of [readDelayUs]: a link too slow for that variant. */
     val readDelayUsByVariant: Map<Int, Long> = emptyMap(),
+    /** The variants the source moves to while it plays, with no new open, as an HLS stream with shared segments does (#464). */
+    val variantsMovedInPlace: Set<Int> = emptySet(),
+    /** How long the source takes to answer a variant change it is asked to make in place. */
+    val variantMoveUs: Long = 0,
+    /** The size of the frame at a time in microseconds, for a picture that changes size while it plays, or null for 1920x1080. */
+    val videoFrameSize: ((Long) -> VideoSize)? = null,
     /**
      * A network link, in bits per second at a time of the test's clock in microseconds. Each video
      * packet then takes as long as its media of the selected variant's bitrate takes over the link,
@@ -1005,8 +1011,23 @@ internal class ScriptedSource(
     private val io: io.github.yuroyami.kiteplayer.MediaIo? = null,
     /** Reads when a wedge began into [wedgedAtNanos]. */
     private val clock: MonotonicClock? = null,
-    override val selectedVariant: Int? = null,
+    openedVariant: Int? = null,
 ) : PlayerMediaSource {
+
+    override var selectedVariant: Int? = openedVariant
+        private set
+
+    /** Every variant the engine asked this source to move to in place, in order. */
+    val variantMoves = mutableListOf<Int?>()
+
+    override suspend fun switchVariant(index: Int?): Boolean {
+        variantMoves += index
+        if (script.variantMoveUs > 0) kotlinx.coroutines.delay(script.variantMoveUs / 1_000)
+        val wanted = index ?: 0
+        if (wanted !in script.variantsMovedInPlace) return false
+        selectedVariant = wanted
+        return true
+    }
 
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
 
@@ -1565,6 +1586,7 @@ internal class ScriptedVideoDecoder(
                 pts = pts,
                 generation = generation,
                 duration = packet.duration ?: Pts(script.videoFrameDurationUs),
+                size = script.videoFrameSize?.invoke(pts.micros) ?: VideoSize(1920, 1080),
                 ledger = ledger,
                 closedCaptions = script.videoCaptions?.invoke(pts.micros)?.encodeToByteArray(),
             ),

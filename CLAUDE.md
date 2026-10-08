@@ -385,6 +385,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
   keyframe seek lands up to one segment early and a precise seek decodes forward from there. It
   reads a run of byte-range fragments of one file through one reader, so playing from the start
   asks for that file from byte 0 only, and a range request appears only after a seek (#209).
+- FFmpeg reads the playlist of an HLS stream that has ended once and never again, so a line
+  written into it later is never seen. A variant change in place therefore serves each segment at
+  an address of the player's own, and decides which variant's bytes it gives when FFmpeg asks for
+  them (#464).
 - FFmpeg's MP4 reader keeps the first `moov` it sees and skips every later one, and a decoder keeps
   the last H.264 or HEVC parameter sets it was given. So every fMP4 segment of a joined DASH
   presentation carries its own Period's parameter sets in band, even a Period whose

@@ -82,7 +82,8 @@ fi
 
 if [[ "$probe_stage" == true ]]; then
     probe_publications=()
-    for probe_module in kiteplayer-core kiteplayer-network; do
+    # kiteplayer-network reads XML through kiteplayer-subtitles, so its metadata names that module.
+    for probe_module in kiteplayer-core kiteplayer-network kiteplayer-subtitles; do
         for probe_platform in KotlinMultiplatform Jvm MacosArm64 IosSimulatorArm64 WasmJs Android; do
             probe_publications+=(":$probe_module:publish${probe_platform}PublicationToVerificationRepository")
         done

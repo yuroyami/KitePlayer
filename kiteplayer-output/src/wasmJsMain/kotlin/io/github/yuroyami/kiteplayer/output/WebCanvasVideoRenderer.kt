@@ -113,7 +113,7 @@ public class WebCanvasVideoRenderer(
     private val guard = VideoFlashGuard()
 
     /** What the guard read from the last picture it measured, for the tests. */
-    internal val flashCells: FloatArray = FloatArray(VideoFlashGuard.CELLS)
+    internal val flashCells: FloatArray = FloatArray(VideoFlashGuard.MEASURES)
 
     private val started = TimeSource.Monotonic.markNow()
 
@@ -218,8 +218,8 @@ public class WebCanvasVideoRenderer(
     private fun flashFactorFor(s: JsAny, size: VideoSize): Float {
         if (flashGuard != FlashGuard.On) return 1f
         val packed = webMeasureStage(s, size.width, size.height, VideoFlashGuard.COLUMNS, VideoFlashGuard.ROWS)
-        if (packed.length != VideoFlashGuard.CELLS * 4) return guard.current
-        for (i in 0 until VideoFlashGuard.CELLS) {
+        if (packed.length != VideoFlashGuard.MEASURES * 4) return guard.current
+        for (i in 0 until VideoFlashGuard.MEASURES) {
             val at = i * 4
             val bits = packed[at].code or (packed[at + 1].code shl 8) or (packed[at + 2].code shl 16) or (packed[at + 3].code shl 24)
             flashCells[i] = Float.fromBits(bits)
@@ -457,9 +457,10 @@ private external fun webRendererStage(state: JsAny, width: Int, height: Int): Bo
 private external fun webStageBytes(state: JsAny): JsAny
 
 /**
- * Measures the staged picture for the flash guard exactly as `VideoFlashGuard.cellsFromRgba` does:
- * each cell's mean relative luminance from four by four points, in linear light with the BT.709
- * weights. Answers the cells' 32-bit floats as one string of their bytes, low byte first.
+ * Measures the staged picture for the flash guard exactly as `VideoFlashGuard.cellsFromRgba` does,
+ * from four by four points in each cell, in linear light: each cell's mean relative luminance with
+ * the BT.709 weights, then each cell's mean red measure, then the share of each cell that is a
+ * saturated red. Answers the 32-bit floats as one string of their bytes, low byte first.
  */
 @JsFun(
     """(s, w, h, columns, rows) => {
@@ -467,25 +468,35 @@ private external fun webStageBytes(state: JsAny): JsAny
         s.linear = new Float32Array(256);
         for (let c = 0; c < 256; c++) { const e = c / 255; s.linear[c] = e <= 0.04045 ? e / 12.92 : Math.pow((e + 0.055) / 1.055, 2.4); }
       }
-      if (!s.cells || s.cells.length !== columns * rows) { s.cells = new Float32Array(columns * rows); s.cellBytes = new Uint8Array(s.cells.buffer); }
+      const count = columns * rows;
+      if (!s.cells || s.cells.length !== count * 3) { s.cells = new Float32Array(count * 3); s.cellBytes = new Uint8Array(s.cells.buffer); }
       const t = s.linear, d = s.image.data, cells = s.cells, n = 4;
       for (let row = 0; row < rows; row++) {
         const top = Math.trunc(row * h / rows), bottom = Math.trunc((row + 1) * h / rows);
         for (let column = 0; column < columns; column++) {
           const left = Math.trunc(column * w / columns), right = Math.trunc((column + 1) * w / columns);
-          let sum = 0;
+          let sum = 0, redSum = 0, saturated = 0;
           for (let sy = 0; sy < n; sy++) {
             const y = Math.min(h - 1, Math.max(0, top + Math.trunc((2 * sy + 1) * (bottom - top) / (2 * n))));
             for (let sx = 0; sx < n; sx++) {
               const x = Math.min(w - 1, Math.max(0, left + Math.trunc((2 * sx + 1) * (right - left) / (2 * n))));
               const at = (y * w + x) * 4;
-              sum += 0.2126 * t[d[at]] + 0.7152 * t[d[at + 1]] + 0.0722 * t[d[at + 2]];
+              const r = t[d[at]], g = t[d[at + 1]], b = t[d[at + 2]];
+              sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+              const measure = r - g - b;
+              if (measure > 0) redSum += measure;
+              if (r > 0 && r >= Math.fround(Math.fround(0.8) * Math.fround(r + g + b))) saturated++;
             }
           }
-          cells[row * columns + column] = sum / (n * n);
+          const cell = row * columns + column;
+          cells[cell] = sum / (n * n);
+          cells[count + cell] = redSum / (n * n);
+          cells[2 * count + cell] = saturated / (n * n);
         }
       }
-      return String.fromCharCode.apply(null, s.cellBytes);
+      let out = "";
+      for (let i = 0; i < s.cellBytes.length; i += 8192) out += String.fromCharCode.apply(null, s.cellBytes.subarray(i, i + 8192));
+      return out;
     }""",
 )
 private external fun webMeasureStage(state: JsAny, width: Int, height: Int, columns: Int, rows: Int): String

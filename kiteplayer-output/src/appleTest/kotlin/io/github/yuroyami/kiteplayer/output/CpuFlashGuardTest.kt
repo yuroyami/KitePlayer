@@ -49,6 +49,21 @@ class CpuFlashGuardTest {
     }
 
     @Test
+    fun aRedAndBlueStrobeOfOneLuminanceIsDimmedByTheRedRule() {
+        guard.setMode(FlashGuard.On)
+        fun flat(red: Int, green: Int, blue: Int) = ByteArray(SIZE * SIZE * 4) {
+            when (it % 4) { 0 -> red; 1 -> green; 2 -> blue; else -> 255 }.toByte()
+        }
+        val factors = List(60) { index ->
+            clock = index * 1_000_000_000L / 30
+            guard.factorFor(if (index / 3 % 2 == 0) flat(0, 124, 255) else flat(255, 0, 0), SIZE, SIZE)
+        }
+        assertEquals(21, factors.indexOfFirst { it < 1f }, "the seventh red leg starts the run (#561)")
+        // A full red leg is 320 on the rule's scale and must come out under 20.
+        assertTrue(factors.last().pow(2.2f) * 320f < 20f, "the factor was ${factors.last()}")
+    }
+
+    @Test
     fun aPictureOutsideARunIsTheSameBytes() {
         guard.setMode(FlashGuard.On)
         val rgba = grey(200)

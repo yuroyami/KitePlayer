@@ -673,10 +673,12 @@ class AwtCanvasVideoRendererTest {
     /** A renderer whose painter fills each frame with the next of its levels, shown 30 a second. */
     private inner class Strobed {
         @Volatile var level = 0
+        /** A packed colour to fill with instead of the grey of [level]. */
+        @Volatile var colour: Int? = null
         var nanos = 0L
         val presenter = CountingPresenter(holdMillis = 0)
         val renderer = renderer { destination, _, _ ->
-            destination.fill(level * 0x010101)
+            destination.fill(colour ?: (level * 0x010101))
             true
         }.also {
             it.presenter = presenter
@@ -698,6 +700,19 @@ class AwtCanvasVideoRendererTest {
 
     /** A strobe at 5 Hz, three frames of black, then three of white. */
     private fun strobe(frames: Int) = List(frames) { if ((it / 3) % 2 == 1) 255 else 0 }
+
+    @Test
+    fun `a red and blue strobe of one luminance is dimmed by the red rule`() = runTest {
+        val s = Strobed()
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+        val dims = (0 until 60).map { index ->
+            s.colour = if ((index / 3) % 2 == 1) 0xFF0000 else 0x007CFF
+            s.show(listOf(0)).single()
+        }
+        assertTrue(dims.take(21).all { it == 1f }, "three red flashes are drawn as they are: $dims")
+        assertTrue(dims.drop(21).all { it < 0.3f }, "and the run is dimmed until a red leg is under the threshold (#561): $dims")
+        s.renderer.close()
+    }
 
     @Test
     fun `a strobe is dimmed from its seventh leg with the guard on`() = runTest {

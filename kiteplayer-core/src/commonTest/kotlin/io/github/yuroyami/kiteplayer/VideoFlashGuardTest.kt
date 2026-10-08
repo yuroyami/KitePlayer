@@ -186,4 +186,89 @@ class VideoFlashGuardTest {
         assertEquals(FlashGuard.Off, harness.renderer?.flashGuard, "and on change")
         harness.close()
     }
+
+    /** A whole frame, luminance and both red measures, of one flat 8-bit colour. */
+    private fun flat(red: Int, green: Int, blue: Int): FloatArray {
+        val size = 64
+        val rgba = ByteArray(size * size * 4) { at ->
+            when (at % 4) { 0 -> red; 1 -> green; 2 -> blue; else -> 255 }.toByte()
+        }
+        return FloatArray(VideoFlashGuard.MEASURES).also { VideoFlashGuard.cellsFromRgba(rgba, size, size, into = it) }
+    }
+
+    /** Three frames of [high] and three of [low], which is 5 Hz at 30 frames a second. */
+    private fun alternate(frames: Int, high: FloatArray, low: FloatArray) = List(frames) { if ((it / 3) % 2 == 1) high else low }
+
+    /** The red measure the frame is drawn with, on the 0 to 320 scale of WCAG 2.2. */
+    private fun drawnRed(cells: FloatArray, factor: Float) = cells[VideoFlashGuard.CELLS] * factor.pow(2.2f) * 320f
+
+    @Test
+    fun aRedAndBlueStrobeOfOneLuminanceStartsARunAndEveryRedLegComesOutUnderTheThreshold() {
+        val red = flat(255, 0, 0)
+        val blue = flat(0, 124, 255)
+        assertTrue(abs(red[0] - blue[0]) < 0.01f, "the two have one luminance: ${red[0]} and ${blue[0]}")
+        assertEquals(1f, red[2 * VideoFlashGuard.CELLS], "a full red is a saturated red")
+        assertEquals(0f, blue[2 * VideoFlashGuard.CELLS])
+
+        val frames = alternate(120, red, blue)
+        // The luminance alone sees nothing move.
+        assertTrue(factors(frames.map { it.copyOf(VideoFlashGuard.CELLS) }).all { it == 1f })
+
+        val factors = factors(frames)
+        val first = factors.indexOfFirst { it < 1f }
+        assertEquals(21, first, "the seventh red leg starts the run")
+        for (i in first + 1 until frames.size) {
+            val leg = abs(drawnRed(frames[i], factors[i]) - drawnRed(frames[i - 1], factors[i - 1]))
+            assertTrue(leg < 20f, "frame $i changed the red measure by $leg")
+        }
+    }
+
+    @Test
+    fun aRedAndBlackStrobeIsDimmedUntilItsRedLegIsUnderTheThresholdToo() {
+        val frames = alternate(120, flat(255, 0, 0), flat(0, 0, 0))
+        val factors = factors(frames)
+        // Dimmed for its luminance alone, the red measure would still move by about 120 of 320.
+        val luminanceOnly = factors(frames.map { it.copyOf(VideoFlashGuard.CELLS) })
+        assertTrue(factors.last() < luminanceOnly.last(), "${factors.last()} against ${luminanceOnly.last()}")
+        for (i in 22 until frames.size) {
+            val leg = abs(drawnRed(frames[i], factors[i]) - drawnRed(frames[i - 1], factors[i - 1]))
+            assertTrue(leg < 20f, "frame $i changed the red measure by $leg")
+        }
+    }
+
+    @Test
+    fun aRedPictureThatDoesNotFlashIsNeverTouched() {
+        val steady = List(120) { flat(255, 0, 0) }
+        assertTrue(factors(steady).all { it == 1f })
+        // Three red flashes in a second are allowed, as three flashes of light are.
+        val red = flat(255, 0, 0)
+        val blue = flat(0, 124, 255)
+        val three = alternate(18, red, blue) + List(90) { blue } + alternate(18, red, blue)
+        assertTrue(factors(three).all { it == 1f })
+    }
+
+    @Test
+    fun aStrobeBetweenTwoColoursThatAreNotASaturatedRedIsNotARedRun() {
+        // Orange has a large red measure, and red is under 0.8 of it. The grey has its luminance.
+        val orange = flat(255, 160, 0)
+        val grey = flat(181, 181, 181)
+        assertTrue(abs(orange[0] - grey[0]) < 0.02f, "the two have one luminance: ${orange[0]} and ${grey[0]}")
+        assertTrue(orange[VideoFlashGuard.CELLS] > 0.5f)
+        assertEquals(0f, orange[2 * VideoFlashGuard.CELLS])
+        assertTrue(factors(alternate(120, orange, grey)).all { it == 1f })
+    }
+
+    @Test
+    fun aRedStrobeOverAFifthOfThePictureIsNotARun() {
+        val red = flat(255, 0, 0)
+        val blue = flat(0, 124, 255)
+        val fifth = VideoFlashGuard.CELLS / 5
+        val partly = blue.copyOf().also { mixed ->
+            for (measure in 0 until 3) for (cell in 0 until fifth) {
+                val at = measure * VideoFlashGuard.CELLS + cell
+                mixed[at] = red[at]
+            }
+        }
+        assertTrue(factors(alternate(120, partly, blue)).all { it == 1f })
+    }
 }

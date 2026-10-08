@@ -45,7 +45,7 @@ internal class MetalFlashGuard(device: MTLDeviceProtocol) {
 
     private val guard = VideoFlashGuard()
     private val bytes = ByteArray(WIDTH * HEIGHT * 4)
-    private val cells = FloatArray(VideoFlashGuard.CELLS)
+    private val cells = FloatArray(VideoFlashGuard.MEASURES)
 
     /** The commands that draw the copy not read yet, and when its picture was drawn. */
     private var waiting: MTLCommandBufferProtocol? = null

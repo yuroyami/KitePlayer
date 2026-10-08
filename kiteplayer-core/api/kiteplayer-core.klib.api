@@ -2128,6 +2128,8 @@ final class io.github.yuroyami.kiteplayer.spi/VideoFlashGuard { // io.github.yur
             final fun <get-CELLS>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.CELLS.<get-CELLS>|<get-CELLS>(){}[0]
         final const val COLUMNS // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.COLUMNS|{}COLUMNS[0]
             final fun <get-COLUMNS>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.COLUMNS.<get-COLUMNS>|<get-COLUMNS>(){}[0]
+        final const val MEASURES // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.MEASURES|{}MEASURES[0]
+            final fun <get-MEASURES>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.MEASURES.<get-MEASURES>|<get-MEASURES>(){}[0]
         final const val ROWS // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.ROWS|{}ROWS[0]
             final fun <get-ROWS>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/VideoFlashGuard.Companion.ROWS.<get-ROWS>|<get-ROWS>(){}[0]
 

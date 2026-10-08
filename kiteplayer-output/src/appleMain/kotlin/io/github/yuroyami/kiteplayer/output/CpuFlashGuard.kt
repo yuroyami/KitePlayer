@@ -26,7 +26,7 @@ internal class CpuFlashGuard(
     private val forgets = atomic(false)
 
     private val guard = VideoFlashGuard()
-    private val cells = FloatArray(VideoFlashGuard.CELLS)
+    private val cells = FloatArray(VideoFlashGuard.MEASURES)
     private var guarding = false
 
     /** Sets the mode and answers whether it changed. A change starts the history afresh. */

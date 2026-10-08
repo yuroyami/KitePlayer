@@ -164,7 +164,7 @@ internal class KiteVideoRenderer(
     @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
     private val guard = io.github.yuroyami.kiteplayer.spi.VideoFlashGuard()
     @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
-    private val guardCells = FloatArray(io.github.yuroyami.kiteplayer.spi.VideoFlashGuard.CELLS)
+    private val guardCells = FloatArray(io.github.yuroyami.kiteplayer.spi.VideoFlashGuard.MEASURES)
 
     /** Set when the picture is taken off or the mode changes, so the worker starts the guard afresh. */
     private val guardForgets = atomic(false)

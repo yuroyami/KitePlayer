@@ -56,13 +56,16 @@ class MetalFlashGuardTest {
     private val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
 
     /** A full-range grey: luma [y], neutral chroma. */
-    private fun grey(y: Int) = MetalPicture.SoftwarePlanes(
+    private fun grey(y: Int) = flat(y, 128, 128)
+
+    /** One full-range BT.709 colour over the whole picture. */
+    private fun flat(y: Int, cb: Int, cr: Int) = MetalPicture.SoftwarePlanes(
         width = SIZE,
         height = SIZE,
         format = PlayerPixelFormat.Nv12,
         planes = listOf(
             MetalPicture.SoftwarePlanes.Plane(ByteArray(SIZE * SIZE) { y.toByte() }, SIZE, SIZE),
-            MetalPicture.SoftwarePlanes.Plane(ByteArray(SIZE * SIZE / 2) { 128.toByte() }, SIZE, SIZE / 2),
+            MetalPicture.SoftwarePlanes.Plane(ByteArray(SIZE * SIZE / 2) { (if (it % 2 == 0) cb else cr).toByte() }, SIZE, SIZE / 2),
         ),
     )
 
@@ -75,15 +78,18 @@ class MetalFlashGuardTest {
      * Draws [lumas] at 30 pictures a second through the composer with the guard, as the renderer
      * does, and answers what each picture came out as: all of its bytes, and the factor it had.
      */
-    private fun drawn(lumas: List<Int>, guarded: Boolean = true): List<Pair<ByteArray, Float>> {
+    private fun drawn(lumas: List<Int>, guarded: Boolean = true): List<Pair<ByteArray, Float>> =
+        drawnPictures(lumas.map(::grey), guarded)
+
+    private fun drawnPictures(pictures: List<MetalPicture.SoftwarePlanes>, guarded: Boolean = true): List<Pair<ByteArray, Float>> {
         val composer = MetalFrameComposer(device)
         val guard = MetalFlashGuard(device)
         val target = device.makeTargetTexture(SIZE, SIZE)
         try {
-            return lumas.mapIndexed { index, y ->
+            return pictures.mapIndexed { index, picture ->
                 val factor = if (guarded) guard.factorForNext() else 1f
                 val commands = composer.encode(
-                    target, TestFrame(), grey(y), null, SIZE, SIZE,
+                    target, TestFrame(), picture, null, SIZE, SIZE,
                     adjustUniforms = dimAdjustUniforms(DISABLED_ADJUST_UNIFORMS, factor, linearLight = false),
                     toneMapped = true,
                     measureTarget = if (guarded) guard.target else null,
@@ -108,6 +114,17 @@ class MetalFlashGuardTest {
 
     /** Black and white, three pictures each: five flashes a second. */
     private fun strobe(pictures: Int) = List(pictures) { if (it / 3 % 2 == 0) 0 else 255 }
+
+    @Test
+    fun aRedAndBlueStrobeOfOneLuminanceIsDimmedByTheRedRule() {
+        // Red is 255, 0, 0 and the blue is 0, 124, 255, which has its relative luminance.
+        val red = flat(54, 99, 255)
+        val blue = flat(107, 208, 60)
+        val factors = drawnPictures(List(60) { if (it / 3 % 2 == 0) blue else red }).map { it.second }
+        assertEquals(22, factors.indexOfFirst { it < 1f }, "the factors were $factors")
+        // A full red leg is 320 on the rule's scale and must come out under 20 (#561).
+        assertTrue(factors.last() < 0.3f, "the factor was ${factors.last()}")
+    }
 
     @Test
     fun aStrobeIsDimmedOneFrameAfterItsRunStarts() {

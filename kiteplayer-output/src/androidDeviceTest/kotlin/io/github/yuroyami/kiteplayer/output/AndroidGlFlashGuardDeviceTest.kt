@@ -35,7 +35,11 @@ class AndroidGlFlashGuardDeviceTest {
      * Draws [shades], grey pictures at 30 a second, as the renderer does: measure, ask the detector,
      * draw with the factor. Answers each picture's factor and its drawn bytes.
      */
-    private fun drawn(shades: List<Int>, guarded: Boolean = true): List<Pair<Float, ByteArray>> {
+    private fun drawn(shades: List<Int>, guarded: Boolean = true): List<Pair<Float, ByteArray>> =
+        drawnColours(shades.map { it * 0x010101 }, guarded)
+
+    /** As [drawn], with each picture one packed `0xRRGGBB` colour. */
+    private fun drawnColours(colours: List<Int>, guarded: Boolean = true): List<Pair<Float, ByteArray>> {
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         check(EGL14.eglInitialize(display, IntArray(2), 0, IntArray(2), 1)) { "eglInitialize" }
         val configs = arrayOfNulls<EGLConfig>(1)
@@ -75,9 +79,9 @@ class AndroidGlFlashGuardDeviceTest {
                 adjust = adjust, ditherStep = 0f, debandThreshold = 0f, debandRange = 0f, debandGrain = 0f,
                 debandSeed = 0f, bicubic = false, linearLight = false,
             )
-            val out = shades.mapIndexed { index, shade ->
+            val out = colours.mapIndexed { index, colour ->
                 val source = ByteBuffer.allocateDirect(SIZE * SIZE * 4)
-                repeat(SIZE * SIZE) { source.put(shade.toByte()).put(shade.toByte()).put(shade.toByte()).put(-1) }
+                repeat(SIZE * SIZE) { source.put((colour shr 16).toByte()).put((colour shr 8).toByte()).put(colour.toByte()).put(-1) }
                 source.position(0)
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
                 GLES20.glTexImage2D(
@@ -98,7 +102,7 @@ class AndroidGlFlashGuardDeviceTest {
                 check(GLES20.glGetError() == GLES20.GL_NO_ERROR) { "a GL error after picture $index" }
                 factor to ByteArray(SIZE * SIZE * 4).also { read.position(0); read.get(it) }
             }
-            if (guarded) Log.i(TAG, "measuring took ${measureNanos / shades.size / 1000} microseconds a picture")
+            if (guarded) Log.i(TAG, "measuring took ${measureNanos / colours.size / 1000} microseconds a picture")
             meter.close()
             return out
         } finally {
@@ -142,6 +146,17 @@ class AndroidGlFlashGuardDeviceTest {
         val largest = lights.zipWithNext().maxOf { (a, b) -> abs(b - a) }
         assertTrue(largest < 0.10f, "a leg of $largest came out after the run started")
         assertTrue(lights.max() > 0.05f, "the picture is dimmed, not blacked out: ${lights.max()}")
+    }
+
+    @Test
+    fun aRedAndBlueStrobeOfOneLuminanceIsDimmedByTheRedRule() {
+        val out = drawnColours(List(60) { if (it / 3 % 2 == 0) 0x007CFF else 0xFF0000 })
+        val factors = out.map { it.first }
+        assertEquals(21, factors.indexOfFirst { it < 1f }, "the factors were $factors")
+        // A full red leg is 320 on the rule's scale and must come out under 20 (#561).
+        val reds = out.drop(21).map { light(it.second[(SIZE / 2 * SIZE + SIZE / 2) * 4].toInt() and 0xFF) * 320f }
+        val largest = reds.zipWithNext().maxOf { (a, b) -> abs(b - a) }
+        assertTrue(largest < 20f, "a red leg of $largest came out after the run started")
     }
 
     @Test

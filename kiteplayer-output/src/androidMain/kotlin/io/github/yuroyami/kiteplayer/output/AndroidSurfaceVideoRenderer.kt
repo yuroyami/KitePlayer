@@ -277,7 +277,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
     private val flashGuard = io.github.yuroyami.kiteplayer.spi.VideoFlashGuard()
     @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
-    private val flashCells = FloatArray(io.github.yuroyami.kiteplayer.spi.VideoFlashGuard.CELLS)
+    private val flashCells = FloatArray(io.github.yuroyami.kiteplayer.spi.VideoFlashGuard.MEASURES)
     private var flashGuarding = false
 
     /**

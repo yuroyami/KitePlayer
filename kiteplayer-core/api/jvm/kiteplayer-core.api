@@ -4217,6 +4217,7 @@ public final class io/github/yuroyami/kiteplayer/spi/VideoFlashGuard {
 	public static final field CELLS I
 	public static final field COLUMNS I
 	public static final field Companion Lio/github/yuroyami/kiteplayer/spi/VideoFlashGuard$Companion;
+	public static final field MEASURES I
 	public static final field ROWS I
 	public fun <init> ()V
 	public final fun factorFor ([FJ)F

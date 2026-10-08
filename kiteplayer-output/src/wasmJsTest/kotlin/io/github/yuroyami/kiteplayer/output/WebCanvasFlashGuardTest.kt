@@ -77,7 +77,7 @@ class WebCanvasFlashGuardTest {
                 rgba[p * 4 + 2] = (p * 3).toByte()
                 rgba[p * 4 + 3] = 255.toByte()
             }
-            val expected = FloatArray(VideoFlashGuard.CELLS)
+            val expected = FloatArray(VideoFlashGuard.MEASURES)
             VideoFlashGuard.cellsFromRgba(rgba, size.width, size.height, into = expected)
             var spread = 0f
             for (i in expected.indices) {
@@ -85,6 +85,9 @@ class WebCanvasFlashGuardTest {
                 spread = maxOf(spread, abs(expected[i] - expected[0]))
             }
             assertTrue(spread > 0.01f, "the pattern must differ from cell to cell, or the points are not tested")
+            val redMeasures = expected.copyOfRange(VideoFlashGuard.CELLS, 2 * VideoFlashGuard.CELLS)
+            val redShares = expected.copyOfRange(2 * VideoFlashGuard.CELLS, VideoFlashGuard.MEASURES)
+            assertTrue(redMeasures.max() > 0.01f && redShares.max() > 0f, "the pattern must hold some saturated red")
             renderer.close()
         }
     }

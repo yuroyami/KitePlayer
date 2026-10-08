@@ -165,7 +165,7 @@ public class AwtCanvasVideoRenderer(
     @OptIn(KitePlayerLowLevelApi::class)
     private val guard = VideoFlashGuard()
     @OptIn(KitePlayerLowLevelApi::class)
-    private val guardCells = FloatArray(VideoFlashGuard.CELLS)
+    private val guardCells = FloatArray(VideoFlashGuard.MEASURES)
 
     /**
      * The flash guard's mode (#500). This renderer measures each picture it paints and dims it while

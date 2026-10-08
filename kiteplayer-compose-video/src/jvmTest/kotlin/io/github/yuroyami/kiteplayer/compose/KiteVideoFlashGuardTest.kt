@@ -35,7 +35,7 @@ class KiteVideoFlashGuardTest {
     init { useSkiaGraphics() }
 
     /** A picture of one grey level, which the fake converter fills in. */
-    private class Flat(val level: Int) : VideoFrame {
+    private class Flat(val level: Int, val colour: Int = level * 0x010101) : VideoFrame {
         override val pts: Pts = Pts(0)
         override val duration: Pts? = null
         override val size: VideoSize = VideoSize(32, 18)
@@ -52,8 +52,8 @@ class KiteVideoFlashGuardTest {
         @Volatile var nanos = 0L
         val renderer = KiteVideoRenderer(
             convert = { frame ->
-                val level = (frame as Flat).level.toByte()
-                ByteArray(frame.size.width * frame.size.height * 4) { if (it % 4 == 3) -1 else level }
+                val colour = (frame as Flat).colour
+                ByteArray(frame.size.width * frame.size.height * 4) { if (it % 4 == 3) -1 else (colour shr (16 - 8 * (it % 4))).toByte() }
             },
             makeImage = { _, width, height -> FrameImage(ImageBitmap(width, height)) },
             publish = { frame -> if (frame != null) published += frame },
@@ -61,11 +61,14 @@ class KiteVideoFlashGuardTest {
         )
 
         /** Shows [levels] at 30 frames a second, each once it is converted, and answers their factors. */
-        fun show(levels: List<Int>): List<Float> = runBlocking {
+        fun show(levels: List<Int>): List<Float> = showColours(levels.map { it * 0x010101 })
+
+        /** As [show], with each picture one packed `0xRRGGBB` colour. */
+        fun showColours(colours: List<Int>): List<Float> = runBlocking {
             val first = published.size
-            levels.forEachIndexed { index, level ->
+            colours.forEachIndexed { index, colour ->
                 nanos += 1_000_000_000L / 30
-                renderer.present(Flat(level), nanos)
+                renderer.present(Flat(0, colour), nanos)
                 val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
                 while (published.size < first + index + 1) {
                     check(System.nanoTime() < deadline) { "frame $index was not published" }
@@ -87,6 +90,19 @@ class KiteVideoFlashGuardTest {
             val dims = h.show(strobe(60))
             assertTrue(dims.take(21).all { it == 1f }, "three flashes are drawn as they are: $dims")
             assertTrue(dims.drop(21).all { it < 1f }, "and the run is dimmed from its seventh leg: $dims")
+        } finally {
+            h.renderer.close()
+        }
+    }
+
+    @Test
+    fun aRedAndBlueStrobeOfOneLuminanceIsDimmedByTheRedRule() {
+        val h = Harness()
+        try {
+            h.renderer.setFlashGuard(FlashGuard.On)
+            val dims = h.showColours(List(60) { if ((it / 3) % 2 == 1) 0xFF0000 else 0x007CFF })
+            assertTrue(dims.take(21).all { it == 1f }, "three red flashes are drawn as they are: $dims")
+            assertTrue(dims.drop(21).all { it < 0.3f }, "and the run is dimmed until a red leg is under the threshold (#561): $dims")
         } finally {
             h.renderer.close()
         }

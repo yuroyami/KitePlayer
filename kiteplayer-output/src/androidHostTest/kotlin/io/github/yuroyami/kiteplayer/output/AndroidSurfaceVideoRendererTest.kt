@@ -1057,19 +1057,27 @@ class AndroidSurfaceHeldPictureTest {
 class AndroidSurfaceFlashGuardTest {
 
     /** Presents a black and white strobe, three pictures each at 30 a second, and answers each picture's colour matrix. */
-    private fun matricesOfAStrobe(mode: io.github.yuroyami.kiteplayer.FlashGuard?, pictures: Int = 60): Pair<List<FloatArray?>, FakeTarget> = runBlocking {
+    private fun matricesOfAStrobe(
+        mode: io.github.yuroyami.kiteplayer.FlashGuard?,
+        pictures: Int = 60,
+        dark: Int = 0x000000,
+        bright: Int = 0xFFFFFF,
+    ): Pair<List<FloatArray?>, FakeTarget> = runBlocking {
         val target = FakeTarget()
         val shade = java.util.concurrent.atomic.AtomicInteger(0)
         val clock = java.util.concurrent.atomic.AtomicLong(0L)
         val r = AndroidSurfaceVideoRenderer(
-            convert = { frame -> rgbaBytes(frame.size.width, frame.size.height) { Triple(shade.get(), shade.get(), shade.get()) } },
+            convert = { frame ->
+                val colour = shade.get()
+                rgbaBytes(frame.size.width, frame.size.height) { Triple((colour shr 16) and 0xFF, (colour shr 8) and 0xFF, colour and 0xFF) }
+            },
             target = target,
             flashNanos = { clock.get() },
         )
         try {
             if (mode != null) r.setFlashGuard(mode)
             val matrices = (0 until pictures).map { index ->
-                shade.set(if (index / 3 % 2 == 0) 0 else 255)
+                shade.set(if (index / 3 % 2 == 0) dark else bright)
                 clock.set(index * 1_000_000_000L / 30)
                 assertTrue(r.present(TestFrame(), 0))
                 awaitPresented(r, index + 1L)
@@ -1078,6 +1086,17 @@ class AndroidSurfaceFlashGuardTest {
             matrices to target
         } finally {
             r.close()
+        }
+    }
+
+    @Test
+    fun `a red and blue strobe of one luminance is dimmed by the red rule`() {
+        val (matrices, _) = matricesOfAStrobe(io.github.yuroyami.kiteplayer.FlashGuard.On, dark = 0x007CFF, bright = 0xFF0000)
+        assertTrue(matrices.take(21).all { it == null }, "three red flashes are drawn whole")
+        // A full red leg is 320 on the rule's scale and must come out under 20 (#561).
+        matrices.drop(21).forEachIndexed { index, matrix ->
+            val m = assertNotNull(matrix, "picture ${index + 21} was drawn whole")
+            assertTrue(m[0] in 0.20f..0.28f, "the factor was ${m[0]}")
         }
     }
 

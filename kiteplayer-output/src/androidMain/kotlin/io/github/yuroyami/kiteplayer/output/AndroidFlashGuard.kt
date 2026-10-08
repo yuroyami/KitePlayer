@@ -20,7 +20,7 @@ internal class GlFlashMeter : AutoCloseable {
     private var texture = 0
     private val pixels: ByteBuffer = ByteBuffer.allocateDirect(WIDTH * HEIGHT * 4)
     private val bytes = ByteArray(WIDTH * HEIGHT * 4)
-    private val cells = FloatArray(VideoFlashGuard.CELLS)
+    private val cells = FloatArray(VideoFlashGuard.MEASURES)
 
     /**
      * Binds the meter's framebuffer, has [draw] draw the whole picture over it, and answers the

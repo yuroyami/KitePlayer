@@ -1,6 +1,6 @@
 # Dimming flashing video
 
-The contract for #500, built in the order at the end. Today the detector, the setting, the Compose
+The contract for #500 and #561, built in the order at the end. Today the detector, the setting, the Compose
 canvas renderer, the AWT canvas, the Metal renderer, the Core Graphics renderers on Apple, the
 Android GL renderer, the Android software path and the web canvas carry it. Apple's sample buffer
 layer and Android's direct MediaCodec surface draw as before.
@@ -42,8 +42,20 @@ The rule is the general flash rule of ITU-R BT.1702 and WCAG 2.2, in relative lu
 - Two legs the opposite way are a flash. More than three flashes in any one second, which is a
   seventh leg within a second of the first, is a flashing run.
 
-Saturated red flashes, which both rules also count, are not detected yet; the grid carries no
-colour. That is a later step.
+### Saturated red
+
+Both rules also count a flash to or from a saturated red, which can move no luminance at all: a cut
+between a full red and a blue of the same luminance, for example. The guard counts it by the red
+flash rule of WCAG 2.2 (#561), on the same grid:
+
+- A colour is a saturated red when `R / (R + G + B)` is 0.8 or more, in linear light. Each cell
+  carries two more values: its mean red measure, which is `R - G - B` with a negative taken as zero,
+  and the share of it that is a saturated red.
+- A cell makes a red leg when its red measure has gone 20 of 320 or more from its last extreme the
+  other way (0.0625 on the scale of 0 to 1), and at least half of the cell is a saturated red on one
+  side of the change. A flash between two colours that are not a saturated red is not a red flash.
+- The picture's red legs are counted as its luminance legs are, and apart from them: a quarter of
+  the picture, and a seventh leg within a second starts a run.
 
 ## How it dims
 
@@ -52,7 +64,13 @@ colour. That is a later step.
   change of the cells that moved. A renderer scales encoded values, and light goes about as their
   power of 2.2, so `k = (0.08 / swing)^(1 / 2.2)`. A black and white strobe comes out at about a
   third of its encoded level, which is 0.08 of its light.
-- A larger leg later in the run lowers `k` at once. While legs keep coming, `k` holds.
+- A red run dims the same way, to a red leg of at most 16 of 320, so `k = (0.05 / swing)^(1 / 2.2)`.
+  A full red against a blue comes out at about a quarter of its encoded level. The guard dims a red
+  run and does not lower its saturation: every renderer can scale the picture, and the two that
+  only lay black over it (the AWT canvas and the web canvas) cannot change a colour. Dimming also
+  brings a red and black strobe under both limits at once, which its luminance factor alone does
+  not: at that factor its red measure would still move by about 120 of 320.
+- A larger leg later in the run, of either kind, lowers `k` at once. While legs keep coming, `k` holds.
 - One second after the last leg, `k` rises back to 1 over 1.5 seconds, slower than any leg, and is
   exactly 1 at the end, after which frames are drawn untouched again.
 - The renderer applies `k` after the viewer's picture adjustments and before the gamma, by
@@ -68,7 +86,8 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
 - A renderer that converts pixels on the CPU (the Compose canvas renderer, the AWT canvas, Core
   Graphics on Apple, the Android software path) samples the converted picture on a sparse lattice,
   four by four points in each cell, 2,304 reads a frame and never the whole frame. It measures a
-  frame before drawing it, so the frame that completes a run is already dimmed. The Compose canvas
+  frame before drawing it, so the frame that completes a run is already dimmed. The same reads
+  give the two red values. The Compose canvas
   renderer measures on its worker, hands each picture to the draw with its factor, and the draw
   folds the factor into the picture controls' colour filter (a MediaCodec picture on Android is
   dimmed earlier, in the GL blit, and the draw then applies the picture controls to it); outside a run it draws with the
@@ -81,7 +100,7 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
 - A GPU renderer (Metal, Android GL) draws a reduced copy beside its adjustment pass and reads it
   back when the next picture is about to draw, so it dims one frame late. The copy is 64 by 36
   texels, one for each point of the lattice above, so the detector reads the same points as on a
-  CPU renderer. An HDR picture is measured as it looks tone mapped to standard range. The Metal
+  CPU renderer. The copy holds the picture's colour, so the red values come from it too. An HDR picture is measured as it looks tone mapped to standard range. The Metal
   renderer draws the copy in the same commands as the picture, so the planes are uploaded once. On
   its extended-range layer the picture is light, so it scales by `k` to the power of 2.2. A picture
   drawn again while paused is not measured again and keeps the factor it was shown with. The
@@ -89,7 +108,7 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
   copy first and reads it at once: the picture that completes a run is already dimmed. That read
   took 0.8 to 1.0 ms a picture on an ASUS ROG Phone 9.
 - The web canvas measures the picture it has staged, at the same points, in one JavaScript loop,
-  so no pixel enters Kotlin memory, and the 144 cells cross to the detector in one call. It has no
+  so no pixel enters Kotlin memory, and the 432 values cross to the detector in one call. It has no
   picture controls, so it dims as the AWT canvas does: black over the picture at `1 - k`, under the
   cues, with the bars left as they were. A held picture drawn again after a resize keeps its
   factor.
@@ -119,6 +138,10 @@ on a system older than the setting, where `FollowSystem` is off.
    MediaCodec reads 81 of 255 at the centre of the screen once its run has started.
 7. The web canvas. Done, tested in Node and in headless Chrome, where a white picture of a 5 Hz
    strobe reads 81 of 255 on a real canvas once its run has started.
+8. Saturated red flashes (#561). Done on every renderer above: the detector takes two more values
+   for each cell, and each renderer measures them where it measures the luminance. Tested on the
+   detector, on five renderers on the host and a Mac, in Node and headless Chrome, and through the
+   GL path on an ASUS ROG Phone 9.
 
 ## Tests
 
@@ -126,6 +149,11 @@ on a system older than the setting, where `FollowSystem` is off.
   output leg under 0.10 from its seventh leg; three flashes in a second are never touched; a fade
   out and in is one flash; a strobe over a fifth of the picture is not a run; a strobe between two
   bright greys, above 0.80, is not a run; and after a run the factor returns to exactly 1.
+- The red rule: a 5 Hz strobe between a full red and a blue of the same luminance, which the
+  luminance rule does not see, starts a run on its seventh leg and every red leg then comes out
+  under 20 of 320; a red and black strobe is dimmed further than for its luminance; a steady red
+  picture, three red flashes in a second, a red strobe over a fifth of the picture, and a strobe
+  between an orange and a grey are never touched.
 - The setting: `setFlashGuard` reaches an attached renderer and one attached later, and the
   snapshot reads it back.
 - Each renderer: with the guard on, a strobe's drawn legs stay under 0.10 after the run starts, and

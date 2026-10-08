@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.FlashGuard
 import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
@@ -10,12 +11,14 @@ import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
+import io.github.yuroyami.kiteplayer.spi.VideoFlashGuard
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlin.js.JsAny
+import kotlin.time.TimeSource
 
 /**
  * Fills a JS byte array with one frame's RGBA, tightly packed, no row padding.
@@ -64,6 +67,13 @@ public fun interface WebFramePainter {
  * [supportedHardwareSurfaces] is empty and always will be on this renderer. The picture controls in
  * [io.github.yuroyami.kiteplayer.VideoAdjustments] are not applied either.
  *
+ * ### The flash guard
+ *
+ * With [FlashGuard.On] each staged picture is measured before it is drawn, and a flashing run is
+ * dimmed by laying black over the picture, under the cues (#500, `docs/video-flash-guard.md`). The
+ * measurement is one JavaScript loop over 2,304 pixels of the stage, so no pixel enters Kotlin
+ * memory. A page has no system setting to follow, so [FlashGuard.FollowSystem] is off here.
+ *
  * Not thread-safe, and on the web that is not a constraint: there are no threads. `present` is
  * already `suspend` and runs on the event loop with no worker, no dispatcher and no `runBlocking`.
  *
@@ -95,6 +105,20 @@ public class WebCanvasVideoRenderer(
     private var retainedRotation: Int = 0
     private var retainedMirrored: Boolean = false
     private var retainedCrop: PictureCrop? = null
+
+    /** The flash guard's factor for the retained picture, so a redraw draws it as it was drawn. */
+    private var retainedFlashFactor: Float = 1f
+
+    private var flashGuard: FlashGuard = FlashGuard.FollowSystem
+    private val guard = VideoFlashGuard()
+
+    /** What the guard read from the last picture it measured, for the tests. */
+    internal val flashCells: FloatArray = FloatArray(VideoFlashGuard.CELLS)
+
+    private val started = TimeSource.Monotonic.markNow()
+
+    /** The flash guard's clock, in nanoseconds: when each picture is drawn. */
+    internal var flashNanos: () -> Long = { started.elapsedNow().inWholeNanoseconds }
 
     /**
      * True from [clearPicture] until the next picture is drawn. The canvas then shows its background
@@ -171,12 +195,14 @@ public class WebCanvasVideoRenderer(
                 failedFrames++
                 return false
             }
+            val flashFactor = flashFactorFor(s, size)
             webCommitStage(s)
             retainedSize = size
+            retainedFlashFactor = flashFactor
             retainedRotation = frame.rotationDegrees
             retainedMirrored = frame.mirrored
             retainedCrop = frame.crop
-            drawStage(s, layout)
+            drawStage(s, layout, flashFactor)
             drawOverlay(s)
             pictureCleared = false
             presentedFrames++
@@ -185,7 +211,33 @@ public class WebCanvasVideoRenderer(
         }
     }
 
-    private fun drawStage(s: JsAny, layout: FrameLayout) {
+    /**
+     * The flash guard's factor for the picture on the stage, 1 when the guard is off. The cells
+     * cross from JavaScript as one string of their bytes, as the overlay's pixels cross the other way.
+     */
+    private fun flashFactorFor(s: JsAny, size: VideoSize): Float {
+        if (flashGuard != FlashGuard.On) return 1f
+        val packed = webMeasureStage(s, size.width, size.height, VideoFlashGuard.COLUMNS, VideoFlashGuard.ROWS)
+        if (packed.length != VideoFlashGuard.CELLS * 4) return guard.current
+        for (i in 0 until VideoFlashGuard.CELLS) {
+            val at = i * 4
+            val bits = packed[at].code or (packed[at + 1].code shl 8) or (packed[at + 2].code shl 16) or (packed[at + 3].code shl 24)
+            flashCells[i] = Float.fromBits(bits)
+        }
+        return guard.factorFor(flashCells, flashNanos())
+    }
+
+    /**
+     * The flash guard's mode (#500). A change of mode starts the history afresh, as taking the
+     * picture off does.
+     */
+    override fun setFlashGuard(mode: FlashGuard) {
+        if (flashGuard == mode) return
+        flashGuard = mode
+        guard.reset()
+    }
+
+    private fun drawStage(s: JsAny, layout: FrameLayout, flashFactor: Float) {
         webDrawStage(
             state = s,
             sourceLeft = layout.sourceLeft,
@@ -200,6 +252,7 @@ public class WebCanvasVideoRenderer(
             centerY = layout.centerY,
             rotation = layout.rotationDegrees,
             mirrored = layout.mirrored,
+            dim = flashFactor,
         )
     }
 
@@ -223,7 +276,7 @@ public class WebCanvasVideoRenderer(
             mirrored = retainedMirrored,
             crop = retainedCrop,
         ) ?: return
-        drawStage(s, layout)
+        drawStage(s, layout, retainedFlashFactor)
         drawOverlay(s)
     }
 
@@ -329,6 +382,7 @@ public class WebCanvasVideoRenderer(
         if (closed) return
         pictureCleared = true
         retainedSize = null
+        guard.reset()
         drawBackground(s)
     }
 
@@ -402,6 +456,40 @@ private external fun webRendererStage(state: JsAny, width: Int, height: Int): Bo
 @JsFun("(s) => s.image.data")
 private external fun webStageBytes(state: JsAny): JsAny
 
+/**
+ * Measures the staged picture for the flash guard exactly as `VideoFlashGuard.cellsFromRgba` does:
+ * each cell's mean relative luminance from four by four points, in linear light with the BT.709
+ * weights. Answers the cells' 32-bit floats as one string of their bytes, low byte first.
+ */
+@JsFun(
+    """(s, w, h, columns, rows) => {
+      if (!s.linear) {
+        s.linear = new Float32Array(256);
+        for (let c = 0; c < 256; c++) { const e = c / 255; s.linear[c] = e <= 0.04045 ? e / 12.92 : Math.pow((e + 0.055) / 1.055, 2.4); }
+      }
+      if (!s.cells || s.cells.length !== columns * rows) { s.cells = new Float32Array(columns * rows); s.cellBytes = new Uint8Array(s.cells.buffer); }
+      const t = s.linear, d = s.image.data, cells = s.cells, n = 4;
+      for (let row = 0; row < rows; row++) {
+        const top = Math.trunc(row * h / rows), bottom = Math.trunc((row + 1) * h / rows);
+        for (let column = 0; column < columns; column++) {
+          const left = Math.trunc(column * w / columns), right = Math.trunc((column + 1) * w / columns);
+          let sum = 0;
+          for (let sy = 0; sy < n; sy++) {
+            const y = Math.min(h - 1, Math.max(0, top + Math.trunc((2 * sy + 1) * (bottom - top) / (2 * n))));
+            for (let sx = 0; sx < n; sx++) {
+              const x = Math.min(w - 1, Math.max(0, left + Math.trunc((2 * sx + 1) * (right - left) / (2 * n))));
+              const at = (y * w + x) * 4;
+              sum += 0.2126 * t[d[at]] + 0.7152 * t[d[at + 1]] + 0.0722 * t[d[at + 2]];
+            }
+          }
+          cells[row * columns + column] = sum / (n * n);
+        }
+      }
+      return String.fromCharCode.apply(null, s.cellBytes);
+    }""",
+)
+private external fun webMeasureStage(state: JsAny, width: Int, height: Int, columns: Int, rows: Int): String
+
 @JsFun("(s) => { s.sctx.putImageData(s.image, 0, 0); }")
 private external fun webCommitStage(state: JsAny)
 
@@ -413,15 +501,19 @@ private external fun webCommitStage(state: JsAny)
  * disagree about where a rotated frame lands. A mirror is set after the turn, so it applies to the
  * picture first. Only the layout's source rectangle of the stage is drawn, which is how a crop
  * comes off before both.
+ *
+ * A `dim` below 1 is the flash guard's factor: black over the picture at `1 - dim` leaves `dim` of
+ * each encoded value under it, and the bars stay as they were.
  */
 @JsFun(
-    """(s, sl, st, sw, sh, dl, dt, dw, dh, cx, cy, rot, mirror) => {
+    """(s, sl, st, sw, sh, dl, dt, dw, dh, cx, cy, rot, mirror, dim) => {
       const g = s.ctx, c = s.canvas;
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.clearRect(0, 0, c.width, c.height);
       if (rot !== 0) { g.translate(cx, cy); g.rotate(rot * Math.PI / 180); g.translate(-cx, -cy); }
       if (mirror) { g.translate(cx, cy); g.scale(-1, 1); g.translate(-cx, -cy); }
       g.drawImage(s.stage, sl, st, sw, sh, dl, dt, dw, dh);
+      if (dim < 1) { g.globalAlpha = 1 - dim; g.fillStyle = '#000'; g.fillRect(dl, dt, dw, dh); g.globalAlpha = 1; }
       g.setTransform(1, 0, 0, 1, 0, 0);
     }""",
 )
@@ -439,6 +531,7 @@ private external fun webDrawStage(
     centerY: Float,
     rotation: Int,
     mirrored: Boolean,
+    dim: Float,
 )
 
 @JsFun("(s) => { const g = s.ctx; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, s.canvas.width, s.canvas.height); }")
@@ -483,5 +576,5 @@ private external fun webPaintOverlay(state: JsAny, scaleX: Float, scaleY: Float)
 @JsFun("(s) => { s.overlay = []; }")
 private external fun webClearOverlay(state: JsAny)
 
-@JsFun("(s) => { s.overlay = []; s.stage = null; s.sctx = null; s.image = null; s.w = 0; s.h = 0; }")
+@JsFun("(s) => { s.overlay = []; s.stage = null; s.sctx = null; s.image = null; s.w = 0; s.h = 0; s.cells = null; s.cellBytes = null; }")
 private external fun webReleaseState(state: JsAny)

@@ -2,8 +2,8 @@
 
 The contract for #500, built in the order at the end. Today the detector, the setting, the Compose
 canvas renderer, the AWT canvas, the Metal renderer, the Core Graphics renderers on Apple, the
-Android GL renderer and the Android software path carry it; every other renderer draws as before
-until its step lands.
+Android GL renderer, the Android software path and the web canvas carry it. Apple's sample buffer
+layer and Android's direct MediaCodec surface draw as before.
 
 Repeated bright flashes can trigger seizures in people with photosensitive epilepsy and discomfort
 in many more. Since iOS 16.4 and macOS 13.3, Apple has a Dim Flashing Lights setting that
@@ -88,14 +88,19 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
   Android GL renderer has an OpenGL ES 2 context, with no way to read back later, so it draws the
   copy first and reads it at once: the picture that completes a run is already dimmed. That read
   took 0.8 to 1.0 ms a picture on an ASUS ROG Phone 9.
-- A renderer that draws no adjustments at all (the web canvas, Apple's sample buffer layer and
-  Android's direct MediaCodec surface) has no guard until it has an adjustment stage.
+- The web canvas measures the picture it has staged, at the same points, in one JavaScript loop,
+  so no pixel enters Kotlin memory, and the 144 cells cross to the detector in one call. It has no
+  picture controls, so it dims as the AWT canvas does: black over the picture at `1 - k`, under the
+  cues, with the bars left as they were. A held picture drawn again after a resize keeps its
+  factor.
+- A renderer that never holds the pixels (Apple's sample buffer layer and Android's direct
+  MediaCodec surface) has no guard.
 
 The engine tells each renderer the mode through `VideoRenderer.setFlashGuard(mode)`, defaulted to
 do nothing, on attach and on every change, as it does the adjustments. A change of mode, and taking
 the picture off, start a renderer's history afresh. Only an Apple renderer reads the system setting
-for `FollowSystem`, so on the Compose canvas renderer and the AWT canvas, which cannot, `FollowSystem`
-is off. The Apple renderers look the setting up by name at run time, so an application still loads
+for `FollowSystem`, so on the Compose canvas renderer, the AWT canvas and the web canvas, which
+cannot, `FollowSystem` is off. The Apple renderers look the setting up by name at run time, so an application still loads
 on a system older than the setting, where `FollowSystem` is off.
 
 ## Order of work
@@ -112,7 +117,8 @@ on a system older than the setting, where `FollowSystem` is off.
    and the software path on the host. The Compose renderer's hardware tier is the same GL renderer:
    the Compose renderer sends the mode on to it. On the phone a 5 Hz strobe played through
    MediaCodec reads 81 of 255 at the centre of the screen once its run has started.
-7. The web canvas, once it has an adjustment stage.
+7. The web canvas. Done, tested in Node and in headless Chrome, where a white picture of a 5 Hz
+   strobe reads 81 of 255 on a real canvas once its run has started.
 
 ## Tests
 

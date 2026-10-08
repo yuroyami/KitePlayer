@@ -303,6 +303,7 @@ final class io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer : io.git
 
     final fun clearPicture() // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.clearPicture|clearPicture(){}[0]
     final fun close() // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.close|close(){}[0]
+    final fun setFlashGuard(io.github.yuroyami.kiteplayer/FlashGuard) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.setFlashGuard|setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard){}[0]
     final fun setScaleMode(io.github.yuroyami.kiteplayer/VideoScale) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.setScaleMode|setScaleMode(io.github.yuroyami.kiteplayer.VideoScale){}[0]
     final fun setTransform(io.github.yuroyami.kiteplayer/VideoTransform) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.setTransform|setTransform(io.github.yuroyami.kiteplayer.VideoTransform){}[0]
     final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]

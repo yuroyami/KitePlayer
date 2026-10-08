@@ -117,6 +117,16 @@ internal class PacketQueue(
     }
 
     /**
+     * Takes back an end that [signalEndOfStream] marked, for a stream that was over only for now
+     * and gives packets again (#570).
+     */
+    fun reopen(generation: Generation) {
+        synchronized(lock) {
+            if (generation == this.generation) endOfStream = false
+        }
+    }
+
+    /**
      * Takes the next packet of the current generation without suspending.
      *
      * The non-suspending form is what a worker that must stay interruptible uses. Wrapping the suspending

@@ -1386,6 +1386,8 @@ internal class PlaybackCore(
         val reply: CompletableDeferred<TrackChange>,
         /** True for the player's own choice, which no caller asked for and nobody awaits (#506). */
         val automatic: Boolean = false,
+        /** True when the sound that plays was over for now and gives packets again (#570). */
+        val returned: Boolean = false,
     )
 
     private var pendingVideoRecovery: VideoRecovery? = null
@@ -5935,7 +5937,9 @@ internal class PlaybackCore(
         // The player's own choice was never a command, so its refusal names the track it gave up
         // on, as an open does for a stream nothing decodes.
         warn(
-            if (request.automatic && track != null) {
+            if (request.returned) {
+                PlaybackWarning.CommandRefused("resume the sound", reason)
+            } else if (request.automatic && track != null) {
                 PlaybackWarning.TrackDeselected(track, reason)
             } else {
                 PlaybackWarning.CommandRefused("selectTrack", reason)
@@ -6170,7 +6174,9 @@ internal class PlaybackCore(
             }
         }
 
-        if (targetStream?.index == currentLane?.stream?.index || targetStream == null && currentLane == null) {
+        val same = targetStream?.index == currentLane?.stream?.index || targetStream == null && currentLane == null
+        // A sound that gives packets again plays on the same stream, with a decoder that starts over.
+        if (same && !request.returned) {
             pendingSelections.remove(TrackKind.Audio)
             request.reply.complete(TrackChange.Applied(TrackKind.Audio, request.track))
             return true
@@ -6345,7 +6351,7 @@ internal class PlaybackCore(
         tracks = tracks.withSelection(TrackKind.Audio, request.track)
         // Before the reply, so a caller that awaited the audio reads the subtitle that goes with it,
         // and while the request is still pending, so a close that cancels this answers it.
-        chooseSubtitleForAudio(session)
+        if (!request.returned) chooseSubtitleForAudio(session)
         publishSnapshot()
         pendingSelections.remove(TrackKind.Audio)
         request.reply.complete(TrackChange.Applied(TrackKind.Audio, request.track))
@@ -6441,10 +6447,33 @@ internal class PlaybackCore(
     }
 
     /** Audio/subtitle are live transactions; only video selection rebuilds the session. */
+    /**
+     * Plays the sound again when its stream, over for now, gives packets again (#570). The demux
+     * lane ended the stream's queue when a full read-ahead found it empty, so its decoder drained
+     * and the picture played on. The sound comes back as a change to the same track does: it waits
+     * until its packets cover the position, and then a new decoder takes the queue.
+     */
+    private fun askForReturnedSound(session: OpenSession) {
+        val gap = session.soundGap.value ?: return
+        val lane = session.audioLane
+        if (lane == null || lane.stream.index != gap.index) {
+            session.soundGap.compareAndSet(gap, null)
+            return
+        }
+        // The actor looks again by itself while it plays, because the demux lane cannot wake it.
+        if (status == PlaybackStatus.Playing) wakeIn(AUDIO_ARRIVAL_POLL)
+        if (!gap.returned || pendingSelections.isNotEmpty() || pendingSeek != null) return
+        if (audioCacheRefusal(lane.queue, currentPosition().micros) != null) return
+        if (!session.soundGap.compareAndSet(gap, null)) return
+        pendingSelections[TrackKind.Audio] =
+            SelectionRequest(TrackKind.Audio, TrackId(gap.index), CompletableDeferred(), returned = true)
+    }
+
     private suspend fun handleTrackChanges() {
         // A renderer failure has already torn the old graph down. The recovery reopen folds these
         // choices into its one replacement graph so nothing is lost and no second open happens.
         if (pendingVideoRecovery != null) return
+        if (!reopenPending) session?.let { askForReturnedSound(it) }
         if (pendingSelections.isEmpty() && !reopenPending) return
         // A picture the demux lane reads into a cache plays in place, as a sound does (#527).
         if (!reopenPending) session?.let { inPlacePictureChange(it) }
@@ -12668,6 +12697,12 @@ internal class PlaybackCore(
         // ones it already has (#455).
         val lastRead = HashMap<Int, Long>()
         val readAgainUpTo = HashMap<Int, Long>()
+        // The streams that have given a packet, and the ones a full read-ahead found empty after
+        // that, which are over until they give a packet again (#570).
+        val everRead = HashSet<Int>()
+        val overForNow = HashSet<Int>()
+        // The time of the first packet read since the reads last moved.
+        var readsFromUs = NO_POSITION
         val queueOf = { index: Int ->
             session.audioQueues[index] ?: session.subtitleQueues[index] ?: session.pictureQueues[index]
         }
@@ -12683,12 +12718,17 @@ internal class PlaybackCore(
                 pastClipEnd.clear()
                 lastRead.clear()
                 readAgainUpTo.clear()
+                // The flush took back every end, and the reads may land where the stream has packets.
+                overForNow.clear()
+                session.soundGap.value = null
+                readsFromUs = NO_POSITION
                 // A seek moved the reads, so the rate starts over from where they land.
                 session.readRate.restart()
                 late.dropHeld()
                 session.readsEndedAtUs.value = NO_CLIP_END
             }
             session.readChange.getAndSet(null)?.let { change ->
+                overForNow -= change.add + change.remove
                 if (changeReading(session, late, change, epoch, queueOf, lastRead, readAgainUpTo, ended)) ended = false
             }
             if (!late.idle) late.deliver(queueOf, epoch, ended)
@@ -12702,15 +12742,20 @@ internal class PlaybackCore(
                 // Waiting for room is the normal answer. It is the wrong answer when the reason there is no
                 // room is that one stream has read far ahead of another, because then the starved stream's
                 // decoder is what everything is waiting for and more reading is the only way to reach it.
-                if (!relieveInterleaving(session)) {
-                    // Woken by whichever consumer takes something, rather than by a timer, so read-ahead
-                    // resumes the moment there is room. Nothing is taken here, so the bounded wait can lose
-                    // at most a wake-up.
-                    // No queue at all is a parked video-only item; the poll is the only wake-up then.
-                    val drained = session.selectedQueues().firstOrNull()
-                    worker.napUntil(WORKER_POLL) { drained?.awaitDrain() ?: kotlinx.coroutines.awaitCancellation() }
+                when (relieveInterleaving(session, epoch, everRead, overForNow, lastRead, readsFromUs)) {
+                    Relief.None -> {
+                        // Woken by whichever consumer takes something, rather than by a timer, so read-ahead
+                        // resumes the moment there is room. Nothing is taken here, so the bounded wait can lose
+                        // at most a wake-up.
+                        // No queue at all is a parked video-only item; the poll is the only wake-up then.
+                        val drained = session.selectedQueues().firstOrNull()
+                        worker.napUntil(WORKER_POLL) { drained?.awaitDrain() ?: kotlinx.coroutines.awaitCancellation() }
+                        continue
+                    }
+                    Relief.Freed -> continue
+                    // The next read goes ahead, past the budget.
+                    Relief.ReadOn -> Unit
                 }
-                continue
             }
             // Marked for the stall timeout: the actor measures how long this read waits.
             session.stallWatch.begin()
@@ -12759,7 +12804,17 @@ internal class PlaybackCore(
                 }
                 readAgainUpTo.remove(readIndex)
             }
-            if (readAtUs != null) lastRead[readIndex] = readAtUs
+            if (readAtUs != null) {
+                lastRead[readIndex] = readAtUs
+                if (readsFromUs == NO_POSITION) readsFromUs = readAtUs
+            }
+            everRead += readIndex
+            if (overForNow.remove(readIndex)) {
+                // The stream was over only for now. Its lane starts again from this packet.
+                val queue = if (readIndex == session.videoStream?.index) session.videoQueue else queueOf(readIndex)
+                queue?.reopen(epoch)
+                session.soundGap.update { gap -> if (gap?.index == readIndex) SoundGap(readIndex, returned = true) else gap }
+            }
             when (packet.streamIndex) {
                 session.videoStream?.index -> session.videoQueue?.offer(packet, epoch) ?: packet.close()
                 else -> {
@@ -12984,9 +13039,26 @@ internal class PlaybackCore(
      * Called from the demux worker. Everything it touches is either immutable or guarded by the queue's own
      * lock, and the warning goes through a flow whose emission is thread safe.
      *
-     * @return true when something was dropped, which means reading can continue at once.
+     * A stream that has given packets before is different (#570). A full read-ahead that finds it
+     * empty means the stream ended before the others, or has a long hole, and a cut would throw
+     * away media of a file that is interleaved well. Such a stream is over for now: its queue ends,
+     * so its lane drains and the other streams play on with every packet kept. mpv marks a stream
+     * as ended the same way when its packet queues are full. A later packet of the stream takes the
+     * end back.
+     *
+     * A queue can also be empty only because its lane takes each packet as it comes, as a stream
+     * does just after it came back. Its last packet is then near the newest one read. The reads go
+     * on past the budget for such a stream, until [INTERLEAVE_REACH_US] of the others was read with
+     * nothing of it, or twice the byte budget is held.
      */
-    private fun relieveInterleaving(session: OpenSession): Boolean {
+    private fun relieveInterleaving(
+        session: OpenSession,
+        epoch: Generation,
+        everRead: Set<Int>,
+        overForNow: MutableSet<Int>,
+        lastRead: Map<Int, Long>,
+        readsFromUs: Long,
+    ): Relief {
         val queues = session.selectedQueues()
         // Relief exists for the deadlock, not for routine budget pressure. While every selected
         // queue is ready, waiting for a drain is the correct answer, and cutting anything would
@@ -12994,7 +13066,21 @@ internal class PlaybackCore(
         // A selected queue held UNDER readiness by the budget is the deadlock: playback cannot
         // start, so nothing will ever drain, so the budget can never free itself.
         val readyUs = config.buffer.readyDuration.inWholeMicroseconds
-        if (queues.none { !it.isReady(readyUs, config.buffer.readyPackets) }) return false
+        if (queues.none { !it.isReady(readyUs, config.buffer.readyPackets) }) return Relief.None
+        queues.firstOrNull { it.count == 0 && !it.isEndOfStream && it.streamIndex in everRead }?.let { over ->
+            // How much of the other streams was read since this one last gave a packet. A stream
+            // with no packet since the reads moved counts from where they started.
+            val newest = lastRead.values.maxOrNull()
+            val last = lastRead[over.streamIndex] ?: readsFromUs.takeIf { it != NO_POSITION }
+            val behindUs = if (newest != null && last != null) newest - last else Long.MAX_VALUE
+            val held = session.allPacketQueues.sumOf { it.bytesBuffered }
+            if (behindUs < INTERLEAVE_REACH_US && held < 2 * config.buffer.totalBytes) return Relief.ReadOn
+            // Before the end, so the actor never sees an ended queue without the gap that explains it.
+            if (session.audioLane?.queue === over) session.soundGap.value = SoundGap(over.streamIndex, returned = false)
+            overForNow += over.streamIndex
+            over.signalEndOfStream(epoch)
+            return Relief.Freed
+        }
         // An inactive switch cache is sacrificed first. It counts against the same byte cap, and a
         // lane whose packets carry no timestamps cannot be pruned by position, so it can hold the
         // whole cap on its own. Cutting it cannot gap what is on screen; the only
@@ -13011,24 +13097,24 @@ internal class PlaybackCore(
             else -> inactiveHoarder.bytesBuffered / 2
         }
         if (inactiveHoarder != null && inactiveHoarder.count > 0 && inactiveHoarder.dropFromTail(keepBytes) > 0) {
-            return true
+            return Relief.Freed
         }
         // Cutting the media being played needs true starvation, not mere unreadiness.
-        val starved = queues.firstOrNull { it.count == 0 && !it.isEndOfStream } ?: return false
-        val hoarding = queues.maxByOrNull { it.bytesBuffered } ?: return false
-        if (hoarding === starved || hoarding.count == 0) return false
+        val starved = queues.firstOrNull { it.count == 0 && !it.isEndOfStream } ?: return Relief.None
+        val hoarding = queues.maxByOrNull { it.bytesBuffered } ?: return Relief.None
+        if (hoarding === starved || hoarding.count == 0) return Relief.None
 
         // Half of what it holds, measured in its own bytes rather than against the byte cap, because the cap
         // that was reached may have been the duration one and a byte target would then drop nothing at all.
         val dropped = hoarding.dropFromTail(hoarding.bytesBuffered / 2)
-        if (dropped == 0) return false
+        if (dropped == 0) return Relief.None
         // Once per session. The condition persists for as long as the file is badly interleaved, and a
         // warning per drop would bury everything else a caller is listening for.
         if (!session.warnedAboutInterleaving) {
             session.warnedAboutInterleaving = true
             warn(PlaybackWarning.PathologicalInterleaving(TrackId(starved.streamIndex), dropped))
         }
-        return true
+        return Relief.Freed
     }
 
     private suspend fun runVideoDecode(session: OpenSession, worker: Worker) {
@@ -13071,6 +13157,19 @@ internal class PlaybackCore(
                     decoder = current
                 }
                 if (drainFrames(session, worker, decoder, video, epoch, held)) continue
+                if (ending && !queue.isEndOfStream) {
+                    // The picture was over only for now and gives packets again (#570). The drained
+                    // decoder starts over, on the next keyframe.
+                    try {
+                        decoder.flush(epoch)
+                    } catch (cancellation: CancellationException) {
+                        throw cancellation
+                    } catch (failure: Throwable) {
+                        throw VideoDecoderRuntimeFailure("flush", failure)
+                    }
+                    ending = false
+                    session.videoWaitingForKeyframe.value = true
+                }
                 if (queue.isEndOfStream && queue.count == 0) {
                     if (!ending) {
                         // The drain signal travels in band, as a null packet, exactly as libavcodec expects.
@@ -13489,13 +13588,15 @@ internal class PlaybackCore(
             val queue = active.queue
             val decoder = active.decoder
             if (passBuffer(session, worker, decoder, epoch)) continue
-            if (queue.isEndOfStream && queue.count == 0) {
-                if (!ending) {
-                    // Same rule as the video worker: the drain signal counts only when accepted.
-                    if (decoder.send(null)) ending = true
-                    continue
-                }
+            // A drained decoder takes nothing more. A sound that was over only for now and gives
+            // packets again gets a new decoder from the actor, and this lane then starts over (#570).
+            if (ending) {
                 worker.nap(WORKER_POLL)
+                continue
+            }
+            if (queue.isEndOfStream && queue.count == 0) {
+                // Same rule as the video worker: the drain signal counts only when accepted.
+                if (decoder.send(null)) ending = true
                 continue
             }
             val packet = queue.poll()
@@ -14173,6 +14274,13 @@ internal class PlaybackCore(
         /** Why the demux lane could not make the last change, for the switch that waits on it (#455). */
         val readChangeFailure = atomic<String?>(null)
 
+        /**
+         * The sound that plays when a full read-ahead found its stream empty, so that it is over
+         * for now (#570), or null. The demux lane writes it and the actor plays the sound again
+         * once it [SoundGap.returned].
+         */
+        val soundGap = atomic<SoundGap?>(null)
+
         /** The sound a switch is fetching, and the clock reading by which it must cover the position (#455). Actor only. */
         var arrivingSound: ArrivingSound? = null
 
@@ -14832,6 +14940,13 @@ internal class PlaybackCore(
         const val AUDIO_SWITCH_MAX_START_GAP_US = 250_000L
 
         /**
+         * How far apart in time two streams of one file can be stored (#570). FFmpeg's muxers
+         * write a stream out once the others are 10 seconds ahead of it, so a stream that gives
+         * nothing for this long is not merely stored late.
+         */
+        const val INTERLEAVE_REACH_US = 10_000_000L
+
+        /**
          * How far the reads must have gone past the end of a sound's last packet before that sound
          * counts as run out (#509). Interleaving in a transport stream is well inside it.
          */
@@ -15310,6 +15425,21 @@ internal class ReadChange(val add: Set<Int>, val remove: Set<Int>, val readFromU
 
 /** A sound a switch is fetching, which must cover the position by [deadlineNanos] on the player's clock (#455). */
 internal class ArrivingSound(val index: Int, val deadlineNanos: Long)
+
+/** What the demux lane did about a full read-ahead with a selected stream that is not ready. */
+internal enum class Relief {
+    /** Nothing. The lane waits for room. */
+    None,
+
+    /** Packets were dropped, or a stream ended for now, so the budget is looked at again. */
+    Freed,
+
+    /** Nothing was freed, and the next read goes ahead all the same. */
+    ReadOn,
+}
+
+/** The stream of the sound that is over for now, and whether it has [returned] with a packet since (#570). */
+internal class SoundGap(val index: Int, val returned: Boolean)
 
 /**
  * Interleaves a decoded buffer into what the ring wants, into one array reused across buffers.

@@ -60,6 +60,8 @@ internal data class ScriptedAudioTrack(
     val isAccessibility: Boolean = false,
     /** Optional early packet cutoff, used to model an alternate cache that stops growing. */
     val packetEndUs: Long? = null,
+    /** A span of the track with no packets at all, as a sound with a long hole has (#570). */
+    val packetHoleUs: LongRange? = null,
     /** Virtual preparation cost before this track's decoder is returned. */
     val decoderCreateDelayUs: Long = 0,
     /** Bytes per scripted packet, so one lane can dominate a byte budget the way a lossless track does. */
@@ -1341,13 +1343,24 @@ internal class ScriptedSource(
         script.audioBufferFrames.toLong() * 1_000_000L /
             track.format(script.sampleRate, script.channels).sampleRate
 
-    private fun audioCandidate(): ScriptedAudioTrack? = script.audioTracks
-        .asSequence()
-        .filter { track ->
-            val trackEndUs = minOf(script.durationUs, track.packetEndUs ?: Long.MAX_VALUE)
-            track.index in selected && audioCursorsUs.getValue(track.index) < trackEndUs
+    private fun audioCandidate(): ScriptedAudioTrack? {
+        // A cursor inside a track's hole moves to the first packet after it.
+        script.audioTracks.forEach { track ->
+            val hole = track.packetHoleUs ?: return@forEach
+            val at = audioCursorsUs.getValue(track.index)
+            if (at in hole) {
+                val durationUs = audioDurationUs(track)
+                audioCursorsUs[track.index] = at + (hole.last + 1 - at + durationUs - 1) / durationUs * durationUs
+            }
         }
-        .minWithOrNull(compareBy({ audioCursorsUs.getValue(it.index) }, { it.index }))
+        return script.audioTracks
+            .asSequence()
+            .filter { track ->
+                val trackEndUs = minOf(script.durationUs, track.packetEndUs ?: Long.MAX_VALUE)
+                track.index in selected && audioCursorsUs.getValue(track.index) < trackEndUs
+            }
+            .minWithOrNull(compareBy({ audioCursorsUs.getValue(it.index) }, { it.index }))
+    }
 
     private fun packetRead(packet: FakePacket): FakePacket {
         demuxFrontierUs = maxOf(demuxFrontierUs, packet.pts?.micros ?: demuxFrontierUs)
@@ -1572,6 +1585,8 @@ internal class ScriptedVideoDecoder(
             ending = true
             return true
         }
+        // libavcodec refuses a packet after the drain signal until a flush.
+        check(!ending) { "a packet was sent after the drain signal with no flush" }
         if (faults.refuseSend()) return false
         if (faults.videoDecodeSendDelay > Duration.ZERO) delay(faults.videoDecodeSendDelay)
         if (faults.emptyDecode() || faults.videoDecodeProducesNothing) return true
@@ -1685,6 +1700,8 @@ internal class ScriptedAudioDecoder(
             ending = true
             return true
         }
+        // libavcodec refuses a packet after the drain signal until a flush.
+        check(!ending) { "a packet was sent after the drain signal with no flush" }
         if (faults.refuseSend()) return false
         if (faults.emptyDecode()) return true
         pending.addLast(

@@ -294,6 +294,14 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A parked video lane is not a selected queue. Its packets are thrown away as they arrive, so its
   queue is always empty; counted, it made the open wait 10 s for a picture and the interleaving
   relief cut the audio until the end of the file (#374).
+- A selected stream that gives no packet while the read-ahead budget is full is over for now, as
+  in mpv: its queue ends, its lane drains, and the first packet that comes back reopens the queue.
+  The sound then returns through the in-place change, and the picture through a flush and the next
+  keyframe. Cutting the fullest queue instead lost 15 s of sound in a file whose picture ended
+  early. A stream fed within the last 10 s of reads is read past the budget, or a returned picture
+  ends again at every empty moment (#570).
+- The scripted decoders refuse a packet after the drain signal until a flush, as libavcodec does.
+  Before, a test passed with a drained decoder fed again, which FFmpeg answers with an error (#570).
 - A sink that reports `FormatChangeRequested` only sets a flag; the actor reopens the output in
   `handleOutputChange`. The reopen parks the two sound lanes, keeps the decoder and the queue, and
   pads silence from the commit point, so the position does not jump. Flushing there would bring

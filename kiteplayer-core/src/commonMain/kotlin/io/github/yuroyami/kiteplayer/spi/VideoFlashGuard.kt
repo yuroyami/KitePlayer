@@ -107,15 +107,13 @@ public class VideoFlashGuard {
         }
         if (running) {
             val quiet = nanos - lastRunLegNanos - HOLD_NANOS
-            if (quiet > 0) {
-                val back = quiet.toFloat() / RELEASE_NANOS
-                if (back >= 1f) {
-                    running = false
-                    factor = 1f
-                    pictureLegs.clear()
-                } else {
-                    factor = releaseFrom + (1f - releaseFrom) * back
-                }
+            // Compared as whole nanoseconds: a Float rounds them, and not the same way on Kotlin/JS.
+            if (quiet >= RELEASE_NANOS) {
+                running = false
+                factor = 1f
+                pictureLegs.clear()
+            } else if (quiet > 0) {
+                factor = releaseFrom + (1f - releaseFrom) * (quiet.toFloat() / RELEASE_NANOS)
             }
         }
         return factor

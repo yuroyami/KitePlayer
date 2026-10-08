@@ -14,7 +14,8 @@ import kotlin.time.Duration.Companion.milliseconds
 /** The flash guard's rule (#500). See `docs/video-flash-guard.md`. */
 class VideoFlashGuardTest {
 
-    private val frameNanos = 1_000_000_000L / 30
+    /** When frame [index] is shown at 30 frames a second, exact to the nanosecond at each whole second. */
+    private fun shownAt(index: Int) = index * 1_000_000_000L / 30
 
     /** A frame whose first [cells] cells have [light] and the rest [rest]. */
     private fun frame(light: Float, cells: Int = VideoFlashGuard.CELLS, rest: Float = 0f) =
@@ -26,7 +27,7 @@ class VideoFlashGuardTest {
 
     /** Each frame's factor, frame [first] being shown at its index times a 30th of a second. */
     private fun factors(frames: List<FloatArray>, guard: VideoFlashGuard = VideoFlashGuard()): List<Float> =
-        frames.mapIndexed { index, cells -> guard.factorFor(cells, index * frameNanos) }
+        frames.mapIndexed { index, cells -> guard.factorFor(cells, shownAt(index)) }
 
     /** The mean light the frame is drawn with: the renderer scales encoded values by the factor. */
     private fun drawn(cells: FloatArray, factor: Float) = cells.average().toFloat() * factor.pow(2.2f)
@@ -87,7 +88,7 @@ class VideoFlashGuardTest {
         assertTrue(factors(strobe(60), guard).last() < 1f)
         guard.reset()
         assertEquals(1f, guard.current)
-        assertTrue(List(30) { guard.factorFor(frame(0f), (100 + it) * frameNanos) }.all { it == 1f })
+        assertTrue(List(30) { guard.factorFor(frame(0f), shownAt(100 + it)) }.all { it == 1f })
     }
 
     @Test
@@ -101,7 +102,7 @@ class VideoFlashGuardTest {
         val faint = factors(strobe(60, high = 0.3f), guard)
         val faintFactor = faint.last()
         assertTrue(faintFactor < 1f, "a strobe of 0.3 is a run")
-        val full = strobe(60).mapIndexed { index, cells -> guard.factorFor(cells, (60 + index) * frameNanos) }
+        val full = strobe(60).mapIndexed { index, cells -> guard.factorFor(cells, shownAt(60 + index)) }
         // The first full leg after the faint run, at frame 63, lowers it on that frame.
         assertTrue(full[3] < faintFactor, "${full[3]} after $faintFactor")
     }

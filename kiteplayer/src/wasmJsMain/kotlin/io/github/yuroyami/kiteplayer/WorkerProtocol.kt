@@ -1068,6 +1068,10 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             kind("ResamplerUnavailable")
             put("detail", warning.detail)
         }
+        is PlaybackWarning.SegmentStoreFailed -> {
+            kind("SegmentStoreFailed")
+            put("detail", warning.detail)
+        }
         is PlaybackWarning.CommandRefused -> {
             kind("CommandRefused")
             put("member", warning.member)
@@ -1710,6 +1714,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "TypesetterUnavailable" -> PlaybackWarning.TypesetterUnavailable(o.str("provider").orEmpty(), detail)
         "SubtitlesNotDrawn" -> PlaybackWarning.SubtitlesNotDrawn(detail)
         "ResamplerUnavailable" -> PlaybackWarning.ResamplerUnavailable(detail)
+        "SegmentStoreFailed" -> PlaybackWarning.SegmentStoreFailed(detail)
         "CommandRefused" -> PlaybackWarning.CommandRefused(o.str("member").orEmpty(), detail)
         "StartupIncomplete" -> PlaybackWarning.StartupIncomplete(detail)
         "ResourcesNotReleased" -> PlaybackWarning.ResourcesNotReleased(detail)

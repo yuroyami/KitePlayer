@@ -292,6 +292,8 @@ public object Dash {
             policy = policy,
             maxManifestBytes = maxManifestBytes,
             maxSegmentBytes = maxSegmentBytes,
+            // The manifest names its segments itself, so the reader need not find them in a playlist (#547).
+            openSegment = if (io.keepsSegments) ({ url -> io.openRelated(url, redirects, segment = true) }) else null,
         )
     }
 }

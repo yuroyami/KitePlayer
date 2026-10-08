@@ -18,6 +18,8 @@ installation and everyday use.
   flows in, and what is not drawn.
 - [Gapless queue playback](gapless-queue.md): how a queue moves to its next item without a
   silence, and when it opens the item from scratch instead.
+- [Segment store](segment-cache.md): keeping HLS and DASH segments on disk between player
+  lifetimes, what is stored, and when a stored segment is used.
 - [Dimming flashing video](video-flash-guard.md): the flash guard, the rule it counts flashes by,
   and which renderers carry it so far.
 

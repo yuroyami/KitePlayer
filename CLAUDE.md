@@ -226,11 +226,22 @@ Each line is something that bit someone. Delete a line when it stops being true.
   window, so that test can fail on it with no catch-up running at all; the catch-up adds only about
   10 ms of the tempo stage's own spread while it runs (#395).
 
+- A player with a segment store does not send the requests of one without, even in the lifetime
+  that fills the store. FFmpeg opens an fMP4 file once for each rendition, and the second open
+  already reads what the first one stored. Compare the set of addresses and the count, not the
+  request log line by line (#547).
+- A segment read to its end from a response in flight hides a store that mixes two files, because
+  the response wins over the stored bytes. A test of a changed file reads only a part of the new
+  one, closes, and reads the whole in a later open (#547).
+
 ### Language and toolchain
 
 - A property named `field` is unreachable by that name inside any accessor of the same class,
   because `field` is the backing-field keyword there. The compiler then reports "Property must be
   initialized" on a completely different property.
+- A member function named like a POSIX call hides the call inside its class on Kotlin/Native. A
+  `rename` that called `rename(from, to)` called itself, and the compiler said that `!=` cannot
+  compare `Unit` with `Int`. Write `platform.posix.rename` in full there.
 - The atomicfu Gradle plugin is banned in every module: its bytecode transform registers a task
   depending on a class-compilation task the Android plugin's multiplatform library variant does not
   create. The library dependency itself is fine. This is the trap most likely to be re-triggered by

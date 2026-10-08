@@ -211,6 +211,7 @@ class WorkerProtocolTest {
         PlaybackWarning.TypesetterUnavailable("libass", "no module"),
         PlaybackWarning.SubtitlesNotDrawn("too many cues"),
         PlaybackWarning.ResamplerUnavailable("none on the web"),
+        PlaybackWarning.SegmentStoreFailed("the directory is gone"),
         PlaybackWarning.CommandRefused("setSpeed", "speed must be within 0.25..4.0, was 10.0"),
         PlaybackWarning.StartupIncomplete("slow"),
         PlaybackWarning.ResourcesNotReleased("decoder"),
@@ -410,7 +411,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(43, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(44, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test

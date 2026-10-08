@@ -5,6 +5,7 @@ package io.github.yuroyami.kiteplayer.network
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoResolver
 import io.github.yuroyami.kiteplayer.NetworkStatus
+import io.github.yuroyami.kiteplayer.SegmentStore
 import io.github.yuroyami.kiteplayer.network.dash.Dash
 import io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider
 
@@ -12,13 +13,18 @@ import io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider
 internal class KtorMediaIoResolverProvider : MediaIoResolverProvider {
     override val id: String = "io.github.yuroyami.kiteplayer.network.ktor"
 
-    override fun create(): MediaIoResolver = object : MediaIoResolver {
+    override fun create(): MediaIoResolver = resolver(store = null)
+
+    // The player's own store, given at each open, so the provider holds none (#547).
+    override fun createWith(store: SegmentStore): MediaIoResolver = resolver(store)
+
+    private fun resolver(store: SegmentStore?): MediaIoResolver = object : MediaIoResolver {
         override suspend fun resolve(uri: String): MediaIo? = resolve(uri, emptyMap())
 
         override suspend fun resolve(uri: String, headers: Map<String, String>): MediaIo? {
             if (!uri.isHttpUri()) return null
             // Each session owns its reader and private client, including failed-open cleanup.
-            return playableReader(KtorMediaIo.open(uri, headers = headers))
+            return playableReader(KtorMediaIo.open(uri, null, headers, HttpReaderPolicy(), redirects = null, reuse = store?.let { SegmentReuse(it) }))
         }
     }
 

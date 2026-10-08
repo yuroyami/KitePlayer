@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoResolver
 import io.github.yuroyami.kiteplayer.NetworkStatus
+import io.github.yuroyami.kiteplayer.SegmentStore
 import io.github.yuroyami.kiteplayer.internal.MediaIoProviderRegistry
 import io.github.yuroyami.kiteplayer.internal.platformMediaIoProviders
 
@@ -38,6 +39,13 @@ public interface MediaIoResolverProvider {
      * platform's.
      */
     public fun networkStatus(): NetworkStatus? = null
+
+    /**
+     * A resolver whose readers keep segments in [store], for a player whose
+     * [io.github.yuroyami.kiteplayer.NetworkConfig.segmentStore] is set (#547), or null, the
+     * default, when this provider keeps none. Called at each such open, so it must be cheap.
+     */
+    public fun createWith(store: SegmentStore): MediaIoResolver? = null
 }
 
 /**
@@ -55,9 +63,9 @@ public object MediaIoProviders {
     /** Installs a provider. Re-registering the same instance is harmless. */
     public fun register(provider: MediaIoResolverProvider): Unit = registry.register(provider)
 
-    internal suspend fun resolve(uri: String, headers: Map<String, String>): MediaIo? {
+    internal suspend fun resolve(uri: String, headers: Map<String, String>, store: SegmentStore? = null): MediaIo? {
         discovered
-        return registry.resolve(uri, headers)
+        return registry.resolve(uri, headers, store)
     }
 
     internal suspend fun resolveLocalFile(path: String): MediaIo? {

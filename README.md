@@ -917,6 +917,27 @@ sends it as text, XML or bytes, by its root element
 - `Dash.mediaItemFor` builds the item yourself, for a client of your own, a `DashUrlPolicy` other
   than the default, or other size ceilings. `Dash.manifest` reads a manifest without playing it.
 
+### Keeping segments between sessions
+
+A player downloads the segments of an HLS or DASH presentation again at each open. Give it a
+segment store and a later player reads them from disk
+([#547](https://github.com/yuroyami/KitePlayer/issues/547)). It is off by default.
+
+```kotlin
+val store = fileSegmentStore("$cacheDirectory/kite-segments", maxBytes = 512L * 1024 * 1024)
+val player = KitePlayer.create(PlayerConfig(network = NetworkConfig(segmentStore = store)))
+```
+
+- Only the media and initialization segments of a presentation that has ended are kept.
+  Playlists, manifests and keys are fetched each time, and a live stream keeps nothing.
+- A stored segment is used by the rules of HTTP caching: with no request while it is fresh, and
+  after one conditional request when it is not.
+- The store never holds more than `maxBytes`. It removes the segments used longest ago.
+- One store serves every player of the application. It works on the JVM, Android and Apple
+  targets. A browser has none.
+
+The [segment store guide](docs/segment-cache.md) has the whole rule.
+
 <details>
 <summary><b>Which transport wins</b>, and when a client exists</summary>
 <br>

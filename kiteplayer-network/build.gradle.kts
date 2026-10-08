@@ -74,6 +74,8 @@ kotlin {
             api(project(":kiteplayer-adaptive"))
             api(libs.ktor.client.core)
             implementation(project(":kiteplayer-subtitles"))
+            // The lock of the segment store. The library only, never the Gradle plugin.
+            implementation(libs.kotlinx.atomicfu)
         }
         val jvmAndAndroidMain = maybeCreate("jvmAndAndroidMain").apply {
             dependsOn(getByName("commonMain"))

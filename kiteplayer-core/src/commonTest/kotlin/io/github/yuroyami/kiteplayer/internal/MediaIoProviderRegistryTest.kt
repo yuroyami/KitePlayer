@@ -4,6 +4,8 @@ package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoResolver
+import io.github.yuroyami.kiteplayer.SegmentStore
+import io.github.yuroyami.kiteplayer.SegmentStoreEntry
 import io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.Dispatchers
@@ -102,5 +104,36 @@ class MediaIoProviderRegistryTest {
         assertNull(registry.resolveLocalFile("/media/a.ts"))
         assertEquals(listOf("files:/media/a.ts"), trace)
     }
-}
 
+    @Test
+    fun aPlayersSegmentStoreGoesToAProviderThatKeepsSegmentsAndToNoOther() = runTest {
+        val store = object : SegmentStore {
+            override val namespace: String = ""
+            override val privateToOneAccount: Boolean = false
+            override val sizeBytes: Long = 0
+            override fun open(name: String): SegmentStoreEntry = error("unused")
+            override fun remove(name: String) = Unit
+            override fun clear() = Unit
+            override fun close() = Unit
+        }
+        val trace = mutableListOf<String>()
+        val given = mutableListOf<SegmentStore>()
+        val keeping = object : MediaIoResolverProvider {
+            override val id: String = "b"
+            override fun create(): MediaIoResolver = MediaIoResolver { trace += "b"; null }
+            override fun createWith(store: SegmentStore): MediaIoResolver {
+                given += store
+                return MediaIoResolver { trace += "b with a store"; null }
+            }
+        }
+        val registry = MediaIoProviderRegistry()
+        registry.register(Provider("a", trace))
+        registry.register(keeping)
+        registry.resolve("https://host/media", emptyMap(), store)
+        assertEquals(listOf("a", "b with a store"), trace)
+        assertEquals(listOf<SegmentStore>(store), given)
+        // A player with no store gets the provider's plain resolver.
+        registry.resolve("https://host/media", emptyMap())
+        assertEquals(listOf("a", "b with a store", "a", "b"), trace)
+    }
+}

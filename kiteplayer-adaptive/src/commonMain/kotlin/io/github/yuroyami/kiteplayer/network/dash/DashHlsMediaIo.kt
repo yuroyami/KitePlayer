@@ -66,6 +66,11 @@ internal class DashHlsMediaIo(
     private val onManifest: suspend (DashManifest) -> Unit = {},
     /** The newest refusal of a request a reader of this item made, once (#453). */
     private val refusal: () -> io.github.yuroyami.kiteplayer.SourceRefusal? = { null },
+    /**
+     * A reader of a media or initialization segment that the transport may keep in a segment store
+     * (#547), or null for a transport with no store. Only a presentation that has ended uses it.
+     */
+    private val openSegment: (suspend (String) -> MediaIo)? = null,
 ) : MediaIo {
 
     private val master = presentation.master.encodeToByteArray()
@@ -75,6 +80,9 @@ internal class DashHlsMediaIo(
 
     private val lock = Mutex()
     private val written = HashMap<String, String>()
+
+    /** The addresses the playlists of a presentation that has ended named as segments or initializations (#547). */
+    private val named = HashSet<String>()
     private val indexed = HashMap<String, DashTimedPlan>()
     private val sequences = HashMap<String, LiveSequence>()
 
@@ -126,7 +134,10 @@ internal class DashHlsMediaIo(
     private val clock = DashLiveClock(
         manifest.utcTimings,
         nowMicros,
-        fetchText = { url -> fetch(DashManifestParser.resolveUrl(manifestUrl, url, policy), null, MAX_TIME_BYTES).decodeToString() },
+        // The clock is not media, so it never meets a segment store.
+        fetchText = { url ->
+            fetch(DashManifestParser.resolveUrl(manifestUrl, url, policy), null, MAX_TIME_BYTES, segment = false).decodeToString()
+        },
         fetchDate = { url -> fetchDate(DashManifestParser.resolveUrl(manifestUrl, url, policy)) },
     )
 
@@ -179,8 +190,17 @@ internal class DashHlsMediaIo(
         // checked again all the same, because FFmpeg is free to ask for anything.
         if (uri.substringAfter("://").substringBefore('/').equals(DashHls.HOST, ignoreCase = true)) return null
         DashManifestParser.requireAllowed(manifestUrl, uri, policy)
-        return openUrl(uri).also { it.setWarningSink(warningSink) }
+        val segment = openSegment != null && lock.withLock { uri in named }
+        return openOriginal(uri, segment).also { it.setWarningSink(warningSink) }
     }
+
+    /**
+     * A reader of [url] at its own server. [segment] says that the manifest named it as a media or
+     * initialization segment, which a segment store may keep once the presentation has ended. A
+     * live presentation's window is not played again, so it keeps none.
+     */
+    private suspend fun openOriginal(url: String, segment: Boolean = true): MediaIo =
+        (openSegment?.takeIf { segment && !manifest.isDynamic } ?: openUrl)(url)
 
     override fun close() {
         if (closed) return
@@ -209,8 +229,16 @@ internal class DashHlsMediaIo(
     private suspend fun playlist(track: DashHlsTrack): String = lock.withLock {
         if (!manifest.isDynamic) {
             return@withLock written.getOrPut(track.address) {
+                val plan = servedPlan(track, manifest, null)
+                if (openSegment != null) {
+                    plan.initializationUrl?.let(named::add)
+                    for (segment in plan.segments) {
+                        named += segment.url
+                        segment.initializationUrl?.let(named::add)
+                    }
+                }
                 DashHls.mediaPlaylist(
-                    servedPlan(track, manifest, null),
+                    plan,
                     live = false,
                     images = track.representation.takeIf { track.role == DashHlsRole.Images },
                     dateOriginMicros = dateOrigin(manifest),
@@ -535,12 +563,12 @@ internal class DashHlsMediaIo(
     }
 
     /** The bytes of [url], or of its [range] of it, after [policy] accepts it, at most [limit] of them. */
-    private suspend fun fetch(url: String, range: LongRange?, limit: Long): ByteArray {
+    private suspend fun fetch(url: String, range: LongRange?, limit: Long, segment: Boolean = true): ByteArray {
         if (range != null) {
             require(range.last - range.first < limit) { "${shownUri(url)} asks for more than $limit bytes" }
             return readRange(url, range)
         }
-        val io = openUrl(DashManifestParser.requireAllowed(manifestUrl, url, policy))
+        val io = openOriginal(DashManifestParser.requireAllowed(manifestUrl, url, policy), segment)
         try {
             return readAllBounded(io, limit, "the segment at ${shownUri(url)}")
         } finally {
@@ -704,7 +732,7 @@ internal class DashHlsMediaIo(
 
     /** The size of [file], which its first response states. */
     private suspend fun sizeOf(file: String): Long {
-        val io = openUrl(DashManifestParser.requireAllowed(manifestUrl, file, policy))
+        val io = openOriginal(DashManifestParser.requireAllowed(manifestUrl, file, policy))
         try {
             return io.size ?: throw DashUnsupportedException("$file states no size, so where its last clusters end is unknown")
         } finally {
@@ -727,7 +755,7 @@ internal class DashHlsMediaIo(
     /** The bytes of [range] of [file]; fewer only at the end of the file, when [allowShort]. */
     private suspend fun readRange(file: String, range: LongRange, allowShort: Boolean = false): ByteArray {
         val wanted = (range.last - range.first + 1).toInt()
-        val io = openUrl(DashManifestParser.requireAllowed(manifestUrl, file, policy))
+        val io = openOriginal(DashManifestParser.requireAllowed(manifestUrl, file, policy))
         try {
             if (range.first > 0) io.seek(range.first)
             val out = ByteArray(wanted)

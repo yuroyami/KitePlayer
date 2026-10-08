@@ -603,6 +603,17 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The [SegmentStore] of this player failed, so the item reads its segments from the network
+     * and keeps none (#547). [detail] says what failed. Once for each open; the media plays.
+     */
+    public data class SegmentStoreFailed(val detail: String) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("detail" to detail)
+
+        override val message: String get() = "the segment store failed, reading from the network: $detail"
+    }
+
+    /**
      * A control the engine could not honour, named so a fire-and-forget caller still finds out
      * The suspending form of the same member throws instead; this
      * warning is how the refusal reaches [KitePlayer.events] and the warning history when the

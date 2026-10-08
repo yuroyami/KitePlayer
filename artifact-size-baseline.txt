@@ -64,10 +64,10 @@ kiteplayer-adaptive jvm 385198
 kiteplayer-adaptive android 360081
 kiteplayer-adaptive macosArm64 344923
 kiteplayer-adaptive iosArm64 344910
-kiteplayer-network jvm 158931
-kiteplayer-network android 149114
-kiteplayer-network macosArm64 103971
-kiteplayer-network iosArm64 103959
+kiteplayer-network jvm 253601
+kiteplayer-network android 239392
+kiteplayer-network macosArm64 212878
+kiteplayer-network iosArm64 212865
 kiteplayer-audioviz jvm 1428692
 kiteplayer-audioviz android 1354053
 kiteplayer-audioviz iosArm64 2166868

@@ -20,6 +20,8 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertNotNull
@@ -82,6 +84,81 @@ class AutomaticNetworkTest {
                 }
             } finally {
                 player.closeAndAwait()
+                server.stop(100, 500)
+            }
+        }
+    }
+
+    /** The automatic transport takes the store of the player's own configuration (#547). */
+    @OptIn(ExperimentalAtomicApi::class)
+    @Test
+    fun theStoreOfThePlayersConfigurationReachesTheAutomaticTransport(): Unit = runBlocking {
+        withTimeout<Unit>(30_000) {
+            val segment = ByteArray(20_000) { (it * 3).toByte() }
+            val asked = AtomicReference(listOf<String>())
+            fun note(what: String) {
+                while (true) {
+                    val old = asked.load()
+                    if (asked.compareAndSet(old, old + what)) return
+                }
+            }
+            val server = embeddedServer(CIO, port = 0) {
+                routing {
+                    get("/list.m3u8") {
+                        note("list")
+                        call.respondBytes("#EXTM3U\n#EXTINF:4,\nseg.ts\n#EXT-X-ENDLIST\n".encodeToByteArray())
+                    }
+                    get("/seg.ts") {
+                        note("segment")
+                        call.response.headers.append("Cache-Control", "max-age=3600")
+                        call.respondBytes(segment)
+                    }
+                }
+            }.start(wait = false)
+            val port = server.engine.resolvedConnectors().first().port
+            val store = assertNotNull(directorySegmentStore(MemoryStoreFiles(), "/cache", 1_000_000))
+            suspend fun readAll(io: MediaIo): ByteArray {
+                var out = ByteArray(0)
+                val chunk = ByteArray(8_192)
+                while (true) {
+                    val count = io.read(chunk, 0, chunk.size)
+                    if (count < 0) return out
+                    out += chunk.copyOf(count)
+                }
+            }
+            // One player lifetime: the backend reads the playlist and then the segment it names.
+            suspend fun lifetime(): ByteArray? {
+                var received: ByteArray? = null
+                val backend = object : MediaBackend {
+                    override suspend fun open(media: MediaItem): BackendSession {
+                        val io = checkNotNull(media.io).open()
+                        readAll(io)
+                        received = checkNotNull(io.openRelated("http://127.0.0.1:$port/seg.ts")).use { readAll(it) }
+                        error("fixture has no decoder")
+                    }
+                }
+                val output = object : OutputBackend {
+                    override val clock: MonotonicClock = MonotonicClock.System
+                    override val audioSink: AudioSinkFactory = object : AudioSinkFactory {
+                        override val name: String = "unused test output"
+                        override suspend fun create(): AudioSink = error("fixture never decodes")
+                    }
+                }
+                val player = KitePlayer.create(PlayerConfig(backends = Backends(backend, output), network = NetworkConfig(segmentStore = store)))
+                try {
+                    runCatching { player.open(MediaItem("http://127.0.0.1:$port/list.m3u8")) }
+                } finally {
+                    player.closeAndAwait()
+                }
+                return received
+            }
+            try {
+                assertContentEquals(segment, lifetime())
+                assertContentEquals(segment, lifetime(), "the second player did not get the segment")
+                assertEquals(listOf("list", "segment", "list"), asked.load(), "the second player's segment did not come from the store")
+                assertEquals(20_000L, store.sizeBytes)
+            } finally {
+                store.close()
                 server.stop(100, 500)
             }
         }

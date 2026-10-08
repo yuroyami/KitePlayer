@@ -821,6 +821,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider { /
         open fun <get-servesLocalFiles>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider.servesLocalFiles.<get-servesLocalFiles>|<get-servesLocalFiles>(){}[0]
 
     abstract fun create(): io.github.yuroyami.kiteplayer/MediaIoResolver // io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider.create|create(){}[0]
+    open fun createWith(io.github.yuroyami.kiteplayer/SegmentStore): io.github.yuroyami.kiteplayer/MediaIoResolver? // io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider.createWith|createWith(io.github.yuroyami.kiteplayer.SegmentStore){}[0]
     open fun networkStatus(): io.github.yuroyami.kiteplayer/NetworkStatus? // io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider.networkStatus|networkStatus(){}[0]
 }
 
@@ -1109,6 +1110,37 @@ abstract interface io.github.yuroyami.kiteplayer/MonotonicClock { // io.github.y
         final val System // io.github.yuroyami.kiteplayer/MonotonicClock.Companion.System|{}System[0]
             final fun <get-System>(): io.github.yuroyami.kiteplayer/MonotonicClock // io.github.yuroyami.kiteplayer/MonotonicClock.Companion.System.<get-System>|<get-System>(){}[0]
     }
+}
+
+abstract interface io.github.yuroyami.kiteplayer/SegmentStore : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/SegmentStore|null[0]
+    abstract val namespace // io.github.yuroyami.kiteplayer/SegmentStore.namespace|{}namespace[0]
+        abstract fun <get-namespace>(): kotlin/String // io.github.yuroyami.kiteplayer/SegmentStore.namespace.<get-namespace>|<get-namespace>(){}[0]
+    abstract val privateToOneAccount // io.github.yuroyami.kiteplayer/SegmentStore.privateToOneAccount|{}privateToOneAccount[0]
+        abstract fun <get-privateToOneAccount>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SegmentStore.privateToOneAccount.<get-privateToOneAccount>|<get-privateToOneAccount>(){}[0]
+    abstract val sizeBytes // io.github.yuroyami.kiteplayer/SegmentStore.sizeBytes|{}sizeBytes[0]
+        abstract fun <get-sizeBytes>(): kotlin/Long // io.github.yuroyami.kiteplayer/SegmentStore.sizeBytes.<get-sizeBytes>|<get-sizeBytes>(){}[0]
+
+    abstract fun clear() // io.github.yuroyami.kiteplayer/SegmentStore.clear|clear(){}[0]
+    abstract fun close() // io.github.yuroyami.kiteplayer/SegmentStore.close|close(){}[0]
+    abstract fun open(kotlin/String): io.github.yuroyami.kiteplayer/SegmentStoreEntry // io.github.yuroyami.kiteplayer/SegmentStore.open|open(kotlin.String){}[0]
+    abstract fun remove(kotlin/String) // io.github.yuroyami.kiteplayer/SegmentStore.remove|remove(kotlin.String){}[0]
+}
+
+abstract interface io.github.yuroyami.kiteplayer/SegmentStoreEntry : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/SegmentStoreEntry|null[0]
+    abstract val record // io.github.yuroyami.kiteplayer/SegmentStoreEntry.record|{}record[0]
+        abstract fun <get-record>(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer/SegmentStoreEntry.record.<get-record>|<get-record>(){}[0]
+
+    abstract fun close() // io.github.yuroyami.kiteplayer/SegmentStoreEntry.close|close(){}[0]
+    abstract fun putRecord(kotlin/ByteArray) // io.github.yuroyami.kiteplayer/SegmentStoreEntry.putRecord|putRecord(kotlin.ByteArray){}[0]
+    abstract fun read(kotlin/Long, kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer/SegmentStoreEntry.read|read(kotlin.Long;kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    abstract fun spans(): kotlin.collections/List<kotlin.ranges/LongRange> // io.github.yuroyami.kiteplayer/SegmentStoreEntry.spans|spans(){}[0]
+    abstract fun write(kotlin/Long): io.github.yuroyami.kiteplayer/SegmentStoreWriter // io.github.yuroyami.kiteplayer/SegmentStoreEntry.write|write(kotlin.Long){}[0]
+}
+
+abstract interface io.github.yuroyami.kiteplayer/SegmentStoreWriter : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/SegmentStoreWriter|null[0]
+    abstract fun close() // io.github.yuroyami.kiteplayer/SegmentStoreWriter.close|close(){}[0]
+    abstract fun publish() // io.github.yuroyami.kiteplayer/SegmentStoreWriter.publish|publish(){}[0]
+    abstract fun write(kotlin/ByteArray, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer/SegmentStoreWriter.write|write(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
 }
 
 sealed interface io.github.yuroyami.kiteplayer.spi/AudioSinkEvent { // io.github.yuroyami.kiteplayer.spi/AudioSinkEvent|null[0]
@@ -3377,7 +3409,7 @@ final class io.github.yuroyami.kiteplayer/MediaProgram { // io.github.yuroyami.k
 }
 
 final class io.github.yuroyami.kiteplayer/NetworkConfig { // io.github.yuroyami.kiteplayer/NetworkConfig|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer/MediaIoResolver? = ..., io.github.yuroyami.kiteplayer/IoCachePolicy = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/NetworkRecovery? = ...) // io.github.yuroyami.kiteplayer/NetworkConfig.<init>|<init>(io.github.yuroyami.kiteplayer.MediaIoResolver?;io.github.yuroyami.kiteplayer.IoCachePolicy;kotlin.Boolean;io.github.yuroyami.kiteplayer.NetworkRecovery?){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/MediaIoResolver? = ..., io.github.yuroyami.kiteplayer/IoCachePolicy = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/NetworkRecovery? = ..., io.github.yuroyami.kiteplayer/SegmentStore? = ...) // io.github.yuroyami.kiteplayer/NetworkConfig.<init>|<init>(io.github.yuroyami.kiteplayer.MediaIoResolver?;io.github.yuroyami.kiteplayer.IoCachePolicy;kotlin.Boolean;io.github.yuroyami.kiteplayer.NetworkRecovery?;io.github.yuroyami.kiteplayer.SegmentStore?){}[0]
 
     final val autoResolve // io.github.yuroyami.kiteplayer/NetworkConfig.autoResolve|{}autoResolve[0]
         final fun <get-autoResolve>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/NetworkConfig.autoResolve.<get-autoResolve>|<get-autoResolve>(){}[0]
@@ -3387,12 +3419,15 @@ final class io.github.yuroyami.kiteplayer/NetworkConfig { // io.github.yuroyami.
         final fun <get-ioResolver>(): io.github.yuroyami.kiteplayer/MediaIoResolver? // io.github.yuroyami.kiteplayer/NetworkConfig.ioResolver.<get-ioResolver>|<get-ioResolver>(){}[0]
     final val recovery // io.github.yuroyami.kiteplayer/NetworkConfig.recovery|{}recovery[0]
         final fun <get-recovery>(): io.github.yuroyami.kiteplayer/NetworkRecovery? // io.github.yuroyami.kiteplayer/NetworkConfig.recovery.<get-recovery>|<get-recovery>(){}[0]
+    final val segmentStore // io.github.yuroyami.kiteplayer/NetworkConfig.segmentStore|{}segmentStore[0]
+        final fun <get-segmentStore>(): io.github.yuroyami.kiteplayer/SegmentStore? // io.github.yuroyami.kiteplayer/NetworkConfig.segmentStore.<get-segmentStore>|<get-segmentStore>(){}[0]
 
     final fun component1(): io.github.yuroyami.kiteplayer/MediaIoResolver? // io.github.yuroyami.kiteplayer/NetworkConfig.component1|component1(){}[0]
     final fun component2(): io.github.yuroyami.kiteplayer/IoCachePolicy // io.github.yuroyami.kiteplayer/NetworkConfig.component2|component2(){}[0]
     final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/NetworkConfig.component3|component3(){}[0]
     final fun component4(): io.github.yuroyami.kiteplayer/NetworkRecovery? // io.github.yuroyami.kiteplayer/NetworkConfig.component4|component4(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer/MediaIoResolver? = ..., io.github.yuroyami.kiteplayer/IoCachePolicy = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/NetworkRecovery? = ...): io.github.yuroyami.kiteplayer/NetworkConfig // io.github.yuroyami.kiteplayer/NetworkConfig.copy|copy(io.github.yuroyami.kiteplayer.MediaIoResolver?;io.github.yuroyami.kiteplayer.IoCachePolicy;kotlin.Boolean;io.github.yuroyami.kiteplayer.NetworkRecovery?){}[0]
+    final fun component5(): io.github.yuroyami.kiteplayer/SegmentStore? // io.github.yuroyami.kiteplayer/NetworkConfig.component5|component5(){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer/MediaIoResolver? = ..., io.github.yuroyami.kiteplayer/IoCachePolicy = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/NetworkRecovery? = ..., io.github.yuroyami.kiteplayer/SegmentStore? = ...): io.github.yuroyami.kiteplayer/NetworkConfig // io.github.yuroyami.kiteplayer/NetworkConfig.copy|copy(io.github.yuroyami.kiteplayer.MediaIoResolver?;io.github.yuroyami.kiteplayer.IoCachePolicy;kotlin.Boolean;io.github.yuroyami.kiteplayer.NetworkRecovery?;io.github.yuroyami.kiteplayer.SegmentStore?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/NetworkConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/NetworkConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/NetworkConfig.toString|toString(){}[0]
@@ -3413,6 +3448,9 @@ final class io.github.yuroyami.kiteplayer/NetworkConfigBuilder { // io.github.yu
     final var recovery // io.github.yuroyami.kiteplayer/NetworkConfigBuilder.recovery|{}recovery[0]
         final fun <get-recovery>(): io.github.yuroyami.kiteplayer/NetworkRecovery? // io.github.yuroyami.kiteplayer/NetworkConfigBuilder.recovery.<get-recovery>|<get-recovery>(){}[0]
         final fun <set-recovery>(io.github.yuroyami.kiteplayer/NetworkRecovery?) // io.github.yuroyami.kiteplayer/NetworkConfigBuilder.recovery.<set-recovery>|<set-recovery>(io.github.yuroyami.kiteplayer.NetworkRecovery?){}[0]
+    final var segmentStore // io.github.yuroyami.kiteplayer/NetworkConfigBuilder.segmentStore|{}segmentStore[0]
+        final fun <get-segmentStore>(): io.github.yuroyami.kiteplayer/SegmentStore? // io.github.yuroyami.kiteplayer/NetworkConfigBuilder.segmentStore.<get-segmentStore>|<get-segmentStore>(){}[0]
+        final fun <set-segmentStore>(io.github.yuroyami.kiteplayer/SegmentStore?) // io.github.yuroyami.kiteplayer/NetworkConfigBuilder.segmentStore.<set-segmentStore>|<set-segmentStore>(io.github.yuroyami.kiteplayer.SegmentStore?){}[0]
 
     final fun build(): io.github.yuroyami.kiteplayer/NetworkConfig // io.github.yuroyami.kiteplayer/NetworkConfigBuilder.build|build(){}[0]
     final fun ioCache(kotlin/Function1<io.github.yuroyami.kiteplayer/IoCachePolicyBuilder, kotlin/Unit>) // io.github.yuroyami.kiteplayer/NetworkConfigBuilder.ioCache|ioCache(kotlin.Function1<io.github.yuroyami.kiteplayer.IoCachePolicyBuilder,kotlin.Unit>){}[0]
@@ -5558,6 +5596,22 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.copy|copy(kotlin.String;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentSkipped.hashCode|hashCode(){}[0]
+    }
+
+    final class SegmentStoreFailed : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed|null[0]
+        constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.<init>|<init>(kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.detail.<get-detail>|<get-detail>(){}[0]
+        final val fields // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.fields|{}fields[0]
+            final fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.fields.<get-fields>|<get-fields>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.message.<get-message>|<get-message>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SegmentStoreFailed.hashCode|hashCode(){}[0]
     }
 
     final class SourceReconnecting : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.SourceReconnecting|null[0]

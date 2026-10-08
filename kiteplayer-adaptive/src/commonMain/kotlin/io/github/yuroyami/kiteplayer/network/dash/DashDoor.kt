@@ -31,6 +31,11 @@ public class DashTransport(
     public val release: () -> Unit = {},
     /** The newest refusal of a request any reader [open] made, once (#453). */
     public val refusal: () -> SourceRefusal? = { null },
+    /**
+     * [open] for a URL the manifest named as a media or initialization segment, which the transport
+     * may keep in a segment store (#547), or null, the default, for a transport with no store.
+     */
+    public val openSegment: (suspend (url: String) -> MediaIo)? = null,
 )
 
 /**
@@ -50,6 +55,9 @@ internal fun DashTransport.failingOver(failover: DashFailover, mpdUrl: String, p
         bitsPerSecond = inner.bitsPerSecond,
         release = inner.release,
         refusal = inner.refusal,
+        openSegment = inner.openSegment?.let { segment ->
+            { url -> failover.open(url) { target -> segment(checked(url, target)) } }
+        },
     )
 }
 
@@ -133,7 +141,8 @@ public object DashDoor {
      * the manifest came from after its redirects. Its segments and its refetches open through
      * [open], which answers null for an address it does not take and judges every redirect itself.
      * [dateOf] reads the `Date` header of a reader that [open] made. The returned reader closes
-     * [io] with it.
+     * [io] with it. [openSegment] is [open] for a segment the manifest named, when the transport
+     * keeps segments in a store (#547).
      */
     public suspend fun readerIfManifest(
         io: MediaIo,
@@ -143,6 +152,7 @@ public object DashDoor {
         policy: DashUrlPolicy = DashUrlPolicy.Default,
         maxManifestBytes: Long = MAX_MANIFEST_BYTES,
         maxSegmentBytes: Long = MAX_SEGMENT_BYTES,
+        openSegment: (suspend (url: String) -> MediaIo?)? = null,
     ): MediaIo? {
         val location = io.location
         if (!DashDetection.declared(io.contentType, location)) {
@@ -170,6 +180,9 @@ public object DashDoor {
                 release = io::close,
                 // Every reader this item opens goes through [io], which collects their refusals.
                 refusal = io::takeRefusal,
+                openSegment = openSegment?.let { segment ->
+                    { url -> segment(url) ?: throw DashUrlRefusedException("${shownUri(url)} is not an http or https address") }
+                },
             ),
         )
     }
@@ -315,21 +328,29 @@ public object DashDoor {
             bitsPerSecond = transport.bitsPerSecond,
             release = transport.release,
             refusal = transport.refusal,
+            openSegment = transport.openSegment,
         )
     }
 
     /** One file, read with range requests, so it seeks. */
     private class FileRoute(private val url: String, private val failover: Failover) : DashRoute {
-        override suspend fun reader(transport: DashTransport): MediaIo =
-            ReleasingMediaIo(failover.over(transport).open(url), transport.release)
+        override suspend fun reader(transport: DashTransport): MediaIo {
+            // These routes play only a presentation that has ended, whose segments a store may keep (#547).
+            val routed = failover.over(transport)
+            return ReleasingMediaIo((routed.openSegment ?: routed.open)(url), transport.release)
+        }
     }
 
     /** One representation's segments as one forward stream. */
     private class SegmentsRoute(private val plan: DashSegmentPlan, private val maxSegmentBytes: Long, private val failover: Failover) : DashRoute {
         override suspend fun reader(transport: DashTransport): MediaIo {
             val routed = failover.over(transport)
+            val stored = routed.openSegment
             return ReleasingMediaIo(
-                DashMediaIo(plan) { url -> routed.fetch(url, maxSegmentBytes, "the segment at ${shownUri(url)}") },
+                DashMediaIo(plan) { url ->
+                    val what = "the segment at ${shownUri(url)}"
+                    if (stored == null) routed.fetch(url, maxSegmentBytes, what) else stored(url).use { readAllBounded(it, maxSegmentBytes, what) }
+                },
                 transport.release,
             )
         }

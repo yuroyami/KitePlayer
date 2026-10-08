@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.MediaIoResolver
 import io.github.yuroyami.kiteplayer.PlaybackWarning
+import io.github.yuroyami.kiteplayer.SegmentStore
 import io.github.yuroyami.kiteplayer.SourceRefusal
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.cookies.AcceptAllCookiesStorage
@@ -101,8 +102,8 @@ public class KtorMediaIo private constructor(
     internal val date: String?,
     /** True for a live radio stream, whose server closing the body is a drop and not an end (#508). */
     private val live: Boolean,
-    firstBody: ByteReadChannel,
-    firstJob: Job,
+    firstBody: ByteReadChannel?,
+    firstJob: Job?,
     private val scope: CoroutineScope,
     private val policy: HttpReaderPolicy,
     /** Where a redirect of any request of this reader may lead, or null for Ktor's own rules. */
@@ -113,7 +114,20 @@ public class KtorMediaIo private constructor(
     icyInterval: Int?,
     /** The station's own `icy-` headers, its name and genre, reported with the first read. */
     stationTags: Map<String, String>,
+    /** The segment store of this item's open and what its playlists named (#547), or null for no store. */
+    private val reuse: SegmentReuse? = null,
+    /** This reader's entry in the store, when its address is a segment the store keeps. */
+    private val stored: StoredSpans? = null,
+    /** The `Last-Modified` of a stored resource with no entity tag, which then guards its ranged requests. */
+    private val lastModified: String? = null,
 ) : MediaIo {
+
+    /** Finds the segments an HLS playlist names as its bytes pass. A stored segment is never a playlist. */
+    private val names: PlaylistNames? =
+        if (reuse != null && stored == null) PlaylistNames(reuse, listOf(uri, location).distinct()) else null
+
+    /** True when this reader's open keeps segments in a store, so an address may be opened as one. */
+    internal val keepsSegments: Boolean get() = reuse?.usable == true
 
     /** The song titles of the current response, or null when the server sends no title blocks. */
     private var icy: IcyTitles? = icyInterval?.let(::IcyTitles)
@@ -202,14 +216,20 @@ public class KtorMediaIo private constructor(
      * reader's own. The DASH door opens a manifest's segments this way when the automatic
      * transport found the manifest (#400).
      */
-    internal suspend fun openRelated(uri: String, rule: RedirectRule?): KtorMediaIo? {
+    internal suspend fun openRelated(uri: String, rule: RedirectRule?, segment: Boolean = false): KtorMediaIo? {
         if (closed) throw KtorMediaIoException("openRelated after close on $shown")
         if (!uri.isHttpUri()) return null
+        // Only an address that a manifest or a finished playlist named as a segment meets the store (#547).
+        val keeps = reuse?.takeIf { it.usable && !it.isKey(uri) && (segment || it.isSegment(uri)) }
         var attempts = 0
         while (true) {
             val failure = try {
-                return open(uri, client, ownsClient = false, related.headersFor(uri), related, policy, rule, meter)
-                    .also { it.setWarningSink(warningSink) }
+                val opened = if (keeps != null) {
+                    openStored(uri, rule, keeps)
+                } else {
+                    open(uri, client, ownsClient = false, related.headersFor(uri), related, policy, rule, meter, reuse)
+                }
+                return opened.also { it.setWarningSink(warningSink) }
             } catch (failure: Throwable) {
                 // The caller's own cancellation ends the open. Anything else is the connection's.
                 currentCoroutineContext().ensureActive()
@@ -221,6 +241,67 @@ public class KtorMediaIo private constructor(
             delay(policy.backoff(attempts))
         }
     }
+
+    /**
+     * A reader of the segment at [uri] that reads what [keeps] holds of it and stores what it
+     * reads from the network. A fresh entry answers with no request. A stale one asks the server
+     * whether the resource changed, and a 304 keeps its bytes.
+     */
+    private suspend fun openStored(uri: String, rule: RedirectRule?, keeps: SegmentReuse): KtorMediaIo {
+        val login = basicLogin(uri)
+        val requested = login?.uri ?: uri
+        val headers = related.headersFor(uri).let { own -> login?.let { withLogin(own, it) } ?: own }
+        val plan = keeps.plan(requested, headers, warningSink)
+            ?: return open(requested, client, ownsClient = false, headers, related, policy, rule, meter, reuse)
+        try {
+            val fresh = plan.fresh()?.takeIf { record -> mayLeadTo(requested, record.location, rule) }
+            if (fresh != null) {
+                val spans = plan.spans()
+                if (spans != null) return fromStore(requested, headers, rule, fresh, spans)
+            }
+            return open(requested, client, ownsClient = false, headers, related, policy, rule, meter, reuse, plan)
+        } catch (failure: Throwable) {
+            plan.abandon()
+            throw failure
+        }
+    }
+
+    /** True when [rule] lets a request for [uri] end at [location], where the stored answer came from. */
+    private fun mayLeadTo(uri: String, location: String, rule: RedirectRule?): Boolean =
+        rule == null || uri == location || runCatching { rule.check(Url(uri), Url(location)) }.isSuccess
+
+    /** A reader made from the stored [record] alone. It sends a request only for bytes the store lacks. */
+    private fun fromStore(
+        uri: String,
+        headers: Map<String, String>,
+        rule: RedirectRule?,
+        record: StoredResponse,
+        spans: StoredSpans,
+    ): KtorMediaIo = KtorMediaIo(
+        client = client,
+        ownsClient = false,
+        uri = uri,
+        requestHeaders = headers,
+        related = related,
+        size = record.size,
+        seekable = record.ranged,
+        location = record.location,
+        contentType = record.contentType,
+        entityTag = record.entityTag,
+        date = record.date,
+        live = false,
+        firstBody = null,
+        firstJob = null,
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        policy = policy,
+        redirects = rule,
+        meter = meter,
+        icyInterval = null,
+        stationTags = emptyMap(),
+        reuse = reuse,
+        stored = spans,
+        lastModified = record.lastModified,
+    )
 
     /**
      * Reads up to [count] bytes from the start of the file, before any other read, and returns
@@ -274,7 +355,20 @@ public class KtorMediaIo private constructor(
     /** One read from the current response, or from a new one at [position]. */
     private suspend fun readOnce(into: ByteArray, offset: Int, length: Int): Int {
         val knownSize = size
-        if (knownSize != null && position >= knownSize) return -1
+        if (knownSize != null && position >= knownSize) {
+            names?.end()
+            return -1
+        }
+        // The store answers, unless a response already streams from this very byte. Its bytes never
+        // reach the meter, so a stored segment cannot raise the measured network rate.
+        if (stored != null && (body == null || bodyPosition != position)) {
+            val served = stored.read(position, into, offset, length)
+            if (served > 0) {
+                dropBody()
+                position += served
+                return served
+            }
+        }
         val channel = body?.takeIf { bodyPosition == position } ?: openAt(position)
         // A station's title block is taken out where it falls, before the audio after it, so the
         // song it names belongs at this read's first byte (#423).
@@ -293,8 +387,14 @@ public class KtorMediaIo private constructor(
         }
         if (pulled < 0) return endOfBody(knownSize)
         titles?.consumed(pulled)
+        stored?.wrote(position, into, offset, pulled)
+        names?.feed(position, into, offset, pulled)
         bodyPosition += pulled
         position += pulled
+        if (position == knownSize) {
+            stored?.publish()
+            names?.end()
+        }
         return pulled
     }
 
@@ -310,6 +410,7 @@ public class KtorMediaIo private constructor(
             dropBody()
             throw KtorMediaIoException("the server of the live stream $shown closed it at byte $position", retryable = true)
         }
+        names?.end()
         return -1
     }
 
@@ -365,6 +466,8 @@ public class KtorMediaIo private constructor(
     override fun close() {
         if (closed) return
         closed = true
+        // The bytes read so far are a whole span, wherever the reader stopped.
+        stored?.close()
         body?.cancel()
         bodyJob?.cancel()
         scope.cancel()
@@ -395,7 +498,7 @@ public class KtorMediaIo private constructor(
                             header(HttpHeaders.Range, "bytes=$target-")
                             // A server that honours this answers with the whole file, not a range, when
                             // the file changed since the first response.
-                            entityTag?.let { header(HttpHeaders.IfRange, it) }
+                            (entityTag ?: lastModified?.takeIf { stored != null })?.let { header(HttpHeaders.IfRange, it) }
                         }
                     }.execute { response ->
                         redirects?.refuseHidden(response, shown)
@@ -446,6 +549,8 @@ public class KtorMediaIo private constructor(
             (target == 0L && response.status == HttpStatusCode.OK)
         if (!ok) {
             related.answered(uri, response.status)
+            // The whole file in answer to a range is another file than the stored one.
+            if (response.status == HttpStatusCode.OK) stored?.changed()
             val changed = if (entityTag != null && response.status == HttpStatusCode.OK) {
                 ", so the file changed since it was opened"
             } else {
@@ -475,15 +580,23 @@ public class KtorMediaIo private constructor(
             response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
         }
         if (size != null && total != size) {
+            stored?.changed()
             throw KtorMediaIoException(
                 "the file at $shown changed since it was opened: it had $size bytes and has ${total ?: "an unknown size"}",
             )
         }
         val tag = response.headers[HttpHeaders.ETag]
         if (entityTag != null && tag != null && tag != entityTag) {
+            stored?.changed()
             throw KtorMediaIoException(
                 "the file at $shown changed since it was opened: its entity tag was $entityTag and is $tag",
             )
+        }
+        // A stored resource with no entity tag is the same file only while its date of change is.
+        val modified = response.headers[HttpHeaders.LastModified]
+        if (stored != null && entityTag == null && lastModified != null && modified != null && modified != lastModified) {
+            stored.changed()
+            throw KtorMediaIoException("the file at $shown changed since it was stored: it was last modified $modified")
         }
     }
 
@@ -552,6 +665,8 @@ public class KtorMediaIo private constructor(
             redirects: RedirectRule?,
             defaultHeaders: Map<String, String> = emptyMap(),
             meter: DownloadMeter = DownloadMeter(),
+            /** The segment store of this open (#547), or null to keep nothing. */
+            reuse: SegmentReuse? = null,
         ): KtorMediaIo {
             // A user name and password in the address become its login, sent to the item's own
             // origin as the item's headers are, and the address is requested without them (#448).
@@ -561,6 +676,7 @@ public class KtorMediaIo private constructor(
             val related = RelatedRequests(requested, defaultHeaders, itemHeaders)
             return open(
                 requested, client ?: itemClient(), ownsClient = client == null, itemHeaders, related, policy, redirects, meter,
+                reuse,
             )
         }
 
@@ -574,10 +690,13 @@ public class KtorMediaIo private constructor(
             policy: HttpReaderPolicy,
             redirects: RedirectRule?,
             meter: DownloadMeter,
+            reuse: SegmentReuse? = null,
+            /** The stored entry of [uri], when it is a segment the store keeps. */
+            plan: StorePlan? = null,
         ): KtorMediaIo {
             // An address that the media names can carry a login of its own, as the item's can.
             basicLogin(uri)?.let { login ->
-                return open(login.uri, http, ownsClient, withLogin(headers, login), related, policy, redirects, meter)
+                return open(login.uri, http, ownsClient, withLogin(headers, login), related, policy, redirects, meter, reuse, plan)
             }
             val shown = shownUri(uri)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -585,6 +704,7 @@ public class KtorMediaIo private constructor(
             val pipe = ByteChannel(autoFlush = true)
             val job = scope.launch {
                 val sent = TimeSource.Monotonic.markNow()
+                val requestSeconds = reuse?.nowSeconds?.invoke() ?: 0L
                 try {
                     guarded(http, redirects) { mark ->
                         http.prepareGet(uri) {
@@ -592,8 +712,22 @@ public class KtorMediaIo private constructor(
                             headers.forEach { (key, value) -> header(key, value) }
                             askForTitles(headers)
                             header(HttpHeaders.Range, "bytes=0-")
+                            // A stale stored segment asks whether it changed, and a 304 keeps its bytes (#547).
+                            plan?.condition()?.let { (name, value) -> header(name, value) }
                         }.execute { response ->
                             redirects?.refuseHidden(response, shown)
+                            if (plan != null && response.status == HttpStatusCode.NotModified) {
+                                plan.revalidated(factsOf(response), requestSeconds)?.let { record ->
+                                    probe.complete(
+                                        Probe(
+                                            record.size, record.ranged, record.entityTag, record.location, record.contentType,
+                                            record.date, lastModified = record.lastModified, stored = plan.spans(), hasBody = false,
+                                        ),
+                                    )
+                                    pipe.close()
+                                    return@execute
+                                }
+                            }
                             // A weak tag cannot make a range request conditional, so only a strong one is kept.
                             val tag = response.headers[HttpHeaders.ETag]?.takeUnless { it.startsWith("W/") }
                             // The request that answered, after every redirect Ktor followed.
@@ -619,26 +753,38 @@ public class KtorMediaIo private constructor(
                                                 "${response.headers[HttpHeaders.ContentRange]}",
                                         )
                                     }
+                                    val kept = plan?.let {
+                                        storeAnswer(it, response, headers, location, range.complete, ranged = true, type, interval == null && !radio, requestSeconds)
+                                    }
                                     probe.complete(
-                                        Probe(range.complete, seekable = interval == null, tag, location, type, date, live = false, interval, station),
+                                        Probe(
+                                            range.complete, seekable = interval == null, tag, location, type, date, live = false, interval, station,
+                                            lastModified = response.headers[HttpHeaders.LastModified], stored = kept,
+                                        ),
                                     )
                                 }
                                 HttpStatusCode.OK -> {
                                     val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                                    val kept = plan?.let {
+                                        storeAnswer(it, response, headers, location, total, ranged = false, type, interval == null && !radio, requestSeconds)
+                                    }
                                     probe.complete(
-                                        Probe(total, seekable = false, tag, location, type, date, live = total == null && radio, interval, station),
+                                        Probe(
+                                            total, seekable = false, tag, location, type, date, live = total == null && radio, interval, station,
+                                            lastModified = response.headers[HttpHeaders.LastModified], stored = kept,
+                                        ),
                                     )
                                 }
                                 else -> {
                                     // An address the item's reader opens after the item did (#453).
                                     related.answered(uri, response.status)
-                                    throw KtorMediaIoException(
-                                        "cannot open $shown: ${response.status}",
-                                        // A server error, an overloaded server or a slow request may pass.
-                                        retryable = response.status.value >= 500 ||
-                                            response.status == HttpStatusCode.RequestTimeout ||
-                                            response.status == HttpStatusCode.TooManyRequests,
-                                    )
+                                    // A server error, an overloaded server or a slow request may pass.
+                                    val retryable = response.status.value >= 500 ||
+                                        response.status == HttpStatusCode.RequestTimeout ||
+                                        response.status == HttpStatusCode.TooManyRequests
+                                    // An answer that is final leaves nothing stored for the address.
+                                    if (!retryable) plan?.refused()
+                                    throw KtorMediaIoException("cannot open $shown: ${response.status}", retryable = retryable)
                                 }
                             }
                             copyMeasured(response.bodyAsChannel(), pipe, meter, sent)
@@ -671,7 +817,7 @@ public class KtorMediaIo private constructor(
                 entityTag = answer.entityTag,
                 date = answer.date,
                 live = answer.live,
-                firstBody = pipe,
+                firstBody = pipe.takeIf { answer.hasBody },
                 firstJob = job,
                 scope = scope,
                 policy = policy,
@@ -679,6 +825,9 @@ public class KtorMediaIo private constructor(
                 meter = meter,
                 icyInterval = answer.icyInterval,
                 stationTags = answer.stationTags,
+                reuse = reuse,
+                stored = answer.stored,
+                lastModified = answer.lastModified.takeIf { answer.stored != null },
             )
         }
     }
@@ -771,7 +920,55 @@ private class Probe(
     val icyInterval: Int? = null,
     /** The station's own headers (#423). */
     val stationTags: Map<String, String> = emptyMap(),
+    val lastModified: String? = null,
+    /** The reader's entry in the segment store (#547), or null when the answer is not stored. */
+    val stored: StoredSpans? = null,
+    /** False for a 304, whose bytes are the stored ones. */
+    val hasBody: Boolean = true,
 )
+
+/** The headers of [response] that decide whether and how long the segment store keeps it. */
+private fun factsOf(response: HttpResponse): ResponseFacts = ResponseFacts(
+    cacheControl = response.headers.getAll(HttpHeaders.CacheControl).orEmpty(),
+    vary = response.headers.getAll(HttpHeaders.Vary).orEmpty(),
+    entityTag = response.headers[HttpHeaders.ETag],
+    lastModified = response.headers[HttpHeaders.LastModified],
+    date = response.headers[HttpHeaders.Date],
+    expires = response.headers[HttpHeaders.Expires],
+    age = response.headers[HttpHeaders.Age],
+)
+
+/**
+ * Tells [plan] what the server answered for a segment, and returns the reader's entry when the
+ * answer is stored. [explicit] are the headers the reader set. The request as it was sent may
+ * carry more, such as a cookie the client keeps, and an answer that varies by one of those is not
+ * stored, because the next request cannot be matched to it. [plain] is false for an answer with
+ * title blocks in its bytes.
+ */
+private fun storeAnswer(
+    plan: StorePlan,
+    response: HttpResponse,
+    explicit: Map<String, String>,
+    location: String,
+    size: Long?,
+    ranged: Boolean,
+    contentType: String?,
+    plain: Boolean,
+    requestSeconds: Long,
+): StoredSpans? {
+    val facts = factsOf(response)
+    val vary = varyNames(facts.vary)
+    val sent = response.call.request.headers
+    val sentCredentials = SegmentReuse.CREDENTIAL_HEADERS.any { sent[it] != null }
+    val sentVaried = vary.orEmpty().any { it in SegmentReuse.CREDENTIAL_HEADERS && sent[it] != SegmentReuse.headerValue(explicit, it) }
+    val fresh = if (size == null || !plain) {
+        null
+    } else {
+        StoredResponse.of(facts, location, size, ranged, contentType, requestSeconds, plan.nowSeconds())
+    }
+    plan.answered(fresh, vary, sentCredentials, sentVaried)
+    return plan.spans()
+}
 
 /**
  * The headers of the requests that a reader's related readers send. [defaults] go to every address.
@@ -851,6 +1048,12 @@ public class KtorMediaIoResolver(
     private val headers: Map<String, String> = emptyMap(),
     /** How long each reader that this resolver makes waits for the server. */
     private val policy: HttpReaderPolicy = HttpReaderPolicy(),
+    /**
+     * Where the readers keep the media and initialization segments of finished HLS and DASH
+     * presentations between player lifetimes (#547), or null, the default, to keep none. The
+     * store stays the caller's to close. `docs/segment-cache.md` has the whole rule.
+     */
+    private val segmentStore: SegmentStore? = null,
 ) : MediaIoResolver, AutoCloseable {
 
     private var created: HttpClient? = null
@@ -864,7 +1067,9 @@ public class KtorMediaIoResolver(
         if (!uri.isHttpUri()) return null
         val itemNames = headers.keys.map { it.lowercase() }.toSet()
         val merged = this.headers.filterKeys { it.lowercase() !in itemNames } + headers
-        return playableReader(KtorMediaIo.open(uri, shared, merged, policy, redirects = null, defaultHeaders = this.headers))
+        return playableReader(
+            KtorMediaIo.open(uri, shared, merged, policy, redirects = null, defaultHeaders = this.headers, reuse = segmentStore?.let { SegmentReuse(it) }),
+        )
     }
 
     /** Closes the client this resolver created, if it ever created one. Idempotent. */

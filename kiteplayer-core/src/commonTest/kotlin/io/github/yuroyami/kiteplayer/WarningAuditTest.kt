@@ -46,6 +46,7 @@ class WarningAuditTest {
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
         PlaybackWarning.SubtitlesNotDrawn("x"),
         PlaybackWarning.ResamplerUnavailable("x"),
+        PlaybackWarning.SegmentStoreFailed("x"),
         PlaybackWarning.AudioTapFailed("x"),
         PlaybackWarning.RecordingStopped("x.mkv", "x"),
         PlaybackWarning.SourceReconnecting(1_024, 1, "x"),
@@ -119,6 +120,10 @@ class WarningAuditTest {
         is PlaybackWarning.ResamplerUnavailable -> listOf(
             "AudioPlayback's conversion stage, when AudioConfig.resampler throws while making a " +
                 "resampler; PlaybackCore reports the first refusal and stops passing the factory",
+        )
+        is PlaybackWarning.SegmentStoreFailed -> listOf(
+            "kiteplayer-network's SegmentReuse.failed, at the first failure of the SegmentStore in one open; " +
+                "the open then reads every segment from the network",
         )
         is PlaybackWarning.ContainerDeclarationDiverged -> listOf(
             "PlaybackCore.reportContainerDivergences, after the first frames of an open, for every " +

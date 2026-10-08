@@ -285,6 +285,9 @@ public class NetworkConfigBuilder(from: NetworkConfig = NetworkConfig()) {
     /** See [NetworkConfig.recovery]. */
     public var recovery: NetworkRecovery? = from.recovery
 
+    /** See [NetworkConfig.segmentStore]. */
+    public var segmentStore: SegmentStore? = from.segmentStore
+
     /** Changes [ioCache] field by field. */
     public fun ioCache(build: IoCachePolicyBuilder.() -> Unit) {
         ioCache = IoCachePolicyBuilder(ioCache).apply(build).build()
@@ -296,6 +299,7 @@ public class NetworkConfigBuilder(from: NetworkConfig = NetworkConfig()) {
         ioCache = ioCache,
         autoResolve = autoResolve,
         recovery = recovery,
+        segmentStore = segmentStore,
     )
 }
 

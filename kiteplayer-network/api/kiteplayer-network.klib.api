@@ -60,7 +60,7 @@ final class io.github.yuroyami.kiteplayer.network/KtorMediaIoException : kotlin/
 }
 
 final class io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver : io.github.yuroyami.kiteplayer/MediaIoResolver, kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver|null[0]
-    constructor <init>(io.ktor.client/HttpClient? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.network/HttpReaderPolicy = ...) // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.<init>|<init>(io.ktor.client.HttpClient?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.network.HttpReaderPolicy){}[0]
+    constructor <init>(io.ktor.client/HttpClient? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.network/HttpReaderPolicy = ..., io.github.yuroyami.kiteplayer/SegmentStore? = ...) // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.<init>|<init>(io.ktor.client.HttpClient?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.network.HttpReaderPolicy;io.github.yuroyami.kiteplayer.SegmentStore?){}[0]
 
     final fun close() // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.close|close(){}[0]
     final suspend fun resolve(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.resolve|resolve(kotlin.String){}[0]
@@ -71,3 +71,5 @@ final object io.github.yuroyami.kiteplayer.network.dash/Dash { // io.github.yuro
     final suspend fun manifest(kotlin/String, io.ktor.client/HttpClient, io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy = ..., kotlin/Long = ..., io.github.yuroyami.kiteplayer.network/HttpReaderPolicy = ...): io.github.yuroyami.kiteplayer.network.dash/DashManifest // io.github.yuroyami.kiteplayer.network.dash/Dash.manifest|manifest(kotlin.String;io.ktor.client.HttpClient;io.github.yuroyami.kiteplayer.network.dash.DashUrlPolicy;kotlin.Long;io.github.yuroyami.kiteplayer.network.HttpReaderPolicy){}[0]
     final suspend fun mediaItemFor(kotlin/String, io.ktor.client/HttpClient, io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy = ..., kotlin/Long = ..., kotlin/Long = ..., io.github.yuroyami.kiteplayer.network/HttpReaderPolicy = ...): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer.network.dash/Dash.mediaItemFor|mediaItemFor(kotlin.String;io.ktor.client.HttpClient;io.github.yuroyami.kiteplayer.network.dash.DashUrlPolicy;kotlin.Long;kotlin.Long;io.github.yuroyami.kiteplayer.network.HttpReaderPolicy){}[0]
 }
+
+final fun io.github.yuroyami.kiteplayer.network/fileSegmentStore(kotlin/String, kotlin/Long, kotlin/String = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/SegmentStore? // io.github.yuroyami.kiteplayer.network/fileSegmentStore|fileSegmentStore(kotlin.String;kotlin.Long;kotlin.String;kotlin.Boolean){}[0]

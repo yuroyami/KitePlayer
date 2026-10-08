@@ -19,7 +19,9 @@ internal suspend fun resolveMediaIo(
     item: MediaItem,
     config: NetworkConfig,
     localFile: suspend (String) -> MediaIo? = MediaIoProviders::resolveLocalFile,
-    automatic: suspend (String, Map<String, String>) -> MediaIo? = MediaIoProviders::resolve,
+    automatic: suspend (String, Map<String, String>) -> MediaIo? = { uri, headers ->
+        MediaIoProviders.resolve(uri, headers, config.segmentStore)
+    },
 ): MediaIo? = when {
     item.io != null -> item.io.open()
     config.ioResolver != null -> config.ioResolver.resolve(item.uri, item.headers)

@@ -159,6 +159,13 @@ public data class NetworkConfig(
      * fails at once as before. `docs/cancellation-and-bounded-waits.md` has the whole rule.
      */
     val recovery: NetworkRecovery? = null,
+    /**
+     * Where the automatic transport keeps the media and initialization segments of finished HLS
+     * and DASH presentations between player lifetimes (#547). Null, the default, keeps nothing. An
+     * explicit [ioResolver] does not read this field and takes its store itself.
+     * `docs/segment-cache.md` has the whole rule.
+     */
+    val segmentStore: SegmentStore? = null,
 )
 
 /**

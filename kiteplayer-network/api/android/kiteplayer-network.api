@@ -1,3 +1,8 @@
+public final class io/github/yuroyami/kiteplayer/network/FileSegmentStoreKt {
+	public static final fun fileSegmentStore (Ljava/lang/String;JLjava/lang/String;Z)Lio/github/yuroyami/kiteplayer/SegmentStore;
+	public static synthetic fun fileSegmentStore$default (Ljava/lang/String;JLjava/lang/String;ZILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/SegmentStore;
+}
+
 public final class io/github/yuroyami/kiteplayer/network/HttpReaderPolicy {
 	public fun <init> ()V
 	public synthetic fun <init> (JJIJJILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -46,8 +51,8 @@ public final class io/github/yuroyami/kiteplayer/network/KtorMediaIoException : 
 
 public final class io/github/yuroyami/kiteplayer/network/KtorMediaIoResolver : io/github/yuroyami/kiteplayer/MediaIoResolver, java/lang/AutoCloseable {
 	public fun <init> ()V
-	public fun <init> (Lio/ktor/client/HttpClient;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/network/HttpReaderPolicy;)V
-	public synthetic fun <init> (Lio/ktor/client/HttpClient;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/network/HttpReaderPolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lio/ktor/client/HttpClient;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/network/HttpReaderPolicy;Lio/github/yuroyami/kiteplayer/SegmentStore;)V
+	public synthetic fun <init> (Lio/ktor/client/HttpClient;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/network/HttpReaderPolicy;Lio/github/yuroyami/kiteplayer/SegmentStore;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
 	public fun resolve (Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun resolve (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

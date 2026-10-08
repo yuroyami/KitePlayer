@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.NetworkStatus
+import io.github.yuroyami.kiteplayer.SegmentStore
 import io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
@@ -30,7 +31,8 @@ internal class MediaIoProviderRegistry {
     }
 
     /** A reader from the first provider that answers [uri], never one that serves local files. */
-    suspend fun resolve(uri: String, headers: Map<String, String>): MediaIo? = firstAnswer(localFiles = false, uri, headers)
+    suspend fun resolve(uri: String, headers: Map<String, String>, store: SegmentStore? = null): MediaIo? =
+        firstAnswer(localFiles = false, uri, headers, store)
 
     /**
      * A Kotlin reader of the local file [path], from the first provider that serves local files, for
@@ -44,12 +46,19 @@ internal class MediaIoProviderRegistry {
         return snapshot.firstNotNullOfOrNull { it.provider.networkStatus() }
     }
 
-    private suspend fun firstAnswer(localFiles: Boolean, uri: String, headers: Map<String, String>): MediaIo? {
+    private suspend fun firstAnswer(
+        localFiles: Boolean,
+        uri: String,
+        headers: Map<String, String>,
+        store: SegmentStore? = null,
+    ): MediaIo? {
         val snapshot = synchronized(lock) {
             entries.entries.sortedBy { it.key }.map { it.value }.filter { it.provider.servesLocalFiles == localFiles }
         }
         for (entry in snapshot) {
-            entry.resolver.resolve(uri, headers)?.let { return it }
+            // A provider that keeps segments answers with the player's store (#547).
+            val resolver = store?.let { entry.provider.createWith(it) } ?: entry.resolver
+            resolver.resolve(uri, headers)?.let { return it }
         }
         return null
     }

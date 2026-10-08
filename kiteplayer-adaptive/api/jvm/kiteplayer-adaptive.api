@@ -66,8 +66,8 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashBaseUrls {
 public final class io/github/yuroyami/kiteplayer/network/dash/DashDoor {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/network/dash/DashDoor;
 	public final fun manifest ([BLjava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;J)Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;
-	public final fun readerIfManifest (Lio/github/yuroyami/kiteplayer/MediaIo;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun readerIfManifest$default (Lio/github/yuroyami/kiteplayer/network/dash/DashDoor;Lio/github/yuroyami/kiteplayer/MediaIo;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JJLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun readerIfManifest (Lio/github/yuroyami/kiteplayer/MediaIo;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JJLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun readerIfManifest$default (Lio/github/yuroyami/kiteplayer/network/dash/DashDoor;Lio/github/yuroyami/kiteplayer/MediaIo;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function1;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JJLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun requireRedirectAllowed (Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
 	public final fun route (Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;J)Lio/github/yuroyami/kiteplayer/network/dash/DashDoor$DashRoute;
 }
@@ -335,12 +335,13 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashTimelineEntry 
 }
 
 public final class io/github/yuroyami/kiteplayer/network/dash/DashTransport {
-	public fun <init> (Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function4;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;)V
-	public synthetic fun <init> (Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function4;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function4;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;)V
+	public synthetic fun <init> (Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function4;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getBitsPerSecond ()Lkotlin/jvm/functions/Function0;
 	public final fun getDate ()Lkotlin/jvm/functions/Function2;
 	public final fun getFetch ()Lkotlin/jvm/functions/Function4;
 	public final fun getOpen ()Lkotlin/jvm/functions/Function2;
+	public final fun getOpenSegment ()Lkotlin/jvm/functions/Function2;
 	public final fun getRefetch ()Lkotlin/jvm/functions/Function2;
 	public final fun getRefusal ()Lkotlin/jvm/functions/Function0;
 	public final fun getRelease ()Lkotlin/jvm/functions/Function0;

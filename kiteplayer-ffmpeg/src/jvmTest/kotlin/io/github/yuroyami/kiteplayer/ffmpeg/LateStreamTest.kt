@@ -111,6 +111,9 @@ class LateStreamTest {
                 waitFor(2.seconds) { player.state.value.tracks.programs.singleOrNull()?.tracks == listOf(TrackId(0), TrackId(2)) },
                 "the channel's new table: ${player.state.value.tracks.programs}",
             )
+            // The track table says the moved sound plays before its first beep is heard, and a busy
+            // machine takes more than a second to get there, so this waits for the beep itself.
+            waitFor(10.seconds) { output.beeps.any { abs(it.hertz - MOVED_HZ) < 60 } }
             delay(1.seconds)
             assertEquals(PlaybackStatus.Playing, player.state.value.status)
 

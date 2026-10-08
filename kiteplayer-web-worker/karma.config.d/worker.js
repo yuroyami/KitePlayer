@@ -37,6 +37,91 @@ config.proxies = Object.assign({}, config.proxies, {
     "/kiteass.mjs": served(path.join(libassDir, "kiteass.mjs")),
     "/kiteass.wasm": served(path.join(libassDir, "kiteass.wasm")),
 });
+// A small server beside the clips, for what a folder of files cannot show (#546). It keeps the
+// address, the range, the X-Kite-Test header and the time since the reset of every request for a
+// clip, and under /kite-probe/ it serves:
+// - asked: those requests, as JSON, and the times live.mpd was served;
+// - reset: forgets them and starts the live clock;
+// - live.m3u8: hls/ts-0 as a live playlist, two segments at the reset and one more every two
+//   seconds, ended after the sixth;
+// - live.mpd: dash/separate as a live manifest, whose third segment is the newest at the reset.
+//   With ?origin=, the segments are named on that origin instead of the manifest's own;
+// - moved/<clip>: a redirect to that clip, kept in the list under this name.
+// Every answer allows another origin to read it, so one test can ask 127.0.0.1 from localhost.
+const probe = { asked: [], manifests: 0, epoch: Date.now() };
+const liveHls = () => {
+    const count = Math.min(6, 2 + Math.floor((Date.now() - probe.epoch) / 2000));
+    const lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:2", "#EXT-X-MEDIA-SEQUENCE:0"];
+    for (let i = 0; i < count; i++) lines.push("#EXTINF:2.000000,", "/testmedia/hls/ts-0-" + i + ".ts");
+    if (count === 6) lines.push("#EXT-X-ENDLIST");
+    return lines.join("\n") + "\n";
+};
+const liveDash = (origin) => {
+    const set = (type, id, attributes) =>
+        '<AdaptationSet contentType="' + type + '"><Representation id="' + id + '" ' + attributes + '>' +
+        '<SegmentTemplate timescale="1" duration="2" startNumber="1" initialization="' + origin + '/testmedia/dash/separate-' + id +
+        '-init.m4s" media="' + origin + '/testmedia/dash/separate-' + id + '-$Number%05d$.m4s"/></Representation></AdaptationSet>';
+    // Segment n is whole 2n seconds after the start, so the third is the newest six seconds in.
+    return '<?xml version="1.0" encoding="utf-8"?>\n' +
+        '<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="dynamic" availabilityStartTime="' +
+        new Date(probe.epoch - 6000).toISOString() + '" publishTime="' + new Date().toISOString() +
+        '" minimumUpdatePeriod="PT2S" timeShiftBufferDepth="PT30S" minBufferTime="PT2S">' +
+        '<Period id="0" start="PT0S">' +
+        set("video", "0", 'mimeType="video/mp4" codecs="avc1.42c00d" bandwidth="300000" width="320" height="180"') +
+        set("audio", "2", 'mimeType="audio/mp4" codecs="mp4a.40.2" bandwidth="96000" audioSamplingRate="48000"') +
+        '</Period></MPD>\n';
+};
+const kiteProbe = function () {
+    return function (request, response, next) {
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.setHeader("Access-Control-Allow-Headers", "*");
+        response.setHeader("Access-Control-Expose-Headers", "Content-Range, Content-Length, Date");
+        if (request.method === "OPTIONS") {
+            response.writeHead(204);
+            return response.end();
+        }
+        const url = request.url;
+        const send = (type, body) => {
+            response.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
+            response.end(body);
+        };
+        if (url.startsWith("/testmedia/")) {
+            probe.asked.push({
+                clip: url.slice("/testmedia/".length), host: request.headers.host,
+                range: request.headers.range || null, marked: request.headers["x-kite-test"] || null,
+                at: Date.now() - probe.epoch,
+            });
+        }
+        if (!url.startsWith("/kite-probe/")) return next();
+        const parsed = new URL(url, "http://probe");
+        const name = parsed.pathname.slice("/kite-probe/".length);
+        if (name === "reset") {
+            probe.asked = [];
+            probe.manifests = 0;
+            probe.epoch = Date.now();
+            return send("text/plain", "ok");
+        }
+        if (name === "asked") return send("application/json", JSON.stringify({ asked: probe.asked, manifests: probe.manifests }));
+        if (name === "live.m3u8") return send("application/vnd.apple.mpegurl", liveHls());
+        if (name === "live.mpd") {
+            probe.manifests++;
+            probe.asked.push({
+                clip: "live.mpd", host: request.headers.host, range: null, marked: request.headers["x-kite-test"] || null,
+                at: Date.now() - probe.epoch,
+            });
+            return send("application/dash+xml", liveDash(parsed.searchParams.get("origin") || ""));
+        }
+        if (name.startsWith("moved/")) {
+            probe.asked.push({ clip: name, host: request.headers.host, range: null, marked: null, at: Date.now() - probe.epoch });
+            response.writeHead(302, { Location: "/testmedia/" + name.slice("moved/".length) });
+            return response.end();
+        }
+        response.writeHead(404);
+        response.end();
+    };
+};
+config.plugins = (config.plugins || []).concat([{ "middleware:kiteProbe": ["factory", kiteProbe] }]);
+config.beforeMiddleware = (config.beforeMiddleware || []).concat(["kiteProbe"]);
 // ES modules need the mime type a browser accepts for a script.
 config.mime = Object.assign({}, config.mime, { "text/javascript": ["mjs"], "application/wasm": ["wasm"] });
 // The test reads this as __karma__.config.kiteWorker. Node has no such object, which is how the

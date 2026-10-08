@@ -20,6 +20,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.await
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
@@ -31,6 +32,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.js.JsAny
 import kotlin.js.JsNumber
+import kotlin.js.JsString
 import kotlin.js.Promise
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -221,8 +223,9 @@ class KitePlayerWorkerBrowserTest {
      * the manifest by its address, and the DASH door serves it to the codec module as HLS, with
      * every segment read by a synchronous request.
      *
-     * The seek goes to the last ten seconds, which is segment 31 of 35. The page's frame loop runs
-     * through all of it under the bound of the first test, 50 ms.
+     * The seek goes to the last ten seconds, which is segment 31 of 35, and the test server's list
+     * of requests shows that no segment between the start and the target was read. The page's
+     * frame loop runs through all of it under the bound of the first test, 50 ms.
      */
     @Test
     fun aDashPresentationWithSeparateSoundPlaysAndSeeksInTheWorker() = runTest(timeout = 3.minutes) {
@@ -258,10 +261,17 @@ class KitePlayerWorkerBrowserTest {
                 }
                 withTimeout(60.seconds) { player.progress.first { it.position >= 1.seconds } }
 
+                val probe = probeOf(media)
+                fetchText("$probe/reset").await<JsString>()
                 player.seek(60.seconds)
                 val after = withTimeout(60.seconds) { player.progress.first { it.position >= 61.seconds } }
                 assertTrue(after.position < 66.seconds, "the position after the seek is on the presentation's own timeline, not ${after.position}")
                 assertNull(player.state.value.error, "the presentation plays on after the seek")
+                // 60 s is in segment 31. The read-ahead of the start was at segment 7 at most, so a
+                // number between that and the target means the seek read its way there.
+                val numbers = asked(probe).requests.mapNotNull { Regex("dash/separate-\\d-(\\d+)\\.m4s").matchEntire(it.clip)?.groupValues?.get(1)?.toInt() }
+                assertTrue(numbers.any { it >= 30 }, "the segment of the target was read: $numbers")
+                assertTrue(numbers.none { it in 8..28 }, "the seek read segments before its target: $numbers")
             } finally {
                 collector.cancel()
                 player.closeAndAwait()
@@ -321,6 +331,181 @@ class KitePlayerWorkerBrowserTest {
             }
         }
     }
+
+    /**
+     * A live HLS playlist plays in the worker past what it listed at the open (#546). The test
+     * server lists two segments of `hls/ts-0` at first and one more every two seconds, and ends the
+     * playlist after the sixth, so the last four are read only if the worker loads the playlist
+     * again.
+     */
+    @Test
+    fun aLiveHlsPlaylistPlaysTheSegmentsAddedAfterTheOpen() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        withContext(Dispatchers.Default) {
+            playing(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); MediaItem("$probe/live.m3u8") }) { player ->
+                withTimeout(60.seconds) {
+                    while (asked(probe).requests.none { it.clip == "hls/ts-0-5.ts" }) delay(200)
+                }
+                withTimeout(60.seconds) { player.state.first { it.status == PlaybackStatus.Ended || it.error != null } }
+                assertNull(player.state.value.error, "the stream plays to the end the playlist gave it")
+                assertEquals((0..5).map { "hls/ts-0-$it.ts" }, asked(probe).requests.map { it.clip }.filter { it.endsWith(".ts") }.distinct(), "every segment was read, in order")
+            }
+        }
+    }
+
+    /**
+     * A live DASH manifest plays in the worker past the segments of its open (#546). The test
+     * server's manifest is `dash/separate` on the clock: its third segment is the newest at the
+     * open, and it asks to be fetched again every two seconds. Segment 7 exists eight seconds
+     * later, and the test server's clock shows that the worker asked for it then and not before.
+     */
+    @Test
+    fun aLiveDashManifestPlaysOnPastTheSegmentsOfItsOpen() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        withContext(Dispatchers.Default) {
+            playing(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); MediaItem("$probe/live.mpd") }) { player ->
+                withTimeout(60.seconds) {
+                    while (true) {
+                        val clips = asked(probe).requests.map { it.clip }
+                        if ("dash/separate-0-00007.m4s" in clips && "dash/separate-2-00007.m4s" in clips) break
+                        assertNull(player.state.value.error, "the live presentation plays on")
+                        delay(200)
+                    }
+                }
+                val all = asked(probe)
+                assertTrue(all.manifests >= 2, "the manifest was fetched again while it played")
+                // Segment 7 is whole 14 s after the manifest's start, which is 8 s after the reset.
+                val seventh = all.requests.first { it.clip == "dash/separate-0-00007.m4s" }
+                assertTrue(seventh.atMillis >= 7_500, "segment 7 was asked for ${seventh.atMillis} ms after the open, before it existed")
+                assertTrue(all.requests.first { it.clip == "dash/separate-0-00001.m4s" }.atMillis < 4_000, "the first segment was read at the open")
+                assertNull(player.state.value.error)
+            }
+        }
+    }
+
+    /**
+     * A manifest behind a redirect plays in the worker (#546): its segments are resolved against
+     * the address the manifest came from in the end, not the one that was asked.
+     */
+    @Test
+    fun aManifestBehindARedirectResolvesItsSegmentsFromWhereItLanded() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        withContext(Dispatchers.Default) {
+            playing(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); MediaItem("$probe/moved/dash/separate.mpd") }) { player ->
+                withTimeout(60.seconds) { player.progress.first { it.position >= 1.seconds } }
+                val clips = asked(probe).requests.map { it.clip }
+                assertTrue("dash/separate.mpd" in clips, "the redirect was followed: $clips")
+                assertEquals(listOf("moved/dash/separate.mpd"), clips.filter { it.startsWith("moved/") }.distinct(), "only the manifest was asked for at the address that moved")
+                assertTrue(clips.any { it.startsWith("dash/separate-") && it.endsWith(".m4s") }, "the segments came from beside the manifest: $clips")
+                assertNull(player.state.value.error)
+            }
+        }
+    }
+
+    /**
+     * The headers of an item go to the origin of its own address and to no other (#546). The test
+     * server answers on `localhost` and on `127.0.0.1`, which are two origins to a browser, and its
+     * live manifest names its segments on either.
+     */
+    @Test
+    fun theHeadersOfAnItemGoToItsOwnOriginOnly() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        val own = probe.removeSuffix("/kite-probe")
+        val other = if ("//localhost" in own) own.replace("//localhost", "//127.0.0.1") else own.replace("//127.0.0.1", "//localhost")
+        assertTrue(other != own, "the test server's address $own has no second name")
+        val headers = mapOf("X-Kite-Test" to "mine")
+        withContext(Dispatchers.Default) {
+            val elsewhere = { MediaItem("$probe/live.mpd?origin=${other.replace(":", "%3A").replace("/", "%2F")}", headers = headers) }
+            playing(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); elsewhere() }) { player ->
+                withTimeout(60.seconds) { player.progress.first { it.position > 0.seconds } }
+                val requests = asked(probe).requests
+                assertEquals(listOf("mine"), requests.filter { it.clip == "live.mpd" }.map { it.marked }.distinct(), "the manifest's own requests carry the headers")
+                val segments = requests.filter { it.clip.startsWith("dash/separate-") }
+                assertTrue(segments.isNotEmpty(), "the segments were read: $requests")
+                assertEquals(listOf(other.substringAfter("//")), segments.map { it.host }.distinct(), "the segments were read from the other origin")
+                assertEquals(listOf(""), segments.map { it.marked }.distinct(), "another origin was sent the item's headers")
+                assertNull(player.state.value.error)
+            }
+            playing(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); MediaItem("$probe/live.mpd", headers = headers) }) { player ->
+                withTimeout(60.seconds) { player.progress.first { it.position > 0.seconds } }
+                val segments = asked(probe).requests.filter { it.clip.startsWith("dash/separate-") }
+                assertTrue(segments.isNotEmpty())
+                assertEquals(listOf("mine"), segments.map { it.marked }.distinct(), "segments on the manifest's own origin carry the headers")
+            }
+        }
+    }
+
+    /**
+     * Starts a worker player, opens what [item] gives, plays it to its first picture and runs
+     * [check], then closes the player.
+     */
+    private suspend fun playing(workerUrl: String, codecUrl: String, item: suspend () -> MediaItem, check: suspend (KitePlayerWorker) -> Unit) = coroutineScope {
+        val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+        val events = Channel<PlayerEvent>(Channel.UNLIMITED)
+        val subscribed = CompletableDeferred<Unit>()
+        val collector = launch {
+            player.events.onSubscription { subscribed.complete(Unit) }.collect { events.send(it) }
+        }
+        try {
+            subscribed.await()
+            player.setViewport(320, 180, 1f)
+            player.open(item())
+            player.play()
+            withTimeout(30.seconds) {
+                while (true) {
+                    when (val event = events.receive()) {
+                        is PlayerEvent.FirstFrameRendered -> break
+                        is PlayerEvent.Failed -> throw AssertionError("the player failed before its first picture: ${event.error}")
+                        else -> Unit
+                    }
+                }
+            }
+            check(player)
+        } finally {
+            collector.cancel()
+            player.closeAndAwait()
+        }
+    }
+
+    /** The requests for clips that the test server kept since its last reset, and how often it served its live manifest. */
+    private class Asked(val requests: List<Request>, val manifests: Int)
+
+    private class Request(val clip: String, val host: String, val range: String, val marked: String, val atMillis: Long) {
+        override fun toString(): String = "$clip from $host" + (if (marked.isEmpty()) "" else " marked $marked")
+    }
+
+    private suspend fun asked(probe: String): Asked {
+        val lines = fetchAsked("$probe/asked").await<JsString>().toString().split("\n")
+        val requests = lines.dropLast(1).filter { it.isNotEmpty() }.map { line -> line.split("|").let { Request(it[0], it[1], it[2], it[3], it[4].toLong()) } }
+        return Asked(requests, lines.last().toInt())
+    }
+
+    /** The test server of karma.config.d/worker.js, which answers beside the clips of [media]. */
+    private fun probeOf(media: String): String = media.removeSuffix("/testmedia") + "/kite-probe"
 
     /**
      * The calls past open, play, pause and seek reach the worker's player and answer as
@@ -529,6 +714,16 @@ class KitePlayerWorkerBrowserTest {
     }""",
 )
 private external fun karmaWorkerConfig(): String?
+
+@JsFun("(url) => fetch(url, { cache: 'no-store' }).then((answer) => answer.text())")
+private external fun fetchText(url: String): Promise<JsString>
+
+/** The test server's list of requests: a line of clip, host, range, header value and time for each, then the manifest count. */
+@JsFun(
+    """(url) => fetch(url, { cache: 'no-store' }).then((answer) => answer.json()).then((all) =>
+        all.asked.map((one) => [one.clip, one.host, one.range || '', one.marked || '', String(one.at)].join('|')).concat([String(all.manifests)]).join("\n"))""",
+)
+private external fun fetchAsked(url: String): Promise<JsString>
 
 @JsFun(
     """(w, h) => {

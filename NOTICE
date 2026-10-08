@@ -78,12 +78,14 @@ kiteplayer-audioviz/src/jvmMain/resources/META-INF/licenses/kiteplayer-audioviz/
 
 Animation upscaler
 ------------------
-kiteplayer-output's Android renderer carries the weights of two networks of
-Anime4K v3.2, Upscale CNN x2 S and M, from release v4.0.1 of
+kiteplayer-output's Android and Apple renderers carry the weights of two
+networks of Anime4K v3.2, Upscale CNN x2 S and M, from release v4.0.1 of
 https://github.com/bloc97/Anime4K, Copyright (c) 2019-2021 bloc97, MIT.
 scripts/generate-anime4k-networks.py generates them into Anime4kNetworks.kt,
 whose header carries the license text. The text also ships inside the Android
-artifact under META-INF/licenses/kiteplayer-output/.
+artifact under META-INF/licenses/kiteplayer-output/. The Apple klibs have no
+place for it, so for those the text is in this repository, under
+kiteplayer-output/src/androidMain/resources/META-INF/licenses/kiteplayer-output/.
 
 Sample media
 ------------

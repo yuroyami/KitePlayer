@@ -24,6 +24,9 @@ kotlin {
     explicitApi()
     jvmToolchain(21)
 
+    // Keeps Kotlin's normal Apple and native hierarchy beside the explicit share below.
+    applyDefaultHierarchyTemplate()
+
     @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
     abiValidation {
         // Declaring the block is what switches tracking on.
@@ -87,6 +90,11 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        // The animation upscaler's networks and their weights, for the two GPU renderers that run
+        // them. The JVM jar and the other targets do not carry about 25 KB they cannot use.
+        val androidAndAppleMain = maybeCreate("androidAndAppleMain").apply { dependsOn(getByName("commonMain")) }
+        getByName("androidMain").dependsOn(androidAndAppleMain)
+        getByName("appleMain").dependsOn(androidAndAppleMain)
         // The web sink is a pump, so its tests need a coroutine scope to run it in.
         getByName("wasmJsTest").dependencies {
             implementation(libs.kotlinx.coroutines.test)

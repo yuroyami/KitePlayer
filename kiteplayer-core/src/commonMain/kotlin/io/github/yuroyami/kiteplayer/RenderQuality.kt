@@ -75,7 +75,9 @@ public data class RenderQuality(
      * a 720p film with [AnimationUpscaler.Fast], and several times that for 1080p with
      * [AnimationUpscaler.Quality]. A GPU that cannot render to half floats skips it.
      *
-     * The Android GPU renderer runs it. The Metal renderer ignores it until #421.
+     * The Android GPU renderer and the Metal renderer run it. The Metal renderer scales an HDR
+     * picture that it shows as HDR without it, because the networks were trained on standard
+     * range.
      */
     public val animationUpscaler: AnimationUpscaler = AnimationUpscaler.Off,
 ) {

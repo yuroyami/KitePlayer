@@ -39,21 +39,8 @@ internal class AnimationUpscaleGl private constructor(
         }
     }
 
-    /** Which texture each layer writes: a layer's texture is reused once its last reader has run. */
-    private val slotOfLayer = IntArray(network.layers.size)
-    private val slotCount: Int
-
-    init {
-        val free = ArrayDeque<Int>()
-        var slots = 0
-        for (layer in network.layers.indices) {
-            slotOfLayer[layer] = free.removeFirstOrNull() ?: slots++
-            for (earlier in 0 until layer) {
-                if (network.lastReaders[earlier] == layer) free.addLast(slotOfLayer[earlier])
-            }
-        }
-        slotCount = slots
-    }
+    private val slotOfLayer = network.slotOfLayer
+    private val slotCount = network.slotCount
 
     var width: Int = 0
         private set

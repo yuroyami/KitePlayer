@@ -421,6 +421,7 @@ public class MetalVideoRenderer internal constructor(
                 toneMapped = true,
                 extendedRangeHeadroom = extendedHeadroom,
                 measureTarget = guard?.target,
+                upscaler = Anime4kNetwork.of(quality.value.animationUpscaler),
             )
             guard?.submitted(commands, AppleHostClock.nanos())
             shownFlashFactor.value = factor
@@ -517,6 +518,7 @@ public class MetalVideoRenderer internal constructor(
                 qualityUniforms = qualityUniformsFor(meta),
                 toneMapped = true,
                 extendedRangeHeadroom = extendedHeadroom,
+                upscaler = Anime4kNetwork.of(quality.value.animationUpscaler),
             )
             shownFlashFactor.value = factor
         } catch (failure: Throwable) {
@@ -613,6 +615,12 @@ public class MetalVideoRenderer internal constructor(
     /**
      * The render-quality passes. The target is `BGRA8Unorm`, so eight bits is what the
      * dither spreads a value across; a paused picture re-encodes so a change is visible at once.
+     *
+     * The animation upscaler runs ahead of the scaling pass, as on Android: the picture is drawn at
+     * its own size, debanded there if asked, the network doubles it, and the scaling pass takes the
+     * doubled picture to the layer with the kernel, linear light, the colour controls and the
+     * dither. It runs only past the network's 1.2x rule. An HDR picture shown as HDR is scaled
+     * without it, because the networks were trained on standard range.
      */
     override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
         this.quality.value = quality

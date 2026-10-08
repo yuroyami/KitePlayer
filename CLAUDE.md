@@ -47,6 +47,8 @@ Each line is something that bit someone. Delete a line when it stops being true.
   media, hide the fixture once and watch it fail.
 - `ci.yml` cancels the run in progress on every push, and a run takes about 45 minutes. Pushing
   each commit of a long session means no run ever finishes. Hold a push until the last run is read.
+  Running an older run's failed jobs again counts as a push here: it cancels the run of a newer
+  commit that is in progress. Run them again only when nothing newer is running.
 - A CI job that fails with "Could not find" for an artifact that Maven Central serves has a broken
   Gradle cache, not a network problem. GitHub evicts cache entries once a repository holds more
   than 10 GB, and it can evict a job's dependency bundle and keep its index. The log then says

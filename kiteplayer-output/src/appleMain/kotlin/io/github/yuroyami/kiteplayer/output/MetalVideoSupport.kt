@@ -824,7 +824,32 @@ internal class MetalPipelines private constructor(
     val overlayLinear: MTLRenderPipelineStateProtocol,
     /** The picture into the flash guard's small eight bit copy, whatever the target's format. */
     val measure: MTLRenderPipelineStateProtocol,
+    private val device: MTLDeviceProtocol,
+    private val library: MTLLibraryProtocol,
 ) {
+    private val upscales = mutableMapOf<Anime4kNetwork, MetalUpscalePipelines>()
+
+    /**
+     * The animation upscaler's passes for [network], compiled the first time a picture needs them.
+     * They are a library of their own beside the renderer's, because compiling both networks with
+     * it doubled the time every renderer waits for its library, from 170 to 350 ms on an Apple M2.
+     * Throws when Metal refuses one.
+     */
+    fun upscale(network: Anime4kNetwork): MetalUpscalePipelines =
+        kotlinx.atomicfu.locks.synchronized(lock) {
+            upscales.getOrPut(network) {
+                val passes = device.compileKitePlayerLibrary(Anime4kMsl.source(network))
+                fun pass(name: String) = device.makePipeline(
+                    library, name, MTLPixelFormatRGBA16Float, blended = false, fragmentLibrary = passes,
+                )
+                MetalUpscalePipelines(
+                    network,
+                    convolutions = network.layers.indices.map { pass(Anime4kMsl.convolutionName(network, it)) },
+                    doubling = pass(Anime4kMsl.DEPTH_TO_SPACE_NAME),
+                )
+            }
+        }
+
     companion object {
         private val lock = kotlinx.atomicfu.locks.SynchronizedObject()
         private val cache = mutableMapOf<Pair<ULong, ULong>, MetalPipelines>()
@@ -842,16 +867,20 @@ internal class MetalPipelines private constructor(
                         overlayLinear = device.makePipeline(library, "kp_overlay_linear", targetFormat, blended = true),
                         measure = if (targetFormat == MTLPixelFormatBGRA8Unorm) picture
                             else device.makePicturePipeline(library, MTLPixelFormatBGRA8Unorm),
+                        device = device,
+                        library = library,
                     )
                 }
             }
     }
 }
 
-/** Compiles [METAL_SHADER_SOURCE] and reports the compiler's own words when it refuses. */
-internal fun MTLDeviceProtocol.compileKitePlayerLibrary(): MTLLibraryProtocol = memScoped {
+/** Compiles [source] and reports the compiler's own words when it refuses. */
+internal fun MTLDeviceProtocol.compileKitePlayerLibrary(
+    source: String = METAL_SHADER_SOURCE,
+): MTLLibraryProtocol = memScoped {
     val error = alloc<ObjCObjectVar<NSError?>>()
-    val library = newLibraryWithSource(METAL_SHADER_SOURCE, options = null, error = error.ptr)
+    val library = newLibraryWithSource(source, options = null, error = error.ptr)
     checkNotNull(library) {
         "Metal shader compilation failed: ${error.value?.localizedDescription ?: "no diagnostic"}"
     }
@@ -877,10 +906,12 @@ internal fun MTLDeviceProtocol.makePipeline(
     fragment: String,
     targetFormat: ULong,
     blended: Boolean,
+    /** Where [fragment] lives, when that is not the library `kp_vertex` comes from. */
+    fragmentLibrary: MTLLibraryProtocol = library,
 ): MTLRenderPipelineStateProtocol = memScoped {
     val descriptor = MTLRenderPipelineDescriptor()
     descriptor.vertexFunction = library.newFunctionWithName("kp_vertex")
-    descriptor.fragmentFunction = library.newFunctionWithName(fragment)
+    descriptor.fragmentFunction = fragmentLibrary.newFunctionWithName(fragment)
     val attachment = descriptor.colorAttachments.objectAtIndexedSubscript(0u)
     attachment.pixelFormat = targetFormat
     if (blended) {

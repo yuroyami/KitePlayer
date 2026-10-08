@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.toneMapPeakNits
@@ -76,6 +77,12 @@ internal class MetalFrameComposer(
 
     /** The picture as light, at its own size, between the two linear-light passes. Reused. */
     private var lightTexture: MTLTextureProtocol? = null
+
+    /** The animation upscaler's textures while a picture needs them. Reused, and let go when none does. */
+    private var upscale: AnimationUpscaleMetal? = null
+
+    /** Networks this device refused once. They are not tried again. */
+    private val refusedUpscalers = mutableSetOf<Anime4kNetwork>()
 
     internal val queue: MTLCommandQueueProtocol =
         checkNotNull(device.newCommandQueue()) { "Metal refused a command queue" }
@@ -162,6 +169,12 @@ internal class MetalFrameComposer(
          * [toneMapped], with no picture controls and no quality pass. Null draws nothing extra.
          */
         measureTarget: MTLTextureProtocol? = null,
+        /**
+         * The animation upscaler's network (#421), or null for none, which draws exactly as before.
+         * It runs only where the picture is drawn past [Anime4kNetwork.runsAt]: the picture is drawn
+         * at its own size, the network doubles it, and the passes below take the doubled picture.
+         */
+        upscaler: Anime4kNetwork? = null,
     ): MTLCommandBufferProtocol {
         check(!closed) { "the Metal frame composer is closed" }
         retireCompletedCommands()
@@ -190,7 +203,8 @@ internal class MetalFrameComposer(
         // must not orphan CVMetalTextureRefs the GPU will never read.
         var releaseHandedOff = false
         try {
-            val flags = qualityUniforms[0].toRawBits()
+            val quad = quadOverride
+                ?: quadUniformsFor(frame, viewportWidth, viewportHeight, scaleMode, videoTransform)
             if (measureTarget != null) {
                 // The guard counts standard range light, whatever the target's own range is.
                 val measureTone = when {
@@ -200,10 +214,17 @@ internal class MetalFrameComposer(
                 }
                 encodeMeasurePass(commands, inputs, measureTone, measureTarget)
             }
+            // With the animation upscaler, everything below draws the doubled picture, which is
+            // already RGB, in place of the planes.
+            val doubled = upscaler?.let { encodeUpscale(commands, it, inputs, quad, target, toneUniforms, qualityUniforms) }
+            val drawn = doubled?.first ?: inputs
+            val drawnTone = if (doubled == null) toneUniforms else DISABLED_TONE_UNIFORMS
+            val drawnQuality = doubled?.second ?: qualityUniforms
+            val flags = drawnQuality[0].toRawBits()
             // Linear light: first the picture as light, at its own size, into a half-float
             // texture, and then that texture scaled onto the target by the second pass.
             val light = if ((flags and LINEAR_LIGHT_FLAG) != 0) {
-                encodeLightPass(commands, inputs, toneUniforms, adjustUniforms, qualityUniforms, flags)
+                encodeLightPass(commands, drawn, drawnTone, adjustUniforms, drawnQuality, flags)
             } else {
                 null
             }
@@ -217,20 +238,18 @@ internal class MetalFrameComposer(
                 "Metal refused a render encoder"
             }
             try {
-                val quad = quadOverride
-                    ?: quadUniformsFor(frame, viewportWidth, viewportHeight, scaleMode, videoTransform)
                 quad.usePinned { pinned ->
                     encoder.setVertexBytes(pinned.addressOf(0), (quad.size * 4).toULong(), atIndex = 0u)
                 }
                 if (light != null) {
                     encoder.setRenderPipelineState(pipelines.lightScale)
-                    qualityUniforms.usePinned { pinned ->
-                        encoder.setFragmentBytes(pinned.addressOf(0), (qualityUniforms.size * 4).toULong(), atIndex = 3u)
+                    drawnQuality.usePinned { pinned ->
+                        encoder.setFragmentBytes(pinned.addressOf(0), (drawnQuality.size * 4).toULong(), atIndex = 3u)
                     }
                     encoder.setFragmentTexture(light, atIndex = 0u)
                 } else {
                     encoder.setRenderPipelineState(picturePipeline)
-                    bindPicture(encoder, inputs, toneUniforms, adjustUniforms, qualityUniforms)
+                    bindPicture(encoder, drawn, drawnTone, adjustUniforms, drawnQuality)
                 }
                 encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
 
@@ -408,8 +427,8 @@ internal class MetalFrameComposer(
         }
         try {
             encoder.setRenderPipelineState(pipelines.lightPicture)
-            LIGHT_PASS_QUAD.usePinned { pinned ->
-                encoder.setVertexBytes(pinned.addressOf(0), (LIGHT_PASS_QUAD.size * 4).toULong(), atIndex = 0u)
+            WHOLE_PICTURE_QUAD.usePinned { pinned ->
+                encoder.setVertexBytes(pinned.addressOf(0), (WHOLE_PICTURE_QUAD.size * 4).toULong(), atIndex = 0u)
             }
             val firstPass = qualityUniforms.copyOf()
             firstPass[0] = Float.fromBits(flags and (DITHER_FLAG or KERNEL_FLAG).inv())
@@ -419,6 +438,76 @@ internal class MetalFrameComposer(
             encoder.endEncoding()
         }
         return texture
+    }
+
+    /**
+     * The animation upscaler's passes: the whole stored picture at the size of its first plane into
+     * the network's source, converted and tone mapped as usual and debanded if asked, and then the
+     * network. The colour controls, the kernel, linear light and the dither wait for the passes that
+     * draw the doubled picture.
+     *
+     * Returns the doubled picture as a packed RGB input and the quality block to draw it with, or
+     * null when this picture is drawn without the network.
+     */
+    private fun encodeUpscale(
+        commands: MTLCommandBufferProtocol,
+        network: Anime4kNetwork,
+        inputs: PictureInputs,
+        quad: FloatArray,
+        target: MTLTextureProtocol,
+        toneUniforms: FloatArray,
+        qualityUniforms: FloatArray,
+    ): Pair<PictureInputs, FloatArray>? {
+        val plane = inputs.textures.first()
+        val width = plane.width.toInt()
+        val height = plane.height.toInt()
+        val flags = qualityUniforms[0].toRawBits()
+        // An HDR picture on an extended-range target is light past standard white. The networks
+        // were trained on standard range code values, so that picture is scaled without them.
+        val hdrLight = (flags and EXTENDED_RANGE_FLAG) != 0 && toneUniforms[0].toRawBits() != 0
+        val runs = network !in refusedUpscalers && !hdrLight &&
+            upscaleRunsAt(quad, width, height, target.width.toInt(), target.height.toInt())
+        if (!runs) {
+            upscale = null
+            return null
+        }
+        val passes = try {
+            upscale?.takeIf { it.pipelines.network === network && it.width == width && it.height == height }
+                ?: AnimationUpscaleMetal(device, pipelines.upscale(network), width, height).also { upscale = it }
+        } catch (failure: Exception) {
+            refusedUpscalers += network
+            upscale = null
+            KiteLog.log("KiteMetal", "the animation upscaler's ${network.name} is off on this GPU: ${failure.message}")
+            return null
+        }
+        val pass = MTLRenderPassDescriptor()
+        val attachment = pass.colorAttachments.objectAtIndexedSubscript(0u)
+        attachment.texture = passes.source
+        attachment.loadAction = platform.Metal.MTLLoadActionDontCare
+        attachment.storeAction = MTLStoreActionStore
+        val encoder = checkNotNull(commands.renderCommandEncoderWithDescriptor(pass)) {
+            "Metal refused a render encoder for the animation upscaler's source"
+        }
+        try {
+            encoder.setRenderPipelineState(pipelines.lightPicture)
+            WHOLE_PICTURE_QUAD.usePinned { pinned ->
+                encoder.setVertexBytes(pinned.addressOf(0), (WHOLE_PICTURE_QUAD.size * 4).toULong(), atIndex = 0u)
+            }
+            val sourcePass = qualityUniforms.copyOf()
+            sourcePass[0] = Float.fromBits(flags and DEBAND_FLAG)
+            bindPicture(encoder, inputs, toneUniforms, DISABLED_ADJUST_UNIFORMS, sourcePass)
+            encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
+        } finally {
+            encoder.endEncoding()
+        }
+        passes.encode(commands)
+        // Debanding ran on the source, so the kernel is free to run on the doubled picture, whose
+        // texel is what it steps by.
+        val doubledPass = qualityUniforms.copyOf()
+        doubledPass[0] = Float.fromBits(flags and DEBAND_FLAG.inv())
+        doubledPass[6] = 1f / (width * 2)
+        doubledPass[7] = 1f / (height * 2)
+        return PictureInputs(listOf(passes.output), DOUBLED_PICTURE_UNIFORMS) to doubledPass
     }
 
     /** Draws the whole stored picture, upright as stored and unadjusted, over all of [target]. */
@@ -438,8 +527,8 @@ internal class MetalFrameComposer(
         }
         try {
             encoder.setRenderPipelineState(pipelines.measure)
-            LIGHT_PASS_QUAD.usePinned { pinned ->
-                encoder.setVertexBytes(pinned.addressOf(0), (LIGHT_PASS_QUAD.size * 4).toULong(), atIndex = 0u)
+            WHOLE_PICTURE_QUAD.usePinned { pinned ->
+                encoder.setVertexBytes(pinned.addressOf(0), (WHOLE_PICTURE_QUAD.size * 4).toULong(), atIndex = 0u)
             }
             bindPicture(encoder, inputs, toneUniforms, DISABLED_ADJUST_UNIFORMS, DISABLED_QUALITY_UNIFORMS)
             encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
@@ -462,6 +551,7 @@ internal class MetalFrameComposer(
         planeSets.clear()
         overlayTextures = emptyList()
         lightTexture = null
+        upscale = null
         textureCache?.let { cache ->
             CVMetalTextureCacheFlush(cache, 0uL)
             CFRelease(cache)
@@ -717,8 +807,10 @@ private const val MAX_SOFTWARE_PLANE_SETS = 3
 
 /** The quality flag bits the composer reads. The shader's `QualityUniforms` lists them all. */
 private const val DITHER_FLAG = 1
+private const val DEBAND_FLAG = 2
 private const val KERNEL_FLAG = 4
 private const val LINEAR_LIGHT_FLAG = 8
 
-/** A quad over the whole target with the picture upright as stored: the light pass's geometry. */
-private val LIGHT_PASS_QUAD = floatArrayOf(1f, 1f, 1f, 0f, 0f, 1f, 0f, 0f, 0f, 0f)
+/** The colour block for a picture that is already RGB in one texture, as the doubled picture is. */
+private val DOUBLED_PICTURE_UNIFORMS: FloatArray =
+    MetalColorUniforms.of(io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo.Unspecified).packWith(sampleScale = 1f, mode = 2)

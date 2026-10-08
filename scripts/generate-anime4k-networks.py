@@ -28,7 +28,7 @@ NETWORKS = [
 OUTPUT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "..",
-    "kiteplayer-output/src/androidMain/kotlin/io/github/yuroyami/kiteplayer/output/Anime4kNetworks.kt",
+    "kiteplayer-output/src/androidAndAppleMain/kotlin/io/github/yuroyami/kiteplayer/output/Anime4kNetworks.kt",
 )
 WHEN = "//!WHEN OUTPUT.w MAIN.w / 1.200 > OUTPUT.h MAIN.h / 1.200 > *"
 DEPTH_TO_SPACE_BODY = """vec4 hook() {

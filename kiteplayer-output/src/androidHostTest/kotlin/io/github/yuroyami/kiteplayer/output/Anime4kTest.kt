@@ -98,6 +98,15 @@ class Anime4kTest {
         assertContentEquals(intArrayOf(7, 7, 7, 7, 7, 7, 7, 8), Anime4kNetworks.medium.lastReaders)
     }
 
+    /** The small network swaps between two textures. The medium one keeps seven for its merge, and one more. */
+    @Test
+    fun eachLayerWritesATextureNoLaterReaderStillNeeds() {
+        assertContentEquals(intArrayOf(0, 1, 0, 1), Anime4kNetworks.small.slotOfLayer)
+        assertEquals(2, Anime4kNetworks.small.slotCount)
+        assertContentEquals(intArrayOf(0, 1, 2, 3, 4, 5, 6, 7), Anime4kNetworks.medium.slotOfLayer)
+        assertEquals(8, Anime4kNetworks.medium.slotCount)
+    }
+
     @Test
     fun theGeneratedShadersCarryTheOriginalsNumbers() {
         for (network in listOf(Anime4kNetworks.small, Anime4kNetworks.medium)) {

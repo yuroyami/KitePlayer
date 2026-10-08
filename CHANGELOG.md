@@ -355,8 +355,14 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   GPU renderer runs it when the picture is drawn at more than 1.2 times its own size, doubling the
   picture before the scaler takes it the rest of the way, and skips it, with one log line, on a GPU
   that cannot draw into half floats. It is off by default and costs memory, about 50 MB for a 720p
-  film with `Fast`. The Metal renderer does not run it yet (#421). `AnimationUpscaleDeviceTest`
-  checks both tiers against a CPU reference and logs what a frame costs on the device.
+  film with `Fast`. `AnimationUpscaleDeviceTest` checks both tiers against a CPU reference and logs
+  what a frame costs on the device.
+- The Metal renderer runs `RenderQuality.animationUpscaler` (#421), so it works on Mac, iPhone and
+  iPad as it does on Android: the picture is drawn at its own size, the network doubles it, and
+  the scaler, linear light, the colour controls and the dither then run on the doubled picture. It
+  runs only when the picture is drawn at more than 1.2 times its own size, and an HDR picture
+  shown as HDR is scaled without it. On an Apple M2, doubling a 1280x720 picture to 2560x1440
+  takes about 3 ms of GPU time a frame with `Fast` and 6 to 8 ms with `Quality`.
 - `PlayerStreamInfo` and `TrackInfo` gain `dolbyVision`, null for a stream that is not Dolby
   Vision, so their constructors and `copy` change (#470). Its `DolbyVisionInfo` holds the profile,
   the level and what the base layer is on its own, so an application can show "Dolby Vision 8.1"

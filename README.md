@@ -116,7 +116,8 @@ video decoder.
   mirrors on top.
 - Fit, fill and stretch, zoom, pan and a forced aspect ratio. Brightness, contrast, saturation and
   hue.
-- Dithering, debanding and a sharper scaler, on Apple's Metal renderer and Android's GPU renderer.
+- Dithering, debanding, a sharper scaler and an upscaler for animation, on Apple's Metal renderer
+  and Android's GPU renderer.
 - A native view on each platform, or Compose with two paths: the platform's video view, or video
   drawn by Compose that takes clipping, alpha and shared element transitions.
 - Frame stepping, screenshots to PNG or JPEG, and thumbnails.

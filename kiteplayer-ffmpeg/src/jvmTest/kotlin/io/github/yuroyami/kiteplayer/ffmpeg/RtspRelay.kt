@@ -28,12 +28,22 @@ import kotlin.concurrent.thread
  *
  * PAUSE stops sending to that player alone, and PLAY starts it again with the newest reports, while
  * the publisher, the other players and the reports carry on. A second PLAY changes nothing, so no
- * player is ever sent a packet twice (#555).
+ * player is ever sent a packet twice (#555). A paused player keeps its UDP sockets until its
+ * connection ends or the relay closes.
  */
-internal class RtspRelay : AutoCloseable {
+internal class RtspRelay(
+    private val onReceiverReleased: () -> Unit = {},
+    private val wrapOutput: (OutputStream) -> OutputStream = { it },
+) : AutoCloseable {
     private val loopback = InetAddress.getLoopbackAddress()
     private val server = ServerSocket(0, 50, loopback)
-    private val sockets = CopyOnWriteArrayList<Socket>()
+    // Admission and resource ownership are independent of active packet delivery. In particular,
+    // PAUSE removes a player from delivery while its UDP sockets remain owned until release.
+    private val ownership = Any()
+    private val closing = Any()
+    private var closed = false
+    private val sockets = mutableSetOf<Socket>()
+    private val receivers = mutableSetOf<Player>()
     private val players = CopyOnWriteArrayList<Player>()
     private val announced = CountDownLatch(1)
 
@@ -65,13 +75,17 @@ internal class RtspRelay : AutoCloseable {
 
     val url: String get() = "rtsp://127.0.0.1:${server.localPort}/live"
 
-    init {
-        thread(isDaemon = true, name = "rtsp-relay-accept") {
-            runCatching {
-                while (true) {
-                    val socket = server.accept()
-                    sockets += socket
+    private val acceptWorker = thread(isDaemon = true, name = "rtsp-relay-accept") {
+        runCatching {
+            while (true) {
+                val socket = server.accept()
+                val admitted = synchronized(ownership) {
+                    if (closed) false else sockets.add(socket)
+                }
+                if (admitted) {
                     thread(isDaemon = true, name = "rtsp-relay-connection") { runCatching { serve(socket) } }
+                } else {
+                    socket.close()
                 }
             }
         }
@@ -96,89 +110,111 @@ internal class RtspRelay : AutoCloseable {
     }
 
     private fun serve(socket: Socket) {
-        val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
-        val output = socket.getOutputStream()
-        var publisher = false
         var player: Player? = null
-        while (true) {
-            val first = input.read()
-            if (first < 0) break
-            if (first == '$'.code) {
-                val channel = input.readUnsignedByte()
-                val length = input.readUnsignedShort()
-                val payload = ByteArray(length)
-                input.readFully(payload)
-                if (publisher) fromPublisher(channel, payload)
-                continue
-            }
-            val head = StringBuilder().append(first.toChar())
-            while (!head.endsWith("\r\n\r\n")) {
-                val next = input.read()
-                if (next < 0) return
-                head.append(next.toChar())
-            }
-            val lines = head.trim().lines()
-            val (method, address) = lines.first().split(' ').let { it[0] to it.getOrElse(1) { "" } }
-            val headers = lines.drop(1).associate { line -> line.substringBefore(':').trim().lowercase() to line.substringAfter(':').trim() }
-            val body = headers["content-length"]?.toInt()?.let { length -> ByteArray(length).also(input::readFully).decodeToString() }
-            val cseq = headers["cseq"] ?: "0"
-            when (method) {
-                "OPTIONS" -> reply(output, cseq, "Public: OPTIONS, DESCRIBE, ANNOUNCE, SETUP, PLAY, PAUSE, RECORD, TEARDOWN, GET_PARAMETER")
-                "ANNOUNCE" -> {
-                    publisher = true
-                    sdp = body
-                    announced.countDown()
-                    reply(output, cseq)
+        try {
+            val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
+            val output = wrapOutput(socket.getOutputStream())
+            var publisher = false
+            while (true) {
+                val first = input.read()
+                if (first < 0) break
+                if (first == '$'.code) {
+                    val channel = input.readUnsignedByte()
+                    val length = input.readUnsignedShort()
+                    val payload = ByteArray(length)
+                    input.readFully(payload)
+                    if (publisher) fromPublisher(channel, payload)
+                    continue
                 }
-                "DESCRIBE" -> {
-                    announced.await(15, TimeUnit.SECONDS)
-                    val description = checkNotNull(sdp) { "nothing was published" }
-                    reply(output, cseq, "Content-Base: $url/", "Content-Type: application/sdp", body = description)
+                val head = StringBuilder().append(first.toChar())
+                while (!head.endsWith("\r\n\r\n")) {
+                    val next = input.read()
+                    if (next < 0) return
+                    head.append(next.toChar())
                 }
-                "SETUP" -> {
-                    val stream = Regex("streamid=(\\d+)").find(address)?.groupValues?.get(1)?.toInt() ?: 0
-                    val transport = headers["transport"].orEmpty()
-                    if (publisher) {
-                        val channel = Regex("interleaved=(\\d+)").find(transport)?.groupValues?.get(1)?.toInt() ?: (2 * stream)
-                        synchronized(publisherChannels) { publisherChannels[stream] = channel }
-                        reply(output, cseq, "Transport: $transport", SESSION)
-                    } else {
-                        val joining = player ?: Player(output).also { player = it }
-                        reply(output, cseq, "Transport: ${joining.setUp(stream, transport)}", SESSION)
+                val lines = head.trim().lines()
+                val (method, address) = lines.first().split(' ').let { it[0] to it.getOrElse(1) { "" } }
+                val headers = lines.drop(1).associate { line -> line.substringBefore(':').trim().lowercase() to line.substringAfter(':').trim() }
+                val body = headers["content-length"]?.toInt()?.let { length -> ByteArray(length).also(input::readFully).decodeToString() }
+                val cseq = headers["cseq"] ?: "0"
+                when (method) {
+                    "OPTIONS" -> reply(output, cseq, "Public: OPTIONS, DESCRIBE, ANNOUNCE, SETUP, PLAY, PAUSE, RECORD, TEARDOWN, GET_PARAMETER")
+                    "ANNOUNCE" -> {
+                        publisher = true
+                        sdp = body
+                        announced.countDown()
+                        reply(output, cseq)
                     }
+                    "DESCRIBE" -> {
+                        announced.await(15, TimeUnit.SECONDS)
+                        val description = checkNotNull(sdp) { "nothing was published" }
+                        reply(output, cseq, "Content-Base: $url/", "Content-Type: application/sdp", body = description)
+                    }
+                    "SETUP" -> {
+                        val stream = Regex("streamid=(\\d+)").find(address)?.groupValues?.get(1)?.toInt() ?: 0
+                        val transport = headers["transport"].orEmpty()
+                        if (publisher) {
+                            val channel = Regex("interleaved=(\\d+)").find(transport)?.groupValues?.get(1)?.toInt() ?: (2 * stream)
+                            synchronized(publisherChannels) { publisherChannels[stream] = channel }
+                            reply(output, cseq, "Transport: $transport", SESSION)
+                        } else {
+                            val answer = synchronized(ownership) {
+                                check(!closed) { "the relay is closed" }
+                                val joining = player ?: Player(output).also {
+                                    player = it
+                                    receivers += it
+                                }
+                                // No SETUP may allocate after close has captured its owners.
+                                joining.setUp(stream, transport)
+                            }
+                            reply(output, cseq, "Transport: $answer", SESSION)
+                        }
+                    }
+                    "RECORD" -> reply(output, cseq, SESSION)
+                    "PLAY" -> {
+                        synchronized(held) {
+                            // A resumed connection owns the same receiver. Repeating PLAY must not
+                            // make every later packet reach that receiver more than once.
+                            val joining = synchronized(ownership) {
+                                check(!closed) { "the relay is closed" }
+                                player?.takeIf { players.addIfAbsent(it) }
+                            }
+                            reply(output, cseq, SESSION, "Range: npt=0.000-")
+                            joining?.let { receiver ->
+                                reports.forEach { (stream, report) -> receiver.send(2 * stream + 1, report) }
+                            }
+                        }
+                    }
+                    "PAUSE" -> {
+                        synchronized(held) {
+                            // Only this receiver stops. The publisher and other players keep going,
+                            // and reports continue to refresh for the receiver's next PLAY.
+                            player?.let(players::remove)
+                            reply(output, cseq, SESSION)
+                        }
+                    }
+                    "TEARDOWN" -> {
+                        reply(output, cseq, SESSION)
+                        break
+                    }
+                    else -> reply(output, cseq, SESSION)
                 }
-                "RECORD" -> reply(output, cseq, SESSION)
-                "PLAY" -> {
-                    reply(output, cseq, SESSION, "Range: npt=0.000-")
-                    player?.let(::play)
+            }
+        } finally {
+            // Closing the TCP connection first also releases a publisher blocked while forwarding
+            // to it. Resource close must not wait for that sender while leaving its socket open.
+            runCatching { socket.close() }
+            val owned = player
+            try {
+                owned?.close()
+            } finally {
+                owned?.let(players::remove)
+                synchronized(ownership) {
+                    if (owned != null) receivers.remove(owned)
+                    sockets.remove(socket)
                 }
-                "PAUSE" -> {
-                    // Stopped before the reply, as a camera does: nothing reaches a player after it
-                    // hears that its pause was accepted.
-                    player?.let { paused -> synchronized(held) { players.remove(paused) } }
-                    reply(output, cseq, SESSION)
-                }
-                "TEARDOWN" -> {
-                    reply(output, cseq, SESSION)
-                    break
-                }
-                else -> reply(output, cseq, SESSION)
             }
         }
-        player?.let(players::remove)
-        player?.close()
-        socket.close()
-    }
-
-    /**
-     * Starts sending to [joining], with each stream's newest sender report first, once per start: a
-     * PLAY from a player that is already playing changes nothing. The engine pauses a live source it
-     * has opened and plays it again, so PLAY, PAUSE, PLAY is every player's start (#555).
-     */
-    private fun play(joining: Player) = synchronized(held) {
-        if (joining in players) return@synchronized
-        reports.forEach { (stream, report) -> joining.send(2 * stream + 1, report) }
-        players += joining
     }
 
     private fun fromPublisher(channel: Int, packet: ByteArray) {
@@ -253,14 +289,32 @@ internal class RtspRelay : AutoCloseable {
         }
     }
 
-    override fun close() {
-        server.close()
-        players.forEach(Player::close)
-        sockets.forEach { runCatching { it.close() } }
+    override fun close(): Unit = synchronized(closing) {
+        val owned = synchronized(ownership) {
+            if (closed) return
+            closed = true
+            sockets.toList() to receivers.toList()
+        }
+        runCatching { server.close() }
+        // Do not take held or a receiver lock before unblocking TCP writers and readers.
+        owned.first.forEach { runCatching { it.close() } }
+        owned.second.forEach(Player::close)
+        players.clear()
+        synchronized(ownership) {
+            sockets.removeAll(owned.first.toSet())
+            receivers.removeAll(owned.second.toSet())
+        }
+        // An accept may have returned just before admission closed. The accept worker rejects
+        // and closes that connection; join it so no unregistered socket outlives close's return.
+        acceptWorker.join(3_000)
+        check(!acceptWorker.isAlive) { "the RTSP accept worker did not stop" }
     }
 
     /** One player's session: where each stream's packets go, over its TCP connection or by UDP. */
     private inner class Player(private val output: OutputStream) {
+        private val state = Any()
+        private var closed = false
+
         /** Over TCP, the player's interleaved channel for each stream's RTP. */
         private val channels = mutableMapOf<Int, Int>()
 
@@ -268,18 +322,27 @@ internal class RtspRelay : AutoCloseable {
         private val ports = mutableMapOf<Int, Int>()
         private val udp = mutableMapOf<Int, Pair<DatagramSocket, DatagramSocket>>()
 
-        fun setUp(stream: Int, transport: String): String {
+        fun setUp(stream: Int, transport: String): String = synchronized(state) {
+            check(!closed) { "the receiver is closed" }
             val interleaved = Regex("interleaved=(\\d+)").find(transport)
             if ("TCP" in transport.uppercase() || interleaved != null) {
                 val channel = interleaved?.groupValues?.get(1)?.toInt() ?: (2 * stream)
+                udp.remove(stream)?.let { (rtp, rtcp) -> rtp.close(); rtcp.close() }
+                ports.remove(stream)
                 channels[stream] = channel
                 return "RTP/AVP/TCP;unicast;interleaved=$channel-${channel + 1}"
             }
             val client = Regex("client_port=(\\d+)").find(transport)!!.groupValues[1].toInt()
             val rtp = DatagramSocket(0, loopback)
-            val rtcp = DatagramSocket(0, loopback)
+            val rtcp = try {
+                DatagramSocket(0, loopback)
+            } catch (failure: Throwable) {
+                rtp.close()
+                throw failure
+            }
+            udp.put(stream, rtp to rtcp)?.let { (oldRtp, oldRtcp) -> oldRtp.close(); oldRtcp.close() }
+            channels.remove(stream)
             ports[stream] = client
-            udp[stream] = rtp to rtcp
             return "RTP/AVP/UDP;unicast;client_port=$client-${client + 1};server_port=${rtp.localPort}-${rtcp.localPort}"
         }
 
@@ -287,7 +350,13 @@ internal class RtspRelay : AutoCloseable {
         fun send(tagged: Int, packet: ByteArray) {
             val stream = tagged / 2
             val rtcp = tagged % 2 == 1
-            channels[stream]?.let { channel ->
+            // Copy routing under the state lock, but never hold it during a possibly blocked send.
+            // close can then close the sockets and wait only for actual resource cleanup.
+            val destination = synchronized(state) {
+                if (closed) return
+                Triple(channels[stream], ports[stream], udp[stream])
+            }
+            destination.first?.let { channel ->
                 val frame = ByteArray(4 + packet.size)
                 frame[0] = '$'.code.toByte()
                 frame[1] = (channel + if (rtcp) 1 else 0).toByte()
@@ -302,13 +371,23 @@ internal class RtspRelay : AutoCloseable {
                 }
                 return
             }
-            val port = ports[stream] ?: return
-            val (rtpSocket, rtcpSocket) = udp[stream] ?: return
+            val port = destination.second ?: return
+            val (rtpSocket, rtcpSocket) = destination.third ?: return
             val target = if (rtcp) port + 1 else port
             runCatching { (if (rtcp) rtcpSocket else rtpSocket).send(DatagramPacket(packet, packet.size, loopback, target)) }
         }
 
-        fun close() = udp.values.forEach { (rtp, rtcp) -> rtp.close(); rtcp.close() }
+        fun close(): Unit = synchronized(state) {
+            if (closed) return
+            closed = true
+            udp.values.forEach { (rtp, rtcp) -> rtp.close(); rtcp.close() }
+            udp.clear()
+            ports.clear()
+            channels.clear()
+            // This observer runs only after every socket is closed, once per receiver. Holding
+            // state until it returns also makes a competing close wait for completed release.
+            onReceiverReleased()
+        }
     }
 
     private companion object {

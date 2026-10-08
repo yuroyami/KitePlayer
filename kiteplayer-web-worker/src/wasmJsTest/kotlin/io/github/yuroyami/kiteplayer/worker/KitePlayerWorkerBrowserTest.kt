@@ -268,6 +268,53 @@ class KitePlayerWorkerBrowserTest {
     }
 
     /**
+     * WebM DASH plays in the worker (#546), in both forms a packager writes. `dash/webm.mpd` names
+     * its segments with a template. `dash/webm-ondemand.mpd` names one file for the picture and one
+     * for the sound, and the DASH door reads each file's `Cues` to find its clusters, with a
+     * request for that byte range alone, and then serves each cluster as a byte range of the file.
+     */
+    @Test
+    fun webmDashPlaysInTheWorkerFromATemplateAndFromAnIndex() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        withContext(Dispatchers.Default) {
+            for (manifest in listOf("webm.mpd", "webm-ondemand.mpd")) {
+                val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+                val events = Channel<PlayerEvent>(Channel.UNLIMITED)
+                val subscribed = CompletableDeferred<Unit>()
+                val collector = launch {
+                    player.events.onSubscription { subscribed.complete(Unit) }.collect { events.send(it) }
+                }
+                try {
+                    subscribed.await()
+                    player.setViewport(320, 180, 1f)
+                    player.open(MediaItem("$media/dash/$manifest"))
+                    val opened = withTimeout(30.seconds) { player.state.first { it.duration != null } }
+                    assertTrue(opened.seekable, "$manifest can seek")
+                    assertEquals(setOf(TrackKind.Video, TrackKind.Audio), opened.tracks.all.map { it.kind }.toSet(), "$manifest has a picture and a sound")
+
+                    player.play()
+                    withTimeout(30.seconds) {
+                        while (events.receive() !is PlayerEvent.FirstFrameRendered) Unit
+                    }
+                    withTimeout(60.seconds) { player.progress.first { it.position >= 1.seconds } }
+                    val half = assertNotNull(opened.duration) / 2
+                    player.seek(half)
+                    withTimeout(60.seconds) { player.progress.first { it.position >= half + 1.seconds } }
+                    assertNull(player.state.value.error, "$manifest plays on after the seek")
+                } finally {
+                    collector.cancel()
+                    player.closeAndAwait()
+                }
+            }
+        }
+    }
+
+    /**
      * The calls past open, play, pause and seek reach the worker's player and answer as
      * `KitePlayer` does: tracks, a track selection, an external subtitle, setters seen in the
      * state, a setter the player refuses, a queue, and a dump. `subbed.mkv` holds h264, AAC and an

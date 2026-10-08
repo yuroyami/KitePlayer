@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.Playlists
 import io.github.yuroyami.kiteplayer.mp4.Fmp4
 import io.github.yuroyami.kiteplayer.mp4.Fmp4Rewrite
+import io.github.yuroyami.kiteplayer.webm.Webm
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -28,6 +29,11 @@ import kotlin.math.abs
  * first initialization, with its own variant's parameter sets in band, as [Fmp4Rewrite] says. The
  * first variant's segments are written that way too, because a decoder that has played another
  * variant keeps that one's parameter sets until it is given others.
+ *
+ * FFmpeg's Matroska reader keeps the first header too. A WebM cluster names its track by number
+ * and counts time in the header's scale, so the clusters of another variant follow as they are
+ * when those agree, and with the first header's track numbers written in when only those differ
+ * (#566).
  *
  * A segment can only be written again from its plain bytes. So the switch decrypts the AES-128
  * segments of an MP4 stream itself, from the first one, and shows FFmpeg a playlist with no key.
@@ -291,13 +297,13 @@ internal class HlsVariantSwitch(
     /** The initialization FFmpeg read first, which its MP4 reader keeps for the whole stream. */
     private var init: HlsInit? = null
 
-    /** The tracks of [init], read at the first move of an MP4 stream. */
-    private var baseTracks: List<Fmp4.Track>? = null
+    /** What [init] holds, read at the first move of a stream that has one. */
+    private var base: Held? = null
 
-    /** How each variant's MP4 segments are written for [init], for the variants a move has checked. */
-    private val plans = arrayOfNulls<List<Fmp4Rewrite.Plan>>(addresses.size)
+    /** How each variant's segments are written for [init], for the variants a move has checked. */
+    private val fits = arrayOfNulls<Fit>(addresses.size)
 
-    /** True once an MP4 stream has moved, from when every segment is written again. */
+    /** True once a stream with an initialization has moved, from when its segments are written again. */
     private var rewrites = false
 
     /** The segment served last and its variant, or null when it was served as it is. */
@@ -308,6 +314,18 @@ internal class HlsVariantSwitch(
     private val keyLock = Mutex()
 
     private class Loaded(val variant: Int, val playlist: HlsMediaPlaylist)
+
+    /** What an initialization holds: the tracks of an MP4 one, or the header of a WebM one. */
+    private sealed interface Held {
+        class Tracks(val tracks: List<Fmp4.Track>) : Held
+        class Header(val header: Webm.Header) : Held
+    }
+
+    /** How a variant's segments are written for [init]: MP4 fragments by plans, WebM clusters by track numbers. */
+    private sealed interface Fit {
+        class Plans(val plans: List<Fmp4Rewrite.Plan>) : Fit
+        class Numbers(val numbers: Map<Long, Long>) : Fit
+    }
 
     /** The variant whose segments FFmpeg is given from the next one it asks for. */
     val selected: Int get() = target.value
@@ -340,8 +358,9 @@ internal class HlsVariantSwitch(
      * Moves the stream to the variant at [index], or to the one the player would choose for null.
      * True when the next segment FFmpeg asks for is that variant's. False when the stream must
      * open again for it: the variants do not share their segments, their codecs or their sound
-     * differ, the playlist is one this switch does not serve, or the segments are MP4 in another
-     * codec than H.264, HEVC, AV1 and VP9, or laid out in other tracks.
+     * differ, the playlist is one this switch does not serve, the segments are MP4 in another
+     * codec than H.264, HEVC, AV1 and VP9, or laid out in other tracks, or they are WebM whose
+     * headers count time in different scales.
      */
     suspend fun request(index: Int?): Boolean = lock.withLock {
         val current = listed ?: return false
@@ -375,28 +394,33 @@ internal class HlsVariantSwitch(
     }
 
     /**
-     * Makes the plans that write the MP4 segments of [next], and of [current] when it has none
-     * yet, for the first initialization. False when either cannot be written for it.
+     * Finds how the segments of [next], and of [current] when that is not known yet, are written
+     * for the first initialization. False when either cannot be written for it.
      */
     private suspend fun planned(current: Loaded, next: Loaded): Boolean {
-        val base = baseTracks ?: tracksOf(init ?: return false).also { baseTracks = it }
+        val base = base ?: held(init ?: return false).also { base = it }
         for (loaded in listOf(current, next)) {
-            if (plans[loaded.variant] != null) continue
+            if (fits[loaded.variant] != null) continue
             val own = loaded.playlist.init ?: return false
-            val tracks = if (own.address == init?.address && own.offset == init?.offset && own.length == init?.length) base else tracksOf(own)
-            plans[loaded.variant] = plansFor(tracks, base) ?: return false
+            val held = if (own.address == init?.address && own.offset == init?.offset && own.length == init?.length) base else held(own)
+            fits[loaded.variant] = when {
+                held is Held.Tracks && base is Held.Tracks -> plansFor(held.tracks, base.tracks)?.let(Fit::Plans)
+                held is Held.Header && base is Held.Header -> Webm.numbersFor(held.header, base.header)?.let(Fit::Numbers)
+                else -> null
+            } ?: return false
         }
         return true
     }
 
-    /** The tracks of the initialization [of], read whole. */
-    private suspend fun tracksOf(of: HlsInit): List<Fmp4.Track> {
-        val reader = opened(of) ?: return emptyList()
-        return try {
-            Fmp4.tracks(readWhole(reader, MAX_INIT_BYTES, of.address))
+    /** What the initialization [of] holds, read whole. */
+    private suspend fun held(of: HlsInit): Held {
+        val reader = opened(of) ?: return Held.Tracks(emptyList())
+        val bytes = try {
+            readWhole(reader, MAX_INIT_BYTES, of.address)
         } finally {
             reader.close()
         }
+        return if (Webm.isWebm(bytes)) Held.Header(Webm.header(bytes)) else Held.Tracks(Fmp4.tracks(bytes))
     }
 
     /** A reader of the initialization [of], in plain bytes. */
@@ -480,6 +504,7 @@ internal class HlsVariantSwitch(
     private suspend fun segment(address: String): MediaIo? {
         val sequence = sequenceOf(address) ?: return null
         var plan: List<Fmp4Rewrite.Plan>? = null
+        var numbers: Map<Long, Long>? = null
         var encrypted = false
         val segment = lock.withLock {
             val variant = target.value
@@ -489,10 +514,16 @@ internal class HlsVariantSwitch(
                 ?: find(sequence)
                 ?: return null
             if (rewrites) {
-                // Anything but the segment after the last one written, of the same variant, is a join.
-                val joined = written != (sequence - 1 to found.first)
-                plan = (plans[found.first] ?: return null).map { Fmp4Rewrite.Plan(it.source, it.target, it.shiftMicros, it.endMicros, joined) }
-                written = sequence to found.first
+                when (val fit = fits[found.first] ?: return null) {
+                    is Fit.Plans -> {
+                        // Anything but the segment after the last one written, of the same variant, is a join.
+                        val joined = written != (sequence - 1 to found.first)
+                        plan = fit.plans.map { Fmp4Rewrite.Plan(it.source, it.target, it.shiftMicros, it.endMicros, joined) }
+                        written = sequence to found.first
+                    }
+                    // Clusters whose track numbers are the first header's own are served as they are.
+                    is Fit.Numbers -> numbers = fit.numbers.takeIf { map -> map.any { it.key != it.value } }
+                }
             }
             // FFmpeg decrypts a segment of a playlist with no initialization, whose key it was shown.
             encrypted = init != null && found.second.key.isNotEmpty()
@@ -500,7 +531,8 @@ internal class HlsVariantSwitch(
         }
         val reader = slice(openAddress(segment.address), segment.offset, segment.length) ?: return null
         val plans = plan
-        if (plans == null && !encrypted) return reader
+        val renumbered = numbers
+        if (plans == null && renumbered == null && !encrypted) return reader
         val bytes = try {
             readWhole(reader, MAX_SEGMENT_BYTES, segment.address)
         } finally {
@@ -511,7 +543,12 @@ internal class HlsVariantSwitch(
         } else {
             bytes
         }
-        return BytesMediaIo(if (plans == null) plain else Fmp4Rewrite.rewrite(plain, plans), segment.address)
+        val served = when {
+            plans != null -> Fmp4Rewrite.rewrite(plain, plans)
+            renumbered != null -> Webm.retrack(plain, renumbered)
+            else -> plain
+        }
+        return BytesMediaIo(served, segment.address)
     }
 
     /** The playlist of [variant] read again, kept as its newest, or null when it cannot be read now. */

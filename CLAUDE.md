@@ -403,6 +403,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
   presentation carries its own Period's parameter sets in band, even a Period whose
   initialization is the stream's own: without them a third Period decoded with the second's
   picture size (#403).
+- The playlist of a DASH track that joins Periods names one initialization for fMP4 or WebM, that of
+  the first Period listed, and the reader writes every segment for it. The variant switch then
+  writes the segment again for the first variant's initialization, in that order. A playlist that
+  names each Period's own initialization is one the switch does not serve, so every quality change
+  opens the stream again (#566).
 - Each live protocol in FFmpeg takes its read timeout under its own name, and without one it
   waits for a silent sender for ever: http, tcp and rtmp take `rw_timeout`, udp takes its own
   `timeout`, and rtsp takes the demuxer's `timeout`. The rtp reader waits for its first packet

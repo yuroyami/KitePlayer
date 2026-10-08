@@ -4832,3 +4832,32 @@ public final class io/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride 
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/webm/Webm {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/webm/Webm;
+	public final fun header ([B)Lio/github/yuroyami/kiteplayer/webm/Webm$Header;
+	public final fun isWebm ([B)Z
+	public final fun joins (Lio/github/yuroyami/kiteplayer/webm/Webm$Track;Lio/github/yuroyami/kiteplayer/webm/Webm$Track;)Z
+	public final fun numbersFor (Lio/github/yuroyami/kiteplayer/webm/Webm$Header;Lio/github/yuroyami/kiteplayer/webm/Webm$Header;)Ljava/util/Map;
+	public final fun retrack ([BLjava/util/Map;)[B
+}
+
+public final class io/github/yuroyami/kiteplayer/webm/Webm$Header {
+	public fun <init> (JLjava/util/List;)V
+	public final fun getTimestampScaleNanos ()J
+	public final fun getTracks ()Ljava/util/List;
+}
+
+public final class io/github/yuroyami/kiteplayer/webm/Webm$Track {
+	public fun <init> (JJLjava/lang/String;[BLjava/lang/Double;Ljava/lang/Long;)V
+	public final fun getChannels ()Ljava/lang/Long;
+	public final fun getCodecId ()Ljava/lang/String;
+	public final fun getCodecPrivate ()[B
+	public final fun getNumber ()J
+	public final fun getSamplingFrequency ()Ljava/lang/Double;
+	public final fun getType ()J
+}
+
+public final class io/github/yuroyami/kiteplayer/webm/WebmUnsupportedException : java/lang/IllegalArgumentException {
+	public fun <init> (Ljava/lang/String;)V
+}
+

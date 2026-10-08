@@ -319,6 +319,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   each step up that did not last. The new `PlaybackWarning.VariantLowered` reports a step down, so
   a `when` that lists every warning needs the new branch. A variant that the caller selected
   stays, and a step up never passes `DemuxPolicy.maxBitrate` or `maxVideoHeight`.
+- A variant change happens in place where the variants share their segment boundaries and their
+  codec (#464, #566). The stream stays open and the next segment comes from the new variant, so
+  the picture changes quality with no pause. MPEG-TS segments, fMP4 segments in H.264, HEVC, AV1
+  or VP9, and WebM segments change this way, and so does a DASH manifest, one of several Periods
+  too. A change to another codec, profile, bit depth or dynamic range still opens the stream again.
 - `MediaIo.networkBitsPerSecond` reports how fast the network delivers a reader's bytes. The
   default answers null. `KtorMediaIo` measures it on its downloads, with the time a response
   waits for the player left out, and the step up reads it (#376).

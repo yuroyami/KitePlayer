@@ -2488,6 +2488,10 @@ final class io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride { // io
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.webm/WebmUnsupportedException : kotlin/IllegalArgumentException { // io.github.yuroyami.kiteplayer.webm/WebmUnsupportedException|null[0]
+    constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.webm/WebmUnsupportedException.<init>|<init>(kotlin.String){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/AudioClockSnapshot { // io.github.yuroyami.kiteplayer/AudioClockSnapshot|null[0]
     final val generation // io.github.yuroyami.kiteplayer/AudioClockSnapshot.generation|{}generation[0]
         final fun <get-generation>(): io.github.yuroyami.kiteplayer/Generation // io.github.yuroyami.kiteplayer/AudioClockSnapshot.generation.<get-generation>|<get-generation>(){}[0]
@@ -5823,6 +5827,40 @@ final object io.github.yuroyami.kiteplayer.spi/SubtitleTypesetters { // io.githu
 final object io.github.yuroyami.kiteplayer.subtitle/CueSelector { // io.github.yuroyami.kiteplayer.subtitle/CueSelector|null[0]
     final fun activeAt(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/Long): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue> // io.github.yuroyami.kiteplayer.subtitle/CueSelector.activeAt|activeAt(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.Long){}[0]
     final fun nextChangeAfter(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/Long): kotlin/Long? // io.github.yuroyami.kiteplayer.subtitle/CueSelector.nextChangeAfter|nextChangeAfter(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.Long){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.webm/Webm { // io.github.yuroyami.kiteplayer.webm/Webm|null[0]
+    final fun header(kotlin/ByteArray): io.github.yuroyami.kiteplayer.webm/Webm.Header // io.github.yuroyami.kiteplayer.webm/Webm.header|header(kotlin.ByteArray){}[0]
+    final fun isWebm(kotlin/ByteArray): kotlin/Boolean // io.github.yuroyami.kiteplayer.webm/Webm.isWebm|isWebm(kotlin.ByteArray){}[0]
+    final fun joins(io.github.yuroyami.kiteplayer.webm/Webm.Track, io.github.yuroyami.kiteplayer.webm/Webm.Track): kotlin/Boolean // io.github.yuroyami.kiteplayer.webm/Webm.joins|joins(io.github.yuroyami.kiteplayer.webm.Webm.Track;io.github.yuroyami.kiteplayer.webm.Webm.Track){}[0]
+    final fun numbersFor(io.github.yuroyami.kiteplayer.webm/Webm.Header, io.github.yuroyami.kiteplayer.webm/Webm.Header): kotlin.collections/Map<kotlin/Long, kotlin/Long>? // io.github.yuroyami.kiteplayer.webm/Webm.numbersFor|numbersFor(io.github.yuroyami.kiteplayer.webm.Webm.Header;io.github.yuroyami.kiteplayer.webm.Webm.Header){}[0]
+    final fun retrack(kotlin/ByteArray, kotlin.collections/Map<kotlin/Long, kotlin/Long>): kotlin/ByteArray // io.github.yuroyami.kiteplayer.webm/Webm.retrack|retrack(kotlin.ByteArray;kotlin.collections.Map<kotlin.Long,kotlin.Long>){}[0]
+
+    final class Header { // io.github.yuroyami.kiteplayer.webm/Webm.Header|null[0]
+        constructor <init>(kotlin/Long, kotlin.collections/List<io.github.yuroyami.kiteplayer.webm/Webm.Track>) // io.github.yuroyami.kiteplayer.webm/Webm.Header.<init>|<init>(kotlin.Long;kotlin.collections.List<io.github.yuroyami.kiteplayer.webm.Webm.Track>){}[0]
+
+        final val timestampScaleNanos // io.github.yuroyami.kiteplayer.webm/Webm.Header.timestampScaleNanos|{}timestampScaleNanos[0]
+            final fun <get-timestampScaleNanos>(): kotlin/Long // io.github.yuroyami.kiteplayer.webm/Webm.Header.timestampScaleNanos.<get-timestampScaleNanos>|<get-timestampScaleNanos>(){}[0]
+        final val tracks // io.github.yuroyami.kiteplayer.webm/Webm.Header.tracks|{}tracks[0]
+            final fun <get-tracks>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.webm/Webm.Track> // io.github.yuroyami.kiteplayer.webm/Webm.Header.tracks.<get-tracks>|<get-tracks>(){}[0]
+    }
+
+    final class Track { // io.github.yuroyami.kiteplayer.webm/Webm.Track|null[0]
+        constructor <init>(kotlin/Long, kotlin/Long, kotlin/String, kotlin/ByteArray?, kotlin/Double?, kotlin/Long?) // io.github.yuroyami.kiteplayer.webm/Webm.Track.<init>|<init>(kotlin.Long;kotlin.Long;kotlin.String;kotlin.ByteArray?;kotlin.Double?;kotlin.Long?){}[0]
+
+        final val channels // io.github.yuroyami.kiteplayer.webm/Webm.Track.channels|{}channels[0]
+            final fun <get-channels>(): kotlin/Long? // io.github.yuroyami.kiteplayer.webm/Webm.Track.channels.<get-channels>|<get-channels>(){}[0]
+        final val codecId // io.github.yuroyami.kiteplayer.webm/Webm.Track.codecId|{}codecId[0]
+            final fun <get-codecId>(): kotlin/String // io.github.yuroyami.kiteplayer.webm/Webm.Track.codecId.<get-codecId>|<get-codecId>(){}[0]
+        final val codecPrivate // io.github.yuroyami.kiteplayer.webm/Webm.Track.codecPrivate|{}codecPrivate[0]
+            final fun <get-codecPrivate>(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.webm/Webm.Track.codecPrivate.<get-codecPrivate>|<get-codecPrivate>(){}[0]
+        final val number // io.github.yuroyami.kiteplayer.webm/Webm.Track.number|{}number[0]
+            final fun <get-number>(): kotlin/Long // io.github.yuroyami.kiteplayer.webm/Webm.Track.number.<get-number>|<get-number>(){}[0]
+        final val samplingFrequency // io.github.yuroyami.kiteplayer.webm/Webm.Track.samplingFrequency|{}samplingFrequency[0]
+            final fun <get-samplingFrequency>(): kotlin/Double? // io.github.yuroyami.kiteplayer.webm/Webm.Track.samplingFrequency.<get-samplingFrequency>|<get-samplingFrequency>(){}[0]
+        final val type // io.github.yuroyami.kiteplayer.webm/Webm.Track.type|{}type[0]
+            final fun <get-type>(): kotlin/Long // io.github.yuroyami.kiteplayer.webm/Webm.Track.type.<get-type>|<get-type>(){}[0]
+    }
 }
 
 final object io.github.yuroyami.kiteplayer/ChromeTraceFormat { // io.github.yuroyami.kiteplayer/ChromeTraceFormat|null[0]

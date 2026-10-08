@@ -83,9 +83,10 @@ class DashRetentionTest {
         assertEquals(9000, urls.size)
         assertNotNull(io.openRelated(urls.first()), "the first segment of the first Period")
         assertNotNull(io.openRelated(urls.last()), "the last segment of the second Period")
-        val maps = io.maps(video.address).distinct()
-        assertEquals(2, maps.size, "one initialization per Period")
-        maps.forEach { assertNotNull(io.openRelated(it), "the initialization $it") }
+        // Every MP4 segment is written against one initialization, the only one the playlist names (#566).
+        val maps = io.maps(video.address)
+        assertEquals(1, maps.size, "one initialization for the track")
+        assertNotNull(io.openRelated(maps.single()), "the initialization ${maps.single()}")
     }
 
     /**
@@ -120,17 +121,18 @@ class DashRetentionTest {
         val periods = (0 until 100).joinToString("") { n -> """<Period duration="PT1S">""" + set("video/mp4", "v$n") + "</Period>" }
         val manifest = static(100, periods)
         val (presentation, io) = reader(manifest)
-        val maps = io.maps(presentation.tracks.single().address).distinct()
-        assertEquals(100, maps.size)
-        maps.forEach { assertNotNull(io.openRelated(it)) }
+        // Each Period's own initialization is read to write its segments again.
+        val segments = io.listed(presentation.tracks.single().address)
+        assertEquals(100, segments.size)
+        segments.forEach { assertNotNull(io.openRelated(it)) }
         assertEquals(100, io.retainedInitializations, "a static presentation keeps what it may need again")
         io.close()
         assertEquals(0, io.retainedInitializations, "closing the reader lets its initializations go")
     }
 
     /**
-     * Past the byte budget the oldest initializations go, and an address the playlist still lists
-     * resolves all the same by reading its initialization again.
+     * Past the byte budget the oldest initializations go, and a segment the playlist still lists
+     * resolves all the same by reading its Period's initialization again.
      */
     @Test
     fun initializationsPastTheBudgetGoAndAreReadAgainWhenAskedFor() = runTest {
@@ -139,13 +141,13 @@ class DashRetentionTest {
         val fetched = mutableListOf<String>()
         val budget = ttml.size * 5L
         val (presentation, io) = reader(manifest, initBudgetBytes = budget, fetched = fetched)
-        val maps = io.maps(presentation.tracks.single().address).distinct()
-        maps.forEach { assertNotNull(io.openRelated(it)) }
+        val segments = io.listed(presentation.tracks.single().address)
+        segments.forEach { assertNotNull(io.openRelated(it)) }
         assertTrue(io.retainedInitializationBytes <= budget, "kept ${io.retainedInitializationBytes} bytes past a budget of $budget")
         assertEquals(5, io.retainedInitializations)
         fetched.clear()
-        assertNotNull(io.openRelated(maps.first()), "a listed initialization stays resolvable")
-        assertEquals(listOf("https://example.test/v0-init.mp4"), fetched, "the one let go is read again")
+        assertNotNull(io.openRelated(segments.first()), "a listed segment stays resolvable")
+        assertEquals(listOf("https://example.test/v0-1.m4s", "https://example.test/v0-init.mp4"), fetched, "the one let go is read again")
     }
 
     private suspend fun MediaIo.readAll(): ByteArray {

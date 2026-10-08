@@ -795,6 +795,16 @@ ffmpeg -v error -y \
   -adaptation_sets "id=0,streams=v id=1,streams=a" \
   -init_seg_name 'webm-$RepresentationID$-init.webm' \
   -media_seg_name 'webm-$RepresentationID$-$Number%05d$.webm' dash/webm.mpd
+# Two picture sizes of VP9 in WebM with one Opus set, for a quality change between them (#566).
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=30:duration=24" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=24" \
+  -filter_complex "[0:v]split=2[big][in];[in]scale=320:180[small]" \
+  -map "[small]" -map "[big]" -map 1:a "${dash_vp9[@]}" -b:v:0 300k -b:v:1 800k -c:a libopus -b:a 64k \
+  -f dash -dash_segment_type webm -seg_duration 2 -use_template 1 -use_timeline 1 \
+  -adaptation_sets "id=0,streams=v id=1,streams=a" \
+  -init_seg_name 'webm-ladder-$RepresentationID$-init.webm' \
+  -media_seg_name 'webm-ladder-$RepresentationID$-$Number%05d$.webm' dash/webm-ladder.mpd
 ffmpeg -v error -y \
   -f lavfi -i "testsrc2=size=320x180:rate=30:duration=70" \
   "${dash_vp9[@]}" -b:v 300k -an -f webm -dash 1 dash/ondemand-video.webm
@@ -818,7 +828,38 @@ for spec in "a|testsrc2=size=320x180|440" "b|smptebars=size=640x360|880" "c|test
     -f dash -seg_duration 2 -use_template 1 -use_timeline 0 -adaptation_sets "id=0,streams=v id=1,streams=a" \
     -init_seg_name "period-$name-\$RepresentationID\$-init.m4s" \
     -media_seg_name "period-$name-\$RepresentationID\$-\$Number\$.m4s" "dash/period-$name.mpd"
+  # The same picture at 480x270, a second representation of the Period for a quality change (#566).
+  ffmpeg -v error -y \
+    -f lavfi -i "${picture%%=*}=size=480x270:rate=30:duration=20" \
+    "${dash_video[@]}" -b:v 600k \
+    -f dash -seg_duration 2 -use_template 1 -use_timeline 0 \
+    -init_seg_name "period-$name-x-init.m4s" \
+    -media_seg_name "period-$name-x-\$Number\$.m4s" "dash/period-$name-x.mpd"
 done
+# The three fMP4 Periods as one presentation with both picture representations in each (#566).
+{
+  echo '<?xml version="1.0" encoding="utf-8"?>'
+  echo '<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT60S" minBufferTime="PT2S">'
+  start=0
+  for spec in "a|320|180" "b|640|360" "c|320|180"; do
+    IFS='|' read -r name width height <<< "$spec"
+    echo "<Period id=\"$name\" start=\"PT${start}S\" duration=\"PT20S\">"
+    echo '<AdaptationSet id="0" contentType="video" mimeType="video/mp4">'
+    echo "<Representation id=\"0\" codecs=\"avc1.42c01e\" bandwidth=\"300000\" width=\"$width\" height=\"$height\">"
+    echo "<SegmentTemplate timescale=\"1000000\" duration=\"2000000\" startNumber=\"1\" media=\"period-$name-0-\$Number\$.m4s\" initialization=\"period-$name-0-init.m4s\"/>"
+    echo '</Representation>'
+    echo '<Representation id="x" codecs="avc1.42c01e" bandwidth="600000" width="480" height="270">'
+    echo "<SegmentTemplate timescale=\"1000000\" duration=\"2000000\" startNumber=\"1\" media=\"period-$name-x-\$Number\$.m4s\" initialization=\"period-$name-x-init.m4s\"/>"
+    echo '</Representation></AdaptationSet>'
+    echo '<AdaptationSet id="1" contentType="audio" mimeType="audio/mp4" lang="en">'
+    echo '<Representation id="1" codecs="mp4a.40.2" bandwidth="96000">'
+    echo "<SegmentTemplate timescale=\"1000000\" duration=\"2000000\" startNumber=\"1\" media=\"period-$name-1-\$Number\$.m4s\" initialization=\"period-$name-1-init.m4s\"/>"
+    echo '</Representation></AdaptationSet>'
+    echo '</Period>'
+    start=$((start + 20))
+  done
+  echo '</MPD>'
+} > dash/periods-ladder.mpd
 for spec in "a|testsrc2=size=320x180" "b|smptebars=size=640x360"; do
   IFS='|' read -r name picture <<< "$spec"
   ffmpeg -v error -y \

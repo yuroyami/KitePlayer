@@ -5,6 +5,8 @@ import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.mp4.Fmp4
 import io.github.yuroyami.kiteplayer.mp4.Fmp4Rewrite
+import io.github.yuroyami.kiteplayer.webm.Webm
+import io.github.yuroyami.kiteplayer.webm.WebmUnsupportedException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -30,10 +32,13 @@ import kotlinx.coroutines.sync.withLock
  * matching representation of every Period, and names its segments and initializations under this
  * reader's own host, where each segment is served moved onto the presentation's timeline: the
  * timeline of the first Period's picture, which a single-Period manifest keeps untouched. An MP4
- * segment is written against the initialization its track's stream began with, which FFmpeg's MP4
- * reader keeps for the whole stream, and loses the samples from its Period's end on. A WebM or
- * MPEG-TS segment keeps them, so media that runs past its Period's end overlaps the next Period;
- * packagers end a Period's last segment at its end, as the fixtures do.
+ * segment is written against the initialization of the first Period listed for its track, the only
+ * one its playlist names, because FFmpeg's MP4 reader keeps the first it reads for the whole
+ * stream. The segment loses the samples from its Period's end on. A WebM track's playlist names
+ * one header too, which FFmpeg's Matroska reader keeps, and a later Period's clusters take that
+ * header's track numbers. A WebM or MPEG-TS segment keeps every sample, so media that runs past
+ * its Period's end overlaps the next Period; packagers end a Period's last segment at its end, as
+ * the fixtures do.
  *
  * Every address of this reader's own host that a playlist hands out stays resolvable for as long as
  * the playlist is valid (#405): for the reader's life in a static presentation, and in a live one
@@ -94,7 +99,14 @@ internal class DashHlsMediaIo(
     /** The tracks whose set or representation a live refresh dropped, each reported once (#406). */
     private val goneReported = HashSet<String>()
 
-    /** The MP4 track each HLS track's stream began with: the first initialization served for it. */
+    /**
+     * The initialization each MP4 or WebM track of joined Periods is written against, by the HLS
+     * track's address: that of the first Period listed for it. It is kept for the reader's life,
+     * because a live server may drop a Period's files once the Period leaves the window.
+     */
+    private val baseInits = HashMap<String, ByteArray>()
+
+    /** The MP4 track of each of [baseInits]. */
     private val baseTracks = HashMap<String, Fmp4.Track>()
 
     /** The Period the presentation's tracks were taken from, the first of the manifest at the open. */
@@ -179,6 +191,7 @@ internal class DashHlsMediaIo(
             try {
                 inits.clear()
                 initBytes = 0
+                baseInits.clear()
             } finally {
                 lock.unlock()
             }
@@ -272,8 +285,15 @@ internal class DashHlsMediaIo(
             val end = timing.endMicros?.let { it - referenceStartMicros + referenceOffsetMicros }
             val container = DashPeriods.containerOf(set, representation)
             val format = track.subtitleFormat
+            // Every MP4 or WebM segment is written against one initialization, so the playlist names
+            // only that one: FFmpeg's readers would skip another, and a variant change must know
+            // which one a segment was written for (#566).
             val initAddress = periodPlan.initializationUrl?.takeIf { format == null }?.let { url ->
-                "$root/${timing.key}/init".also { pieces[it] = Piece.Init(track, url, periodPlan.initializationRange, container) }
+                if (container == DashContainer.Mp4 || container == DashContainer.Webm) {
+                    "$root/init".also { pieces.getOrPut(it) { Piece.Init(track, url, periodPlan.initializationRange, container) } }
+                } else {
+                    "$root/${timing.key}/init".also { pieces[it] = Piece.Init(track, url, periodPlan.initializationRange, container) }
+                }
             }
             var first = index > 0
             for (segment in periodPlan.segments) {
@@ -311,15 +331,15 @@ internal class DashHlsMediaIo(
 
     /**
      * The bytes of [piece] as FFmpeg is to read them. An initialization is served as it is, and
-     * the first of an MP4 track's is kept as the one its stream began with. A segment is moved
-     * onto the presentation's timeline: an MP4 one written against that first initialization,
-     * a WebM one by its clusters' timestamps, an MPEG-TS one by its PTS, DTS and PCR.
+     * an MP4 or WebM track's is kept as the one its stream began with. A segment is moved onto the
+     * presentation's timeline: an MP4 one written against that initialization, a WebM one by
+     * its clusters' timestamps, with that header's track numbers, an MPEG-TS one by its PTS, DTS
+     * and PCR.
      */
     private suspend fun serve(piece: Piece): ByteArray = when (piece) {
-        is Piece.Init -> cachedInit(piece.url, piece.range).also { init ->
-            if (piece.container == DashContainer.Mp4) {
-                Fmp4.tracks(init).firstOrNull()?.let { track -> lock.withLock { baseTracks.getOrPut(piece.track.address) { track } } }
-            }
+        is Piece.Init -> when (piece.container) {
+            DashContainer.Mp4, DashContainer.Webm -> baseInit(piece)
+            else -> cachedInit(piece.url, piece.range)
         }
         is Piece.Media -> {
             val bytes = fetch(piece.url, piece.range, MAX_SEGMENT_BYTES)
@@ -330,18 +350,59 @@ internal class DashHlsMediaIo(
                     if (source == null) {
                         bytes
                     } else {
-                        val target = lock.withLock { baseTracks.getOrPut(piece.track.address) { source } }
+                        val target = baseTrack(piece.track) ?: source
                         dashFmp4 { Fmp4Rewrite.rewrite(bytes, Fmp4Rewrite.Plan(source, target, piece.shiftMicros, piece.endMicros)) }
                     }
                 }
                 DashContainer.Webm -> {
-                    val scale = init?.let { WebmIndex.layout(it).timestampScaleNanos } ?: 1_000_000L
-                    WebmRewrite.shiftClusters(bytes, piece.shiftMicros * 1000 / scale)
+                    val own = init?.let { dashWebm { Webm.header(it) } }
+                    val moved = WebmRewrite.shiftClusters(bytes, piece.shiftMicros * 1000 / (own?.timestampScaleNanos ?: 1_000_000L))
+                    val base = baseInitOf(piece.track)?.let { dashWebm { Webm.header(it) } }
+                    if (own == null || base == null) {
+                        moved
+                    } else {
+                        val numbers = Webm.numbersFor(own, base)
+                            ?: throw DashUnsupportedException("the WebM of ${shownUri(piece.url)} does not fit the header its stream began with")
+                        Webm.retrack(moved, numbers)
+                    }
                 }
                 DashContainer.Ts -> TsRewrite.shift(bytes, rounded(piece.shiftMicros * 9, 100))
                 DashContainer.Other -> bytes
             }
         }
+    }
+
+    /** The initialization [piece] names, read once and kept as the one its track's segments are written against. */
+    private suspend fun baseInit(piece: Piece.Init): ByteArray {
+        val address = piece.track.address
+        lock.withLock { baseInits[address] }?.let { return it }
+        val bytes = fetch(piece.url, piece.range, MAX_SUBTITLE_BYTES)
+        return lock.withLock {
+            baseInits.getOrPut(address) {
+                if (piece.container == DashContainer.Mp4) Fmp4.tracks(bytes).firstOrNull()?.let { baseTracks[address] = it }
+                bytes
+            }
+        }
+    }
+
+    /** The initialization that [track]'s segments are written against, or null when its playlist names none. */
+    private suspend fun baseInitOf(track: DashHlsTrack): ByteArray? {
+        lock.withLock { baseInits[track.address] }?.let { return it }
+        val piece = lock.withLock { pieces["https://${DashHls.HOST}/${track.setIndex}-${track.representationIndex}/init"] } as? Piece.Init ?: return null
+        return baseInit(piece)
+    }
+
+    /** The MP4 track that [track]'s segments are written against, or null when its playlist names no initialization. */
+    private suspend fun baseTrack(track: DashHlsTrack): Fmp4.Track? {
+        baseInitOf(track) ?: return null
+        return lock.withLock { baseTracks[track.address] }
+    }
+
+    /** [block], with a WebM header that cannot be read told as a presentation the reader cannot play. */
+    private inline fun <T> dashWebm(block: () -> T): T = try {
+        block()
+    } catch (refused: WebmUnsupportedException) {
+        throw DashUnsupportedException(refused.message ?: "the WebM header cannot be read")
     }
 
     /** [value] divided by [divisor], to the nearest whole number, halves away from zero. */

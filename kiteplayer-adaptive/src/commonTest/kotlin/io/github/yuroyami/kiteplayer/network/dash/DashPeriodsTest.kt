@@ -123,13 +123,12 @@ class DashPeriodsTest {
         val root = "https://${DashHls.HOST}/0-0"
         assertEquals(
             listOf(
-                "#EXT-X-MAP:URI=\"$root/p0/init\"",
+                "#EXT-X-MAP:URI=\"$root/init\"",
                 "#EXTINF:2.000000,", "$root/p0/1",
                 "#EXTINF:2.000000,", "$root/p0/2",
                 // The Period ends one second into its third segment.
                 "#EXTINF:1.000000,", "$root/p0/3",
                 "#EXT-X-DISCONTINUITY",
-                "#EXT-X-MAP:URI=\"$root/p5000000/init\"",
                 "#EXTINF:2.000000,", "$root/p5000000/45",
                 "#EXTINF:2.000000,", "$root/p5000000/46",
                 "#EXT-X-ENDLIST",
@@ -145,10 +144,9 @@ class DashPeriodsTest {
         val video = presentation.tracks.single { it.role == DashHlsRole.Video }
         io.openRelated(video.address)!!.readAll()
         val root = "https://${DashHls.HOST}/0-0"
-        val base = Fmp4.tracks(io.openRelated("$root/p0/init")!!.readAll()).single()
+        val base = Fmp4.tracks(io.openRelated("$root/init")!!.readAll()).single()
         assertEquals(1L to 1000L, base.id to base.timescale)
         io.openRelated("$root/p0/1")!!.readAll()
-        io.openRelated("$root/p5000000/init")!!.readAll()
         val moved = Fmp4.samples(io.openRelated("$root/p5000000/45")!!.readAll(), base)
         // Its media time of 90 s is where the Period begins, five seconds in.
         assertEquals(listOf(5000L, 6000L), moved.map { it.decodeTime })

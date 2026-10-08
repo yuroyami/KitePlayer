@@ -376,6 +376,82 @@ class DashThroughHlsTest {
         }
     }
 
+    /**
+     * A quality change inside a Period and one that a Period boundary follows (#566). The smaller
+     * representation is 320x180 in the first and third Periods and 640x360 in the second, and the
+     * larger one is 480x270 in all three.
+     */
+    @Test
+    fun aVariantChangeInAPresentationOfSeveralPeriodsTakesTheNextSegmentsWithNoNewOpen() =
+        withSource("periods-ladder.mpd", needs = "dash/periods-ladder.mpd") { source ->
+            val video = source.streams.first { it.kind == TrackKind.Video }
+            val decoder = checkNotNull((source as KiteFFmpegSource).videoDecoderFactories().firstNotNullOfOrNull { it.create(video, HwdecPolicy.Off) })
+            try {
+                assertEquals(1, source.selectedVariant, "the larger representation plays first")
+                val all = ArrayList(source.picturesBetween(decoder, from = 0.0, until = 1.0))
+                assertTrue(source.switchVariant(0), "the two representations share their segments in every Period")
+                all += source.picturesBetween(decoder, from = null, until = 25.0)
+                assertTrue(source.switchVariant(1), "the change back is inside the second Period")
+                all += source.picturesBetween(decoder, from = null, until = 44.0)
+                assertTrue(source.switchVariant(0), "the change is inside the third Period")
+                all += source.picturesBetween(decoder, from = null, until = 59.9)
+                all.sortBy { it.first }
+                val steps = all.map { it.first }.zipWithNext { a, b -> b - a }
+                assertTrue(steps.all { it in 0.030..0.037 }, "a picture is missing or shown twice: ${steps.filter { it !in 0.030..0.037 }}")
+                // Each run of one size, with the time of its first picture.
+                val runs = all.fold(ArrayList<Pair<Double, VideoSize>>()) { runs, picture ->
+                    if (runs.lastOrNull()?.second != picture.second) runs += picture
+                    runs
+                }
+                assertEquals(
+                    listOf(VideoSize(480, 270), VideoSize(320, 180), VideoSize(640, 360), VideoSize(480, 270), VideoSize(320, 180)),
+                    runs.map { it.second },
+                    "the sizes in order, with the time each began: $runs",
+                )
+                // The pictures start 21 ms in, behind the sound's first samples.
+                for ((at, _) in runs) assertTrue(at % 2.0 < 0.05, "a change at $at s is not at a segment's first picture")
+                assertTrue(runs[1].first <= 8.0, "the first change waited until ${runs[1].first} s")
+                assertEquals(20.0, runs[2].first, 0.04, "the smaller representation takes its second Period's size where the Period begins")
+                assertTrue(runs[3].first in 26.0..34.0, "the change inside the second Period was at ${runs[3].first} s")
+                assertTrue(runs[4].first in 44.0..52.0, "the change inside the third Period was at ${runs[4].first} s")
+                assertEquals(1, asked.count { it == "periods-ladder.mpd" }, "the manifest was read once, so the stream did not open again: $asked")
+            } finally {
+                decoder.close()
+            }
+        }
+
+    /** WebM clusters of another representation follow the first one's header (#566). */
+    @Test
+    fun aVariantChangeTakesTheNextWebmSegmentsFromTheOtherRepresentationWithNoNewOpen() =
+        withSource("webm-ladder.mpd", needs = "dash/webm-ladder.mpd") { source ->
+            val video = source.streams.first { it.kind == TrackKind.Video }
+            val decoder = checkNotNull((source as KiteFFmpegSource).videoDecoderFactories().firstNotNullOfOrNull { it.create(video, HwdecPolicy.Off) })
+            try {
+                assertEquals(1, source.selectedVariant, "the larger representation plays first")
+                val all = ArrayList(source.picturesBetween(decoder, from = 0.0, until = 1.0))
+                assertTrue(source.switchVariant(0), "the two representations share their segments")
+                all += source.picturesBetween(decoder, from = null, until = 12.0)
+                assertTrue(source.switchVariant(1), "the change back")
+                all += source.picturesBetween(decoder, from = null, until = 23.9)
+                all.sortBy { it.first }
+                val steps = all.map { it.first }.zipWithNext { a, b -> b - a }
+                assertTrue(steps.all { it in 0.030..0.037 }, "a picture is missing or shown twice: ${steps.filter { it !in 0.030..0.037 }}")
+                val runs = all.fold(ArrayList<Pair<Double, VideoSize>>()) { runs, picture ->
+                    if (runs.lastOrNull()?.second != picture.second) runs += picture
+                    runs
+                }
+                assertEquals(listOf(VideoSize(640, 360), VideoSize(320, 180), VideoSize(640, 360)), runs.map { it.second }, "the sizes in order, with the time each began: $runs")
+                for ((at, _) in runs) assertTrue(at % 2.0 < 0.05, "a change at $at s is not at a segment's first picture")
+                assertTrue(runs[1].first <= 8.0, "the first change waited until ${runs[1].first} s")
+                assertTrue(runs[2].first in 12.0..20.0, "the change back was at ${runs[2].first} s")
+                assertEquals(1, asked.count { it == "webm-ladder.mpd" }, "the manifest was read once, so the stream did not open again: $asked")
+                val segments = asked.filter { it.startsWith("webm-ladder-0-0") || it.startsWith("webm-ladder-1-0") }.distinct()
+                assertEquals(segments.distinctBy { it.substringAfterLast('-') }, segments, "each segment was read from one representation only")
+            } finally {
+                decoder.close()
+            }
+        }
+
     @Test
     fun aPeriodOfAnotherSizeDecodesAtItsOwnSizeAndTheOnesAroundItAtTheirs() = withSource("periods.mpd") { source ->
         val video = source.streams.first { it.kind == TrackKind.Video }

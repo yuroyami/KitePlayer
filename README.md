@@ -748,11 +748,16 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
 - MPEG-TS segments change as they are. fMP4 segments change when their pictures are H.264, HEVC,
   AV1 or VP9: the player writes each fragment again for the initialization the stream began with.
   H.264 and HEVC fragments get the variant's own parameter sets. AV1 and VP9 need nothing added,
-  because their key frames state the picture size. A DASH manifest of one Period changes the same
-  way. The player decrypts AES-128 fMP4 segments itself, so each variant may have its own key.
-- Any other change opens the stream again, so the picture holds for a moment: WebM segments, a
-  DASH manifest of several Periods, and a variant of another codec, profile, bit depth or dynamic
-  range.
+  because their key frames state the picture size. The player decrypts AES-128 fMP4 segments
+  itself, so each variant may have its own key.
+- WebM segments in VP8, VP9 or AV1 change as they are when the variants' headers use the same
+  timestamp scale, which packagers do
+  ([#566](https://github.com/yuroyami/KitePlayer/issues/566)). Where only the track numbers differ,
+  the player writes the first header's numbers into each cluster.
+- A DASH manifest changes the same way, one of several Periods too.
+- Any other change opens the stream again, so the picture holds for a moment: a variant of another
+  codec, profile, bit depth or dynamic range, and variants that do not share their segment
+  boundaries.
 - The choice follows the screen ([#447](https://github.com/yuroyami/KitePlayer/issues/447)). An
   HDR version plays on a display that shows HDR as HDR, under `HdrPolicy.Auto`, and the SDR one
   elsewhere. Nothing larger plays than the smallest variant that fills the view the picture is
@@ -1042,7 +1047,7 @@ summary.
 
 | Topic | What to expect |
 | --- | --- |
-| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time, in `KitePlayerWorker` too. `selectVariant` changes it, and the player steps down and up by itself with the measured network rate. A stream of MPEG-TS segments, or of fMP4 segments in H.264, HEVC, AV1 or VP9, changes in place, with no pause, and so does a DASH manifest of one Period. Any other stream opens again for the change, which holds the picture for a moment.<br><br>A DASH manifest of fMP4, MPEG-TS or WebM segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`, and a manifest of several Periods plays as one presentation. `KitePlayerWorker` plays a DASH manifest from its address too. A persistent cache does not work yet.<br><br>A seek bar's preview pictures come from the stream, an HLS image playlist or a DASH thumbnail set, or from a WebVTT thumbnail file that `MediaItem.thumbnails` names: `thumbnailAt` gives the grid image and the region of the tile for a position, downloaded only when asked ([#433](https://github.com/yuroyami/KitePlayer/issues/433)). |
+| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time, in `KitePlayerWorker` too. `selectVariant` changes it, and the player steps down and up by itself with the measured network rate. A stream of MPEG-TS segments, of fMP4 segments in H.264, HEVC, AV1 or VP9, or of WebM segments changes in place, with no pause, and so does a DASH manifest, one of several Periods too. Any other stream opens again for the change, which holds the picture for a moment.<br><br>A DASH manifest of fMP4, MPEG-TS or WebM segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`, and a manifest of several Periods plays as one presentation. `KitePlayerWorker` plays a DASH manifest from its address too. A persistent cache does not work yet.<br><br>A seek bar's preview pictures come from the stream, an HLS image playlist or a DASH thumbnail set, or from a WebVTT thumbnail file that `MediaItem.thumbnails` names: `thumbnailAt` gives the grid image and the region of the tile for a position, downloaded only when asked ([#433](https://github.com/yuroyami/KitePlayer/issues/433)). |
 | **Native Linux and Windows** | No audio output and no HTTPS. Use the desktop JVM target, or pass your own `OutputBackend`. |
 | **Desktop JVM sound** | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | **AV1 on the web** | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |

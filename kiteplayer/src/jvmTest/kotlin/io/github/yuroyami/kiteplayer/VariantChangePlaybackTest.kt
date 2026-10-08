@@ -52,6 +52,15 @@ class VariantChangePlaybackTest {
     fun aDashManifestStepsUpAndDownWithNoHeldPictureAndNoGapInSound() =
         stepsUpAndDown("dash", "separate.mpd", startHeight = 180, up = 1, down = 0, master = "separate.mpd", segments = Regex("separate-([01])-(\\d+)\\.m4s"))
 
+    /** Each Period's segments are written twice, for its track's first initialization and then for the first variant's (#566). */
+    @Test
+    fun aDashManifestOfSeveralPeriodsStepsUpAndDownWithNoHeldPictureAndNoGapInSound() =
+        stepsUpAndDown("dash", "periods-ladder.mpd", startHeight = 180, up = 1, down = 0, master = "periods-ladder.mpd", segments = Regex("period-a-([0x])-(\\d+)\\.m4s"))
+
+    @Test
+    fun aWebmDashManifestStepsUpAndDownWithNoHeldPictureAndNoGapInSound() =
+        stepsUpAndDown("dash", "webm-ladder.mpd", startHeight = 180, up = 1, down = 0, master = "webm-ladder.mpd", segments = Regex("webm-ladder-([01])-(\\d+)\\.webm"))
+
     /**
      * Plays [name] of the fixture folder [folder] from the variant of [startHeight], moves to the
      * variant [up] once pictures show, and to [down] once a picture of [up] showed. [segments]

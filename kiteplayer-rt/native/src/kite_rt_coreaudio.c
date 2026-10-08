@@ -69,18 +69,18 @@
 #define KPRT_DEFAULT_DEVICE_BUFFER_FRAMES 512
 
 /* Channels this sink will accept. Both Apple output units take interleaved 32 bit
- * float, and above stereo the layout is DECLARED rather than assumed: each count from one to six
- * carries the tag whose speaker order matches FFmpeg's own for that count, so the engine's
+ * float, and above stereo the layout is DECLARED rather than assumed: each count from one to
+ * eight carries the tag whose speaker order matches FFmpeg's own for that count, so the engine's
  * interleave reaches the right speakers without a remap. See `kprt_layout_tag_for`, which replaced
- * the old rule of tagging EVERY count above two as MPEG 5.1 A. Counts above 6 clamp
- * to 2 rather than 6, because the pipeline's mixer downmixes to stereo but cannot yet fold 8 into
- * 6; stereo is the honest fallback that always sounds right.
+ * the old rule of tagging EVERY count above two as MPEG 5.1 A. A count above eight is taken as
+ * eight: the first eight channels of a layout with height speakers are its 7.1 bed.
  *
- * This is the CEILING, not the answer. The DEVICE's own channel count bounds it further at create
- * time, because the input scope accepts a width the hardware does not have and reports success, so
- * a count taken from the caller alone silently drops every channel past the route's own. */
+ * This is the CEILING, not the answer. The DEVICE bounds it further at create time, twice: by its
+ * channel count, because the input scope accepts a width the hardware does not have and reports
+ * success, and by the speakers its layout names, because a device with eight channels set up as
+ * stereo plays only two of them. See `kprt_sink_bound_channels`. */
 #define KPRT_MIN_CHANNELS 1
-#define KPRT_MAX_CHANNELS 6
+#define KPRT_MAX_CHANNELS 8
 
 /* How many channels the DEVICE behind this unit actually has.
  *
@@ -103,6 +103,93 @@ static int32_t kprt_device_channels(AudioComponentInstance instance)
     return (int32_t)hardware.mChannelsPerFrame;
 }
 
+/* How many of a layout's channels name a speaker.
+ *
+ * A tag names every channel it counts, a bitmap names one speaker per bit, and a list of
+ * descriptions names a channel unless its label is unknown, unused or a plain channel number. An
+ * audio interface with eight line outputs answers eight channels and no speaker; an HDMI receiver
+ * that Audio MIDI Setup holds as stereo answers eight channels and two speakers. */
+int32_t kprt_layout_speakers(const struct AudioChannelLayout *layout, uint32_t size)
+{
+    const uint32_t header = (uint32_t)offsetof(AudioChannelLayout, mChannelDescriptions);
+    AudioChannelLayoutTag tag;
+    uint32_t count, held, i;
+    int32_t named = 0;
+
+    if (layout == NULL || size < header)
+        return -1;
+    tag = layout->mChannelLayoutTag;
+    if (tag == kAudioChannelLayoutTag_UseChannelBitmap) {
+        uint32_t bits = (uint32_t)layout->mChannelBitmap;
+        for (; bits != 0; bits &= bits - 1)
+            named++;
+        return named;
+    }
+    if (tag != kAudioChannelLayoutTag_UseChannelDescriptions) {
+        if ((tag & 0xFFFF0000u) == kAudioChannelLayoutTag_DiscreteInOrder ||
+            (tag & 0xFFFF0000u) == kAudioChannelLayoutTag_Unknown)
+            return 0;
+        return (int32_t)(tag & 0xFFFFu);
+    }
+    /* Never read a description the answer did not hold, whatever its count claims. */
+    held = (size - header) / (uint32_t)sizeof(AudioChannelDescription);
+    count = layout->mNumberChannelDescriptions < held ? layout->mNumberChannelDescriptions : held;
+    for (i = 0; i < count; i++) {
+        AudioChannelLabel label = layout->mChannelDescriptions[i].mChannelLabel;
+        if (label == kAudioChannelLabel_Unknown || label == kAudioChannelLabel_Unused ||
+            label == kAudioChannelLabel_Discrete || (label & 0xFFFF0000u) == kAudioChannelLabel_Discrete_0)
+            continue;
+        named++;
+    }
+    return named;
+}
+
+/* The speakers the DEVICE behind this unit is set up with, or -1 when the unit does not say.
+ *
+ * The output scope's layout is the device's preferred one, which on a Mac is what Audio MIDI Setup
+ * shows under Configure Speakers. mpv reads the same property for the same reason. */
+static int32_t kprt_device_speakers(AudioComponentInstance instance)
+{
+    /* Room for a layout of 64 described channels, on the stack: more than any device names. */
+    union {
+        AudioChannelLayout layout;
+        uint8_t bytes[offsetof(AudioChannelLayout, mChannelDescriptions) +
+                      64 * sizeof(AudioChannelDescription)];
+    } answer;
+    UInt32 size = (UInt32)sizeof(answer);
+
+    memset(&answer, 0, sizeof(answer));
+    if (AudioUnitGetProperty(instance, kAudioUnitProperty_AudioChannelLayout,
+                             kAudioUnitScope_Output, KPRT_OUTPUT_BUS,
+                             &answer, &size) != noErr) {
+        return -1;
+    }
+    return kprt_layout_speakers(&answer.layout, (uint32_t)size);
+}
+
+/* The channel count to open with: what was asked, inside the ceiling, bounded by the device.
+ *
+ * `device_channels` is zero when the unit would not say, and `speakers` is negative when it named
+ * no layout; each then bounds nothing. A device that names fewer speakers than it has channels is
+ * opened at its speakers, and never below stereo while it has two channels: a layout of unnamed
+ * channels still plays its first pair, which is where the system puts stereo. */
+int32_t kprt_sink_bound_channels(int32_t requested, int32_t device_channels, int32_t speakers)
+{
+    int32_t accepted = requested;
+
+    if (accepted < KPRT_MIN_CHANNELS)
+        accepted = KPRT_MIN_CHANNELS;
+    if (accepted > KPRT_MAX_CHANNELS)
+        accepted = KPRT_MAX_CHANNELS;
+    if (device_channels > 0 && device_channels < accepted)
+        accepted = device_channels;
+    if (speakers >= 0 && speakers < accepted) {
+        int32_t floor = accepted < 2 ? accepted : 2;
+        accepted = speakers > floor ? speakers : floor;
+    }
+    return accepted;
+}
+
 static void report_status(int32_t *out_os_status, OSStatus status)
 {
     if (out_os_status != NULL)
@@ -120,6 +207,10 @@ static void report_status(int32_t *out_os_status, OSStatus status)
  *   1  FC                      2  FL FR
  *   3  FL FR LFE               4  FL FR BL BR
  *   5  FL FR FC BL BR          6  FL FR FC LFE BL BR
+ *   7  FL FR FC LFE BC SL SR   8  FL FR FC LFE BL BR SL SR
+ *
+ * Seven and eight are the WAVE tags, because WAVE order is FFmpeg's order. MPEG 7.1 C carries the
+ * same eight speakers with the side pair before the back pair.
  */
 static AudioChannelLayoutTag kprt_layout_tag_for(int32_t channels, int64_t *out_mask)
 {
@@ -130,6 +221,8 @@ static AudioChannelLayoutTag kprt_layout_tag_for(int32_t channels, int64_t *out_
     case 4: *out_mask = 0x33; return kAudioChannelLayoutTag_Quadraphonic;
     case 5: *out_mask = 0x37; return kAudioChannelLayoutTag_MPEG_5_0_A;
     case 6: *out_mask = 0x3F; return kAudioChannelLayoutTag_MPEG_5_1_A;
+    case 7: *out_mask = 0x70F; return kAudioChannelLayoutTag_WAVE_6_1;
+    case 8: *out_mask = 0x63F; return kAudioChannelLayoutTag_WAVE_7_1;
     default: *out_mask = 0;   return 0;
     }
 }
@@ -403,11 +496,7 @@ int32_t kprt_sink_create_on_device(uint32_t device_id, int32_t sample_rate, int3
     *out_sink = NULL;
     memset(out_format, 0, sizeof(*out_format));
 
-    accepted_channels = channels;
-    if (accepted_channels < KPRT_MIN_CHANNELS)
-        accepted_channels = KPRT_MIN_CHANNELS;
-    if (accepted_channels > KPRT_MAX_CHANNELS)
-        accepted_channels = 2; /* not 6: see the KPRT_MAX_CHANNELS note */
+    accepted_channels = kprt_sink_bound_channels(channels, 0, -1);
 
     /* The sample rate is deliberately NOT validated here. A rate the device refuses must be refused
      * BY THE DEVICE, after the instance exists, because that is the window in which a half open used
@@ -456,17 +545,14 @@ int32_t kprt_sink_create_on_device(uint32_t device_id, int32_t sample_rate, int3
     }
 #endif
 
-    /* The device's own channel count bounds the accepted one. Asking is the whole point: the input
-     * scope would take six channels on a two channel route without complaint, and the engine reads
-     * the accepted count as permission to skip its downmix, so the surround content would simply
-     * never be folded into the two speakers that exist. Bounding here instead makes the pipeline
-     * fold 5.1 to stereo through the matrix it already has and `ReferencePcmTest` already pins. A
-     * unit that will not answer leaves the caller's count alone. */
-    {
-        int32_t device_channels = kprt_device_channels(instance);
-        if (device_channels > 0 && device_channels < accepted_channels)
-            accepted_channels = device_channels;
-    }
+    /* The device bounds the accepted count. Asking is the whole point: the input scope would take
+     * six channels on a two channel route without complaint, and the engine reads the accepted
+     * count as permission to skip its downmix, so the surround content would simply never be
+     * folded into the two speakers that exist. Bounding here instead makes the pipeline fold 5.1
+     * to stereo through the matrix it already has and `ReferencePcmTest` already pins. A unit that
+     * will not answer leaves the caller's count alone. */
+    accepted_channels = kprt_sink_bound_channels(channels, kprt_device_channels(instance),
+                                                 kprt_device_speakers(instance));
 
     sink = (kprt_sink *)calloc(1, sizeof(kprt_sink));
     if (sink == NULL) {

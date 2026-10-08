@@ -121,4 +121,13 @@ int32_t kprt_render_into(kprt_sink *sink, float *destination, int32_t frames,
  * worst. Separate from `kprt_render_into` because the pair has to close after the body returns. */
 void kprt_sink_note_span(kprt_sink *sink, uint64_t entered_ticks, uint64_t left_ticks);
 
+/* The channel count a sink opens with, from the count asked for, the device's channel count (zero
+ * when unknown) and the speakers its layout names (negative when unknown). Apple only. */
+int32_t kprt_sink_bound_channels(int32_t requested, int32_t device_channels, int32_t speakers);
+
+/* How many channels of a CoreAudio layout of `size` bytes name a speaker, or -1 for no layout.
+ * Apple only. */
+struct AudioChannelLayout;
+int32_t kprt_layout_speakers(const struct AudioChannelLayout *layout, uint32_t size);
+
 #endif /* KITE_RT_SINK_INTERNAL_H */

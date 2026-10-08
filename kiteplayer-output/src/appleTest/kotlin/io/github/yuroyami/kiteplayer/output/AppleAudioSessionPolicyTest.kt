@@ -146,6 +146,96 @@ class AppleAudioSessionPolicyTest {
     }
 
     @Test
+    fun aSurroundItemDeclaresItsChannelsBeforeTheActivationAndAsksTheRouteAfterIt() {
+        val controller = RecordingAppleAudioSessionController()
+        val manager = AppleAudioSessionLeaseManager(controller)
+
+        manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie, channels = 6).close()
+
+        assertEquals(
+            listOf(
+                "category:playback:moviePlayback:mixWithOthers",
+                "multichannel:true",
+                "active:true:none",
+                "channels:6",
+                "channels:2",
+                "multichannel:false",
+                "active:false:notifyOthers",
+            ),
+            controller.calls,
+            "the last close hands the route back as it was found",
+        )
+    }
+
+    @Test
+    fun aStereoItemAsksTheSessionForNothingAboutChannels() {
+        val controller = RecordingAppleAudioSessionController()
+        val manager = AppleAudioSessionLeaseManager(controller)
+
+        manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie, channels = 2).close()
+        manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie, channels = 1).close()
+
+        assertEquals(emptyList(), controller.calls.filter { it.startsWith("multichannel") || it.startsWith("channels") })
+    }
+
+    @Test
+    fun theChannelsFollowTheItemThatOpenedLast() {
+        val controller = RecordingAppleAudioSessionController()
+        val manager = AppleAudioSessionLeaseManager(controller)
+
+        val stereo = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie, channels = 2)
+        val surround = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie, channels = 8)
+        val alsoSurround = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie, channels = 6)
+        val stereoAgain = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie, channels = 2)
+        listOf(stereo, surround, alsoSurround, stereoAgain).forEach { it.close() }
+
+        assertEquals(
+            listOf(
+                "category:playback:moviePlayback:mixWithOthers",
+                "active:true:none",
+                "multichannel:true",
+                "channels:8",
+                "channels:6",
+                "multichannel:false",
+                "channels:2",
+                "active:false:notifyOthers",
+            ),
+            controller.calls,
+        )
+    }
+
+    @Test
+    fun aSessionThatRefusesTheChannelsStillOpens() {
+        val controller = RecordingAppleAudioSessionController(refuseChannels = true)
+        val manager = AppleAudioSessionLeaseManager(controller)
+
+        val lease = manager.acquire(AppleAudioSessionPolicy.ManagedPlayback, AudioContent.Movie, channels = 6)
+        assertEquals(1, manager.activeLeaseCount, "the output unit bounds the channels by what the route gives")
+        lease.close()
+
+        assertEquals(
+            listOf(
+                "category:playback:moviePlayback:mixWithOthers",
+                "multichannel:true",
+                "active:true:none",
+                "channels:6",
+                "active:false:notifyOthers",
+            ),
+            controller.calls,
+            "nothing that was refused is taken back",
+        )
+    }
+
+    @Test
+    fun anApplicationManagedLeaseDeclaresNoChannels() {
+        val controller = RecordingAppleAudioSessionController()
+        AppleAudioSessionLeaseManager(controller)
+            .acquire(AppleAudioSessionPolicy.ApplicationManaged, AudioContent.Movie, channels = 8)
+            .close()
+        assertEquals(emptyList(), controller.calls)
+    }
+
+    @Test
     fun aRefusedReactivationIsLeftForTheDeviceStartToReport() {
         // The first activation, at acquire, succeeds; the second, at resume, is refused.
         var activations = 0
@@ -240,6 +330,7 @@ class AppleAudioSessionPolicyTest {
 /** Shared fake seam for the lease-manager and sink-transaction fixtures. */
 internal class RecordingAppleAudioSessionController(
     private var failActivationCount: Int = 0,
+    private val refuseChannels: Boolean = false,
     private val observe: (String) -> Unit = {},
 ) : AppleAudioSessionController {
     private val lock = SynchronizedObject()
@@ -266,6 +357,16 @@ internal class RecordingAppleAudioSessionController(
                 throw PlannedAppleAudioSessionFailure()
             }
         }
+    }
+
+    override fun setMultichannelContent(offered: Boolean) {
+        record("multichannel:$offered")
+        if (refuseChannels) throw PlannedAppleAudioSessionFailure()
+    }
+
+    override fun preferOutputChannels(channels: Int) {
+        record("channels:$channels")
+        if (refuseChannels) throw PlannedAppleAudioSessionFailure()
     }
 
     private fun record(event: String) {

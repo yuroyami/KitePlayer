@@ -135,6 +135,8 @@ video decoder.
 - A stereo mode: mono, left only, right only or swapped, after the downmix, with no click on a
   change ([#462](https://github.com/yuroyami/KitePlayer/issues/462)).
 - Surround folds into the speakers the device has, and mono or stereo can fill a surround device.
+  Apple outputs take up to 7.1, and an iPhone tells the system when an item is surround, so a
+  receiver or headphones that place sound in space can take it.
 - A choice of output device on macOS and the desktop JVM.
 - Waveforms, and an optional audio visualiser for media with no picture.
 

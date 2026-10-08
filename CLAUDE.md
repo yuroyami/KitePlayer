@@ -47,6 +47,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
   media, hide the fixture once and watch it fail.
 - `ci.yml` cancels the run in progress on every push, and a run takes about 45 minutes. Pushing
   each commit of a long session means no run ever finishes. Hold a push until the last run is read.
+- A CI job that fails with "Could not find" for an artifact that Maven Central serves has a broken
+  Gradle cache, not a network problem. GitHub evicts cache entries once a repository holds more
+  than 10 GB, and it can evict a job's dependency bundle and keep its index. The log then says
+  "Did not restore dependencies". Delete that job's `gradle-home` entry with `gh cache delete`.
 - `./gradlew ... | tail` reports the exit code of `tail`. A background build once reported success
   with BUILD FAILED sitting in its own log.
 - Moving or renaming the checkout breaks the prebuilt C test binaries: they carry an absolute path

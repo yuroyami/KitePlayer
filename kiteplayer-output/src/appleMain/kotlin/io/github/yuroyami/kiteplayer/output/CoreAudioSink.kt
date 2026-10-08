@@ -153,6 +153,16 @@ private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
  * fails with that error. The failure stays on [events], so a collector that subscribes after the
  * loss still receives it. iOS has no default device of its own: the audio session owns the route.
  *
+ * ### Channels
+ *
+ * The sink opens with up to eight channels, in FFmpeg's order for the count: 5.1, 6.1 and 7.1 each
+ * reach their own speakers. The device bounds the count twice (#502), by the channels it has and by
+ * the speakers its layout names, so a receiver that the Mac holds as stereo in Audio MIDI Setup
+ * opens as stereo and the engine folds the surround into it. On iOS, a session this sink manages
+ * tells the system that an item has more than two channels and asks the route for that many, and
+ * the sink then opens with what the route gave. The count is decided at the open and kept until
+ * the sink closes.
+ *
  * ### Threading
  *
  * [openWithRing], [start], [stop], [drain] and [setPaused] belong to the session owner, which is the
@@ -401,7 +411,7 @@ public class CoreAudioSink private constructor(
         // On iOS the process audio session must be active before RemoteIO is created. Acquiring is the
         // first step in the same transaction as the C device and ring. A later failure hands the lease
         // back only after C destruction is confirmed; uncertain destruction retains it fail-closed.
-        val acquiredLease = leaseManager.acquire(policy, content)
+        val acquiredLease = leaseManager.acquire(policy, content, request.channels)
         var ownedSink: CPointer<kprt_sink>? = null
 
         try {

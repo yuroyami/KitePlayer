@@ -15,7 +15,10 @@ import platform.AVFAudio.AVAudioSessionModeDefault
 import platform.AVFAudio.AVAudioSessionModeMoviePlayback
 import platform.AVFAudio.AVAudioSessionModeSpokenAudio
 import platform.AVFAudio.AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+import platform.AVFAudio.maximumOutputNumberOfChannels
 import platform.AVFAudio.setActive
+import platform.AVFAudio.setPreferredOutputNumberOfChannels
+import platform.AVFAudio.setSupportsMultichannelContent
 import platform.Foundation.NSError
 
 internal actual fun platformAppleAudioSessionController(): AppleAudioSessionController =
@@ -51,6 +54,21 @@ private object IosAppleAudioSessionController : AppleAudioSessionController {
             } else {
                 session.setActive(active = active, error = error)
             }
+        }
+    }
+
+    override fun setMultichannelContent(offered: Boolean) {
+        call("declaring multichannel content to AVAudioSession") { error ->
+            session.setSupportsMultichannelContent(offered, error = error)
+        }
+    }
+
+    override fun preferOutputChannels(channels: Int) {
+        // Zero is a session that will not say what its route offers, and is asked for nothing.
+        val offered = session.maximumOutputNumberOfChannels.toInt()
+        if (offered <= 0) return
+        call("asking AVAudioSession for output channels") { error ->
+            session.setPreferredOutputNumberOfChannels(minOf(channels, offered).toLong(), error = error)
         }
     }
 

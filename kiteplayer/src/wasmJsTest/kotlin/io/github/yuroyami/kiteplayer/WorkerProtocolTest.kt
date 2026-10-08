@@ -62,6 +62,10 @@ class WorkerProtocolTest {
         growth = FileGrowth(endsAfter = 5.seconds),
         thumbnails = ThumbnailSource("https://example.com/thumbs.vtt"),
         runsIntoNext = true,
+        externalAudio = listOf(
+            AudioSource("https://example.com/dub.m4a", title = "Dub", language = "fr"),
+            AudioSource("https://example.com/commentary.opus"),
+        ),
     )
 
     private val tracks = Tracks(
@@ -201,6 +205,7 @@ class WorkerProtocolTest {
         PlaybackWarning.ContainerDeclarationDiverged(0, "width", "1920", "1440"),
         PlaybackWarning.SubtitleSourceUnreadable("https://example.com/a.srt", "404"),
         PlaybackWarning.ThumbnailsUnreadable("https://example.com/thumbs.vtt", "404"),
+        PlaybackWarning.AudioSourceUnreadable("https://example.com/dub.m4a", "404"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/a.srt", "windows-1252", "Shift_JIS"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/b.srt", "windows-1252"),
         PlaybackWarning.TypesetterUnavailable("libass", "no module"),
@@ -405,7 +410,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(42, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(43, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test
@@ -498,6 +503,7 @@ class WorkerProtocolTest {
         val refused = listOf(
             MediaItem.from(reader, "bytes.mp4"),
             MediaItem("https://example.com/a.mp4", externalSubtitles = listOf(SubtitleSource("a.srt", io = reader))),
+            MediaItem("https://example.com/a.mp4", externalAudio = listOf(AudioSource("a.m4a", io = reader))),
         )
         for (media in refused) {
             assertIs<PlaybackError.ConfigurationInvalid>(crossingRefusal(media)?.error, "$media must be refused")

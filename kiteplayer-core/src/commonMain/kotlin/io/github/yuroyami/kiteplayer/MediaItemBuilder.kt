@@ -22,6 +22,7 @@ public class MediaItemBuilder(private val uri: String) {
     private val headers = LinkedHashMap<String, String>()
     private var thumbnails: ThumbnailSource? = null
     private val externalSubtitles = ArrayList<SubtitleSource>()
+    private val externalAudio = ArrayList<AudioSource>()
     private var videoFilter: String? = null
     private var audioFilter: String? = null
     private var startPosition: Duration? = null
@@ -59,6 +60,16 @@ public class MediaItemBuilder(private val uri: String) {
     /** Adds subtitle files. See [SubtitleSource]. */
     public fun externalSubtitles(sources: List<SubtitleSource>): MediaItemBuilder = apply {
         externalSubtitles += sources
+    }
+
+    /** Adds an audio file or stream that plays beside the media. See [AudioSource]. */
+    public fun externalAudio(source: AudioSource): MediaItemBuilder = apply {
+        externalAudio += source
+    }
+
+    /** Adds audio files or streams that play beside the media. See [AudioSource]. */
+    public fun externalAudio(sources: List<AudioSource>): MediaItemBuilder = apply {
+        externalAudio += sources
     }
 
     /** See [MediaItem.videoFilter]. */
@@ -196,6 +207,7 @@ public class MediaItemBuilder(private val uri: String) {
         clip = clip,
         thumbnails = thumbnails,
         runsIntoNext = runsIntoNext,
+        externalAudio = externalAudio.toList(),
     )
 }
 

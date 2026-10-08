@@ -3918,7 +3918,7 @@ internal class PlaybackCore(
             // Only an open that reads through the engine's reader shows its progress, so only such
             // an open can stall. The backend's own protocols carry their own timeouts instead.
             val stallLimit = if (sessionIo != null) config.buffer.stallTimeout else Duration.INFINITE
-            openBackendSession(effectiveItem, stallWatch, stallLimit, preemptible = pending == null)
+            openBackendSession(effectiveItem, stallWatch, stallLimit, report, preemptible = pending == null)
         } catch (failure: Throwable) {
             // Every reader on this path is the engine's, whoever supplied the factory, so an open
             // that never produced a session closes it here. The backend's own unwind may have got
@@ -4518,6 +4518,9 @@ internal class PlaybackCore(
      * to the open until it returns, and a close under a read is the one thing a blocking bridge must
      * never meet. A session that the open built anyway is closed here.
      *
+     * The item's external audio inputs open in the same job, after the media (#392). Each gets a
+     * reader by the item's own rule, which tells [watch] of its bytes and [report] of its warnings.
+     *
      * @throws OpenPreempted when a stop or a close cancelled the open.
      * @throws PlaybackException with [PlaybackError.SourceStalled] when the open stalled.
      */
@@ -4525,6 +4528,7 @@ internal class PlaybackCore(
         item: MediaItem,
         watch: StallWatch,
         stallLimit: Duration,
+        report: (PlaybackWarning) -> Unit,
         preemptible: Boolean = true,
     ): BackendSession {
         var outcome: Result<BackendSession>? = null
@@ -4534,7 +4538,14 @@ internal class PlaybackCore(
                 watch.begin()
                 val opening = launch(dispatchers.demux) {
                     outcome = try {
-                        Result.success(backend.open(item))
+                        Result.success(
+                            openWithExternalAudio(backend, item) { input ->
+                                resolveMediaIo(input, config.network)?.let { reader ->
+                                    reader.setWarningSink { warning -> report(warning) }
+                                    ProgressReportingMediaIo(reader, watch)
+                                }
+                            },
+                        )
                     } catch (failure: Throwable) {
                         Result.failure(failure)
                     }
@@ -12801,7 +12812,8 @@ internal class PlaybackCore(
                 ended = true
                 continue
             }
-            val listed = packet.newStreams
+            // A list the media announces does not know the item's external audio streams (#392).
+            val listed = packet.newStreams?.let { session.source.streamsAnnouncedBy(packet, it) }
             val programs = packet.newPrograms
             if (listed != null || programs != null) announceLayout(session, late, listed, programs)
             // Read before the packet is handed on, which gives it away.
@@ -15776,7 +15788,7 @@ internal suspend fun inspectMedia(backend: MediaBackend, media: MediaItem): Medi
     // A backend open may block its thread, so it never runs on the caller's (#202).
     withContext(blockingWorkDispatcher) {
         val session = try {
-            backend.open(media)
+            openWithExternalAudio(backend, media)
         } catch (failure: CancellationException) {
             throw failure
         } catch (failure: PlaybackException) {

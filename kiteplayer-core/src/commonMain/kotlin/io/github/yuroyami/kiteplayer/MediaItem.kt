@@ -177,6 +177,12 @@ public data class MediaItem(
      * lets a crossfade overlap them.
      */
     val runsIntoNext: Boolean = false,
+    /**
+     * Audio files or streams that play beside the media, such as a dub or a commentary (#392).
+     * Each audio track of each one is listed in [Tracks] beside the media's own, and
+     * [KitePlayer.selectTrack] plays one in step with the picture. See [AudioSource].
+     */
+    val externalAudio: List<AudioSource> = emptyList(),
 ) {
     public companion object {}
 
@@ -217,6 +223,7 @@ public data class MediaItem(
         append("MediaItem(").append(label)
         if (headers.isNotEmpty()) append(", headers=").append(headers.keys)
         if (externalSubtitles.isNotEmpty()) append(", externalSubtitles=").append(externalSubtitles.size)
+        if (externalAudio.isNotEmpty()) append(", externalAudio=").append(externalAudio.size)
         if (videoFilter != null) append(", videoFilter=").append(videoFilter)
         if (audioFilter != null) append(", audioFilter=").append(audioFilter)
         if (clip != null) append(", clip=").append(clip)
@@ -564,6 +571,36 @@ public data class SubtitleSource(
         public val ENCODINGS: List<String> = SubtitleEncodings.names
     }
 }
+
+/**
+ * An audio file or stream that plays beside a media item (#392), named in [MediaItem.externalAudio].
+ *
+ * The player opens it with the item, through the same backend. Each of its audio tracks becomes a
+ * track of the item, listed after the media's own, and its pictures and subtitles are left out. A
+ * track plays on the item's timeline: its time zero is the item's time zero, and a seek moves both.
+ * The player reads only the sound that is heard, so a track of another input starts within a moment
+ * of [KitePlayer.selectTrack], with the picture going on, as an HLS audio rendition does.
+ *
+ * The item's length, tags and chapters stay those of [MediaItem.uri]. An input shorter than the
+ * picture ends early and the picture plays on. An input that cannot open is left out with
+ * [PlaybackWarning.AudioSourceUnreadable], and the item plays without it.
+ *
+ * Where the bytes come from, in order: [io] when set; then the network resolver, as for the item;
+ * then [uri] through the backend. The resolver gets the item's [MediaItem.headers] only when [uri]
+ * has the same scheme, host and port as the item's own URI. To send headers to another server, give
+ * the input its own [io]. The item's [MediaItem.openOptions], [MediaItem.formatHint] and
+ * [MediaItem.demux] do not apply to it.
+ */
+public data class AudioSource(
+    /** Where the audio is: a file path, or an address, as [MediaItem.uri] is. */
+    val uri: String,
+    /** Shown in a track menu for each track of this input. Defaults to the track's own title, then the file name. */
+    val title: String? = null,
+    /** The language of this input's tracks, in place of what the file says. */
+    val language: String? = null,
+    /** Reads the bytes through your own code, as [MediaItem.io] does. A factory: each open asks for a fresh reader. */
+    val io: MediaIoFactory? = null,
+)
 
 /** How exact a seek needs to be, traded against how long it takes. */
 public enum class SeekMode {

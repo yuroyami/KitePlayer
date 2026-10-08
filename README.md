@@ -138,6 +138,8 @@ video decoder.
   Apple outputs take up to 7.1, and an iPhone tells the system when an item is surround, so a
   receiver or headphones that place sound in space can take it.
 - A choice of output device on macOS and the desktop JVM.
+- Audio files and streams beside the video, such as a dub or a commentary, as tracks of the item
+  ([#392](https://github.com/yuroyami/KitePlayer/issues/392)).
 - Waveforms, and an optional audio visualiser for media with no picture.
 
 </td>
@@ -333,8 +335,9 @@ unpack `kiteplayer-wasm-js-<version>-web.zip` beside `index.html` too, for
 `kiteplayer-web-worker.mjs` and the three files beside it. With gzip it is about 0.50 MiB to
 download, and CI holds it to 0.53 MiB. The worker player has the calls and flows of `KitePlayer`
 with the same names, except those its KDoc lists, such as `captureFrame` and recording. A setter
-it refuses arrives on `events` as `CommandRefused` rather than throwing at the call. An item, or an
-external subtitle, with a reader of its own cannot cross to the worker; give it an address. The
+it refuses arrives on `events` as `CommandRefused` rather than throwing at the call. An item, an
+external subtitle or an external audio input with a reader of its own cannot cross to the worker;
+give it an address. The
 worker loads `kiteass.mjs` from beside the page too, so the libass web zip from step 2 serves
 both players; pass another `libassUrl` to `KitePlayerWorker.start` if the files live elsewhere.
 `pictureInPictureOrNull()` puts the worker's canvas in a picture in picture window, as
@@ -568,8 +571,25 @@ val item = mediaItem("https://cdn.example.com/live/channel.ts") {
 `probe`, `corruptPackets`, `lowLatency` and the other demux settings say how the container opens,
 and they fill the item's `demux` field. Raw FFmpeg options still go in `openOptions`, but an option
 that a typed field also sets refuses the open with a typed error. `MediaItem` also carries
-`startPosition`, `externalSubtitles`, `videoFilter` for an FFmpeg filter chain, and `formatHint`
-when a container needs naming.
+`startPosition`, `externalSubtitles`, `externalAudio`, `videoFilter` for an FFmpeg filter chain,
+and `formatHint` when a container needs naming.
+
+An item can play audio files or streams beside its media. Each one is an external audio input.
+
+```kotlin
+val item = mediaItem("https://cdn.example.com/film.mp4") {
+    externalAudio(AudioSource("https://cdn.example.com/film.fr.m4a", title = "French", language = "fr"))
+}
+```
+
+- The audio tracks of each input are listed in `tracks.audio`, after the media's own tracks.
+- `selectTrack(TrackKind.Audio, id)` plays one. The player reads only the input that is heard.
+- The open still chooses the media's own sound first. With no sound in the media, it chooses the
+  first input.
+- A seek moves the media and the input together. An input shorter than the media goes silent at
+  its end.
+- An input that cannot open is left out with the warning `AudioSourceUnreadable`. The item still
+  plays.
 
 </details>
 

@@ -457,6 +457,7 @@ public class KitePlayerWorker private constructor(
         return media.copy(
             uri = pageAddress(media.uri),
             externalSubtitles = media.externalSubtitles.map { it.copy(uri = pageAddress(it.uri)) },
+            externalAudio = media.externalAudio.map { it.copy(uri = pageAddress(it.uri)) },
         )
     }
 

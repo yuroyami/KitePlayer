@@ -212,6 +212,7 @@ internal fun crossingRefusal(item: MediaItem): PlaybackException? = refusal(
     listOfNotNull(
         "a reader of its own".takeIf { item.io != null },
         "an external subtitle with a reader of its own".takeIf { item.externalSubtitles.any { it.io != null } },
+        "an external audio input with a reader of its own".takeIf { item.externalAudio.any { it.io != null } },
         "a thumbnail file with a reader of its own".takeIf { item.thumbnails?.io != null },
     ),
 )
@@ -476,6 +477,13 @@ private fun encodeItem(item: MediaItem): JsAny = record {
     item.growth?.let { growth -> put("growthEndsAfter", growth.endsAfter) }
     item.thumbnails?.let { put("thumbnails", it.uri) }
     if (item.runsIntoNext) put("runsIntoNext", true)
+    put("audio", item.externalAudio.encodeEach(::encodeAudio))
+}
+
+private fun encodeAudio(source: AudioSource): JsAny = record {
+    put("uri", source.uri)
+    put("title", source.title)
+    put("language", source.language)
 }
 
 private fun encodeSubtitle(source: SubtitleSource): JsAny = record {
@@ -1036,6 +1044,11 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             put("uri", warning.uri)
             put("reason", warning.reason)
         }
+        is PlaybackWarning.AudioSourceUnreadable -> {
+            kind("AudioSourceUnreadable")
+            put("uri", warning.uri)
+            put("reason", warning.reason)
+        }
         is PlaybackWarning.SubtitleCharsetGuessed -> {
             kind("SubtitleCharsetGuessed")
             put("uri", warning.uri)
@@ -1299,6 +1312,13 @@ private fun decodeItem(o: JsAny): MediaItem = MediaItem(
     growth = o.micros("growthEndsAfter")?.let(::FileGrowth),
     thumbnails = o.str("thumbnails")?.let { ThumbnailSource(it) },
     runsIntoNext = o.flag("runsIntoNext"),
+    externalAudio = o.list("audio", ::decodeAudio).orEmpty(),
+)
+
+private fun decodeAudio(o: JsAny): AudioSource = AudioSource(
+    uri = o.str("uri") ?: missing("uri"),
+    title = o.str("title"),
+    language = o.str("language"),
 )
 
 private fun decodeSubtitle(o: JsAny): SubtitleSource = SubtitleSource(
@@ -1681,6 +1701,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         )
         "SubtitleSourceUnreadable" -> PlaybackWarning.SubtitleSourceUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "ThumbnailsUnreadable" -> PlaybackWarning.ThumbnailsUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
+        "AudioSourceUnreadable" -> PlaybackWarning.AudioSourceUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "SubtitleCharsetGuessed" -> PlaybackWarning.SubtitleCharsetGuessed(
             o.str("uri").orEmpty(),
             o.str("charset").orEmpty(),

@@ -14,7 +14,8 @@ import kotlin.time.Duration.Companion.microseconds
  * [MediaItem.audioFilter]. [asProperties] drops all five, and an item that needs one is rebuilt by the application before
  * [KitePlayer.restore]. Headers, raw
  * open options, the format hint, the demux settings, the start position, the clip, the title,
- * artist and album, and whether an item runs into the next are strings and travel.
+ * artist and album, and whether an item runs into the next are strings and travel. So do the
+ * address, title and language of each [MediaItem.externalAudio] input, but not its [AudioSource.io].
  *
  * Tracks are remembered by LANGUAGE rather than by id, because ids belong to one open of one
  * container and a memento outlives both.
@@ -79,7 +80,8 @@ public data class PlayerMemento(
      * `queue.N.clipStart` and `queue.N.clipEnd` (microseconds) for a clipped item,
      * `queue.N.title`, `queue.N.artist`, `queue.N.album`, `queue.N.audioContent` when it is not
      * automatic, `queue.N.header.<name>`,
-     * `queue.N.option.<key>` and `queue.N.demux.<field>`; then `queueOrder` as space-separated
+     * `queue.N.option.<key>`, `queue.N.demux.<field>`, and for each external audio input
+     * `queue.N.externalAudio.M.uri`, `.title` and `.language`; then `queueOrder` as space-separated
      * positions when there is one, one key per setting, durations in microseconds, and
      * `audioLanguage` and `subtitleLanguage` only when known.
      */
@@ -103,6 +105,11 @@ public data class PlayerMemento(
             item.headers.forEach { (name, value) -> put("queue.$n.header.$name", value) }
             item.openOptions.forEach { (key, value) -> put("queue.$n.option.$key", value) }
             putDemux("queue.$n.demux.", item.demux)
+            item.externalAudio.forEachIndexed { m, audio ->
+                put("queue.$n.externalAudio.$m.uri", audio.uri)
+                audio.title?.let { put("queue.$n.externalAudio.$m.title", it) }
+                audio.language?.let { put("queue.$n.externalAudio.$m.language", it) }
+            }
         }
         put("queueIndex", queueIndex.toString())
         if (queueOrder.isNotEmpty()) put("queueOrder", queueOrder.joinToString(" "))
@@ -171,7 +178,7 @@ public data class PlayerMemento(
 
     public companion object {
         /** The version [asProperties] stamps. [fromProperties] also reads every older one. */
-        public const val FORMAT_VERSION: Int = 9
+        public const val FORMAT_VERSION: Int = 10
 
         /**
          * Reads what [asProperties] wrote.
@@ -185,8 +192,9 @@ public data class PlayerMemento(
             // setting, version 2 nothing about the demux settings, version 3 nothing about the
             // item titles or the shuffle order, version 4 nothing about the variant limits or the
             // HDR policy, version 5 nothing about an item's audio content, version 6 nothing
-            // about the programme an item plays, version 7 nothing about an item's clip, and
-            // version 8 nothing about an item that runs into the next.
+            // about the programme an item plays, version 7 nothing about an item's clip,
+            // version 8 nothing about an item that runs into the next, and version 9 nothing
+            // about an item's external audio.
             // Each reads back with the defaults for those, which is what a player that had never
             // been told about them would have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
@@ -218,6 +226,18 @@ public data class PlayerMemento(
                         MediaClip(start.toLong().microseconds, properties["queue.$n.clipEnd"]?.toLong()?.microseconds)
                     },
                     runsIntoNext = properties["queue.$n.runsIntoNext"]?.toBooleanStrict() ?: false,
+                    // One uri key for each input, so the keys bound the count as they bound the queue.
+                    externalAudio = generateSequence(0) { it + 1 }
+                        .map { m -> "queue.$n.externalAudio.$m." }
+                        .takeWhile { prefix -> "${prefix}uri" in properties }
+                        .map { prefix ->
+                            AudioSource(
+                                uri = properties.getValue("${prefix}uri"),
+                                title = properties["${prefix}title"],
+                                language = properties["${prefix}language"],
+                            )
+                        }
+                        .toList(),
                 )
             }
             return PlayerMemento(

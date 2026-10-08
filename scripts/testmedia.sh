@@ -183,6 +183,12 @@ echo "MPEG-TS remux of the 1080p clip, timestamps pushed 1400 seconds into the f
 ffmpeg -v error -y -i sync1080p30.mp4 -c copy \
   -output_ts_offset 1400 -f mpegts tsoffset1400.ts
 
+echo "The 1080p clip as a picture alone and a sound alone, for an item that plays two files as one"
+# -c copy keeps every packet and every timestamp of sync1080p30.mp4, so the two files played
+# together must come out as the one file does.
+ffmpeg -v error -y -i sync1080p30.mp4 -an -c copy sync1080p30-video.mp4
+ffmpeg -v error -y -i sync1080p30.mp4 -vn -c copy sync1080p30-audio.m4a
+
 echo "4K HEVC Main10, 6s, no audio, for hardware decode"
 ffmpeg -v error -y \
   -f lavfi -i "testsrc2=size=3840x2160:rate=30:duration=6" \

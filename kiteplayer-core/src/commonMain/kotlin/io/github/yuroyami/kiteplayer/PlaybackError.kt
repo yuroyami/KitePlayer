@@ -512,6 +512,17 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The external audio input at [uri] could not be opened, or holds no audio track, so the item
+     * plays without its tracks (#392). See [AudioSource].
+     */
+    public data class AudioSourceUnreadable(
+        val uri: String,
+        val reason: String,
+    ) : PlaybackWarning() {
+        override val message: String get() = "the external audio ${redactUri(uri)} was left out: ${redactUrisIn(reason)}"
+    }
+
+    /**
      * The item's WebVTT thumbnail file at [uri] could not be read or held no picture, so the seek
      * bar has none of its pictures (#433). The item plays on, and the stream's own pictures, when
      * it has any, stand in.

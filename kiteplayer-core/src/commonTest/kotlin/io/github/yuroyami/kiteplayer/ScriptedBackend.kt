@@ -1720,6 +1720,8 @@ internal class ScriptedAudioDecoder(
         }
         // libavcodec refuses a packet after the drain signal until a flush.
         check(!ending) { "a packet was sent after the drain signal with no flush" }
+        // A backend downcasts a packet to its own type, so it must get its own packet back (#392).
+        check(packet is FakePacket) { "the scripted decoder was sent a packet that is not its backend's: ${packet::class.simpleName}" }
         if (faults.refuseSend()) return false
         if (faults.emptyDecode()) return true
         pending.addLast(

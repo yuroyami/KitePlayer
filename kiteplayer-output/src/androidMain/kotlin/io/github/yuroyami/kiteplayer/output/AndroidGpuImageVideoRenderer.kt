@@ -131,6 +131,16 @@ public class AndroidGpuImageVideoRenderer(
         bridge.adjust.set(GlState.packGlAdjust(adjustments))
     }
 
+    /**
+     * The flash guard's mode (#500). The blit measures each picture it latches and dims it while a
+     * flashing run lasts. Android has no system setting to follow, so `FollowSystem` is off here.
+     */
+    override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
+        val on = mode == io.github.yuroyami.kiteplayer.FlashGuard.On
+        // A change of mode starts the history afresh, as taking the picture off does.
+        if (bridge.flashGuardOn.getAndSet(on) != on) bridge.flashGuardForgets.set(true)
+    }
+
     /** False: the blit runs at each latch only, so a held picture shows a change from a redraw (#463). */
     override val redrawsHeldPicture: Boolean get() = false
     private val codecTarget = MediaCodecSurfaceTarget(initialSurface = bridge.surface)
@@ -469,6 +479,10 @@ private class OesRgbaBridge(
 
     /** The animation upscaler's tier. Off is the blit alone, bit for bit. */
     val animationUpscaler = AtomicReference(io.github.yuroyami.kiteplayer.AnimationUpscaler.Off)
+
+    /** True while the flash guard is on, and set when its history must start afresh. Read by the blit. */
+    val flashGuardOn = java.util.concurrent.atomic.AtomicBoolean(false)
+    val flashGuardForgets = java.util.concurrent.atomic.AtomicBoolean(false)
     private val startup = AtomicReference<Result<GlState>>()
     private val ready = CountDownLatch(1)
     @Volatile private var closed = false
@@ -498,6 +512,8 @@ private class OesRgbaBridge(
                         bicubic,
                         linearLight,
                         animationUpscaler,
+                        flashGuardOn,
+                        flashGuardForgets,
                         publish,
                         recordSuperseded,
                         reportFailure,
@@ -685,9 +701,40 @@ internal class GlState private constructor(
     private val bicubic: java.util.concurrent.atomic.AtomicBoolean,
     private val linearLight: java.util.concurrent.atomic.AtomicBoolean,
     private val animationUpscaler: AtomicReference<io.github.yuroyami.kiteplayer.AnimationUpscaler>,
+    private val flashGuardOn: java.util.concurrent.atomic.AtomicBoolean,
+    private val flashGuardForgets: java.util.concurrent.atomic.AtomicBoolean,
 ) : AutoCloseable {
     /** Advances per draw so the debanding ring and its grain do not sit still. */
     private val debandSeed = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /** The flash guard (#500): the detector, its reading of each picture, and whether it ran last. */
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+    private val flashGuard = io.github.yuroyami.kiteplayer.spi.VideoFlashGuard()
+    private val flashMeter = GlFlashMeter()
+    private var flashGuarding = false
+
+    /**
+     * The flash guard's factor for the picture latched in [texture], measured through [transform]
+     * before the picture is drawn: 1 outside a flashing run and while the guard is off.
+     */
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+    private fun flashFactor(sourceSize: VideoSize): Float {
+        val on = flashGuardOn.get()
+        val forget = flashGuardForgets.getAndSet(false)
+        if (on != flashGuarding || forget) flashGuard.reset()
+        flashGuarding = on
+        if (!on) return 1f
+        val cells = flashMeter.measure {
+            blit.draw(
+                GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture, transform, TEX_COORDS,
+                sourceSize.width, sourceSize.height,
+                adjust = null, ditherStep = 0f, debandThreshold = 0f, debandRange = 0f, debandGrain = 0f,
+                debandSeed = 0f, bicubic = false, linearLight = false,
+            )
+        }
+        glCheck("measure the picture for the flash guard")
+        return flashGuard.factorFor(cells, System.nanoTime())
+    }
     private val transform = FloatArray(16)
     private var outputQueue: OutputQueue? = null
     private var outputSurface: EGLSurface = EGL14.EGL_NO_SURFACE
@@ -773,6 +820,8 @@ internal class GlState private constructor(
      */
     fun clearPictures() {
         if (closed) return
+        // Taking the picture off starts the flash guard's history afresh.
+        flashGuardForgets.set(true)
         frameConfigurations.discardPending()
         if (outputQueue != null) destroyOutput(force = false)
     }
@@ -839,8 +888,9 @@ internal class GlState private constructor(
             if (crop != null && bufferSize != null) cropTextureTransform(transform, crop, bufferSize)
             makeCurrent(outputSurface)
             val seed = (debandSeed.getAndIncrement() % 1024).toFloat()
+            val adjusted = dimGlAdjust(adjust.get(), flashFactor(sourceSize))
             val upscaler = upscalerFor(sourceSize, outputSize)
-            if (upscaler == null || !drawUpscaledOrRefuse(upscaler, outputSize, seed)) {
+            if (upscaler == null || !drawUpscaledOrRefuse(upscaler, outputSize, seed, adjusted)) {
                 GLES20.glViewport(0, 0, outputSize.width, outputSize.height)
                 blit.draw(
                     GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
@@ -849,7 +899,7 @@ internal class GlState private constructor(
                     TEX_COORDS,
                     sourceSize.width,
                     sourceSize.height,
-                    adjust.get(),
+                    adjusted,
                     ditherStep.get(),
                     debandThreshold.get(),
                     debandRange.get(),
@@ -904,7 +954,12 @@ internal class GlState private constructor(
         }
     }
 
-    private fun drawUpscaledOrRefuse(upscaler: AnimationUpscaleGl, outputSize: VideoSize, seed: Float): Boolean =
+    private fun drawUpscaledOrRefuse(
+        upscaler: AnimationUpscaleGl,
+        outputSize: VideoSize,
+        seed: Float,
+        adjusted: FloatArray?,
+    ): Boolean =
         try {
             drawUpscaled(
                 upscaler,
@@ -916,7 +971,7 @@ internal class GlState private constructor(
                 0,
                 outputSize.width,
                 outputSize.height,
-                adjust.get(),
+                adjusted,
                 ditherStep.get(),
                 debandThreshold.get(),
                 debandRange.get(),
@@ -1108,6 +1163,7 @@ internal class GlState private constructor(
         failure = cleanupFailure(failure, decoderSurface::release)
         failure = cleanupFailure(failure, surfaceTexture::release)
         failure = cleanupFailure(failure) { releaseUpscaler() }
+        failure = cleanupFailure(failure) { flashMeter.close() }
         failure = cleanupFailure(failure) {
             GLES20.glDeleteProgram(blit.program)
             plainBlit?.let { GLES20.glDeleteProgram(it.program) }
@@ -1444,6 +1500,8 @@ internal class GlState private constructor(
             bicubic: java.util.concurrent.atomic.AtomicBoolean,
             linearLight: java.util.concurrent.atomic.AtomicBoolean,
             animationUpscaler: AtomicReference<io.github.yuroyami.kiteplayer.AnimationUpscaler>,
+            flashGuardOn: java.util.concurrent.atomic.AtomicBoolean,
+            flashGuardForgets: java.util.concurrent.atomic.AtomicBoolean,
             publish: (AndroidGpuImageFrame) -> Unit,
             recordSuperseded: (Long) -> Unit,
             reportFailure: (Throwable) -> Unit,
@@ -1548,6 +1606,8 @@ internal class GlState private constructor(
                     bicubic = bicubic,
                     linearLight = linearLight,
                     animationUpscaler = animationUpscaler,
+                    flashGuardOn = flashGuardOn,
+                    flashGuardForgets = flashGuardForgets,
                 )
                 surfaceTexture.setOnFrameAvailableListener(
                     {

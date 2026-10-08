@@ -1,8 +1,9 @@
 # Dimming flashing video
 
 The contract for #500, built in the order at the end. Today the detector, the setting, the Compose
-canvas renderer, the AWT canvas, the Metal renderer and the Core Graphics renderers on Apple carry
-it; every other renderer draws as before until its step lands.
+canvas renderer, the AWT canvas, the Metal renderer, the Core Graphics renderers on Apple, the
+Android GL renderer and the Android software path carry it; every other renderer draws as before
+until its step lands.
 
 Repeated bright flashes can trigger seizures in people with photosensitive epilepsy and discomfort
 in many more. Since iOS 16.4 and macOS 13.3, Apple has a Dim Flashing Lights setting that
@@ -74,14 +75,18 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
   over the picture at `1 - k` before the cues, which leaves `k` of each encoded value under it, and
   a repaint of a held picture draws it at the factor it was shown with. The Core Graphics
   renderers, AppKit's and UIKit's, measure on their conversion worker and fold the factor into the
-  matrix they apply to the bytes.
+  matrix they apply to the bytes. The Android software path does the same with the colour matrix
+  of its paint.
 - A GPU renderer (Metal, Android GL) draws a reduced copy beside its adjustment pass and reads it
   back when the next picture is about to draw, so it dims one frame late. The copy is 64 by 36
   texels, one for each point of the lattice above, so the detector reads the same points as on a
   CPU renderer. An HDR picture is measured as it looks tone mapped to standard range. The Metal
   renderer draws the copy in the same commands as the picture, so the planes are uploaded once. On
   its extended-range layer the picture is light, so it scales by `k` to the power of 2.2. A picture
-  drawn again while paused is not measured again and keeps the factor it was shown with.
+  drawn again while paused is not measured again and keeps the factor it was shown with. The
+  Android GL renderer has an OpenGL ES 2 context, with no way to read back later, so it draws the
+  copy first and reads it at once: the picture that completes a run is already dimmed. That read
+  took 0.8 to 1.0 ms a picture on an ASUS ROG Phone 9.
 - A renderer that draws no adjustments at all (the web canvas, Apple's sample buffer layer and
   Android's direct MediaCodec surface) has no guard until it has an adjustment stage.
 
@@ -102,7 +107,8 @@ on a system older than the setting, where `FollowSystem` is off.
 5. Metal and the Apple setting, on a Mac. Done, tested offscreen on a Mac; the check by eye on a
    Mac and on an iPhone is owed. Core Graphics is done too, tested on a Mac and on the iOS
    simulator.
-6. Android GL, the Android software path and the Compose renderer's hardware tier, on a device.
+6. Android GL and the Android software path. Done: the GL half is tested on an ASUS ROG Phone 9
+   and the software path on the host. The Compose renderer's hardware tier is next.
 7. The web canvas, once it has an adjustment stage.
 
 ## Tests

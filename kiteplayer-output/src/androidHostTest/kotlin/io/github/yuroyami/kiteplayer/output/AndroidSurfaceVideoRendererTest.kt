@@ -26,6 +26,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -1049,5 +1050,80 @@ class AndroidSurfaceHeldPictureTest {
             software.close()
             direct.close()
         }
+    }
+}
+
+/** The software path measures what it converts and dims a flashing run (#500). */
+class AndroidSurfaceFlashGuardTest {
+
+    /** Presents a black and white strobe, three pictures each at 30 a second, and answers each picture's colour matrix. */
+    private fun matricesOfAStrobe(mode: io.github.yuroyami.kiteplayer.FlashGuard?, pictures: Int = 60): Pair<List<FloatArray?>, FakeTarget> = runBlocking {
+        val target = FakeTarget()
+        val shade = java.util.concurrent.atomic.AtomicInteger(0)
+        val clock = java.util.concurrent.atomic.AtomicLong(0L)
+        val r = AndroidSurfaceVideoRenderer(
+            convert = { frame -> rgbaBytes(frame.size.width, frame.size.height) { Triple(shade.get(), shade.get(), shade.get()) } },
+            target = target,
+            flashNanos = { clock.get() },
+        )
+        try {
+            if (mode != null) r.setFlashGuard(mode)
+            val matrices = (0 until pictures).map { index ->
+                shade.set(if (index / 3 % 2 == 0) 0 else 255)
+                clock.set(index * 1_000_000_000L / 30)
+                assertTrue(r.present(TestFrame(), 0))
+                awaitPresented(r, index + 1L)
+                target.drawnColorMatrix
+            }
+            matrices to target
+        } finally {
+            r.close()
+        }
+    }
+
+    @Test
+    fun `a strobe is dimmed from the picture that makes its run`() {
+        val (matrices, _) = matricesOfAStrobe(io.github.yuroyami.kiteplayer.FlashGuard.On)
+        assertTrue(matrices.take(21).all { it == null }, "the strobe is drawn whole before its run")
+        // The seventh leg is on picture 21, and from there every encoded value is drawn at about a third.
+        matrices.drop(21).forEachIndexed { index, matrix ->
+            val m = assertNotNull(matrix, "picture ${index + 21} was drawn whole")
+            assertTrue(m[0] in 0.25f..0.40f && m[6] == m[0] && m[12] == m[0], "the factor was ${m[0]}")
+            assertEquals(1f, m[18], "the alpha row is left alone")
+        }
+    }
+
+    @Test
+    fun `a strobe is drawn whole when the guard is off or only follows a system setting`() {
+        assertTrue(matricesOfAStrobe(io.github.yuroyami.kiteplayer.FlashGuard.Off).first.all { it == null })
+        // Android has no system setting to follow, so the default guards nothing.
+        assertTrue(matricesOfAStrobe(mode = null).first.all { it == null })
+        assertTrue(matricesOfAStrobe(io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem).first.all { it == null })
+    }
+
+    @Test
+    fun `the flash factor multiplies the picture controls and leaves a steady picture alone`() {
+        assertNull(dimColorMatrix(null, 1f))
+        val brighter = FloatArray(20).also { it[0] = 1f; it[6] = 1f; it[12] = 1f; it[18] = 1f; it[4] = 51f }
+        assertSame(brighter, dimColorMatrix(brighter, 1f))
+        val dimmed = assertNotNull(dimColorMatrix(brighter, 0.5f))
+        assertEquals(0.5f, dimmed[0])
+        assertEquals(25.5f, dimmed[4], "the offset is dimmed with the matrix")
+        assertEquals(1f, dimmed[18])
+        assertEquals(1f, brighter[0], "the renderer's own matrix is not written to")
+        val alone = assertNotNull(dimColorMatrix(null, 0.5f))
+        assertEquals(listOf(0.5f, 0.5f, 0.5f, 1f), listOf(alone[0], alone[6], alone[12], alone[18]))
+
+        assertNull(dimGlAdjust(null, 1f))
+        val gl = assertNotNull(dimGlAdjust(null, 0.5f))
+        assertEquals(listOf(0.5f, 0f, 0f, 0f, 0.5f, 0f, 0f, 0f, 0.5f, 0f, 0f, 0f, 1f), gl.take(13))
+        assertEquals(0f, gl[14], "the gamma stays off")
+        val packed = assertNotNull(GlState.packGlAdjust(io.github.yuroyami.kiteplayer.VideoAdjustments(brightness = 0.2f)))
+        val both = assertNotNull(dimGlAdjust(packed, 0.5f))
+        (0 until 12).forEach { assertEquals(packed[it] * 0.5f, both[it], "coefficient $it") }
+        // A gamma alone leaves the matrix off, and the factor then switches it on as itself.
+        val gamma = assertNotNull(GlState.packGlAdjust(io.github.yuroyami.kiteplayer.VideoAdjustments(gamma = 2f)))
+        val gammaDimmed = assertNotNull(dimGlAdjust(gamma, 0.5f))
+        assertEquals(listOf(0.5f, 1f, gamma[13], 1f), listOf(gammaDimmed[0], gammaDimmed[12], gammaDimmed[13], gammaDimmed[14]))
     }
 }

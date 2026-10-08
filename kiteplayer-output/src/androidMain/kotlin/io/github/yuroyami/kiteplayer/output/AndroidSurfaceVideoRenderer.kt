@@ -109,6 +109,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     private val geometryConsumer: ((VideoSize, Int, PictureCrop?) -> Unit)? = null,
     /** Whether [convert] rolls this frame's HDR off to SDR. See the public constructors. */
     private val toneMapped: (VideoFrame) -> Boolean = { false },
+    /** The flash guard's clock, in nanoseconds: when each picture is drawn. A host test passes its own. */
+    private val flashNanos: () -> Long = System::nanoTime,
 ) : VideoRenderer {
 
     /**
@@ -262,7 +264,47 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         val framePts: Pts,
         val crop: PictureCrop?,
         val epoch: Long,
+        /** The flash guard's factor the picture was drawn with. */
+        val flashFactor: Float,
     )
+
+    private val flashGuardOn = atomic(false)
+
+    /** Set when the picture is taken off or the mode changes, so the next picture starts the guard afresh. */
+    private val flashGuardForgets = atomic(false)
+
+    /** The flash guard (#500) and whether it ran on the last picture. Worker thread only. */
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+    private val flashGuard = io.github.yuroyami.kiteplayer.spi.VideoFlashGuard()
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+    private val flashCells = FloatArray(io.github.yuroyami.kiteplayer.spi.VideoFlashGuard.CELLS)
+    private var flashGuarding = false
+
+    /**
+     * The flash guard's mode (#500). The software path measures each picture it converts and dims it
+     * while a flashing run lasts. A MediaCodec picture goes to the Surface with no stage to dim it
+     * in, so it has no guard. Android has no system setting to follow, so `FollowSystem` is off here.
+     */
+    override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
+        val on = mode == io.github.yuroyami.kiteplayer.FlashGuard.On
+        if (flashGuardOn.getAndSet(on) != on) {
+            flashGuardForgets.value = true
+            // A held picture is drawn again, so turning the guard off undims it at once.
+            requestRedraw()
+        }
+    }
+
+    /** The flash guard's factor for [picture], measured on a sparse lattice of it. Worker thread only. */
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+    private fun flashFactorFor(picture: IntArray, size: VideoSize): Float {
+        val on = flashGuardOn.value
+        val forget = flashGuardForgets.getAndSet(false)
+        if (on != flashGuarding || forget) flashGuard.reset()
+        flashGuarding = on
+        if (!on) return 1f
+        io.github.yuroyami.kiteplayer.spi.VideoFlashGuard.cellsFromPackedRgb(picture, size.width, size.height, into = flashCells)
+        return flashGuard.factorFor(flashCells, flashNanos())
+    }
 
     /** A change of the overlay, the adjustments, the scale or the framing waits to be drawn. */
     private val redrawWanted = atomic(false)
@@ -531,8 +573,10 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         // Taken before the draw reads the overlay and the settings, so a change that comes after
         // that read still asks for its own redraw.
         val wanted = redrawWanted.getAndSet(false)
-        if (draw(picture, size, rotation, mirrored, framePts, crop, epoch, redraw = false)) {
-            held = HeldPicture(size, rotation, mirrored, framePts, crop, epoch)
+        // Measured before it is drawn, so the picture that completes a flashing run is already dimmed.
+        val flashFactor = flashFactorFor(picture, size)
+        if (draw(picture, size, rotation, mirrored, framePts, crop, epoch, redraw = false, flashFactor = flashFactor)) {
+            held = HeldPicture(size, rotation, mirrored, framePts, crop, epoch, flashFactor)
             softwareShowing.value = true
         } else if (wanted) {
             redrawWanted.value = true
@@ -560,6 +604,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         draw(
             argb, picture.size, picture.rotationDegrees, picture.mirrored, picture.framePts, picture.crop,
             picture.epoch, redraw = true,
+            // A held picture is not measured again: it keeps its factor until the guard goes off.
+            flashFactor = if (flashGuardOn.value && !flashGuardForgets.value) picture.flashFactor else 1f,
         )
     }
 
@@ -584,6 +630,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             pictureEpoch += 1
             pictureCleared = true
         }
+        // Taking the picture off starts the flash guard's history afresh.
+        flashGuardForgets.value = true
         signal.trySend(Unit)
     }
 
@@ -716,6 +764,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         crop: PictureCrop?,
         epoch: Long,
         redraw: Boolean,
+        flashFactor: Float = 1f,
     ): Boolean {
         fun lost(detail: String): Boolean {
             if (redraw) reportSurfaceLost(detail) else failWithLostSurface(detail)
@@ -736,7 +785,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             // cleared shows it.
             canvas.clearToBlack()
             noteCanvasSize(canvas.width, canvas.height)
-            target.setVideoColorMatrix(videoColorMatrix.value)
+            target.setVideoColorMatrix(dimColorMatrix(videoColorMatrix.value, flashFactor))
             val layout = frameLayout(
                 canvas.width, canvas.height, size, rotationDegrees, scaleMode.value,
                 videoTransform.value, mirrored, crop,

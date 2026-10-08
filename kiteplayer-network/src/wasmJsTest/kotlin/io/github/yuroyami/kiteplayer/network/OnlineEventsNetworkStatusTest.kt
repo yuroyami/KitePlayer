@@ -8,14 +8,14 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
- * The web's network status (#461), on Node with an event target standing in for the page's own,
- * because Node raises no `online` or `offline` events itself.
+ * The web's network status (#461), with an event target standing in for the page's own, because
+ * Node raises no `online` or `offline` events itself. The same tests run in a browser, which does.
  */
 class OnlineEventsNetworkStatusTest {
 
     @Test
-    fun withoutOnlineEventsThereIsNoStatus() {
-        assertNull(platformNetworkStatus())
+    fun aStatusExistsOnlyWhereOnlineEventsDo() {
+        if (hasPageEvents()) assertNotNull(platformNetworkStatus()) else assertNull(platformNetworkStatus())
     }
 
     @Test
@@ -37,6 +37,8 @@ class OnlineEventsNetworkStatusTest {
         }
     }
 }
+
+private fun hasPageEvents(): Boolean = js("typeof globalThis.addEventListener === 'function'")
 
 private fun installEventTarget(): Unit = js(
     """{

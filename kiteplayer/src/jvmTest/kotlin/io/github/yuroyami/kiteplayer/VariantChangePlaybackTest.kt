@@ -159,7 +159,8 @@ class VariantChangePlaybackTest {
                 } else {
                     println("variant change $name: the machine dropped $away pictures away from a change, so the times above were not checked")
                 }
-                assertEquals(emptyList(), warnings.toList(), "a change that was asked for warns of nothing")
+                // Late pictures are judged above by their own count, and a loaded machine warns of them.
+                assertEquals(emptyList(), warnings.filterNot { it is PlaybackWarning.FrameDropping }, "a change that was asked for warns of nothing")
                 assertEquals(null, output.failure.get())
             } finally {
                 watching.cancel()

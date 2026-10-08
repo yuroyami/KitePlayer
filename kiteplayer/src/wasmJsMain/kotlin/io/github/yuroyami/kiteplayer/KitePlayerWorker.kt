@@ -412,6 +412,10 @@ public class KitePlayerWorker private constructor(
     /**
      * Asks the worker to close the player and end, and returns at once. The worker ends when the
      * player has closed. [closeAndAwait] waits for that.
+     *
+     * A worker that is inside a read does not see the request until the read returns, and a live
+     * stream that stopped growing never returns it (#568). The page ends a worker that has not
+     * answered within three seconds, and every command still waiting on it fails.
      */
     override fun close() {
         if (closed) return
@@ -423,6 +427,18 @@ public class KitePlayerWorker private constructor(
         }
         pending[id] = CompletableDeferred()
         post(PageMessage.Close(id))
+        afterMillis(CLOSE_GRACE_MILLIS) { endUnanswered(id) }
+    }
+
+    /** Ends a worker that did not answer the close [id]. */
+    private fun endUnanswered(id: Int) {
+        val closing = pending.remove(id) ?: return
+        val error = PlaybackError.Internal("the player closed while its worker did not answer")
+        val waiting = pending.values.toList()
+        pending.clear()
+        waiting.forEach { it.completeExceptionally(PlaybackException(error)) }
+        finish()
+        closing.complete(null)
     }
 
     /** [close], returning once the worker has closed the player and ended. */
@@ -664,3 +680,9 @@ private external fun workerPostInit(worker: JsAny, message: JsAny, canvas: JsAny
 
 @JsFun("(worker) => { worker.terminate(); }")
 private external fun workerTerminate(worker: JsAny)
+
+/** How long a close waits for the worker's answer before the page ends the worker. */
+private const val CLOSE_GRACE_MILLIS = 3_000
+
+@JsFun("(millis, run) => { setTimeout(run, millis); }")
+private external fun afterMillis(millis: Int, run: () -> Unit)

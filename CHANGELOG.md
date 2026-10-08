@@ -510,6 +510,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `kiteplayer-network` brings the new artifact, so an application changes nothing. A build that
   names every KitePlayer artifact by hand, for a version alignment or an exclusion, needs the new
   name. `Dash.manifest` and `Dash.mediaItemFor` stay in `kiteplayer-network`.
+- `KitePlayerWorker.close` ends a worker that has not answered within three seconds, and the
+  commands still waiting on it fail. Before, a worker inside a read that never returned, such as
+  one of a live stream that stopped growing, could not be closed (#568).
 
 ### Removed
 

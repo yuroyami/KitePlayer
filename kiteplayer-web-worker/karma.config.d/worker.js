@@ -45,10 +45,15 @@ config.proxies = Object.assign({}, config.proxies, {
 // - live.m3u8: hls/ts-0 as a live playlist, two segments at the reset and one more every two
 //   seconds, ended after the sixth;
 // - live.mpd: dash/separate as a live manifest, whose third segment is the newest at the reset.
-//   With ?origin=, the segments are named on that origin instead of the manifest's own;
-// - moved/<clip>: a redirect to that clip, kept in the list under this name.
+//   With ?origin=, the segments are named on that origin instead of the manifest's own. With
+//   ?ended=1 it is the whole presentation, ended;
+// - moved/<clip>: a redirect to that clip, kept in the list under this name;
+// - periods.mpd: the three Periods of dash/period-a, -b and -c as one manifest of 60 seconds,
+//   whose second Period has a larger picture;
+// - live-periods.mpd: the first of those Periods as a live manifest 16 seconds in, which names
+//   the second Period only from its second fetch on.
 // Every answer allows another origin to read it, so one test can ask 127.0.0.1 from localhost.
-const probe = { asked: [], manifests: 0, epoch: Date.now() };
+const probe = { asked: [], manifests: 0, periodFetches: 0, epoch: Date.now() };
 const liveHls = () => {
     const count = Math.min(6, 2 + Math.floor((Date.now() - probe.epoch) / 2000));
     const lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:2", "#EXT-X-MEDIA-SEQUENCE:0"];
@@ -56,20 +61,40 @@ const liveHls = () => {
     if (count === 6) lines.push("#EXT-X-ENDLIST");
     return lines.join("\n") + "\n";
 };
-const liveDash = (origin) => {
+const liveDash = (origin, ended) => {
     const set = (type, id, attributes) =>
         '<AdaptationSet contentType="' + type + '"><Representation id="' + id + '" ' + attributes + '>' +
         '<SegmentTemplate timescale="1" duration="2" startNumber="1" initialization="' + origin + '/testmedia/dash/separate-' + id +
         '-init.m4s" media="' + origin + '/testmedia/dash/separate-' + id + '-$Number%05d$.m4s"/></Representation></AdaptationSet>';
     // Segment n is whole 2n seconds after the start, so the third is the newest six seconds in.
-    return '<?xml version="1.0" encoding="utf-8"?>\n' +
-        '<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="dynamic" availabilityStartTime="' +
-        new Date(probe.epoch - 6000).toISOString() + '" publishTime="' + new Date().toISOString() +
-        '" minimumUpdatePeriod="PT2S" timeShiftBufferDepth="PT30S" minBufferTime="PT2S">' +
+    const head = ended
+        ? 'type="static" mediaPresentationDuration="PT70S" minBufferTime="PT2S"'
+        : 'type="dynamic" availabilityStartTime="' + new Date(probe.epoch - 6000).toISOString() + '" publishTime="' +
+            new Date().toISOString() + '" minimumUpdatePeriod="PT2S" timeShiftBufferDepth="PT30S" minBufferTime="PT2S"';
+    return '<?xml version="1.0" encoding="utf-8"?>\n<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" ' + head + '>' +
         '<Period id="0" start="PT0S">' +
         set("video", "0", 'mimeType="video/mp4" codecs="avc1.42c00d" bandwidth="300000" width="320" height="180"') +
         set("audio", "2", 'mimeType="audio/mp4" codecs="mp4a.40.2" bandwidth="96000" audioSamplingRate="48000"') +
         '</Period></MPD>\n';
+};
+const periods = (names, live) => {
+    const set = (name, type, id, attributes) =>
+        '<AdaptationSet id="' + id + '" contentType="' + type + '"' + (type === "audio" ? ' lang="en"' : '') + '>' +
+        '<Representation id="' + id + '" ' + attributes + '>' +
+        '<SegmentTemplate timescale="1000000" duration="2000000" startNumber="1" media="/testmedia/dash/period-' + name +
+        '-$RepresentationID$-$Number$.m4s" initialization="/testmedia/dash/period-' + name + '-$RepresentationID$-init.m4s"/>' +
+        '</Representation></AdaptationSet>';
+    const head = live
+        ? 'type="dynamic" availabilityStartTime="' + new Date(probe.epoch - 16000).toISOString() +
+            '" minimumUpdatePeriod="PT2S" timeShiftBufferDepth="PT20S"'
+        : 'type="static" mediaPresentationDuration="PT' + (names.length * 20) + 'S"';
+    return '<?xml version="1.0" encoding="utf-8"?>\n<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" ' + head + '>' +
+        names.map((name, index) => {
+            const size = name === "b" ? 'width="640" height="360"' : 'width="320" height="180"';
+            return '<Period id="' + name + '" start="PT' + (index * 20) + 'S" duration="PT20S">' +
+                set(name, "video", "0", 'mimeType="video/mp4" codecs="avc1.42c01e" bandwidth="300000" ' + size) +
+                set(name, "audio", "1", 'mimeType="audio/mp4" codecs="mp4a.40.2" bandwidth="96000"') + '</Period>';
+        }).join("") + '</MPD>\n';
 };
 const kiteProbe = function () {
     return function (request, response, next) {
@@ -98,6 +123,7 @@ const kiteProbe = function () {
         if (name === "reset") {
             probe.asked = [];
             probe.manifests = 0;
+            probe.periodFetches = 0;
             probe.epoch = Date.now();
             return send("text/plain", "ok");
         }
@@ -109,7 +135,13 @@ const kiteProbe = function () {
                 clip: "live.mpd", host: request.headers.host, range: null, marked: request.headers["x-kite-test"] || null,
                 at: Date.now() - probe.epoch,
             });
-            return send("application/dash+xml", liveDash(parsed.searchParams.get("origin") || ""));
+            return send("application/dash+xml", liveDash(parsed.searchParams.get("origin") || "", parsed.searchParams.get("ended") === "1"));
+        }
+        const kept = () => probe.asked.push({ clip: name, host: request.headers.host, range: null, marked: null, at: Date.now() - probe.epoch });
+        if (name === "periods.mpd") return send("application/dash+xml", periods(["a", "b", "c"], false));
+        if (name === "live-periods.mpd") {
+            kept();
+            return send("application/dash+xml", periods(++probe.periodFetches > 1 ? ["a", "b"] : ["a"], true));
         }
         if (name.startsWith("moved/")) {
             probe.asked.push({ clip: name, host: request.headers.host, range: null, marked: null, at: Date.now() - probe.epoch });

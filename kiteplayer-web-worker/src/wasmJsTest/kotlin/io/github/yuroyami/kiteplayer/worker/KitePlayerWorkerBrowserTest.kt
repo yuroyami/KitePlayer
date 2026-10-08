@@ -17,6 +17,8 @@ import io.github.yuroyami.kiteplayer.TrackId
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.view.WebPictureInPictureMode
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.await
 import kotlinx.coroutines.channels.Channel
@@ -43,6 +45,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * A worker player plays a clip from the network while the page keeps drawing (#100).
@@ -360,13 +363,16 @@ class KitePlayerWorkerBrowserTest {
     }
 
     /**
-     * A live DASH manifest plays in the worker past the segments of its open (#546). The test
+     * The worker reads a live DASH manifest past the segments of its open (#546). The test
      * server's manifest is `dash/separate` on the clock: its third segment is the newest at the
      * open, and it asks to be fetched again every two seconds. Segment 7 exists eight seconds
      * later, and the test server's clock shows that the worker asked for it then and not before.
+     *
+     * The test watches the requests and not the picture: the worker waits for each new segment
+     * inside the read, so the open of a live stream answers late there (#568).
      */
     @Test
-    fun aLiveDashManifestPlaysOnPastTheSegmentsOfItsOpen() = runTest(timeout = 3.minutes) {
+    fun aLiveDashManifestIsReadOnPastTheSegmentsOfItsOpen() = runTest(timeout = 3.minutes) {
         val setup = karmaWorkerConfig()?.split("\n")
         if (setup == null) {
             println("skipped: the worker player runs only in the browser half, where karma serves the worker")
@@ -375,7 +381,7 @@ class KitePlayerWorkerBrowserTest {
         val (workerUrl, codecUrl, media) = setup
         val probe = probeOf(media)
         withContext(Dispatchers.Default) {
-            playing(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); MediaItem("$probe/live.mpd") }) { player ->
+            reading(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); MediaItem("$probe/live.mpd") }) { player ->
                 withTimeout(60.seconds) {
                     while (true) {
                         val clips = asked(probe).requests.map { it.clip }
@@ -392,6 +398,88 @@ class KitePlayerWorkerBrowserTest {
                 assertTrue(all.requests.first { it.clip == "dash/separate-0-00001.m4s" }.atMillis < 4_000, "the first segment was read at the open")
                 assertNull(player.state.value.error)
             }
+        }
+    }
+
+    /**
+     * A manifest of three Periods plays in the worker as one presentation of 60 seconds (#546).
+     * Each Period has its own initialization, and the second has a larger picture. Play crosses
+     * the first join, a seek lands in the third Period, and the picture's size follows the Period.
+     */
+    @Test
+    fun threeDashPeriodsPlayAsOnePresentationInTheWorker() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        withContext(Dispatchers.Default) {
+            playing(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); MediaItem("$probe/periods.mpd") }) { player ->
+                val duration = assertNotNull(player.state.value.duration)
+                assertTrue(duration in 59.seconds..61.seconds, "the three Periods of 20 seconds are one presentation, not $duration")
+                assertEquals(180, player.state.value.videoSize?.height, "the first Period's picture")
+
+                // The first join is at 20 s.
+                player.seek(17.seconds)
+                val second = withTimeout(60.seconds) { player.progress.first { it.position >= 23.seconds } }
+                assertTrue(second.position < 27.seconds, "the position stepped at the join, to ${second.position}")
+                withTimeout(10.seconds) { player.state.first { it.videoSize?.height == 360 } }
+
+                player.seek(45.seconds)
+                val third = withTimeout(60.seconds) { player.progress.first { it.position >= 46.seconds } }
+                assertTrue(third.position < 50.seconds, "the position after the seek is in the third Period, not ${third.position}")
+                withTimeout(10.seconds) { player.state.first { it.videoSize?.height == 180 } }
+
+                val clips = asked(probe).requests.map { it.clip }
+                for (name in listOf("a", "b", "c")) {
+                    assertTrue("dash/period-$name-0-init.m4s" in clips, "the initialization of Period $name was read: $clips")
+                }
+                assertNull(player.state.value.error)
+            }
+        }
+    }
+
+    /**
+     * A live manifest gains a Period while the worker reads it (#546). The test server's manifest
+     * names one Period that ends four seconds after the open, and the second Period only from its
+     * second fetch on. The second Period ends too, and no third one follows.
+     *
+     * The stream then stops growing, and the worker waits inside its read for a segment that never
+     * comes (#568). The close still returns, because the page ends a worker that does not answer, and the
+     * open that was waiting fails.
+     */
+    @Test
+    fun aPeriodThatARefreshAddsIsReadAndAWorkerInsideAReadStillCloses() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        withContext(Dispatchers.Default) {
+            var opening: Deferred<Result<Unit>>? = null
+            reading(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); MediaItem("$probe/live-periods.mpd") }) { player ->
+                opening = this
+                withTimeout(60.seconds) {
+                    while ("dash/period-b-0-10.m4s" !in asked(probe).requests.map { it.clip }) {
+                        assertNull(player.state.value.error, "the live presentation is read on")
+                        delay(200)
+                    }
+                }
+                val clips = asked(probe).requests.map { it.clip }
+                assertTrue(clips.count { it == "live-periods.mpd" } >= 2, "the manifest was fetched again: $clips")
+                assertTrue(clips.indexOf("dash/period-a-0-10.m4s") < clips.indexOf("dash/period-b-0-init.m4s"), "the first Period was read to its end first: $clips")
+                // Nothing follows the second Period, so the next read never returns.
+                delay(3.seconds)
+                val closing = TimeSource.Monotonic.markNow()
+                withTimeout(20.seconds) { player.closeAndAwait() }
+                println("WORKER close of a worker inside a read: ${closing.elapsedNow().inWholeMilliseconds} ms")
+            }
+            val answer = withTimeout(10.seconds) { assertNotNull(opening).await() }
+            assertIs<PlaybackException>(answer.exceptionOrNull(), "the open that waited on the worker fails: $answer")
         }
     }
 
@@ -423,7 +511,7 @@ class KitePlayerWorkerBrowserTest {
     /**
      * The headers of an item go to the origin of its own address and to no other (#546). The test
      * server answers on `localhost` and on `127.0.0.1`, which are two origins to a browser, and its
-     * live manifest names its segments on either.
+     * manifest names its segments on either.
      */
     @Test
     fun theHeadersOfAnItemGoToItsOwnOriginOnly() = runTest(timeout = 3.minutes) {
@@ -439,7 +527,7 @@ class KitePlayerWorkerBrowserTest {
         assertTrue(other != own, "the test server's address $own has no second name")
         val headers = mapOf("X-Kite-Test" to "mine")
         withContext(Dispatchers.Default) {
-            val elsewhere = { MediaItem("$probe/live.mpd?origin=${other.replace(":", "%3A").replace("/", "%2F")}", headers = headers) }
+            val elsewhere = { MediaItem("$probe/live.mpd?ended=1&origin=${other.replace(":", "%3A").replace("/", "%2F")}", headers = headers) }
             playing(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); elsewhere() }) { player ->
                 withTimeout(60.seconds) { player.progress.first { it.position > 0.seconds } }
                 val requests = asked(probe).requests
@@ -450,7 +538,7 @@ class KitePlayerWorkerBrowserTest {
                 assertEquals(listOf(""), segments.map { it.marked }.distinct(), "another origin was sent the item's headers")
                 assertNull(player.state.value.error)
             }
-            playing(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); MediaItem("$probe/live.mpd", headers = headers) }) { player ->
+            playing(workerUrl, codecUrl, { fetchText("$probe/reset").await<JsString>(); MediaItem("$probe/live.mpd?ended=1", headers = headers) }) { player ->
                 withTimeout(60.seconds) { player.progress.first { it.position > 0.seconds } }
                 val segments = asked(probe).requests.filter { it.clip.startsWith("dash/separate-") }
                 assertTrue(segments.isNotEmpty())
@@ -487,6 +575,25 @@ class KitePlayerWorkerBrowserTest {
             check(player)
         } finally {
             collector.cancel()
+            player.closeAndAwait()
+        }
+    }
+
+    /**
+     * Starts a worker player and opens what [item] gives without waiting for the answer, which is
+     * the receiver of [check], then closes the player.
+     */
+    private suspend fun reading(
+        workerUrl: String,
+        codecUrl: String,
+        item: suspend () -> MediaItem,
+        check: suspend Deferred<Result<Unit>>.(KitePlayerWorker) -> Unit,
+    ) = coroutineScope {
+        val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+        try {
+            val media = item()
+            async { runCatching { player.open(media) } }.check(player)
+        } finally {
             player.closeAndAwait()
         }
     }

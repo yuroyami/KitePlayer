@@ -450,6 +450,12 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - The worker browser test's karma file serves only the folders it lists, one pattern for each, so
   a clip in a new folder of `testmedia` answers 404 there until `karma.config.d/worker.js` names
   the folder (#546).
+- The player in a Web Worker has one thread, and FFmpeg waits for the next segment of a live
+  playlist inside the read. Until the read-ahead is full nothing else runs: the open of a live DASH
+  stream answers after 26 s, and a live stream that stops growing never answers again, so a test
+  of one watches the test server's requests, not the picture (#568). A whole-player test whose
+  stream ends the worker's reads this way hangs in its own close without the page's three second
+  limit.
 - `runBlocking` does not exist on the web target because there is no thread to block, so a shared
   test written with it will not compile there. The fix is the test-coroutine builder, not moving the
   test into a narrower source set: narrowing silently removes it from every target that no longer

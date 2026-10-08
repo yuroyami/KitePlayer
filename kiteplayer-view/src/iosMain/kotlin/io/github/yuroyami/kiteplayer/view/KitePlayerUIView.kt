@@ -14,6 +14,8 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.cinterop.readValue
 import kotlinx.cinterop.useContents
@@ -128,9 +130,89 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         set(value) {
             field = value
             binding.setPlayer(value)
+            rebuildControls()
             updateAccessibilityState()
             watchPlayer()
         }
+
+    /**
+     * Draws default controls over the picture: play and pause, previous and next for a queue, the
+     * seek bar with its buffered ranges, the times, a mute button, menus for the audio and subtitle
+     * tracks, the quality and the speed, and picture in picture and full screen buttons when
+     * [onPictureInPicture] and [onFullScreen] are set. False by default.
+     *
+     * They are UIKit buttons, a slider and menus, with no other library. A tap on the picture shows
+     * or hides them, they hide by themselves while the player plays, and a finger dragged sideways
+     * over the picture scrubs. Every control has a name for VoiceOver, and the seek bar is
+     * adjustable. While they show, subtitles stand above them. They do what `KitePlayerControls`
+     * of `kiteplayer-compose-ui` does, from the same [PlayerControlsModel].
+     */
+    public var showsControls: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            rebuildControls()
+            updateAccessibilityState()
+        }
+
+    /** Every word the controls show or VoiceOver says. English by default; pass translated ones. */
+    public var controlsStrings: PlayerControlsStrings = PlayerControlsStrings.Default
+        set(value) {
+            field = value
+            controlsOverlay?.let { overlay ->
+                overlay.model.strings = value
+                overlay.refresh()
+            }
+        }
+
+    /** What the full screen button does, or null for no such button. The screen is the application's. */
+    public var onFullScreen: (() -> Unit)? = null
+        set(value) {
+            field = value
+            controlsOverlay?.model?.onFullScreen = value
+        }
+
+    /** What the picture in picture button does, or null for no such button. See [KitePlayerPictureInPicture]. */
+    public var onPictureInPicture: (() -> Unit)? = null
+        set(value) {
+            field = value
+            controlsOverlay?.model?.onPictureInPicture = value
+        }
+
+    /** The model behind the controls, to show or hide them from code, or null while [showsControls] is false or no player is set. */
+    public val controls: PlayerControlsModel? get() = controlsOverlay?.model
+
+    internal var controlsOverlay: ControlsOverlayView? = null
+        private set
+    private var controlsScope: CoroutineScope? = null
+
+    /** Builds the controls for the player and the switch as they stand now, and drops the old ones. */
+    private fun rebuildControls() {
+        controlsOverlay?.let { old ->
+            old.close()
+            old.model.close()
+            old.removeFromSuperview()
+        }
+        controlsScope?.cancel()
+        controlsOverlay = null
+        controlsScope = null
+        val paired = player
+        if (!showsControls || paired == null) {
+            setIsAccessibilityElement(true)
+            return
+        }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val model = PlayerControlsModel(paired, scope, controlsStrings)
+        model.onFullScreen = onFullScreen
+        model.onPictureInPicture = onPictureInPicture
+        controlsScope = scope
+        controlsOverlay = ControlsOverlayView(model, scope).also { overlay ->
+            addSubview(overlay)
+            overlay.setFrame(bounds)
+        }
+        // VoiceOver does not look inside an element, so the picture inside the controls stands for the video.
+        setIsAccessibilityElement(false)
+    }
 
     /**
      * Keeps the display from dimming and locking while the player plays video and this view is in
@@ -181,6 +263,7 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         set(value) {
             field = value
             setAccessibilityLabel(value)
+            controlsOverlay?.picture?.setAccessibilityLabel(value)
         }
 
     /**
@@ -204,17 +287,21 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
      */
     public fun updateAccessibilityState() {
         val snapshot = player?.state?.value
-        setAccessibilityValue(
-            if (snapshot == null) {
-                accessibilityStateFormat(PlaybackStatus.Idle, Duration.ZERO, null)
-            } else {
-                accessibilityStateFormat(
-                    snapshot.status,
-                    player?.progress?.value?.position ?: Duration.ZERO,
-                    snapshot.duration,
-                )
-            },
-        )
+        val text = if (snapshot == null) {
+            accessibilityStateFormat(PlaybackStatus.Idle, Duration.ZERO, null)
+        } else {
+            accessibilityStateFormat(
+                snapshot.status,
+                player?.progress?.value?.position ?: Duration.ZERO,
+                snapshot.duration,
+            )
+        }
+        setAccessibilityValue(text)
+        // With the controls on, the picture inside them is the element VoiceOver meets as the video.
+        controlsOverlay?.picture?.let { picture ->
+            picture.setAccessibilityLabel(accessibilityVideoLabel)
+            picture.setAccessibilityValue(text)
+        }
     }
 
     /** Frames delivered to this view's layer, across every renderer this view has built. */
@@ -285,6 +372,7 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         } finally {
             CATransaction.commit()
         }
+        controlsOverlay?.setFrame(bounds)
     }
 
     override fun didMoveToWindow() {

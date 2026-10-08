@@ -21,9 +21,13 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
 import java.awt.Canvas
 import java.awt.EventQueue
+import java.awt.image.BufferedImage
+import javax.accessibility.AccessibleRole
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -282,6 +286,153 @@ class KitePlayerAwtViewTest {
         val deadline = System.nanoTime() + 5_000_000_000L
         while (description(view) != "Failed" && System.nanoTime() < deadline) Thread.sleep(10)
         assertEquals("Failed", description(view))
+        view.release()
+    }
+
+    /** A renderer that can draw the view's controls into its frames, and remembers what it was given. */
+    private class ControlsRecorder(inner: CanvasRecorder = CanvasRecorder()) : AwtPlayerViewRenderer by inner, AwtControlsCanvas {
+        val painters = mutableListOf<AwtControlsPainter?>()
+        var repaints = 0
+        override fun setControlsPainter(painter: AwtControlsPainter?) {
+            painters += painter
+        }
+        override fun repaintControls() {
+            repaints++
+        }
+    }
+
+    // The controls are opt-in, so a screen that never asks for them is as it was (#469).
+    @Test
+    fun theViewHasNoControlsUntilItIsAsked() {
+        val view = KitePlayerAwtView()
+        view.player = player()
+        assertFalse(view.showsControls)
+        assertNull(view.controls)
+        assertEquals(0, view.mouseListeners.size)
+        assertEquals(0, view.keyListeners.size)
+        assertEquals(0, view.accessibleContext.accessibleChildrenCount)
+        view.release()
+    }
+
+    @Test
+    fun turningTheControlsOnAddsThemAndTurningThemOffTakesThemAway() {
+        val view = KitePlayerAwtView()
+        view.setSize(640, 360)
+        // No player yet, so there is nothing to control.
+        view.showsControls = true
+        assertNull(view.controls)
+
+        view.player = player()
+        val model = assertNotNull(view.controls)
+        assertTrue(model.state.value.visible)
+        assertEquals(1, view.mouseListeners.size)
+        assertEquals(1, view.mouseMotionListeners.size)
+        assertEquals(1, view.keyListeners.size)
+
+        // A screen reader reaches each painted part by name. Nothing is open, so there is no seek bar.
+        val context = view.accessibleContext
+        val parts = List(context.accessibleChildrenCount) { context.getAccessibleChild(it).accessibleContext }
+        assertEquals(listOf("Play", "Mute", "Volume", "Speed"), parts.map { it.accessibleName })
+        assertEquals(
+            listOf(AccessibleRole.PUSH_BUTTON, AccessibleRole.PUSH_BUTTON, AccessibleRole.SLIDER, AccessibleRole.PUSH_BUTTON),
+            parts.map { it.accessibleRole },
+        )
+        assertEquals("100 percent", parts[2].accessibleDescription)
+        assertEquals(100, parts[2].accessibleValue.currentAccessibleValue)
+        assertSame(context.getAccessibleChild(0), context.getAccessibleChild(0))
+
+        view.showsControls = false
+        assertNull(view.controls)
+        assertEquals(0, view.mouseListeners.size)
+        assertEquals(0, view.keyListeners.size)
+        assertEquals(0, context.accessibleChildrenCount)
+
+        // Releasing the view drops them with the player.
+        view.showsControls = true
+        assertNotNull(view.controls)
+        view.release()
+        assertNull(view.controls)
+        assertEquals(0, view.mouseListeners.size)
+    }
+
+    @Test
+    fun theWordsAndTheButtonsOfTheApplicationReachTheControls() {
+        val view = KitePlayerAwtView()
+        view.setSize(640, 360)
+        view.controlsStrings = PlayerControlsStrings(play = "Lecture", fullScreen = "Plein écran")
+        var asked = 0
+        view.onFullScreen = { asked++ }
+        view.player = player()
+        view.showsControls = true
+        val context = view.accessibleContext
+        val names = List(context.accessibleChildrenCount) { context.getAccessibleChild(it).accessibleContext.accessibleName }
+        assertEquals(listOf("Lecture", "Mute", "Volume", "Speed", "Plein écran"), names)
+        context.getAccessibleChild(4).accessibleContext.accessibleAction.doAccessibleAction(0)
+        assertEquals(1, asked)
+
+        // Words set later reach the controls already on screen.
+        view.controlsStrings = PlayerControlsStrings(play = "Wiedergabe")
+        assertEquals("Wiedergabe", context.getAccessibleChild(0).accessibleContext.accessibleName)
+        view.release()
+    }
+
+    @Test
+    fun aRendererThatCanDrawTheControlsIsGivenThemForEveryGeneration() {
+        val first = ControlsRecorder()
+        val view = KitePlayerAwtView()
+        view.rendererFactory = AwtPlayerViewRendererFactory { first }
+        view.player = player()
+        // Off: the renderer is told there is nothing to draw.
+        assertTrue(first.painters.all { it == null })
+
+        view.showsControls = true
+        val painter = assertNotNull(first.painters.last())
+        assertSame<Any?>(view.awtControls, painter)
+        assertTrue(first.repaints > 0)
+
+        // A new generation is handed the same controls before it paints.
+        val second = ControlsRecorder()
+        view.rendererFactory = AwtPlayerViewRendererFactory { second }
+        assertSame(painter, second.painters.last())
+
+        view.showsControls = false
+        assertNull(second.painters.last())
+        view.release()
+    }
+
+    @Test
+    fun aViewWhoseRendererCannotDrawTheControlsPaintsThemItself() {
+        val view = KitePlayerAwtView()
+        view.setSize(640, 360)
+        view.player = player()
+        view.showsControls = true
+        val image = BufferedImage(640, 360, BufferedImage.TYPE_INT_RGB)
+        val g = image.createGraphics()
+        view.paint(g)
+        g.dispose()
+        // The play icon, at the left of the bottom row, is white.
+        assertEquals(0xFFFFFFFF.toInt(), image.getRGB(8 + 18, 360 - 8 - 18))
+
+        // With the controls off the same paint leaves the canvas as AWT cleared it.
+        view.showsControls = false
+        val plain = BufferedImage(640, 360, BufferedImage.TYPE_INT_RGB)
+        val p = plain.createGraphics()
+        view.paint(p)
+        p.dispose()
+        assertTrue(plain.getRGB(8 + 18, 360 - 8 - 18) != 0xFFFFFFFF.toInt())
+        view.release()
+    }
+
+    @Test
+    fun theFloatingWindowDoesNotGetTheControls() {
+        val view = pairedView(CanvasRecorder())
+        view.showsControls = true
+        val painted = assertNotNull(view.awtControls)
+        assertTrue(painted.paintsHere)
+        view.floatingCanvas = Canvas()
+        assertFalse(painted.paintsHere)
+        view.floatingCanvas = null
+        assertTrue(painted.paintsHere)
         view.release()
     }
 

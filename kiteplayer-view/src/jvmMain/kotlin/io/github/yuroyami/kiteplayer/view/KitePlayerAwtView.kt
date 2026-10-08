@@ -6,9 +6,15 @@ import io.github.yuroyami.kiteplayer.VideoSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.awt.Canvas
 import java.awt.EventQueue
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.util.EnumMap
+import javax.accessibility.Accessible
 import javax.accessibility.AccessibleContext
 import kotlin.time.Duration
 
@@ -56,6 +62,7 @@ public open class KitePlayerAwtView : Canvas() {
                 )
                 try {
                     renderer.setCanvas(rendererCanvas())
+                    (renderer as? AwtControlsCanvas)?.setControlsPainter(awtControls)
                     renderer
                 } catch (configurationFailure: Throwable) {
                     // Not yet known to PlayerViewBinding, so that binding cannot roll it back.
@@ -118,7 +125,89 @@ public open class KitePlayerAwtView : Canvas() {
             binding.setPlayer(value)
             updateAccessibilityState()
             watchPlayer()
+            rebuildControls()
         }
+
+    /**
+     * Draws default controls over the picture: play and pause, previous and next for a queue, the
+     * seek bar with its buffered ranges, the times, the volume, menus for the audio and subtitle
+     * tracks, the quality and the speed, and picture in picture and full screen buttons when
+     * [onPictureInPicture] and [onFullScreen] are set. False by default.
+     *
+     * They are painted into the canvas with Java2D, so they need a renderer that is an
+     * [AwtControlsCanvas], as the default one is. A click on the picture shows or hides them, and
+     * they hide by themselves while the player plays. Space plays or pauses, the left and right
+     * arrows move ten seconds, the up and down arrows change the volume, M mutes and F asks for
+     * full screen. While they show, subtitles stand above them. They do what
+     * `KitePlayerControls` of `kiteplayer-compose-ui` does, from the same [PlayerControlsModel].
+     */
+    public var showsControls: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            rebuildControls()
+        }
+
+    /** Every word the controls show or a screen reader says. English by default; pass translated ones. */
+    public var controlsStrings: PlayerControlsStrings = PlayerControlsStrings.Default
+        set(value) {
+            field = value
+            awtControls?.model?.strings = value
+        }
+
+    /** What the full screen button and the F key do, or null for no such button. The window is the application's. */
+    public var onFullScreen: (() -> Unit)? = null
+        set(value) {
+            field = value
+            awtControls?.model?.onFullScreen = value
+        }
+
+    /** What the picture in picture button does, or null for no such button. See [KitePlayerPictureInPicture]. */
+    public var onPictureInPicture: (() -> Unit)? = null
+        set(value) {
+            field = value
+            awtControls?.model?.onPictureInPicture = value
+        }
+
+    /** The model behind the controls, to show or hide them from code, or null while [showsControls] is false or no player is set. */
+    public val controls: PlayerControlsModel? get() = awtControls?.model
+
+    internal var awtControls: AwtPlayerControls? = null
+        private set
+    private var controlsScope: CoroutineScope? = null
+    private val accessibleControls = EnumMap<AwtControl, AccessibleControl>(AwtControl::class.java)
+
+    /** Builds the controls for the player and the switch as they stand now, and drops the old ones. */
+    private fun rebuildControls() {
+        awtControls?.close()
+        controlsScope?.cancel()
+        awtControls = null
+        controlsScope = null
+        accessibleControls.clear()
+        val paired = player
+        if (showsControls && paired != null) {
+            val scope = CoroutineScope(SupervisorJob() + AwtEventThread)
+            val model = PlayerControlsModel(paired, scope, controlsStrings)
+            model.onFullScreen = onFullScreen
+            model.onPictureInPicture = onPictureInPicture
+            controlsScope = scope
+            awtControls = AwtPlayerControls(this, model, scope, ::repaintControls).also { it.paintsHere = floatingCanvas == null }
+        }
+        (binding.activeRenderer as? AwtControlsCanvas)?.setControlsPainter(awtControls)
+        repaintControls()
+    }
+
+    private fun repaintControls() {
+        val canvas = binding.activeRenderer as? AwtControlsCanvas
+        if (canvas != null) canvas.repaintControls() else repaint()
+    }
+
+    override fun paint(g: Graphics) {
+        super.paint(g)
+        // A renderer that draws the controls into its frames leaves nothing to draw here.
+        if (binding.activeRenderer is AwtControlsCanvas) return
+        (g as? Graphics2D)?.let { awtControls?.paint(it, width, height) }
+    }
 
     /** What a screen reader calls this view, as its accessible name. English by default; pass a translated one. */
     public var accessibilityVideoLabel: String = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
@@ -174,6 +263,17 @@ public open class KitePlayerAwtView : Canvas() {
         override fun getAccessibleName(): String = accessibilityVideoLabel
 
         override fun getAccessibleDescription(): String = accessibilityState
+
+        // The controls are painted, so each part is listed here for a screen reader to reach.
+        override fun getAccessibleChildrenCount(): Int = awtControls?.reachable()?.size ?: 0
+
+        override fun getAccessibleChild(i: Int): Accessible? {
+            val painted = awtControls ?: return null
+            val control = painted.reachable().getOrNull(i) ?: return null
+            return accessibleControls.getOrPut(control) {
+                AccessibleControl(painted, this@KitePlayerAwtView, control).also { it.setAccessibleParent(this@KitePlayerAwtView) }
+            }
+        }
     }
 
     /** Follows the player's state for what a screen reader hears, only while this view has its peer and a player. */
@@ -223,6 +323,8 @@ public open class KitePlayerAwtView : Canvas() {
         set(value) {
             if (field === value) return
             field = value
+            // The floating window takes its own clicks, so the controls are not drawn into it.
+            awtControls?.paintsHere = value == null
             binding.activeRenderer?.setCanvas(rendererCanvas())
         }
 

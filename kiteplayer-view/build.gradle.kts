@@ -48,9 +48,8 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
-        }
-        // The web tests wait for a browser promise, so they need a coroutine test scope.
-        getByName("wasmJsTest").dependencies {
+            // The controls model hides on a timer, which its test runs on a virtual clock. The web
+            // tests also wait for a browser promise through it.
             implementation(libs.kotlinx.coroutines.test)
         }
     }

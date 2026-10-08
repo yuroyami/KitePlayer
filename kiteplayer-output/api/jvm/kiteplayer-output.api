@@ -6,6 +6,10 @@ public final class io/github/yuroyami/kiteplayer/output/AnnexB {
 	public final fun toAnnexB ([BI)[B
 }
 
+public abstract interface class io/github/yuroyami/kiteplayer/output/AwtCanvasDecoration {
+	public abstract fun paint (Ljava/awt/Graphics2D;II)V
+}
+
 public final class io/github/yuroyami/kiteplayer/output/AwtCanvasVideoRenderer : io/github/yuroyami/kiteplayer/spi/VideoRenderer {
 	public fun <init> (Lio/github/yuroyami/kiteplayer/output/AwtFramePainter;Lkotlin/jvm/functions/Function2;)V
 	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/output/AwtFramePainter;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -20,8 +24,10 @@ public final class io/github/yuroyami/kiteplayer/output/AwtCanvasVideoRenderer :
 	public fun getShowsHdr ()Z
 	public final fun getSupersededFrames ()J
 	public fun present (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun repaint ()V
 	public fun setAdjustments (Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public final fun setCanvas (Ljava/awt/Canvas;)V
+	public final fun setDecoration (Lio/github/yuroyami/kiteplayer/output/AwtCanvasDecoration;)V
 	public fun setFlashGuard (Lio/github/yuroyami/kiteplayer/FlashGuard;)V
 	public fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
 	public fun setOverlay (Lio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

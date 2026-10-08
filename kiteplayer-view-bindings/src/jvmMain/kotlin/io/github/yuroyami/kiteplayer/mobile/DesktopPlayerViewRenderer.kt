@@ -3,10 +3,13 @@ package io.github.yuroyami.kiteplayer.mobile
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
+import io.github.yuroyami.kiteplayer.output.AwtCanvasDecoration
 import io.github.yuroyami.kiteplayer.output.AwtCanvasVideoRenderer
 import io.github.yuroyami.kiteplayer.output.AwtFramePainter
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
+import io.github.yuroyami.kiteplayer.view.AwtControlsCanvas
+import io.github.yuroyami.kiteplayer.view.AwtControlsPainter
 import io.github.yuroyami.kiteplayer.view.AwtPlayerViewRenderer
 import io.github.yuroyami.kiteplayer.view.AwtPlayerViewRendererFactory
 import io.github.yuroyami.kiteplayer.view.KitePlayerAwtView
@@ -84,12 +87,20 @@ private fun packRgbInto(
 
 private class DesktopAwtPlayerViewRenderer(
     private val delegate: AwtCanvasVideoRenderer,
-) : AwtPlayerViewRenderer, VideoRenderer by delegate {
+) : AwtPlayerViewRenderer, AwtControlsCanvas, VideoRenderer by delegate {
     override val presentedFrames: Long get() = delegate.presentedFrames
     override val supersededFrames: Long get() = delegate.supersededFrames
     override val failedFrames: Long get() = delegate.failedFrames
 
     override fun setCanvas(canvas: Canvas?) {
         delegate.setCanvas(canvas)
+    }
+
+    override fun setControlsPainter(painter: AwtControlsPainter?) {
+        delegate.setDecoration(painter?.let { controls -> AwtCanvasDecoration { graphics, width, height -> controls.paint(graphics, width, height) } })
+    }
+
+    override fun repaintControls() {
+        delegate.repaint()
     }
 }

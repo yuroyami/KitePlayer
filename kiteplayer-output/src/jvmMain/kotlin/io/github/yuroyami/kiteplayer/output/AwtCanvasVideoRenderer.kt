@@ -50,6 +50,19 @@ public fun interface AwtFramePainter {
 }
 
 /**
+ * Draws over every frame an [AwtCanvasVideoRenderer] composes, after the picture and the subtitles.
+ *
+ * It exists for player controls: nothing a toolkit draws can appear above a native canvas, so what
+ * must show over the picture is drawn into the same frame. [paint] runs on whichever thread paints
+ * the frame, with the renderer's paint lock held, so it reads only what is safe from any thread
+ * and never waits.
+ */
+public fun interface AwtCanvasDecoration {
+    /** Draws into a canvas of [width] by [height], in the canvas's own coordinates. */
+    public fun paint(graphics: java.awt.Graphics2D, width: Int, height: Int)
+}
+
+/**
  * Draws frames onto an AWT canvas, on a thread of its own.
  *
  * ### Why this exists next to the Compose renderer
@@ -154,6 +167,7 @@ public class AwtCanvasVideoRenderer(
     /** The flash guard's factor for [lastImage], so a repaint draws it as it was drawn. */
     private var lastDim: Float = 1f
     private var overlay: SubtitleOverlay? = null
+    private var decoration: AwtCanvasDecoration? = null
     private var scaleMode: VideoScale = VideoScale.Fit
     private var transform: VideoTransform = VideoTransform.Identity
 
@@ -342,6 +356,23 @@ public class AwtCanvasVideoRenderer(
     }
 
     /**
+     * What to draw over every frame, or null for nothing. The retained picture is painted again at
+     * once, so a paused player shows the change.
+     */
+    public fun setDecoration(decoration: AwtCanvasDecoration?) {
+        synchronized(lock) {
+            if (closed) return
+            this.decoration = decoration
+        }
+        repaintRetained()
+    }
+
+    /** Paints the retained picture again, for a decoration that has something new to draw. */
+    public fun repaint() {
+        repaintRetained()
+    }
+
+    /**
      * Forgets the retained picture and paints the background with the cues over it (#530). There is
      * no queue here, so the retained picture is the only frame there is to forget.
      */
@@ -388,6 +419,7 @@ public class AwtCanvasVideoRenderer(
         val mode: VideoScale
         val currentTransform: VideoTransform
         val dim: Float
+        val over: AwtCanvasDecoration?
         synchronized(lock) {
             if (closed) return false
             target = canvas ?: return false
@@ -398,9 +430,10 @@ public class AwtCanvasVideoRenderer(
             mode = scaleMode
             currentTransform = transform
             dim = lastDim
+            over = decoration
         }
         if (!target.isDisplayable) return false
-        if (image == null || size == null) return presenter.present(target, null, null, overlaySnapshot(), 1f)
+        if (image == null || size == null) return presenter.present(target, null, null, overlaySnapshot(), 1f, over)
         val layout = frameLayout(
             canvasWidth = target.width,
             canvasHeight = target.height,
@@ -410,7 +443,7 @@ public class AwtCanvasVideoRenderer(
             transform = currentTransform,
             mirrored = mirrored,
         ) ?: return false
-        return presenter.present(target, image, layout, overlaySnapshot(), dim)
+        return presenter.present(target, image, layout, overlaySnapshot(), dim, over)
     }
 
     private fun overlaySnapshot(): SubtitleOverlay? = synchronized(lock) { overlay }
@@ -428,6 +461,7 @@ public class AwtCanvasVideoRenderer(
             lastImage = null
             lastSize = null
             overlay = null
+            decoration = null
             old
         }
         released?.removeComponentListener(resizeListener)

@@ -85,18 +85,8 @@ internal class SampleController(
         }
     }
 
-    fun play() {
-        if (openStarted.get()) player.play()
-    }
-
     fun pause() {
         if (openStarted.get()) player.pause()
-    }
-
-    fun seekToFiveSeconds() {
-        if (openStarted.get()) {
-            scope.launch { player.seek(5_000.milliseconds, SeekMode.Precise) }
-        }
     }
 
     fun onBackground() {

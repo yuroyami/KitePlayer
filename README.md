@@ -432,6 +432,20 @@ the desktop JVM.
 view.player = player
 ```
 
+A view has no controls until you ask for them. Each of the three views draws a default set from
+its own toolkit, with no Compose:
+
+```kotlin
+view.showsControls = true
+view.onFullScreen = { /* your window, your rule */ }
+```
+
+They have play and pause, previous and next, a seek bar with the buffered ranges, mute, and menus
+for the audio tracks, the subtitles, the quality and the speed. Their words come from
+`view.controlsStrings`, in English unless you pass your own `PlayerControlsStrings`. For controls of
+your own in a native toolkit, read `PlayerControlsModel`: it holds the state and the commands, and
+no toolkit.
+
 A player from `KitePlayer()` gives the views their renderer. A player built with `KitePlayer.create`
 on backends of your own also needs `view.installMobileRenderer()`, or `installDesktopRenderer()` on
 the desktop, from `io.github.yuroyami.kiteplayer.mobile`.
@@ -1122,7 +1136,7 @@ flowchart LR
 | `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo`, both video paths and the default controls, `KitePlayerControls`. No player factory, no network. |
 | `kiteplayer-compose-interop` | Compose hosting the platform's native video view: `KitePlayerSurface`. `KitePlayerVideo` uses it at runtime; add it yourself only to call `KitePlayerSurface` directly. |
 | `kiteplayer-compose-video` | Video drawn by Compose itself: `KiteVideo`. `KitePlayerVideo` uses it at runtime; add it yourself only to draw with `KiteVideo` directly, for example in a second window. |
-| `kiteplayer-view` | The native views: `KitePlayerView` on Android, `KitePlayerUIView` on iOS, `KitePlayerAwtView` on the desktop JVM. |
+| `kiteplayer-view` | The native views: `KitePlayerView` on Android, `KitePlayerUIView` on iOS, `KitePlayerAwtView` on the desktop JVM, and their default controls. |
 | `kiteplayer-view-bindings` | The FFmpeg adapters those views need. |
 | `kiteplayer-core` | The engine and its service interfaces. Depends on kotlinx.coroutines and atomicfu, and on `kiteplayer-rt` on native targets. |
 | `kiteplayer-ffmpeg` | Media source and decoders over KiteFFmpeg, plus snapshots, thumbnails, waveforms and the subtitle parsers. |

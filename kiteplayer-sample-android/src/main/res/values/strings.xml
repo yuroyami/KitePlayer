@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">KitePlayer Sample</string>
-    <string name="play">Play</string>
-    <string name="pause">Pause</string>
-    <string name="seek_five">Seek 5s</string>
     <string name="perf_waiting">presented=0 decoded=0 engineDrop=0 outputFail=0 superseded=0</string>
     <string name="choose_renderer">Choose a rendering path</string>
     <string name="choose_renderer_detail">Each screen owns a separate player and demonstrates one public integration API.</string>

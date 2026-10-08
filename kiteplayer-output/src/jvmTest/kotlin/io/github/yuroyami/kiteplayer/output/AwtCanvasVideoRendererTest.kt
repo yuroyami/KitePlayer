@@ -427,6 +427,9 @@ class AwtCanvasVideoRendererTest {
         val drawn: MutableList<Pair<Boolean, io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?>> =
             java.util.Collections.synchronizedList(mutableListOf())
 
+        /** For each paint, the decoration it was given. */
+        val decorations: MutableList<AwtCanvasDecoration?> = java.util.Collections.synchronizedList(mutableListOf())
+
         /** For each paint, the flash guard's factor it was drawn at. */
         val dims: MutableList<Float> = java.util.Collections.synchronizedList(mutableListOf())
 
@@ -436,9 +439,11 @@ class AwtCanvasVideoRendererTest {
             layout: FrameLayout?,
             overlay: io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?,
             dim: Float,
+            decoration: AwtCanvasDecoration?,
         ): Boolean {
             drawn += (image != null && layout != null) to overlay
             dims += dim
+            decorations += decoration
             val now = inside.incrementAndGet()
             mostAtOnce.accumulateAndGet(now, ::maxOf)
             painting.countDown()
@@ -447,6 +452,54 @@ class AwtCanvasVideoRendererTest {
             inside.decrementAndGet()
             return shows
         }
+    }
+
+    // The view's controls are drawn into the frame, because nothing shows above a native canvas (#469).
+    @Test
+    fun aDecorationIsHandedToEveryPaintAndPaintedAtOnceWhenItChanges() = runTest {
+        val r = renderer()
+        val presenter = CountingPresenter(holdMillis = 0)
+        r.presenter = presenter
+        r.setCanvas(DisplayableCanvas())
+        val controls = AwtCanvasDecoration { _, _, _ -> }
+
+        r.setDecoration(controls)
+        r.present(CountingFrame(), 0L)
+        r.repaint()
+        r.setDecoration(null)
+        assertEquals(listOf(controls, controls, controls, null), presenter.decorations.toList())
+        r.close()
+    }
+
+    @Test
+    fun aDecorationDrawsOverThePictureAndOneThatThrowsCostsNothing() {
+        val image = BufferedImage(40, 20, BufferedImage.TYPE_INT_RGB)
+        val g = image.createGraphics()
+        AwtCanvasPresenter.compose(g, 40, 20, null, null, overlay = null)
+        var seen: Pair<Int, Int>? = null
+        AwtCanvasPresenter.decorate(g, 40, 20) { graphics, width, height ->
+            seen = width to height
+            graphics.color = Color.RED
+            graphics.fillRect(0, 10, width, 10)
+        }
+        // The decoration's colour stays its own: the caller's graphics still draws as before.
+        assertEquals(Color.BLACK, g.color)
+        AwtCanvasPresenter.decorate(g, 40, 20) { _, _, _ -> throw IllegalStateException("controls broke") }
+        AwtCanvasPresenter.decorate(g, 40, 20, null)
+        g.dispose()
+        assertEquals(40 to 20, seen)
+        assertEquals(0xFF000000.toInt(), image.getRGB(5, 5))
+        assertEquals(0xFFFF0000.toInt(), image.getRGB(5, 15))
+
+        // The presenter draws it into the frame it shows, over a canvas with no picture yet.
+        val strategy = FakeStrategy()
+        val shown = AwtCanvasPresenter().present(StrategyCanvas(strategy), null, null, overlay = null, dim = 1f) { graphics, width, height ->
+            graphics.color = Color.RED
+            graphics.fillRect(0, height / 2, width, height / 2)
+        }
+        assertTrue(shown)
+        assertEquals(0xFFFF0000.toInt(), strategy.backing.getRGB(80, 80))
+        assertEquals(0xFF000000.toInt(), strategy.backing.getRGB(80, 10))
     }
 
     // The engine paints from its scheduler while the actor changes the controls (#225).
@@ -782,7 +835,7 @@ class AwtCanvasVideoRendererTest {
         val layout = frameLayout(160, 90, VideoSize(16, 9), 0)!!
         for ((dim, expected) in listOf(1f to 255, 0.5f to 128)) {
             val strategy = FakeStrategy()
-            assertTrue(AwtCanvasPresenter().present(StrategyCanvas(strategy), white, layout, overlay = null, dim = dim))
+            assertTrue(AwtCanvasPresenter().present(StrategyCanvas(strategy), white, layout, overlay = null, dim = dim, decoration = null))
             val middle = Color(strategy.backing.getRGB(80, 45))
             assertTrue(kotlin.math.abs(middle.red - expected) <= 1, "white at $dim reached the screen as $middle")
         }

@@ -31,7 +31,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
-import platform.CoreGraphics.CGRectGetHeight
 import platform.CoreGraphics.CGRectGetWidth
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSBundle
@@ -106,7 +105,6 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
     /** `--deband` turns debanding on, so the taps it costs can be measured against a run without them. */
     private val debandOn = NSProcessInfo.processInfo.arguments.contains(DEBAND_ARGUMENT)
     private var scenarioStarted = false
-    private val controlButtons = mutableListOf<UIButton>()
     private var openFileButton: UIButton? = null
 
     // UIKit holds a picker's delegate weakly, so the controller keeps it.
@@ -122,7 +120,11 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         super.viewDidLoad()
         view.backgroundColor = UIColor.blackColor
         view.addSubview(playerView)
-        if (!smokeMode && !scenarioMode) installControls()
+        if (!smokeMode && !scenarioMode) {
+            // The view's own controls play, pause, seek and pick tracks. A scripted run shows none.
+            playerView.showsControls = true
+            installOpenFile()
+        }
         // A scripted run outlives the auto-lock timer, and a locked phone suspends the app.
         if (scenarioMode) UIApplication.sharedApplication.idleTimerDisabled = true
     }
@@ -130,7 +132,7 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
     override fun viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         playerView.setFrame(view.bounds)
-        layoutControls()
+        layoutOpenFile()
     }
 
     override fun viewDidAppear(animated: Boolean) {
@@ -154,43 +156,31 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         if (!smokeMode && !scenarioMode) closeSample()
     }
 
-    private fun installControls() {
-        addControl("Play", "playSample")
-        addControl("Pause", "pauseSample")
-        addControl("Seek 5s", "seekSample")
-        openFileButton = addControl("Open file", "pickFile")
-    }
-
-    private fun addControl(title: String, action: String): UIButton {
+    /** The one control the view's own controls have no place for: picking another file. */
+    private fun installOpenFile() {
         val button = UIButton.buttonWithType(UIButtonTypeSystem)
-        button.setTitle(title, forState = UIControlStateNormal)
+        button.setTitle("Open file", forState = UIControlStateNormal)
         button.setTitleColor(UIColor.whiteColor, forState = UIControlStateNormal)
         button.backgroundColor = UIColor.colorWithWhite(white = 0.16, alpha = 0.88)
         button.layer.cornerRadius = CONTROL_CORNER_RADIUS
         button.enabled = false
         button.addTarget(
             target = this,
-            action = NSSelectorFromString(action),
+            action = NSSelectorFromString("pickFile"),
             forControlEvents = UIControlEventTouchUpInside,
         )
         view.addSubview(button)
-        controlButtons += button
-        return button
+        openFileButton = button
     }
 
-    private fun layoutControls() {
-        if (controlButtons.isEmpty()) return
+    /** At the top, so the bar of the view's controls keeps the bottom. */
+    private fun layoutOpenFile() {
+        val button = openFileButton ?: return
         val width = CGRectGetWidth(view.bounds)
-        val height = CGRectGetHeight(view.bounds)
-        val bottomInset = view.safeAreaInsets.useContents { bottom }
-        val controlsWidth = width - CONTROL_MARGIN * 2 - CONTROL_SPACING * (controlButtons.size - 1)
-        val buttonWidth = (controlsWidth / controlButtons.size).coerceAtLeast(0.0)
-        val y = (height - bottomInset - CONTROL_MARGIN - CONTROL_HEIGHT).coerceAtLeast(CONTROL_MARGIN)
-
-        controlButtons.forEachIndexed { index, button ->
-            val x = CONTROL_MARGIN + index * (buttonWidth + CONTROL_SPACING)
-            button.setFrame(CGRectMake(x, y, buttonWidth, CONTROL_HEIGHT))
-        }
+        val topInset = view.safeAreaInsets.useContents { top }
+        val rightInset = view.safeAreaInsets.useContents { right }
+        val x = (width - rightInset - CONTROL_MARGIN - OPEN_FILE_WIDTH).coerceAtLeast(CONTROL_MARGIN)
+        button.setFrame(CGRectMake(x, topInset + CONTROL_MARGIN, OPEN_FILE_WIDTH, CONTROL_HEIGHT))
     }
 
     private suspend fun openSample() {
@@ -208,11 +198,11 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
             activePlayer.open(MediaItem(mediaPath))
             if (sampleClosing) return
 
-            setControlsEnabled(true)
+            setOpenFileEnabled(true)
             printSampleSummary("ready (${activePlayer.state.value.status})", activePlayer)
             terminalJob = scope.launch {
                 val terminal = activePlayer.state.first { snapshot -> snapshot.status.isTerminal }
-                setControlsEnabled(false)
+                setOpenFileEnabled(false)
                 delay(TERMINAL_STATS_SETTLE)
                 if (samplePlayer === activePlayer && !sampleClosing) {
                     printSampleSummary("terminal ${terminal.status}", activePlayer)
@@ -225,47 +215,6 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
                     printSampleSummary("terminal ${activePlayer.state.value.status}", activePlayer)
                 }
                 closeSample()
-            }
-        }
-    }
-
-    @ObjCAction
-    private fun playSample() {
-        val activePlayer = samplePlayer ?: return
-        if (sampleClosing) return
-        activePlayer.play()
-        printSampleSummary("action play", activePlayer)
-    }
-
-    @ObjCAction
-    private fun pauseSample() {
-        val activePlayer = samplePlayer ?: return
-        if (sampleClosing) return
-        activePlayer.pause()
-        printSampleSummary("action pause", activePlayer)
-    }
-
-    @ObjCAction
-    private fun seekSample() {
-        val activePlayer = samplePlayer ?: return
-        if (sampleClosing) return
-        setControlsEnabled(false)
-        scope.launch {
-            try {
-                activePlayer.seek(SEEK_POSITION, SeekMode.Precise)
-                if (samplePlayer === activePlayer && !sampleClosing) {
-                    printSampleSummary("action precise seek to 5 s", activePlayer)
-                }
-            } catch (failure: Throwable) {
-                if (!sampleClosing) {
-                    println("iOS sample seek failed: ${failure.message ?: failure::class.simpleName}")
-                    printSampleSummary("action precise seek failed", activePlayer)
-                }
-            } finally {
-                val status = activePlayer.state.value.status
-                if (samplePlayer === activePlayer && !sampleClosing && !status.isTerminal) {
-                    setControlsEnabled(true)
-                }
             }
         }
     }
@@ -283,7 +232,7 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
     private suspend fun openPicked(url: NSURL) {
         val activePlayer = samplePlayer ?: return
         if (sampleClosing) return
-        setControlsEnabled(false)
+        setOpenFileEnabled(false)
         try {
             // Open is legal only from Idle, Ended or Failed, and the bundled clip may still be loaded.
             activePlayer.stop()
@@ -295,19 +244,19 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
                 println("iOS sample could not open the picked file: ${failure.message ?: failure::class.simpleName}")
             }
         } finally {
-            if (samplePlayer === activePlayer && !sampleClosing) setControlsEnabled(true)
+            if (samplePlayer === activePlayer && !sampleClosing) setOpenFileEnabled(true)
         }
     }
 
     // Open file stays usable after playback ends, so a user can pick another file.
-    private fun setControlsEnabled(enabled: Boolean) {
-        controlButtons.forEach { it.enabled = enabled || (it === openFileButton && !sampleClosing) }
+    private fun setOpenFileEnabled(enabled: Boolean) {
+        openFileButton?.enabled = enabled || !sampleClosing
     }
 
     private fun closeSample() {
         if (sampleClosing) return
         sampleClosing = true
-        setControlsEnabled(false)
+        setOpenFileEnabled(false)
         terminalJob?.cancel()
         terminalJob = null
 
@@ -736,6 +685,6 @@ private val SEEK_LANDING_RANGE = 5_000L..5_034L
 private val PRESENTATION_POLL = 10.milliseconds
 private val TERMINAL_STATS_SETTLE = 2.seconds
 private const val CONTROL_MARGIN = 16.0
-private const val CONTROL_SPACING = 8.0
+private const val OPEN_FILE_WIDTH = 112.0
 private const val CONTROL_HEIGHT = 44.0
 private const val CONTROL_CORNER_RADIUS = 8.0

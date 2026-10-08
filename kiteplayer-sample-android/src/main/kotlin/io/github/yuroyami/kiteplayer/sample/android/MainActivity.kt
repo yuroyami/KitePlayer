@@ -1,10 +1,10 @@
 package io.github.yuroyami.kiteplayer.sample.android
 
 import android.app.Activity
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.widget.Button
 import android.widget.TextView
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.MediaIo
@@ -18,11 +18,11 @@ import io.github.yuroyami.kiteplayer.view.enterPictureInPicture
 import io.github.yuroyami.kiteplayer.view.keepPictureInPictureParamsCurrent
 
 /**
- * Direct native-view demo: one [KitePlayerView] inflated from XML and three ordinary buttons.
+ * Direct native-view demo: one [KitePlayerView] inflated from XML, with the view's own controls.
  * The XML path is deliberate:
  * it proves the native-view artifact is usable without Compose or a programmatic factory. The
  * surface lifecycle still lives entirely inside the reusable view, so this Activity owns no
- * SurfaceHolder callback, renderer or Surface.
+ * SurfaceHolder callback, renderer or Surface, and no control of its own.
  */
 internal class MainActivity : Activity() {
 
@@ -42,15 +42,13 @@ internal class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         playerView = findViewById<KitePlayerView>(R.id.player_view).apply { installMobileRenderer() }
-        val controls = findViewById<View>(R.id.controls)
         val perfOverlay = findViewById<TextView>(R.id.performance)
         val showPerfOverlay = true
 
-        findViewById<Button>(R.id.play).setOnClickListener { controller.play() }
-        findViewById<Button>(R.id.pause).setOnClickListener { controller.pause() }
-        findViewById<Button>(R.id.seek_five).setOnClickListener { controller.seekToFiveSeconds() }
+        // The view's own controls play, pause, seek and pick tracks. The scripted run shows none.
+        playerView.showsControls = !smoke
+        playerView.onPictureInPicture = { playerView.enterPictureInPicture(this) }
 
-        controls.visibility = if (smoke) View.GONE else View.VISIBLE
         perfOverlay.visibility = if (!smoke && showPerfOverlay) View.VISIBLE else View.GONE
         if (perfOverlay.visibility == View.VISIBLE) {
             controller.observePerformance(playerView) { perfOverlay.text = it }
@@ -88,6 +86,12 @@ internal class MainActivity : Activity() {
         ) {
             playerView.enterPictureInPicture(this)
         }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        // The small window has no room for a bar, and the system draws its own buttons over it.
+        playerView.showsControls = !smoke && !isInPictureInPictureMode
     }
 
     override fun onPause() {

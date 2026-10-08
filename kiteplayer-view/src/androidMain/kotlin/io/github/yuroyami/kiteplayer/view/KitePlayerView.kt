@@ -23,6 +23,8 @@ import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.roundToInt
@@ -162,7 +164,80 @@ public open class KitePlayerView @JvmOverloads constructor(
             binding.setPlayer(value)
             updateAccessibilityState()
             watchPlayer()
+            rebuildControls()
         }
+
+    /**
+     * Draws default controls over the picture: play and pause, previous and next for a queue, the
+     * seek bar with its buffered ranges, the times, a mute button, menus for the audio and subtitle
+     * tracks, the quality and the speed, and picture in picture and full screen buttons when
+     * [onPictureInPicture] and [onFullScreen] are set. False by default.
+     *
+     * They are plain platform views, with no other library. A tap on the picture shows or hides
+     * them, they hide by themselves while the player plays, and a finger dragged sideways over the
+     * picture scrubs. Every control takes the focus of a keyboard or a D-pad, and has a name and a
+     * role for a screen reader. While they show, subtitles stand above them. They do what
+     * `KitePlayerControls` of `kiteplayer-compose-ui` does, from the same [PlayerControlsModel].
+     */
+    public var showsControls: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            rebuildControls()
+        }
+
+    /** Every word the controls show or a screen reader says. English by default; pass translated ones. */
+    public var controlsStrings: PlayerControlsStrings = PlayerControlsStrings.Default
+        set(value) {
+            field = value
+            controlsOverlay?.let { overlay ->
+                overlay.model.strings = value
+                overlay.refresh()
+            }
+        }
+
+    /** What the full screen button does, or null for no such button. The window is the application's. */
+    public var onFullScreen: (() -> Unit)? = null
+        set(value) {
+            field = value
+            controlsOverlay?.model?.onFullScreen = value
+        }
+
+    /** What the picture in picture button does, or null for no such button. See [enterPictureInPicture]. */
+    public var onPictureInPicture: (() -> Unit)? = null
+        set(value) {
+            field = value
+            controlsOverlay?.model?.onPictureInPicture = value
+        }
+
+    /** The model behind the controls, to show or hide them from code, or null while [showsControls] is false or no player is set. */
+    public val controls: PlayerControlsModel? get() = controlsOverlay?.model
+
+    private var controlsOverlay: ControlsOverlay? = null
+    private var controlsScope: CoroutineScope? = null
+
+    /** Builds the controls for the player and the switch as they stand now, and drops the old ones. */
+    private fun rebuildControls() {
+        controlsOverlay?.let { old ->
+            old.close()
+            old.model.close()
+            removeView(old)
+        }
+        controlsScope?.cancel()
+        controlsOverlay = null
+        controlsScope = null
+        val paired = player
+        if (!showsControls || paired == null) return
+        val scope = CoroutineScope(SupervisorJob() + MainLooper)
+        val model = PlayerControlsModel(paired, scope, controlsStrings)
+        model.onFullScreen = onFullScreen
+        model.onPictureInPicture = onPictureInPicture
+        controlsScope = scope
+        // Added last, so the controls are above the picture and the subtitles.
+        controlsOverlay = ControlsOverlay(context, model, scope).also {
+            addView(it, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        }
+    }
 
     /**
      * Keeps the display from dimming and locking while the player plays video and this view is on
@@ -639,10 +714,10 @@ internal fun videoBounds(
 }
 
 /**
- * The main thread as a coroutine dispatcher, for the view's state watch. Written here rather than
+ * The main thread as a coroutine dispatcher, for the view's state watch and its controls. Written here rather than
  * taken from kotlinx-coroutines-android, which no module of this library depends on.
  */
-private object MainLooper : CoroutineDispatcher() {
+internal object MainLooper : CoroutineDispatcher() {
     private val handler = Handler(Looper.getMainLooper())
 
     override fun dispatch(context: CoroutineContext, block: Runnable) {

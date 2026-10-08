@@ -18,6 +18,7 @@ import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.useContents
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
@@ -26,13 +27,18 @@ import platform.Foundation.NSDate
 import platform.Foundation.NSRunLoop
 import platform.Foundation.dateWithTimeIntervalSinceNow
 import platform.Foundation.runUntilDate
+import platform.UIKit.UIControlEventTouchUpInside
 import platform.UIKit.UIWindow
+import platform.UIKit.accessibilityHint
+import platform.UIKit.isAccessibilityElement
 import platform.UIKit.accessibilityLabel
 import platform.UIKit.accessibilityValue
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -116,6 +122,78 @@ class KitePlayerUIViewTest {
         }
         assertEquals("Vídeo", view.accessibilityLabel)
         assertEquals("Sin contenido", view.accessibilityValue)
+        view.release()
+    }
+
+    // The controls are opt-in, so a screen that never asks for them is as it was (#469).
+    @Test
+    fun theViewHasNoControlsUntilItIsAsked() {
+        val view = KitePlayerUIView()
+        view.player = player()
+        assertFalse(view.showsControls)
+        assertNull(view.controls)
+        assertEquals(0, view.subviews.size)
+        assertTrue(view.isAccessibilityElement)
+        view.release()
+    }
+
+    @Test
+    fun turningTheControlsOnAddsThemAndTurningThemOffTakesThemAway() {
+        val view = KitePlayerUIView()
+        view.setFrame(CGRectMake(0.0, 0.0, 320.0, 240.0))
+        // No player yet, so there is nothing to control.
+        view.showsControls = true
+        assertNull(view.controls)
+        assertEquals(0, view.subviews.size)
+
+        view.player = player()
+        val model = assertNotNull(view.controls)
+        assertTrue(model.state.value.visible)
+        val overlay = assertNotNull(view.controlsOverlay)
+        assertEquals(listOf<Any?>(overlay), view.subviews)
+        view.layoutIfNeeded()
+        assertEquals(320.0, overlay.frame.useContents { size.width })
+        assertEquals(240.0, overlay.frame.useContents { size.height })
+        // VoiceOver does not look inside an element, so the picture inside the controls is the video now.
+        assertFalse(view.isAccessibilityElement)
+        assertEquals(DEFAULT_VIDEO_ACCESSIBILITY_LABEL, overlay.picture.accessibilityLabel)
+        assertEquals("No media", overlay.picture.accessibilityValue)
+        assertEquals("Hide controls", overlay.picture.accessibilityHint)
+        assertEquals("Play", overlay.playButton.accessibilityLabel)
+
+        view.showsControls = false
+        assertNull(view.controls)
+        assertEquals(0, view.subviews.size)
+        assertTrue(view.isAccessibilityElement)
+
+        // Releasing the view drops them with the player.
+        view.showsControls = true
+        assertNotNull(view.controls)
+        view.release()
+        assertNull(view.controls)
+        assertEquals(0, view.subviews.size)
+    }
+
+    @Test
+    fun theWordsAndTheButtonsOfTheApplicationReachTheControls() {
+        val view = KitePlayerUIView()
+        view.setFrame(CGRectMake(0.0, 0.0, 320.0, 240.0))
+        view.controlsStrings = PlayerControlsStrings(play = "Lecture", fullScreen = "Plein écran")
+        var asked = 0
+        view.onFullScreen = { asked++ }
+        view.player = player()
+        view.showsControls = true
+        val overlay = assertNotNull(view.controlsOverlay)
+        assertEquals("Lecture", overlay.playButton.accessibilityLabel)
+        assertEquals("Plein écran", overlay.fullScreenButton.accessibilityLabel)
+        assertFalse(overlay.fullScreenButton.hidden)
+        assertTrue(overlay.pictureInPictureButton.hidden)
+        overlay.fullScreenButton.sendActionsForControlEvents(UIControlEventTouchUpInside)
+        assertEquals(1, asked)
+
+        // Words set later reach the controls already on screen.
+        view.controlsStrings = PlayerControlsStrings(play = "Wiedergabe")
+        assertEquals("Wiedergabe", overlay.playButton.accessibilityLabel)
         view.release()
     }
 

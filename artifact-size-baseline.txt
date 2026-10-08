@@ -31,10 +31,10 @@ kiteplayer-output macosArm64 432027
 kiteplayer-output iosArm64 402742
 kiteplayer-output macosArm64-cinterop-kitemetal 9250
 kiteplayer-output iosArm64-cinterop-kitemetal 8721
-kiteplayer-view jvm 50654
-kiteplayer-view android 57136
-kiteplayer-view macosArm64 46738
-kiteplayer-view iosArm64 67697
+kiteplayer-view jvm 176228
+kiteplayer-view android 164989
+kiteplayer-view macosArm64 108717
+kiteplayer-view iosArm64 164423
 kiteplayer-view-bindings jvm 8642
 kiteplayer-view-bindings android 7678
 kiteplayer-view-bindings iosArm64 14210

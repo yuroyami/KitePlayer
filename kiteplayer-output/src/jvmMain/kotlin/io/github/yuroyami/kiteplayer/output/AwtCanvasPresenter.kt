@@ -26,9 +26,16 @@ internal interface CanvasPresenter {
      * Draws and shows one composed frame, and answers true only when the strategy showed it. A null
      * [image] or [layout] composes the background and the cues alone, for a renderer whose
      * picture was taken off the screen (#530). The picture is drawn at [dim], the flash guard's
-     * factor, 1 outside a flashing run (#500).
+     * factor, 1 outside a flashing run (#500). [decoration] draws last, over the picture and the cues.
      */
-    fun present(canvas: Canvas, image: BufferedImage?, layout: FrameLayout?, overlay: SubtitleOverlay?, dim: Float): Boolean
+    fun present(
+        canvas: Canvas,
+        image: BufferedImage?,
+        layout: FrameLayout?,
+        overlay: SubtitleOverlay?,
+        dim: Float,
+        decoration: AwtCanvasDecoration?,
+    ): Boolean
 }
 
 internal class AwtCanvasPresenter : CanvasPresenter {
@@ -43,6 +50,7 @@ internal class AwtCanvasPresenter : CanvasPresenter {
         layout: FrameLayout?,
         overlay: SubtitleOverlay?,
         dim: Float,
+        decoration: AwtCanvasDecoration?,
     ): Boolean {
         if (canvas.width <= 0 || canvas.height <= 0) return false
         if (strategyIsStale(canvas.bufferStrategy != null, builtWidth, builtHeight, canvas.width, canvas.height)) {
@@ -59,6 +67,7 @@ internal class AwtCanvasPresenter : CanvasPresenter {
                 val g = strategy.drawGraphics as? Graphics2D ?: return false
                 try {
                     compose(g, canvas.width, canvas.height, image, layout, overlay, dim)
+                    decorate(g, canvas.width, canvas.height, decoration)
                 } finally {
                     g.dispose()
                 }
@@ -149,6 +158,21 @@ internal class AwtCanvasPresenter : CanvasPresenter {
             g.fill(area)
         }
         drawOverlay(g, overlay, canvasWidth, canvasHeight)
+    }
+
+    /**
+     * Draws [decoration] over a composed frame, on a copy of [g] so that what it sets stays its own.
+     * A decoration that throws is dropped for this frame: it must not cost the picture.
+     */
+    fun decorate(g: Graphics2D, canvasWidth: Int, canvasHeight: Int, decoration: AwtCanvasDecoration?) {
+        val painter = decoration ?: return
+        val own = g.create() as? Graphics2D ?: return
+        try {
+            painter.paint(own, canvasWidth, canvasHeight)
+        } catch (_: RuntimeException) {
+        } finally {
+            own.dispose()
+        }
     }
 
     /**

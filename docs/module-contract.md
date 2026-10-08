@@ -407,8 +407,8 @@ click, so controls drawn over `KiteRenderPath.NativeView` receive none; such an 
 for `KiteRenderPath.ComposeCanvas` or places the controls beside the video, as the class already
 documents.
 
-Out of scope here: controls for the native views, which can follow once these settle, and a
-volume above 100 percent in the default controls.
+Out of scope here: a volume above 100 percent in the default controls. The controls of the native
+views are the next section.
 
 Tests: the state holders against a scripted player, including the scrub calls and their seek mode,
 the buffered fractions, the volume curve's ends and middle, and the visibility timeout. Compose UI
@@ -416,6 +416,77 @@ tests on the JVM: every control's role and label, `setProgress` moving the playe
 arrow keys reaching every control, a tap and the timeout hiding the controls alike, the
 unmirrored transport row in a right-to-left layout, and `KitePlayerVideo` without controls drawing
 exactly what it drew before.
+
+## Default controls for the native views
+
+The second half of #469, for an application without Compose. Everything lives in
+`kiteplayer-view`, in the `io.github.yuroyami.kiteplayer.view` package. No module gains a
+dependency.
+
+**The switch.** `KitePlayerView`, `KitePlayerUIView` and `KitePlayerAwtView` each have the same five
+members, and the controls are off until the application asks:
+
+- `showsControls: Boolean`, false by default. Android has no XML attribute for it.
+- `controlsStrings: PlayerControlsStrings`, the words, in English by default.
+- `onFullScreen: (() -> Unit)?` and `onPictureInPicture: (() -> Unit)?`. Each button exists only
+  while its callback is set, because the window belongs to the application.
+- `controls: PlayerControlsModel?`, the model behind the controls, or null while they are off or
+  the view has no player.
+
+**The model.** `PlayerControlsModel(player, scope, strings, hideAfter = 3.seconds)` has no toolkit
+in it. Its `state` is a `StateFlow` of `PlayerControlsSnapshot`, one immutable value with all a
+set of controls draws: `visible`, `showsPlay`, the queue flags, `position`, `duration`,
+`seekable`, `scrubTarget`, `fraction`, `buffered`, the texts of the times, `volumeLevel`,
+`muted`, and the choices of the four menus of `PlayerControlsMenu` as `PlayerControlsOption`
+values. Its commands are `togglePlay`, `previous`, `next`, `beginScrub`, `moveScrub`, `endScrub`,
+`cancelScrub`, `stepBy`, `setVolumeLevel`, `toggleMute`, `select(menu, index)`, `toggleFullScreen`,
+`enterPictureInPicture`, `poke`, `wake`, `hide`, `toggleVisible`, `hold` and `close`. An
+application that draws its own controls in a native toolkit builds them from this model.
+
+The model follows the rules of the Compose controls: the play button shows play unless the player
+was asked to play, the controls hide after the timeout only while the player plays, a drag of the
+seek bar asks for `SeekMode.KeyframeThenRefine` seeks, the volume slider follows the cube of its
+position, and subtitles move up through `KitePlayer.setSubtitlePosition` while the controls show.
+It mirrors those rules; it does not share code with `kiteplayer-compose-ui`, which keeps its own
+state holders. `PlayerControlsStrings` has the same keys and the same English words as
+`KitePlayerControlsLabels`.
+
+**What each view draws.** All three show play and pause, previous and next for a queue, the seek
+bar with its buffered ranges, the position and the duration, a mute button, and menus for the
+audio tracks, the subtitle tracks, the qualities and the speeds. A tap or a click on the picture
+shows or hides them. The transport buttons and the seek bar keep their order in a right-to-left
+layout, and the icons are never mirrored.
+
+- Android: plain `android.view` and `android.widget` classes that draw on a `Canvas`, with
+  `PopupMenu` for the menus. A horizontal drag over the picture scrubs and shows the target time.
+  The seek bar reports a range to TalkBack and takes its set-progress and scroll actions. The
+  D-pad reaches every control, and the first key press while the controls are hidden only shows
+  them. An open menu keeps the controls up.
+- iOS: `UIButton` objects with path icons, a `UISlider` over the buffered ranges, and `UIMenu` for
+  the menus. A sideways drag over the picture scrubs. VoiceOver reads every button by its label
+  and adjusts the seek bar. The slider is made when the view first enters a window.
+- Desktop: the controls are painted with Java2D into each frame the renderer shows, because the
+  view is a heavyweight `Canvas` and nothing a toolkit draws shows above it. The renderer must be
+  an `AwtControlsCanvas`, as the default renderer is; with another renderer the view paints the
+  controls itself. A volume slider shows from 480 pixels of width. Space plays or pauses, the left
+  and right arrows move ten seconds, the up and down arrows change the volume, M mutes and F asks
+  for full screen. Each control is an accessible child of the view with a name, a role and an
+  action.
+
+For the desktop, `AwtCanvasVideoRenderer` in `kiteplayer-output` gains `setDecoration` and
+`repaint`, with the `AwtCanvasDecoration` interface, and `DesktopAwtPlayerViewRenderer` in
+`kiteplayer-view-bindings` implements `AwtControlsCanvas` on top of them.
+
+Not in these controls: a volume slider on Android and iOS, where the device buttons set the
+volume, a preview picture over the seek bar, and a volume above 100 percent. On iOS and the
+desktop an open menu does not keep the controls up, because UIKit and AWT do not say when their
+menus close.
+
+Tests: the model against a scripted player in `commonTest`, on every target. The AWT controls on
+the JVM: the layout, the mouse, the keys, the paint and the accessible children. The UIKit
+controls in the simulator: the buttons, the menus, the scrub calls, the buffered ranges and the
+layout. On Android the host tests cover the key map and the seek bar arithmetic only, because a
+host test cannot build a view; the views themselves need a device run.
 
 ## Time of day for live streams
 

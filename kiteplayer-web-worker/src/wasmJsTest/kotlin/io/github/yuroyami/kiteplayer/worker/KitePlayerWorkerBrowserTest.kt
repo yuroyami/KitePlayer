@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.worker
 
+import io.github.yuroyami.kiteplayer.DemuxPolicy
 import io.github.yuroyami.kiteplayer.KitePlayerWorker
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -161,6 +162,51 @@ class KitePlayerWorkerBrowserTest {
                 player.seek(8.seconds)
                 withTimeout(60.seconds) { player.progress.first { it.position >= 9.seconds } }
                 assertNull(player.state.value.error, "the stream plays on after the seek")
+            } finally {
+                collector.cancel()
+                player.closeAndAwait()
+            }
+        }
+    }
+
+    /**
+     * An fMP4 stream under AES-128 plays in the worker and changes variant in place (#546, #565).
+     * `hls/ladder-aes.m3u8` has 640x360, 1280x720 and 1920x1080, each two seconds a segment. The
+     * worker decrypts each segment and, after the change, writes it again for the first variant's
+     * initialization, all in Kotlin compiled for the browser.
+     */
+    @Test
+    fun anEncryptedMp4StreamChangesVariantInTheWorker() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        withContext(Dispatchers.Default) {
+            val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+            val events = Channel<PlayerEvent>(Channel.UNLIMITED)
+            val subscribed = CompletableDeferred<Unit>()
+            val collector = launch {
+                player.events.onSubscription { subscribed.complete(Unit) }.collect { events.send(it) }
+            }
+            try {
+                subscribed.await()
+                player.setViewport(320, 180, 1f)
+                player.open(MediaItem("$media/hls/ladder-aes.m3u8", demux = DemuxPolicy(maxVideoHeight = 400)))
+                val opened = withTimeout(30.seconds) { player.state.first { it.duration != null } }
+                assertEquals(listOf(360, 720, 1080), opened.tracks.variants.map { it.height })
+                assertEquals(0, opened.tracks.selectedVariant, "the item asked for at most 400 lines")
+
+                player.play()
+                withTimeout(30.seconds) {
+                    while (events.receive() !is PlayerEvent.FirstFrameRendered) Unit
+                }
+                player.selectVariant(1)
+                withTimeout(30.seconds) { player.state.first { it.tracks.selectedVariant == 1 } }
+                // Past two segment boundaries, so segments of the second variant have played.
+                withTimeout(90.seconds) { player.progress.first { it.position >= 5.seconds } }
+                assertNull(player.state.value.error, "the stream plays on in the other variant")
             } finally {
                 collector.cancel()
                 player.closeAndAwait()

@@ -1,12 +1,9 @@
 package io.github.yuroyami.kiteplayer.sample.android
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,16 +11,19 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.yuroyami.kiteplayer.compose.KitePlayerControls
 import java.util.Locale
 
-/** Shared controls and engine telemetry; the video slot remains specific to each public API. */
+/**
+ * The library's default controls over the video, and engine telemetry under it. The video slot
+ * remains specific to each public API.
+ */
 @Composable
 internal fun SampleComposeScreen(
     title: String,
@@ -64,8 +64,10 @@ internal fun SampleComposeScreen(
                 .fillMaxWidth()
                 .weight(1f)
                 .background(Color.Black),
-            content = video,
-        )
+        ) {
+            video()
+            KitePlayerControls(controller.player, Modifier.matchParentSize())
+        }
         BasicText(
             text = engineStats,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -78,31 +80,5 @@ internal fun SampleComposeScreen(
                 style = TextStyle(color = Color(0xFF9AD5FF), fontSize = 12.sp),
             )
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            SampleButton("Play", Modifier.weight(1f), controller::play)
-            SampleButton("Pause", Modifier.weight(1f), controller::pause)
-            SampleButton("Seek 5s", Modifier.weight(1f), controller::seekToFiveSeconds)
-        }
-    }
-}
-
-@Composable
-private fun SampleButton(label: String, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier = modifier
-            .background(Color(0xFF315D83))
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        BasicText(
-            text = label,
-            style = TextStyle(color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium),
-        )
     }
 }

@@ -10,15 +10,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -37,7 +33,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,8 +43,7 @@ import io.github.yuroyami.kiteplayer.compose.rememberKitePlayer
 import io.github.yuroyami.kiteplayer.isAvailable
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MediaItem
-import io.github.yuroyami.kiteplayer.PlaybackStatus
-import io.github.yuroyami.kiteplayer.SeekMode
+import io.github.yuroyami.kiteplayer.compose.KitePlayerControls
 import io.github.yuroyami.kiteplayer.compose.KiteVideo
 import io.github.yuroyami.kiteplayer.compose.KiteVideoState
 import io.github.yuroyami.kiteplayer.compose.rememberKiteVideoState
@@ -57,14 +51,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.util.Locale
-import kotlin.time.Duration
 
 private val Ink = Color(0xFF0B0B10)
 private val Panel = Color(0xFF16161F)
 private val Accent = Color(0xFF9C7BFF)
 private val Muted = Color(0xFF9A9AAE)
 
-/** The whole sample: a player, a KiteVideo, four controls and the measurement driver. */
+/** The whole sample: a player, a KiteVideo under the library's default controls, and the measurement driver. */
 @Composable
 internal fun DesktopSample(options: SampleOptions, onMeasurementDone: () -> Unit) {
     if (!KitePlayer.isAvailable) {
@@ -98,12 +91,13 @@ internal fun DesktopSample(options: SampleOptions, onMeasurementDone: () -> Unit
             contentAlignment = Alignment.Center,
         ) {
             VideoStage(video, modifiersOn, drawCost)
+            // A measurement counts what the video costs to draw, so nothing is drawn over it then.
+            if (opened && !options.measure) KitePlayerControls(player, Modifier.matchParentSize())
         }
-        Controls(
+        Panel(
             player = player,
             video = video,
             modifiersOn = modifiersOn,
-            enabled = opened,
             onToggleModifiers = { modifiersOn = !modifiersOn },
         )
     }
@@ -209,49 +203,24 @@ private fun Refusal(message: String) {
     }
 }
 
-/** Play, pause, seek, and the modifier toggle. Deliberately not a media centre. */
+/** The modifier toggle and the counters. Playback itself is the library's `KitePlayerControls`. */
 @Composable
-private fun Controls(
+private fun Panel(
     player: KitePlayer,
     video: KiteVideoState,
     modifiersOn: Boolean,
-    enabled: Boolean,
     onToggleModifiers: () -> Unit,
 ) {
-    val snapshot by player.state.collectAsState()
-    val progress by player.progress.collectAsState()
-    // Null while nothing is open, and for a live stream. Zero makes the bar inert, which is right.
-    val duration = snapshot.duration ?: Duration.ZERO
-    val playing = snapshot.status == PlaybackStatus.Playing
-
     Column(
         Modifier.fillMaxWidth().background(Panel).padding(horizontal = 20.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        SeekBar(
-            fraction = fractionOf(progress.position, duration),
-            enabled = enabled && snapshot.seekable,
-            onSeek = { at -> player.requestSeek(duration * at.toDouble(), SeekMode.KeyframeThenRefine) },
+        Button(
+            label = if (modifiersOn) "Compose modifiers: on" else "Compose modifiers: off",
+            enabled = true,
+            highlighted = modifiersOn,
+            onClick = onToggleModifiers,
         )
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Button(if (playing) "Pause" else "Play", enabled) {
-                if (playing) player.pause() else player.play()
-            }
-            Button(
-                label = if (modifiersOn) "Compose modifiers: on" else "Compose modifiers: off",
-                enabled = true,
-                highlighted = modifiersOn,
-                onClick = onToggleModifiers,
-            )
-            BasicText(
-                text = "${clock(progress.position)} / ${clock(duration)}",
-                style = TextStyle(color = Muted, fontSize = 13.sp),
-            )
-        }
         Telemetry(player, video)
     }
 }
@@ -316,41 +285,4 @@ private fun Button(
             ),
         )
     }
-}
-
-@Composable
-private fun SeekBar(fraction: Float, enabled: Boolean, onSeek: (Float) -> Unit) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(22.dp)
-            .pointerInput(enabled) {
-                if (!enabled) return@pointerInput
-                detectTapGestures { at -> onSeek((at.x / size.width).coerceIn(0f, 1f)) }
-            }
-            .pointerInput(enabled) {
-                if (!enabled) return@pointerInput
-                detectHorizontalDragGestures { change, _ ->
-                    onSeek((change.position.x / size.width).coerceIn(0f, 1f))
-                }
-            },
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFF2C2C3A)))
-        Box(
-            Modifier
-                .fillMaxWidth(fraction.coerceIn(0.004f, 1f))
-                .height(5.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(Accent),
-        )
-    }
-}
-
-private fun fractionOf(position: Duration, duration: Duration): Float =
-    if (duration <= Duration.ZERO) 0f else (position / duration).toFloat().coerceIn(0f, 1f)
-
-private fun clock(value: Duration): String {
-    val total = value.coerceAtLeast(Duration.ZERO).inWholeMilliseconds
-    return String.format(Locale.US, "%d:%02d.%01d", total / 60_000, total / 1000 % 60, total % 1000 / 100)
 }

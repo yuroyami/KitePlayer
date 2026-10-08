@@ -98,6 +98,12 @@ int32_t kprt_sink_destroy(kprt_sink *sink)
     return KPRT_SINK_OK;
 }
 
+void kprt_sink_set_output_latency_nanos(kprt_sink *sink, int64_t nanos)
+{
+    (void)sink;
+    (void)nanos;
+}
+
 void kprt_sink_read_stats(const kprt_sink *sink, kprt_sink_stats *out)
 {
     (void)sink;

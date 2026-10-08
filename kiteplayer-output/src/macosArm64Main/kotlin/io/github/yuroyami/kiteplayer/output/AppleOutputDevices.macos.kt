@@ -11,6 +11,7 @@ import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointed
 import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.DoubleVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.UIntVar
 import kotlinx.cinterop.alloc
@@ -31,6 +32,8 @@ import platform.CoreAudio.AudioObjectPropertyAddress
 import platform.CoreAudio.AudioObjectRemovePropertyListener
 import platform.CoreAudio.kAudioDevicePropertyDeviceIsAlive
 import platform.CoreAudio.kAudioDevicePropertyDeviceUID
+import platform.CoreAudio.kAudioDevicePropertyLatency
+import platform.CoreAudio.kAudioDevicePropertyNominalSampleRate
 import platform.CoreAudio.kAudioDevicePropertyStreams
 import platform.CoreAudio.kAudioHardwarePropertyDefaultOutputDevice
 import platform.CoreAudio.kAudioHardwarePropertyDevices
@@ -39,6 +42,7 @@ import platform.CoreAudio.kAudioObjectPropertyName
 import platform.CoreAudio.kAudioObjectPropertyScopeGlobal
 import platform.CoreAudio.kAudioObjectPropertyScopeOutput
 import platform.CoreAudio.kAudioObjectSystemObject
+import platform.CoreAudio.kAudioStreamPropertyLatency
 import platform.CoreFoundation.CFRelease
 import platform.CoreFoundation.CFStringGetCString
 import platform.CoreFoundation.CFStringGetLength
@@ -167,23 +171,108 @@ internal object MacOutputDevices : AppleOutputDevices {
     }
 
     private fun hasOutputStream(device: UInt): Boolean = memScoped {
-        val address = alloc<AudioObjectPropertyAddress>().apply {
-            mSelector = kAudioDevicePropertyStreams
-            mScope = kAudioObjectPropertyScopeOutput
-            mElement = kAudioObjectPropertyElementMain
-        }
+        val address = address(kAudioDevicePropertyStreams, kAudioObjectPropertyScopeOutput)
         val size = alloc<UIntVar>()
         AudioObjectGetPropertyDataSize(device, address.ptr, 0u, null, size.ptr) == 0 && size.value > 0u
     }
+
+    /**
+     * The device's own latency plus its first output stream's, at the device's sample rate.
+     *
+     * The render callback's timestamp is when a frame is passed to the hardware, so the buffer and
+     * the device's safety offset are already in it, and these two are what is left before the
+     * frame is heard. A device that does not answer its latency or its rate answers null here.
+     */
+    override fun outputLatencyNanos(device: UInt): Long? {
+        val target = if (device == 0u) defaultOutputDevice() else device
+        if (target == 0u) return null
+        val rate = memScoped {
+            val answer = alloc<DoubleVar>()
+            val size = alloc<UIntVar>().apply { value = sizeOf<DoubleVar>().toUInt() }
+            val status = AudioObjectGetPropertyData(
+                target, globalAddress(kAudioDevicePropertyNominalSampleRate).ptr, 0u, null, size.ptr, answer.ptr,
+            )
+            if (status == 0) answer.value else null
+        } ?: return null
+        val deviceFrames = uintProperty(target, kAudioDevicePropertyLatency, kAudioObjectPropertyScopeOutput) ?: return null
+        val streamFrames = firstOutputStream(target)
+            ?.let { uintProperty(it, kAudioStreamPropertyLatency, kAudioObjectPropertyScopeGlobal) } ?: 0u
+        return latencyFramesToNanos(deviceFrames.toLong() + streamFrames.toLong(), rate)
+    }
+
+    /**
+     * Watches the latency and the sample rate of the device in use. For the default output (0) it
+     * also watches which device that is, and moves its two listeners to the new one.
+     */
+    override fun watchOutputLatency(device: UInt, onChange: () -> Unit): AutoCloseable? {
+        if (device != 0u) return deviceLatencyListeners(device, onChange)
+        val lock = SynchronizedObject()
+        var closed = false
+        var onDevice: AutoCloseable? = deviceLatencyListeners(defaultOutputDevice(), onChange)
+        val onDefault = HardwareListener.register(
+            objectId = kAudioObjectSystemObject.toUInt(),
+            selector = kAudioHardwarePropertyDefaultOutputDevice,
+        ) {
+            synchronized(lock) {
+                if (closed) return@synchronized
+                onDevice?.close()
+                onDevice = deviceLatencyListeners(defaultOutputDevice(), onChange)
+            }
+            onChange()
+        }
+        return AutoCloseable {
+            onDefault?.close()
+            synchronized(lock) {
+                closed = true
+                onDevice?.close()
+                onDevice = null
+            }
+        }
+    }
+
+    private fun deviceLatencyListeners(device: UInt, onChange: () -> Unit): AutoCloseable? {
+        if (device == 0u) return null
+        val latency = HardwareListener.register(device, kAudioDevicePropertyLatency, kAudioObjectPropertyScopeOutput, onChange)
+        val rate = HardwareListener.register(device, kAudioDevicePropertyNominalSampleRate, onNotice = onChange)
+        if (latency == null && rate == null) return null
+        return AutoCloseable {
+            latency?.close()
+            rate?.close()
+        }
+    }
+
+    /** The first output stream of [device], or null when it has none. */
+    private fun firstOutputStream(device: UInt): UInt? = memScoped {
+        val address = address(kAudioDevicePropertyStreams, kAudioObjectPropertyScopeOutput)
+        val size = alloc<UIntVar>()
+        if (AudioObjectGetPropertyDataSize(device, address.ptr, 0u, null, size.ptr) != 0) return null
+        val capacity = (size.value / sizeOf<UIntVar>().toUInt()).toInt()
+        if (capacity == 0) return null
+        val streams = allocArray<UIntVar>(capacity)
+        if (AudioObjectGetPropertyData(device, address.ptr, 0u, null, size.ptr, streams) != 0) return null
+        if (size.value < sizeOf<UIntVar>().toUInt()) null else streams[0]
+    }
+
+    /** One 32-bit property of an audio object, or null when the object does not answer it. */
+    private fun uintProperty(objectId: UInt, selector: UInt, scope: UInt): UInt? = memScoped {
+        val answer = alloc<UIntVar>()
+        val size = alloc<UIntVar>().apply { value = sizeOf<UIntVar>().toUInt() }
+        val status = AudioObjectGetPropertyData(objectId, address(selector, scope).ptr, 0u, null, size.ptr, answer.ptr)
+        if (status == 0) answer.value else null
+    }
 }
+
+/** One property address on the main element, in [this] scope's memory. */
+internal fun AutofreeScope.address(selector: UInt, scope: UInt): AudioObjectPropertyAddress =
+    alloc<AudioObjectPropertyAddress>().apply {
+        mSelector = selector
+        mScope = scope
+        mElement = kAudioObjectPropertyElementMain
+    }
 
 /** One global-scope property address on the main element, in [this] scope's memory. */
 internal fun AutofreeScope.globalAddress(selector: UInt): AudioObjectPropertyAddress =
-    alloc<AudioObjectPropertyAddress>().apply {
-        mSelector = selector
-        mScope = kAudioObjectPropertyScopeGlobal
-        mElement = kAudioObjectPropertyElementMain
-    }
+    address(selector, kAudioObjectPropertyScopeGlobal)
 
 /** A string property of one audio object, such as its name or its UID, or null. */
 internal fun deviceString(device: UInt, selector: UInt): String? {
@@ -221,6 +310,7 @@ internal fun CFStringRef.toKotlinString(): String? = memScoped {
 internal class HardwareListener private constructor(
     private val objectId: UInt,
     private val selector: UInt,
+    private val scope: UInt,
     private val token: Long,
 ) : AutoCloseable {
 
@@ -233,7 +323,7 @@ internal class HardwareListener private constructor(
             closed = true
         }
         memScoped {
-            AudioObjectRemovePropertyListener(objectId, globalAddress(selector).ptr, notice, token.toCPointer<CPointed>())
+            AudioObjectRemovePropertyListener(objectId, address(selector, scope).ptr, notice, token.toCPointer<CPointed>())
         }
         table.remove(token)
     }
@@ -246,16 +336,21 @@ internal class HardwareListener private constructor(
         internal val liveCount: Int get() = table.size
 
         /** Registers [onNotice], or answers null when CoreAudio refuses. */
-        fun register(objectId: UInt, selector: UInt, onNotice: () -> Unit): HardwareListener? {
+        fun register(
+            objectId: UInt,
+            selector: UInt,
+            scope: UInt = kAudioObjectPropertyScopeGlobal,
+            onNotice: () -> Unit,
+        ): HardwareListener? {
             val token = table.add(onNotice)
             val status = memScoped {
-                AudioObjectAddPropertyListener(objectId, globalAddress(selector).ptr, notice, token.toCPointer<CPointed>())
+                AudioObjectAddPropertyListener(objectId, address(selector, scope).ptr, notice, token.toCPointer<CPointed>())
             }
             if (status != 0) {
                 table.remove(token)
                 return null
             }
-            return HardwareListener(objectId, selector, token)
+            return HardwareListener(objectId, selector, scope, token)
         }
 
         /** The one C function every listener registers. It looks its value up in [table]. */

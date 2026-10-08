@@ -622,11 +622,13 @@ int32_t kprt_render_into(kprt_sink *sink, float *destination, int32_t frames,
         kprt_counter_bump(&sink->estimated_anchors);
 
     /* The device's timestamp is when the FIRST frame of this buffer reaches it; the anchor wants the
-     * instant its LAST frame becomes audible, which is one buffer later. No device latency is
-     * subtracted anywhere, because the deadline already accounts for it: that is the whole reason
-     * the callback takes a time at all rather than the engine estimating one. */
+     * instant its LAST frame becomes audible. That is one buffer later, plus the time the route
+     * takes from the device to the ear: a few milliseconds for a built-in speaker and far more
+     * for a Bluetooth or AirPlay route. The owner reads that time from the system off this thread
+     * and stores it; this is one atomic load and no call. */
     deadline = kprt_sink_ticks_to_nanos(sink, host_ticks) +
-        frames_to_nanos(frames, sink->sample_rate);
+        frames_to_nanos(frames, sink->sample_rate) +
+        atomic_load_explicit(&sink->output_latency_nanos, memory_order_relaxed);
 
     /* The deadline publishes BEFORE the render consumes the ring, with release. A
      * drain polls "ring empty?" and then reads this deadline; with the old order (store after

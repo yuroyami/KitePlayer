@@ -52,6 +52,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The longest route latency the sink believes. AirPlay reports about two seconds; a figure far
+ * above that is a broken report, and following it would hold the picture back by as much. */
+#define KPRT_MAX_OUTPUT_LATENCY_NANOS 10000000000LL
+
 /* The output bus of an output unit. Fixed by CoreAudio, not a choice. */
 #define KPRT_OUTPUT_BUS 0u
 
@@ -740,6 +744,17 @@ int32_t kprt_sink_destroy(kprt_sink *sink)
 
     free(sink);
     return KPRT_SINK_OK;
+}
+
+void kprt_sink_set_output_latency_nanos(kprt_sink *sink, int64_t nanos)
+{
+    if (sink == NULL)
+        return;
+    if (nanos < 0)
+        nanos = 0;
+    if (nanos > KPRT_MAX_OUTPUT_LATENCY_NANOS)
+        nanos = KPRT_MAX_OUTPUT_LATENCY_NANOS;
+    atomic_store_explicit(&sink->output_latency_nanos, nanos, memory_order_relaxed);
 }
 
 void kprt_sink_read_stats(const kprt_sink *sink, kprt_sink_stats *out)

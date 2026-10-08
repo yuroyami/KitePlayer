@@ -609,6 +609,16 @@ KPRT_API int32_t kprt_sink_set_paused(kprt_sink *sink, int32_t paused, int32_t *
  * KPRT_SINK_TEARDOWN_UNPROVEN. KPRT_SINK_OK means everything was released. */
 KPRT_API int32_t kprt_sink_destroy(kprt_sink *sink);
 
+/* Sets the time between a frame reaching the device and being heard, which every later anchor and
+ * deadline then includes. The callback's timestamp ends at the device, so without this a Bluetooth
+ * route plays its sound later than the clock says, by the route's whole delay.
+ *
+ * The owner reads the figure from the system (the device's and the stream's latency on macOS, the
+ * audio session's output latency on iOS) at open and whenever the route changes. Any thread but
+ * the device's may call this. A negative value is stored as zero and one above ten seconds as ten
+ * seconds. Tolerates NULL. */
+KPRT_API void kprt_sink_set_output_latency_nanos(kprt_sink *sink, int64_t nanos);
+
 KPRT_API void kprt_sink_read_stats(const kprt_sink *sink, kprt_sink_stats *out);
 
 #ifdef __cplusplus

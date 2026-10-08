@@ -45,7 +45,35 @@ internal interface AppleOutputDevices {
 
     /** How many channels the current output route carries, or null when this platform does not say (#466). */
     fun outputChannelCount(): Int? = null
+
+    /**
+     * How long a frame takes from the device to the ear on the route that [device] plays through,
+     * in nanoseconds, as the system reports it (#495). 0 for [device] is the route the system
+     * already plays through. A built-in speaker answers a few milliseconds and a Bluetooth route
+     * far more. Null when the system does not say.
+     */
+    fun outputLatencyNanos(device: UInt): Long? = null
+
+    /**
+     * Calls [onChange] each time [outputLatencyNanos] may answer differently for [device]: the
+     * route changed, or the device changed its latency or its sample rate. [onChange] runs on a
+     * notification thread, never on the device's render thread.
+     *
+     * @return the registration, which `close` releases, or null when the platform has no such notice.
+     */
+    fun watchOutputLatency(device: UInt, onChange: () -> Unit): AutoCloseable? = null
 }
 
-/** The CoreAudio answers on macOS, and the empty ones on iOS. */
+/**
+ * [frames] sample frames at [sampleRate] in nanoseconds, or null for a rate that is not a rate.
+ * CoreAudio reports a device's latency in frames of its own sample rate.
+ */
+internal fun latencyFramesToNanos(frames: Long, sampleRate: Double): Long? =
+    if (sampleRate > 0.0 && sampleRate.isFinite() && frames >= 0) (frames * 1_000_000_000.0 / sampleRate).toLong() else null
+
+/** [seconds] in nanoseconds, or null for a figure that is not a time. The iOS session reports seconds. */
+internal fun latencySecondsToNanos(seconds: Double): Long? =
+    if (seconds >= 0.0 && seconds.isFinite()) (seconds * 1_000_000_000.0).toLong() else null
+
+/** The CoreAudio answers on macOS, and the session's on iOS. */
 internal expect fun platformAppleOutputDevices(): AppleOutputDevices

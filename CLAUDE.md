@@ -45,6 +45,8 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A Kotlin/Native test report gives every test a time near zero, so a test that returned early
   because it found no fixture reads exactly like one that ran. To prove a native test reads its
   media, hide the fixture once and watch it fail.
+- `ci.yml` cancels the run in progress on every push, and a run takes about 45 minutes. Pushing
+  each commit of a long session means no run ever finishes. Hold a push until the last run is read.
 - `./gradlew ... | tail` reports the exit code of `tail`. A background build once reported success
   with BUILD FAILED sitting in its own log.
 - Moving or renaming the checkout breaks the prebuilt C test binaries: they carry an absolute path
@@ -317,6 +319,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - The downmix normalize policy is off by default, matching FFmpeg and other players: merged
   surrounds sum without normalising unless a caller asks. Tested both ways. Do not flip the
   default.
+- The CoreAudio callback's timestamp ends at the device, not at the ear. The Apple sink reads the
+  rest from the system (device plus stream latency on macOS, the session's output latency on iOS)
+  and the C sink adds it to every anchor. The buffer and the safety offset are already in the
+  timestamp, so adding them, as mpv does, counts them twice. A MacBook Air's own speakers report
+  28 ms, so the figure is not only for Bluetooth (#495).
 - Pause consumes the final device anchor before freezing clocks, so a late callback cannot
   re-anchor a frozen clock, and resume re-arms a timestamp floor so a pre-pause device timestamp
   can never anchor the clock afterwards.

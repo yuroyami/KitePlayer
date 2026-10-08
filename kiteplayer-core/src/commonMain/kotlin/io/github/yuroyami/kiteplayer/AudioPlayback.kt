@@ -1237,8 +1237,11 @@ public class AudioPlayback(
         /** The longest wait on a full ring, so a deep ring still refills in small steps. */
         val FULL_RING_WAIT_MAX: Duration = 50.milliseconds
 
-        /** Timeline lines kept behind the newest anchor, well past any device's latency. */
-        const val TIMELINE_KEEP_US = 2_000_000L
+        /**
+         * Timeline lines kept behind the newest anchor, past any route's latency: an AirPlay route
+         * reports about two seconds, and the Apple sink believes a report up to ten (#495).
+         */
+        const val TIMELINE_KEEP_US = 12_000_000L
 
         /** How often a fade asks the ring whether it has reached silence. */
         val FADE_POLL: Duration = 1.milliseconds

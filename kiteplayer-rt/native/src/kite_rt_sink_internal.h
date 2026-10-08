@@ -81,6 +81,12 @@ struct kprt_sink {
     _Atomic int64_t worst_callback_nanos;
     _Atomic int64_t last_deadline_nanos;
 
+    /* The time between a frame reaching the device and being heard, as the system reports it for
+     * the current route. Written off the device's thread by `kprt_sink_set_output_latency_nanos`
+     * and read once by each callback, relaxed: a callback that reads the previous value dates one
+     * buffer with the previous route's latency, which the next anchor corrects. */
+    _Atomic int64_t output_latency_nanos;
+
     /* ---- Owner-thread lifecycle, plus the two fields other threads may read. ----
      *
      * `running` is read by the stats path concurrently with start/stop, so it is

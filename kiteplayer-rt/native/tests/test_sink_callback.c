@@ -88,6 +88,7 @@ static void reset_sink(kprt_ring *ring)
     atomic_store(&sink.zero_filled_callbacks, 0);
     atomic_store(&sink.worst_callback_nanos, 0);
     atomic_store(&sink.last_deadline_nanos, 0);
+    atomic_store(&sink.output_latency_nanos, 0);
 }
 
 static void prefill(int32_t frames, float value)
@@ -448,6 +449,33 @@ int main(void)
         KT_EQ_I64(atomic_load(&sink.estimated_anchors), 0);
         kt_detail("deadline=%lld pts_us=%lld",
                   (long long)anchor.audible_at_nanos, (long long)anchor.pts_us);
+    }
+
+    /* ---- the route's latency: the anchor and the deadline both move by it ---- */
+    kt_case("the route's output latency is added to the anchor and to the deadline");
+    {
+        const uint64_t host = 900000000ULL;
+        const int32_t frames = 256;
+        const int64_t latency = 180000000LL;
+        kprt_anchor anchor;
+
+        kprt_ring_flush(ring);
+        reset_sink(ring);
+        kprt_sink_set_output_latency_nanos(&sink, latency);
+        KT_EQ_INT(kprt_test_feed(ring, frames, 0, 1, 0), frames);
+        KT_EQ_INT(kprt_render_into(&sink, destination, frames, host, 0), frames);
+        kprt_ring_anchor(ring, &anchor);
+        KT_EQ_INT(anchor.valid, 1);
+        KT_EQ_I64(anchor.audible_at_nanos, expected_deadline(host, frames) + latency);
+        KT_EQ_I64(atomic_load(&sink.last_deadline_nanos), expected_deadline(host, frames) + latency);
+
+        /* A report below zero or far above any real route is not followed. */
+        kprt_sink_set_output_latency_nanos(&sink, -5);
+        KT_EQ_I64(atomic_load(&sink.output_latency_nanos), 0);
+        kprt_sink_set_output_latency_nanos(&sink, 60000000000LL);
+        KT_EQ_I64(atomic_load(&sink.output_latency_nanos), 10000000000LL);
+        kprt_sink_set_output_latency_nanos(NULL, latency);
+        kt_detail("anchor=%lld", (long long)anchor.audible_at_nanos);
     }
 
     /* ---- a short read: exact zeroes after the real frames, and exactly one underrun ---- */

@@ -20,6 +20,7 @@ import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_destroy
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_format
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_read_stats
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_ring
+import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_set_output_latency_nanos
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_set_paused
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_start
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_stats
@@ -108,9 +109,12 @@ private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
  * anchor is estimated from the clock and the estimate is counted, which is what [estimatedAnchors]
  * reports.
  *
- * Nothing here estimates a device latency, because nothing needs to. ffplay assumes every device holds
- * exactly two buffer periods, and that assumption is the largest single source of fixed A/V offset in
- * it.
+ * That host time ends at the device. The route from there to the ear takes more: a few milliseconds
+ * for a built-in speaker, and far more for a Bluetooth or AirPlay route. The sink reads that time
+ * from the system at open and each time the route changes, through [AppleOutputDevices], and hands
+ * it to the C sink, which adds it to every anchor (#495). On macOS it is the device's latency plus
+ * its stream's, and on iOS the audio session's output latency. Nothing here guesses a figure: a
+ * route the system does not describe adds nothing, and [latencyQuality] says so.
  *
  * ### Silence, which is now owned entirely in C
  *
@@ -286,15 +290,41 @@ public class CoreAudioSink private constructor(
     private var deviceBufferFramesOrDefault: Int = DEFAULT_DEVICE_BUFFER_FRAMES
 
     /**
-     * `Estimated`, not `Exact`, and the distinction is deliberate.
+     * `Exact` while the system reports the latency of the route in use, and `Estimated` otherwise.
      *
-     * The host time CoreAudio reports covers the audio unit's own buffer accurately. The full signal
-     * path can add more: the device's safety offset, and on a Bluetooth or AirPlay route a large and
-     * variable transport delay. Summing those means reading several device properties and following
-     * route changes. Until this sink does that, `Estimated` is the honest answer, and the engine widens
-     * its tolerances rather than trusting a figure that may be short by tens of milliseconds.
+     * The host time CoreAudio reports covers the audio unit's own buffer accurately, and the route's
+     * reported latency covers the path from the device to the ear. Without that report the anchors
+     * end at the device, and may be short by a Bluetooth route's whole delay.
      */
-    override val latencyQuality: LatencyQuality = LatencyQuality.Estimated
+    override val latencyQuality: LatencyQuality
+        get() = if (reportedOutputLatency.value != null) LatencyQuality.Exact else LatencyQuality.Estimated
+
+    /** What the system last reported for the route's latency, or null when it did not say. */
+    private val reportedOutputLatency = atomic<Long?>(null)
+
+    /** The route's latency the anchors include now, in nanoseconds: 0 when the system reports none. */
+    internal val outputLatencyNanos: Long get() = reportedOutputLatency.value ?: 0L
+
+    /**
+     * Reads the route's latency again and hands it to the C sink. Runs at open and from the latency
+     * watch, on a notification thread, under [lock] so that it never reaches a sink being destroyed.
+     */
+    private fun refreshOutputLatency(deviceId: UInt) {
+        synchronized(lock) {
+            val sink = handle ?: return
+            applyOutputLatency(sink, deviceId)
+        }
+    }
+
+    private fun applyOutputLatency(sink: CPointer<kprt_sink>, deviceId: UInt) {
+        val reported = try {
+            outputDevices.outputLatencyNanos(deviceId)
+        } catch (_: Throwable) {
+            null
+        }
+        reportedOutputLatency.value = reported
+        kprt_sink_set_output_latency_nanos(sink, reported ?: 0L)
+    }
 
     /**
      * Refused, and the message says what to call instead. See the class note.
@@ -429,6 +459,12 @@ public class CoreAudioSink private constructor(
                 }
             }
 
+            // The route's latency, read after its watch is in place so that no change falls between
+            // the two. A notice that arrives before the handle is published finds none and does
+            // nothing, and the read below then answers the same figure.
+            val latencyWatch = outputDevices.watchOutputLatency(deviceId) { refreshOutputLatency(deviceId) }
+            applyOutputLatency(created.sink, deviceId)
+
             // Published inside the lock, so a diagnostic read from another thread sees either nothing
             // or the complete device/ring/session transaction. Opening itself belongs to the session
             // owner; the lock is here for the readers.
@@ -437,7 +473,13 @@ public class CoreAudioSink private constructor(
                 ring = attachedRing
                 negotiated = created.format
                 sessionLease = acquiredLease
-                deviceWatch = watch
+                deviceWatch = if (latencyWatch == null) watch else AutoCloseable {
+                    try {
+                        watch?.close()
+                    } finally {
+                        latencyWatch.close()
+                    }
+                }
             }
             ownedSink = null
             return handoff
@@ -535,6 +577,7 @@ public class CoreAudioSink private constructor(
             negotiated = null
             sessionLease = null
             deviceWatch = null
+            reportedOutputLatency.value = null
             OwnedLifecycle(currentSink, currentLease, currentWatch)
         }
         // The notice goes first, so that no notice reaches a sink whose device is going. A notice

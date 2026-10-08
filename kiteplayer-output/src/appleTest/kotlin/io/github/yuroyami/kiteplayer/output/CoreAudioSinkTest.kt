@@ -87,7 +87,9 @@ class CoreAudioSinkTest {
         assertEquals(48_000, handoff.format.sampleRate)
         assertEquals(2, handoff.format.channels)
         assertEquals(SampleFormat.F32, handoff.format.sampleFormat)
-        assertEquals(LatencyQuality.Estimated, sink.latencyQuality)
+        // Exact while the system reports the route's latency, which a machine with an output does (#495).
+        val described = platformAppleOutputDevices().outputLatencyNanos(0u) != null
+        assertEquals(if (described) LatencyQuality.Exact else LatencyQuality.Estimated, sink.latencyQuality)
 
         try {
             // Prime before starting. Starting a device with nothing to play is an immediate underrun and

@@ -7745,6 +7745,18 @@ internal class PlaybackCore(
         ) {
             val packet = session.pendingSubtitlePacket ?: queue.poll() ?: break
             session.pendingSubtitlePacket = null
+            if (session.subtitleDrained) {
+                // Captions that ended with their picture and came back with it (#570). A decoder
+                // takes its next packet after a drain only after a flush.
+                try {
+                    decoder.flush(requestedEpoch)
+                } catch (failure: Throwable) {
+                    packet.close()
+                    throw failure
+                }
+                session.subtitleDrained = false
+                session.subtitleDrainRefusals = 0
+            }
             val accepted = try {
                 decoder.send(packet)
             } catch (failure: Throwable) {
@@ -7855,6 +7867,17 @@ internal class PlaybackCore(
         while (!interrupted && !session.subtitle2DecoderMayHaveOutput && packetAttempts < SUBTITLE_PACKETS_PER_PASS) {
             val packet = session.pendingSubtitle2Packet ?: queue.poll() ?: break
             session.pendingSubtitle2Packet = null
+            if (session.subtitle2Drained) {
+                // As on the primary lane: the next packet after a drain comes after a flush (#570).
+                try {
+                    decoder.flush(requestedEpoch)
+                } catch (failure: Throwable) {
+                    packet.close()
+                    throw failure
+                }
+                session.subtitle2Drained = false
+                session.subtitle2DrainRefusals = 0
+            }
             val accepted = try {
                 decoder.send(packet)
             } catch (failure: Throwable) {
@@ -13169,6 +13192,8 @@ internal class PlaybackCore(
                     }
                     ending = false
                     session.videoWaitingForKeyframe.value = true
+                    // Its captions ended with it, and come back with it.
+                    session.videoStream?.let { session.subtitleQueues[captionTrackIndex(it.index)] }?.reopen(epoch)
                 }
                 if (queue.isEndOfStream && queue.count == 0) {
                     if (!ending) {

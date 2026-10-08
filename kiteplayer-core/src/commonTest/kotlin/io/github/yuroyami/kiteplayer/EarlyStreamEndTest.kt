@@ -1,10 +1,14 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.captionTrackIndex
+import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import kotlinx.coroutines.test.runTest
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -21,6 +25,9 @@ class EarlyStreamEndTest {
 
     /** The sample frames the engine gave the device. It gives none while a sound is over. */
     private fun CoreHarness.heardFrames(): Long = sink.framesPlayed
+
+    private fun CoreHarness.shownCaptions(): List<String> =
+        core.subtitleCues.value.filterIsInstance<SubtitleCue.Text>().map { it.plainText }.filter { it.isNotEmpty() }
 
     private fun shortSound(endUs: Long = 3_000_000) = MediaScript(
         durationUs = 40_000_000,
@@ -139,6 +146,41 @@ class EarlyStreamEndTest {
         assertEquals(75, shown.count { it in 50_000_000 until 100_000_000 }, "the picture did not come back after the first hole")
         assertEquals(250, shown.count { it >= 100_000_000 }, "the picture did not come back after the second hole")
         assertTrue(harness.cuts().isEmpty(), "${harness.cuts()}")
+        harness.close()
+    }
+
+    @Test
+    fun theCaptionsInsideAPictureComeBackWithItAfterALongHole() = runTest {
+        val before = (0 until 75).map { it * 40_000L }
+        val after = (0 until 250).map { 50_000_000L + it * 40_000L }
+        val media = MediaScript(
+            durationUs = 60_000_000,
+            videoTimestampsUs = before + after,
+            videoKeyframesUs = (before + after).filterIndexed { index, _ -> index % 10 == 0 }.toSet() + 50_000_000L,
+            videoCaptions = { pts ->
+                when (pts) {
+                    1_000_000L -> "HELLO"
+                    2_000_000L -> SCRIPTED_CAPTION_CLEAR
+                    52_000_000L -> "AGAIN"
+                    54_000_000L -> "MORE"
+                    else -> null
+                }
+            },
+        )
+        val harness = CoreHarness(this, script = media)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1500.milliseconds)
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Subtitle, TrackId(captionTrackIndex(0))))
+        harness.run(500.milliseconds)
+        assertEquals(listOf("HELLO"), harness.shownCaptions())
+        val flushes = ScriptedCaptionDecoderFactory.flushes
+        harness.run(51.seconds)
+        assertEquals(listOf("AGAIN"), harness.shownCaptions(), "at ${harness.core.position()}")
+        harness.run(2.seconds)
+        assertEquals(listOf("MORE"), harness.shownCaptions(), "at ${harness.core.position()}")
+        // One flush for the return. A caption decoder remembers its screen from packet to packet.
+        assertEquals(1, ScriptedCaptionDecoderFactory.flushes - flushes, "flushes of the caption decoder")
         harness.close()
     }
 

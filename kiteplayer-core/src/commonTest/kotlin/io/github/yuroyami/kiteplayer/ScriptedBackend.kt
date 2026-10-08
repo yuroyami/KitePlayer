@@ -678,6 +678,7 @@ internal class ScriptedSubtitleDecoder(
     private val pending = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
     private val held = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
     private val lastStart = track.cues.maxOfOrNull { it.startMicros }
+    private var drained = false
     var closed: Boolean = false
         private set
 
@@ -687,8 +688,11 @@ internal class ScriptedSubtitleDecoder(
             probe.drains++
             pending.addAll(held)
             held.clear()
+            drained = true
             return true
         }
+        // The contract of SubtitleDecoder: the next packet after a drain comes only after a flush.
+        check(!drained) { "a subtitle packet was sent after the drain signal with no flush" }
         if (track.refusesPackets) return false
         val pts = packet.pts?.micros ?: return true
         val cues = track.cuesByStart[pts].orEmpty()
@@ -707,6 +711,7 @@ internal class ScriptedSubtitleDecoder(
     override suspend fun flush(newGeneration: Generation) {
         pending.clear()
         held.clear()
+        drained = false
     }
 
     override fun close() {
@@ -724,13 +729,24 @@ internal const val SCRIPTED_CAPTION_CLEAR: String = "<clear>"
 internal object ScriptedCaptionDecoderFactory : SubtitleDecoderFactory {
     override val name: String = "scripted-captions"
 
+    /** Flushes of every caption decoder made here. A test reads the difference. */
+    var flushes: Int = 0
+        private set
+
     override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? {
         if (stream.codec != io.github.yuroyami.kiteplayer.spi.CLOSED_CAPTIONS_CODEC) return null
         return object : SubtitleDecoder {
             private val pending = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
+            private var drained = false
 
             override suspend fun send(packet: PlayerPacket?): Boolean {
-                val pts = packet?.pts?.micros ?: return true
+                if (packet == null) {
+                    drained = true
+                    return true
+                }
+                // The contract of SubtitleDecoder: the next packet after a drain comes only after a flush.
+                check(!drained) { "a caption packet was sent after the drain signal with no flush" }
+                val pts = packet.pts?.micros ?: return true
                 val text = packet.copyBytes().decodeToString()
                 val spans = if (text == SCRIPTED_CAPTION_CLEAR) emptyList() else listOf(io.github.yuroyami.kiteplayer.subtitle.StyledSpan(text))
                 pending.addLast(io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(pts, io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.OPEN_END, spans))
@@ -745,6 +761,8 @@ internal object ScriptedCaptionDecoderFactory : SubtitleDecoderFactory {
 
             override suspend fun flush(newGeneration: Generation) {
                 pending.clear()
+                drained = false
+                flushes++
             }
 
             override fun close() = Unit

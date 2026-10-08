@@ -21,10 +21,10 @@ kiteplayer-rt macosArm64 4737
 kiteplayer-rt iosArm64 4723
 kiteplayer-rt macosArm64-cinterop-kitert 22709
 kiteplayer-rt iosArm64-cinterop-kitert 21967
-kiteplayer-ffmpeg jvm 472107
-kiteplayer-ffmpeg android 445936
-kiteplayer-ffmpeg macosArm64 500943
-kiteplayer-ffmpeg iosArm64 500929
+kiteplayer-ffmpeg jvm 547708
+kiteplayer-ffmpeg android 516714
+kiteplayer-ffmpeg macosArm64 558014
+kiteplayer-ffmpeg iosArm64 558000
 kiteplayer-output jvm 126235
 kiteplayer-output android 427712
 kiteplayer-output macosArm64 432027

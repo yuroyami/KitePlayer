@@ -134,6 +134,7 @@ final class io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer : io.
 
     final fun clearPicture() // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.clearPicture|clearPicture(){}[0]
     final fun close() // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.close|close(){}[0]
+    final fun setFlashGuard(io.github.yuroyami.kiteplayer/FlashGuard) // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.setFlashGuard|setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard){}[0]
     final fun setTransform(io.github.yuroyami.kiteplayer/VideoTransform) // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.setTransform|setTransform(io.github.yuroyami.kiteplayer.VideoTransform){}[0]
     final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
     final fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]

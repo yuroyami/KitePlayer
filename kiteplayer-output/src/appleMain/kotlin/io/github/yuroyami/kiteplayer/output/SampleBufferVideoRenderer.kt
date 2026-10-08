@@ -107,11 +107,21 @@ import platform.posix.memcpy
  *
  * The picture controls in [io.github.yuroyami.kiteplayer.VideoAdjustments] are not applied here:
  * the layer shows the decoded picture as it is.
+ *
+ * The flash guard works here as on the other renderers (#562, `docs/video-flash-guard.md`). While
+ * it is on, each new picture is measured from a small copy drawn on the GPU. A picture inside a
+ * flashing run is composed dimmed into a new pixel buffer, as a picture with text is, so the small
+ * window shows it dimmed too. Outside a run the picture reaches the layer as it is stored. Without
+ * a Metal device there is no guard.
  */
 public class SampleBufferVideoRenderer internal constructor(
     private val resolve: MetalPictureResolver,
     private val sink: SampleSink,
     private val makeBurner: () -> SubtitleBurner? = { SubtitleBurner.createOrNull() },
+    /** Reads the system's Dim Flashing Lights setting; a test passes its own. */
+    private val dimFlashingLights: () -> Boolean = { AppleDimFlashingLights.enabled },
+    /** When a picture is shown, in nanoseconds, for the flash guard; a test passes its own clock. */
+    private val flashNanos: () -> Long = { AppleHostClock.nanos() },
 ) : VideoRenderer {
 
     public constructor(
@@ -148,6 +158,17 @@ public class SampleBufferVideoRenderer internal constructor(
     /** The viewer's framing, of which this renderer draws the turn and mirror. Guarded by [lock]. */
     private var viewerTransform = io.github.yuroyami.kiteplayer.VideoTransform.Identity
 
+    private val flashGuardMode = atomic(io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem)
+
+    /** True while the last picture was measured for the flash guard. Guarded by [lock]. */
+    private var guarding = false
+
+    private fun guardWanted(): Boolean = when (flashGuardMode.value) {
+        io.github.yuroyami.kiteplayer.FlashGuard.On -> true
+        io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem -> dimFlashingLights()
+        io.github.yuroyami.kiteplayer.FlashGuard.Off -> false
+    }
+
     /** Frames this renderer handed to the layer. */
     public val presentedFrames: Long get() = presented.value
 
@@ -175,6 +196,7 @@ public class SampleBufferVideoRenderer internal constructor(
                 lastPicture?.let { CVPixelBufferRelease(it.buffer) }
                 lastPicture = picture
                 pictureCleared = false
+                picture.dim = flashFactorFor(picture)
                 show(picture)
             }
         }
@@ -220,6 +242,23 @@ public class SampleBufferVideoRenderer internal constructor(
     }
 
     /**
+     * Sets the flash guard (#562). A change starts its history afresh, and a picture on screen that
+     * was dimmed is drawn again whole.
+     */
+    override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
+        if (flashGuardMode.getAndSet(mode) == mode) return
+        synchronized(lock) {
+            if (closed.value) return
+            forgetFlashes()
+            val last = lastPicture ?: return
+            if (last.dim < 1f) {
+                last.dim = 1f
+                if (!pictureCleared) show(last)
+            }
+        }
+    }
+
+    /**
      * Gives back the picture on screen and shows the text on black while there is text, or takes
      * the picture off the layer when there is none, until the next frame. A subtitle change in
      * between draws the new text the same way.
@@ -230,6 +269,7 @@ public class SampleBufferVideoRenderer internal constructor(
             lastPicture?.let { CVPixelBufferRelease(it.buffer) }
             lastPicture = null
             pictureCleared = true
+            forgetFlashes()
             showBackground()
         }
     }
@@ -252,7 +292,7 @@ public class SampleBufferVideoRenderer internal constructor(
     private fun show(picture: PlainPicture): Boolean {
         val text = overlay?.takeIf { it.hasText() }
         val facts = picture.facts.orientedBy(viewerTransform)
-        val burned = if (text != null || facts.needsRedraw) burn(picture, facts, text) else null
+        val burned = if (text != null || facts.needsRedraw || picture.dim < 1f) burn(picture, facts, text, picture.dim) else null
         val sample = sampleBufferFor(burned ?: picture.buffer, picture.targetNanos)
         // The sample holds its own reference to the image, so the burned buffer's can go now.
         burned?.let { CVPixelBufferRelease(it) }
@@ -293,13 +333,34 @@ public class SampleBufferVideoRenderer internal constructor(
         return burner?.burnBackground(text)
     }
 
-    /** The composed picture, or null to show it as stored. Called under [lock]. */
-    private fun burn(picture: PlainPicture, facts: PictureFacts, text: SubtitleOverlay?): CVPixelBufferRef? {
+    /**
+     * The flash guard's factor for a new [picture], 1 while the guard is off or there is no Metal
+     * device. Called under [lock].
+     */
+    private fun flashFactorFor(picture: PlainPicture): Float {
+        val wanted = guardWanted()
+        if (wanted != guarding) forgetFlashes()
+        guarding = wanted
+        if (!wanted) return 1f
         if (!burnerTried) {
             burnerTried = true
             burner = makeBurner()
         }
-        val composed = burner?.burn(picture.buffer, facts, text) ?: return null
+        return burner?.flashFactor(picture.buffer, picture.facts, flashNanos()) ?: 1f
+    }
+
+    /** Starts the flash guard's history afresh at the next picture. Called under [lock]. */
+    private fun forgetFlashes() {
+        burner?.forgetFlashes()
+    }
+
+    /** The composed picture, or null to show it as stored. Called under [lock]. */
+    private fun burn(picture: PlainPicture, facts: PictureFacts, text: SubtitleOverlay?, dim: Float): CVPixelBufferRef? {
+        if (!burnerTried) {
+            burnerTried = true
+            burner = makeBurner()
+        }
+        val composed = burner?.burn(picture.buffer, facts, text, dim) ?: return null
         if (facts.colorSpace.willToneMap()) hdrAnnouncer.announce(facts.colorSpace.transfer.name)
         return composed
     }
@@ -338,7 +399,10 @@ public class SampleBufferVideoRenderer internal constructor(
         val buffer: CVPixelBufferRef,
         val facts: PictureFacts,
         val targetNanos: Long,
-    )
+    ) {
+        /** The flash guard's factor this picture is shown with, kept for a redraw of it. */
+        var dim: Float = 1f
+    }
 
     private companion object {
         const val NANOS_PER_SECOND = 1_000_000_000

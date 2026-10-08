@@ -138,4 +138,99 @@ class SampleBufferSubtitleTest {
             sink.release()
         }
     }
+
+    // ── The flash guard (#562) ───────────────────────────────────────────────────────────────
+
+    /** NV12, full range, one grey. */
+    private fun greyNv12(luma: Int) = MetalPicture.SoftwarePlanes(
+        width = 64,
+        height = 64,
+        format = io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat.Nv12,
+        planes = listOf(
+            MetalPicture.SoftwarePlanes.Plane(ByteArray(64 * 64) { luma.toByte() }, 64, 64),
+            MetalPicture.SoftwarePlanes.Plane(ByteArray(64 * 32) { 128.toByte() }, 64, 32),
+        ),
+    )
+
+    /**
+     * Presents a black and white strobe, three pictures each at 30 a second, and answers the
+     * samples the layer got, one for each picture.
+     */
+    private fun strobed(
+        mode: io.github.yuroyami.kiteplayer.FlashGuard?,
+        systemSetting: Boolean = false,
+        pictures: Int = 60,
+        then: suspend (SampleBufferVideoRenderer, RecordingSampleSink) -> Unit = { _, _ -> },
+    ): List<Pair<Boolean, Int>> = runBlocking {
+        val sink = RecordingSampleSink()
+        var luma = 0
+        var clock = 0L
+        val renderer = SampleBufferVideoRenderer(
+            resolve = { greyNv12(luma) },
+            sink = sink,
+            dimFlashingLights = { systemSetting },
+            flashNanos = { clock },
+        )
+        try {
+            if (mode != null) renderer.setFlashGuard(mode)
+            repeat(pictures) { index ->
+                luma = if (index / 3 % 2 == 0) 0 else 255
+                clock = index * 1_000_000_000L / 30
+                assertTrue(renderer.present(SampleTestFrame(64, 64, fullRange709), targetNanos = clock))
+            }
+            then(renderer, sink)
+            // For each sample: whether it was composed, and the green of its centre when it was.
+            sink.samples.map { sample ->
+                val image = imageOf(sample)
+                val composed = CVPixelBufferGetPixelFormatType(image) == kCVPixelFormatType_32BGRA
+                composed to if (composed) bgraAt(image, 32, 32)[1] else -1
+            }
+        } finally {
+            renderer.close()
+            sink.release()
+        }
+    }
+
+    @Test
+    fun aStrobeIsDimmedFromThePictureThatMakesItsRun() {
+        val shown = strobed(io.github.yuroyami.kiteplayer.FlashGuard.On)
+        assertEquals(60, shown.size)
+        // The seventh leg is on picture 21. It is measured before it is shown, so it is dimmed itself.
+        assertTrue(shown.take(21).none { it.first }, "before the run every picture reaches the layer as it is stored")
+        assertTrue(shown.drop(21).all { it.first }, "inside the run every picture is composed")
+        val whites = shown.drop(21).filterIndexed { index, _ -> (index + 21) / 3 % 2 == 1 }.map { it.second }
+        // 0.08 of the light of white is about 81 of 255.
+        assertTrue(whites.all { it in 70..92 }, "a white picture of the run came out as $whites")
+    }
+
+    @Test
+    fun aStrobeIsShownWholeWithTheGuardOffAndFollowsTheSystemSettingOtherwise() {
+        assertTrue(strobed(io.github.yuroyami.kiteplayer.FlashGuard.Off, systemSetting = true).none { it.first })
+        assertTrue(strobed(mode = null, systemSetting = false).none { it.first }, "FollowSystem with the setting off")
+        assertTrue(strobed(mode = null, systemSetting = true).drop(21).all { it.first }, "FollowSystem with the setting on")
+    }
+
+    @Test
+    fun aPictureThatDoesNotFlashReachesTheLayerAsItIsStored() = runBlocking {
+        val sink = RecordingSampleSink()
+        val renderer = SampleBufferVideoRenderer(resolve = { greyNv12(200) }, sink = sink, flashNanos = { sink.samples.size * 33_000_000L })
+        try {
+            renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+            repeat(30) { assertTrue(renderer.present(SampleTestFrame(64, 64, fullRange709), targetNanos = 0L)) }
+            assertTrue(sink.samples.all { CVPixelBufferGetPixelFormatType(imageOf(it)) != kCVPixelFormatType_32BGRA })
+        } finally {
+            renderer.close()
+            sink.release()
+        }
+    }
+
+    @Test
+    fun turningTheGuardOffDrawsADimmedPictureAgainWhole() {
+        val shown = strobed(io.github.yuroyami.kiteplayer.FlashGuard.On, pictures = 30) { renderer, _ ->
+            renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.Off)
+        }
+        assertEquals(31, shown.size, "the picture on screen is shown once more")
+        assertTrue(shown[29].first, "the last picture of the strobe was dimmed")
+        assertTrue(!shown[30].first, "and it is shown again as it is stored")
+    }
 }

@@ -71,9 +71,12 @@ import platform.Metal.MTLTextureUsageShaderRead
  *
  * Not thread safe. The renderer calls it under its own lock.
  */
-internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
+internal class SubtitleBurner private constructor(private val device: MTLDeviceProtocol) {
 
     private val composer = MetalFrameComposer(device)
+
+    /** The flash guard's copy and detector, made when a picture is first measured (#562). */
+    private var flashGuard: MetalFlashGuard? = null
     private val textureCache: CVMetalTextureCacheRef = createTargetCache(device)
     private var pool: CVPixelBufferPoolRef? = null
     private var poolWidth = 0
@@ -83,9 +86,12 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
      * A new buffer showing [pixels] as [facts] say, with [overlay] above it when there is one. The
      * caller owns one reference to it.
      *
+     * A [dim] below 1 is the flash guard's factor: the picture is drawn at that share of each
+     * encoded value, and the text is not dimmed.
+     *
      * Null when any step refuses, and the caller then shows the picture as it is stored.
      */
-    fun burn(pixels: CVPixelBufferRef, facts: PictureFacts, overlay: SubtitleOverlay?): CVPixelBufferRef? {
+    fun burn(pixels: CVPixelBufferRef, facts: PictureFacts, overlay: SubtitleOverlay?, dim: Float = 1f): CVPixelBufferRef? {
         val picture = MetalPicture.CorePixelBuffer(pixels)
         if (!composer.canEncode(picture)) return null
         // The buffer takes the shape of what the crop leaves, and the composer reads only that.
@@ -96,7 +102,7 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
         val width = if (quarterTurned) storedHeight else storedWidth
         val height = if (quarterTurned) storedWidth else storedHeight
         val target = pooledBuffer(width, height) ?: return null
-        val drawn = runCatching { draw(target, facts, picture, overlay, width, height) }.getOrDefault(false)
+        val drawn = runCatching { draw(target, facts, picture, overlay, width, height, dim) }.getOrDefault(false)
         if (!drawn) {
             CVPixelBufferRelease(target)
             return null
@@ -126,8 +132,30 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
         return target
     }
 
+    /**
+     * The flash guard's factor for [pixels], shown at [nanos]: 1 outside a flashing run. The small
+     * copy is drawn and read back before this returns, so the picture that completes a run is
+     * already dimmed. A picture that cannot be measured keeps the factor of the one before.
+     */
+    fun flashFactor(pixels: CVPixelBufferRef, facts: PictureFacts, nanos: Long): Float {
+        val picture = MetalPicture.CorePixelBuffer(pixels)
+        val guard = flashGuard ?: MetalFlashGuard(device).also { flashGuard = it }
+        if (!composer.canEncode(picture)) return guard.current
+        return runCatching {
+            guard.submitted(composer.encodeMeasure(facts, picture, guard.target), nanos)
+            guard.factorForNext()
+        }.getOrDefault(guard.current)
+    }
+
+    /** Forgets every measured picture, as after a clear or a change of mode. */
+    fun forgetFlashes() {
+        flashGuard?.reset()
+    }
+
     /** Gives back the GPU objects, the texture cache and the pool. */
     fun close() {
+        flashGuard?.reset()
+        flashGuard = null
         composer.close()
         CVMetalTextureCacheFlush(textureCache, 0uL)
         CFRelease(textureCache)
@@ -142,6 +170,7 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
         overlay: SubtitleOverlay?,
         width: Int,
         height: Int,
+        dim: Float,
     ): Boolean = drawInto(target, width, height) { texture ->
         composer.encode(
             target = texture,
@@ -152,6 +181,7 @@ internal class SubtitleBurner private constructor(device: MTLDeviceProtocol) {
             viewportHeight = height,
             // Stretch fills the buffer edge to edge, and the buffer already has the turned shape.
             scaleMode = VideoScale.Stretch,
+            adjustUniforms = dimAdjustUniforms(DISABLED_ADJUST_UNIFORMS, dim, linearLight = false),
             toneMapped = true,
         )
     }

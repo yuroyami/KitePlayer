@@ -1,9 +1,9 @@
 # Dimming flashing video
 
-The contract for #500 and #561, built in the order at the end. Today the detector, the setting, the Compose
-canvas renderer, the AWT canvas, the Metal renderer, the Core Graphics renderers on Apple, the
-Android GL renderer, the Android software path and the web canvas carry it. Apple's sample buffer
-layer and Android's direct MediaCodec surface draw as before.
+The contract for #500, #561 and #562, built in the order at the end. Today the detector, the
+setting, the Compose canvas renderer, the AWT canvas, the Metal renderer, the Core Graphics
+renderers and the sample buffer layer on Apple, the Android GL renderer, the Android software path
+and the web canvas carry it. Android's direct MediaCodec surface draws as before.
 
 Repeated bright flashes can trigger seizures in people with photosensitive epilepsy and discomfort
 in many more. Since iOS 16.4 and macOS 13.3, Apple has a Dim Flashing Lights setting that
@@ -112,8 +112,18 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
   picture controls, so it dims as the AWT canvas does: black over the picture at `1 - k`, under the
   cues, with the bars left as they were. A held picture drawn again after a resize keeps its
   factor.
-- A renderer that never holds the pixels (Apple's sample buffer layer and Android's direct
-  MediaCodec surface) has no guard.
+- Apple's sample buffer layer, the renderer picture in picture needs, shows pixel buffers and
+  draws nothing itself (#562). While the guard is on it draws only the reduced copy of each new
+  picture on the GPU and reads it back at once, so the picture that completes a run is already
+  dimmed. A picture inside a run is composed dimmed into a new pixel buffer, the way a picture with
+  subtitles is, and that buffer is shown. A black layer over the display layer would not do: the
+  picture in picture window shows the layer's samples and nothing laid over them. Outside a run the
+  picture reaches the layer as it is stored. An HDR picture inside a run is shown tone mapped to
+  standard range, as it is while it carries subtitles. Without a Metal device there is no guard.
+  Apple does not document whether this layer dims by itself with Dim Flashing Lights on, as the
+  system player does, and that was not measured. If it does, a run is dimmed twice under
+  `FollowSystem`, which is darker than needed and never less safe.
+- Android's direct MediaCodec surface never holds the pixels and has no guard.
 
 The engine tells each renderer the mode through `VideoRenderer.setFlashGuard(mode)`, defaulted to
 do nothing, on attach and on every change, as it does the adjustments. A change of mode, and taking
@@ -138,7 +148,9 @@ on a system older than the setting, where `FollowSystem` is off.
    MediaCodec reads 81 of 255 at the centre of the screen once its run has started.
 7. The web canvas. Done, tested in Node and in headless Chrome, where a white picture of a 5 Hz
    strobe reads 81 of 255 on a real canvas once its run has started.
-8. Saturated red flashes (#561). Done on every renderer above: the detector takes two more values
+8. Apple's sample buffer layer (#562). Done, tested on a Mac with a real Metal device; the look
+   at a picture in picture window is owed.
+9. Saturated red flashes (#561). Done on every renderer above: the detector takes two more values
    for each cell, and each renderer measures them where it measures the luminance. Tested on the
    detector, on five renderers on the host and a Mac, in Node and headless Chrome, and through the
    GL path on an ASUS ROG Phone 9.

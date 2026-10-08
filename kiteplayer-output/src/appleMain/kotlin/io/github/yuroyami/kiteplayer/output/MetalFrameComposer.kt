@@ -257,6 +257,38 @@ internal class MetalFrameComposer(
     }
 
     /**
+     * Draws only the flash guard's copy of [picture] into [measureTarget], tone mapped to standard
+     * range, for a renderer that shows the picture itself without drawing it (#562).
+     *
+     * @return the command buffer, already committed.
+     */
+    fun encodeMeasure(frame: VideoFrame, picture: MetalPicture, measureTarget: MTLTextureProtocol): MTLCommandBufferProtocol {
+        check(!closed) { "the Metal frame composer is closed" }
+        retireCompletedCommands()
+        val commands = checkNotNull(makeCommands(queue)) { "Metal refused a command buffer" }
+        pictureColor = frame.colorSpace
+        val toneUniforms = packToneUniforms(frame.colorSpace, SDR_WHITE_NITS, frame.toneMapPeakNits)
+        val inputs = when (picture) {
+            is MetalPicture.SoftwarePlanes -> softwareInputs(picture)
+            is MetalPicture.CorePixelBuffer -> hardwareInputs(picture, frame)
+        }
+        var releaseHandedOff = false
+        try {
+            encodeMeasurePass(commands, inputs, toneUniforms, measureTarget)
+            // As in [encode]: the wrapped textures must outlive the GPU's read of them.
+            val releaseInputs = inputs.release
+            commands.addCompletedHandler { releaseInputs() }
+            commands.commit()
+            releaseHandedOff = true
+            inputs.softwareSet?.commands = commands
+            submittedCommands.addLast(commands)
+        } finally {
+            if (!releaseHandedOff) inputs.release()
+        }
+        return commands
+    }
+
+    /**
      * Clears [target] to the black the bars are drawn in and draws [overlay] over it, with no
      * picture: what a renderer shows while no picture plays. The arguments mean what they mean
      * to [encode].

@@ -722,7 +722,9 @@ point includes it. You do not build a resolver or a Ktor client.
 - In a browser, a player on the page's own thread cannot play network media, because a read cannot
   wait there. `KitePlayerWorker` plays it from a web worker
   ([#100](https://github.com/yuroyami/KitePlayer/issues/100)), see [Web setup](#web-setup). It
-  downloads the whole file before it plays, up to 512 MiB, and HLS and DASH do not play there yet.
+  downloads the whole file before it plays, up to 512 MiB. HLS plays there, one whole segment at a
+  time, and changes variant in place. DASH does not play there yet
+  ([#546](https://github.com/yuroyami/KitePlayer/issues/546)).
   On the page's thread, fetch the file and play it from memory with
   `MediaItem.from(MediaIo.ofBytes(bytes), name)`.
 
@@ -749,8 +751,8 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
   because their key frames state the picture size. A DASH manifest of one Period changes the same
   way. The player decrypts AES-128 fMP4 segments itself, so each variant may have its own key.
 - Any other change opens the stream again, so the picture holds for a moment: WebM segments, a
-  DASH manifest of several Periods, a variant of another codec, profile, bit depth or dynamic
-  range, and a stream in the browser.
+  DASH manifest of several Periods, and a variant of another codec, profile, bit depth or dynamic
+  range.
 - The choice follows the screen ([#447](https://github.com/yuroyami/KitePlayer/issues/447)). An
   HDR version plays on a display that shows HDR as HDR, under `HdrPolicy.Auto`, and the SDR one
   elsewhere. Nothing larger plays than the smallest variant that fills the view the picture is
@@ -1001,7 +1003,7 @@ already listening when a song starts. Album art does not count as a picture.
 | **Android** | Plays real media on phones, checked by hand. CI runs the host tests, and an emulator job runs the device tests of five modules and the sample app on every push. A failure there does not fail the run yet. |
 | **iOS** | Plays real media on devices, checked by hand. CI runs the tests of every iOS module on the simulator. |
 | **macOS arm64**, native and desktop JVM | Plays real media. CI runs every module's tests on both, the format matrix included. |
-| **Web**, wasmJs | Plays through the FFmpeg WebAssembly module with browser audio, from memory. `KitePlayerWorker` runs the player in a web worker, which plays single files from the network too. CI runs the web tests under Node and in a headless browser. |
+| **Web**, wasmJs | Plays through the FFmpeg WebAssembly module with browser audio, from memory. `KitePlayerWorker` runs the player in a web worker, which plays single files and HLS streams from the network too. CI runs the web tests under Node and in a headless browser. |
 | **Linux and Windows**, native | No audio output and no HTTPS, so `KitePlayer()` throws and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own `OutputBackend` to `KitePlayer.create`. CI runs the media-free tests. |
 | **Linux and Windows**, desktop JVM | The native libraries are linked. The Linux FFmpeg backend decodes in a container, and neither has played sound on a real machine. |
 | **tvOS, watchOS, iOS x64, Android native** | Only the engine modules build there; CI runs the tvOS and watchOS tests on their simulators. |
@@ -1040,7 +1042,7 @@ summary.
 
 | Topic | What to expect |
 | --- | --- |
-| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time. `selectVariant` changes it, and the player steps down and up by itself with the measured network rate. A stream of MPEG-TS segments, or of fMP4 segments in H.264, HEVC, AV1 or VP9, changes in place, with no pause, and so does a DASH manifest of one Period. Any other stream opens again for the change, which holds the picture for a moment.<br><br>A DASH manifest of fMP4, MPEG-TS or WebM segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`, and a manifest of several Periods plays as one presentation. A persistent cache does not work yet.<br><br>A seek bar's preview pictures come from the stream, an HLS image playlist or a DASH thumbnail set, or from a WebVTT thumbnail file that `MediaItem.thumbnails` names: `thumbnailAt` gives the grid image and the region of the tile for a position, downloaded only when asked ([#433](https://github.com/yuroyami/KitePlayer/issues/433)). |
+| **Adaptive streaming** | Single-file HTTP and HTTPS work, with an in-memory byte cache, everywhere. In the browser they work only in `KitePlayerWorker`, which downloads the whole file before it plays.<br><br>HLS plays one variant at a time, in `KitePlayerWorker` too. `selectVariant` changes it, and the player steps down and up by itself with the measured network rate. A stream of MPEG-TS segments, or of fMP4 segments in H.264, HEVC, AV1 or VP9, changes in place, with no pause, and so does a DASH manifest of one Period. Any other stream opens again for the change, which holds the picture for a moment.<br><br>A DASH manifest of fMP4, MPEG-TS or WebM segments plays through the HLS path, live ones included, with a variant for each video representation, from its address alone or through `Dash.mediaItemFor`, and a manifest of several Periods plays as one presentation. A persistent cache does not work yet.<br><br>A seek bar's preview pictures come from the stream, an HLS image playlist or a DASH thumbnail set, or from a WebVTT thumbnail file that `MediaItem.thumbnails` names: `thumbnailAt` gives the grid image and the region of the tile for a position, downloaded only when asked ([#433](https://github.com/yuroyami/KitePlayer/issues/433)). |
 | **Native Linux and Windows** | No audio output and no HTTPS. Use the desktop JVM target, or pass your own `OutputBackend`. |
 | **Desktop JVM sound** | Plays on macOS. Linux and Windows have not played audio on a real machine. |
 | **AV1 on the web** | There is no software AV1, because the web build has one thread and dav1d needs threads. Native targets decode AV1 with dav1d, and in hardware where the device has it. |

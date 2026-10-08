@@ -447,6 +447,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
   reads on the page as "nothing" and only a new warning breaks the build. Add each new member both
   ways and set it off its default in `WorkerProtocolTest`; three fields and a warning went missing
   this way at once (#517).
+- The worker browser test's karma file serves only the folders it lists, one pattern for each, so
+  a clip in a new folder of `testmedia` answers 404 there until `karma.config.d/worker.js` names
+  the folder (#546).
 - `runBlocking` does not exist on the web target because there is no thread to block, so a shared
   test written with it will not compile there. The fix is the test-coroutine builder, not moving the
   test into a narrower source set: narrowing silently removes it from every target that no longer

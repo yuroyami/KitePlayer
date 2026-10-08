@@ -114,6 +114,61 @@ class KitePlayerWorkerBrowserTest {
     }
 
     /**
+     * An HLS stream plays in the worker (#546). The worker's reader opens the variant playlist and
+     * each segment that the master names with a synchronous request of its own, which the codec
+     * module asks for while it reads. `hls/ts.m3u8` has a 320x180 and a 640x360 variant in MPEG-TS
+     * segments of two seconds, twelve seconds long.
+     *
+     * With the related opens taken out of the web backend, the open fails and this test with it.
+     */
+    @Test
+    fun anHlsStreamPlaysSeeksAndChangesVariantInTheWorker() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        withContext(Dispatchers.Default) {
+            val canvas = pageCanvas(320, 180)
+            val player = KitePlayerWorker.start(canvas, workerUrl, codecUrl)
+            val events = Channel<PlayerEvent>(Channel.UNLIMITED)
+            val subscribed = CompletableDeferred<Unit>()
+            val collector = launch {
+                player.events.onSubscription { subscribed.complete(Unit) }.collect { events.send(it) }
+            }
+            try {
+                subscribed.await()
+                player.setViewport(320, 180, 1f)
+                player.open(MediaItem("$media/hls/ts.m3u8"))
+                val opened = withTimeout(30.seconds) { player.state.first { it.duration != null } }
+                assertEquals(12.seconds, opened.duration, "the worker reports the stream's duration")
+                assertTrue(opened.seekable, "a stream that has ended can seek")
+                assertEquals(listOf(180, 360), opened.tracks.variants.map { it.height }, "both variants of the master are listed")
+                assertEquals(listOf(TrackKind.Video, TrackKind.Audio), opened.tracks.all.map { it.kind }, "the picture and the sound of the segments")
+
+                player.play()
+                withTimeout(30.seconds) {
+                    while (events.receive() !is PlayerEvent.FirstFrameRendered) Unit
+                }
+                withTimeout(60.seconds) { player.progress.first { it.position >= 1.seconds } }
+
+                val other = opened.tracks.variants.first { it.index != opened.tracks.selectedVariant }.index
+                player.selectVariant(other)
+                withTimeout(30.seconds) { player.state.first { it.tracks.selectedVariant == other } }
+                withTimeout(60.seconds) { player.progress.first { it.position >= 3.seconds } }
+
+                player.seek(8.seconds)
+                withTimeout(60.seconds) { player.progress.first { it.position >= 9.seconds } }
+                assertNull(player.state.value.error, "the stream plays on after the seek")
+            } finally {
+                collector.cancel()
+                player.closeAndAwait()
+            }
+        }
+    }
+
+    /**
      * The calls past open, play, pause and seek reach the worker's player and answer as
      * `KitePlayer` does: tracks, a track selection, an external subtitle, setters seen in the
      * state, a setter the player refuses, a queue, and a dump. `subbed.mkv` holds h264, AAC and an

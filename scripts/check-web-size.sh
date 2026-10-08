@@ -28,11 +28,15 @@
 # compiler's unoptimised output instead, 1.21 MiB when it first shipped and 1.49 MiB by then,
 # against a budget of 1.25 MiB.
 #
-# The worker budget is now 0.62 MiB. On 2026-10-08 the worker measured 643,266 bytes, 11,550 more
+# The worker budget was then 0.62 MiB. On 2026-10-08 the worker measured 643,266 bytes, 11,550 more
 # than the 631,716 of the run before it. Three features came between the two: text subtitles drawn
 # on the web canvas (#559), the audio output that reopens when the route changes its channel count
 # (#563), and the red flash rule of the flash guard (#561). The binary grew by 7,577 bytes and the
 # JavaScript beside it by 3,973, which is the subtitle drawing and the longer flash measure.
+#
+# The worker budget is now 0.64 MiB. HLS plays in the worker (#546), so the code that reads a
+# playlist, serves a variant and moves to another one is reached there for the first time: the
+# worker measured 668,414 bytes with it and 644,892 without, 23,522 more.
 #
 # Both budgets are ratchets: a new KiteFFmpeg pin, or player code, that grows a module past its
 # budget fails here, and raising a budget is a decision made in the same commit, with both numbers
@@ -48,8 +52,8 @@ cd "$ROOT"
 
 # 1.47 MiB.
 BUDGET_BYTES=1541407
-# 0.62 MiB.
-WORKER_BUDGET_BYTES=650117
+# 0.64 MiB.
+WORKER_BUDGET_BYTES=671089
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...

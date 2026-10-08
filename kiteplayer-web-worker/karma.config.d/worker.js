@@ -22,6 +22,7 @@ config.files.push(
     { pattern: path.join(workerDir, "*"), included: false, served: true, watched: false },
     { pattern: path.join(moduleDir, "*"), included: false, served: true, watched: false },
     { pattern: path.join(mediaDir, "*"), included: false, served: true, watched: false, nocache: true },
+    { pattern: path.join(mediaDir, "hls", "*"), included: false, served: true, watched: false, nocache: true },
     { pattern: path.join(libassDir, "*"), included: false, served: true, watched: false },
 );
 // Percent-encoded: a bare '#' in a checkout's path is a fragment, so the proxy target would

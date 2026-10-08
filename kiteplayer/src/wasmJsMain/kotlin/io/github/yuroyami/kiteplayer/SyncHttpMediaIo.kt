@@ -3,7 +3,9 @@
 package io.github.yuroyami.kiteplayer
 
 import kotlin.js.JsAny
+import kotlin.math.pow
 import kotlin.time.Duration
+import kotlin.time.TimeSource
 
 /**
  * Answers an `http`, `https` or `blob` address in a player that runs in a Web Worker (#100) with a
@@ -38,8 +40,10 @@ internal class SyncHttpResolver(private val timeout: Duration) : MediaIoResolver
  */
 internal class SyncHttpMediaIo(
     private val url: String,
-    headers: Map<String, String>,
+    private val headers: Map<String, String>,
     private val timeout: Duration,
+    /** Shared with the readers that [openRelated] makes, so the rate counts an HLS stream's segments. */
+    private val meter: SyncDownloadMeter = SyncDownloadMeter(),
 ) : MediaIo {
 
     private val state: JsAny = xhrState(headers.toJsObject(), timeout.inWholeMilliseconds.toDouble())
@@ -91,6 +95,22 @@ internal class SyncHttpMediaIo(
         this.position = position
     }
 
+    /**
+     * A reader of the same kind for [uri], which an HLS playlist names its playlists, segments and
+     * keys with (#546). The item's headers go only to the origin this reader's own address has,
+     * because another origin was never meant to see them. Null for any scheme but `http`, `https`
+     * and `blob`.
+     */
+    override suspend fun openRelated(uri: String): MediaIo? {
+        check(!closed) { "the reader for $url is closed" }
+        val scheme = uri.substringBefore(':', missingDelimiterValue = "").lowercase()
+        if (scheme != "http" && scheme != "https" && scheme != "blob") return null
+        val own = originOf(uri) == originOf(url)
+        return SyncHttpMediaIo(uri, if (own) headers else emptyMap(), timeout, meter).also { it.start() }
+    }
+
+    override fun networkBitsPerSecond(): Long? = meter.bitsPerSecond()
+
     override fun close() {
         if (closed) return
         closed = true
@@ -99,8 +119,11 @@ internal class SyncHttpMediaIo(
 
     private fun fetch(from: Long) {
         nextWindow = if (from == windowEnd && from > 0) (nextWindow * 2).coerceAtMost(MAX_WINDOW_BYTES) else FIRST_WINDOW_BYTES
+        val asked = TimeSource.Monotonic.markNow()
         when (val status = xhrFetch(state, url, from.toDouble(), nextWindow.toDouble())) {
-            200, 206, 416 -> Unit
+            // The whole request waits for the network, so all of its time counts.
+            200, 206 -> meter.add(xhrWindowLength(state), asked.elapsedNow())
+            416 -> Unit
             TIMED_OUT -> throw PlaybackException(PlaybackError.SourceStalled(url, timeout))
             0 -> throw PlaybackException(PlaybackError.SourceUnavailable(url, null, xhrError(state) ?: "the request failed"))
             else -> throw PlaybackException(PlaybackError.SourceUnavailable(url, null, "HTTP $status"))
@@ -113,6 +136,43 @@ internal class SyncHttpMediaIo(
 
         /** What [xhrFetch] answers when the request ran out of time. */
         const val TIMED_OUT = -1
+    }
+}
+
+/** The scheme, host and port of [address], which a browser resolves against the worker's own. */
+@JsFun("(address) => { try { return new URL(address, self.location.href).origin; } catch (e) { return address; } }")
+private external fun originOf(address: String): String
+
+/**
+ * How fast the network delivered a reader's bytes and those of the readers it opened, as the
+ * player's other network reader measures it: each [HALF_LIFE_BYTES] halves the weight of what came
+ * before. A worker has one thread, so nothing here is shared between two.
+ */
+internal class SyncDownloadMeter {
+    private var bytes = 0.0
+    private var nanos = 0.0
+    private var counted = 0L
+
+    /** [count] bytes arrived after a wait of [took] for the network. */
+    fun add(count: Int, took: Duration) {
+        if (count <= 0) return
+        val keep = 0.5.pow(count / HALF_LIFE_BYTES)
+        bytes = bytes * keep + count
+        nanos = nanos * keep + took.inWholeNanoseconds.coerceAtLeast(0L)
+        counted += count
+    }
+
+    /** Bits per second, recent bytes weighing most, or null before [MIN_BYTES] were measured. */
+    fun bitsPerSecond(): Long? {
+        if (counted < MIN_BYTES || nanos <= 0.0) return null
+        return (bytes * 8.0 * 1_000_000_000.0 / nanos).toLong()
+    }
+
+    private companion object {
+        const val HALF_LIFE_BYTES = 1_048_576.0
+
+        /** Bytes to measure before the figure means anything: about one segment of a low variant. */
+        const val MIN_BYTES = 524_288L
     }
 }
 

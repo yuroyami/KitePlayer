@@ -72,10 +72,39 @@ internal actual class BlockingMediaIo actual constructor(
     }
 }
 
-internal actual fun <T> blockingIn(lifetime: Job, block: suspend () -> T): T =
-    throw UnsupportedOperationException("the web backend cannot wait for a reader, so it opens no related address")
+/**
+ * Runs [block] to its end on the spot, or refuses it when it suspends (#546). A reader whose
+ * bytes are resident, or one that waits for the network inside a worker's synchronous request,
+ * opens a related address without suspending. One that suspends is cancelled before this throws,
+ * so nothing of it runs on after the caller has gone.
+ */
+@Suppress("UNCHECKED_CAST")
+internal actual fun <T> blockingIn(lifetime: Job, block: suspend () -> T): T {
+    if (lifetime.isCancelled) throw CancellationException("the media source was interrupted")
+    val call = Job(lifetime)
+    val ignored = object : Continuation<T> {
+        override val context = call
+        override fun resumeWith(result: Result<T>) = Unit
+    }
+    val outcome = try {
+        block.startCoroutineUninterceptedOrReturn(ignored)
+    } catch (failure: Throwable) {
+        call.cancel()
+        throw failure
+    }
+    if (outcome === COROUTINE_SUSPENDED) {
+        call.cancel(CancellationException("the web backend cannot wait for a related address"))
+        throw UnsupportedOperationException(
+            "A related address did not open at once, and the web backend cannot wait for it. " +
+                "Run the player in a Worker, where a reader may wait for the network, or supply a reader " +
+                "whose related addresses are already resident.",
+        )
+    }
+    call.complete()
+    return outcome as T
+}
 
-internal actual val nestedOpensSupported: Boolean = false
+internal actual val nestedOpensSupported: Boolean = true
 
 /**
  * Runs [block] and returns its value, or null if it SUSPENDED.

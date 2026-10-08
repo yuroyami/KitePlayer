@@ -221,7 +221,8 @@ class KitePlayerWorkerBrowserTest {
      * the manifest by its address, and the DASH door serves it to the codec module as HLS, with
      * every segment read by a synchronous request.
      *
-     * The seek goes to the last ten seconds, which is segment 31 of 35.
+     * The seek goes to the last ten seconds, which is segment 31 of 35. The page's frame loop runs
+     * through all of it under the bound of the first test, 50 ms.
      */
     @Test
     fun aDashPresentationWithSeparateSoundPlaysAndSeeksInTheWorker() = runTest(timeout = 3.minutes) {
@@ -233,6 +234,7 @@ class KitePlayerWorkerBrowserTest {
         val (workerUrl, codecUrl, media) = setup
         withContext(Dispatchers.Default) {
             val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+            val heartbeat = heartbeatStart()
             val events = Channel<PlayerEvent>(Channel.UNLIMITED)
             val subscribed = CompletableDeferred<Unit>()
             val collector = launch {
@@ -264,6 +266,12 @@ class KitePlayerWorkerBrowserTest {
                 collector.cancel()
                 player.closeAndAwait()
             }
+            // The page draws on while the worker waits for each request of the presentation.
+            val frames = heartbeatFrames(heartbeat)
+            val worst = heartbeatStop(heartbeat)
+            println("WORKER heartbeat with DASH: $frames frames, longest gap ${worst.toInt()} ms")
+            assertTrue(frames > 60, "the page drew only $frames frames, so the gaps measure nothing")
+            assertTrue(worst < 50.0, "the page went ${worst.toInt()} ms without a frame while the worker played DASH")
         }
     }
 

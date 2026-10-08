@@ -288,9 +288,33 @@ class HlsSwitchingTest {
         assertNull(HlsVariantSwitch.plansFor(listOf(pictures(1, sps = 2), track(2, "soun", "ac-3")), base), "sound in another codec")
         val titled = base + track(3, "subt", "stpp")
         assertNull(HlsVariantSwitch.plansFor(titled, titled), "a kind of track the switch does not write")
-        val vp9 = listOf(track(1, "vide", "vp09"))
-        assertNull(HlsVariantSwitch.plansFor(vp9, vp9), "pictures whose parameter sets cannot go in band")
+        val unknown = listOf(track(1, "vide", "mjpg"))
+        assertNull(HlsVariantSwitch.plansFor(unknown, unknown), "pictures in a codec that is not known to take another size")
         assertNull(HlsVariantSwitch.plansFor(emptyList(), emptyList()), "an initialization that is not MP4 has no track")
+    }
+
+    /** An AV1 track whose `av1C` has [level] and the profile and bit depth bits [profile] and [depth]. */
+    private fun av1(level: Int, profile: Int = 0, depth: Int = 0x0C): Fmp4.Track {
+        val av1C = byteArrayOf(0x81.toByte(), ((profile shl 5) or level).toByte(), depth.toByte(), 0)
+        return Fmp4.Track(1, 15_360, "vide", "av01", 0, 0, 0, mp4Box("av01", ByteArray(78) + mp4Box("av1C", av1C)))
+    }
+
+    /** A VP9 track whose `vpcC` has [level], [profile] and the bit depth and chroma byte [depth]. */
+    private fun vp9(level: Int, profile: Int = 0, depth: Int = 0x82): Fmp4.Track {
+        val vpcC = byteArrayOf(1, 0, 0, 0, profile.toByte(), level.toByte(), depth.toByte(), 1, 1, 1, 0, 0)
+        return Fmp4.Track(1, 15_360, "vide", "vp09", 0, 0, 0, mp4Box("vp09", ByteArray(78) + mp4Box("vpcC", vpcC)))
+    }
+
+    @Test
+    fun picturesWhoseKeyFramesStateTheirSizePairAcrossLevelsOfOneProfileAndBitDepth() {
+        // An AV1 key frame holds a sequence header and a VP9 key frame its size, so nothing goes in band.
+        assertNotNull(HlsVariantSwitch.plansFor(listOf(av1(level = 8)), listOf(av1(level = 0))), "AV1 at another level")
+        assertNotNull(HlsVariantSwitch.plansFor(listOf(vp9(level = 31)), listOf(vp9(level = 11))), "VP9 at another level")
+        assertNull(HlsVariantSwitch.plansFor(listOf(av1(level = 8, profile = 1)), listOf(av1(level = 0))), "AV1 in another profile")
+        assertNull(HlsVariantSwitch.plansFor(listOf(av1(level = 8, depth = 0x4C)), listOf(av1(level = 0))), "AV1 in ten bits after eight")
+        assertNull(HlsVariantSwitch.plansFor(listOf(vp9(level = 31, profile = 2)), listOf(vp9(level = 11))), "VP9 in another profile")
+        assertNull(HlsVariantSwitch.plansFor(listOf(vp9(level = 31, depth = 0xA2)), listOf(vp9(level = 11))), "VP9 in ten bits after eight")
+        assertNull(HlsVariantSwitch.plansFor(listOf(vp9(level = 31)), listOf(av1(level = 0))), "VP9 after AV1")
     }
 
     private fun mp4Vod(name: String, extra: String = "") = buildString {

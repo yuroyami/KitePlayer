@@ -293,7 +293,7 @@ internal class HlsVariantSwitch(
      * True when the next segment FFmpeg asks for is that variant's. False when the stream must
      * open again for it: the variants do not share their segments, their codecs or their sound
      * differ, the playlist is one this switch does not serve, or the segments are MP4 and
-     * encrypted, in another codec than H.264 and HEVC, or laid out in other tracks.
+     * encrypted, in another codec than H.264, HEVC, AV1 and VP9, or laid out in other tracks.
      */
     suspend fun request(index: Int?): Boolean = lock.withLock {
         val current = listed ?: return false
@@ -471,8 +471,11 @@ internal class HlsVariantSwitch(
                 if (from.size != to.size) return null
                 for (i in from.indices) {
                     if (!Fmp4Rewrite.joins(from[i], to[i])) return null
-                    // An in-band change of picture size is something only these two codecs are known to take.
-                    if (kind == "vide" && Fmp4Rewrite.inBandParameterSets(from[i], to[i]) == null) return null
+                    // A decoder takes another picture size from parameter sets written in band, which
+                    // H.264 and HEVC have, or from a key frame that states it, as in AV1 and VP9.
+                    if (kind == "vide" && Fmp4Rewrite.inBandParameterSets(from[i], to[i]) == null &&
+                        !Fmp4Rewrite.describedByKeyFrames(from[i], to[i])
+                    ) return null
                     out += Fmp4Rewrite.Plan(from[i], to[i], shiftMicros = 0, endMicros = null)
                 }
             }

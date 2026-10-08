@@ -703,6 +703,22 @@ ffmpeg -v error -y \
   "${hls_vod[@]}" -hls_segment_type fmp4 -hls_fmp4_init_filename "ladder-%v-init.mp4" \
   -hls_segment_filename "hls/ladder-%v-%d.m4s" -master_pl_name ladder.m3u8 \
   -var_stream_map "v:0,a:0 v:1,a:1 v:2,a:2" "hls/ladder-%v.m3u8"
+# The same master in AV1 and in VP9, 256x144, 640x360 and 1280x720. A key frame of either codec
+# states its own picture size, so a variant change needs nothing added to the samples (#564).
+ladder_av1=(-c:v libsvtav1 -preset 12 -svtav1-params "keyint=30:scd=0")
+ladder_vp9=(-c:v libvpx-vp9 -deadline realtime -cpu-used 8 -row-mt 1 -g 30 -keyint_min 30)
+for codec in av1 vp9; do
+  if [ "$codec" = "av1" ]; then ladder_codec=("${ladder_av1[@]}"); else ladder_codec=("${ladder_vp9[@]}"); fi
+  ffmpeg -v error -y \
+    -f lavfi -i "testsrc2=size=1280x720:rate=30:duration=12" \
+    -f lavfi -i "sine=frequency=880:sample_rate=48000:duration=12" \
+    -filter_complex "[0:v]split=3[hi][mid0][lo0];[mid0]scale=640:360[mid];[lo0]scale=256:144[lo]" \
+    -map "[lo]" -map 1:a -map "[mid]" -map 1:a -map "[hi]" -map 1:a \
+    "${ladder_codec[@]}" -pix_fmt yuv420p -b:v:0 200k -b:v:1 500k -b:v:2 1200k -c:a aac -b:a 96k \
+    "${hls_vod[@]}" -hls_segment_type fmp4 -hls_fmp4_init_filename "ladder-$codec-%v-init.mp4" \
+    -hls_segment_filename "hls/ladder-$codec-%v-%d.m4s" -master_pl_name "ladder-$codec.m3u8" \
+    -var_stream_map "v:0,a:0 v:1,a:1 v:2,a:2" "hls/ladder-$codec-%v.m3u8"
+done
 
 echo "DASH presentations in dash/: separate video and audio sets, one numbered set, and indexed single files"
 # Read by the DASH tests, which play them through the HLS path (#295). Seventy seconds each, so a

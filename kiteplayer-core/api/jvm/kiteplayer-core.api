@@ -3321,6 +3321,7 @@ public final class io/github/yuroyami/kiteplayer/mp4/Fmp4$Track {
 
 public final class io/github/yuroyami/kiteplayer/mp4/Fmp4Rewrite {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/mp4/Fmp4Rewrite;
+	public final fun describedByKeyFrames (Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;)Z
 	public final fun inBandParameterSets (Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;)[B
 	public final fun joins (Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;)Z
 	public final fun micros (JJ)J

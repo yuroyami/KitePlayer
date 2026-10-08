@@ -5785,6 +5785,7 @@ final object io.github.yuroyami.kiteplayer.mp4/Fmp4 { // io.github.yuroyami.kite
 }
 
 final object io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite { // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite|null[0]
+    final fun describedByKeyFrames(io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, io.github.yuroyami.kiteplayer.mp4/Fmp4.Track): kotlin/Boolean // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.describedByKeyFrames|describedByKeyFrames(io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;io.github.yuroyami.kiteplayer.mp4.Fmp4.Track){}[0]
     final fun inBandParameterSets(io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, io.github.yuroyami.kiteplayer.mp4/Fmp4.Track): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.inBandParameterSets|inBandParameterSets(io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;io.github.yuroyami.kiteplayer.mp4.Fmp4.Track){}[0]
     final fun joins(io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, io.github.yuroyami.kiteplayer.mp4/Fmp4.Track): kotlin/Boolean // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.joins|joins(io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;io.github.yuroyami.kiteplayer.mp4.Fmp4.Track){}[0]
     final fun micros(kotlin/Long, kotlin/Long): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.micros|micros(kotlin.Long;kotlin.Long){}[0]

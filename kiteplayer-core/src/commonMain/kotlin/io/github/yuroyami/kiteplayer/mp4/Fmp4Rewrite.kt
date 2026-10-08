@@ -61,14 +61,16 @@ public object Fmp4Rewrite {
 
     /**
      * Whether a decoder set up from [target]'s initialization plays [source]'s samples once they
-     * are written for it. Pictures in H.264 or HEVC do when their parameter sets can go in band.
-     * Sound does when only its bit rate differs. Anything else needs the same configuration.
+     * are written for it. Pictures in H.264 or HEVC do when their parameter sets can go in band,
+     * and pictures in AV1 or VP9 do when [describedByKeyFrames]. Sound does when only its bit rate
+     * differs. Anything else needs the same configuration.
      */
     public fun joins(source: Fmp4.Track, target: Fmp4.Track): Boolean {
         if (sameCodec(source, target)) return true
         val codec = codecOf(source)
         if (codec == null || codec != codecOf(target)) return false
         if (configuration(source) != null) return inBandParameterSets(source, target) != null
+        if (describedByKeyFrames(source, target)) return true
         return source.handler == "soun" && target.handler == "soun" && sameSound(source, target)
     }
 
@@ -256,6 +258,40 @@ public object Fmp4Rewrite {
         val specific = descriptor(config.second + DECODER_CONFIG_FIELDS, config.third)?.takeIf { it.first == 0x05 }
         val setup = specific?.let { entry.copyOfRange(it.second, it.third) } ?: ByteArray(0)
         return byteArrayOf(entry[config.second]) + setup
+    }
+
+    /**
+     * Whether [source] and [target] are both AV1 or both VP9, in one profile, bit depth and chroma
+     * layout. Each key frame of those codecs states its own picture size: an AV1 sync sample holds
+     * a sequence header (AV1 in ISOBMFF, section 2.4) and a VP9 key frame has the size in its
+     * header. So a decoder takes another size with nothing added to the samples.
+     */
+    public fun describedByKeyFrames(source: Fmp4.Track, target: Fmp4.Track): Boolean {
+        val a = keyFrameCodec(source) ?: return false
+        val b = keyFrameCodec(target) ?: return false
+        return a.contentEquals(b)
+    }
+
+    /** The sample entry type of [track]'s AV1 or VP9, then its profile and its bit depth and chroma byte, or null for another codec. */
+    private fun keyFrameCodec(track: Fmp4.Track): ByteArray? {
+        val entry = track.sampleEntryBytes ?: return null
+        if (entry.size < 8 + VISUAL_SAMPLE_ENTRY_FIELDS) return null
+        val type = entry.decodeToString(4, 8)
+        val boxes = Fmp4.boxes(entry, 8 + VISUAL_SAMPLE_ENTRY_FIELDS, entry.size)
+        return when (type) {
+            "av01" -> {
+                // `av1C`: a marker and version byte, then the profile in three bits, then the tier bit
+                // over the bit depth, monochrome and chroma bits.
+                val at = boxes.firstOrNull { it.type == "av1C" }?.takeIf { it.end - it.dataStart >= 4 }?.dataStart ?: return null
+                byteArrayOf(1, ((entry[at + 1].toInt() and 0xFF) shr 5).toByte(), (entry[at + 2].toInt() and 0x7F).toByte())
+            }
+            "vp09" -> {
+                // `vpcC`: a version and flags, the profile, the level, then the bit depth and chroma byte.
+                val at = boxes.firstOrNull { it.type == "vpcC" }?.takeIf { it.end - it.dataStart >= 7 }?.dataStart ?: return null
+                byteArrayOf(2, entry[at + 4], entry[at + 6])
+            }
+            else -> null
+        }
     }
 
     /**

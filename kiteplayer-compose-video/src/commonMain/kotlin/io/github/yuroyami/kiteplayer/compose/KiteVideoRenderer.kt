@@ -110,6 +110,8 @@ internal class KiteVideoRenderer(
     private val convert: (VideoFrame) -> ByteArray,
     /** Whether [convert] rolls a frame's HDR off to SDR, which only the converter knows. */
     private val toneMapped: (VideoFrame) -> Boolean = { false },
+    /** Releases what [convert] holds. Called once by close, on the worker, after the last conversion. */
+    private val closeConverter: () -> Unit = {},
     /** Builds the drawable image and, when pooled, its asynchronous-consumer lease. */
     private val makeImage: (rgba: ByteArray, width: Int, height: Int) -> FrameImage,
     /** Publishes the newest finished frame, or null at close. Production writes snapshot state. */
@@ -533,29 +535,36 @@ internal class KiteVideoRenderer(
      * The order is its siblings': mark closed so [present] refuses, close the signal so the
      * worker's wait ends, join the worker so a conversion in flight finishes with the buffers it
      * started with, then drain the slot (final, because nothing is left running to refill it),
-     * publish the null and release the thread.
+     * publish the null, close the converter on the worker's thread and release that thread. A
+     * step that throws does not stop the steps after it; the first failure is thrown at the end.
      */
     override fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
         var failure: Throwable? = null
-        try {
-            hardwareRenderer?.close()
-        } catch (caught: Throwable) {
-            failure = caught
-        } finally {
-            signal.close()
-            worker.cancel()
-            runBlocking { workerJob.join() }
-            hardwareEventJob?.let { runBlocking { it.join() } }
+        fun step(action: () -> Unit) {
+            try {
+                action()
+            } catch (caught: Throwable) {
+                if (failure == null) failure = caught
+            }
+        }
+        step { hardwareRenderer?.close() }
+        signal.close()
+        worker.cancel()
+        runBlocking { workerJob.join() }
+        hardwareEventJob?.let { runBlocking { it.join() } }
+        step {
             drainPending()
             publish(null)
             releasePublishedFrames()
             kotlinx.atomicfu.locks.synchronized(overlayPublishLock) { publishOverlay(null) }
-            // After the join and the null publish: no worker can ask for an image and no reader
-            // should be handed one, so the image storage goes back now.
-            releaseImages()
-            dispatcher.close()
         }
+        // After the join and the null publish: no worker can ask for an image and no reader
+        // should be handed one, so the image storage goes back now.
+        step(releaseImages)
+        // The worker's job has ended, so its thread is idle: the converter closes where it ran.
+        step { runBlocking(dispatcher) { closeConverter() } }
+        dispatcher.close()
         failure?.let { throw it }
     }
 

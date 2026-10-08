@@ -46,10 +46,7 @@ adds itself, can open a second `Window(alwaysOnTop = true, undecorated = true)` 
 
 ## Apple offscreen frame ownership
 
-Planned API contract for #476. The implementation and ABI update follow in a separate change.
-
-`MetalPictureReader`, in `kiteplayer-output`, will implement `AutoCloseable`. Its public
-constructor and `readRgba(frame, picture, toneMapped)` signature stay available. One worker
+`MetalPictureReader`, in `kiteplayer-output`, implements `AutoCloseable`. One worker
 thread constructs, uses and closes a reader; the reader does not support concurrent calls.
 
 The caller owns the reader and calls `close()` when finished. Close waits for submitted GPU work
@@ -61,7 +58,7 @@ The reader borrows the frame and picture for `readRgba`; it does not close eithe
 remain valid until the call returns. The returned RGBA byte array belongs to the caller and
 remains valid after the reader closes.
 
-Each Compose video renderer will own its frame converter. On iOS, that converter creates its
+Each Compose video renderer owns its frame converter. On iOS, that converter creates its
 Metal reader lazily on its worker when a hardware frame needs it. Separate renderers own separate
 readers. Renderer close stops accepting frames, waits for an in-flight conversion to finish, then
 closes the converter on that same worker before releasing the worker dispatcher. Closing a

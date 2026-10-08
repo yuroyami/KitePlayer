@@ -724,6 +724,70 @@ class KiteVideoRendererTest {
         assertEquals(1, h.published.count { it == null })
     }
 
+    /** The converter holds native storage on iOS (#476), so it closes where it converted. */
+    @Test
+    fun closeClosesTheConverterOnceOnTheWorkerAfterTheConversionInFlight() = runBlocking {
+        val order = CopyOnWriteArrayList<String>()
+        val threads = CopyOnWriteArrayList<Thread>()
+        val converting = CountDownLatch(1)
+        val letGo = CountDownLatch(1)
+        val renderer = KiteVideoRenderer(
+            convert = { frame ->
+                threads += Thread.currentThread()
+                converting.countDown()
+                letGo.await(10, TimeUnit.SECONDS)
+                order += "converted"
+                ByteArray(frame.size.width * frame.size.height * 4)
+            },
+            closeConverter = {
+                threads += Thread.currentThread()
+                order += "converter-closed"
+            },
+            makeImage = { _, w, h -> FrameImage(FakeImage(w, h)) },
+            publish = {},
+        )
+        assertTrue(renderer.present(TestFrame(), 0L))
+        assertTrue(converting.await(10, TimeUnit.SECONDS))
+        val closing = Thread { renderer.close() }.apply { start() }
+        Thread.sleep(50)
+        assertEquals(emptyList(), order.toList(), "the converter stays open while a conversion runs")
+        letGo.countDown()
+        closing.join(10_000)
+        renderer.close()
+        assertEquals(listOf("converted", "converter-closed"), order.toList())
+        assertEquals(1, threads.distinct().size, "closed on the thread that converted: $threads")
+    }
+
+    @Test
+    fun aRendererClosedBeforeItsFirstFrameStillClosesItsConverter() {
+        var closes = 0
+        val renderer = KiteVideoRenderer(
+            convert = { error("no frame was presented") },
+            closeConverter = { closes += 1 },
+            makeImage = { _, w, h -> FrameImage(FakeImage(w, h)) },
+            publish = {},
+        )
+        renderer.close()
+        assertEquals(1, closes)
+    }
+
+    @Test
+    fun aConverterThatFailsToCloseDoesNotStopTheRestOfTheClose() = runBlocking {
+        val order = CopyOnWriteArrayList<String>()
+        val renderer = KiteVideoRenderer(
+            convert = { error("no frame was presented") },
+            closeConverter = { error("the converter refused to close") },
+            makeImage = { _, w, h -> FrameImage(FakeImage(w, h)) },
+            publish = { frame -> if (frame == null) order += "publish-null" },
+            releaseImages = { order += "release" },
+        )
+        val failure = kotlin.test.assertFailsWith<IllegalStateException> { renderer.close() }
+        assertEquals("the converter refused to close", failure.message)
+        assertEquals(listOf("publish-null", "release"), order.toList())
+        // The worker's thread was released too: a second renderer's close is not held up by it.
+        assertFalse(renderer.present(TestFrame(), 0L))
+    }
+
     @Test
     fun closeReleasesTheImagesExactlyOnceAfterTheNullPublish() = runBlocking {
         val order = CopyOnWriteArrayList<String>()

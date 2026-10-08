@@ -36,15 +36,15 @@ internal actual class FrameImagePool actual constructor() {
  * reader, so every frame goes through KiteFFmpeg's CPU converter. A frame from any other
  * backend is refused with UnsupportedFrameType, reported once and then not attempted again.
  */
-internal actual fun kiteCodecRgbaConverter(): (VideoFrame) -> ByteArray {
+internal actual fun kiteCodecRgbaConverter(): FrameConverter {
     val buffers = SoftwareConverter.Buffers()
-    return { frame ->
+    return FrameConverter({ frame ->
         // The near end of the measured upload window, before any pixel is read.
         KiteVideoUploadProfiler.frameStarted()
         val rgba = SoftwareConverter.toRgba(frame.asKiteFFmpegFrame(), buffers)
         KiteVideoUploadProfiler.frameConverted()
         rgba
-    }
+    })
 }
 
 internal actual fun kiteCodecToneMaps(frame: VideoFrame): Boolean = SoftwareConverter.toneMapsHdr(frame.colorSpace)

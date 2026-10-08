@@ -5,19 +5,19 @@ package io.github.yuroyami.kiteplayer.output
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.toneMapPeakNits
-import kotlinx.cinterop.CPointer
+import kotlinx.atomicfu.atomic
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.interpretCPointer
 import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.pointed
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
 import platform.CoreVideo.CVMetalTextureCacheCreate
 import platform.CoreVideo.CVMetalTextureCacheCreateTextureFromImage
 import platform.CoreVideo.CVMetalTextureCacheFlush
+import platform.CoreVideo.CVMetalTextureCacheRef
 import platform.CoreVideo.CVMetalTextureCacheRefVar
 import platform.CoreVideo.CVMetalTextureGetTexture
 import platform.CoreVideo.CVMetalTextureRefVar
@@ -95,8 +95,15 @@ internal class MetalFrameComposer(
     /** The retained source storage, including obsolete geometry still in flight. */
     internal val softwarePlaneSetCount: Int get() = planeSets.size
 
-    /** The zero-copy wrap cache for VideoToolbox frames. Created on first hardware frame. */
-    private var textureCache: CPointer<CVMetalTextureCacheRefVar>? = null
+    /** The zero-copy wrap cache for VideoToolbox frames, retained. Created on first hardware frame. */
+    private var textureCache: CVMetalTextureCacheRef? = null
+
+    /** The texture caches this composer holds: 1 after the first hardware frame, 0 once closed. */
+    internal val heldTextureCaches: Int get() = if (textureCache == null) 0 else 1
+
+    /** The CoreVideo texture wrappers handed to a command and not yet released by its completion. */
+    private val heldWrappers = atomic(0)
+    internal val heldTextureWrappers: Int get() = heldWrappers.value
 
     /** Overlay textures keyed by the overlay's contentHash; rebuilt only when the hash moves. */
     private var overlayTextures: List<Pair<FloatArray, MTLTextureProtocol>> = emptyList()
@@ -368,9 +375,9 @@ internal class MetalFrameComposer(
     }
 
     /**
-     * Releases what the composer owns natively: the CVMetalTextureCache and its nativeHeap
-     * holder. Waiting on each submitted buffer fences both its GPU reads and its own completed
-     * handlers before dropping source storage. Idempotent; a closed composer refuses new work.
+     * Releases what the composer owns natively: the retained CVMetalTextureCache. Waiting on each
+     * submitted buffer fences both its GPU reads and its own completed handlers before dropping
+     * source storage. Idempotent; a closed composer refuses new work.
      */
     fun close() {
         if (closed) return
@@ -381,10 +388,9 @@ internal class MetalFrameComposer(
         planeSets.clear()
         overlayTextures = emptyList()
         lightTexture = null
-        textureCache?.let { holder ->
-            CVMetalTextureCacheFlush(holder.pointed.value, 0uL)
-            holder.pointed.value?.let { CFRelease(it) }
-            kotlinx.cinterop.nativeHeap.free(holder.rawValue)
+        textureCache?.let { cache ->
+            CVMetalTextureCacheFlush(cache, 0uL)
+            CFRelease(cache)
         }
         textureCache = null
     }
@@ -533,7 +539,7 @@ internal class MetalFrameComposer(
                     val out = alloc<CVMetalTextureRefVar>()
                     val rc = CVMetalTextureCacheCreateTextureFromImage(
                         allocator = null,
-                        textureCache = cache.pointed.value,
+                        textureCache = cache,
                         sourceImage = buffer,
                         textureAttributes = null,
                         pixelFormat = format,
@@ -543,15 +549,19 @@ internal class MetalFrameComposer(
                         textureOut = out.ptr,
                     )
                     check(rc == kCVReturnSuccess) { "CVMetalTextureCacheCreateTextureFromImage failed: $rc" }
-                    val texture = checkNotNull(CVMetalTextureGetTexture(out.value)) {
-                        "a wrapped CVMetalTexture carried no MTLTexture"
-                    } as MTLTextureProtocol
+                    val texture = CVMetalTextureGetTexture(out.value) as MTLTextureProtocol?
+                    if (texture == null) {
+                        // The wrapper exists but holds no texture: it is still ours to release.
+                        out.value?.let { CFRelease(it) }
+                        error("a wrapped CVMetalTexture carried no MTLTexture")
+                    }
+                    heldWrappers.incrementAndGet()
                     wrapped += out.value to texture
                 }
             }
         } catch (failure: Throwable) {
             // A failure halfway through wrapping owns whatever it already wrapped.
-            wrapped.forEach { (cv, _) -> if (cv != null) CFRelease(cv) }
+            releaseWrappers(wrapped)
             throw failure
         }
         val frameColor = MetalColorUniforms.of(pictureColor)
@@ -570,24 +580,35 @@ internal class MetalFrameComposer(
             // No cache flush here: flushing after every frame defeated the cache's whole point
             // The cache is flushed once, at close, or by CoreVideo itself on
             // real invalidation.
-            release = {
-                wrapped.forEach { (cv, _) -> if (cv != null) CFRelease(cv) }
-            },
+            release = { releaseWrappers(wrapped) },
         )
     }
 
-    private fun ensureTextureCache(): CPointer<CVMetalTextureCacheRefVar> {
+    private fun releaseWrappers(wrapped: List<Pair<platform.CoreVideo.CVMetalTextureRef?, MTLTextureProtocol>>) {
+        wrapped.forEach { (cv, _) ->
+            if (cv != null) CFRelease(cv)
+            heldWrappers.decrementAndGet()
+        }
+    }
+
+    private fun ensureTextureCache(): CVMetalTextureCacheRef {
         textureCache?.let { return it }
-        val holder = kotlinx.cinterop.nativeHeap.alloc<CVMetalTextureCacheRefVar>()
-        val rc = CVMetalTextureCacheCreate(
-            allocator = null,
-            cacheAttributes = null,
-            metalDevice = device as objcnames.protocols.MTLDeviceProtocol,
-            textureAttributes = null,
-            cacheOut = holder.ptr,
-        )
-        check(rc == kCVReturnSuccess) { "CVMetalTextureCacheCreate failed: $rc" }
-        return holder.ptr.also { textureCache = it }
+        return memScoped {
+            val out = alloc<CVMetalTextureCacheRefVar>()
+            val rc = CVMetalTextureCacheCreate(
+                allocator = null,
+                cacheAttributes = null,
+                metalDevice = device as objcnames.protocols.MTLDeviceProtocol,
+                textureAttributes = null,
+                cacheOut = out.ptr,
+            )
+            val cache = out.value
+            if (rc != kCVReturnSuccess || cache == null) {
+                cache?.let { CFRelease(it) }
+                error("CVMetalTextureCacheCreate failed: $rc")
+            }
+            cache.also { textureCache = it }
+        }
     }
 
     private fun refreshOverlayTextures(overlay: SubtitleOverlay, viewportWidth: Int, viewportHeight: Int) {

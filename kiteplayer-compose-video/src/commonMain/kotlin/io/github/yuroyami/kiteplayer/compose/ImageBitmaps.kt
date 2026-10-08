@@ -44,6 +44,15 @@ internal class UnsupportedFrameType(
 )
 
 /**
+ * One renderer's frame converter and what it holds. The renderer calls [toRgba] from its one
+ * worker, and calls [close] once on that worker after the last conversion.
+ */
+internal class FrameConverter(
+    val toRgba: (VideoFrame) -> ByteArray,
+    val close: () -> Unit = {},
+)
+
+/**
  * The converter one renderer uses. It turns a frame from the aggregate's own FFmpeg backend into
  * tightly packed RGBA. A frame from any other backend is refused with [UnsupportedFrameType], which
  * the renderer reports once and then stops attempting, exactly like the platform views' converter
@@ -53,7 +62,7 @@ internal class UnsupportedFrameType(
  * and every image builder copies the bytes. A target whose converter can reuse its arrays keeps
  * them in the converter, so it allocates them once per renderer rather than once per frame.
  */
-internal expect fun kiteCodecRgbaConverter(): (VideoFrame) -> ByteArray
+internal expect fun kiteCodecRgbaConverter(): FrameConverter
 
 /** Whether the converter of [kiteCodecRgbaConverter] rolls [frame]'s HDR off to SDR. */
 internal expect fun kiteCodecToneMaps(frame: VideoFrame): Boolean

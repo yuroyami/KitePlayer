@@ -9,6 +9,8 @@ import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.corePixelBufferOrNull
 import io.github.yuroyami.kiteplayer.ffmpeg.uploadPlanesOrNull
 import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
+import io.github.yuroyami.kiteplayer.output.MetalPicture
+import io.github.yuroyami.kiteplayer.output.MetalPictureReader
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
@@ -32,37 +34,57 @@ internal actual class FrameImagePool actual constructor() {
     }
 }
 
-/**
- * The reader, one per worker thread: the renderer's worker owns its converter the
- * same way it owns everything else, and the thread-local keeps two simultaneous KiteVideo
- * states from racing one Metal queue. Null means Metal failed to initialise; the CPU converter
- * remains the measured fallback then, stated rather than silent.
- */
-@kotlin.native.concurrent.ThreadLocal
-private object GpuFrameReader {
-    val reader: io.github.yuroyami.kiteplayer.output.MetalPictureReader? =
-        runCatching { io.github.yuroyami.kiteplayer.output.MetalPictureReader() }.getOrNull()
+internal actual fun kiteCodecRgbaConverter(): FrameConverter {
+    val converter = HardwareFrameConverter()
+    return FrameConverter(
+        toRgba = { frame ->
+            val decoded = frame.asKiteFFmpegFrame()
+            // The Metal reader serves HARDWARE frames only, where a GPU readback is the only
+            // route from a CVPixelBuffer to bytes. Software planes used to ride the same path, which
+            // was upload plus readback plus Skia's re-upload for pixels the CPU converter produces in
+            // ONE pass with the same arithmetic (the shader is written to match it), tone mapping
+            // included. The GPU roundtrip for software frames was strictly waste.
+            val hardware = decoded.corePixelBufferOrNull()?.let { MetalPicture.CorePixelBuffer(it) }
+            (if (hardware != null) converter.readOrNull(frame, hardware) else null)
+                ?: SoftwareConverter.toRgba(decoded)
+        },
+        close = converter::close,
+    )
 }
 
-// The native converter and the Metal reader allocate their own array, so nothing is kept here.
-internal actual fun kiteCodecRgbaConverter(): (VideoFrame) -> ByteArray = ::convertFrameToRgba
+/**
+ * One renderer's Metal reader (#476), made on the renderer's worker when the first hardware frame
+ * needs it and closed there by the renderer. Two renderers never share one, so they never race
+ * one Metal queue. The native converter and the reader allocate their own array each call.
+ */
+internal class HardwareFrameConverter(
+    private val makeReader: () -> MetalPictureReader = ::MetalPictureReader,
+) {
+    private var reader: MetalPictureReader? = null
+    private var unavailable = false
+    private var closed = false
 
-private fun convertFrameToRgba(frame: VideoFrame): ByteArray {
-    val decoded = frame.asKiteFFmpegFrame()
-    // The Metal reader serves HARDWARE frames only, where a GPU readback is the only
-    // route from a CVPixelBuffer to bytes. Software planes used to ride the same path, which
-    // was upload plus readback plus Skia's re-upload for pixels the CPU converter produces in
-    // ONE pass with the same arithmetic (the shader is written to match it), tone mapping
-    // included. The GPU roundtrip for software frames was strictly waste.
-    val reader = GpuFrameReader.reader
-    if (reader != null) {
-        val hardware = decoded.corePixelBufferOrNull()
-            ?.let { io.github.yuroyami.kiteplayer.output.MetalPicture.CorePixelBuffer(it) }
-        // toneMapped: this is the DISPLAY path, so an HDR CVPixelBuffer reads back as the SDR
-        // the viewer should see (the tone-mapping rule); SDR frames stay bit-exact through the same flag.
-        if (hardware != null) return reader.readRgba(frame, hardware, toneMapped = true)
+    /**
+     * The picture as the viewer should see it, an HDR one rolled off to SDR by the tone-mapping
+     * rule. Null when Metal failed to initialise or the converter is closed: the CPU converter is
+     * the measured fallback then.
+     */
+    fun readOrNull(frame: VideoFrame, picture: MetalPicture.CorePixelBuffer): ByteArray? {
+        if (closed || unavailable) return null
+        val ready = reader ?: runCatching(makeReader).getOrNull().also { reader = it }
+        if (ready == null) {
+            unavailable = true
+            return null
+        }
+        return ready.readRgba(frame, picture, toneMapped = true)
     }
-    return SoftwareConverter.toRgba(decoded)
+
+    /** Closes the reader, if one was made. A second call does nothing. */
+    fun close() {
+        closed = true
+        reader?.close()
+        reader = null
+    }
 }
 
 // The Metal reader rolls a hardware HDR frame off with the same rule the CPU converter uses.

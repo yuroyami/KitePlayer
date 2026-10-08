@@ -42,9 +42,9 @@ internal actual class FrameImagePool actual constructor() {
     actual fun release() = Unit
 }
 
-internal actual fun kiteCodecRgbaConverter(): (VideoFrame) -> ByteArray {
+internal actual fun kiteCodecRgbaConverter(): FrameConverter {
     val buffers = SoftwareConverter.Buffers()
-    return { frame -> SoftwareConverter.toRgba(frame.asKiteFFmpegFrame(), buffers) }
+    return FrameConverter({ frame -> SoftwareConverter.toRgba(frame.asKiteFFmpegFrame(), buffers) })
 }
 
 internal actual fun kiteCodecToneMaps(frame: VideoFrame): Boolean = SoftwareConverter.toneMapsHdr(frame.colorSpace)

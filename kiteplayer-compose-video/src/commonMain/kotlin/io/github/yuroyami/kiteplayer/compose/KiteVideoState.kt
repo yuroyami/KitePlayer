@@ -33,14 +33,23 @@ public class KiteVideoState internal constructor(
     hardwareRendererFactory: ((publish: (KiteVideoFrame) -> Unit) -> KiteVideoHardwareRenderer?) = { null },
     /** Whether [convert] rolls a frame's HDR off to SDR. */
     toneMapped: (VideoFrame) -> Boolean = { false },
+    /** Releases what [convert] holds, on the renderer's worker, when the renderer closes. */
+    closeConverter: () -> Unit = {},
 ) {
     public constructor() : this(FrameImagePool(), { null })
 
     internal constructor(
         pool: FrameImagePool,
         hardwareRendererFactory: ((publish: (KiteVideoFrame) -> Unit) -> KiteVideoHardwareRenderer?),
+    ) : this(kiteCodecRgbaConverter(), pool, hardwareRendererFactory)
+
+    private constructor(
+        converter: FrameConverter,
+        pool: FrameImagePool,
+        hardwareRendererFactory: ((publish: (KiteVideoFrame) -> Unit) -> KiteVideoHardwareRenderer?),
     ) : this(
-        convert = kiteCodecRgbaConverter(),
+        convert = converter.toRgba,
+        closeConverter = converter.close,
         makeImage = { rgba, width, height -> pool.imageFor(rgba, width, height) },
         releaseImages = { pool.release() },
         hardwareRendererFactory = hardwareRendererFactory,
@@ -162,6 +171,7 @@ public class KiteVideoState internal constructor(
 
     private val videoRenderer = KiteVideoRenderer(
         convert = convert,
+        closeConverter = closeConverter,
         toneMapped = toneMapped,
         makeImage = makeImage,
         publish = ::publishFrame,

@@ -24,9 +24,11 @@ import platform.Metal.MTLTextureProtocol
  * CPU converter's output.
  *
  * NOT thread safe: one reader belongs to one worker thread, the same confinement every renderer
- * in this library keeps.
+ * in this library keeps. That thread constructs it, reads through it and closes it.
+ *
+ * The reader holds native storage that no garbage collector frees: [close] it when done.
  */
-public class MetalPictureReader public constructor() {
+public class MetalPictureReader public constructor() : AutoCloseable {
 
     private val device = MTLCreateSystemDefaultDevice()
         ?: error("this machine has no Metal device")
@@ -35,6 +37,11 @@ public class MetalPictureReader public constructor() {
     private var target: MTLTextureProtocol? = null
     private var targetWidth = 0
     private var targetHeight = 0
+    private var closed = false
+
+    /** What the composer still holds natively, for the ownership tests. */
+    internal val heldTextureCaches: Int get() = composer.heldTextureCaches
+    internal val heldTextureWrappers: Int get() = composer.heldTextureWrappers
 
     /** The identity quad: full-viewport, unrotated, untouched texcoords. */
     private val identityQuad = floatArrayOf(1f, 1f, 1f, 0f, 0f, 1f, 0f, 0f, 0f, 0f)
@@ -42,6 +49,11 @@ public class MetalPictureReader public constructor() {
     /**
      * Renders [picture] and returns `width * height * 4` tightly packed RGBA bytes at the
      * frame's stored size.
+     *
+     * The reader borrows [frame] and [picture] until the call returns and closes neither. The
+     * returned array is the caller's and stays valid after [close].
+     *
+     * @throws IllegalStateException when the reader is closed.
      */
     public fun readRgba(
         frame: VideoFrame,
@@ -53,6 +65,7 @@ public class MetalPictureReader public constructor() {
          */
         toneMapped: Boolean = false,
     ): ByteArray {
+        check(!closed) { "the Metal picture reader is closed" }
         val width = frame.size.width
         val height = frame.size.height
         require(width > 0 && height > 0) { "frame has no dimensions: ${width}x$height" }
@@ -86,5 +99,16 @@ public class MetalPictureReader public constructor() {
             )
         }
         return bytes
+    }
+
+    /**
+     * Waits for submitted GPU work, then releases the CoreVideo texture cache and the cached
+     * frame storage. A second call does nothing.
+     */
+    override fun close() {
+        if (closed) return
+        closed = true
+        target = null
+        composer.close()
     }
 }

@@ -1569,7 +1569,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * A source that can move to the variant while it plays does so (#464): playback goes on, and
      * the picture changes to the new variant once the media already read has played. An HLS stream
-     * of MPEG-TS segments whose variants share their segment boundaries is one. Otherwise the media
+     * whose variants share their segment boundaries is one, with MPEG-TS segments, or with fMP4
+     * segments of H.264 or HEVC that are not encrypted. Otherwise the media
      * opens again on that variant at the current position, through the same rebuild as a video
      * track change, and keeps playing or stays paused.
      *

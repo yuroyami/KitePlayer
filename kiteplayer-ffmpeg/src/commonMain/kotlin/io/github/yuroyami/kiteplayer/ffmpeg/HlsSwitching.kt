@@ -2,8 +2,11 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.Playlists
+import io.github.yuroyami.kiteplayer.mp4.Fmp4
+import io.github.yuroyami.kiteplayer.mp4.Fmp4Rewrite
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.abs
@@ -19,6 +22,12 @@ import kotlin.math.abs
  * variants of a stream hold the same content on the same timestamps, so the reader goes on as if
  * nothing changed, and an MPEG-TS decoder takes the new picture size from the parameter sets each
  * segment starts with.
+ *
+ * FFmpeg's MP4 reader keeps the first initialization it is given, so fragments of another variant
+ * do not fit it. From the first move on, every MP4 segment is therefore written again for that
+ * first initialization, with its own variant's parameter sets in band, as [Fmp4Rewrite] says. The
+ * first variant's segments are written that way too, because a decoder that has played another
+ * variant keeps that one's parameter sets until it is given others.
  */
 
 /** One segment of a media playlist: where its bytes are, when it plays, and what must match to stand in for another. */
@@ -238,6 +247,18 @@ internal class HlsVariantSwitch(
     /** The initialization FFmpeg read first, which its MP4 reader keeps for the whole stream. */
     private var init: HlsInit? = null
 
+    /** The tracks of [init], read at the first move of an MP4 stream. */
+    private var baseTracks: List<Fmp4.Track>? = null
+
+    /** How each variant's MP4 segments are written for [init], for the variants a move has checked. */
+    private val plans = arrayOfNulls<List<Fmp4Rewrite.Plan>>(addresses.size)
+
+    /** True once an MP4 stream has moved, from when every segment is written again. */
+    private var rewrites = false
+
+    /** The segment served last and its variant, or null when it was served as it is. */
+    private var written: Pair<Long, Int>? = null
+
     private class Loaded(val variant: Int, val playlist: HlsMediaPlaylist)
 
     /** The variant whose segments FFmpeg is given from the next one it asks for. */
@@ -262,7 +283,7 @@ internal class HlsVariantSwitch(
         when {
             address == PLAYLIST -> addresses[target.value]
             address.startsWith(INIT) -> init?.address
-            address.startsWith(SEGMENT) -> sequenceOf(address)?.let(::find)?.address
+            address.startsWith(SEGMENT) -> sequenceOf(address)?.let(::find)?.second?.address
             else -> null
         } ?: address
     }
@@ -271,7 +292,8 @@ internal class HlsVariantSwitch(
      * Moves the stream to the variant at [index], or to the one the player would choose for null.
      * True when the next segment FFmpeg asks for is that variant's. False when the stream must
      * open again for it: the variants do not share their segments, their codecs or their sound
-     * differ, or the playlist is one this switch does not serve.
+     * differ, the playlist is one this switch does not serve, or the segments are MP4 and
+     * encrypted, in another codec than H.264 and HEVC, or laid out in other tracks.
      */
     suspend fun request(index: Int?): Boolean = lock.withLock {
         val current = listed ?: return false
@@ -287,12 +309,48 @@ internal class HlsVariantSwitch(
         } catch (failure: Throwable) {
             null
         } ?: return false
-        // FFmpeg's MP4 reader keeps the first initialization, which another variant's fragments do not fit.
-        if (current.playlist.init != null) return false
         if (!sameSegments(current.playlist, next.playlist)) return false
+        if (current.playlist.init != null) {
+            val fits = try {
+                planned(current, next)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                false
+            }
+            if (!fits) return false
+            rewrites = true
+        }
         loaded[wanted] = next
         target.value = wanted
         true
+    }
+
+    /**
+     * Makes the plans that write the MP4 segments of [next], and of [current] when it has none
+     * yet, for the first initialization. False when either cannot be written for it.
+     */
+    private suspend fun planned(current: Loaded, next: Loaded): Boolean {
+        // An encrypted segment is decrypted inside FFmpeg, after this switch has served it.
+        if (current.playlist.encrypted || next.playlist.encrypted) return false
+        val base = baseTracks ?: tracksOf(init ?: return false).also { baseTracks = it }
+        for (loaded in listOf(current, next)) {
+            if (plans[loaded.variant] != null) continue
+            val own = loaded.playlist.init ?: return false
+            val tracks = if (own.address == init?.address && own.offset == init?.offset && own.length == init?.length) base else tracksOf(own)
+            plans[loaded.variant] = plansFor(tracks, base) ?: return false
+        }
+        return true
+    }
+
+    /** The tracks of the initialization [of], read whole. */
+    private suspend fun tracksOf(of: HlsInit): List<Fmp4.Track> {
+        val reader = slice(openAddress(of.address), of.offset, of.length) ?: return emptyList()
+        return try {
+            Fmp4.tracks(readWhole(reader, MAX_INIT_BYTES, of.address))
+        } finally {
+            reader.close()
+        }
     }
 
     private suspend fun playlist(): MediaIo? = lock.withLock {
@@ -335,14 +393,30 @@ internal class HlsVariantSwitch(
 
     private suspend fun segment(address: String): MediaIo? {
         val sequence = sequenceOf(address) ?: return null
+        var plan: List<Fmp4Rewrite.Plan>? = null
         val segment = lock.withLock {
             val variant = target.value
-            loaded[variant]?.playlist?.at(sequence)
+            val found = loaded[variant]?.playlist?.at(sequence)?.let { variant to it }
                 // A live variant that had not listed the segment yet when the stream moved to it.
-                ?: reloaded(variant)?.playlist?.at(sequence)
+                ?: reloaded(variant)?.playlist?.at(sequence)?.let { variant to it }
                 ?: find(sequence)
-        } ?: return null
-        return slice(openAddress(segment.address), segment.offset, segment.length)
+                ?: return null
+            if (rewrites) {
+                // Anything but the segment after the last one written, of the same variant, is a join.
+                val joined = written != (sequence - 1 to found.first)
+                plan = (plans[found.first] ?: return null).map { Fmp4Rewrite.Plan(it.source, it.target, it.shiftMicros, it.endMicros, joined) }
+                written = sequence to found.first
+            }
+            found.second
+        }
+        val reader = slice(openAddress(segment.address), segment.offset, segment.length) ?: return null
+        val plans = plan ?: return reader
+        val bytes = try {
+            readWhole(reader, MAX_SEGMENT_BYTES, segment.address)
+        } finally {
+            reader.close()
+        }
+        return BytesMediaIo(Fmp4Rewrite.rewrite(bytes, plans), segment.address)
     }
 
     /** The playlist of [variant] read again, kept as its newest, or null when it cannot be read now. */
@@ -361,11 +435,10 @@ internal class HlsVariantSwitch(
 
     private fun sequenceOf(address: String): Long? = address.substring(SEGMENT.length).substringBefore('.').toLongOrNull()
 
-    /** The segment [sequence] of the variant that plays, else of the playlist FFmpeg read it in. */
-    private fun find(sequence: Long): HlsSegment? =
-        loaded[target.value]?.playlist?.at(sequence)
-            ?: listed?.playlist?.at(sequence)
-            ?: loaded.firstNotNullOfOrNull { it?.playlist?.at(sequence) }
+    /** The segment [sequence] of the variant that plays, else of the playlist FFmpeg read it in, with its variant. */
+    private fun find(sequence: Long): Pair<Int, HlsSegment>? =
+        (sequenceOf(loaded[target.value]) + sequenceOf(listed) + loaded.asSequence())
+            .firstNotNullOfOrNull { read -> read?.playlist?.at(sequence)?.let { read.variant to it } }
 
     companion object {
         /** A host no server has: RFC 2606 keeps `.invalid` out of the DNS. */
@@ -381,7 +454,62 @@ internal class HlsVariantSwitch(
         fun sameKind(from: HlsVariant, to: HlsVariant): Boolean =
             from.audioOnly == to.audioOnly && from.hdr == to.hdr && from.dolbyVisionOnly == to.dolbyVisionOnly &&
                 from.videoCodec == to.videoCodec && (from.attributes["AUDIO"] == null) == (to.attributes["AUDIO"] == null)
+
+        /**
+         * How segments with the tracks [own] are written for a reader that holds [base]: each
+         * picture and sound track for the one of its kind at the same place. Null when the two
+         * hold other kinds of track, or a different number of one kind, or a pair that a decoder
+         * cannot take in band.
+         */
+        fun plansFor(own: List<Fmp4.Track>, base: List<Fmp4.Track>): List<Fmp4Rewrite.Plan>? {
+            if (base.isEmpty() || own.size != base.size) return null
+            if ((own + base).any { it.handler != "vide" && it.handler != "soun" }) return null
+            val out = ArrayList<Fmp4Rewrite.Plan>()
+            for (kind in listOf("vide", "soun")) {
+                val from = own.filter { it.handler == kind }
+                val to = base.filter { it.handler == kind }
+                if (from.size != to.size) return null
+                for (i in from.indices) {
+                    if (!Fmp4Rewrite.joins(from[i], to[i])) return null
+                    // An in-band change of picture size is something only these two codecs are known to take.
+                    if (kind == "vide" && Fmp4Rewrite.inBandParameterSets(from[i], to[i]) == null) return null
+                    out += Fmp4Rewrite.Plan(from[i], to[i], shiftMicros = 0, endMicros = null)
+                }
+            }
+            // The order of the first initialization's tracks, which is the order its fragments had.
+            return out.sortedBy { plan -> base.indexOf(plan.target) }
+        }
+
+        /** The most an initialization may hold. One is a few kilobytes. */
+        private const val MAX_INIT_BYTES: Long = 4L shl 20
+
+        /** The most one segment may hold to be written again, as much as the DASH path reads. */
+        private const val MAX_SEGMENT_BYTES: Long = 64L shl 20
     }
+}
+
+/** All of [reader], or a failure when it holds more than [limit] bytes. [name] is for the message. */
+private suspend fun readWhole(reader: MediaIo, limit: Long, name: String): ByteArray {
+    val declared = reader.size
+    require(declared == null || declared <= limit) { "$name holds $declared bytes, and at most $limit are read whole" }
+    // One byte more than a declared size, so the end shows without a copy.
+    var bytes = ByteArray(if (declared != null) declared.toInt() + 1 else 64 shl 10)
+    var filled = 0
+    while (true) {
+        if (filled == bytes.size) {
+            require(filled <= limit) { "$name holds more than $limit bytes, and at most that many are read whole" }
+            bytes = bytes.copyOf(minOf(bytes.size.toLong() * 2, limit + 1).toInt())
+        }
+        val count = reader.read(bytes, filled, bytes.size - filled)
+        when {
+            count < 0 -> break
+            // Nothing yet, and more may come.
+            count == 0 -> delay(1)
+            else -> filled += count
+        }
+    }
+    require(filled <= limit) { "$name holds more than $limit bytes, and at most that many are read whole" }
+    return bytes.copyOf(filled)
 }
 
 /** [upstream] from [offset] on for [length] bytes, or all of it. Null stays null. */

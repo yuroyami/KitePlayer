@@ -652,7 +652,7 @@ ffmpeg -v error -y \
   -x265-params "log-level=error:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:range=limited:hdr10=1:master-display=G(8500,39850)B(6550,2300)R(35400,14600)WP(15635,16450)L(40000000,50):max-cll=4000,400" \
   hdr10-meta.mp4
 
-echo "HLS streams in hls/: two variants, a separate audio rendition, AES-128, and fMP4 byte ranges"
+echo "HLS streams in hls/: two variants, a separate audio rendition, AES-128, fMP4 byte ranges, and an fMP4 ladder"
 # Read by the HLS tests through a reader that maps addresses to these files, so every playlist
 # names its segments relatively, as a server's would. Two second segments with a keyframe at each.
 mkdir -p hls
@@ -690,6 +690,19 @@ ffmpeg -v error -y \
   -f lavfi -i "sine=frequency=770:sample_rate=48000:duration=12" \
   "${hls_video[@]}" -b:v 300k -c:a aac -b:a 96k \
   "${hls_vod[@]}" -hls_segment_type fmp4 -hls_flags single_file hls/fmp4.m3u8
+# A master playlist of three fMP4 variants, 640x360, 1280x720 and 1920x1080, each with its own
+# muxed sound, for a variant change with no new open (#464). The smallest has no B-frames and the
+# other two have, so their edit lists and their decode times differ, as a real ladder's do.
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=1920x1080:rate=30:duration=12" \
+  -f lavfi -i "sine=frequency=880:sample_rate=48000:duration=12" \
+  -filter_complex "[0:v]split=3[hi][mid0][lo0];[mid0]scale=1280:720[mid];[lo0]scale=640:360[lo]" \
+  -map "[lo]" -map 1:a -map "[mid]" -map 1:a -map "[hi]" -map 1:a \
+  "${hls_video[@]}" -b:v:0 300k -b:v:1 900k -b:v:2 2000k -bf:v:0 0 -bf:v:1 2 -bf:v:2 2 \
+  -c:a aac -b:a:0 64k -b:a:1 96k -b:a:2 96k \
+  "${hls_vod[@]}" -hls_segment_type fmp4 -hls_fmp4_init_filename "ladder-%v-init.mp4" \
+  -hls_segment_filename "hls/ladder-%v-%d.m4s" -master_pl_name ladder.m3u8 \
+  -var_stream_map "v:0,a:0 v:1,a:1 v:2,a:2" "hls/ladder-%v.m3u8"
 
 echo "DASH presentations in dash/: separate video and audio sets, one numbered set, and indexed single files"
 # Read by the DASH tests, which play them through the HLS path (#295). Seventy seconds each, so a

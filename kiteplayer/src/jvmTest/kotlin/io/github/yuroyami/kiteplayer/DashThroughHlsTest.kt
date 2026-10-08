@@ -348,6 +348,35 @@ class DashThroughHlsTest {
     }
 
     @Test
+    fun aVariantChangeTakesTheNextMp4SegmentsFromTheOtherRepresentationWithNoNewOpen() = withSource("separate.mpd") { source ->
+        val video = source.streams.first { it.kind == TrackKind.Video }
+        val decoder = checkNotNull((source as KiteFFmpegSource).videoDecoderFactories().firstNotNullOfOrNull { it.create(video, HwdecPolicy.Off) })
+        try {
+            assertEquals(1, source.selectedVariant, "the larger representation plays first")
+            val before = source.picturesBetween(decoder, from = 0.0, until = 1.0)
+            assertTrue(source.switchVariant(0), "the two representations share their segments")
+            assertEquals(0, source.selectedVariant)
+            // On from where the reader is, as the engine does: no seek, and the same decoder.
+            val after = source.picturesBetween(decoder, from = null, until = 12.0)
+            val all = (before + after).sortedBy { it.first }
+            val steps = all.map { it.first }.zipWithNext { a, b -> b - a }
+            assertTrue(steps.all { it in 0.030..0.037 }, "a picture is missing or shown twice: ${steps.filter { it !in 0.030..0.037 }}")
+            val small = all.indexOfFirst { it.second == VideoSize(320, 180) }
+            assertTrue(small > 0, "no picture of the smaller representation was decoded")
+            assertEquals(setOf(VideoSize(640, 360)), all.take(small).map { it.second }.toSet())
+            assertEquals(setOf(VideoSize(320, 180)), all.drop(small).map { it.second }.toSet(), "once it changed, it stays")
+            assertEquals(0.0, all[small].first % 2.0, 0.04, "the change is at a segment's first picture")
+            assertTrue(all[small].first <= 8.0, "the change waited until ${all[small].first} s")
+            assertEquals(1, asked.count { it == "separate.mpd" }, "the manifest was read once, so the stream did not open again: $asked")
+            // The seek to the start read the first segment a second time.
+            val segments = asked.filter { it.startsWith("separate-0-0") || it.startsWith("separate-1-0") }.distinct()
+            assertEquals(segments.distinctBy { it.substringAfterLast('-') }, segments, "each segment was read from one representation only")
+        } finally {
+            decoder.close()
+        }
+    }
+
+    @Test
     fun aPeriodOfAnotherSizeDecodesAtItsOwnSizeAndTheOnesAroundItAtTheirs() = withSource("periods.mpd") { source ->
         val video = source.streams.first { it.kind == TrackKind.Video }
         // One decoder across every seek, as the engine keeps one, so it carries each Period's
@@ -494,13 +523,14 @@ class DashThroughHlsTest {
 
     /**
      * Each picture [decoder] gives from the keyframe before [from] seconds to [until], with its time
-     * and size. A [generation] above the first flushes it first, as the engine does at a seek.
+     * and size. A [generation] above the first flushes it first, as the engine does at a seek. With no
+     * [from] it reads on from where the source is.
      */
-    private suspend fun PlayerMediaSource.picturesBetween(decoder: VideoDecoder, from: Double, until: Double, generation: Long = 1): List<Pair<Double, VideoSize>> {
+    private suspend fun PlayerMediaSource.picturesBetween(decoder: VideoDecoder, from: Double?, until: Double, generation: Long = 1): List<Pair<Double, VideoSize>> {
         val video = streams.first { it.kind == TrackKind.Video }
         val out = ArrayList<Pair<Double, VideoSize>>()
         if (generation > 1) decoder.flush(Generation(generation))
-        seekToKeyframe(Pts((from * 1e6).toLong()))
+        if (from != null) seekToKeyframe(Pts((from * 1e6).toLong()))
         suspend fun drain() {
             while (true) decoder.receive()?.use { out += it.pts.micros / 1e6 to it.size } ?: break
         }

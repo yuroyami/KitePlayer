@@ -14,7 +14,9 @@ internal object Mp4Bytes {
 
     /**
      * An initialization segment of one track: [trackId], [timescale], the [handler] type, a sample
-     * entry of type [sampleEntry], and trex defaults of [defaultDuration] and [defaultSize].
+     * entry of type [sampleEntry], and trex defaults of [defaultDuration] and [defaultSize]. [edits]
+     * are the entries of an edit list, each a length in [movieTimescale] and a start in the media,
+     * which is -1 for an empty edit.
      */
     fun init(
         trackId: Long,
@@ -24,15 +26,19 @@ internal object Mp4Bytes {
         defaultDuration: Long = 0,
         defaultSize: Long = 0,
         entry: ByteArray = box(sampleEntry, ByteArray(8)),
+        edits: List<Pair<Long, Long>> = emptyList(),
+        movieTimescale: Long = 0,
     ): ByteArray {
         val tkhd = fullBox("tkhd", 0, 3, u32(0) + u32(0) + u32(trackId) + ByteArray(68))
         val mdhd = fullBox("mdhd", 0, 0, u32(0) + u32(0) + u32(timescale) + u32(0) + ByteArray(4))
         val hdlr = fullBox("hdlr", 0, 0, u32(0) + handler.encodeToByteArray() + ByteArray(12) + byteArrayOf(0))
         val stsd = fullBox("stsd", 0, 0, u32(1) + entry)
         val minf = box("minf", box("stbl", stsd))
-        val trak = box("trak", tkhd + box("mdia", mdhd + hdlr + minf))
+        val elst = fullBox("elst", 0, 0, u32(edits.size.toLong()) + edits.fold(ByteArray(0)) { all, (length, start) -> all + u32(length) + u32(start) + u32(0x10000) })
+        val edts = if (edits.isEmpty()) ByteArray(0) else box("edts", elst)
+        val trak = box("trak", tkhd + edts + box("mdia", mdhd + hdlr + minf))
         val trex = fullBox("trex", 0, 0, u32(trackId) + u32(1) + u32(defaultDuration) + u32(defaultSize) + u32(0))
-        return box("ftyp", "iso6".encodeToByteArray() + u32(0)) + box("moov", fullBox("mvhd", 0, 0, ByteArray(96)) + trak + box("mvex", trex))
+        return box("ftyp", "iso6".encodeToByteArray() + u32(0)) + box("moov", fullBox("mvhd", 0, 0, ByteArray(8) + u32(movieTimescale) + ByteArray(84)) + trak + box("mvex", trex))
     }
 
     /** One sample: its duration, or null to lean on the defaults, its bytes, and its flags and composition offset when stated. */
@@ -45,6 +51,21 @@ internal object Mp4Bytes {
             byteArrayOf(1, (pps.size shr 8).toByte(), pps.size.toByte()) + pps
         // The 78 bytes of a visual sample entry's own fields, then its boxes.
         return box("avc1", ByteArray(78) + box("avcC", avcC))
+    }
+
+    /**
+     * An `mp4a` sample entry of [channels] channels at [sampleRate], whose `esds` states the bit
+     * rate [bitRate] and hands the decoder [setup].
+     */
+    fun mp4a(channels: Int = 2, sampleRate: Int = 48_000, bitRate: Long = 96_000, setup: ByteArray = byteArrayOf(0x11, 0x90.toByte())): ByteArray {
+        val specific = byteArrayOf(0x05, setup.size.toByte()) + setup
+        // The object type of AAC, an audio stream, a buffer size, then the largest and the average bit rate.
+        val config = byteArrayOf(0x40, 0x15, 0, 0, 0) + u32(bitRate) + u32(bitRate) + specific
+        val stream = byteArrayOf(0, 1, 0) + byteArrayOf(0x04, config.size.toByte()) + config + byteArrayOf(0x06, 1, 2)
+        val esds = fullBox("esds", 0, 0, byteArrayOf(0x03, stream.size.toByte()) + stream)
+        // Six reserved bytes and a data reference, eight reserved bytes, channels, sample size, four more, the rate.
+        val fields = ByteArray(6) + byteArrayOf(0, 1) + ByteArray(8) + byteArrayOf(0, channels.toByte(), 0, 16) + ByteArray(4) + u32(sampleRate.toLong() shl 16)
+        return box("mp4a", fields + esds + box("btrt", u32(0) + u32(bitRate) + u32(bitRate)))
     }
 
     /**

@@ -1743,6 +1743,10 @@ final class io.github.yuroyami.kiteplayer.audio/LoudnessResult { // io.github.yu
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.audio/LoudnessResult.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.mp4/Fmp4UnsupportedException : kotlin/IllegalArgumentException { // io.github.yuroyami.kiteplayer.mp4/Fmp4UnsupportedException|null[0]
+    constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.mp4/Fmp4UnsupportedException.<init>|<init>(kotlin.String){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.spi/AudioFormat { // io.github.yuroyami.kiteplayer.spi/AudioFormat|null[0]
     constructor <init>(kotlin/Int, kotlin/Int, io.github.yuroyami.kiteplayer.spi/SampleFormat, io.github.yuroyami.kiteplayer.spi/ChannelLayout = ..., kotlin/Long? = ...) // io.github.yuroyami.kiteplayer.spi/AudioFormat.<init>|<init>(kotlin.Int;kotlin.Int;io.github.yuroyami.kiteplayer.spi.SampleFormat;io.github.yuroyami.kiteplayer.spi.ChannelLayout;kotlin.Long?){}[0]
 
@@ -5701,6 +5705,108 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(kotlin/Int = ..., kotlin/Int = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.copy|copy(kotlin.Int;kotlin.Int;kotlin.String){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.VariantLowered.hashCode|hashCode(){}[0]
+    }
+}
+
+final object io.github.yuroyami.kiteplayer.mp4/Fmp4 { // io.github.yuroyami.kiteplayer.mp4/Fmp4|null[0]
+    final const val MAX_SAMPLES_PER_SEGMENT // io.github.yuroyami.kiteplayer.mp4/Fmp4.MAX_SAMPLES_PER_SEGMENT|{}MAX_SAMPLES_PER_SEGMENT[0]
+        final fun <get-MAX_SAMPLES_PER_SEGMENT>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.MAX_SAMPLES_PER_SEGMENT.<get-MAX_SAMPLES_PER_SEGMENT>|<get-MAX_SAMPLES_PER_SEGMENT>(){}[0]
+    final const val NON_SYNC // io.github.yuroyami.kiteplayer.mp4/Fmp4.NON_SYNC|{}NON_SYNC[0]
+        final fun <get-NON_SYNC>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.NON_SYNC.<get-NON_SYNC>|<get-NON_SYNC>(){}[0]
+
+    final fun boxes(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin.collections/List<io.github.yuroyami.kiteplayer.mp4/Fmp4.Box> // io.github.yuroyami.kiteplayer.mp4/Fmp4.boxes|boxes(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final fun fragments(kotlin/ByteArray, io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, kotlin/Long = ...): kotlin.collections/List<io.github.yuroyami.kiteplayer.mp4/Fmp4.Fragment> // io.github.yuroyami.kiteplayer.mp4/Fmp4.fragments|fragments(kotlin.ByteArray;io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;kotlin.Long){}[0]
+    final fun samples(kotlin/ByteArray, io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, kotlin/Long = ...): kotlin.collections/List<io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample> // io.github.yuroyami.kiteplayer.mp4/Fmp4.samples|samples(kotlin.ByteArray;io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;kotlin.Long){}[0]
+    final fun tracks(kotlin/ByteArray): kotlin.collections/List<io.github.yuroyami.kiteplayer.mp4/Fmp4.Track> // io.github.yuroyami.kiteplayer.mp4/Fmp4.tracks|tracks(kotlin.ByteArray){}[0]
+    final fun u32(kotlin/ByteArray, kotlin/Int): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.u32|u32(kotlin.ByteArray;kotlin.Int){}[0]
+    final fun u64(kotlin/ByteArray, kotlin/Int): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.u64|u64(kotlin.ByteArray;kotlin.Int){}[0]
+
+    final class Box { // io.github.yuroyami.kiteplayer.mp4/Fmp4.Box|null[0]
+        constructor <init>(kotlin/String, kotlin/Int, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.mp4/Fmp4.Box.<init>|<init>(kotlin.String;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+
+        final val dataStart // io.github.yuroyami.kiteplayer.mp4/Fmp4.Box.dataStart|{}dataStart[0]
+            final fun <get-dataStart>(): kotlin/Int // io.github.yuroyami.kiteplayer.mp4/Fmp4.Box.dataStart.<get-dataStart>|<get-dataStart>(){}[0]
+        final val end // io.github.yuroyami.kiteplayer.mp4/Fmp4.Box.end|{}end[0]
+            final fun <get-end>(): kotlin/Int // io.github.yuroyami.kiteplayer.mp4/Fmp4.Box.end.<get-end>|<get-end>(){}[0]
+        final val start // io.github.yuroyami.kiteplayer.mp4/Fmp4.Box.start|{}start[0]
+            final fun <get-start>(): kotlin/Int // io.github.yuroyami.kiteplayer.mp4/Fmp4.Box.start.<get-start>|<get-start>(){}[0]
+        final val type // io.github.yuroyami.kiteplayer.mp4/Fmp4.Box.type|{}type[0]
+            final fun <get-type>(): kotlin/String // io.github.yuroyami.kiteplayer.mp4/Fmp4.Box.type.<get-type>|<get-type>(){}[0]
+    }
+
+    final class Fragment { // io.github.yuroyami.kiteplayer.mp4/Fmp4.Fragment|null[0]
+        constructor <init>(kotlin/Long, kotlin.collections/List<io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample>) // io.github.yuroyami.kiteplayer.mp4/Fmp4.Fragment.<init>|<init>(kotlin.Long;kotlin.collections.List<io.github.yuroyami.kiteplayer.mp4.Fmp4.Sample>){}[0]
+
+        final val samples // io.github.yuroyami.kiteplayer.mp4/Fmp4.Fragment.samples|{}samples[0]
+            final fun <get-samples>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample> // io.github.yuroyami.kiteplayer.mp4/Fmp4.Fragment.samples.<get-samples>|<get-samples>(){}[0]
+        final val sequence // io.github.yuroyami.kiteplayer.mp4/Fmp4.Fragment.sequence|{}sequence[0]
+            final fun <get-sequence>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Fragment.sequence.<get-sequence>|<get-sequence>(){}[0]
+    }
+
+    final class Sample { // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample|null[0]
+        constructor <init>(kotlin/Long, kotlin/Long, kotlin/Long, kotlin/ByteArray, kotlin/Long = ...) // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.<init>|<init>(kotlin.Long;kotlin.Long;kotlin.Long;kotlin.ByteArray;kotlin.Long){}[0]
+
+        final val compositionOffset // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.compositionOffset|{}compositionOffset[0]
+            final fun <get-compositionOffset>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.compositionOffset.<get-compositionOffset>|<get-compositionOffset>(){}[0]
+        final val data // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.data|{}data[0]
+            final fun <get-data>(): kotlin/ByteArray // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.data.<get-data>|<get-data>(){}[0]
+        final val decodeTime // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.decodeTime|{}decodeTime[0]
+            final fun <get-decodeTime>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.decodeTime.<get-decodeTime>|<get-decodeTime>(){}[0]
+        final val duration // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.duration|{}duration[0]
+            final fun <get-duration>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.duration.<get-duration>|<get-duration>(){}[0]
+        final val flags // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.flags|{}flags[0]
+            final fun <get-flags>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.flags.<get-flags>|<get-flags>(){}[0]
+        final val isSync // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.isSync|{}isSync[0]
+            final fun <get-isSync>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.mp4/Fmp4.Sample.isSync.<get-isSync>|<get-isSync>(){}[0]
+    }
+
+    final class Track { // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track|null[0]
+        constructor <init>(kotlin/Long, kotlin/Long, kotlin/String?, kotlin/String?, kotlin/Long, kotlin/Long, kotlin/Long = ..., kotlin/ByteArray? = ..., kotlin/Long = ...) // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.<init>|<init>(kotlin.Long;kotlin.Long;kotlin.String?;kotlin.String?;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.ByteArray?;kotlin.Long){}[0]
+
+        final val defaultDuration // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.defaultDuration|{}defaultDuration[0]
+            final fun <get-defaultDuration>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.defaultDuration.<get-defaultDuration>|<get-defaultDuration>(){}[0]
+        final val defaultFlags // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.defaultFlags|{}defaultFlags[0]
+            final fun <get-defaultFlags>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.defaultFlags.<get-defaultFlags>|<get-defaultFlags>(){}[0]
+        final val defaultSize // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.defaultSize|{}defaultSize[0]
+            final fun <get-defaultSize>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.defaultSize.<get-defaultSize>|<get-defaultSize>(){}[0]
+        final val handler // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.handler|{}handler[0]
+            final fun <get-handler>(): kotlin/String? // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.handler.<get-handler>|<get-handler>(){}[0]
+        final val id // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.id|{}id[0]
+            final fun <get-id>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.id.<get-id>|<get-id>(){}[0]
+        final val sampleEntry // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.sampleEntry|{}sampleEntry[0]
+            final fun <get-sampleEntry>(): kotlin/String? // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.sampleEntry.<get-sampleEntry>|<get-sampleEntry>(){}[0]
+        final val sampleEntryBytes // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.sampleEntryBytes|{}sampleEntryBytes[0]
+            final fun <get-sampleEntryBytes>(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.sampleEntryBytes.<get-sampleEntryBytes>|<get-sampleEntryBytes>(){}[0]
+        final val timeOffset // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.timeOffset|{}timeOffset[0]
+            final fun <get-timeOffset>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.timeOffset.<get-timeOffset>|<get-timeOffset>(){}[0]
+        final val timescale // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.timescale|{}timescale[0]
+            final fun <get-timescale>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4.Track.timescale.<get-timescale>|<get-timescale>(){}[0]
+    }
+}
+
+final object io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite { // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite|null[0]
+    final fun inBandParameterSets(io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, io.github.yuroyami.kiteplayer.mp4/Fmp4.Track): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.inBandParameterSets|inBandParameterSets(io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;io.github.yuroyami.kiteplayer.mp4.Fmp4.Track){}[0]
+    final fun joins(io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, io.github.yuroyami.kiteplayer.mp4/Fmp4.Track): kotlin/Boolean // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.joins|joins(io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;io.github.yuroyami.kiteplayer.mp4.Fmp4.Track){}[0]
+    final fun micros(kotlin/Long, kotlin/Long): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.micros|micros(kotlin.Long;kotlin.Long){}[0]
+    final fun rewrite(kotlin/ByteArray, io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan): kotlin/ByteArray // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.rewrite|rewrite(kotlin.ByteArray;io.github.yuroyami.kiteplayer.mp4.Fmp4Rewrite.Plan){}[0]
+    final fun rewrite(kotlin/ByteArray, kotlin.collections/List<io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan>): kotlin/ByteArray // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.rewrite|rewrite(kotlin.ByteArray;kotlin.collections.List<io.github.yuroyami.kiteplayer.mp4.Fmp4Rewrite.Plan>){}[0]
+    final fun sameCodec(io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, io.github.yuroyami.kiteplayer.mp4/Fmp4.Track): kotlin/Boolean // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.sameCodec|sameCodec(io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;io.github.yuroyami.kiteplayer.mp4.Fmp4.Track){}[0]
+    final fun sameLayout(io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, io.github.yuroyami.kiteplayer.mp4/Fmp4.Track): kotlin/Boolean // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.sameLayout|sameLayout(io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;io.github.yuroyami.kiteplayer.mp4.Fmp4.Track){}[0]
+    final fun ticks(kotlin/Long, kotlin/Long): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.ticks|ticks(kotlin.Long;kotlin.Long){}[0]
+
+    final class Plan { // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan|null[0]
+        constructor <init>(io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, io.github.yuroyami.kiteplayer.mp4/Fmp4.Track, kotlin/Long, kotlin/Long?, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.<init>|<init>(io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;io.github.yuroyami.kiteplayer.mp4.Fmp4.Track;kotlin.Long;kotlin.Long?;kotlin.Boolean){}[0]
+
+        final val endMicros // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.endMicros|{}endMicros[0]
+            final fun <get-endMicros>(): kotlin/Long? // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.endMicros.<get-endMicros>|<get-endMicros>(){}[0]
+        final val joined // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.joined|{}joined[0]
+            final fun <get-joined>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.joined.<get-joined>|<get-joined>(){}[0]
+        final val shiftMicros // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.shiftMicros|{}shiftMicros[0]
+            final fun <get-shiftMicros>(): kotlin/Long // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.shiftMicros.<get-shiftMicros>|<get-shiftMicros>(){}[0]
+        final val source // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.source|{}source[0]
+            final fun <get-source>(): io.github.yuroyami.kiteplayer.mp4/Fmp4.Track // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.source.<get-source>|<get-source>(){}[0]
+        final val target // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.target|{}target[0]
+            final fun <get-target>(): io.github.yuroyami.kiteplayer.mp4/Fmp4.Track // io.github.yuroyami.kiteplayer.mp4/Fmp4Rewrite.Plan.target.<get-target>|<get-target>(){}[0]
     }
 }
 

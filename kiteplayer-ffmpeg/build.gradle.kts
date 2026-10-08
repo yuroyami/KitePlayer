@@ -95,6 +95,8 @@ kotlin {
     }
 
     sourceSets {
+        // The fragmented MP4 rewriter is shared with kiteplayer-network behind this marker (#464).
+        all { languageSettings.optIn("io.github.yuroyami.kiteplayer.KitePlayerInternalApi") }
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
             // The text subtitle parsers. Pure Kotlin; the decoder below is a thin shim

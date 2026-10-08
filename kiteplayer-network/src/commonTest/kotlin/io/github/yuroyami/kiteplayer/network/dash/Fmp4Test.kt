@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
+import io.github.yuroyami.kiteplayer.mp4.Fmp4
+import io.github.yuroyami.kiteplayer.mp4.Fmp4UnsupportedException
 import io.github.yuroyami.kiteplayer.network.dash.Mp4Bytes.Sample
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -47,14 +49,14 @@ class Fmp4Test {
         // A few dozen bytes that ask for four billion samples of no bytes each (#474).
         val segment = Mp4Bytes.defaultRuns(1, listOf(0xFFFF_FFFFL))
         assertTrue(segment.size < 100, "the segment is ${segment.size} bytes")
-        assertFailsWith<DashUnsupportedException> { Fmp4.fragments(segment, defaultsTrack()) }
+        assertFailsWith<Fmp4UnsupportedException> { Fmp4.fragments(segment, defaultsTrack()) }
     }
 
     @Test
     fun theBudgetCountsEveryRunOfTheSegment() {
         val track = defaultsTrack()
         assertEquals(10, Fmp4.samples(Mp4Bytes.defaultRuns(1, listOf(4, 6)), track, maxSamples = 10).size)
-        assertFailsWith<DashUnsupportedException> { Fmp4.samples(Mp4Bytes.defaultRuns(1, listOf(5, 6)), track, maxSamples = 10) }
+        assertFailsWith<Fmp4UnsupportedException> { Fmp4.samples(Mp4Bytes.defaultRuns(1, listOf(5, 6)), track, maxSamples = 10) }
     }
 
     @Test
@@ -102,5 +104,18 @@ class Fmp4Test {
     fun anotherTracksFragmentGivesNoSample() {
         val track = Fmp4.tracks(Mp4Bytes.init(trackId = 1, timescale = 1000, handler = "subt", sampleEntry = "stpp")).single()
         assertEquals(emptyList(), Fmp4.samples(Mp4Bytes.segment(2, decodeTime = 0, listOf(Sample(1000, byteArrayOf(1)))), track))
+    }
+
+    @Test
+    fun anEditListGivesTheTrackItsTimeOffsetAsFFmpegWorksItOut() {
+        fun offset(vararg edits: Pair<Long, Long>, movieTimescale: Long = 1000) =
+            Fmp4.tracks(Mp4Bytes.init(1, 15_360, "vide", "avc1", edits = edits.toList(), movieTimescale = movieTimescale)).single().timeOffset
+        assertEquals(0L, offset(), "no edit list")
+        assertEquals(1024L, offset(0L to 1024L), "one edit that starts two frames into the media")
+        // An empty edit of 66 ms of the movie is 1013 ticks of the media, which count the other way.
+        assertEquals(11L, offset(66L to -1L, 0L to 1024L))
+        assertEquals(-1013L, offset(66L to -1L, 0L to 0L))
+        assertEquals(0L, offset(0L to 1024L, 0L to 4096L), "FFmpeg applies no offset for a list of more edits")
+        assertEquals(0L, offset(66L to -1L, 0L to 1024L, movieTimescale = 0), "nor without a movie timescale")
     }
 }

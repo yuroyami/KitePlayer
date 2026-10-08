@@ -1,5 +1,8 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
+import io.github.yuroyami.kiteplayer.mp4.Fmp4
+import io.github.yuroyami.kiteplayer.mp4.Fmp4Rewrite
+import io.github.yuroyami.kiteplayer.mp4.Fmp4UnsupportedException
 import io.github.yuroyami.kiteplayer.network.dash.Mp4Bytes.Sample
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -32,7 +35,7 @@ class Fmp4RewriteTest {
         val init = track(Mp4Bytes.init(1, 1000, "soun", "mp4a"))
         val segment = Mp4Bytes.defaultRuns(1, listOf(0xFFFF_FFFFL))
         assertSame(segment, Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(init, init, shiftMicros = 0, endMicros = null)))
-        assertFailsWith<DashUnsupportedException> {
+        assertFailsWith<Fmp4UnsupportedException> {
             Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(init, init, shiftMicros = 1_000, endMicros = null))
         }
     }
@@ -52,7 +55,7 @@ class Fmp4RewriteTest {
         val avc = track(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = avcA))
         val hevc = track(Mp4Bytes.init(1, 1000, "vide", "hvc1"))
         val segment = Mp4Bytes.segment(1, 0, listOf(Sample(1000, byteArrayOf(1), sync)))
-        assertFailsWith<DashUnsupportedException> { Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(hevc, avc, 0, null)) }
+        assertFailsWith<Fmp4UnsupportedException> { Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(hevc, avc, 0, null)) }
         val avc3 = track(Mp4Bytes.init(1, 1000, "vide", "avc3", entry = avcA.copyOf().also { "avc3".encodeToByteArray().copyInto(it, 4) }))
         Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(avc3, avc, 0, null))
     }
@@ -140,5 +143,116 @@ class Fmp4RewriteTest {
         val source = track(Mp4Bytes.init(1, 1000, "vide", "dva1", entry = dva1))
         val target = track(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = avcA))
         assertContentEquals(byteArrayOf(0, 0, 0, 2, 0x67, 3, 0, 0, 0, 2, 0x68, 3), Fmp4Rewrite.inBandParameterSets(source, target))
+    }
+
+    @Test
+    fun eachTrackOfASegmentIsWrittenForItsOwnTarget() {
+        // Pictures and sound in one segment, as a muxed HLS variant has them (#464).
+        val picture = track(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = avcB))
+        val sound = track(Mp4Bytes.init(2, 48_000, "soun", "mp4a"))
+        val firstPicture = track(Mp4Bytes.init(5, 1000, "vide", "avc1", entry = avcA))
+        val firstSound = track(Mp4Bytes.init(6, 48_000, "soun", "mp4a"))
+        val segment = Mp4Bytes.segment(1, 4000, listOf(Sample(40, byteArrayOf(9), sync), Sample(40, byteArrayOf(8), nonSync))) +
+            Mp4Bytes.segment(2, 192_000, listOf(Sample(1024, byteArrayOf(7))))
+        val written = Fmp4Rewrite.rewrite(
+            segment,
+            listOf(Fmp4Rewrite.Plan(picture, firstPicture, 0, null), Fmp4Rewrite.Plan(sound, firstSound, 0, null)),
+        )
+        val pictures = Fmp4.samples(written, firstPicture)
+        assertEquals(listOf(4000L, 4040L), pictures.map { it.decodeTime })
+        assertContentEquals(byteArrayOf(0, 0, 0, 4, 0x67, 2, 2, 2, 0, 0, 0, 2, 0x68, 2, 9), pictures[0].data)
+        assertContentEquals(byteArrayOf(8), pictures[1].data)
+        val sounds = Fmp4.samples(written, firstSound)
+        assertEquals(listOf(192_000L), sounds.map { it.decodeTime })
+        assertContentEquals(byteArrayOf(7), sounds.single().data)
+        assertEquals(emptyList(), Fmp4.samples(written, picture) + Fmp4.samples(written, sound), "the segment's own track ids are gone")
+    }
+
+    @Test
+    fun aTrackWithNoPlanIsLeftOutOfAWrittenSegment() {
+        val picture = track(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = avcA))
+        val other = track(Mp4Bytes.init(3, 1000, "meta", "mett"))
+        val segment = Mp4Bytes.segment(1, 0, listOf(Sample(40, byteArrayOf(9), sync))) + Mp4Bytes.segment(3, 0, listOf(Sample(40, byteArrayOf(5))))
+        val written = Fmp4Rewrite.rewrite(segment, listOf(Fmp4Rewrite.Plan(picture, picture, 0, null)))
+        assertEquals(1, Fmp4.samples(written, picture).size)
+        assertEquals(emptyList(), Fmp4.samples(written, other))
+    }
+
+    @Test
+    fun timesFollowTheDifferenceOfTheTwoEditLists() {
+        // The reader takes the first initialization's edit offset from every time. The source's
+        // edit starts 80 ms into its media and the target's at once, so each time moves back 80 ms.
+        val source = track(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = avcA, edits = listOf(0L to 80L), movieTimescale = 1000))
+        val target = track(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = avcA))
+        assertEquals(80L, source.timeOffset)
+        val segment = Mp4Bytes.segment(
+            1,
+            4000,
+            listOf(Sample(40, byteArrayOf(1), sync, 80), Sample(40, byteArrayOf(2), nonSync, 160), Sample(40, byteArrayOf(3), nonSync, 0)),
+        )
+        val samples = Fmp4.samples(Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(source, target, 0, null)), target)
+        assertEquals(listOf(3920L, 3960L, 4000L), samples.map { it.decodeTime })
+        assertEquals(listOf(4000L, 4120L, 4000L), samples.map { it.decodeTime + it.compositionOffset }, "each picture shows 80 ms earlier in the media")
+        val back = Fmp4.samples(Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(target, source, 0, null)), source)
+        assertEquals(listOf(4080L, 4120L, 4160L), back.map { it.decodeTime }, "and the other way round, later")
+    }
+
+    @Test
+    fun anEditOffsetIsScaledWhenTheTimescalesDiffer() {
+        val source = track(Mp4Bytes.init(1, 90_000, "vide", "avc1", entry = avcA, edits = listOf(0L to 7200L), movieTimescale = 1000))
+        val target = track(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = avcA, edits = listOf(0L to 30L), movieTimescale = 1000))
+        val segment = Mp4Bytes.segment(1, 360_000, listOf(Sample(3600, byteArrayOf(1), sync, 7200)))
+        val sample = Fmp4.samples(Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(source, target, 0, null)), target).single()
+        // 4000 ms, less the source's 80 ms, plus the 30 ms the reader will take away.
+        assertEquals(3950L, sample.decodeTime)
+        assertEquals(80L, sample.compositionOffset)
+    }
+
+    @Test
+    fun aJoinedSegmentDecodesNoEarlierThanItsFirstPictureShows() {
+        // Pictures that decode two frames ahead of what they show: I, P, then the two B between them.
+        val init = track(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = avcA))
+        val segment = Mp4Bytes.segment(
+            1,
+            3920,
+            listOf(
+                Sample(40, byteArrayOf(1), sync, 80), Sample(40, byteArrayOf(2), nonSync, 160),
+                Sample(40, byteArrayOf(3), nonSync, 40), Sample(40, byteArrayOf(4), nonSync, 40), Sample(40, byteArrayOf(5), nonSync, 160),
+            ),
+        )
+        val shown = listOf(4000L, 4120L, 4040L, 4080L, 4240L)
+        val plain = Fmp4.samples(Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(init, init, 0, null)), init)
+        assertEquals(listOf(3920L, 3960L, 4000L, 4040L, 4080L), plain.map { it.decodeTime }, "a segment that follows its own stream keeps its decode times")
+        val joined = Fmp4.samples(Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(init, init, 0, null, joined = true)), init)
+        assertEquals(listOf(4000L, 4001L, 4002L, 4040L, 4080L), joined.map { it.decodeTime }, "each rises, from the time the first picture shows")
+        assertEquals(shown, joined.map { it.decodeTime + it.compositionOffset }, "and every picture shows when it did")
+        assertEquals(shown, plain.map { it.decodeTime + it.compositionOffset })
+        assertEquals(4120L, joined.last().decodeTime + joined.last().duration, "the segment ends where it did")
+    }
+
+    @Test
+    fun soundJoinsWhenOnlyItsBitRateDiffers() {
+        fun sound(entry: ByteArray) = track(Mp4Bytes.init(2, 48_000, "soun", "mp4a", entry = entry))
+        val first = sound(Mp4Bytes.mp4a(bitRate = 96_000))
+        assertTrue(Fmp4Rewrite.joins(sound(Mp4Bytes.mp4a(bitRate = 64_000)), first), "the decoder is set up the same way")
+        assertTrue(!Fmp4Rewrite.sameCodec(sound(Mp4Bytes.mp4a(bitRate = 64_000)), first), "though the two entries differ")
+        assertTrue(!Fmp4Rewrite.joins(sound(Mp4Bytes.mp4a(channels = 6)), first), "another channel count")
+        assertTrue(!Fmp4Rewrite.joins(sound(Mp4Bytes.mp4a(sampleRate = 44_100)), first), "another sample rate")
+        assertTrue(!Fmp4Rewrite.joins(sound(Mp4Bytes.mp4a(setup = byteArrayOf(0x12, 0x10))), first), "another decoder setup")
+        assertTrue(!Fmp4Rewrite.joins(track(Mp4Bytes.init(2, 48_000, "soun", "ac-3")), first), "another codec")
+    }
+
+    @Test
+    fun picturesJoinWhenTheirParameterSetsCanTravelInBand() {
+        fun picture(entry: ByteArray, type: String = "avc1") = track(Mp4Bytes.init(1, 1000, "vide", type, entry = entry))
+        val first = picture(avcA)
+        assertTrue(Fmp4Rewrite.joins(picture(avcB), first))
+        val shortLengths = Mp4Bytes.avc1(sps = byteArrayOf(0x67, 2), pps = byteArrayOf(0x68, 2), lengthSize = 2)
+        assertTrue(!Fmp4Rewrite.joins(picture(shortLengths), first), "every NAL unit would need its length written again")
+        val hevc = Mp4Bytes.hevcEntry("hvc1", byteArrayOf(0x40), byteArrayOf(0x42), byteArrayOf(0x44))
+        assertTrue(!Fmp4Rewrite.joins(picture(hevc, "hvc1"), first), "another codec")
+        val vp9 = track(Mp4Bytes.init(1, 1000, "vide", "vp09", entry = Mp4Bytes.box("vp09", ByteArray(78) + byteArrayOf(1))))
+        val otherVp9 = track(Mp4Bytes.init(1, 1000, "vide", "vp09", entry = Mp4Bytes.box("vp09", ByteArray(78) + byteArrayOf(2))))
+        assertTrue(Fmp4Rewrite.joins(vp9, vp9) && !Fmp4Rewrite.joins(otherVp9, vp9), "a codec with no parameter sets needs the same configuration")
     }
 }

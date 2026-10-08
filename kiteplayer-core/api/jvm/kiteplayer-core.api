@@ -3266,6 +3266,85 @@ public final class io/github/yuroyami/kiteplayer/audio/LoudnessResult {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/mp4/Fmp4 {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/mp4/Fmp4;
+	public static final field MAX_SAMPLES_PER_SEGMENT J
+	public static final field NON_SYNC J
+	public final fun boxes ([BII)Ljava/util/List;
+	public final fun fragments ([BLio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;J)Ljava/util/List;
+	public static synthetic fun fragments$default (Lio/github/yuroyami/kiteplayer/mp4/Fmp4;[BLio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;JILjava/lang/Object;)Ljava/util/List;
+	public final fun samples ([BLio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;J)Ljava/util/List;
+	public static synthetic fun samples$default (Lio/github/yuroyami/kiteplayer/mp4/Fmp4;[BLio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;JILjava/lang/Object;)Ljava/util/List;
+	public final fun tracks ([B)Ljava/util/List;
+	public final fun u32 ([BI)J
+	public final fun u64 ([BI)J
+}
+
+public final class io/github/yuroyami/kiteplayer/mp4/Fmp4$Box {
+	public fun <init> (Ljava/lang/String;III)V
+	public final fun getDataStart ()I
+	public final fun getEnd ()I
+	public final fun getStart ()I
+	public final fun getType ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/mp4/Fmp4$Fragment {
+	public fun <init> (JLjava/util/List;)V
+	public final fun getSamples ()Ljava/util/List;
+	public final fun getSequence ()J
+}
+
+public final class io/github/yuroyami/kiteplayer/mp4/Fmp4$Sample {
+	public fun <init> (JJJ[BJ)V
+	public synthetic fun <init> (JJJ[BJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCompositionOffset ()J
+	public final fun getData ()[B
+	public final fun getDecodeTime ()J
+	public final fun getDuration ()J
+	public final fun getFlags ()J
+	public final fun isSync ()Z
+}
+
+public final class io/github/yuroyami/kiteplayer/mp4/Fmp4$Track {
+	public fun <init> (JJLjava/lang/String;Ljava/lang/String;JJJ[BJ)V
+	public synthetic fun <init> (JJLjava/lang/String;Ljava/lang/String;JJJ[BJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDefaultDuration ()J
+	public final fun getDefaultFlags ()J
+	public final fun getDefaultSize ()J
+	public final fun getHandler ()Ljava/lang/String;
+	public final fun getId ()J
+	public final fun getSampleEntry ()Ljava/lang/String;
+	public final fun getSampleEntryBytes ()[B
+	public final fun getTimeOffset ()J
+	public final fun getTimescale ()J
+}
+
+public final class io/github/yuroyami/kiteplayer/mp4/Fmp4Rewrite {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/mp4/Fmp4Rewrite;
+	public final fun inBandParameterSets (Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;)[B
+	public final fun joins (Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;)Z
+	public final fun micros (JJ)J
+	public final fun rewrite ([BLio/github/yuroyami/kiteplayer/mp4/Fmp4Rewrite$Plan;)[B
+	public final fun rewrite ([BLjava/util/List;)[B
+	public final fun sameCodec (Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;)Z
+	public final fun sameLayout (Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;)Z
+	public final fun ticks (JJ)J
+}
+
+public final class io/github/yuroyami/kiteplayer/mp4/Fmp4Rewrite$Plan {
+	public fun <init> (Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;JLjava/lang/Long;Z)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;JLjava/lang/Long;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getEndMicros ()Ljava/lang/Long;
+	public final fun getJoined ()Z
+	public final fun getShiftMicros ()J
+	public final fun getSource ()Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;
+	public final fun getTarget ()Lio/github/yuroyami/kiteplayer/mp4/Fmp4$Track;
+}
+
+public final class io/github/yuroyami/kiteplayer/mp4/Fmp4UnsupportedException : java/lang/IllegalArgumentException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioBuffer : java/lang/AutoCloseable {
 	public abstract fun copyChannel (I[FI)V
 	public static synthetic fun copyChannel$default (Lio/github/yuroyami/kiteplayer/spi/AudioBuffer;I[FIILjava/lang/Object;)V

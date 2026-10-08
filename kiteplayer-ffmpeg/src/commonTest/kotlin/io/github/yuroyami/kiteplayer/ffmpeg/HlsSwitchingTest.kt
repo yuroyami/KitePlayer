@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
+import io.github.yuroyami.kiteplayer.mp4.Fmp4
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -254,5 +255,74 @@ class HlsSwitchingTest {
         val reloaded = assertNotNull(switch.open(HlsVariantSwitch.PLAYLIST)).text()
         assertTrue("#EXT-X-MEDIA-SEQUENCE:11" in reloaded, reloaded)
         assertEquals("high 15", assertNotNull(switch.open("https://kite-hls.invalid/segment/15.ts")).text())
+    }
+
+    private fun mp4Box(type: String, payload: ByteArray): ByteArray =
+        byteArrayOf(0, 0, ((8 + payload.size) shr 8).toByte(), (8 + payload.size).toByte()) + type.encodeToByteArray() + payload
+
+    /** An H.264 picture track whose configuration holds [sps], with NAL lengths of [lengthSize] bytes. */
+    private fun pictures(id: Long, sps: Int, lengthSize: Int = 4): Fmp4.Track {
+        val avcC = byteArrayOf(1, 0x64, 0, 0x1F, (0xFC or (lengthSize - 1)).toByte(), 0xE1.toByte(), 0, 2, 0x67, sps.toByte(), 1, 0, 1, 0x68)
+        return Fmp4.Track(id, 15_360, "vide", "avc1", 0, 0, 0, mp4Box("avc1", ByteArray(78) + mp4Box("avcC", avcC)))
+    }
+
+    private fun track(id: Long, handler: String, entry: String, setup: Int = 0): Fmp4.Track =
+        Fmp4.Track(id, 48_000, handler, entry, 0, 0, 0, mp4Box(entry, ByteArray(28) + mp4Box("conf", byteArrayOf(setup.toByte()))))
+
+    @Test
+    fun eachTrackOfAVariantIsWrittenForTheFirstInitializationsTrackOfItsKind() {
+        val base = listOf(pictures(7, sps = 1), track(8, "soun", "mp4a"))
+        val own = listOf(track(1, "soun", "mp4a"), pictures(2, sps = 2))
+        val plans = assertNotNull(HlsVariantSwitch.plansFor(own, base))
+        assertEquals(listOf(2L to 7L, 1L to 8L), plans.map { it.source.id to it.target.id }, "in the order of the first initialization")
+        assertNotNull(HlsVariantSwitch.plansFor(base, base), "the first variant's own segments are written again too")
+    }
+
+    @Test
+    fun noPlanIsMadeForTracksThatCannotStandInForTheFirstOnes() {
+        val base = listOf(pictures(1, sps = 1), track(2, "soun", "mp4a"))
+        assertNull(HlsVariantSwitch.plansFor(listOf(pictures(1, sps = 2)), base), "no sound where the stream began with sound")
+        assertNull(HlsVariantSwitch.plansFor(listOf(pictures(1, sps = 2), pictures(2, sps = 3)), base), "two picture tracks")
+        assertNull(HlsVariantSwitch.plansFor(listOf(pictures(1, sps = 2), track(2, "soun", "mp4a", setup = 9)), base), "sound set up another way")
+        assertNull(HlsVariantSwitch.plansFor(listOf(pictures(1, sps = 2, lengthSize = 2), track(2, "soun", "mp4a")), base), "NAL lengths of another size")
+        assertNull(HlsVariantSwitch.plansFor(listOf(pictures(1, sps = 2), track(2, "soun", "ac-3")), base), "sound in another codec")
+        val titled = base + track(3, "subt", "stpp")
+        assertNull(HlsVariantSwitch.plansFor(titled, titled), "a kind of track the switch does not write")
+        val vp9 = listOf(track(1, "vide", "vp09"))
+        assertNull(HlsVariantSwitch.plansFor(vp9, vp9), "pictures whose parameter sets cannot go in band")
+        assertNull(HlsVariantSwitch.plansFor(emptyList(), emptyList()), "an initialization that is not MP4 has no track")
+    }
+
+    private fun mp4Vod(name: String, extra: String = "") = buildString {
+        append("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:7\n#EXT-X-PLAYLIST-TYPE:VOD\n")
+        append(extra)
+        append("#EXT-X-MAP:URI=\"$name-init.mp4\"\n")
+        for (n in 0..2) append("#EXTINF:2.000000,\n$name-$n.m4s\n")
+        append("#EXT-X-ENDLIST\n")
+    }
+
+    @Test
+    fun anMp4ChangeIsRefusedForEncryptedSegmentsAndForAnInitializationThatIsNotMp4() = runTest {
+        val stream = Stream(files())
+        stream.files["https://cdn.test/low.m3u8"] = mp4Vod("low")
+        stream.files["https://cdn.test/high.m3u8"] = mp4Vod("high")
+        stream.files["https://cdn.test/low-init.mp4"] = "this is no MP4"
+        stream.files["https://cdn.test/high-init.mp4"] = "nor is this"
+        stream.files["https://cdn.test/low-0.m4s"] = "low 0"
+        val switch = switchOver(stream)
+        assertNotNull(switch.open(HlsVariantSwitch.PLAYLIST)).close()
+        assertFalse(switch.request(1), "no track can be read from the first initialization")
+        assertTrue("https://cdn.test/low-init.mp4" in stream.asked, "which was read to find that out")
+        assertEquals(0, switch.selected)
+        assertEquals("low 0", assertNotNull(switch.open("https://kite-hls.invalid/segment/7.m4s")).text(), "the stream goes on as it was")
+
+        val key = "#EXT-X-KEY:METHOD=AES-128,URI=\"key\"\n"
+        val locked = Stream(files())
+        locked.files["https://cdn.test/low.m3u8"] = mp4Vod("low", key)
+        locked.files["https://cdn.test/high.m3u8"] = mp4Vod("high", key)
+        val other = switchOver(locked)
+        assertNotNull(other.open(HlsVariantSwitch.PLAYLIST)).close()
+        assertFalse(other.request(1), "an encrypted segment is decrypted after the switch served it")
+        assertFalse(locked.asked.any { it.endsWith(".mp4") }, "so no initialization is even read")
     }
 }

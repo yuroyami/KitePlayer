@@ -3,6 +3,8 @@ package io.github.yuroyami.kiteplayer.network.dash
 import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.PlaybackWarning
+import io.github.yuroyami.kiteplayer.mp4.Fmp4
+import io.github.yuroyami.kiteplayer.mp4.Fmp4Rewrite
 import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
 import io.github.yuroyami.kiteplayer.network.shownUri
 import kotlinx.coroutines.CancellationException
@@ -331,7 +333,7 @@ internal class DashHlsMediaIo(
                         bytes
                     } else {
                         val target = lock.withLock { baseTracks.getOrPut(piece.track.address) { source } }
-                        Fmp4Rewrite.rewrite(bytes, Fmp4Rewrite.Plan(source, target, piece.shiftMicros, piece.endMicros))
+                        dashFmp4 { Fmp4Rewrite.rewrite(bytes, Fmp4Rewrite.Plan(source, target, piece.shiftMicros, piece.endMicros)) }
                     }
                 }
                 DashContainer.Webm -> {

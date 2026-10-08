@@ -389,6 +389,15 @@ Each line is something that bit someone. Delete a line when it stops being true.
   written into it later is never seen. A variant change in place therefore serves each segment at
   an address of the player's own, and decides which variant's bytes it gives when FFmpeg asks for
   them (#464).
+- FFmpeg's MP4 reader marks a sample of a fragment to be dropped after decoding when its decode
+  time does not pass the last one of the fragment before, as an overlap of two fragments. A
+  stream with B-frames decodes ahead of what it shows, so its first fragment after a join with a
+  stream that has none lost two pictures, with every packet still arriving. `Fmp4Rewrite.Plan.joined`
+  holds decode times at the segment's first shown time. MPEG-TS has no such rule (#464).
+- FFmpeg's MP4 reader takes the first initialization's edit list offset from every time of a
+  fragment, whatever initialization the fragment was made for. Two variants of one ladder differ
+  there when only one has B-frames, by two frames in the fixture, so `Fmp4Rewrite` moves each
+  time by the difference (#464).
 - FFmpeg's MP4 reader keeps the first `moov` it sees and skips every later one, and a decoder keeps
   the last H.264 or HEVC parameter sets it was given. So every fMP4 segment of a joined DASH
   presentation carries its own Period's parameter sets in band, even a Period whose

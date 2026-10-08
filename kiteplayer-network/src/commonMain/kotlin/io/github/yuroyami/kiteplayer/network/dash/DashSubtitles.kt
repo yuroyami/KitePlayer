@@ -1,5 +1,15 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
+import io.github.yuroyami.kiteplayer.mp4.Fmp4
+import io.github.yuroyami.kiteplayer.mp4.Fmp4UnsupportedException
+
+/** Runs [block], and states a fragment the MP4 reader refuses as this tier's own refusal. */
+internal inline fun <T> dashFmp4(block: () -> T): T = try {
+    block()
+} catch (refused: Fmp4UnsupportedException) {
+    throw DashUnsupportedException(refused.message ?: "the MP4 fragment cannot be read")
+}
+
 /**
  * The subtitle samples of a DASH presentation as cues (#402): TTML in MP4 (`stpp`) and WebVTT in
  * MP4 (`wvtt`), ISO/IEC 14496-30, whose segments FFmpeg's HLS reader cannot take, because it opens
@@ -18,7 +28,7 @@ internal object DashSubtitles {
     fun mp4Cues(init: ByteArray, segment: ByteArray): List<TimedCue> {
         val track = Fmp4.tracks(init).firstOrNull() ?: throw DashUnsupportedException("the subtitle initialization has no track")
         val out = ArrayList<TimedCue>()
-        for (sample in Fmp4.samples(segment, track)) {
+        for (sample in dashFmp4 { Fmp4.samples(segment, track) }) {
             val start = micros(sample.decodeTime + sample.compositionOffset, track.timescale)
             val end = micros(sample.decodeTime + sample.compositionOffset + sample.duration, track.timescale)
             val cues = when (track.sampleEntry) {

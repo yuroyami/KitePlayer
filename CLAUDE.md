@@ -255,6 +255,15 @@ Each line is something that bit someone. Delete a line when it stops being true.
   AGP 9.4.1; `help` alone shows nothing, a wasmJs task must be in the graph. Nothing here is
   workable. At the next Dokka bump, look for `setVisible` in its plugin jar first; measure again
   only if the call is gone.
+- Dokka stays on 2.2.0 here while the sibling builds with 2.3.0-Beta. On 2.3.0-Beta the API site
+  failed in `kiteplayer-output` with 24 unresolved links, all in documentation that its Apple
+  renderers and `CoreAudioSink` inherit from interfaces in `kiteplayer-core`, such as
+  `[RendererEvent.SurfaceLost]` and `[capacityFrames]`. The same inherited links resolve on the
+  JVM, Android and the web. Only a Mac reproduces it: `./gradlew
+  :kiteplayer-output:dokkaGeneratePublicationHtml`. CI's publish check stages four other modules,
+  so CI stays green while a real publish of `kiteplayer-output` would fail on the same warnings.
+  2.3.0-Beta also analyses a source set the JVM and Android share with no classpath; the
+  `jvmAndAndroidMain` classpath lines in five modules answer that and are harmless on 2.2.0.
 - From Kotlin 2.4.20, ABI validation also writes an Android dump for each module, under
   `api/android/`, so the Android public API is guarded too. A Kotlin bump can add lines to every
   dump at once: 2.4.20 adds a no-argument JVM constructor to each class whose parameters all have

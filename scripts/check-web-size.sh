@@ -16,7 +16,7 @@
 # HLS reader so that a nested opener can play HLS and DASH in a browser, and the readers that 0.5.0
 # added beside it, from the Dolby Vision RPU to Matroska editions (#523).
 #
-# The worker budget is 0.61 MiB (#554). It was 0.53 MiB, the 0.50 MiB that the binary measured once
+# The worker budget was 0.61 MiB (#554), and 0.53 MiB before: the 0.50 MiB the binary measured once
 # its zip took Binaryen's optimised build and the worker stopped linking the network transport it
 # never asks (#519), with a little room. That measurement used a local KiteFFmpeg 0.5.0 build from
 # before the release; the same commit built against the released 0.5.0 measures 537,689 bytes. On
@@ -27,6 +27,12 @@
 # pictures, turned pictures, late streams), the largest under 5 KB. Until #519 the zip held the
 # compiler's unoptimised output instead, 1.21 MiB when it first shipped and 1.49 MiB by then,
 # against a budget of 1.25 MiB.
+#
+# The worker budget is now 0.62 MiB. On 2026-10-08 the worker measured 643,266 bytes, 11,550 more
+# than the 631,716 of the run before it. Three features came between the two: text subtitles drawn
+# on the web canvas (#559), the audio output that reopens when the route changes its channel count
+# (#563), and the red flash rule of the flash guard (#561). The binary grew by 7,577 bytes and the
+# JavaScript beside it by 3,973, which is the subtitle drawing and the longer flash measure.
 #
 # Both budgets are ratchets: a new KiteFFmpeg pin, or player code, that grows a module past its
 # budget fails here, and raising a budget is a decision made in the same commit, with both numbers
@@ -42,8 +48,8 @@ cd "$ROOT"
 
 # 1.47 MiB.
 BUDGET_BYTES=1541407
-# 0.61 MiB.
-WORKER_BUDGET_BYTES=639631
+# 0.62 MiB.
+WORKER_BUDGET_BYTES=650117
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...

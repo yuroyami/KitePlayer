@@ -68,6 +68,39 @@ class AppleSubtitleRasterizerTest {
         )
     }
 
+    /**
+     * Two TTML paragraphs in one region, drawn by CoreText (#492): they stack in document order
+     * inside the region's padding, sit at its bottom, and the region's background lies under them.
+     * A long paragraph breaks its lines at the region's inner width.
+     */
+    @Test
+    fun paragraphsOfARegionStackInsideItWithRealText() {
+        val region = io.github.yuroyami.kiteplayer.subtitle.CueRegion(
+            "low", left = 0.1f, top = 0.6f, width = 0.8f, height = 0.35f,
+            padding = io.github.yuroyami.kiteplayer.subtitle.CueInsets(left = 0.05f, top = 0.05f, right = 0.05f, bottom = 0.05f),
+            displayAlign = io.github.yuroyami.kiteplayer.subtitle.CueDisplayAlign.After,
+            backgroundColor = 0xFF202020.toInt(),
+        )
+        fun para(text: String, order: Int) = SubtitleCue.Text(
+            startMicros = 0,
+            endMicros = 1_000_000,
+            spans = listOf(StyledSpan(text, CueStyle())),
+            layout = CueLayout(alignment = CueAlignment.TopCenter, region = region, regionOrder = order),
+        )
+        fun draw(vararg cues: SubtitleCue) = AppleSubtitleRasterizer().rasterize(cues.toList(), 640, 360, 1f)
+        val images = draw(para("The second paragraph", 1), para("The first paragraph", 0))
+        assertEquals(3, images.size, "the background and two paragraphs")
+        val (box, first, second) = images
+        assertEquals(listOf(64, 216, 512, 126), listOf(box.x, box.y, box.bitmap.width, box.bitmap.height), "the region's box")
+        assertTrue(first.y + first.bitmap.height <= second.y, "the paragraphs overlap: ${first.y}+${first.bitmap.height} > ${second.y}")
+        assertEquals(second.y + second.bitmap.height, 216 + 126 - 6, "the block sits on the padded bottom")
+        assertTrue(first.x > 64 + 25 && first.x + first.bitmap.width < 64 + 512 - 25, "inside the padding: ${first.x}")
+        // A paragraph wider than the region breaks at its inner width, 512 less two pads of 25.6.
+        val long = draw(para("word ".repeat(40).trim(), 0)).last()
+        assertTrue(long.bitmap.width <= 461 + 2 * shadowPad + 1, "broke at ${long.bitmap.width}")
+        assertTrue(long.bitmap.height > first.bitmap.height * 2, "into several lines")
+    }
+
     // An authored position is the anchor the alignment names, as on the desktop and Android.
     @Test
     fun aPositionedCueIsAnchoredOnTheAuthoredPoint() {

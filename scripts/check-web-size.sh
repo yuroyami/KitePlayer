@@ -43,10 +43,15 @@
 # fragmented MP4 and WebM index readers and the subtitle conversions. The worker measured 720,786
 # bytes with it and 668,414 without, 52,372 more. Ktor stays out of the worker.
 #
-# The worker budget is now 0.70 MiB. A quality change with no new open reaches a DASH stream of
+# The worker budget was then 0.70 MiB. A quality change with no new open reaches a DASH stream of
 # several Periods and a WebM one (#566), which adds the WebM header reader and the rewrite of a
 # cluster's track numbers. The worker measured 723,596 bytes with it, 2,810 more, and 79 over the
 # budget before.
+#
+# The worker budget is now 0.71 MiB. Kotlin 2.4.21 grew the worker from 731,855 bytes to 735,258,
+# 3,403 more and 1,255 over the budget before, with no player change between the two runs. The
+# growth is all in the wasm binary; the three JavaScript files beside it kept their exact bytes.
+# The codec module measured the same 1,537,134 bytes in both runs.
 #
 # Both budgets are ratchets: a new KiteFFmpeg pin, or player code, that grows a module past its
 # budget fails here, and raising a budget is a decision made in the same commit, with both numbers
@@ -62,8 +67,8 @@ cd "$ROOT"
 
 # 1.47 MiB.
 BUDGET_BYTES=1541407
-# 0.70 MiB.
-WORKER_BUDGET_BYTES=734003
+# 0.71 MiB.
+WORKER_BUDGET_BYTES=744489
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...

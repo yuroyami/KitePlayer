@@ -67,7 +67,12 @@ class ComposeVideoScreenshotTest {
 
     private companion object {
         const val GRID = 48
-        const val VIVID_SPAN = 150
+        /**
+         * The default controls lie over a paused picture and darken it by 40 percent, so a colour
+         * that spanned 150 spans 90 there. The screen's own colours span less, but for one line of
+         * light blue text, which covers far less than [VIVID_SHARE] of the grid.
+         */
+        const val VIVID_SPAN = 85
         const val VIVID_SHARE = 0.03
         const val TIMEOUT_MILLIS = 40_000L
         const val POLL_MILLIS = 250L

@@ -10,6 +10,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-09
+
 ### Upgrading from 0.2.0
 
 - `KitePlayer()` builds a player on the default stack (#383). It replaces

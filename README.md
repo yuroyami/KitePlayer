@@ -238,11 +238,11 @@ each target you declare.
 
 ```kotlin
 commonMain.dependencies {
-    implementation("io.github.yuroyami:kiteplayer:0.2.0")            // native views, no Compose
+    implementation("io.github.yuroyami:kiteplayer:0.3.0")            // native views, no Compose
     // or
-    implementation("io.github.yuroyami:kiteplayer-compose:0.2.0")    // Compose, plus everything above
+    implementation("io.github.yuroyami:kiteplayer-compose:0.3.0")    // Compose, plus everything above
 
-    implementation("io.github.yuroyami:kiteplayer-audioviz:0.2.0")   // optional: a visualiser for audio
+    implementation("io.github.yuroyami:kiteplayer-audioviz:0.3.0")   // optional: a visualiser for audio
 }
 ```
 
@@ -313,7 +313,7 @@ A browser cannot link FFmpeg or libass into the Kotlin binary, so the page serve
 WebAssembly modules. Each one comes as a `web` zip beside its artifact on Maven Central:
 
 1. Unpack `kiteffmpeg-wasm-js-<version>-web.zip` beside `index.html`, with the KiteFFmpeg version
-   that KitePlayer depends on (0.4.0 for 0.2.0). The page then serves `kite.mjs`, `kite.wasm`
+   that KitePlayer depends on (0.5.1 for 0.3.0). The page then serves `kite.mjs`, `kite.wasm`
    and `licenses/`.
 2. Unpack `kiteplayer-libass-wasm-js-<version>-web.zip` there too, for `kiteass.mjs` and
    `kiteass.wasm`. The first ASS track loads them. Without them, ASS falls back to the built-in

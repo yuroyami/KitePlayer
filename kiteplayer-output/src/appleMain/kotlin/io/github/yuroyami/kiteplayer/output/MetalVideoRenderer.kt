@@ -159,10 +159,7 @@ public class MetalVideoRenderer internal constructor(
      * at 1 until a layer asks for extended range.
      */
     private fun wantsExtendedRange(colorSpace: io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo): Boolean {
-        headroom.refresh()
-        return hdrPolicy.value == io.github.yuroyami.kiteplayer.HdrPolicy.Auto &&
-            colorSpace.willToneMap() &&
-            headroom.potential > MIN_EXTENDED_HEADROOM
+        return colorSpace.willToneMap() && showsHdr
     }
 
     /**
@@ -512,6 +509,19 @@ public class MetalVideoRenderer internal constructor(
         // The old paused-picture limit is gone: the retained picture re-encodes now.
         requestRedraw()
     }
+
+    /**
+     * True when HDR shows as HDR here (#540): under `HdrPolicy.Auto`, on a display that can go
+     * beyond standard range white. It is the test that puts an HDR frame on the extended-range
+     * layer, so an adaptive stream's HDR version is chosen exactly where it will be shown as HDR.
+     * Any thread; the answer follows the display the layer is on, read on the main thread.
+     */
+    override val showsHdr: Boolean
+        get() {
+            headroom.refresh()
+            return hdrPolicy.value == io.github.yuroyami.kiteplayer.HdrPolicy.Auto &&
+                headroom.potential > MIN_EXTENDED_HEADROOM
+        }
 
     /** A paused HDR picture re-encodes at once, in the range the new policy asks for. */
     override fun setHdrPolicy(policy: io.github.yuroyami.kiteplayer.HdrPolicy) {

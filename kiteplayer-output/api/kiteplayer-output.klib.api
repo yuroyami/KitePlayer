@@ -100,6 +100,8 @@ final class io.github.yuroyami.kiteplayer.output/MetalVideoRenderer : io.github.
         final fun <get-outputSize>(): io.github.yuroyami.kiteplayer/VideoSize? // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.outputSize.<get-outputSize>|<get-outputSize>(){}[0]
     final val presentedFrames // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.presentedFrames|{}presentedFrames[0]
         final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
+    final val showsHdr // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.showsHdr|{}showsHdr[0]
+        final fun <get-showsHdr>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.showsHdr.<get-showsHdr>|<get-showsHdr>(){}[0]
     final val supersededFrames // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.supersededFrames|{}supersededFrames[0]
         final fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
 

@@ -38,10 +38,15 @@
 # playlist, serves a variant and moves to another one is reached there for the first time: the
 # worker measured 668,414 bytes with it and 644,892 without, 23,522 more.
 #
-# The worker budget is now 0.69 MiB. DASH plays in the worker (#546), which links the DASH reader
+# The worker budget was then 0.69 MiB. DASH plays in the worker (#546), which links the DASH reader
 # of kiteplayer-adaptive: the manifest parser, the playlists it writes for the HLS path, the
 # fragmented MP4 and WebM index readers and the subtitle conversions. The worker measured 720,786
 # bytes with it and 668,414 without, 52,372 more. Ktor stays out of the worker.
+#
+# The worker budget is now 0.70 MiB. A quality change with no new open reaches a DASH stream of
+# several Periods and a WebM one (#566), which adds the WebM header reader and the rewrite of a
+# cluster's track numbers. The worker measured 723,596 bytes with it, 2,810 more, and 79 over the
+# budget before.
 #
 # Both budgets are ratchets: a new KiteFFmpeg pin, or player code, that grows a module past its
 # budget fails here, and raising a budget is a decision made in the same commit, with both numbers
@@ -57,8 +62,8 @@ cd "$ROOT"
 
 # 1.47 MiB.
 BUDGET_BYTES=1541407
-# 0.69 MiB.
-WORKER_BUDGET_BYTES=723517
+# 0.70 MiB.
+WORKER_BUDGET_BYTES=734003
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...

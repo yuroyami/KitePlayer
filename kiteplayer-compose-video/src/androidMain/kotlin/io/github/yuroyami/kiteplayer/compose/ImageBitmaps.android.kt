@@ -182,6 +182,10 @@ private class AndroidKiteVideoHardwareRenderer(
     override fun setViewport(width: Int, height: Int, scale: Float) = delegate.setViewport(width, height, scale)
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) = delegate.setTransform(transform)
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) = delegate.setScaleMode(mode)
+
+    // The blit under this wrapper is the only shader on this path, so this must reach it. Left
+    // out, it lands on the interface's default, which does nothing (#560).
+    override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) = delegate.setRenderQuality(quality)
     override suspend fun setOverlay(overlay: SubtitleOverlay?) = delegate.setOverlay(overlay)
     override fun clearPicture() = delegate.clearPicture()
     override val events get() = delegate.events

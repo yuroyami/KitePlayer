@@ -290,6 +290,12 @@ ffmpeg -v error -y \
   -vf "format=yuv420p10le,$pq_tag" ${left_on_encoder[@]+"${left_on_encoder[@]}"} \
   -c:v libx265 -preset ultrafast -x265-params log-level=error -tag:v hvc1 -g 1 colors-pq.mp4
 expect_siting colors-pq.mp4 left
+
+echo "black and white strobe at 5 Hz, three pictures each, for the flash guard"
+ffmpeg -v error -y \
+  -f lavfi -i "color=c=black:size=640x360:rate=30:duration=4" \
+  -vf "geq=lum='if(lt(mod(N,6),3),16,235)':cb=128:cr=128,format=yuv420p" \
+  -c:v libx264 -preset ultrafast -g 30 -bf 0 strobe-5hz.mp4
 ffmpeg -v error -y \
   -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 5 \
   -vf "format=yuv420p10le,$cl_tag" ${left_on_encoder[@]+"${left_on_encoder[@]}"} \

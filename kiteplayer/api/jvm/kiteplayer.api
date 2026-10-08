@@ -55,6 +55,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun openQueueAsync (Ljava/util/List;)Ljava/util/concurrent/CompletableFuture;
 	public final fun openQueueAsync (Ljava/util/List;I)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun openQueueAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Ljava/util/List;IILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
+	public final fun positionAtTimeOfDayMillis (J)Ljava/lang/Long;
 	public final fun positionMillis ()J
 	public final fun previousAsync ()Ljava/util/concurrent/CompletableFuture;
 	public final fun previousChapterAsync ()Ljava/util/concurrent/CompletableFuture;
@@ -75,6 +76,9 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun seekAsync (JLio/github/yuroyami/kiteplayer/SeekMode;)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun seekAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;JLio/github/yuroyami/kiteplayer/SeekMode;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun seekToChapterAsync (I)Ljava/util/concurrent/CompletableFuture;
+	public final fun seekToTimeOfDayAsync (J)Ljava/util/concurrent/CompletableFuture;
+	public final fun seekToTimeOfDayAsync (JLio/github/yuroyami/kiteplayer/SeekMode;)Ljava/util/concurrent/CompletableFuture;
+	public static synthetic fun seekToTimeOfDayAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;JLio/github/yuroyami/kiteplayer/SeekMode;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun selectProgramAsync (Ljava/lang/Integer;)Ljava/util/concurrent/CompletableFuture;
 	public final fun selectSecondarySubtitleAsync (Lio/github/yuroyami/kiteplayer/TrackInfo;)Ljava/util/concurrent/CompletableFuture;
 	public final fun selectTrackAsync (Lio/github/yuroyami/kiteplayer/TrackKind;Lio/github/yuroyami/kiteplayer/TrackInfo;)Ljava/util/concurrent/CompletableFuture;
@@ -95,6 +99,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public static synthetic fun stepFrameAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Lio/github/yuroyami/kiteplayer/StepDirection;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun stopAsync ()Ljava/util/concurrent/CompletableFuture;
 	public final fun stopRecordingAsync ()Ljava/util/concurrent/CompletableFuture;
+	public final fun timeOfDayAtMillis (J)Ljava/lang/Long;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/KitePlayerJava$AudioBlockSink {

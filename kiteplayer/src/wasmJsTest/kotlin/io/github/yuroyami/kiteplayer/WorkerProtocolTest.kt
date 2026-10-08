@@ -61,6 +61,7 @@ class WorkerProtocolTest {
         clip = MediaClip(start = 61.seconds, end = 3.minutes),
         growth = FileGrowth(endsAfter = 5.seconds),
         thumbnails = ThumbnailSource("https://example.com/thumbs.vtt"),
+        runsIntoNext = true,
     )
 
     private val tracks = Tracks(
@@ -149,6 +150,7 @@ class WorkerProtocolTest {
         playRequested = true,
         preloadedIndex = 1,
         hdrPolicy = HdrPolicy.ToneMap,
+        flashGuard = FlashGuard.On,
         videoDynamicRange = VideoDynamicRange.ToneMapped,
         failedQueueItems = setOf(1),
         durationIsEstimate = true,
@@ -157,6 +159,7 @@ class WorkerProtocolTest {
         dialogueLevelDb = 4.5f,
         pitchSemitones = -2.5,
         skipSilence = true,
+        reconnecting = true,
         lyrics = "A line\nAnother line",
     )
 
@@ -215,6 +218,7 @@ class WorkerProtocolTest {
         PlaybackWarning.ExternalClockSilent("none set"),
         PlaybackWarning.VariantLowered(2, 1, "waited 3s"),
         PlaybackWarning.QueueItemSkipped(1, "https://example.com/gone.mp4", PlaybackError.SourceUnavailable("https://example.com/gone.mp4", null, "HTTP 404")),
+        PlaybackWarning.Reconnecting(PlaybackError.SourceStalled("https://example.com/live.m3u8", 30.seconds)),
     )
 
     private val errors = listOf(
@@ -315,6 +319,7 @@ class WorkerProtocolTest {
             Control.SetVideoTransform(snapshot.videoTransform),
             Control.SetVideoTransform(VideoTransform.Identity),
             Control.SetHdrPolicy(HdrPolicy.ToneMap),
+            Control.SetFlashGuard(FlashGuard.On),
             Control.SetSubtitleDelay((-250).milliseconds),
             Control.SetSubtitleScale(1.25f),
             Control.SetSubtitleStyle(style),
@@ -337,7 +342,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Send(control)
             assertEquals(message, message.roundTrip(), "the control ${control.member} changed on the way")
         }
-        assertEquals(35, controls.map { it.member }.distinct().size, "every control is here")
+        assertEquals(36, controls.map { it.member }.distinct().size, "every control is here")
     }
 
     @Test
@@ -399,7 +404,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(41, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(42, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test
@@ -420,6 +425,14 @@ class WorkerProtocolTest {
             WorkerMessage.State(snapshot),
             WorkerMessage.State(PlayerSnapshot()),
             WorkerMessage.Progressed(Progress(12_345_678L.microseconds, 2.seconds, listOf(0.seconds..30.seconds))),
+            WorkerMessage.Progressed(
+                Progress(
+                    position = 7.seconds,
+                    timeOfDayMillis = 1_791_408_847_123L,
+                    firstTimeOfDayMillis = 1_791_408_840_000L,
+                    lastTimeOfDayMillis = 1_791_408_870_000L,
+                ),
+            ),
             WorkerMessage.Progressed(Progress()),
             WorkerMessage.Stats(stats),
             WorkerMessage.Stats(stats.copy(hardwareDecode = HwdecStatus.HardwareZeroCopy(HwdecKind.VideoToolbox), containerBitrate = null)),

@@ -7,6 +7,7 @@ import io.github.yuroyami.kiteplayer.spi.MediaBackend
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -88,6 +89,11 @@ public data class PlayerConfig(
      * [KitePlayer.setKeyframeChoice]; this is only the value a fresh player starts at.
      */
     val keyframeChoice: KeyframeChoice = KeyframeChoice.Before,
+    /**
+     * Whether flashing video is dimmed (#500). Change it live with [KitePlayer.setFlashGuard]; this
+     * is only the value a fresh player starts at.
+     */
+    val flashGuard: FlashGuard = FlashGuard.FollowSystem,
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive
@@ -147,7 +153,45 @@ public data class NetworkConfig(
      * False preserves the backend's URI handling. Explicit readers and resolvers still apply.
      */
     val autoResolve: Boolean = true,
+    /**
+     * Waiting for the network after an item that had opened fails for it, and opening the item
+     * again where it was, or at the live edge, once the network is back (#461). Null, the default,
+     * fails at once as before. `docs/cancellation-and-bounded-waits.md` has the whole rule.
+     */
+    val recovery: NetworkRecovery? = null,
 )
+
+/**
+ * How the player gets an item back after the network failed it (#461): it waits, says so with
+ * [PlayerSnapshot.reconnecting], and opens the item again at its position, or at the live edge for
+ * a stream that cannot seek, then plays on if it was playing. See [NetworkConfig.recovery].
+ */
+public data class NetworkRecovery(
+    /**
+     * How long the player keeps trying, from the failure on, before it fails with the error that
+     * started the wait. [Duration.INFINITE] never gives up.
+     */
+    val maxWait: Duration = 5.minutes,
+    /**
+     * Where the player learns that the device has a network again, to try at once rather than on
+     * its timer. Null takes the one an installed provider gives for the platform, which the network
+     * module does, or none, and then the timer alone tries.
+     */
+    val status: NetworkStatus? = null,
+) {
+    init {
+        require(maxWait.isPositive()) { "maxWait must be positive, was $maxWait" }
+    }
+}
+
+/** Whether the device has a network, as the platform tells it (#461). See [NetworkRecovery.status]. */
+public fun interface NetworkStatus {
+    /**
+     * Calls [onChange] with whether the device has a network now, and again at each change, until
+     * the handle closes. [onChange] may be called from any thread.
+     */
+    public fun watch(onChange: (online: Boolean) -> Unit): AutoCloseable
+}
 
 /**
  * The byte cache: one contiguous RAM window over an [MediaIo]'s bytes. Reads pull
@@ -257,11 +301,32 @@ public data class QueueConfig(
      * itself. [QueueItemFailure.Skip] moves on, as mpv does: see there.
      */
     val onItemFailure: QueueItemFailure = QueueItemFailure.Stop,
+    /**
+     * How long the end of one queue item and the start of the next sound together, the first
+     * fading out while the second fades in, each on an equal power curve (#434). Zero, the default,
+     * keeps the gapless join, sample after sample. At most [MAX_CROSSFADE].
+     *
+     * It applies between two items with no picture, cover art aside, that decode to the same rate
+     * and channels, whose first item states its length and does not [MediaItem.runsIntoNext], and
+     * only when the next item is ready in time. Every other join stays gapless. The next item
+     * becomes the current one at the end of the fade, when the last sample of the item before it is
+     * heard, so its position then reads the fade's length into it. `docs/gapless-queue.md` has the
+     * whole rule.
+     */
+    val crossfade: Duration = Duration.ZERO,
 ) {
     init {
         require(!preloadNext.isNegative() && preloadNext.isFinite()) {
             "preloadNext must be zero or a finite positive duration, was $preloadNext"
         }
+        require(!crossfade.isNegative() && crossfade <= MAX_CROSSFADE) {
+            "crossfade must be between zero and $MAX_CROSSFADE, was $crossfade"
+        }
+    }
+
+    public companion object {
+        /** The longest [crossfade]. */
+        public val MAX_CROSSFADE: Duration = 30.seconds
     }
 }
 

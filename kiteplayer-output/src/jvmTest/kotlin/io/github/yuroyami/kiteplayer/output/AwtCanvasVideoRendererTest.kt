@@ -427,13 +427,18 @@ class AwtCanvasVideoRendererTest {
         val drawn: MutableList<Pair<Boolean, io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?>> =
             java.util.Collections.synchronizedList(mutableListOf())
 
+        /** For each paint, the flash guard's factor it was drawn at. */
+        val dims: MutableList<Float> = java.util.Collections.synchronizedList(mutableListOf())
+
         override fun present(
             canvas: java.awt.Canvas,
             image: BufferedImage?,
             layout: FrameLayout?,
             overlay: io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?,
+            dim: Float,
         ): Boolean {
             drawn += (image != null && layout != null) to overlay
+            dims += dim
             val now = inside.incrementAndGet()
             mostAtOnce.accumulateAndGet(now, ::maxOf)
             painting.countDown()
@@ -486,7 +491,7 @@ class AwtCanvasVideoRendererTest {
 
     /** Draws into an image and counts its shows; a show can be made to fail like a lost peer. */
     private class FakeStrategy(private val failShow: Boolean = false) : java.awt.image.BufferStrategy() {
-        private val backing = BufferedImage(160, 90, BufferedImage.TYPE_INT_RGB)
+        val backing = BufferedImage(160, 90, BufferedImage.TYPE_INT_RGB)
         val shows = java.util.concurrent.atomic.AtomicInteger()
 
         override fun getCapabilities(): java.awt.BufferCapabilities = java.awt.BufferCapabilities(
@@ -661,6 +666,143 @@ class AwtCanvasVideoRendererTest {
         assertEquals(Color.BLACK.rgb, target.getRGB(2, 2), "the old picture is gone")
         assertEquals(Color.BLACK.rgb, target.getRGB(30, 30))
         assertEquals(Color.WHITE.rgb, target.getRGB(10, 10), "the cue is still drawn")
+    }
+
+    // ── The flash guard (#500) ───────────────────────────────────────────────────────────────
+
+    /** A renderer whose painter fills each frame with the next of its levels, shown 30 a second. */
+    private inner class Strobed {
+        @Volatile var level = 0
+        var nanos = 0L
+        val presenter = CountingPresenter(holdMillis = 0)
+        val renderer = renderer { destination, _, _ ->
+            destination.fill(level * 0x010101)
+            true
+        }.also {
+            it.presenter = presenter
+            it.guardNanos = { nanos }
+            it.setCanvas(DisplayableCanvas())
+        }
+
+        /** Presents [levels] and answers the factor each was drawn at. */
+        suspend fun show(levels: List<Int>): List<Float> {
+            val first = presenter.dims.size
+            for (next in levels) {
+                level = next
+                nanos += 1_000_000_000L / 30
+                assertTrue(renderer.present(CountingFrame(), nanos))
+            }
+            return presenter.dims.drop(first)
+        }
+    }
+
+    /** A strobe at 5 Hz, three frames of black, then three of white. */
+    private fun strobe(frames: Int) = List(frames) { if ((it / 3) % 2 == 1) 255 else 0 }
+
+    @Test
+    fun `a strobe is dimmed from its seventh leg with the guard on`() = runTest {
+        val s = Strobed()
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+        val dims = s.show(strobe(60))
+        assertTrue(dims.take(21).all { it == 1f }, "three flashes are drawn as they are: $dims")
+        assertTrue(dims.drop(21).all { it < 1f }, "and the run is dimmed from its seventh leg: $dims")
+        s.renderer.close()
+    }
+
+    @Test
+    fun `with the guard off or following a system it cannot read nothing is dimmed`() = runTest {
+        val s = Strobed()
+        assertTrue(s.show(strobe(60)).all { it == 1f }, "FollowSystem, the default, has no system here")
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.Off)
+        assertTrue(s.show(strobe(60)).all { it == 1f })
+        s.renderer.close()
+    }
+
+    @Test
+    fun `a picture that does not flash is never dimmed`() = runTest {
+        val s = Strobed()
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+        val fade = List(30) { 255 - it * 8 } + List(30) { 15 + it * 8 }
+        assertTrue(s.show(fade + fade).all { it == 1f })
+        s.renderer.close()
+    }
+
+    @Test
+    fun `a repaint draws the held picture as dim as it was drawn`() = runTest {
+        val s = Strobed()
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+        val last = s.show(strobe(30)).last()
+        assertTrue(last < 1f)
+        s.renderer.setOverlay(null)
+        assertEquals(last, s.presenter.dims.last(), "a cue or a control changed under a pause")
+        s.renderer.close()
+    }
+
+    @Test
+    fun `taking the picture off forgets the run`() = runTest {
+        val s = Strobed()
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+        assertTrue(s.show(strobe(30)).last() < 1f)
+        s.renderer.clearPicture()
+        assertEquals(1f, s.presenter.dims.last(), "the background is never dimmed")
+        assertTrue(s.show(strobe(18)).all { it == 1f }, "a fresh history: three flashes again")
+        s.renderer.close()
+    }
+
+    @Test
+    fun `turning the guard off and on again starts a fresh history`() = runTest {
+        val s = Strobed()
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+        assertTrue(s.show(strobe(30)).last() < 1f)
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.Off)
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+        assertTrue(s.show(strobe(18)).all { it == 1f }, "three flashes again, not the old run")
+        s.renderer.close()
+    }
+
+    @Test
+    fun `the presenter draws the picture at the factor it is handed`() {
+        val white = BufferedImage(16, 9, BufferedImage.TYPE_INT_RGB)
+        for (y in 0 until 9) for (x in 0 until 16) white.setRGB(x, y, Color.WHITE.rgb)
+        val layout = frameLayout(160, 90, VideoSize(16, 9), 0)!!
+        for ((dim, expected) in listOf(1f to 255, 0.5f to 128)) {
+            val strategy = FakeStrategy()
+            assertTrue(AwtCanvasPresenter().present(StrategyCanvas(strategy), white, layout, overlay = null, dim = dim))
+            val middle = Color(strategy.backing.getRGB(80, 45))
+            assertTrue(kotlin.math.abs(middle.red - expected) <= 1, "white at $dim reached the screen as $middle")
+        }
+    }
+
+    @Test
+    fun `a dimmed picture is drawn at its share of each value and the cues are not`() {
+        val white = BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB)
+        for (y in 0 until 4) for (x in 0 until 4) white.setRGB(x, y, Color.WHITE.rgb)
+        val cue = io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+            images = listOf(
+                io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                    x = 4,
+                    y = 4,
+                    bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(4, 4, ByteArray(4 * 4 * 4) { -1 }),
+                ),
+            ),
+            viewportWidth = 40,
+            viewportHeight = 40,
+            contentHash = 1L,
+        )
+        for (turn in listOf(0, 90)) {
+            for ((dim, expected) in listOf(1f to 255, 0.5f to 128, 0.25f to 64)) {
+                val target = BufferedImage(40, 40, BufferedImage.TYPE_INT_RGB)
+                val g = target.createGraphics()
+                AwtCanvasPresenter.compose(g, 40, 40, white, frameLayout(40, 40, VideoSize(4, 4), turn)!!, cue, dim)
+                g.dispose()
+                val middle = Color(target.getRGB(20, 20))
+                assertTrue(
+                    listOf(middle.red, middle.green, middle.blue).all { kotlin.math.abs(it - expected) <= 1 },
+                    "white at $dim turned $turn is $middle",
+                )
+                assertEquals(Color.WHITE.rgb, target.getRGB(6, 6), "the cue over the picture at $dim turned $turn")
+            }
+        }
     }
 
     /**

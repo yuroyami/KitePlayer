@@ -37,6 +37,13 @@ public final class io/github/yuroyami/kiteplayer/subtitle/TeletextPageReader {
 	public final fun reset ()V
 }
 
+public final class io/github/yuroyami/kiteplayer/subtitle/TtmlParser {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/TtmlParser;
+	public final fun isTtml (Ljava/lang/String;)Z
+	public final fun parse (Ljava/lang/String;)Ljava/util/List;
+	public final fun read (Ljava/lang/String;)Ljava/util/List;
+}
+
 public final class io/github/yuroyami/kiteplayer/subtitle/WebVttParser {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/WebVttParser;
 	public final fun parse (Ljava/lang/String;)Ljava/util/List;
@@ -46,5 +53,55 @@ public final class io/github/yuroyami/kiteplayer/subtitle/WebVttParser {
 
 public final class io/github/yuroyami/kiteplayer/subtitle/WebVttTrackParser {
 	public final fun parseCueBody (Ljava/lang/String;)Ljava/util/List;
+}
+
+public final class io/github/yuroyami/kiteplayer/subtitle/xml/XmlElement : io/github/yuroyami/kiteplayer/subtitle/xml/XmlNode {
+	public fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun attr (Ljava/lang/String;)Ljava/lang/String;
+	public final fun child (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/subtitle/xml/XmlElement;
+	public final fun children (Ljava/lang/String;)Ljava/util/List;
+	public final fun getAttributes ()Ljava/util/Map;
+	public final fun getChildren ()Ljava/util/List;
+	public final fun getContent ()Ljava/util/List;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getText ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/subtitle/xml/XmlMini {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/xml/XmlMini;
+	public static final field MAX_ATTRIBUTES I
+	public static final field MAX_DEPTH I
+	public static final field MAX_ELEMENTS I
+	public static final field MAX_ELEMENT_ATTRIBUTES I
+	public static final field MAX_LENGTH I
+	public final fun parse (Ljava/lang/CharSequence;Lio/github/yuroyami/kiteplayer/subtitle/xml/XmlMini$Limits;)Lio/github/yuroyami/kiteplayer/subtitle/xml/XmlElement;
+	public static synthetic fun parse$default (Lio/github/yuroyami/kiteplayer/subtitle/xml/XmlMini;Ljava/lang/CharSequence;Lio/github/yuroyami/kiteplayer/subtitle/xml/XmlMini$Limits;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/subtitle/xml/XmlElement;
+}
+
+public final class io/github/yuroyami/kiteplayer/subtitle/xml/XmlMini$Limits {
+	public fun <init> ()V
+	public fun <init> (IIIIZ)V
+	public synthetic fun <init> (IIIIZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getKeepContent ()Z
+	public final fun getMaxAttributes ()I
+	public final fun getMaxElementAttributes ()I
+	public final fun getMaxElements ()I
+	public final fun getMaxLength ()I
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/subtitle/xml/XmlNode {
+}
+
+public final class io/github/yuroyami/kiteplayer/subtitle/xml/XmlSyntaxException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;I)V
+	public final fun getOffset ()I
+	public final fun getReason ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/subtitle/xml/XmlText : io/github/yuroyami/kiteplayer/subtitle/xml/XmlNode {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun getValue ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
 }
 

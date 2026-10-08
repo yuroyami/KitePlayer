@@ -94,6 +94,9 @@ public class PlayerConfigBuilder(from: PlayerConfig = PlayerConfig()) {
     /** See [PlayerConfig.keyframeChoice]. */
     public var keyframeChoice: KeyframeChoice = from.keyframeChoice
 
+    /** See [PlayerConfig.flashGuard]. */
+    public var flashGuard: FlashGuard = from.flashGuard
+
     /** Changes [audio] field by field. */
     public fun audio(build: AudioConfigBuilder.() -> Unit) {
         audio = AudioConfigBuilder(audio).apply(build).build()
@@ -139,6 +142,7 @@ public class PlayerConfigBuilder(from: PlayerConfig = PlayerConfig()) {
         hdrPolicy = hdrPolicy,
         externalClock = externalClock,
         keyframeChoice = keyframeChoice,
+        flashGuard = flashGuard,
     )
 }
 
@@ -278,6 +282,9 @@ public class NetworkConfigBuilder(from: NetworkConfig = NetworkConfig()) {
     /** See [NetworkConfig.autoResolve]. */
     public var autoResolve: Boolean = from.autoResolve
 
+    /** See [NetworkConfig.recovery]. */
+    public var recovery: NetworkRecovery? = from.recovery
+
     /** Changes [ioCache] field by field. */
     public fun ioCache(build: IoCachePolicyBuilder.() -> Unit) {
         ioCache = IoCachePolicyBuilder(ioCache).apply(build).build()
@@ -288,6 +295,7 @@ public class NetworkConfigBuilder(from: NetworkConfig = NetworkConfig()) {
         ioResolver = ioResolver,
         ioCache = ioCache,
         autoResolve = autoResolve,
+        recovery = recovery,
     )
 }
 
@@ -366,11 +374,15 @@ public class QueueConfigBuilder(from: QueueConfig = QueueConfig()) {
     /** See [QueueConfig.onItemFailure]. */
     public var onItemFailure: QueueItemFailure = from.onItemFailure
 
+    /** See [QueueConfig.crossfade]. */
+    public var crossfade: Duration = from.crossfade
+
     /** The [QueueConfig] these fields describe, checked as its constructor checks it. */
     public fun build(): QueueConfig = QueueConfig(
         preloadNext = preloadNext,
         gapless = gapless,
         reshuffleEachLap = reshuffleEachLap,
         onItemFailure = onItemFailure,
+        crossfade = crossfade,
     )
 }

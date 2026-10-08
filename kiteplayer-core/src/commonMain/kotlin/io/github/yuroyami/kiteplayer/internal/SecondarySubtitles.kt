@@ -47,7 +47,8 @@ private val PICTURE_SUBTITLE_CODECS: Set<String> =
  * primary. Above or below it they join the bottom stack the primary's ordinary lines stand in, so
  * both follow the subtitle position, and they take the primary's stacking so the one pile grows one
  * way. A primary line its author placed elsewhere keeps its place, and the secondary then holds the
- * bottom alone. Pictures carry their own place and keep it.
+ * bottom alone. A secondary line leaves its TTML region behind (#492). Pictures carry their own
+ * place and keep it.
  */
 internal fun placeSecondaryCues(
     cues: List<SubtitleCue>,
@@ -62,6 +63,7 @@ internal fun placeSecondaryCues(
                     alignment = if (placement == SecondarySubtitlePlacement.Top) CueAlignment.TopCenter else CueAlignment.BottomCenter,
                     positionX = null,
                     positionY = null,
+                    region = null,
                     stacking = if (placement == SecondarySubtitlePlacement.Top) cue.layout.stacking else stacking ?: cue.layout.stacking,
                 ),
             )
@@ -87,7 +89,7 @@ internal fun secondaryFirst(primary: List<SubtitleCue>, placement: SecondarySubt
 /** The stacking of the first of [cues] that stands in the bottom stack, which the stack obeys, or null. */
 private fun primaryStacking(cues: List<SubtitleCue>): CueStacking? = cues.firstNotNullOfOrNull { cue ->
     (cue as? SubtitleCue.Text)?.layout?.takeIf { layout ->
-        layout.positionY == null && (
+        layout.positionY == null && layout.region == null && (
             layout.alignment == CueAlignment.BottomLeft ||
                 layout.alignment == CueAlignment.BottomCenter ||
                 layout.alignment == CueAlignment.BottomRight

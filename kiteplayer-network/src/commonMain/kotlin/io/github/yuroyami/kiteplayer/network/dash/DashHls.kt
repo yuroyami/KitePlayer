@@ -213,13 +213,16 @@ internal object DashHls {
 
     /**
      * The media playlist of [plan]. A live one has no end, so FFmpeg loads it again for the
-     * segments that arrive; [sequence] numbers its first segment.
+     * segments that arrive; [sequence] numbers its first segment. With [dateOriginMicros], the time
+     * of day of the plan's time zero in microseconds since 1970 UTC, each segment carries its own
+     * `EXT-X-PROGRAM-DATE-TIME`, which the player reads for the time of day of its positions (#444).
      */
     fun mediaPlaylist(
         plan: DashTimedPlan,
         live: Boolean,
         sequence: Long = plan.segments.firstOrNull()?.number ?: 0L,
         images: DashRepresentation? = null,
+        dateOriginMicros: Long? = null,
     ): String =
         buildString {
             val longest = plan.segments.maxOfOrNull { it.durationMicros } ?: 1_000_000L
@@ -258,6 +261,9 @@ internal object DashHls {
                     tileSize(images)?.let { (w, h) -> append("RESOLUTION=${w}x$h,") }
                     append("LAYOUT=${grid.columns}x${grid.rows},DURATION=").append(seconds(tileMicros)).append('\n')
                     tilesWritten = nominal
+                }
+                if (dateOriginMicros != null && grid == null) {
+                    append("#EXT-X-PROGRAM-DATE-TIME:").append(dateTime(dateOriginMicros + segment.startMicros)).append('\n')
                 }
                 append("#EXTINF:").append(seconds(segment.durationMicros)).append(",\n")
                 segment.range?.let { append("#EXT-X-BYTERANGE:").append(byteRange(it)).append('\n') }
@@ -374,6 +380,26 @@ internal object DashHls {
         val width = representation.width?.takeIf { it > 0 } ?: return null
         val height = representation.height?.takeIf { it > 0 } ?: return null
         return width / grid.columns to height / grid.rows
+    }
+
+    /** [micros] since 1970 UTC as RFC 8216 writes a date, `2026-10-07T21:34:00.000Z`, to the millisecond. */
+    internal fun dateTime(micros: Long): String {
+        val millis = micros.floorDiv(1_000L)
+        val days = millis.floorDiv(86_400_000L)
+        val ofDay = millis - days * 86_400_000L
+        // The civil date of a day count, the inverse of the manifest reader's daysFromCivil.
+        val z = days + 719_468
+        val era = (if (z >= 0) z else z - 146_096) / 146_097
+        val dayOfEra = z - era * 146_097
+        val yearOfEra = (dayOfEra - dayOfEra / 1_460 + dayOfEra / 36_524 - dayOfEra / 146_096) / 365
+        val dayOfYear = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100)
+        val shifted = (5 * dayOfYear + 2) / 153
+        val day = dayOfYear - (153 * shifted + 2) / 5 + 1
+        val month = if (shifted < 10) shifted + 3 else shifted - 9
+        val year = yearOfEra + era * 400 + if (month <= 2) 1 else 0
+        fun two(value: Long) = value.toString().padStart(2, '0')
+        return "${year.toString().padStart(4, '0')}-${two(month)}-${two(day)}T${two(ofDay / 3_600_000)}:" +
+            "${two(ofDay / 60_000 % 60)}:${two(ofDay / 1_000 % 60)}.${(ofDay % 1_000).toString().padStart(3, '0')}Z"
     }
 
     private fun seconds(micros: Long): String =

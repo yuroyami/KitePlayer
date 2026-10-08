@@ -117,3 +117,20 @@ internal fun String.videoToolboxRoute(): HardwareRoute? = when (trim().lowercase
     "av1" -> HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox, decoder = DecoderId("av1"))
     else -> null
 }
+
+/**
+ * The codecs Direct3D 11 decodes, for the native Windows target and for the desktop JVM on Windows
+ * (#101). KiteFFmpeg's Windows builds attach a Direct3D 11 device behind exactly these ordinary
+ * decoders and no others, so the table names no codec the library cannot attach. Whether this
+ * machine's GPU decodes the stream is FFmpeg's runtime answer: a machine with no usable device
+ * refuses at open, a stream the GPU cannot take comes back as software frames, and the measured
+ * fallback handles both, as it does for VideoToolbox.
+ *
+ * AV1 stays out although FFmpeg has a D3D11VA AV1 hwaccel: the library does not offer it behind
+ * `av1`, and FFmpeg finds dav1d first for that codec, which cannot take the attach.
+ */
+internal fun String.d3d11vaRoute(): HardwareRoute? = when (trim().lowercase()) {
+    "h264", "avc1", "hevc", "h265", "hev1", "vp9", "mpeg2video", "vc1", "wmv3" ->
+        HardwareRoute.Accel(HardwareAccel.D3d11va, HwdecKind.D3d11va)
+    else -> null
+}

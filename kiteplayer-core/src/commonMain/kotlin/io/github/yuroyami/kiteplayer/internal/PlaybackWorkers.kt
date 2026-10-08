@@ -328,6 +328,10 @@ internal class AttachableRenderer : VideoRenderer {
         delegate?.setAdjustments(adjustments)
     }
 
+    override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
+        delegate?.setFlashGuard(mode)
+    }
+
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
         delegate?.setTransform(transform)
     }

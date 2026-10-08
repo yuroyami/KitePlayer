@@ -56,6 +56,9 @@ class PlaybackCoreTest {
             // the open switches in the same pass.
             "handleLateStreams",
             "handleTrackChanges",
+            // Right after the rebuild a track change runs, because a wait for the network opens
+            // the item again the same way (#461).
+            "handleReconnect",
             "handleAudioFill",
             // Right after the clock is anchored for the pass, so a gapless swap happens before
             // anything reads the position or the picture of the item that just ended.

@@ -4,25 +4,15 @@ import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteffmpeg.DecoderId
 
 /**
- * Windows offers no hardware route here, so every codec decodes in software.
- *
- * **The build DOES carry D3D11VA, and this comment used to say it did not** (corrected
- * 2026-08-25). `libavcodec.a` for mingw-x64 contains eighteen d3d11va, d3d11va2 and dxva2 hwaccels,
- * compiled because the mingw configure profile never passed `--disable-autodetect`. The
- * decision described a reduced profile and the binary quietly exceeded it.
- *
- * Refusing the route anyway is still correct, because COMPILED is not PLUMBED. A D3D11VA hwaccel
- * needs a hardware device context and a frame download path on the KiteFFmpeg side, and neither
- * exists; offering the route would make every open pay an attach that always fails and would report
- * a hardware decoder in diagnostics that never ran.
- *
- * The hwaccels are deliberately left in the binary rather than stripped: stripping means a recipe
- * change, which makes every baked Windows tree stale and costs a rebake and a binary release, to
- * delete code that Windows video output will want. Plumbing them is its own issue and
- * arrives here as one more route, with the measured fallback the Apple axis uses.
+ * Windows attaches Direct3D 11 behind the ordinary decoders that KiteFFmpeg's Windows build
+ * offers it for (#101). The library creates the device and downloads each frame to main memory on
+ * request, so a frame reaches any renderer that reads planes. A machine without a usable device
+ * refuses at open, and the measured fallback then decodes in software with a warning, as it does
+ * for VideoToolbox. Whether the GPU route is faster has to be measured on a Windows PC with a GPU;
+ * nothing here has run one yet.
  */
 internal actual fun platformDecoderSelection(codec: String, policy: HwdecPolicy): DecoderSelection =
-    decoderSelection(policy, route = null)
+    decoderSelection(policy, route = codec.d3d11vaRoute())
 
 /**
  * Windows has Media Foundation audio decoders, but FFmpeg exposes no `*_mf` DECODER to name;

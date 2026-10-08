@@ -1,4 +1,4 @@
-package io.github.yuroyami.kiteplayer.network.xml
+package io.github.yuroyami.kiteplayer.subtitle.xml
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -100,7 +100,7 @@ class XmlMiniLimitsTest {
         val names = (0 until XmlMini.MAX_ELEMENT_ATTRIBUTES).map { "a$it" }
         val atLimit = "<MPD " + names.joinToString(" ") { "$it=\"x\"" } + "/>"
         assertEquals(XmlMini.MAX_ELEMENT_ATTRIBUTES, XmlMini.parse(atLimit).attributes.size)
-        val refusal = assertFailsWith<XmlException> { XmlMini.parse(atLimit.dropLast(2) + " over=\"x\"/>") }
+        val refusal = assertFailsWith<XmlSyntaxException> { XmlMini.parse(atLimit.dropLast(2) + " over=\"x\"/>") }
         assertTrue("more than ${XmlMini.MAX_ELEMENT_ATTRIBUTES} attributes" in refusal.message.orEmpty(), refusal.message)
     }
 
@@ -109,7 +109,7 @@ class XmlMiniLimitsTest {
         val names = collidingNames(32_768)
         assertEquals(1, names.map { it.hashCode() }.toSet().size, "the names share one hash code")
         val xml = "<MPD " + names.joinToString(" ") { "$it=\"x\"" } + "/>"
-        val refusal = assertFailsWith<XmlException> { XmlMini.parse(xml) }
+        val refusal = assertFailsWith<XmlSyntaxException> { XmlMini.parse(xml) }
         // Each attribute is 35 characters wide, so the refusal comes at the 129th of 32,768.
         val stoppedAt = "<MPD ".length + 35 * XmlMini.MAX_ELEMENT_ATTRIBUTES
         assertEquals(stoppedAt, refusal.offset, refusal.message)
@@ -130,7 +130,7 @@ class XmlMiniLimitsTest {
     fun aDocumentWithMoreAttributesInAllThanTheLimitIsRefused() {
         val limits = XmlMini.Limits(maxAttributes = 10)
         assertEquals(5, XmlMini.parse("<MPD>" + "<E a=\"1\" b=\"2\"/>".repeat(5) + "</MPD>", limits).children.size)
-        val refusal = assertFailsWith<XmlException> {
+        val refusal = assertFailsWith<XmlSyntaxException> {
             XmlMini.parse("<MPD>" + "<E a=\"1\" b=\"2\"/>".repeat(5) + "<E c=\"3\"/></MPD>", limits)
         }
         assertTrue("more than 10 attributes in the document" in refusal.message.orEmpty(), refusal.message)
@@ -140,7 +140,7 @@ class XmlMiniLimitsTest {
     fun aDocumentWithMoreElementsThanTheLimitIsRefused() {
         val limits = XmlMini.Limits(maxElements = 10)
         assertEquals(9, XmlMini.parse("<MPD>" + "<E/>".repeat(9) + "</MPD>", limits).children.size)
-        val refusal = assertFailsWith<XmlException> {
+        val refusal = assertFailsWith<XmlSyntaxException> {
             XmlMini.parse("<MPD>" + "<E/>".repeat(10) + "</MPD>", limits)
         }
         assertTrue("more than 10 elements" in refusal.message.orEmpty(), refusal.message)
@@ -151,7 +151,7 @@ class XmlMiniLimitsTest {
         val limits = XmlMini.Limits(maxLength = 16)
         assertEquals("01234", XmlMini.parse("<MPD>01234</MPD>", limits).text)
         val text = CountingText("<MPD>0123456789</MPD>")
-        assertFailsWith<XmlException> { XmlMini.parse(text, limits) }
+        assertFailsWith<XmlSyntaxException> { XmlMini.parse(text, limits) }
         assertEquals(0L, text.reads, "no character is read before the length is checked")
     }
 

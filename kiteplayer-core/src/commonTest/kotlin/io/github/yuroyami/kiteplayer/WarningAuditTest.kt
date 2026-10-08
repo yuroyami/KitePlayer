@@ -49,6 +49,7 @@ class WarningAuditTest {
         PlaybackWarning.RecordingStopped("x.mkv", "x"),
         PlaybackWarning.SourceReconnecting(1_024, 1, "x"),
         PlaybackWarning.AddressRenewed("https://cdn.example/seg-1.ts", 403),
+        PlaybackWarning.Reconnecting(PlaybackError.SourceStalled("https://cdn.example/live.m3u8", kotlin.time.Duration.ZERO)),
         PlaybackWarning.GrowthUnavailable("live.ts"),
         PlaybackWarning.GaplessFallback(1, "x"),
         PlaybackWarning.SegmentSkipped("https://cdn.example/seg-1.ts", "x"),
@@ -85,6 +86,10 @@ class WarningAuditTest {
         is PlaybackWarning.AddressRenewed -> listOf(
             "PlaybackCore.renewIfRefused, when the item's reader reports through MediaIo.takeRefusal that a " +
                 "server answered 401 or 403 after the open, and the item opens again through its resolver",
+        )
+        is PlaybackWarning.Reconnecting -> listOf(
+            "PlaybackCore.startReconnect, when NetworkConfig.recovery is set and an item read over the " +
+                "network, after it opened, stalls or fails a read, so the player waits to open it again",
         )
         is PlaybackWarning.SourceReconnecting -> listOf(
             "KtorMediaIo.read in :kiteplayer-network, before each reconnect after a failed read, a read " +

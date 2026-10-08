@@ -55,6 +55,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun openQueueAsync (Ljava/util/List;)Ljava/util/concurrent/CompletableFuture;
 	public final fun openQueueAsync (Ljava/util/List;I)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun openQueueAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Ljava/util/List;IILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
+	public final fun positionAtTimeOfDayMillis (J)Ljava/lang/Long;
 	public final fun positionMillis ()J
 	public final fun previousAsync ()Ljava/util/concurrent/CompletableFuture;
 	public final fun previousChapterAsync ()Ljava/util/concurrent/CompletableFuture;
@@ -75,6 +76,9 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun seekAsync (JLio/github/yuroyami/kiteplayer/SeekMode;)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun seekAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;JLio/github/yuroyami/kiteplayer/SeekMode;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun seekToChapterAsync (I)Ljava/util/concurrent/CompletableFuture;
+	public final fun seekToTimeOfDayAsync (J)Ljava/util/concurrent/CompletableFuture;
+	public final fun seekToTimeOfDayAsync (JLio/github/yuroyami/kiteplayer/SeekMode;)Ljava/util/concurrent/CompletableFuture;
+	public static synthetic fun seekToTimeOfDayAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;JLio/github/yuroyami/kiteplayer/SeekMode;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun selectProgramAsync (Ljava/lang/Integer;)Ljava/util/concurrent/CompletableFuture;
 	public final fun selectSecondarySubtitleAsync (Lio/github/yuroyami/kiteplayer/TrackInfo;)Ljava/util/concurrent/CompletableFuture;
 	public final fun selectTrackAsync (Lio/github/yuroyami/kiteplayer/TrackKind;Lio/github/yuroyami/kiteplayer/TrackInfo;)Ljava/util/concurrent/CompletableFuture;
@@ -95,6 +99,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public static synthetic fun stepFrameAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Lio/github/yuroyami/kiteplayer/StepDirection;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun stopAsync ()Ljava/util/concurrent/CompletableFuture;
 	public final fun stopRecordingAsync ()Ljava/util/concurrent/CompletableFuture;
+	public final fun timeOfDayAtMillis (J)Ljava/lang/Long;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/KitePlayerJava$AudioBlockSink {
@@ -237,7 +242,25 @@ public final class io/github/yuroyami/kiteplayer/session/KitePlayerMediaSession 
 	public final fun setArtwork (Landroid/graphics/Bitmap;)V
 	public final fun setArtworkLoader (Lkotlin/jvm/functions/Function2;)V
 	public final fun setCustomActions (Ljava/util/List;Lkotlin/jvm/functions/Function1;)V
+	public final fun setMediaButtonHandler (Lkotlin/jvm/functions/Function1;)V
+	public final fun setMediaRequestHandler (Ljava/util/Set;Lkotlin/jvm/functions/Function1;)V
 	public final fun setSessionActivity (Landroid/app/PendingIntent;)V
+}
+
+public final class io/github/yuroyami/kiteplayer/session/KitePlayerResumption {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/session/KitePlayerResumption;
+	public final fun clear (Landroid/content/Context;)V
+	public final fun save (Landroid/content/Context;Lio/github/yuroyami/kiteplayer/PlayerMemento;Ljava/lang/String;Ljava/lang/String;)V
+	public static synthetic fun save$default (Lio/github/yuroyami/kiteplayer/session/KitePlayerResumption;Landroid/content/Context;Lio/github/yuroyami/kiteplayer/PlayerMemento;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)V
+}
+
+public abstract class io/github/yuroyami/kiteplayer/session/KitePlayerResumptionService : android/service/media/MediaBrowserService {
+	public fun <init> ()V
+	public fun onCreate ()V
+	public fun onDestroy ()V
+	public fun onGetRoot (Ljava/lang/String;ILandroid/os/Bundle;)Landroid/service/media/MediaBrowserService$BrowserRoot;
+	public fun onLoadChildren (Ljava/lang/String;Landroid/service/media/MediaBrowserService$Result;)V
+	public abstract fun onResume (Lio/github/yuroyami/kiteplayer/PlayerMemento;)V
 }
 
 public final class io/github/yuroyami/kiteplayer/session/MediaNotificationAction {
@@ -314,6 +337,48 @@ public final class io/github/yuroyami/kiteplayer/session/MediaNotificationOption
 	public final fun getWakeLocks ()Lio/github/yuroyami/kiteplayer/session/WakeLockPolicy;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class io/github/yuroyami/kiteplayer/session/MediaRequest {
+	public abstract fun getExtras ()Landroid/os/Bundle;
+	public abstract fun getPlay ()Z
+}
+
+public final class io/github/yuroyami/kiteplayer/session/MediaRequest$Address : io/github/yuroyami/kiteplayer/session/MediaRequest {
+	public fun getExtras ()Landroid/os/Bundle;
+	public fun getPlay ()Z
+	public final fun getUri ()Landroid/net/Uri;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/session/MediaRequest$MediaId : io/github/yuroyami/kiteplayer/session/MediaRequest {
+	public fun getExtras ()Landroid/os/Bundle;
+	public final fun getMediaId ()Ljava/lang/String;
+	public fun getPlay ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/session/MediaRequest$Prepare : io/github/yuroyami/kiteplayer/session/MediaRequest {
+	public fun getExtras ()Landroid/os/Bundle;
+	public fun getPlay ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/session/MediaRequest$Search : io/github/yuroyami/kiteplayer/session/MediaRequest {
+	public fun getExtras ()Landroid/os/Bundle;
+	public fun getPlay ()Z
+	public final fun getQuery ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/session/MediaRequestKind : java/lang/Enum {
+	public static final field Address Lio/github/yuroyami/kiteplayer/session/MediaRequestKind;
+	public static final field MediaId Lio/github/yuroyami/kiteplayer/session/MediaRequestKind;
+	public static final field Prepare Lio/github/yuroyami/kiteplayer/session/MediaRequestKind;
+	public static final field Search Lio/github/yuroyami/kiteplayer/session/MediaRequestKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/session/MediaRequestKind;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/session/MediaRequestKind;
 }
 
 public final class io/github/yuroyami/kiteplayer/session/MediaSessionPhase : java/lang/Enum {

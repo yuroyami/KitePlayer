@@ -24,7 +24,11 @@ import kotlin.concurrent.thread
  * those reports are what line the streams up and the publisher sends one only every 5 seconds.
  *
  * [hold] keeps the media back, in order, and [release] sends what was held at once, which is a
- * network that stalls and then delivers.
+ * network that stalls and then delivers. Held packets go to the players playing at the release.
+ *
+ * PAUSE stops sending to that player alone, and PLAY starts it again with the newest reports, while
+ * the publisher, the other players and the reports carry on. A second PLAY changes nothing, so no
+ * player is ever sent a packet twice (#555).
  */
 internal class RtspRelay : AutoCloseable {
     private val loopback = InetAddress.getLoopbackAddress()
@@ -78,6 +82,9 @@ internal class RtspRelay : AutoCloseable {
 
     fun hold() = synchronized(held) { holding = true }
 
+    /** How many packets [hold] is keeping back, so a test can wait until the publisher's have arrived. */
+    fun heldPackets(): Int = synchronized(held) { held.size }
+
     fun release() {
         synchronized(held) {
             holding = false
@@ -116,7 +123,7 @@ internal class RtspRelay : AutoCloseable {
             val body = headers["content-length"]?.toInt()?.let { length -> ByteArray(length).also(input::readFully).decodeToString() }
             val cseq = headers["cseq"] ?: "0"
             when (method) {
-                "OPTIONS" -> reply(output, cseq, "Public: OPTIONS, DESCRIBE, ANNOUNCE, SETUP, PLAY, RECORD, TEARDOWN, GET_PARAMETER")
+                "OPTIONS" -> reply(output, cseq, "Public: OPTIONS, DESCRIBE, ANNOUNCE, SETUP, PLAY, PAUSE, RECORD, TEARDOWN, GET_PARAMETER")
                 "ANNOUNCE" -> {
                     publisher = true
                     sdp = body
@@ -143,12 +150,13 @@ internal class RtspRelay : AutoCloseable {
                 "RECORD" -> reply(output, cseq, SESSION)
                 "PLAY" -> {
                     reply(output, cseq, SESSION, "Range: npt=0.000-")
-                    player?.let { joining ->
-                        synchronized(held) {
-                            reports.forEach { (stream, report) -> joining.send(2 * stream + 1, report) }
-                            players += joining
-                        }
-                    }
+                    player?.let(::play)
+                }
+                "PAUSE" -> {
+                    // Stopped before the reply, as a camera does: nothing reaches a player after it
+                    // hears that its pause was accepted.
+                    player?.let { paused -> synchronized(held) { players.remove(paused) } }
+                    reply(output, cseq, SESSION)
                 }
                 "TEARDOWN" -> {
                     reply(output, cseq, SESSION)
@@ -160,6 +168,17 @@ internal class RtspRelay : AutoCloseable {
         player?.let(players::remove)
         player?.close()
         socket.close()
+    }
+
+    /**
+     * Starts sending to [joining], with each stream's newest sender report first, once per start: a
+     * PLAY from a player that is already playing changes nothing. The engine pauses a live source it
+     * has opened and plays it again, so PLAY, PAUSE, PLAY is every player's start (#555).
+     */
+    private fun play(joining: Player) = synchronized(held) {
+        if (joining in players) return@synchronized
+        reports.forEach { (stream, report) -> joining.send(2 * stream + 1, report) }
+        players += joining
     }
 
     private fun fromPublisher(channel: Int, packet: ByteArray) {

@@ -1,4 +1,4 @@
-package io.github.yuroyami.kiteplayer.network.xml
+package io.github.yuroyami.kiteplayer.subtitle.xml
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,7 +17,7 @@ class XmlMiniDepthTest {
 
     @Test
     fun `a document nested past the ceiling is refused typed rather than overflowing the stack`() {
-        val refusal = assertFailsWith<XmlException> { XmlMini.parse(nested(XmlMini.MAX_DEPTH + 50)) }
+        val refusal = assertFailsWith<XmlSyntaxException> { XmlMini.parse(nested(XmlMini.MAX_DEPTH + 50)) }
         assertTrue("nested past" in refusal.message!!, refusal.message!!)
     }
 

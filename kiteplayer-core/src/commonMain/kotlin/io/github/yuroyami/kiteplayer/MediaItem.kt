@@ -171,6 +171,12 @@ public data class MediaItem(
      * this file when it is set, and from the stream otherwise. See [ThumbnailSource].
      */
     val thumbnails: ThumbnailSource? = null,
+    /**
+     * True when this item's sound runs into the next one's, as the tracks of an album can, so the
+     * queue joins the two gapless whatever [QueueConfig.crossfade] says (#434). False, the default,
+     * lets a crossfade overlap them.
+     */
+    val runsIntoNext: Boolean = false,
 ) {
     public companion object {}
 
@@ -222,6 +228,7 @@ public data class MediaItem(
         if (title != null) append(", title=").append(title)
         if (artist != null) append(", artist=").append(artist)
         if (album != null) append(", album=").append(album)
+        if (runsIntoNext) append(", runsIntoNext")
         append(")")
     }
 }

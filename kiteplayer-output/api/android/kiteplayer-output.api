@@ -21,6 +21,7 @@ public final class io/github/yuroyami/kiteplayer/output/AndroidGpuImageVideoRend
 	public fun present (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setAdjustments (Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public final fun setDisplayRefreshRate (F)V
+	public fun setFlashGuard (Lio/github/yuroyami/kiteplayer/FlashGuard;)V
 	public fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
 	public fun setOverlay (Lio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setRenderQuality (Lio/github/yuroyami/kiteplayer/RenderQuality;)V
@@ -64,6 +65,7 @@ public final class io/github/yuroyami/kiteplayer/output/AndroidSurfaceVideoRende
 	public fun setAdjustments (Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public final fun setDisplayHdr ([IF)V
 	public final fun setDisplayRefreshRate (F)V
+	public fun setFlashGuard (Lio/github/yuroyami/kiteplayer/FlashGuard;)V
 	public fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
 	public fun setOverlay (Lio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setRenderQuality (Lio/github/yuroyami/kiteplayer/RenderQuality;)V

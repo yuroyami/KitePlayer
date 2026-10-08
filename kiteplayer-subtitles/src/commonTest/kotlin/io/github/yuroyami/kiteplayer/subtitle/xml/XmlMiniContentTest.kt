@@ -1,4 +1,4 @@
-package io.github.yuroyami.kiteplayer.network.xml
+package io.github.yuroyami.kiteplayer.subtitle.xml
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

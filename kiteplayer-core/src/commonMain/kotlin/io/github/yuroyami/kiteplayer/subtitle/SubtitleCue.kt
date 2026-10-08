@@ -177,7 +177,83 @@ public data class CueLayout(
      * which names none.
      */
     val scriptColorMatrix: ScriptColorMatrix? = null,
+    /**
+     * The box this cue flows in, as a TTML region places a paragraph (#492), or null for a cue that
+     * is placed by [alignment], the margins and an authored position, as every other format's is.
+     *
+     * With a region, the cue's lines break at the width inside the region's padding and are aligned
+     * there by the horizontal part of [alignment]; its vertical part, the margins, [positionX] and
+     * [positionY] mean nothing. The cues on screen that share a region stack in [regionOrder] as one
+     * block, which the region places, and none of them stands in the implicit bottom stack or moves
+     * with the viewer's subtitle position. docs/subtitle-regions.md has the whole rule.
+     */
+    val region: CueRegion? = null,
+    /** This cue's place among the paragraphs of its [region], in document order. */
+    val regionOrder: Int = 0,
 )
+
+/**
+ * A box on the screen that cues flow in, as a TTML region is (#492). A value: two cues are in the
+ * same region when their regions are equal, and [id] keeps two regions with the same box apart.
+ *
+ * [left], [top], [width] and [height] are fractions of the area subtitles lay out in, the output
+ * less the safe area, as an authored position is.
+ */
+public data class CueRegion(
+    /** The region's name in its document. */
+    val id: String,
+    val left: Float,
+    val top: Float,
+    val width: Float,
+    val height: Float,
+    /** Space inside the edges: [CueInsets.left] and [CueInsets.right] as fractions of [width], the others of [height]. */
+    val padding: CueInsets = CueInsets.None,
+    /** Where the block of cues sits between the padded top and bottom. */
+    val displayAlign: CueDisplayAlign = CueDisplayAlign.Before,
+    /** ARGB with a straight alpha, drawn under the region's text. Fully transparent draws nothing. */
+    val backgroundColor: Int = 0x00000000,
+    /** When [backgroundColor] shows. */
+    val showBackground: CueShowBackground = CueShowBackground.Always,
+    /** Whether what flows past the region's edges is cut off, TTML's `overflow="hidden"`, its default. */
+    val clip: Boolean = true,
+)
+
+/** Four insets, each a fraction of the dimension it runs along. */
+public data class CueInsets(
+    val left: Float = 0f,
+    val top: Float = 0f,
+    val right: Float = 0f,
+    val bottom: Float = 0f,
+) {
+    public companion object {
+        /** No inset on any side. */
+        public val None: CueInsets = CueInsets()
+    }
+}
+
+/** Where a region's block of cues sits between its padded top and bottom. */
+public enum class CueDisplayAlign {
+    /** At the top. */
+    Before,
+
+    /** In the middle. */
+    Center,
+
+    /** At the bottom. */
+    After,
+}
+
+/** When a region's background shows. */
+public enum class CueShowBackground {
+    /**
+     * Whenever a cue of the region is on screen, one with no text included: a TTML reader gives a
+     * region's active time a cue of its own with no text, so the background shows alone then.
+     */
+    Always,
+
+    /** Only while a cue of the region shows text. */
+    WhenActive,
+}
 
 /**
  * The value of an ASS script's `YCbCr Matrix` header (#499): the matrix and range its colours went

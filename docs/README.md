@@ -14,8 +14,12 @@ installation and everyday use.
   read, and which limit bounds each wait.
 - [Subtitle placement](subtitle-placement.md): where subtitles land, on every renderer and with
   both subtitle engines.
+- [TTML regions](subtitle-regions.md): how TTML and DFXP files are read, the regions their text
+  flows in, and what is not drawn.
 - [Gapless queue playback](gapless-queue.md): how a queue moves to its next item without a
   silence, and when it opens the item from scratch instead.
+- [Dimming flashing video](video-flash-guard.md): the flash guard, the rule it counts flashes by,
+  and which renderers carry it so far.
 
 ## Audio visualiser
 

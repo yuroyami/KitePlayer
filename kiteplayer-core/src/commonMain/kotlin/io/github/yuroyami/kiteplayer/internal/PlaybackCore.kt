@@ -71,11 +71,14 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSink
 import io.github.yuroyami.kiteplayer.spi.BackendSession
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.log10
 import kotlin.math.round
 import kotlin.math.roundToLong
 import kotlin.math.sign
+import kotlin.math.sin
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
@@ -89,6 +92,8 @@ import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.subtitle.CueSelector
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.atomicfu.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -1219,6 +1224,7 @@ internal class PlaybackCore(
     private var videoAdjustments: VideoAdjustments = VideoAdjustments.Identity
     private var renderQuality: io.github.yuroyami.kiteplayer.RenderQuality = config.renderQuality
     private var hdrPolicy: io.github.yuroyami.kiteplayer.HdrPolicy = config.hdrPolicy
+    private var flashGuard: io.github.yuroyami.kiteplayer.FlashGuard = config.flashGuard
 
     /** What the renderer last said the screen shows of this open's dynamic range. Reset with the session. */
     private var videoDynamicRange: io.github.yuroyami.kiteplayer.VideoDynamicRange =
@@ -1323,6 +1329,15 @@ internal class PlaybackCore(
 
     /** Where the last renewal of the item's address (#453) opened it again, or null when none has. */
     private var renewedAtUs: Long? = null
+
+    /** The wait for the network after the item failed for it (#461), or null. Actor only. */
+    private var reconnect: Reconnect? = null
+
+    /** Set by the network status, from any thread, when it reports a network after reporting none (#461). */
+    private val networkBack = atomic(false)
+
+    /** Whether the network status reported no network during this wait, from any thread (#461). */
+    private val networkWasLost = atomic(false)
 
     /**
      * True while the primary subtitle is the one the open chose by its rules, which read the audio,
@@ -1535,6 +1550,7 @@ internal class PlaybackCore(
         Handler("drainCommands") { drainCommands() },
         Handler("handleLateStreams") { handleLateStreams() },
         Handler("handleTrackChanges") { handleTrackChanges() },
+        Handler("handleReconnect") { handleReconnect() },
         Handler("handleAudioFill") { handleAudioFill() },
         Handler("handleQueueHandoff") { handleQueueHandoff() },
         Handler("handleVideoWrite") { handleVideoWrite() },
@@ -2156,6 +2172,38 @@ internal class PlaybackCore(
         return itemTime(if (masked != NO_SEEK_MASK) masked else publishedPositionMicros.value).microseconds
     }
 
+    /**
+     * The source whose positions have a time of day (#444), published by the actor on every pass,
+     * so a caller on any thread asks the one that is open. A source answers these behind its own
+     * lock, and a closed one still answers from what it read.
+     */
+    private val timeOfDaySource = atomic<PlayerMediaSource?>(null)
+
+    /** The time of day of [position], a position of the current item, or null where none is stated. */
+    fun timeOfDayAt(position: Duration): Long? {
+        val source = timeOfDaySource.value ?: return null
+        return askSource { source.timeOfDayAt(Pts(fileTime(position.inWholeMicroseconds))) }
+    }
+
+    /** The position of the current item broadcast at [epochMillis], or null where none is stated. */
+    fun positionAtTimeOfDay(epochMillis: Long): Duration? {
+        val source = timeOfDaySource.value ?: return null
+        return askSource { source.positionAtTimeOfDay(epochMillis) }?.let { itemTime(it.micros).microseconds }
+    }
+
+    private fun timeOfDaySpan(): LongRange? {
+        val source = timeOfDaySource.value ?: return null
+        return askSource { source.timeOfDaySpan }
+    }
+
+    /** A question about the time of day that the source cannot answer is no answer, never a failure of the player. */
+    private inline fun <T> askSource(question: () -> T?): T? = try {
+        question()
+    } catch (refused: Exception) {
+        if (refused is CancellationException) throw refused
+        null
+    }
+
     /** One atomic mapping read, projected to the host instant of this call. */
     fun audioClock(): AudioClockSnapshot {
         val snapshot = publishedAudioClock.value
@@ -2656,6 +2704,8 @@ internal class PlaybackCore(
 
     private fun seekRejection(): Throwable? = when {
         pendingVideoRecovery != null -> null
+        // A wait for the network moves where the item opens again, for an item that could seek (#461).
+        reconnect?.atUs != null -> null
         session == null -> IllegalStateException("seek needs an open media item")
         session?.source?.seekable != true -> UnsupportedOperationException(
             "this source is not seekable, so there is no position to move the cursor to",
@@ -2754,21 +2804,29 @@ internal class PlaybackCore(
                 if (status == PlaybackStatus.Ended && session?.source?.seekable == true) {
                     restartFrom(Pts.Zero)
                 }
+                // Waiting for the network, the player buffers until the item is back (#461).
+                if (reconnect != null) setStatus(PlaybackStatus.Buffering)
                 command.reply.complete(Unit)
             }
             is CoreCommand.Pause -> {
                 playRequested = false
-                applyPause()
+                if (reconnect != null) setStatus(PlaybackStatus.Paused) else applyPause()
                 command.reply.complete(Unit)
             }
-            is CoreCommand.Seek -> queueSeek(command.request, command.reply)
-            is CoreCommand.SeekLater -> if (
-                session?.source?.seekable == true || pendingVideoRecovery != null
-            ) {
-                queueSeek(command.request, null)
-            } else {
-                // Dropped: the mask it set on the caller's thread goes with it (#255).
-                clearSeekMaskUnlessPending()
+            is CoreCommand.Seek -> {
+                val wait = reconnect
+                if (wait != null && session == null) seekWhileReconnecting(wait, command.request, command.reply) else queueSeek(command.request, command.reply)
+            }
+            is CoreCommand.SeekLater -> {
+                val wait = reconnect?.takeIf { it.atUs != null && session == null }
+                if (wait != null) {
+                    seekWhileReconnecting(wait, command.request, null)
+                } else if (session?.source?.seekable == true || pendingVideoRecovery != null) {
+                    queueSeek(command.request, null)
+                } else {
+                    // Dropped: the mask it set on the caller's thread goes with it (#255).
+                    clearSeekMaskUnlessPending()
+                }
             }
             is CoreCommand.Stop -> {
                 // A cancelled request's stop that finds another request's session leaves it alone.
@@ -3039,6 +3097,14 @@ internal class PlaybackCore(
                 if (session == null) pendingRenderer?.setHdrPolicy(command.value)
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetFlashGuard -> {
+                flashGuard = command.value
+                // Delivered like the adjustments it folds into (#500).
+                session?.renderer?.setFlashGuard(command.value)
+                if (session == null) pendingRenderer?.setFlashGuard(command.value)
+                snapshotDirty = true
+                command.reply.complete(Unit)
+            }
             // The same rule as the tone map warning: only after this open's first frame, so a report
             // about the previous item's last frames does not count for this one.
             is CoreCommand.ReportDynamicRange -> {
@@ -3159,6 +3225,7 @@ internal class PlaybackCore(
         renderer?.setAdjustments(videoAdjustments)
         renderer?.setRenderQuality(renderQuality)
         renderer?.setHdrPolicy(hdrPolicy)
+        renderer?.setFlashGuard(flashGuard)
         renderer?.setTransform(videoTransform)
         val session = this.session
         if (session == null) {
@@ -3502,6 +3569,8 @@ internal class PlaybackCore(
      * a fresh open, and the player's own for a preload that was aligned to it (#306).
      */
     private fun resetForOpen(item: MediaItem, epoch: Generation) {
+        // An open ends a wait for the network, as it ends any item (#461).
+        endReconnect()
         media = item
         variantChosenByPlayer = false
         renewedAtUs = null
@@ -5461,6 +5530,189 @@ internal class PlaybackCore(
     }
 
     /**
+     * The wait of [io.github.yuroyami.kiteplayer.NetworkConfig.recovery] (#461): the error that
+     * started it, how to open the item again, and when to try next. See
+     * `docs/cancellation-and-bounded-waits.md`.
+     */
+    private class Reconnect(
+        val error: PlaybackError,
+        val startedNanos: Long,
+        /** Where the item opens again, in microseconds of its file, or null to open it at the live edge. */
+        var atUs: Long?,
+        val duration: Duration?,
+        val video: StreamChoice,
+        val audio: StreamChoice,
+        val subtitle: StreamChoice,
+        val secondary: TrackId?,
+    ) {
+        var attempts = 0
+        var nextAttemptNanos = 0L
+        var watch: AutoCloseable? = null
+    }
+
+    /**
+     * Turns [error], which ended [session], into a wait for the network when the recovery asks for
+     * one (#461): the item had opened, reads over the network and failed reading. The session is
+     * torn down as a failure tears it down, but the player does not fail.
+     *
+     * @return true when the wait began, and false when the caller fails as before.
+     */
+    private suspend fun startReconnect(session: OpenSession, error: PlaybackError): Boolean {
+        val recovery = config.network.recovery ?: return false
+        if (error !is PlaybackError.SourceStalled && error !is PlaybackError.SourceUnavailable) return false
+        if (media?.uri?.let(::readsOverNetwork) != true) return false
+        fun choice(index: Int?) = index?.let { StreamChoice.At(it) } ?: StreamChoice.None
+        val wait = Reconnect(
+            error = error,
+            startedNanos = clock.nanos(),
+            atUs = if (session.source.seekable) currentPosition().micros else null,
+            duration = publishedDuration(session),
+            video = choice(session.videoStream?.index),
+            audio = choice(session.audioStream?.index),
+            subtitle = choice(session.selectedSubtitleStream?.index),
+            secondary = tracks.selectedSecondarySubtitle,
+        )
+        teardownSession()
+        resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
+        pendingSeek = null
+        clearSeekMaskUnlessPending()
+        reconnect = wait
+        networkBack.value = false
+        networkWasLost.value = false
+        wait.watch = watchNetwork(recovery)
+        nextReconnectIn(wait)
+        warn(PlaybackWarning.Reconnecting(error))
+        setStatus(if (playRequested) PlaybackStatus.Buffering else PlaybackStatus.Paused)
+        publishSnapshot()
+        return true
+    }
+
+    /** Watches the network status of [recovery], or the installed one, for the wait (#461). */
+    private fun watchNetwork(recovery: io.github.yuroyami.kiteplayer.NetworkRecovery): AutoCloseable? {
+        val status = recovery.status ?: io.github.yuroyami.kiteplayer.spi.MediaIoProviders.networkStatus() ?: return null
+        return try {
+            status.watch { online ->
+                if (!online) {
+                    networkWasLost.value = true
+                } else if (networkWasLost.getAndSet(false)) {
+                    networkBack.value = true
+                }
+            }
+        } catch (failure: Exception) {
+            // The timer alone tries then, as on a platform with no status.
+            io.github.yuroyami.kiteplayer.KiteLog.log("kiteplayer", "the network status could not be watched: ${failure.message}")
+            null
+        }
+    }
+
+    /** Sets when [wait] tries next: 1, 2, 4 and 8 seconds after the attempt before, then every 10. */
+    private fun nextReconnectIn(wait: Reconnect) {
+        val delay = RECONNECT_DELAYS.getOrElse(wait.attempts) { RECONNECT_DELAY_MAX }
+        wait.nextAttemptNanos = clock.nanos() + delay.inWholeNanoseconds
+        wakeIn(delay)
+    }
+
+    /** Ends the wait and stops watching the network (#461). */
+    private fun endReconnect() {
+        val wait = reconnect ?: return
+        reconnect = null
+        runCatching { wait.watch?.close() }
+        snapshotDirty = true
+    }
+
+    /**
+     * Each pass of a wait for the network (#461): gives up at the limit, and otherwise opens the item
+     * again when its time has come or the network status reported a network again.
+     */
+    private suspend fun handleReconnect() {
+        val wait = reconnect ?: return
+        val now = clock.nanos()
+        val maxWait = config.network.recovery?.maxWait ?: Duration.ZERO
+        if (maxWait.isFinite() && now - wait.startedNanos >= maxWait.inWholeNanoseconds) {
+            endReconnect()
+            fail(wait.error)
+            return
+        }
+        if (!networkBack.getAndSet(false) && now < wait.nextAttemptNanos) {
+            wakeIn((wait.nextAttemptNanos - now).nanoseconds)
+            return
+        }
+        val item = media ?: run {
+            endReconnect()
+            return
+        }
+        wait.attempts++
+        try {
+            requestedEpoch = requestedEpoch.next()
+            val rebuilt = buildSession(item, wait.video, wait.audio, wait.subtitle)
+            session = rebuilt
+            // As a rebuild: fresh decoders stamp the first epoch, and the reposition aligns them.
+            flushDecoders(rebuilt, requestedEpoch)
+            clearBuffers(rebuilt, requestedEpoch)
+            rebuilt.videoParked.value = !videoEnabled
+            startWorkers(rebuilt)
+            when (awaitInitialFill(rebuilt)) {
+                FillOutcome.WorkerFinished -> throw workerOutcomeException(rebuilt, "before the item could refill after the network came back")
+                FillOutcome.TimedOut -> warn(
+                    PlaybackWarning.StartupIncomplete("no stream reached readiness within $OPEN_FILL_DEADLINE after the item was opened again"),
+                )
+                FillOutcome.Ready -> Unit
+                // A stop or a close is waiting, and it ends the wait.
+                FillOutcome.Preempted -> {
+                    teardownSession()
+                    return
+                }
+            }
+            wait.atUs?.let { at ->
+                if (pendingSeek == null && rebuilt.source.seekable) {
+                    pendingSeek = SeekRequest(SeekTarget.Absolute(Pts(at)), SeekMode.Precise)
+                }
+            }
+            endReconnect()
+            restoreSubtitleState(wait.secondary)
+            refreshTypesetting()
+            if (rebuilt.videoStream == null) clearRendererPicture()
+            setStatus(if (playRequested) PlaybackStatus.Buffering else PlaybackStatus.Paused)
+            publishSnapshot()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (preempted: OpenPreempted) {
+            teardownSession()
+        } catch (failure: Throwable) {
+            val error = classify(failure, item)
+            teardownSession()
+            if (error is PlaybackError.SourceStalled || error is PlaybackError.SourceUnavailable) {
+                nextReconnectIn(wait)
+                snapshotDirty = true
+            } else {
+                endReconnect()
+                fail(error)
+            }
+        }
+    }
+
+    /**
+     * A seek during a wait for the network (#461): it moves where the item opens again, and is
+     * answered at once. Only for an item that could seek, which [seekRejection] checks.
+     */
+    private fun seekWhileReconnecting(wait: Reconnect, request: SeekRequest, reply: CompletableDeferred<SeekResult>?) {
+        val from = wait.atUs ?: 0L
+        val origin = itemOriginMicros.value
+        val target = when (val to = request.target) {
+            is SeekTarget.Absolute -> to.position.micros
+            is SeekTarget.Relative -> from + to.offset.inWholeMicroseconds
+            is SeekTarget.Factor -> wait.duration?.let { origin + (it.inWholeMicroseconds * to.fraction).toLong() } ?: from
+        }
+        val endUs = wait.duration?.let { origin + it.inWholeMicroseconds }
+        val at = target.coerceAtLeast(origin).let { if (endUs != null) it.coerceAtMost(endUs) else it }
+        wait.atUs = at
+        publishedPositionMicros.value = at
+        maskedSeekTargetMicros.value = NO_SEEK_MASK
+        progressState.value = progressState.value.copy(position = itemTime(at).microseconds)
+        reply?.complete(SeekResult.Applied(Pts(at)))
+    }
+
+    /**
      * Whether [session]'s silent stretches are cut (#429): while the setting is on, no picture is
      * shown and the stream is not live. A picture would have to follow each cut, and a live stream
      * cut would only reach its live edge sooner and wait there. Turning a video back on seeks to
@@ -7147,6 +7399,8 @@ internal class PlaybackCore(
             return false
         }
         val error = PlaybackError.SourceStalled(media?.uri ?: "", stalledFor)
+        // A stall over the network waits for the network instead, when the recovery asks (#461).
+        if (startReconnect(session, error)) return true
         teardownSession()
         fail(error)
         resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
@@ -8506,6 +8760,12 @@ internal class PlaybackCore(
         var handedOff: Boolean = false
 
         /**
+         * True once a crossfade into this item was armed (#434). The fade takes the item's first
+         * sound, so `next` opens it afresh rather than from here.
+         */
+        var fading: Boolean = false
+
+        /**
          * True when this item cannot take the current item's ring, so it follows the old way: the
          * current item ends and stops its device, and this item opens from the preload with a
          * device of its own (#306).
@@ -8516,6 +8776,69 @@ internal class PlaybackCore(
     private class PreparedNext(
         val session: OpenSession,
         val externals: List<ExternalSubtitleTrack>,
+    )
+
+    /**
+     * A crossfade from the current item into the next (#434): the next item's share, which the
+     * current item's feeder mixes into its own sound before the ring. See `docs/gapless-queue.md`.
+     *
+     * The actor arms it once the next item is primed, and the feeder mixes. [incoming] and the
+     * buffer it is mixed from are shared under [lock]: the actor takes the share back under it when
+     * the preload is dropped, without parking the feeder, because a park abandons the sound the
+     * feeder is writing, and this item goes on playing.
+     */
+    private class Crossfade(
+        /** The epoch the fade was armed in. A seek moves on from it, and the feeder leaves the fade. */
+        val epoch: Generation,
+        /** Where the fade starts, in microseconds of the current item's file. */
+        val startUs: Long,
+        /** Where it ends: the current item's end. */
+        val endUs: Long,
+        /**
+         * The next item's ReplayGain over the current one's. The current item's trim scales the
+         * whole mix, so the next item's share comes out at its own gain.
+         */
+        val gainRatio: Float,
+        incoming: OpenSession,
+    ) {
+        val lock = SynchronizedObject()
+
+        /** The next item, or null once its share was taken back and only the fade-out goes on. */
+        var incoming: OpenSession? = incoming
+
+        /** The fade's length in frames, set at its first frame, or zero before. The feeder's. */
+        var frames: Long = 0
+
+        /** How many of [frames] were written. The feeder's. */
+        var done: Long = 0
+
+        /** The next item's buffer being mixed in, its sound interleaved, and the frames of it used. */
+        var buffer: AudioBuffer? = null
+        var samples: FloatArray = FloatArray(0)
+        var used: Int = 0
+
+        val interleaver = Interleaver()
+
+        /** Closes the buffer being mixed, which the next item's lanes count as theirs. Under [lock]. */
+        fun dropBuffer() {
+            val held = buffer ?: return
+            buffer = null
+            used = 0
+            held.close()
+            incoming?.audioInFlight?.decrementAndGet()
+        }
+    }
+
+    /**
+     * Where the next item's feeder picks up after a crossfade gave it the ring (#434): the buffer
+     * the fade was mixing from, with the frames of it already heard, and the rest of the fade-in
+     * when the current item ended before the fade did.
+     */
+    private class FadeInRest(
+        val buffer: AudioBuffer?,
+        val skipFrames: Int,
+        val done: Long,
+        val frames: Long,
     )
 
     /**
@@ -8793,6 +9116,7 @@ internal class PlaybackCore(
             return
         }
         if (!next.handedOff) {
+            armCrossfade(active, next, prepared)
             if (!currentAudioFinished(active)) {
                 // With every packet decoded, the last sample is at most a ring depth and a few
                 // buffers away, and the next item's feeder must start well before the ring runs dry.
@@ -8800,7 +9124,9 @@ internal class PlaybackCore(
                 wakeIn(if (allDecoded) HANDOFF_POLL else WORKER_POLL)
                 return
             }
-            if (!pendingPrimed(prepared.session)) {
+            // A fade has been taking the next item's sound for seconds, so its queues are not full;
+            // its lanes run, and the ring covers what they owe.
+            if (!next.fading && !pendingPrimed(prepared.session)) {
                 // Waited for only while the ring still covers the wait.
                 if (ringRunsDry(active)) {
                     dropPending("the next item was not ready when the current one ran out of sound")
@@ -8962,7 +9288,11 @@ internal class PlaybackCore(
         if (!passMayFollow(active, index)) return
         val durationUs = active.itemEndUs ?: return
         val wrapUs = loopWrapUs(active)
-        val leadUs = config.queue.preloadNext.inWholeMicroseconds
+        // A crossfade starts that long before the end, so the next item opens earlier, with time to prime (#434).
+        val leadUs = maxOf(
+            config.queue.preloadNext.inWholeMicroseconds,
+            crossfadeOutUs(active, repeat)?.let { it + CROSSFADE_PRIME_US } ?: 0L,
+        )
         if (wrapUs != null) {
             if (!passBeforeBDue(active, wrapUs, leadUs)) return
         } else if (!passAtEndDue(active, durationUs, leadUs)) {
@@ -9298,6 +9628,89 @@ internal class PlaybackCore(
             active.audioInFlight.value == 0
     }
 
+    /**
+     * How long a crossfade out of [active] may last, in microseconds, or null when none may (#434):
+     * the configured length, cut to half the item. Only the current item's side of the rules in
+     * `docs/gapless-queue.md`; [crossfadeIntoUs] adds the next item's.
+     */
+    private fun crossfadeOutUs(active: OpenSession, repeat: Boolean): Long? {
+        val wanted = config.queue.crossfade.inWholeMicroseconds
+        if (wanted <= 0L || repeat || !config.queue.gapless || config.queue.preloadNext <= Duration.ZERO) return null
+        if (media?.runsIntoNext == true || active.audioLane == null || showsPicture(active)) return null
+        if (active.itemEndIsEstimate) return null
+        val endUs = active.itemEndUs ?: return null
+        return minOf(wanted, (endUs - active.clipStartUs) / 2).takeIf { it > 0L }
+    }
+
+    /** [crossfadeOutUs] with the next item's side: no picture, the same rate and channels, and half its length. */
+    private fun crossfadeIntoUs(active: OpenSession, next: PendingNext, incoming: OpenSession): Long? {
+        if (next.wrapUs != null) return null
+        val outUs = crossfadeOutUs(active, next.repeat) ?: return null
+        if (incoming.audioLane == null || showsPicture(incoming)) return null
+        val ours = active.audioLane?.decoder?.outputFormat ?: return null
+        val theirs = incoming.audioLane?.decoder?.outputFormat ?: return null
+        if (ours.sampleRate != theirs.sampleRate || ours.channels != theirs.channels) return null
+        val theirLengthUs = incoming.itemEndUs?.let { it - incoming.clipStartUs }
+        return (if (theirLengthUs != null) minOf(outUs, theirLengthUs / 2) else outUs).takeIf { it > 0L }
+    }
+
+    /** True when [target] shows a picture, which a crossfade does not mix (#434). Cover art is no picture here. */
+    private fun showsPicture(target: OpenSession): Boolean = target.videoStream?.let { !it.isCoverArt } == true
+
+    /**
+     * Arms the crossfade into [next] once one applies and the next item is primed (#434). Once an
+     * epoch: a fade armed too late for its start, or taken back, leaves the join gapless.
+     */
+    private fun armCrossfade(active: OpenSession, next: PendingNext, prepared: PreparedNext) {
+        if (next.fading || active.crossfadeEpoch == requestedEpoch) return
+        if (pendingSeek != null || seekPhase.isRunning) return
+        val incoming = prepared.session
+        val fadeUs = crossfadeIntoUs(active, next, incoming) ?: return
+        val endUs = active.itemEndUs ?: return
+        val audio = active.audio ?: return
+        if (!pendingPrimed(incoming)) return
+        val startUs = endUs - fadeUs
+        // Heard past the start already: the item ends gapless rather than with a fade cut short.
+        if (currentPosition().micros >= startUs) {
+            active.crossfadeEpoch = requestedEpoch
+            return
+        }
+        val ratio = replayGainFor(incoming.audioStream, incoming.source.metadata) / audio.replayGain
+        active.crossfadeEpoch = requestedEpoch
+        next.fading = true
+        active.crossfade.value = Crossfade(requestedEpoch, startUs, endUs, ratio, incoming)
+        snapshotDirty = true
+    }
+
+    /**
+     * Gives the next item's sound back from a fade whose preload is being dropped (#434). The
+     * feeder lets go of it under the fade's lock, and goes on fading the current item out alone.
+     */
+    private fun withdrawCrossfade(active: OpenSession, incoming: OpenSession) {
+        val fade = active.crossfade.value ?: return
+        synchronized(fade.lock) {
+            if (fade.incoming !== incoming) return
+            fade.dropBuffer()
+            fade.incoming = null
+        }
+    }
+
+    /**
+     * What the next item's feeder picks up from [fade] at the handoff (#434), with the current
+     * item's feeder parked: the buffer the mix was in, past the frames already heard, and the rest
+     * of the fade-in. Null when the fade had not started, which leaves an ordinary gapless join.
+     */
+    private fun takeFadeInRest(fade: Crossfade, incoming: OpenSession): FadeInRest? = synchronized(fade.lock) {
+        if (fade.incoming !== incoming || fade.done == 0L) {
+            fade.dropBuffer()
+            return@synchronized null
+        }
+        val buffer = fade.buffer?.takeIf { fade.used < it.frameCount }
+        if (buffer == null) fade.dropBuffer()
+        fade.buffer = null
+        FadeInRest(buffer, fade.used, fade.done, fade.frames)
+    }
+
     /** True when the ring holds too little of the current item to wait for the next one any longer. */
     private fun ringRunsDry(active: OpenSession): Boolean =
         (active.audio?.buffered ?: Duration.ZERO) <= HANDOFF_MARGIN
@@ -9321,6 +9734,8 @@ internal class PlaybackCore(
             dropPending("the current item's audio feeder did not stop within $QUIESCE_DEADLINE")
             return false
         }
+        // The fade's share of the next item goes on from where the mix left it (#434).
+        active.crossfade.getAndSet(null)?.let { fade -> incoming.fadeInRest = takeFadeInRest(fade, incoming) }
         // ReplayGain is applied on the way in, so the next item's own value holds from its first sample.
         audio.replayGain = replayGainFor(incoming.audioStream, incoming.source.metadata)
         audio.beginJoin()
@@ -9354,7 +9769,7 @@ internal class PlaybackCore(
      * subtitle files, so `next` opens the item afresh.
      */
     private fun primedFor(index: Int?): PendingNext? =
-        pendingNext?.takeIf { index != null && it.index == index && it.prepared != null && !it.handedOff && !it.repeat }
+        pendingNext?.takeIf { index != null && it.index == index && it.prepared != null && !it.handedOff && !it.repeat && !it.fading }
 
     /**
      * Opens a primed preload as the current item without opening it again (#306). The item before
@@ -9661,7 +10076,12 @@ internal class PlaybackCore(
                 retiringBuilds += next.job
             }
             next.handedOff && active != null -> takeRingBack(active, prepared.session, midItem = next.wrapUs != null)
-            else -> releaseSession(prepared.session)
+            else -> {
+                // A fade that took the next item's sound gives it back first, and the current item
+                // fades out on its own to its end (#434).
+                if (next.fading && active != null) withdrawCrossfade(active, prepared.session)
+                releaseSession(prepared.session)
+            }
         }
     }
 
@@ -10730,6 +11150,7 @@ internal class PlaybackCore(
 
     private suspend fun runStop() {
         sessionOwner = null
+        endReconnect()
         cancelSubtitleAcquisitions { IllegalStateException("stop() ended the subtitle file's load before it finished") }
         playRequested = false
         pendingVideoRecovery = null
@@ -10769,6 +11190,7 @@ internal class PlaybackCore(
         playRequested = false
         pendingVideoRecovery = null
         pendingSeek = null
+        endReconnect()
         cancelSubtitleAcquisitions { IllegalStateException("close() ended the subtitle file's load before it finished") }
         // Nothing here may block before the release below starts, because the close deadline is
         // the release's: finishing a recording, releasing the preload and waiting for preload
@@ -11066,6 +11488,7 @@ internal class PlaybackCore(
             videoAdjustments = videoAdjustments,
             renderQuality = renderQuality,
             hdrPolicy = hdrPolicy,
+            flashGuard = flashGuard,
             videoDynamicRange = videoDynamicRange,
             videoTransform = videoTransform,
             subtitleDelay = subtitleDelay,
@@ -11384,6 +11807,8 @@ internal class PlaybackCore(
                 audioFeedError(session, cause) { "the ${outcome.name} worker failed" }
             else -> PlaybackError.Internal("the ${outcome.name} worker failed", cause)
         }
+        // A read the network failed waits for the network instead, when the recovery asks (#461).
+        if (outcome.name == DEMUX_WORKER && startReconnect(session, error)) return
         // A dead worker is a handled failure and never a hang, which is why every worker reports here.
         teardownSession()
         fail(error)
@@ -11430,9 +11855,10 @@ internal class PlaybackCore(
         snapshotState.value = PlayerSnapshot(
             status = status,
             media = media,
-            duration = session?.let { publishedDuration(it) },
+            // A wait for the network keeps what the item had (#461).
+            duration = session?.let { publishedDuration(it) } ?: reconnect?.duration,
             durationIsEstimate = session?.let { durationStillEstimated(it) } ?: false,
-            seekable = session?.source?.seekable ?: false,
+            seekable = session?.source?.seekable ?: (reconnect?.atUs != null),
             videoSize = session?.videoStream?.visibleVideoSize,
             // The item's own thumbnail file stands before the stream's pictures (#433).
             tracks = itemThumbnails?.file?.takeIf { itemThumbnails?.source == media?.thumbnails }
@@ -11467,6 +11893,7 @@ internal class PlaybackCore(
             videoAdjustments = videoAdjustments,
             renderQuality = renderQuality,
             hdrPolicy = hdrPolicy,
+            flashGuard = flashGuard,
             videoDynamicRange = videoDynamicRange,
             videoTransform = videoTransform,
             subtitleDelay = subtitleDelay,
@@ -11489,6 +11916,7 @@ internal class PlaybackCore(
             markers = markers,
             playRequested = publishedPlayIntent(),
             preloadedIndex = pendingNext?.takeIf { it.prepared != null && it.index >= 0 }?.index,
+            reconnecting = reconnect != null,
         )
         publishProgressAndStats()
     }
@@ -11523,15 +11951,22 @@ internal class PlaybackCore(
         val session = session
         val now = clock.nanos()
         publishAudioClock(session, now)
+        // Every pass, so a caller's question about the time of day reaches the open source at once.
+        timeOfDaySource.value = session?.source
         if (force || (now - lastProgressAtNanos).nanoseconds >= config.progressInterval) {
             lastProgressAtNanos = now
             if (session != null) noteFurthestPosition(session)
+            // The masked read, deliberately: the progress flow feeds the same seek bars that
+            // poll position(), and the two must never disagree about which timeline is current.
+            val shown = position()
+            val span = timeOfDaySpan()
             progressState.value = Progress(
-                // The masked read, deliberately: the progress flow feeds the same seek bars that
-                // poll position(), and the two must never disagree about which timeline is current.
-                position = position(),
+                position = shown,
                 bufferedAhead = bufferedAhead(session),
                 bufferedRanges = bufferedRanges(session),
+                timeOfDayMillis = timeOfDayAt(shown),
+                firstTimeOfDayMillis = span?.first,
+                lastTimeOfDayMillis = span?.last,
             )
         }
         if (force || (now - lastStatsAtNanos).nanoseconds >= config.statsInterval) {
@@ -12989,6 +13424,14 @@ internal class PlaybackCore(
         // The buffer that reaches past a taken pass end, kept unwritten from the end on.
         var held: AudioBuffer? = null
         var heldAt: PassEnd? = null
+        // After a crossfade gave this item the ring: the buffer the mix was in, the frames of it
+        // already heard, and the rest of a fade-in that the item before ended short of (#434).
+        val rest = session.fadeInRest
+        session.fadeInRest = null
+        var carried: AudioBuffer? = rest?.buffer
+        var carriedSkip = rest?.skipFrames ?: 0
+        var fadeInDone = rest?.done ?: 0L
+        val fadeInFrames = rest?.frames ?: 0L
         try {
             while (true) {
                 // Every park comes before the ring is cleared, by a seek or a track change, or before
@@ -13005,12 +13448,23 @@ internal class PlaybackCore(
                 worker.checkpoint()
                 if (worker.releases != restarts) {
                     restarts = worker.releases
-                    if (worker.epoch != epoch) fedUntilUs = Long.MIN_VALUE
+                    if (worker.epoch != epoch) {
+                        fedUntilUs = Long.MIN_VALUE
+                        // A seek leaves a fade-in behind with the sound it was for.
+                        fadeInDone = fadeInFrames
+                    }
                     epoch = worker.epoch
                 }
                 val waiting = held
                 var resumeFromUs = Long.MIN_VALUE
-                val buffer = if (waiting != null) {
+                var skipFrames = 0
+                val pickedUp = carried
+                val buffer = if (pickedUp != null) {
+                    carried = null
+                    skipFrames = carriedSkip
+                    carriedSkip = 0
+                    pickedUp
+                } else if (waiting != null) {
                     val end = heldAt ?: error("a held buffer has its end")
                     // Kept while the end stands: the next pass takes the ring from here, or the
                     // end is lifted and this pass carries on from it. A quiesce ends the nap, and
@@ -13070,6 +13524,14 @@ internal class PlaybackCore(
                     var interleaved = interleaver.interleave(buffer)
                     var pts = buffer.pts
                     var frames = buffer.frameCount
+                    // The frames of a crossfade's last buffer that the mix already played (#434).
+                    if (skipFrames > 0 && buffer.format.sampleRate > 0) {
+                        val cut = skipFrames.coerceAtMost(frames)
+                        val channels = buffer.format.channels
+                        interleaved = interleaved.copyOfRange(cut * channels, frames * channels)
+                        pts = Pts(pts.micros + buffer.format.durationOf(cut).micros)
+                        frames -= cut
+                    }
                     // Sample-exact trim of the one buffer that straddles the seek target. The decode
                     // side drops whole buffers that END before the target; this slices the leading
                     // pre-target samples off the survivor, so a precise seek starts its sound AT the
@@ -13115,6 +13577,14 @@ internal class PlaybackCore(
                         if (keep) end?.reached?.value = true
                         continue
                     }
+                    // A crossfade into the next item mixes its share in here, before the taps and the
+                    // ring, and the next item finishes a fade-in the item before ended short of (#434).
+                    session.crossfade.value?.takeIf { it.epoch == epoch }?.let { fade ->
+                        mixCrossfade(fade, pts, interleaved, frames, buffer.format, epoch)
+                    }
+                    if (fadeInDone < fadeInFrames) {
+                        fadeInDone = fadeIn(interleaved, frames, buffer.format.channels, fadeInDone, fadeInFrames)
+                    }
                     // The landing is the first sample that will be heard, so it is recorded after the trim.
                     session.firstAudio.record(epoch, pts)
                     session.landingArrived.trySend(Unit)
@@ -13149,7 +13619,114 @@ internal class PlaybackCore(
                 kept.close()
                 session.audioInFlight.decrementAndGet()
             }
+            carried?.let { left ->
+                left.close()
+                session.audioInFlight.decrementAndGet()
+            }
         }
+    }
+
+    /**
+     * Mixes the next item's share of [fade] into [out], [frames] frames of the current item's sound
+     * at [pts], in place (#434). From the fade's start, the current item is scaled by cos(pi/2 x)
+     * and the next item by sin(pi/2 x), with x the part of the fade written so far, so two unrelated
+     * sounds keep their loudness through it. Past the fade, the current item is silent.
+     */
+    private fun mixCrossfade(fade: Crossfade, pts: Pts, out: FloatArray, frames: Int, format: AudioFormat, epoch: Generation) {
+        val rate = format.sampleRate
+        val channels = format.channels
+        if (rate <= 0 || channels <= 0) return
+        synchronized(fade.lock) {
+            var at = 0
+            if (fade.frames == 0L) {
+                // The fade's first buffer: it starts at its start, or here, that much shorter, when
+                // this feeder had written past the start before the next item was ready.
+                val startsAt = (fade.startUs - pts.micros) * rate / 1_000_000L
+                if (startsAt >= frames) return
+                at = startsAt.coerceAtLeast(0L).toInt()
+                val left = (fade.endUs - maxOf(fade.startUs, pts.micros)) * rate / 1_000_000L
+                if (left <= 0L) {
+                    // Written past the end already: nothing is left to fade, and the join is gapless.
+                    fade.dropBuffer()
+                    fade.incoming = null
+                    fade.frames = -1L
+                    return
+                }
+                fade.frames = left
+            }
+            if (fade.frames < 0L) return
+            while (at < frames) {
+                val available = nextShare(fade, frames - at, format, epoch)
+                val count = if (available > 0) available else frames - at
+                for (i in 0 until count) {
+                    val x = (fade.done + i).toDouble() / fade.frames
+                    val outGain = if (x >= 1.0) 0f else cos(x * PI / 2).toFloat()
+                    val inGain = if (x >= 1.0) 1f else sin(x * PI / 2).toFloat()
+                    val o = (at + i) * channels
+                    if (available > 0) {
+                        val n = (fade.used + i) * channels
+                        val share = inGain * fade.gainRatio
+                        for (c in 0 until channels) out[o + c] = out[o + c] * outGain + fade.samples[n + c] * share
+                    } else {
+                        for (c in 0 until channels) out[o + c] *= outGain
+                    }
+                }
+                if (available > 0) fade.used += available
+                fade.done += count
+                at += count
+            }
+        }
+    }
+
+    /**
+     * How many frames of the next item's sound [fade] has ready, up to [max], pulling its next
+     * decoded buffer when the one being mixed is used up (#434). The next item's own start, a start
+     * position or a clip's, trims its first buffer to the sample, as its feeder would. Zero when its
+     * sound is taken back or not decoded yet. Under the fade's lock.
+     */
+    private fun nextShare(fade: Crossfade, max: Int, format: AudioFormat, epoch: Generation): Int {
+        val incoming = fade.incoming ?: return 0
+        while (true) {
+            val held = fade.buffer
+            if (held != null && fade.used < held.frameCount) return minOf(max, held.frameCount - fade.used)
+            fade.dropBuffer()
+            val next = incoming.decodedAudio.tryReceive().getOrNull() ?: return 0
+            val sameFormat = next.format.sampleRate == format.sampleRate && next.format.channels == format.channels
+            if (next.generation != epoch || !sameFormat) {
+                next.close()
+                incoming.audioInFlight.decrementAndGet()
+                if (!sameFormat) {
+                    // A sound that changed its format part way cannot be mixed sample for sample.
+                    fade.incoming = null
+                    return 0
+                }
+                continue
+            }
+            fade.buffer = next
+            fade.samples = fade.interleaver.interleave(next)
+            val discardBefore = incoming.discardBeforeUs.value
+            fade.used = if (discardBefore != Long.MIN_VALUE && next.pts.micros < discardBefore) {
+                ((discardBefore - next.pts.micros) * format.sampleRate / 1_000_000L).coerceIn(0L, next.frameCount.toLong()).toInt()
+            } else {
+                0
+            }
+        }
+    }
+
+    /**
+     * Scales [frames] frames of [out] by the rest of a crossfade's fade-in, sin(pi/2 x) from [done]
+     * of [total] frames on (#434), and returns how far it got.
+     */
+    private fun fadeIn(out: FloatArray, frames: Int, channels: Int, done: Long, total: Long): Long {
+        var at = done
+        for (frame in 0 until frames) {
+            if (at >= total) break
+            val gain = sin(at.toDouble() / total * PI / 2).toFloat()
+            val o = frame * channels
+            for (c in 0 until channels) out[o + c] *= gain
+            at++
+        }
+        return at
     }
 
     /**
@@ -13718,6 +14295,18 @@ internal class PlaybackCore(
          */
         val passEnd = atomic<PassEnd?>(null)
 
+        /** The crossfade into the next item that the feeder mixes, or null (#434). */
+        val crossfade = atomic<Crossfade?>(null)
+
+        /** The epoch a crossfade was armed in, so an item fades out once an epoch. Actor only. */
+        var crossfadeEpoch: Generation? = null
+
+        /**
+         * For a next item that a crossfade handed the ring to, where its feeder picks up (#434).
+         * Set before the feeder starts, and read by it once.
+         */
+        var fadeInRest: FadeInRest? = null
+
         /**
          * Whether this turn of an A-B loop was given its end, or none, and the B it was given for.
          * Actor-owned, but for a pass, whose build gives them before it is handed over.
@@ -14140,6 +14729,9 @@ internal class PlaybackCore(
         /** The least of the current item the ring must hold while the handoff waits for the next one. */
         val HANDOFF_MARGIN: Duration = 40.milliseconds
 
+        /** How long before a crossfade's start the next item opens, to be primed in time (#434). */
+        const val CROSSFADE_PRIME_US: Long = 2_000_000L
+
         /**
          * The least time before B that a turn of an A-B loop needs for its next pass to open,
          * unless the section is shorter (#467). A turn that starts nearer B goes back by the seek.
@@ -14265,6 +14857,21 @@ private const val MAX_COMMANDS_PER_PASS: Int = 64
 
 /** How far playback must move past a renewal of the item's address before another may run (#453). */
 private const val RENEWAL_PROGRESS_US: Long = 2_000_000L
+
+/** The waits before the first attempts to open an item again after the network failed it (#461). */
+private val RECONNECT_DELAYS: List<Duration> = listOf(1.seconds, 2.seconds, 4.seconds, 8.seconds)
+
+/** The wait between the attempts after [RECONNECT_DELAYS] (#461). */
+private val RECONNECT_DELAY_MAX: Duration = 10.seconds
+
+/** The address schemes read over a network, whose failures a wait for the network covers (#461). */
+private val NETWORK_SCHEMES: Set<String> = setOf("http", "https", "rtsp", "rtsps", "rtmp", "rtmps", "udp", "rtp", "srt", "tcp")
+
+/** True when [uri] is read over a network, by its scheme (#461). */
+internal fun readsOverNetwork(uri: String): Boolean {
+    val scheme = uri.substringBefore("://", missingDelimiterValue = "")
+    return scheme.isNotEmpty() && scheme.lowercase() in NETWORK_SCHEMES
+}
 
 // Holding the delay behind a live sender (#395).
 /** How much faster than the caller's speed the player catches up: a second of delay in ten. */
@@ -14662,6 +15269,8 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         CoreCommand("setRenderQuality", reply)
     class SetHdrPolicy(val value: io.github.yuroyami.kiteplayer.HdrPolicy, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setHdrPolicy", reply)
+    class SetFlashGuard(val value: io.github.yuroyami.kiteplayer.FlashGuard, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setFlashGuard", reply)
     class SetExternalClock(val value: io.github.yuroyami.kiteplayer.ExternalClock?, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setExternalClock", reply)
     class ReportDynamicRange(val value: io.github.yuroyami.kiteplayer.VideoDynamicRange, val reply: CompletableDeferred<Unit>) :

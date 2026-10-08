@@ -55,6 +55,8 @@ kotlin {
     }
 
     sourceSets {
+        // The bounded XML reader is shared with kiteplayer-network behind this marker (#492).
+        all { languageSettings.optIn("io.github.yuroyami.kiteplayer.KitePlayerInternalApi") }
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
         }

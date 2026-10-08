@@ -89,6 +89,14 @@ public interface VideoRenderer : AutoCloseable {
     public fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {}
 
     /**
+     * Whether to dim the picture while it flashes (#500), told on attach and on every change like
+     * [setAdjustments]. A renderer with a guard runs [VideoFlashGuard] on what it draws; only an
+     * Apple renderer reads the system setting for [io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem].
+     * Defaulted, so a renderer without a guard keeps compiling.
+     */
+    public fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {}
+
+    /**
      * How much work to spend on the picture beyond decoding it correctly.
      *
      * Told the same way the scale mode and the picture controls are told, and honoured as far as

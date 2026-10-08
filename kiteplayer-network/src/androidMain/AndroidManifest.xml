@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The network status a player waits on after the network failed an item (#461). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <application>
+        <!-- Keeps the application context for that status, as kiteplayer-io does (#457). -->
+        <provider
+            android:name="io.github.yuroyami.kiteplayer.network.KiteNetworkContextProvider"
+            android:authorities="${applicationId}.kiteplayer-network"
+            android:exported="false" />
+    </application>
 </manifest>

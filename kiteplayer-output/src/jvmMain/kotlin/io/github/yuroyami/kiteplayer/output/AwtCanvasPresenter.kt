@@ -25,9 +25,10 @@ internal interface CanvasPresenter {
     /**
      * Draws and shows one composed frame, and answers true only when the strategy showed it. A null
      * [image] or [layout] composes the background and the cues alone, for a renderer whose
-     * picture was taken off the screen (#530).
+     * picture was taken off the screen (#530). The picture is drawn at [dim], the flash guard's
+     * factor, 1 outside a flashing run (#500).
      */
-    fun present(canvas: Canvas, image: BufferedImage?, layout: FrameLayout?, overlay: SubtitleOverlay?): Boolean
+    fun present(canvas: Canvas, image: BufferedImage?, layout: FrameLayout?, overlay: SubtitleOverlay?, dim: Float): Boolean
 }
 
 internal class AwtCanvasPresenter : CanvasPresenter {
@@ -41,6 +42,7 @@ internal class AwtCanvasPresenter : CanvasPresenter {
         image: BufferedImage?,
         layout: FrameLayout?,
         overlay: SubtitleOverlay?,
+        dim: Float,
     ): Boolean {
         if (canvas.width <= 0 || canvas.height <= 0) return false
         if (strategyIsStale(canvas.bufferStrategy != null, builtWidth, builtHeight, canvas.width, canvas.height)) {
@@ -56,7 +58,7 @@ internal class AwtCanvasPresenter : CanvasPresenter {
             do {
                 val g = strategy.drawGraphics as? Graphics2D ?: return false
                 try {
-                    compose(g, canvas.width, canvas.height, image, layout, overlay)
+                    compose(g, canvas.width, canvas.height, image, layout, overlay, dim)
                 } finally {
                     g.dispose()
                 }
@@ -88,7 +90,8 @@ internal class AwtCanvasPresenter : CanvasPresenter {
 
     /**
      * Draws one composed frame: the letterbox, the picture, then the cues on top. With no [image]
-     * or no [layout] the whole canvas is the letterbox, under the cues.
+     * or no [layout] the whole canvas is the letterbox, under the cues. Below 1, [dim] darkens the
+     * picture to that share of each encoded value, and the cues stay as they are (#500).
      *
      * Visible for testing, and tested against a plain image rather than a canvas, because the
      * geometry and the overlay placement are the parts worth pinning and neither needs a window.
@@ -100,6 +103,7 @@ internal class AwtCanvasPresenter : CanvasPresenter {
         image: BufferedImage?,
         layout: FrameLayout?,
         overlay: SubtitleOverlay?,
+        dim: Float = 1f,
     ) {
         // The letterbox is painted every time rather than only when the geometry changes: a
         // narrower frame after a wider one would otherwise leave the old picture's edges on screen.
@@ -114,8 +118,10 @@ internal class AwtCanvasPresenter : CanvasPresenter {
             RenderingHints.VALUE_INTERPOLATION_BILINEAR,
         )
         val turn = layout.rotationDegrees
+        val area: java.awt.Shape
         if (turn == 0 && !layout.mirrored) {
             g.drawImage(image, layout.left, layout.top, layout.width, layout.height, null)
+            area = java.awt.Rectangle(layout.left, layout.top, layout.width, layout.height)
         } else {
             // Scaled into the rectangle before the turn and turned about the centre of where the
             // picture lands, in one transform, so a half-pixel edge stays a half pixel. The graphics'
@@ -134,6 +140,13 @@ internal class AwtCanvasPresenter : CanvasPresenter {
             place.translate(layout.drawLeft.toDouble(), layout.drawTop.toDouble())
             place.scale(layout.drawWidth.toDouble() / image.width, layout.drawHeight.toDouble() / image.height)
             g.drawImage(image, place, null)
+            area = place.createTransformedShape(java.awt.Rectangle(0, 0, image.width, image.height))
+        }
+        if (dim < 1f) {
+            // Black over the picture at 1 - dim leaves dim of each value under it: the flash guard's
+            // scale, with no picture controls on this renderer to fold it into.
+            g.color = Color(0f, 0f, 0f, (1f - dim).coerceIn(0f, 1f))
+            g.fill(area)
         }
         drawOverlay(g, overlay, canvasWidth, canvasHeight)
     }

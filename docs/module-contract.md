@@ -10,7 +10,7 @@ found.
 |---|---|
 | `kiteplayer` | Default playback assembly: core, FFmpeg, output, native view bindings and HTTP/HTTPS transport. No Compose dependency. |
 | `kiteplayer-compose` | Complete playback, `KitePlayerVideo` with both Compose video paths and the runtime path switcher, and `rememberKitePlayer`. One dependency for a Compose app, including apps also using XML. |
-| `kiteplayer-compose-ui` | `KitePlayerVideo`, which accepts an existing player. Does not depend on the playback assembly or automatically add networking. It depends on the two path modules with `implementation`, so their composables are not on a consumer's compile classpath; an app that calls `KitePlayerSurface` or `KiteVideo` directly depends on that module itself. |
+| `kiteplayer-compose-ui` | `KitePlayerVideo`, which accepts an existing player, and `KitePlayerControls`, default controls drawn over it. Does not depend on the playback assembly or automatically add networking. It depends on the two path modules with `implementation`, so their composables are not on a consumer's compile classpath; an app that calls `KitePlayerSurface` or `KiteVideo` directly depends on that module itself. |
 | `kiteplayer-core` | Engine and service contracts. Does not depend on FFmpeg, Ktor or Compose. |
 
 The individual backend, network, view and Compose renderer modules remain available for custom
@@ -112,7 +112,10 @@ an extension registry. Competing providers must have deterministic selection.
 
 JVM and Android use service metadata; Native and web use target initialisation/registration.
 The Android network artifact supplies the normal `android.permission.INTERNET` permission through
-manifest merging, so consumers do not need a separate permission declaration.
+manifest merging, so consumers do not need a separate permission declaration. It also supplies
+`android.permission.ACCESS_NETWORK_STATE` and a provider that keeps the application context, for
+the network status a player waits on (#461); both are normal, granted at install, and removable
+with `tools:node="remove"`, which leaves the wait on its timer.
 Kotlin's eager initialisation is experimental/deprecated, so dependency-presence activation must
 be verified against this pinned toolchain in optimised consumers before being claimed. A consumer
 proof references only core APIs: touching a network symbol would hide a missing registration root.
@@ -127,7 +130,10 @@ lazy-created client, so reader close also releases the client.
 ## Subtitles and compatibility
 
 Default playback continues to include the Kotlin subtitle parsers through the FFmpeg backend,
-with cue timing in core and text rasterisation in output. `kiteplayer-libass` joins the default
+with cue timing in core and text rasterisation in output. `kiteplayer-network` depends on
+`kiteplayer-subtitles` for the bounded XML reader that DASH manifests and TTML subtitles share
+(#492), through `KitePlayerInternalApi`, which is not for applications, and for `TtmlParser`, which
+reads the TTML of DASH and HLS subtitles as it reads a TTML file. `kiteplayer-libass` joins the default
 assembly the way the network module does: `kiteplayer` depends on it, so
 `kiteplayer-compose` inherit it, and `kiteplayer-compose-ui` does not. Discovery mirrors the
 transport providers exactly: `SubtitleTypesetterProvider` through service metadata on the JVM and
@@ -273,3 +279,204 @@ round-trips the new event; it does not invent a web noisy-route implementation. 
 ABI output is regenerated for affected published modules in the implementation commit. Native
 source/API checks, fake-HAL route tests, media-key behavior and physical headphone trials are
 separate evidence; none stands in for another.
+
+## Android media requests and playback resumption
+
+Planned API contract for #431. The implementation and ABI update follow in separate changes. All of
+it is Android-only, in `kiteplayer`'s `session` package, and with none of it set nothing changes.
+
+**Requests for specific media.** `KitePlayerMediaSession.setMediaRequestHandler(kinds:
+Set<MediaRequestKind>, handler: ((MediaRequest) -> Unit)?)` takes the requests the application
+answers. `MediaRequestKind` is `Search`, `MediaId`, `Address` and `Prepare`. The session offers the
+system exactly the matching actions: play and prepare from a search for `Search`, from an id for
+`MediaId`, from an address for `Address`, and plain prepare for `Prepare`. A null handler or an
+empty set offers none, as today. A later call replaces the earlier one.
+
+`MediaRequest` is a sealed class whose cases have internal constructors: `Search(query)`,
+`MediaId(mediaId)`, `Address(uri)` and `Prepare`. Each carries `play: Boolean`, false for a prepare,
+and `extras: Bundle`, empty when the system sent none. A search the system sends without words, for
+"play something", arrives as an empty query. The handler runs on the main thread and decides what to
+open; the session opens and plays nothing by itself, because only the application knows its
+catalogue. A request whose kind is not offered, which a stale controller can still send, is ignored.
+
+**Media keys first.** `setMediaButtonHandler(handler: ((KeyEvent) -> Boolean)?)` sees each key event
+of a media button intent on the main thread before the session's own rule from #437. True means the
+application handled it and the session does nothing more; false, or no handler, leaves today's
+behaviour, including play-pause acting at once and the headset's double press.
+
+**The resume card.** Android 11 and later show a media resume card after a reboot or after the
+application closed, for an application with an exported browser service that answers the recent
+root. `KitePlayerResumptionService` is an abstract `MediaBrowserService` the application subclasses
+and declares, exported, with the `android.media.browse.MediaBrowserService` intent filter.
+`KitePlayerMediaService` stays unexported.
+
+- `KitePlayerResumption.save(context, memento, title, subtitle = null)` keeps the state to resume
+  in the application's private preferences, as `PlayerMemento.asProperties()` text, and `clear`
+  removes it. The application decides when to save, for example at a pause and when the player
+  closes.
+- The service answers a root only for the recent hint, only when something is saved, and only to a
+  caller the media session manager trusts for media control, which is the system interface and
+  holders of the media control permission. Any other caller gets no root, so an exported service
+  hands nothing to an arbitrary application. Its one child is the saved item, playable, with the
+  saved title and subtitle.
+- The service owns a session of its own, whose token it publishes. A play on it, which is what
+  pressing the card sends, calls the abstract `onResume(memento: PlayerMemento)` on the main thread.
+  The application builds its player there, restores the memento, attaches its own session and
+  plays; the service then releases its own session, so the application's session is the only one.
+  A memento that cannot be read clears the saved state and offers no root.
+
+Tests: host tests of the offered actions for each kind set, of the request each callback turns into,
+of a media button handler that consumes a key and one that declines, and of the root answer for the
+recent hint, no hint, nothing saved and an untrusted caller. The device check, owed to the ASUS, is
+the resume card appearing after the application is closed and playing the saved item at its saved
+position.
+
+## Default player controls
+
+The contract for #469. Everything lives in `kiteplayer-compose-ui`, in the
+`io.github.yuroyami.kiteplayer.compose` package, beside `KitePlayerVideo`. The module gains
+`implementation(compose.foundation)`, which an application already receives through
+`kiteplayer-compose-video`, and no Material artifact: the owner decided on 2026-10-07 against
+both a Material dependency and a new module.
+
+**State holders.** Each is created with a `remember...State(player)` composable, reads the
+player's `state` and `progress`, and calls the player's own commands. An application that wants
+its own look builds it from these; the default controls use nothing else.
+
+- `TransportState`: `showsPlay`, `canGoPrevious`, `canGoNext`, `togglePlay()`, `previous()` and
+  `next()`. `showsPlay` is true unless the player was asked to play, so a buffering player shows
+  pause, the answer to the listener's own request.
+- `SeekBarState`: `position`, `duration`, `seekable`, `fraction` and `buffered`, the buffered
+  ranges as fractions of the duration. When `Progress.bufferedRanges` is empty, which it is for
+  HLS and with the byte cache off, one range runs from the position to `Progress.bufferedAhead`.
+  `startScrub(fraction)`, `scrubTo(fraction)`, `endScrub()` and `cancelScrub()` move a scrub
+  target, which the bar shows in place of the position while the scrub lasts. Each step calls
+  `requestSeek` with `KeyframeThenRefine`, and the engine merges the steps and refines the last
+  one, so the end asks for nothing more; a cancel seeks back to where the scrub started.
+  `stepBy(delta)` jumps from the position. `preview` is `KitePlayer.thumbnailAt` for the scrub
+  target, or null.
+- `TrackMenuState`: a list of `TrackMenuOption`s, each with a `label` and `selected`, and
+  `select(option)`. Made by `rememberTrackMenuState(player, kind)` for audio or subtitles, where
+  subtitles have an off option first; by `rememberQualityMenuState(player)`, with an automatic
+  option first and the variants after it; and by `rememberSpeedMenuState(player, speeds)`. Every
+  track is listed with its title and language, never cycled one per press.
+- `VolumeState`: `level` in 0..1, `muted`, `setLevel(level)` and `toggleMute()`. The level
+  follows hearing through a cube, as mpv's volume does: the amplitude is the level cubed, so half
+  the slider is an eighth of the amplitude, about 18 dB down. A volume above 1 shows as a full
+  slider and is left alone until the slider moves. Moving the slider above 0 takes the mute off.
+- `ControlsVisibility`: `visible`, `show()`, `hide()` and `toggle()`, from
+  `rememberControlsVisibility(player, timeout = 3.seconds)`. The controls hide after the timeout
+  only while the player was asked to play, and any interaction, a key press or a scrub starts the
+  timeout again; a scrub or an open menu holds them up. A tap on the picture toggles them, and a
+  tap and the timeout both hide them the same way.
+
+**The default controls.** `KitePlayerControls(player, modifier, visibility, style, labels,
+onFullScreen, onPictureInPicture)` draws play and pause, previous and next for a queue, the seek
+bar with its buffered ranges and the times, the volume, menus for audio, subtitles, quality and
+speed, and full screen and picture-in-picture buttons when their callbacks are given. It is made
+only from the state holders above, from Compose Foundation and `compose.ui`.
+
+- Look: `KitePlayerControlsStyle`, with colours and sizes and a default, in place of a theme.
+- Words: `KitePlayerControlsLabels`, with English defaults. Every string a listener or a screen
+  reader meets comes from it, the time and track names included, so an application translates it
+  whole.
+- Icons are our own vectors. Play, previous, next and the seek bar are never mirrored: the whole
+  transport row and the seek bar lay out left to right in a right-to-left layout too, as Media3
+  learned in androidx/media issue 227. Text still follows the layout direction.
+- Every control is focusable and reached by a D-pad and by the keyboard. Space and the media
+  play-pause key toggle playback from whichever control has focus, the arrow keys step the
+  focused seek bar by 10 seconds and the focused volume by a tenth, and Escape closes a menu and
+  gives focus back to its button. While the controls are hidden, the first arrow, D-pad centre
+  or Enter only shows them and focuses play, as a television player does. Focus draws a ring in
+  the style's focus colour.
+- A menu button shows only when there is something to choose: two audio tracks, one subtitle
+  track, two qualities. Below 480 dp of width the volume shows as its mute button alone.
+- Every control has a role and a label. The seek bar and the volume, which Compose has no slider
+  role for, carry `progressBarRangeInfo` and a `setProgress` action, as the visualiser's panel
+  does (#326), and state the position and duration in words.
+- While the controls show, subtitles move up through `KitePlayer.setSubtitlePosition`, and settle
+  back when they hide, unless the application changed the position itself in between. It is the
+  same rule the session guards use for a pause they did not make.
+- On a touch screen, a horizontal drag over the picture scrubs, showing the target time, and
+  seeks where the finger lifts. The width of the picture stands for the whole item, or for ten
+  minutes of a longer one. A mouse drag does not scrub.
+
+**The option on `KitePlayerVideo`.** A new overload takes a required
+`controls: @Composable BoxScope.() -> Unit` after the existing parameters and draws it over the
+video, for example `controls = { KitePlayerControls(player) }`. The existing signature stays as it
+is, so no existing screen or compiled caller changes. On the desktop, a native view takes every
+click, so controls drawn over `KiteRenderPath.NativeView` receive none; such an application asks
+for `KiteRenderPath.ComposeCanvas` or places the controls beside the video, as the class already
+documents.
+
+Out of scope here: controls for the native views, which can follow once these settle, and a
+volume above 100 percent in the default controls.
+
+Tests: the state holders against a scripted player, including the scrub calls and their seek mode,
+the buffered fractions, the volume curve's ends and middle, and the visibility timeout. Compose UI
+tests on the JVM: every control's role and label, `setProgress` moving the player, Tab and the
+arrow keys reaching every control, a tap and the timeout hiding the controls alike, the
+unmirrored transport row in a right-to-left layout, and `KitePlayerVideo` without controls drawing
+exactly what it drew before.
+
+## Time of day for live streams
+
+The contract for #444. A playlist that names its segments through variables, `EXT-X-DEFINE`,
+gives no time of day yet, because the addresses FFmpeg opens are matched against the playlist's
+text as written.
+
+**Where the times come from.**
+
+- HLS: each media playlist's `EXT-X-PROGRAM-DATE-TIME`. FFmpeg's HLS reader ignores the tag, so
+  the player reads it from every media playlist its own reader hands FFmpeg: the one opened, and
+  each reload of a live one. A segment without a tag of its own takes the date of the segment
+  before it plus that segment's length. After `EXT-X-DISCONTINUITY`, a segment with no tag of its
+  own has no date. A playlist FFmpeg reads with its own protocols, because the item's reader opens
+  no related address, gives the dates of the playlist opened and no reload.
+- DASH: the HLS playlists the player writes for FFmpeg carry the same tag, the manifest's
+  `availabilityStartTime` plus the Period's start plus the segment's time, whenever the manifest
+  states `availabilityStartTime`.
+- A stream that states neither publishes nothing, and every call below answers null.
+
+**How a position gets its time.** The first segment FFmpeg opens starts the position timeline,
+because FFmpeg's start time is the first timestamp it reads. Each later segment of the same
+playlist starts where the one before it ends; across a gap in the sequence numbers, which a late
+reload of a live playlist leaves, it starts as far after the last known one as their dates say. A
+position's time of day is its segment's date plus the offset into the segment.
+
+**Type.** A time of day is milliseconds since 1970 UTC, in a `Long`. `kotlin.time.Instant` still
+needs an opt-in in this Kotlin, which every application calling the API would inherit, and a
+`Long` reads the same from Java.
+
+**API.**
+
+- `Progress.timeOfDayMillis: Long?`: the time of day of `Progress.position`.
+- `Progress.firstTimeOfDayMillis` and `Progress.lastTimeOfDayMillis`, both `Long?`: the earliest
+  and the latest moment the stream lists, the start and the end of the latest playlist. For a
+  recording they are the edges of its seekable range. A live stream cannot seek in this player, so
+  for it they say how far the listed window reaches, and the last one is the live edge.
+- `KitePlayer.timeOfDayAt(position: Duration): Long?`, for any position.
+- `KitePlayer.positionAtTimeOfDay(epochMillis: Long): Duration?`, its inverse.
+- `suspend KitePlayer.seekToTimeOfDay(epochMillis: Long, mode: SeekMode = SeekMode.Precise)`. It
+  throws `IllegalArgumentException` for a moment the stream gives no position for, and otherwise
+  what `seek` throws, `UnsupportedOperationException` for a source that cannot seek included.
+- `KitePlayer.timeOfDayClock(moment: (atNanos: Long) -> Long?): ExternalClock`, a clock that
+  answers the position whose time of day `moment` names for each question. Two players on one live
+  stream that follow it with the same `moment`, such as a shared wall clock less a fixed delay, line
+  up on the same broadcast moment rather than on media time, which differs between two joins of
+  one stream. On a stream that cannot seek, the clock's speed trim closes a difference up to 150 ms,
+  and a larger one stays, because the seek it would take is refused.
+- `KitePlayerJava`: `timeOfDayAtMillis(positionMillis)`, `positionAtTimeOfDayMillis(epochMillis)`
+  and `seekToTimeOfDayAsync(epochMillis, mode)`.
+- The SPI: `PlayerMediaSource.timeOfDayAt(position: Pts): Long?`,
+  `PlayerMediaSource.positionAtTimeOfDay(epochMillis: Long): Pts?` and
+  `PlayerMediaSource.timeOfDaySpan: LongRange?`, defaulted to null so an existing source keeps
+  compiling. The engine calls them from its own thread and from the callers' threads, while the
+  demux lane reads, so a source keeps what they answer behind a lock.
+
+Tests: a local HLS event playlist with `EXT-X-PROGRAM-DATE-TIME` on its segments, served by the
+test HTTP server: the published time of day equals the tag of the segment that plays plus the
+offset into it, and a seek to a time of day lands in the segment that holds it. A live DASH
+manifest gives its segments' dates through `availabilityStartTime`. A stream without dates
+publishes none. The playlist reading and the time map have their own tests: the carried dates,
+the discontinuity, the gap of a late reload, and both directions of the map.

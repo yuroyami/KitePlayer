@@ -98,7 +98,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
  * own and left out the variants, so the player listed no quality to choose or step to (#543).
  */
 internal fun OpenedItem.toSource(): KiteFFmpegSource =
-    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing, thumbnails)
+    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing, thumbnails, times)
 
 /**
  * Applies [media]'s filter chains to this source. An audio chain on a build without filter graphs,
@@ -135,6 +135,8 @@ public class KiteFFmpegSource internal constructor(
     private val growing: GrowingMediaIo? = null,
     /** The seek bar pictures an HLS stream, or a DASH one through its stand-in, names (#433). */
     override val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? = null,
+    /** The time of day of an HLS stream's positions, or a DASH one's through its stand-in (#444). */
+    private val times: HlsTimeOfDay? = null,
 ) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null
@@ -316,6 +318,14 @@ public class KiteFFmpegSource internal constructor(
      * FFmpeg's HLS reader downloads each rendition of a master playlist on its own, and a DASH
      * presentation reaches it as one, so a sound nobody hears there costs its download (#455).
      */
+    // The map counts from the first segment FFmpeg opened, which is where the mapper's zero is.
+    override fun timeOfDayAt(position: Pts): Long? = times?.timeOfDayAt(position.micros)?.let { it.floorDiv(1_000L) }
+
+    override fun positionAtTimeOfDay(epochMillis: Long): Pts? = times?.positionAt(epochMillis * 1_000)?.let(::Pts)
+
+    override val timeOfDaySpan: LongRange?
+        get() = times?.span()?.let { it.first.floorDiv(1_000L)..it.last.floorDiv(1_000L) }
+
     override val separateAudioRenditions: Boolean =
         source.formatName == "hls" && streams.count { it.kind == io.github.yuroyami.kiteplayer.TrackKind.Audio } > 1
 
@@ -1022,7 +1032,14 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
         }
 
         if (selection.hardware == null) return source.newVideoDecoder(stream, filter = filter)
+        return openSelected(stream, selection, filter)
+    }
 
+    /**
+     * Opens [stream] on [selection]'s hardware route, with the software fallback its policy allows.
+     * Apart from [create] so that a test can hand it a route this platform would not choose.
+     */
+    internal suspend fun openSelected(stream: PlayerStreamInfo, selection: DecoderSelection, filter: String?): VideoDecoder? {
         val continuity = VideoDecoderContinuity()
 
         return openDecoderWithFallback(
@@ -1707,8 +1724,8 @@ public class KiteFFmpegVideoFrame internal constructor(
     }
 
     /**
-     * The software twin of a VideoToolbox frame, downloaded ONCE on first need and owned by this
-     * wrapper. Lazy on purpose: a newest-wins renderer supersedes most frames without ever
+     * The software twin of a VideoToolbox or Direct3D 11 frame, downloaded ONCE on first need and
+     * owned by this wrapper. Lazy on purpose: a newest-wins renderer supersedes most frames without ever
      * reading pixels, and an eager download would pay 3 to 25 MB of copying for every one of
      * them. A renderer that can draw the CVPixelBuffer itself never triggers this.
      */
@@ -1716,12 +1733,13 @@ public class KiteFFmpegVideoFrame internal constructor(
 
     /**
      * The frame whose planes may be read: the frame itself when it is software, its downloaded
-     * twin when it is a VideoToolbox frame. Other hardware kinds refuse here, because their
-     * pixels genuinely cannot be read back and pretending otherwise would hide a wiring bug.
+     * twin when it is a VideoToolbox or Direct3D 11 frame. Other hardware kinds refuse here,
+     * because nothing in this backend downloads them and pretending otherwise would hide a wiring
+     * bug.
      */
     internal fun readableFrame(): KiteFrame {
         if (!info.isHardware) return frame
-        check(hardwareSurface == HwSurfaceKind.CoreVideoPixelBuffer) {
+        check(hardwareSurface?.downloadsToMemory() == true) {
             "a $hardwareSurface frame needs its matching renderer"
         }
         return downloadedTwin ?: frame.downloadFromHardware().also { downloadedTwin = it }

@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -81,6 +82,15 @@ public class KitePlayerMediaSession(
     @Volatile
     private var customActionHandler: ((String) -> Unit)? = null
 
+    /** The requests for specific media the application answers (#431). */
+    private val requests = MediaRequestRouter<MediaRequest>()
+
+    /** The kinds [requests] offers, so a change republishes the session's actions. */
+    private val requestKinds = MutableStateFlow<Set<MediaRequestKind>>(emptySet())
+
+    @Volatile
+    private var mediaButtonHandler: ((KeyEvent) -> Boolean)? = null
+
     @Volatile
     private var sessionActivity: PendingIntent? = null
 
@@ -108,18 +118,20 @@ public class KitePlayerMediaSession(
         // One collector writes both halves in order, so artwork a caller sets cannot be overwritten
         // by a write that started before it.
         scope.launch {
-            var publishedActions = customActions.value
+            var publishedActions = customActions.value to requestKinds.value
             combine(
                 player.state,
                 player.progress,
                 shownArtwork,
                 customActions,
-            ) { snapshot, progress, image, actions ->
-                Triple(snapshot.toMediaSessionState(progress), image, actions)
+                requestKinds,
+            ) { snapshot, progress, image, actions, kinds ->
+                Triple(snapshot.toMediaSessionState(progress), image, actions to kinds)
             }.collect { (state, image, actions) ->
                 mirror.update(state, image)
                 // The mirror pushes the playback half only when the transport changes, and the
-                // custom actions are not part of it, so a change there pushes on its own.
+                // custom actions and the offered requests are not part of it, so a change there
+                // pushes on its own.
                 if (actions != publishedActions) {
                     publishedActions = actions
                     pushPlaybackState(state)
@@ -182,6 +194,28 @@ public class KitePlayerMediaSession(
         customActions.value = actions.toList()
     }
 
+    /**
+     * The requests for specific media that the application answers (#431): a search, an item by its
+     * id or by its address, and a prepare. The session offers the system exactly the actions of
+     * [kinds], and hands each such request to [handler] on the main thread. The session opens and
+     * plays nothing by itself, because only the application knows its catalogue. A null handler or an
+     * empty set offers none, which is the default. A later call replaces this one.
+     */
+    public fun setMediaRequestHandler(kinds: Set<MediaRequestKind>, handler: ((MediaRequest) -> Unit)?) {
+        requests.set(kinds, handler)
+        requestKinds.value = requests.offered
+    }
+
+    /**
+     * Sees each media key before the session does (#431), on the main thread. True means the
+     * application handled the key, and the session does nothing more with it, for example an
+     * audiobook that turns next into a 30 second skip. False, or no handler, leaves the session's own
+     * handling: play-pause acts at once, and a headset's button keeps its double press.
+     */
+    public fun setMediaButtonHandler(handler: ((KeyEvent) -> Boolean)?) {
+        mediaButtonHandler = handler
+    }
+
     private suspend fun loadArtwork() {
         var loadedItem: Any? = null
         combine(artworkLoader, player.state.distinctUntilChangedBy(::artworkKey)) { loader, snapshot ->
@@ -220,7 +254,7 @@ public class KitePlayerMediaSession(
     }
 
     private fun pushPlaybackState(state: MediaSessionState) {
-        val playback = sessionPlaybackFor(state, customActions.value)
+        val playback = sessionPlaybackFor(state, customActions.value, requests.offered)
         val builder = PlaybackState.Builder()
             .setActions(playback.actions)
             .setState(playback.state, playback.positionMillis, playback.speed)
@@ -264,7 +298,9 @@ public class KitePlayerMediaSession(
         // double press (#437).
         override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
             val event = mediaButtonIntent.keyEvent() ?: return super.onMediaButtonEvent(mediaButtonIntent)
-            return when (mediaKeyAction(event.keyCode, event.action, event.repeatCount)) {
+            return when (mediaKeyActionFor(event, event.keyCode, event.action, event.repeatCount, mediaButtonHandler)) {
+                // The application handled it (#431).
+                MediaKeyAction.Application -> true
                 MediaKeyAction.Toggle -> {
                     // Buffering counts as playing: the listener asked for sound, so a toggle means stop.
                     if (player.state.value.status.isActive) player.pauseFromRemote() else player.playFromRemote()
@@ -295,6 +331,31 @@ public class KitePlayerMediaSession(
             customActionHandler?.invoke(action)
         }
 
+        override fun onPlayFromSearch(query: String?, extras: Bundle?) = search(query, play = true, extras)
+        override fun onPrepareFromSearch(query: String?, extras: Bundle?) = search(query, play = false, extras)
+        override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) = byId(mediaId, play = true, extras)
+        override fun onPrepareFromMediaId(mediaId: String?, extras: Bundle?) = byId(mediaId, play = false, extras)
+        override fun onPlayFromUri(uri: Uri?, extras: Bundle?) = byAddress(uri, play = true, extras)
+        override fun onPrepareFromUri(uri: Uri?, extras: Bundle?) = byAddress(uri, play = false, extras)
+
+        override fun onPrepare() {
+            requests.deliver(MediaRequestKind.Prepare) { MediaRequest.Prepare(Bundle.EMPTY) }
+        }
+
+        private fun search(query: String?, play: Boolean, extras: Bundle?) {
+            requests.deliver(MediaRequestKind.Search) { MediaRequest.Search(query.orEmpty(), play, extras ?: Bundle.EMPTY) }
+        }
+
+        private fun byId(mediaId: String?, play: Boolean, extras: Bundle?) {
+            requests.deliver(MediaRequestKind.MediaId) {
+                mediaId?.let { MediaRequest.MediaId(it, play, extras ?: Bundle.EMPTY) }
+            }
+        }
+
+        private fun byAddress(uri: Uri?, play: Boolean, extras: Bundle?) {
+            requests.deliver(MediaRequestKind.Address) { uri?.let { MediaRequest.Address(it, play, extras ?: Bundle.EMPTY) } }
+        }
+
         private fun skipBy(by: Duration) {
             scope.launch {
                 val target = (player.position() + by).coerceAtLeast(Duration.ZERO)
@@ -307,6 +368,9 @@ public class KitePlayerMediaSession(
 
 /** What the session does with one media key event. */
 internal enum class MediaKeyAction {
+    /** The application's media button handler took it (#431). */
+    Application,
+
     /** Plays or pauses, at once. */
     Toggle,
 
@@ -328,6 +392,19 @@ internal fun mediaKeyAction(keyCode: Int, action: Int, repeatCount: Int): MediaK
         if (action == KeyEvent.ACTION_DOWN && repeatCount == 0) MediaKeyAction.Toggle else MediaKeyAction.Consume
     else -> MediaKeyAction.Platform
 }
+
+/**
+ * [mediaKeyAction], after the application's own handler has seen [event] and declined it (#431).
+ * Generic in the event, so a host test can decide without the platform's key event.
+ */
+internal fun <E> mediaKeyActionFor(
+    event: E,
+    keyCode: Int,
+    action: Int,
+    repeatCount: Int,
+    application: ((E) -> Boolean)?,
+): MediaKeyAction =
+    if (application?.invoke(event) == true) MediaKeyAction.Application else mediaKeyAction(keyCode, action, repeatCount)
 
 /** The key event a media button intent carries, or null. */
 private fun Intent.keyEvent(): KeyEvent? =
@@ -358,13 +435,14 @@ internal data class SessionPlayback(
 internal fun sessionPlaybackFor(
     state: MediaSessionState,
     customActions: List<MediaNotificationAction>,
+    requests: Set<MediaRequestKind> = emptySet(),
 ): SessionPlayback = SessionPlayback(
     state = platformStateFor(state.phase),
     positionMillis = state.position.inWholeMilliseconds,
     // The platform walks the position on at this rate, so anything but playing must report zero or
     // the lock screen's position moves while nothing plays.
     speed = if (state.playing) state.speed.toFloat() else 0f,
-    actions = actionsFor(state),
+    actions = actionsFor(state) or requestActionsFor(requests),
     customActions = customActions,
 )
 

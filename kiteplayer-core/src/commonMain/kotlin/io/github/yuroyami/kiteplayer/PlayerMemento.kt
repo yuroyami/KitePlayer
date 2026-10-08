@@ -13,8 +13,8 @@ import kotlin.time.Duration.Companion.microseconds
  * [MediaItem.externalSubtitles], [MediaItem.thumbnails], [MediaItem.videoFilter] and
  * [MediaItem.audioFilter]. [asProperties] drops all five, and an item that needs one is rebuilt by the application before
  * [KitePlayer.restore]. Headers, raw
- * open options, the format hint, the demux settings, the start position, the clip, and the title,
- * artist and album are strings and travel.
+ * open options, the format hint, the demux settings, the start position, the clip, the title,
+ * artist and album, and whether an item runs into the next are strings and travel.
  *
  * Tracks are remembered by LANGUAGE rather than by id, because ids belong to one open of one
  * container and a memento outlives both.
@@ -99,6 +99,7 @@ public data class PlayerMemento(
             item.artist?.let { put("queue.$n.artist", it) }
             item.album?.let { put("queue.$n.album", it) }
             if (item.audioContent != AudioContent.Automatic) put("queue.$n.audioContent", item.audioContent.name)
+            if (item.runsIntoNext) put("queue.$n.runsIntoNext", "true")
             item.headers.forEach { (name, value) -> put("queue.$n.header.$name", value) }
             item.openOptions.forEach { (key, value) -> put("queue.$n.option.$key", value) }
             putDemux("queue.$n.demux.", item.demux)
@@ -170,7 +171,7 @@ public data class PlayerMemento(
 
     public companion object {
         /** The version [asProperties] stamps. [fromProperties] also reads every older one. */
-        public const val FORMAT_VERSION: Int = 8
+        public const val FORMAT_VERSION: Int = 9
 
         /**
          * Reads what [asProperties] wrote.
@@ -184,7 +185,8 @@ public data class PlayerMemento(
             // setting, version 2 nothing about the demux settings, version 3 nothing about the
             // item titles or the shuffle order, version 4 nothing about the variant limits or the
             // HDR policy, version 5 nothing about an item's audio content, version 6 nothing
-            // about the programme an item plays, and version 7 nothing about an item's clip.
+            // about the programme an item plays, version 7 nothing about an item's clip, and
+            // version 8 nothing about an item that runs into the next.
             // Each reads back with the defaults for those, which is what a player that had never
             // been told about them would have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
@@ -215,6 +217,7 @@ public data class PlayerMemento(
                     clip = properties["queue.$n.clipStart"]?.let { start ->
                         MediaClip(start.toLong().microseconds, properties["queue.$n.clipEnd"]?.toLong()?.microseconds)
                     },
+                    runsIntoNext = properties["queue.$n.runsIntoNext"]?.toBooleanStrict() ?: false,
                 )
             }
             return PlayerMemento(

@@ -5,6 +5,7 @@ package io.github.yuroyami.kiteplayer.spi
 import io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaIoResolver
+import io.github.yuroyami.kiteplayer.NetworkStatus
 import io.github.yuroyami.kiteplayer.internal.MediaIoProviderRegistry
 import io.github.yuroyami.kiteplayer.internal.platformMediaIoProviders
 
@@ -29,6 +30,14 @@ public interface MediaIoResolverProvider {
      * is one still being written ([io.github.yuroyami.kiteplayer.MediaItem.growth]). False by default.
      */
     public val servesLocalFiles: Boolean get() = false
+
+    /**
+     * Whether the device has a network, for [io.github.yuroyami.kiteplayer.NetworkRecovery] (#461),
+     * or null when this provider cannot tell, which is the default. The player watches the first
+     * one a provider gives, only while it waits for the network. The network module gives the
+     * platform's.
+     */
+    public fun networkStatus(): NetworkStatus? = null
 }
 
 /**
@@ -54,5 +63,11 @@ public object MediaIoProviders {
     internal suspend fun resolveLocalFile(path: String): MediaIo? {
         discovered
         return registry.resolveLocalFile(path)
+    }
+
+    /** The network status of the first provider, by identifier, that gives one (#461). */
+    internal fun networkStatus(): NetworkStatus? {
+        discovered
+        return registry.networkStatus()
     }
 }

@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.internal.placeSecondaryCues
 import io.github.yuroyami.kiteplayer.internal.secondaryFirst
 import io.github.yuroyami.kiteplayer.subtitle.CueAlignment
 import io.github.yuroyami.kiteplayer.subtitle.CueLayout
+import io.github.yuroyami.kiteplayer.subtitle.CueRegion
 import io.github.yuroyami.kiteplayer.subtitle.CueStacking
 import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
@@ -157,5 +158,25 @@ class SecondarySubtitleChoiceTest {
         assertTrue(secondaryFirst(plain, SecondarySubtitlePlacement.BelowPrimary))
         assertTrue(!secondaryFirst(plain, SecondarySubtitlePlacement.AbovePrimary))
         assertTrue(!secondaryFirst(plain, SecondarySubtitlePlacement.Top))
+    }
+
+    /**
+     * A TTML line flows in its author's region (#492). As the secondary track it leaves the region
+     * and goes where the viewer put it, and as the primary it stands in no stack, so it decides no
+     * stacking.
+     */
+    @Test
+    fun aRegionStaysWithThePrimaryAndTheSecondaryLeavesIt() {
+        val box = CueRegion("low", 0.1f, 0.8f, 0.8f, 0.15f)
+        val regional = CueLayout(alignment = CueAlignment.TopCenter, region = box, stacking = CueStacking.LastAtBottom)
+        val placed = placeSecondaryCues(listOf(cue("secondary", regional)), emptyList(), SecondarySubtitlePlacement.BelowPrimary)
+            .single() as SubtitleCue.Text
+        assertEquals(null, placed.layout.region, "the secondary kept its region")
+        assertEquals(CueAlignment.BottomCenter, placed.layout.alignment)
+        val bottomAligned = CueLayout(alignment = CueAlignment.BottomCenter, region = box, stacking = CueStacking.LastAtBottom)
+        assertTrue(
+            secondaryFirst(listOf(cue("primary", bottomAligned)), SecondarySubtitlePlacement.BelowPrimary),
+            "a primary line in a region decided the stacking of a pile it is not in",
+        )
     }
 }

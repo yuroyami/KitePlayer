@@ -200,6 +200,7 @@ internal class DashHlsMediaIo(
                     servedPlan(track, manifest, null),
                     live = false,
                     images = track.representation.takeIf { track.role == DashHlsRole.Images },
+                    dateOriginMicros = dateOrigin(manifest),
                 )
             }
         }
@@ -209,7 +210,18 @@ internal class DashHlsMediaIo(
         val plan = servedPlan(track, manifest, now)
         retainListed(track, plan)
         val sequence = sequences.getOrPut(track.address) { LiveSequence() }.first(plan)
-        DashHls.mediaPlaylist(plan, live = true, sequence = sequence)
+        DashHls.mediaPlaylist(plan, live = true, sequence = sequence, dateOriginMicros = dateOrigin(manifest))
+    }
+
+    /**
+     * The time of day of the served plan's time zero, or null when [from] states no
+     * `availabilityStartTime` (#444). One Period's plan counts in its Period's time, which starts
+     * that far after the availability start; a joined plan counts in the presentation's own time.
+     */
+    private fun dateOrigin(from: DashManifest): Long? {
+        val start = from.availabilityStartTimeMicros ?: return null
+        val single = from.periods.size == 1 && from.periodTimings().first().startMicros == referenceStartMicros
+        return start + if (single) referenceStartMicros else 0L
     }
 
     /** [track]'s plan as FFmpeg is to read it: one Period's, or every Period's joined when [from] has more or another. */

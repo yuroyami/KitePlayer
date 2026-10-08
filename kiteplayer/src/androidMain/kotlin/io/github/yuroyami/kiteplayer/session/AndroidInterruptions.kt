@@ -16,8 +16,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Makes [player] behave when something takes the sound away: a call, another app, or the
@@ -116,7 +119,21 @@ private class AndroidInterruptionHandle(
                         // A blocking platform call, which cancelling the scope does not stop, so the
                         // answer may come back after close (#415).
                         val request = focusRequestFor(player.state.value.audioContent).also { focusRequest = it }
-                        val result = focusResultFor(audioManager.requestAudioFocus(request))
+                        // A refusal that only says the media service is not in the foreground yet
+                        // is asked again once it is (#454).
+                        val result = requestFocusOnceForeground(
+                            request = { focusResultFor(audioManager.requestAudioFocus(request)) },
+                            mayWaitForForeground = {
+                                waitsForForeground(
+                                    Build.VERSION.SDK_INT,
+                                    MediaServiceForeground.notificationAttached,
+                                    MediaServiceForeground.inForeground.value,
+                                )
+                            },
+                            awaitForeground = {
+                                withTimeoutOrNull(FOREGROUND_WAIT) { MediaServiceForeground.inForeground.first { it } } != null
+                            },
+                        )
                         when (synchronized(lifecycle) { lifecycle.answered(result) }) {
                             FocusAnswer.Held -> Unit
                             // "Later", during a call: pause now, and the gain that comes plays (#451).
@@ -144,6 +161,21 @@ private class AndroidInterruptionHandle(
         synchronized(applier) { applier.release() }
     }
 }
+
+/**
+ * Whether a refused focus request may be the Android 15 refusal of an application in the background
+ * (#454): the rule exists from Android 15, an attached media notification puts its service into the
+ * foreground when playback starts, and that service is not there yet. Anything else is a real refusal.
+ */
+internal fun waitsForForeground(sdk: Int, notificationAttached: Boolean, inForeground: Boolean): Boolean =
+    sdk >= Build.VERSION_CODES.VANILLA_ICE_CREAM && notificationAttached && !inForeground
+
+/**
+ * How long a refused request waits for the media service to enter the foreground before the refusal
+ * stands. The service's start takes a few hundred milliseconds; a refusal for another reason costs
+ * at most this much sound before the player pauses.
+ */
+private val FOREGROUND_WAIT = 1.seconds
 
 /** The `AudioAttributes` content type a focus request declares for [content], as the audio track does. */
 internal fun focusContentType(content: AudioContent): Int = when (content) {

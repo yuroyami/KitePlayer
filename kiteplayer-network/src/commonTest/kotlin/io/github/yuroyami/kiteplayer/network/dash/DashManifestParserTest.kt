@@ -34,6 +34,20 @@ class DashManifestParserTest {
     }
 
     @Test
+    fun aMalformedManifestIsRefusedWithThisModulesXmlException() {
+        // The reader is the subtitle module's since #492; its refusals still reach a caller as ours.
+        val unclosed = assertFailsWith<io.github.yuroyami.kiteplayer.network.xml.XmlException> {
+            DashManifestParser.parse("<MPD><Period></MPD>", "https://example.com/a.mpd")
+        }
+        assertEquals("</MPD> closes <Period> at offset 18", unclosed.message)
+        assertEquals(18, unclosed.offset)
+        val deep = assertFailsWith<io.github.yuroyami.kiteplayer.network.xml.XmlException> {
+            DashManifestParser.parse("<a>".repeat(XmlMini.MAX_DEPTH + 1), "https://example.com/a.mpd")
+        }
+        assertTrue(deep.message!!.startsWith("nested past ${XmlMini.MAX_DEPTH} elements"), "${deep.message}")
+    }
+
+    @Test
     fun isoDurationsParse() {
         assertEquals(9_000_000L, DashManifestParser.parseIsoDurationMicros("PT9S"))
         assertEquals(90_500_000L, DashManifestParser.parseIsoDurationMicros("PT1M30.5S"))

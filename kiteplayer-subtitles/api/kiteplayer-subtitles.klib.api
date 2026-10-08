@@ -6,6 +6,45 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-subtitles>
+sealed interface io.github.yuroyami.kiteplayer.subtitle.xml/XmlNode // io.github.yuroyami.kiteplayer.subtitle.xml/XmlNode|null[0]
+
+final class io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement : io.github.yuroyami.kiteplayer.subtitle.xml/XmlNode { // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement|null[0]
+    constructor <init>(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String>, kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement>, kotlin/String, kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle.xml/XmlNode> = ...) // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.<init>|<init>(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.xml.XmlElement>;kotlin.String;kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.xml.XmlNode>){}[0]
+
+    final val attributes // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.attributes|{}attributes[0]
+        final fun <get-attributes>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.attributes.<get-attributes>|<get-attributes>(){}[0]
+    final val children // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.children|{}children[0]
+        final fun <get-children>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement> // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.children.<get-children>|<get-children>(){}[0]
+    final val content // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.content|{}content[0]
+        final fun <get-content>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle.xml/XmlNode> // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.content.<get-content>|<get-content>(){}[0]
+    final val name // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.name.<get-name>|<get-name>(){}[0]
+    final val text // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.text|{}text[0]
+        final fun <get-text>(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.text.<get-text>|<get-text>(){}[0]
+
+    final fun attr(kotlin/String): kotlin/String? // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.attr|attr(kotlin.String){}[0]
+    final fun child(kotlin/String): io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement? // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.child|child(kotlin.String){}[0]
+    final fun children(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement> // io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement.children|children(kotlin.String){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.subtitle.xml/XmlSyntaxException : kotlin/Exception { // io.github.yuroyami.kiteplayer.subtitle.xml/XmlSyntaxException|null[0]
+    constructor <init>(kotlin/String, kotlin/Int) // io.github.yuroyami.kiteplayer.subtitle.xml/XmlSyntaxException.<init>|<init>(kotlin.String;kotlin.Int){}[0]
+
+    final val offset // io.github.yuroyami.kiteplayer.subtitle.xml/XmlSyntaxException.offset|{}offset[0]
+        final fun <get-offset>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle.xml/XmlSyntaxException.offset.<get-offset>|<get-offset>(){}[0]
+    final val reason // io.github.yuroyami.kiteplayer.subtitle.xml/XmlSyntaxException.reason|{}reason[0]
+        final fun <get-reason>(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle.xml/XmlSyntaxException.reason.<get-reason>|<get-reason>(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.subtitle.xml/XmlText : io.github.yuroyami.kiteplayer.subtitle.xml/XmlNode { // io.github.yuroyami.kiteplayer.subtitle.xml/XmlText|null[0]
+    constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.subtitle.xml/XmlText.<init>|<init>(kotlin.String){}[0]
+
+    final val value // io.github.yuroyami.kiteplayer.subtitle.xml/XmlText.value|{}value[0]
+        final fun <get-value>(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle.xml/XmlText.value.<get-value>|<get-value>(){}[0]
+
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle.xml/XmlText.toString|toString(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.subtitle/AssTrackParser { // io.github.yuroyami.kiteplayer.subtitle/AssTrackParser|null[0]
     final fun parseEvent(kotlin/String, kotlin/Long, kotlin/Long): io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text? // io.github.yuroyami.kiteplayer.subtitle/AssTrackParser.parseEvent|parseEvent(kotlin.String;kotlin.Long;kotlin.Long){}[0]
 }
@@ -20,6 +59,36 @@ final class io.github.yuroyami.kiteplayer.subtitle/TeletextPageReader { // io.gi
 
 final class io.github.yuroyami.kiteplayer.subtitle/WebVttTrackParser { // io.github.yuroyami.kiteplayer.subtitle/WebVttTrackParser|null[0]
     final fun parseCueBody(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/StyledSpan> // io.github.yuroyami.kiteplayer.subtitle/WebVttTrackParser.parseCueBody|parseCueBody(kotlin.String){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini { // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini|null[0]
+    final const val MAX_ATTRIBUTES // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.MAX_ATTRIBUTES|{}MAX_ATTRIBUTES[0]
+        final fun <get-MAX_ATTRIBUTES>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.MAX_ATTRIBUTES.<get-MAX_ATTRIBUTES>|<get-MAX_ATTRIBUTES>(){}[0]
+    final const val MAX_DEPTH // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.MAX_DEPTH|{}MAX_DEPTH[0]
+        final fun <get-MAX_DEPTH>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.MAX_DEPTH.<get-MAX_DEPTH>|<get-MAX_DEPTH>(){}[0]
+    final const val MAX_ELEMENTS // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.MAX_ELEMENTS|{}MAX_ELEMENTS[0]
+        final fun <get-MAX_ELEMENTS>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.MAX_ELEMENTS.<get-MAX_ELEMENTS>|<get-MAX_ELEMENTS>(){}[0]
+    final const val MAX_ELEMENT_ATTRIBUTES // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.MAX_ELEMENT_ATTRIBUTES|{}MAX_ELEMENT_ATTRIBUTES[0]
+        final fun <get-MAX_ELEMENT_ATTRIBUTES>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.MAX_ELEMENT_ATTRIBUTES.<get-MAX_ELEMENT_ATTRIBUTES>|<get-MAX_ELEMENT_ATTRIBUTES>(){}[0]
+    final const val MAX_LENGTH // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.MAX_LENGTH|{}MAX_LENGTH[0]
+        final fun <get-MAX_LENGTH>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.MAX_LENGTH.<get-MAX_LENGTH>|<get-MAX_LENGTH>(){}[0]
+
+    final fun parse(kotlin/CharSequence, io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits = ...): io.github.yuroyami.kiteplayer.subtitle.xml/XmlElement // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.parse|parse(kotlin.CharSequence;io.github.yuroyami.kiteplayer.subtitle.xml.XmlMini.Limits){}[0]
+
+    final class Limits { // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits|null[0]
+        constructor <init>(kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.<init>|<init>(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Boolean){}[0]
+
+        final val keepContent // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.keepContent|{}keepContent[0]
+            final fun <get-keepContent>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.keepContent.<get-keepContent>|<get-keepContent>(){}[0]
+        final val maxAttributes // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.maxAttributes|{}maxAttributes[0]
+            final fun <get-maxAttributes>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.maxAttributes.<get-maxAttributes>|<get-maxAttributes>(){}[0]
+        final val maxElementAttributes // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.maxElementAttributes|{}maxElementAttributes[0]
+            final fun <get-maxElementAttributes>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.maxElementAttributes.<get-maxElementAttributes>|<get-maxElementAttributes>(){}[0]
+        final val maxElements // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.maxElements|{}maxElements[0]
+            final fun <get-maxElements>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.maxElements.<get-maxElements>|<get-maxElements>(){}[0]
+        final val maxLength // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.maxLength|{}maxLength[0]
+            final fun <get-maxLength>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle.xml/XmlMini.Limits.maxLength.<get-maxLength>|<get-maxLength>(){}[0]
+    }
 }
 
 final object io.github.yuroyami.kiteplayer.subtitle/AssParser { // io.github.yuroyami.kiteplayer.subtitle/AssParser|null[0]
@@ -46,6 +115,12 @@ final object io.github.yuroyami.kiteplayer.subtitle/SubRipParser { // io.github.
     final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.parse|parse(kotlin.String){}[0]
     final fun parseCue(kotlin/String, kotlin/Long, kotlin/Long): io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text? // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.parseCue|parseCue(kotlin.String;kotlin.Long;kotlin.Long){}[0]
     final fun parseCueBody(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/StyledSpan> // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.parseCueBody|parseCueBody(kotlin.String){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.subtitle/TtmlParser { // io.github.yuroyami.kiteplayer.subtitle/TtmlParser|null[0]
+    final fun isTtml(kotlin/String): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/TtmlParser.isTtml|isTtml(kotlin.String){}[0]
+    final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/TtmlParser.parse|parse(kotlin.String){}[0]
+    final fun read(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/TtmlParser.read|read(kotlin.String){}[0]
 }
 
 final object io.github.yuroyami.kiteplayer.subtitle/WebVttParser { // io.github.yuroyami.kiteplayer.subtitle/WebVttParser|null[0]

@@ -40,6 +40,8 @@ kotlin {
             api(project(":kiteplayer-core"))
             api(compose.runtime)
             api(compose.ui)
+            // The default controls (#469). An application already has it through compose-video.
+            implementation(compose.foundation)
             implementation(project(":kiteplayer-compose-interop"))
             implementation(project(":kiteplayer-compose-video"))
             // The screen reader wording, shared with the platform views.

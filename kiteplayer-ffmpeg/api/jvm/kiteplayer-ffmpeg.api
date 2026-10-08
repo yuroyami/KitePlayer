@@ -43,10 +43,12 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public fun getStreamDivergences ()Ljava/util/List;
 	public fun getStreams ()Ljava/util/List;
 	public fun getThumbnails ()Lio/github/yuroyami/kiteplayer/spi/PlayerThumbnails;
+	public fun getTimeOfDaySpan ()Lkotlin/ranges/LongRange;
 	public fun getTimestampsMayJump ()Z
 	public fun getVariants ()Ljava/util/List;
 	public fun interrupt ()Z
 	public fun pauseReading ()Z
+	public fun positionAtTimeOfDay-iQ5BAKg (J)Lio/github/yuroyami/kiteplayer/Pts;
 	public fun readPacket (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun resumeReading ()Z
 	public fun seekToKeyframe-HwpeAyI (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -55,6 +57,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public final fun setOnWarning (Lkotlin/jvm/functions/Function1;)V
 	public fun startRecording (Ljava/lang/String;)V
 	public fun stopRecording ()V
+	public fun timeOfDayAt-gzNCz5I (J)Ljava/lang/Long;
 	public final fun videoDecoderFactories ()Ljava/util/List;
 }
 

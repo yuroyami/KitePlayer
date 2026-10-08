@@ -10,6 +10,7 @@ import io.github.yuroyami.kiteplayer.network.KtorMediaIoException
 import io.github.yuroyami.kiteplayer.network.RedirectRule
 import io.github.yuroyami.kiteplayer.network.originOf
 import io.github.yuroyami.kiteplayer.network.shownUri
+import io.github.yuroyami.kiteplayer.network.xml.XmlLimits
 import io.github.yuroyami.kiteplayer.network.xml.XmlMini
 import io.ktor.client.HttpClient
 import io.ktor.client.request.prepareGet
@@ -371,7 +372,7 @@ public object Dash {
         // UTF-8 never decodes to more UTF-16 code units than it had bytes, so a length limit
         // equal to the byte ceiling never refuses what the fetch accepted.
         val lengthLimit = maxManifestBytes.coerceIn(XmlMini.MAX_LENGTH.toLong(), Int.MAX_VALUE.toLong()).toInt()
-        return DashManifestParser.parse(body.decodeToString(), mpdUrl, policy, XmlMini.Limits(maxLength = lengthLimit))
+        return DashManifestParser.parse(body.decodeToString(), mpdUrl, policy, XmlLimits(maxLength = lengthLimit))
     }
 
     /**

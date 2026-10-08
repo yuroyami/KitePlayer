@@ -1,6 +1,8 @@
 // KitePlayerWorkerBrowserTest starts a real worker player (#100). The page gets three things from
 // disk, proxied to fixed paths:
-// - the worker binary this module builds, its development executable, under /worker/;
+// - the worker binary this module builds, its development executable, under /worker/, or the
+//   directory KITEPLAYER_WORKER_DIR names, such as the unpacked web zip a page actually serves
+//   (#554). The variable is not a task input, so pass --rerun with it;
 // - the codec module from the kiteffmpeg web zip, which unpackKiteFFmpegWebModule unpacks, at
 //   /kite.mjs and /kite.wasm;
 // - the clips of the repository's testmedia directory, under /testmedia/;
@@ -10,7 +12,8 @@
 // karma.conf.js lives in <root>/build/wasm/packages/<project>-test, four levels under the root.
 const path = require("path");
 const root = path.resolve(__dirname, "../../../..");
-const workerDir = path.join(root, "kiteplayer-web-worker/build/compileSync/wasmJs/main/developmentExecutable/kotlin");
+const workerDir = process.env.KITEPLAYER_WORKER_DIR ||
+    path.join(root, "kiteplayer-web-worker/build/compileSync/wasmJs/main/developmentExecutable/kotlin");
 const moduleDir = path.join(root, "kiteplayer-web-worker/build/kiteffmpeg-web");
 const mediaDir = process.env.KITEPLAYER_TESTMEDIA || path.join(root, "testmedia");
 const libassDir = path.join(root, "kiteplayer-libass/build/kiteass");

@@ -401,6 +401,18 @@ LaunchedEffect(Unit) {
 > video are painted but never pressed. Use the canvas path there, or keep the controls beside the
 > video.
 
+The video has no controls until you ask for them. `KitePlayerControls` draws a default set over
+it: play and pause, previous and next for a queue, the seek bar, the volume, and menus for the
+audio and subtitle tracks, the quality and the speed. A tap on the picture shows or hides them.
+
+```kotlin
+KitePlayerVideo(player, Modifier.fillMaxSize()) { KitePlayerControls(player) }
+```
+
+Its words come from `KitePlayerControlsLabels`, in English unless you pass your own, and its look
+from `KitePlayerControlsStyle`. For controls of your own, build them from the same state holders,
+such as `rememberSeekBarState(player)` and `rememberTrackMenuState(player, TrackKind.Audio)`.
+
 </details>
 
 <details name="show">
@@ -694,7 +706,14 @@ point includes it. You do not build a resolver or a Ktor client.
 - Android and the JVM use OkHttp with the platform trust store, and Apple uses NSURLSession.
 - `MediaItem.headers` reach whichever transport is selected.
 - The Android artifact declares the `INTERNET` permission for you. Cleartext HTTP follows your app's
-  own policy.
+  own policy. It also declares `ACCESS_NETWORK_STATE`, which Android grants at install, and a
+  provider that keeps the application context, so a player waiting for the network hears at once
+  when it comes back.
+- A drop of the network longer than the reader's reconnects fails the item. Set
+  `NetworkConfig.recovery = NetworkRecovery()` and the player waits for the network instead, says
+  so with `PlayerSnapshot.reconnecting`, and opens the item again where it was, or at the live
+  edge, for up to `maxWait` ([#461](https://github.com/yuroyami/KitePlayer/issues/461)). It is off
+  by default.
 - In a browser, a player on the page's own thread cannot play network media, because a read cannot
   wait there. `KitePlayerWorker` plays it from a web worker
   ([#100](https://github.com/yuroyami/KitePlayer/issues/100)), see [Web setup](#web-setup). It
@@ -745,6 +764,14 @@ bytes, plays too ([#400](https://github.com/yuroyami/KitePlayer/issues/400)).
   reference to a variable that nothing defined fails the open, and the error names it.
 - A segment that cannot be read is skipped, and `PlaybackWarning.SegmentSkipped` says so. A stream
   that ends while its last segments fail ends with `PlaybackError.SourceUnavailable`.
+- `EXT-X-PROGRAM-DATE-TIME` gives each position the time of day it was broadcast
+  ([#444](https://github.com/yuroyami/KitePlayer/issues/444)), in milliseconds since 1970 UTC.
+  `Progress.timeOfDayMillis` publishes it for the position, and `firstTimeOfDayMillis` and
+  `lastTimeOfDayMillis` for the moments the playlist lists, the last of a live one being its edge.
+  `KitePlayer.timeOfDayAt` and `positionAtTimeOfDay` map both ways, `seekToTimeOfDay` goes to one
+  in a stream that can seek, and `timeOfDayClock` makes two players on one live stream follow the
+  same broadcast moment. A DASH manifest's `availabilityStartTime` gives the same. A playlist that
+  names its segments through variables gives no time of day yet.
 - `MediaItem.headers` go only to the scheme, host and port of the item's own address, because a
   playlist can name segments on any server.
 - Your own `MediaIo` can serve HLS too: report the address it read in `location`, and open the
@@ -895,7 +922,8 @@ screen. A desktop app keeps playing without help, and a web page plays while its
 - From Android 12, Android can refuse a start from the background. `onForegroundRefused` tells you,
   and the notification still shows. Android 13 and later need no notification permission for it.
 - The library declares no service and no permission for background playback, so your manifest
-  carries every entry above. The one entry the library adds is `INTERNET`.
+  carries every entry above. The entries the library adds are `INTERNET` and
+  `ACCESS_NETWORK_STATE`.
 
 </details>
 
@@ -1041,7 +1069,7 @@ flowchart LR
 | `kiteplayer-compose` | Everything in `kiteplayer`, plus both Compose video paths and the switch between them. The complete Compose entry point. |
 | `kiteplayer` | The default playback stack for native views: engine, FFmpeg decoders, audio output, view adapters, HTTP and HTTPS, libass, input doors. |
 | `kiteplayer-audioviz` | Optional. An audio visualiser for files with no picture: presets, palettes, and a director that changes drawings with the music. |
-| `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo` and both video paths. No player factory, no network. |
+| `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo`, both video paths and the default controls, `KitePlayerControls`. No player factory, no network. |
 | `kiteplayer-compose-interop` | Compose hosting the platform's native video view: `KitePlayerSurface`. `KitePlayerVideo` uses it at runtime; add it yourself only to call `KitePlayerSurface` directly. |
 | `kiteplayer-compose-video` | Video drawn by Compose itself: `KiteVideo`. `KitePlayerVideo` uses it at runtime; add it yourself only to draw with `KiteVideo` directly, for example in a second window. |
 | `kiteplayer-view` | The native views: `KitePlayerView` on Android, `KitePlayerUIView` on iOS, `KitePlayerAwtView` on the desktop JVM. |

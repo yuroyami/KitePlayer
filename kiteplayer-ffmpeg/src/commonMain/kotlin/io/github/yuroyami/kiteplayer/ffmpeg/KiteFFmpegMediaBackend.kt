@@ -47,14 +47,17 @@ public class KiteFFmpegMediaBackend(
         "KiteFFmpegMediaBackend(decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
 
     /**
-     * External subtitle files, ASS and LRC lyrics included: the pure parsers this module ships, and
-     * FFmpeg's own readers for every other format (#492). East Asian files are read with the tables
+     * External subtitle files, ASS, TTML and LRC lyrics included: the pure parsers this module ships,
+     * and FFmpeg's own readers for every other format (#492). East Asian files are read with the tables
      * of kiteplayer-subtitles, the same on every target.
      */
     override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
         object : io.github.yuroyami.kiteplayer.spi.SubtitleFileParser {
             override fun parse(text: String, vttHint: Boolean): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> =
                 when {
+                    // A TTML or DFXP document is known by its root element, whatever its name (#492).
+                    io.github.yuroyami.kiteplayer.subtitle.TtmlParser.isTtml(text) ->
+                        io.github.yuroyami.kiteplayer.subtitle.TtmlParser.parse(text)
                     // An ASS document announces itself; the hint flags are SRT/VTT's business.
                     text.trimStart('\uFEFF', ' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true) ->
                         io.github.yuroyami.kiteplayer.subtitle.AssParser.parse(text)

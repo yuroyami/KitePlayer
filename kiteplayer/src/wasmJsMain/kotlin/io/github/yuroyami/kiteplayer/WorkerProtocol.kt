@@ -121,6 +121,7 @@ internal sealed class Control(val member: String) {
     data class SetRenderQuality(val value: RenderQuality) : Control("setRenderQuality")
     data class SetVideoTransform(val value: VideoTransform) : Control("setVideoTransform")
     data class SetHdrPolicy(val value: HdrPolicy) : Control("setHdrPolicy")
+    data class SetFlashGuard(val value: FlashGuard) : Control("setFlashGuard")
     data class SetSubtitleDelay(val value: Duration) : Control("setSubtitleDelay")
     data class SetSubtitleScale(val value: Float) : Control("setSubtitleScale")
     data class SetSubtitleStyle(val value: SubtitleStyleOverride?) : Control("setSubtitleStyle")
@@ -375,6 +376,7 @@ private fun encodeControl(control: Control): JsAny = record {
         is Control.SetRenderQuality -> put("value", encodeRenderQuality(control.value))
         is Control.SetVideoTransform -> put("value", encodeTransform(control.value))
         is Control.SetHdrPolicy -> put("value", control.value)
+        is Control.SetFlashGuard -> put("value", control.value)
         is Control.SetSubtitleDelay -> put("value", control.value)
         is Control.SetSubtitleScale -> put("value", control.value)
         is Control.SetSubtitleStyle -> put("value", control.value?.let(::encodeStyle))
@@ -473,6 +475,7 @@ private fun encodeItem(item: MediaItem): JsAny = record {
     }
     item.growth?.let { growth -> put("growthEndsAfter", growth.endsAfter) }
     item.thumbnails?.let { put("thumbnails", it.uri) }
+    if (item.runsIntoNext) put("runsIntoNext", true)
 }
 
 private fun encodeSubtitle(source: SubtitleSource): JsAny = record {
@@ -557,10 +560,12 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("playRequested", snapshot.playRequested)
     put("preloadedIndex", snapshot.preloadedIndex)
     put("hdrPolicy", snapshot.hdrPolicy)
+    put("flashGuard", snapshot.flashGuard)
     put("videoDynamicRange", snapshot.videoDynamicRange)
     put("failedQueueItems", numbers(snapshot.failedQueueItems.sorted().map(Int::toDouble)))
     put("durationIsEstimate", snapshot.durationIsEstimate)
     put("lyrics", snapshot.lyrics)
+    put("reconnecting", snapshot.reconnecting)
 }
 
 private fun encodeVideoSize(size: VideoSize): JsAny = record {
@@ -725,6 +730,10 @@ private fun encodeProgress(progress: Progress): JsAny = record {
             }
         },
     )
+    // Unix time in milliseconds, well inside the 2^53 a number holds exactly (#444).
+    put("timeOfDay", progress.timeOfDayMillis)
+    put("firstTimeOfDay", progress.firstTimeOfDayMillis)
+    put("lastTimeOfDay", progress.lastTimeOfDayMillis)
 }
 
 private fun encodeStats(stats: PlaybackStats): JsAny = record {
@@ -1093,6 +1102,10 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             put("to", warning.to)
             put("detail", warning.detail)
         }
+        is PlaybackWarning.Reconnecting -> {
+            kind("Reconnecting")
+            put("error", encodeError(warning.error))
+        }
         is PlaybackWarning.QueueItemSkipped -> {
             kind("QueueItemSkipped")
             put("index", warning.index)
@@ -1225,6 +1238,7 @@ private fun decodeControl(o: JsAny): Control? = when (o.str("t")) {
     "setRenderQuality" -> Control.SetRenderQuality(decodeRenderQuality(o.child("value") ?: missing("value")))
     "setVideoTransform" -> Control.SetVideoTransform(decodeTransform(o.child("value") ?: missing("value")))
     "setHdrPolicy" -> Control.SetHdrPolicy(o.enum<HdrPolicy>("value") ?: missing("value"))
+    "setFlashGuard" -> Control.SetFlashGuard(o.enum<FlashGuard>("value") ?: missing("value"))
     "setSubtitleDelay" -> Control.SetSubtitleDelay(o.micros("value") ?: missing("value"))
     "setSubtitleScale" -> Control.SetSubtitleScale(o.float("value") ?: missing("value"))
     "setSubtitleStyle" -> Control.SetSubtitleStyle(o.child("value")?.let(::decodeStyle))
@@ -1279,6 +1293,7 @@ private fun decodeItem(o: JsAny): MediaItem = MediaItem(
     clip = o.micros("clipStart")?.let { start -> MediaClip(start, o.micros("clipEnd")) },
     growth = o.micros("growthEndsAfter")?.let(::FileGrowth),
     thumbnails = o.str("thumbnails")?.let { ThumbnailSource(it) },
+    runsIntoNext = o.flag("runsIntoNext"),
 )
 
 private fun decodeSubtitle(o: JsAny): SubtitleSource = SubtitleSource(
@@ -1359,10 +1374,12 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         playRequested = o.flag("playRequested"),
         preloadedIndex = o.int("preloadedIndex"),
         hdrPolicy = o.enum<HdrPolicy>("hdrPolicy") ?: default.hdrPolicy,
+        flashGuard = o.enum<FlashGuard>("flashGuard") ?: default.flashGuard,
         videoDynamicRange = o.enum<VideoDynamicRange>("videoDynamicRange") ?: default.videoDynamicRange,
         failedQueueItems = o.numbers("failedQueueItems")?.map(Double::toInt)?.toSet() ?: default.failedQueueItems,
         durationIsEstimate = o.flag("durationIsEstimate"),
         lyrics = o.str("lyrics"),
+        reconnecting = o.flag("reconnecting"),
     )
 }
 
@@ -1509,6 +1526,9 @@ private fun decodeProgress(o: JsAny): Progress = Progress(
     bufferedRanges = o.list("bufferedRanges") { range ->
         (range.micros("start") ?: missing("start"))..(range.micros("end") ?: missing("end"))
     }.orEmpty(),
+    timeOfDayMillis = o.long("timeOfDay"),
+    firstTimeOfDayMillis = o.long("firstTimeOfDay"),
+    lastTimeOfDayMillis = o.long("lastTimeOfDay"),
 )
 
 private fun decodeStats(o: JsAny): PlaybackStats {
@@ -1677,6 +1697,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "SegmentSkipped" -> PlaybackWarning.SegmentSkipped(o.str("uri").orEmpty(), detail)
         "ExternalClockSilent" -> PlaybackWarning.ExternalClockSilent(detail)
         "VariantLowered" -> PlaybackWarning.VariantLowered(o.int("from") ?: missing("from"), o.int("to") ?: missing("to"), detail)
+        "Reconnecting" -> PlaybackWarning.Reconnecting(o.child("error")?.let(::decodeError) ?: missing("error"))
         "QueueItemSkipped" -> PlaybackWarning.QueueItemSkipped(
             o.int("index") ?: missing("index"),
             o.str("uri").orEmpty(),

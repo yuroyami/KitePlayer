@@ -14,13 +14,24 @@
 # The codec budget was the size of the module that KiteFFmpeg 0.3.0 publishes, 1.42 MiB, which the
 # owner chose on #58. KiteFFmpeg 0.5.0 raised it to 1.47 MiB, because its module carries FFmpeg's
 # HLS reader so that a nested opener can play HLS and DASH in a browser, and the readers that 0.5.0
-# added beside it, from the Dolby Vision RPU to Matroska editions (#523). The worker budget is
-# 0.53 MiB, the 0.50 MiB that the binary measured once its zip took Binaryen's optimised build and
-# the worker stopped linking the network transport it never asks, with a little room. Until #519 the
-# zip held the compiler's unoptimised output instead, 1.21 MiB when it first shipped and 1.49 MiB by
-# then, against a budget of 1.25 MiB. Both are ratchets: a new KiteFFmpeg pin, or player code, that
-# grows a module past its budget fails here, and raising a budget is a decision made in the same
-# commit, with both numbers in its message.
+# added beside it, from the Dolby Vision RPU to Matroska editions (#523).
+#
+# The worker budget is 0.61 MiB (#554). It was 0.53 MiB, the 0.50 MiB that the binary measured once
+# its zip took Binaryen's optimised build and the worker stopped linking the network transport it
+# never asks (#519), with a little room. That measurement used a local KiteFFmpeg 0.5.0 build from
+# before the release; the same commit built against the released 0.5.0 measures 537,689 bytes. On
+# 2026-10-07 the worker measured 611,648 bytes, and the 73,939 more were player features, not a
+# packaging fault: the zip still held the optimiser's output byte for byte, and the unoptimised
+# binary's code grew by 253,458 bytes spread over hundreds of functions of the engine, its FFmpeg
+# adapter and its subtitle readers (closed captions, teletext, lyrics, cue sheets, seek bar
+# pictures, turned pictures, late streams), the largest under 5 KB. Until #519 the zip held the
+# compiler's unoptimised output instead, 1.21 MiB when it first shipped and 1.49 MiB by then,
+# against a budget of 1.25 MiB.
+#
+# Both budgets are ratchets: a new KiteFFmpeg pin, or player code, that grows a module past its
+# budget fails here, and raising a budget is a decision made in the same commit, with both numbers
+# in its message. Each file's SHA-256 is printed beside its size, so a failure names the exact bytes
+# it measured, and CI keeps those files as the run's web-size artifact.
 #
 #   ./scripts/check-web-size.sh    # build, unpack, measure, compare: must PASS
 
@@ -31,19 +42,19 @@ cd "$ROOT"
 
 # 1.47 MiB.
 BUDGET_BYTES=1541407
-# 0.53 MiB.
-WORKER_BUDGET_BYTES=555745
+# 0.61 MiB.
+WORKER_BUDGET_BYTES=639631
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...
     python3 - "$@" <<'EOF'
-import os, sys, zlib
+import hashlib, os, sys, zlib
 
 label = sys.argv[1]
 budget = int(sys.argv[2])
 total = 0
 print(label)
-print(f"{'file':<44} {'raw bytes':>12} {'gzipped':>12}")
+print(f"{'file':<44} {'raw bytes':>12} {'gzipped':>12}  sha256")
 for path in sys.argv[3:]:
     if not os.path.isfile(path):
         sys.exit(f"{path} is missing; the task that makes it did not produce it")
@@ -52,7 +63,7 @@ for path in sys.argv[3:]:
     packer = zlib.compressobj(9, zlib.DEFLATED, 31)
     packed = len(packer.compress(data) + packer.flush())
     total += packed
-    print(f"{os.path.basename(path):<44} {len(data):>12} {packed:>12}")
+    print(f"{os.path.basename(path):<44} {len(data):>12} {packed:>12}  {hashlib.sha256(data).hexdigest()[:16]}")
 mib = lambda n: n / (1024 * 1024)
 print(f"{'total':<44} {'':>12} {total:>12}  ({mib(total):.3f} MiB, budget {mib(budget):.2f} MiB)")
 summary = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -66,6 +77,7 @@ EOF
 }
 
 ./gradlew --quiet :kiteplayer-ffmpeg:unpackKiteFFmpegWebModule :kiteplayer:workerWebZip
+grep -E '^kiteffmpeg = "' gradle/libs.versions.toml
 
 measure "Web codec module" "$BUDGET_BYTES" \
     kiteplayer-ffmpeg/build/kiteffmpeg-web/kite.wasm kiteplayer-ffmpeg/build/kiteffmpeg-web/kite.mjs

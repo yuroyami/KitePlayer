@@ -59,6 +59,8 @@ import kotlin.time.Duration
  * - `subtitleCues`: the worker draws the subtitles on the canvas itself.
  * - `coverArt`: the media session of the page's own player shows it, and a worker has none.
  * - `position()` and `audioClock()`: read [progress] instead. `transportMark` and `awaitClose`.
+ * - `timeOfDayAt`, `positionAtTimeOfDay`, `seekToTimeOfDay` and `timeOfDayClock`: read the time
+ *   of day of the position, and the first and last moments the stream dates, from [progress].
  * - `inspect`, `scanAudio`, `captureFrame`, `thumbnailAt`, recording, `memento` and `restore`.
  * - Attaching or detaching a renderer or an audio tap, and `setExternalClock`.
  * - An item, or an external subtitle or a thumbnail file, with its own reader: it is refused with
@@ -344,6 +346,9 @@ public class KitePlayerWorker private constructor(
 
     /** Sets how HDR video reaches the screen. */
     public fun setHdrPolicy(value: HdrPolicy): Unit = send(Control.SetHdrPolicy(value))
+
+    /** See `KitePlayer.setFlashGuard`. The worker's canvas has no guard yet, so it changes nothing drawn. */
+    public fun setFlashGuard(mode: FlashGuard): Unit = send(Control.SetFlashGuard(mode))
 
     /** Shifts subtitle timing. Positive shows cues later. */
     public fun setSubtitleDelay(value: Duration): Unit = send(Control.SetSubtitleDelay(value))

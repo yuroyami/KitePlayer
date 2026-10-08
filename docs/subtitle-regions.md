@@ -1,7 +1,8 @@
 # TTML regions
 
 The contract for the TTML and DFXP half of #492, built in the order at the end. Every other format
-of that issue already loads.
+of that issue already loads, and TTML and DFXP files now load too, with their regions in the cues;
+the shared layout that places those regions is the next step.
 
 TTML is the subtitle format broadcasters and streaming services hand out, and DFXP is its older
 name. Unlike SubRip or WebVTT, a TTML file places its text in regions: boxes on the screen with a
@@ -98,14 +99,17 @@ is written once there and holds on the desktop, Android and Apple alike.
 
 A cue without a region is laid out exactly as today, which keeps every SubRip, WebVTT and ASS file
 where it was. So does a TTML paragraph with no region: it goes to the bottom of the picture like a
-SubRip line, aligned as its `textAlign` says.
+SubRip line, aligned as its `textAlign` says, and centred like a SubRip line when nothing sets one.
 
 ## What the reader keeps
 
 - Text, line breaks (`br`, and newlines under `xml:space="preserve"`), and the styles of each span:
-  `color`, `fontFamily`, `fontSize`, `fontStyle`, `fontWeight`, `textDecoration` (underline and
-  line-through), `textOutline`, and `backgroundColor`, which every rasterizer takes from a cue's
-  first span.
+  `color`, `fontFamily` (its first named family; a generic one such as `sansSerif` is the
+  player's own), `fontSize`, `fontStyle`, `fontWeight`, `textDecoration` (underline and
+  line-through), the colour of `textOutline` or its `none`, and the `backgroundColor` of a span or
+  its paragraph, which every rasterizer takes from a cue's first span. The text keeps the player's
+  outline and shadow unless `textOutline` says otherwise, because TTML's own default of none is
+  unreadable over a bright picture.
 - Region styles: `origin`, `extent`, `padding`, `displayAlign`, `backgroundColor`,
   `showBackground`, `overflow` and `zIndex`, which becomes the cue's `layer`. The styles a region
   sets for its text, such as `color` or `textAlign`, are inherited by the paragraphs flowed into it,
@@ -113,7 +117,7 @@ SubRip line, aligned as its `textAlign` says.
 - `textAlign` and `direction` set the horizontal alignment. `wrapOption="noWrap"` is `CueWrap.Never`.
 - Lengths in percent, in cells (`ttp:cellResolution`, 32 by 15 by default), and in pixels when the
   root `tt` element states its `tts:extent` in pixels. A font size in cells or pixels becomes a
-  size against the authored height, and a percentage a factor on the parent's size. A paragraph
+  size against the authored height, and a percentage or `em` a factor on the parent's size. A paragraph
   with no font size keeps the player's own size, so a file that never sets one reads like every
   other format.
 - A region whose box cannot be resolved, such as one in pixels with no root extent, is not used,
@@ -121,9 +125,9 @@ SubRip line, aligned as its `textAlign` says.
 
 Not drawn, and named here so their absence is a decision rather than a surprise: vertical writing
 modes, which are laid out horizontally; ruby and text emphasis; `opacity`; `lineHeight`;
-`linePadding` and `multiRowAlign`; animation with `set`; images; and a background behind a span
-other than the first of its paragraph. A paragraph's base direction follows the platform's own
-bidi of its text.
+`linePadding` and `multiRowAlign`; animation with `set`; images; a background behind a span
+other than the first of its paragraph, or behind a `body` or `div`; and an outline's thickness. A
+paragraph's base direction follows the platform's own bidi of its text.
 
 ## The network path
 
@@ -156,7 +160,7 @@ canvas is the last step below.
    using it and its tests unchanged. Done.
 3. The model, `TtmlParser` in `kiteplayer-subtitles` with its cues' regions and styles, the network
    module's WebVTT conversion built on it in place of its own TTML reader, and the external file
-   path.
+   path. Done. Until step 4 a cue with a region is drawn at the top of the picture.
 4. Region layout in the shared rasterizer loop, tested on the desktop rasterizer.
 5. A browser raster path for text cues, regions included.
 

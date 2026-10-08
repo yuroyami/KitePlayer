@@ -285,6 +285,29 @@ final enum class io.github.yuroyami.kiteplayer.subtitle/CueAlignment : kotlin/En
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.subtitle/CueAlignment> // io.github.yuroyami.kiteplayer.subtitle/CueAlignment.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign : kotlin/Enum<io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign> { // io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign|null[0]
+    enum entry After // io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign.After|null[0]
+    enum entry Before // io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign.Before|null[0]
+    enum entry Center // io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign.Center|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign> // io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign // io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign> // io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign.values|values#static(){}[0]
+}
+
+final enum class io.github.yuroyami.kiteplayer.subtitle/CueShowBackground : kotlin/Enum<io.github.yuroyami.kiteplayer.subtitle/CueShowBackground> { // io.github.yuroyami.kiteplayer.subtitle/CueShowBackground|null[0]
+    enum entry Always // io.github.yuroyami.kiteplayer.subtitle/CueShowBackground.Always|null[0]
+    enum entry WhenActive // io.github.yuroyami.kiteplayer.subtitle/CueShowBackground.WhenActive|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.subtitle/CueShowBackground.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.subtitle/CueShowBackground> // io.github.yuroyami.kiteplayer.subtitle/CueShowBackground.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.subtitle/CueShowBackground // io.github.yuroyami.kiteplayer.subtitle/CueShowBackground.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.subtitle/CueShowBackground> // io.github.yuroyami.kiteplayer.subtitle/CueShowBackground.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer.subtitle/CueStacking : kotlin/Enum<io.github.yuroyami.kiteplayer.subtitle/CueStacking> { // io.github.yuroyami.kiteplayer.subtitle/CueStacking|null[0]
     enum entry FirstAtBottom // io.github.yuroyami.kiteplayer.subtitle/CueStacking.FirstAtBottom|null[0]
     enum entry LastAtBottom // io.github.yuroyami.kiteplayer.subtitle/CueStacking.LastAtBottom|null[0]
@@ -2151,8 +2174,35 @@ final class io.github.yuroyami.kiteplayer.subtitle/CueIndex { // io.github.yuroy
     final fun syncTo(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>) // io.github.yuroyami.kiteplayer.subtitle/CueIndex.syncTo|syncTo(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.subtitle/CueInsets { // io.github.yuroyami.kiteplayer.subtitle/CueInsets|null[0]
+    constructor <init>(kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer.subtitle/CueInsets.<init>|<init>(kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float){}[0]
+
+    final val bottom // io.github.yuroyami.kiteplayer.subtitle/CueInsets.bottom|{}bottom[0]
+        final fun <get-bottom>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueInsets.bottom.<get-bottom>|<get-bottom>(){}[0]
+    final val left // io.github.yuroyami.kiteplayer.subtitle/CueInsets.left|{}left[0]
+        final fun <get-left>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueInsets.left.<get-left>|<get-left>(){}[0]
+    final val right // io.github.yuroyami.kiteplayer.subtitle/CueInsets.right|{}right[0]
+        final fun <get-right>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueInsets.right.<get-right>|<get-right>(){}[0]
+    final val top // io.github.yuroyami.kiteplayer.subtitle/CueInsets.top|{}top[0]
+        final fun <get-top>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueInsets.top.<get-top>|<get-top>(){}[0]
+
+    final fun component1(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueInsets.component1|component1(){}[0]
+    final fun component2(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueInsets.component2|component2(){}[0]
+    final fun component3(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueInsets.component3|component3(){}[0]
+    final fun component4(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueInsets.component4|component4(){}[0]
+    final fun copy(kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ...): io.github.yuroyami.kiteplayer.subtitle/CueInsets // io.github.yuroyami.kiteplayer.subtitle/CueInsets.copy|copy(kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/CueInsets.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueInsets.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/CueInsets.toString|toString(){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.subtitle/CueInsets.Companion|null[0]
+        final val None // io.github.yuroyami.kiteplayer.subtitle/CueInsets.Companion.None|{}None[0]
+            final fun <get-None>(): io.github.yuroyami.kiteplayer.subtitle/CueInsets // io.github.yuroyami.kiteplayer.subtitle/CueInsets.Companion.None.<get-None>|<get-None>(){}[0]
+    }
+}
+
 final class io.github.yuroyami.kiteplayer.subtitle/CueLayout { // io.github.yuroyami.kiteplayer.subtitle/CueLayout|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer.subtitle/CueAlignment = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float? = ..., kotlin/Float? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.subtitle/CueWrap = ..., io.github.yuroyami.kiteplayer.subtitle/CueStacking = ..., kotlin/Long = ..., kotlin/Long = ..., io.github.yuroyami.kiteplayer.subtitle/ScriptColorMatrix? = ...) // io.github.yuroyami.kiteplayer.subtitle/CueLayout.<init>|<init>(io.github.yuroyami.kiteplayer.subtitle.CueAlignment;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float?;kotlin.Float?;kotlin.Int?;io.github.yuroyami.kiteplayer.subtitle.CueWrap;io.github.yuroyami.kiteplayer.subtitle.CueStacking;kotlin.Long;kotlin.Long;io.github.yuroyami.kiteplayer.subtitle.ScriptColorMatrix?){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.subtitle/CueAlignment = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float? = ..., kotlin/Float? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.subtitle/CueWrap = ..., io.github.yuroyami.kiteplayer.subtitle/CueStacking = ..., kotlin/Long = ..., kotlin/Long = ..., io.github.yuroyami.kiteplayer.subtitle/ScriptColorMatrix? = ..., io.github.yuroyami.kiteplayer.subtitle/CueRegion? = ..., kotlin/Int = ...) // io.github.yuroyami.kiteplayer.subtitle/CueLayout.<init>|<init>(io.github.yuroyami.kiteplayer.subtitle.CueAlignment;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float?;kotlin.Float?;kotlin.Int?;io.github.yuroyami.kiteplayer.subtitle.CueWrap;io.github.yuroyami.kiteplayer.subtitle.CueStacking;kotlin.Long;kotlin.Long;io.github.yuroyami.kiteplayer.subtitle.ScriptColorMatrix?;io.github.yuroyami.kiteplayer.subtitle.CueRegion?;kotlin.Int){}[0]
 
     final val alignment // io.github.yuroyami.kiteplayer.subtitle/CueLayout.alignment|{}alignment[0]
         final fun <get-alignment>(): io.github.yuroyami.kiteplayer.subtitle/CueAlignment // io.github.yuroyami.kiteplayer.subtitle/CueLayout.alignment.<get-alignment>|<get-alignment>(){}[0]
@@ -2172,6 +2222,10 @@ final class io.github.yuroyami.kiteplayer.subtitle/CueLayout { // io.github.yuro
         final fun <get-positionX>(): kotlin/Float? // io.github.yuroyami.kiteplayer.subtitle/CueLayout.positionX.<get-positionX>|<get-positionX>(){}[0]
     final val positionY // io.github.yuroyami.kiteplayer.subtitle/CueLayout.positionY|{}positionY[0]
         final fun <get-positionY>(): kotlin/Float? // io.github.yuroyami.kiteplayer.subtitle/CueLayout.positionY.<get-positionY>|<get-positionY>(){}[0]
+    final val region // io.github.yuroyami.kiteplayer.subtitle/CueLayout.region|{}region[0]
+        final fun <get-region>(): io.github.yuroyami.kiteplayer.subtitle/CueRegion? // io.github.yuroyami.kiteplayer.subtitle/CueLayout.region.<get-region>|<get-region>(){}[0]
+    final val regionOrder // io.github.yuroyami.kiteplayer.subtitle/CueLayout.regionOrder|{}regionOrder[0]
+        final fun <get-regionOrder>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueLayout.regionOrder.<get-regionOrder>|<get-regionOrder>(){}[0]
     final val scriptColorMatrix // io.github.yuroyami.kiteplayer.subtitle/CueLayout.scriptColorMatrix|{}scriptColorMatrix[0]
         final fun <get-scriptColorMatrix>(): io.github.yuroyami.kiteplayer.subtitle/ScriptColorMatrix? // io.github.yuroyami.kiteplayer.subtitle/CueLayout.scriptColorMatrix.<get-scriptColorMatrix>|<get-scriptColorMatrix>(){}[0]
     final val stacking // io.github.yuroyami.kiteplayer.subtitle/CueLayout.stacking|{}stacking[0]
@@ -2183,6 +2237,8 @@ final class io.github.yuroyami.kiteplayer.subtitle/CueLayout { // io.github.yuro
     final fun component10(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component10|component10(){}[0]
     final fun component11(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component11|component11(){}[0]
     final fun component12(): io.github.yuroyami.kiteplayer.subtitle/ScriptColorMatrix? // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component12|component12(){}[0]
+    final fun component13(): io.github.yuroyami.kiteplayer.subtitle/CueRegion? // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component13|component13(){}[0]
+    final fun component14(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component14|component14(){}[0]
     final fun component2(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component2|component2(){}[0]
     final fun component3(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component3|component3(){}[0]
     final fun component4(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component4|component4(){}[0]
@@ -2191,10 +2247,50 @@ final class io.github.yuroyami.kiteplayer.subtitle/CueLayout { // io.github.yuro
     final fun component7(): kotlin/Int? // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component7|component7(){}[0]
     final fun component8(): io.github.yuroyami.kiteplayer.subtitle/CueWrap // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component8|component8(){}[0]
     final fun component9(): io.github.yuroyami.kiteplayer.subtitle/CueStacking // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component9|component9(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer.subtitle/CueAlignment = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float? = ..., kotlin/Float? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.subtitle/CueWrap = ..., io.github.yuroyami.kiteplayer.subtitle/CueStacking = ..., kotlin/Long = ..., kotlin/Long = ..., io.github.yuroyami.kiteplayer.subtitle/ScriptColorMatrix? = ...): io.github.yuroyami.kiteplayer.subtitle/CueLayout // io.github.yuroyami.kiteplayer.subtitle/CueLayout.copy|copy(io.github.yuroyami.kiteplayer.subtitle.CueAlignment;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float?;kotlin.Float?;kotlin.Int?;io.github.yuroyami.kiteplayer.subtitle.CueWrap;io.github.yuroyami.kiteplayer.subtitle.CueStacking;kotlin.Long;kotlin.Long;io.github.yuroyami.kiteplayer.subtitle.ScriptColorMatrix?){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer.subtitle/CueAlignment = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float? = ..., kotlin/Float? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.subtitle/CueWrap = ..., io.github.yuroyami.kiteplayer.subtitle/CueStacking = ..., kotlin/Long = ..., kotlin/Long = ..., io.github.yuroyami.kiteplayer.subtitle/ScriptColorMatrix? = ..., io.github.yuroyami.kiteplayer.subtitle/CueRegion? = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer.subtitle/CueLayout // io.github.yuroyami.kiteplayer.subtitle/CueLayout.copy|copy(io.github.yuroyami.kiteplayer.subtitle.CueAlignment;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float?;kotlin.Float?;kotlin.Int?;io.github.yuroyami.kiteplayer.subtitle.CueWrap;io.github.yuroyami.kiteplayer.subtitle.CueStacking;kotlin.Long;kotlin.Long;io.github.yuroyami.kiteplayer.subtitle.ScriptColorMatrix?;io.github.yuroyami.kiteplayer.subtitle.CueRegion?;kotlin.Int){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/CueLayout.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueLayout.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/CueLayout.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.subtitle/CueRegion { // io.github.yuroyami.kiteplayer.subtitle/CueRegion|null[0]
+    constructor <init>(kotlin/String, kotlin/Float, kotlin/Float, kotlin/Float, kotlin/Float, io.github.yuroyami.kiteplayer.subtitle/CueInsets = ..., io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign = ..., kotlin/Int = ..., io.github.yuroyami.kiteplayer.subtitle/CueShowBackground = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.subtitle/CueRegion.<init>|<init>(kotlin.String;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.CueInsets;io.github.yuroyami.kiteplayer.subtitle.CueDisplayAlign;kotlin.Int;io.github.yuroyami.kiteplayer.subtitle.CueShowBackground;kotlin.Boolean){}[0]
+
+    final val backgroundColor // io.github.yuroyami.kiteplayer.subtitle/CueRegion.backgroundColor|{}backgroundColor[0]
+        final fun <get-backgroundColor>(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueRegion.backgroundColor.<get-backgroundColor>|<get-backgroundColor>(){}[0]
+    final val clip // io.github.yuroyami.kiteplayer.subtitle/CueRegion.clip|{}clip[0]
+        final fun <get-clip>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/CueRegion.clip.<get-clip>|<get-clip>(){}[0]
+    final val displayAlign // io.github.yuroyami.kiteplayer.subtitle/CueRegion.displayAlign|{}displayAlign[0]
+        final fun <get-displayAlign>(): io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign // io.github.yuroyami.kiteplayer.subtitle/CueRegion.displayAlign.<get-displayAlign>|<get-displayAlign>(){}[0]
+    final val height // io.github.yuroyami.kiteplayer.subtitle/CueRegion.height|{}height[0]
+        final fun <get-height>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueRegion.height.<get-height>|<get-height>(){}[0]
+    final val id // io.github.yuroyami.kiteplayer.subtitle/CueRegion.id|{}id[0]
+        final fun <get-id>(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/CueRegion.id.<get-id>|<get-id>(){}[0]
+    final val left // io.github.yuroyami.kiteplayer.subtitle/CueRegion.left|{}left[0]
+        final fun <get-left>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueRegion.left.<get-left>|<get-left>(){}[0]
+    final val padding // io.github.yuroyami.kiteplayer.subtitle/CueRegion.padding|{}padding[0]
+        final fun <get-padding>(): io.github.yuroyami.kiteplayer.subtitle/CueInsets // io.github.yuroyami.kiteplayer.subtitle/CueRegion.padding.<get-padding>|<get-padding>(){}[0]
+    final val showBackground // io.github.yuroyami.kiteplayer.subtitle/CueRegion.showBackground|{}showBackground[0]
+        final fun <get-showBackground>(): io.github.yuroyami.kiteplayer.subtitle/CueShowBackground // io.github.yuroyami.kiteplayer.subtitle/CueRegion.showBackground.<get-showBackground>|<get-showBackground>(){}[0]
+    final val top // io.github.yuroyami.kiteplayer.subtitle/CueRegion.top|{}top[0]
+        final fun <get-top>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueRegion.top.<get-top>|<get-top>(){}[0]
+    final val width // io.github.yuroyami.kiteplayer.subtitle/CueRegion.width|{}width[0]
+        final fun <get-width>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueRegion.width.<get-width>|<get-width>(){}[0]
+
+    final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/CueRegion.component1|component1(){}[0]
+    final fun component10(): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/CueRegion.component10|component10(){}[0]
+    final fun component2(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueRegion.component2|component2(){}[0]
+    final fun component3(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueRegion.component3|component3(){}[0]
+    final fun component4(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueRegion.component4|component4(){}[0]
+    final fun component5(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueRegion.component5|component5(){}[0]
+    final fun component6(): io.github.yuroyami.kiteplayer.subtitle/CueInsets // io.github.yuroyami.kiteplayer.subtitle/CueRegion.component6|component6(){}[0]
+    final fun component7(): io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign // io.github.yuroyami.kiteplayer.subtitle/CueRegion.component7|component7(){}[0]
+    final fun component8(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueRegion.component8|component8(){}[0]
+    final fun component9(): io.github.yuroyami.kiteplayer.subtitle/CueShowBackground // io.github.yuroyami.kiteplayer.subtitle/CueRegion.component9|component9(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer.subtitle/CueInsets = ..., io.github.yuroyami.kiteplayer.subtitle/CueDisplayAlign = ..., kotlin/Int = ..., io.github.yuroyami.kiteplayer.subtitle/CueShowBackground = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer.subtitle/CueRegion // io.github.yuroyami.kiteplayer.subtitle/CueRegion.copy|copy(kotlin.String;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float;io.github.yuroyami.kiteplayer.subtitle.CueInsets;io.github.yuroyami.kiteplayer.subtitle.CueDisplayAlign;kotlin.Int;io.github.yuroyami.kiteplayer.subtitle.CueShowBackground;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/CueRegion.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueRegion.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/CueRegion.toString|toString(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer.subtitle/CueStyle { // io.github.yuroyami.kiteplayer.subtitle/CueStyle|null[0]

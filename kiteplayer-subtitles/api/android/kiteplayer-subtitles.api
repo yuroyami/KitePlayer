@@ -37,6 +37,13 @@ public final class io/github/yuroyami/kiteplayer/subtitle/TeletextPageReader {
 	public final fun reset ()V
 }
 
+public final class io/github/yuroyami/kiteplayer/subtitle/TtmlParser {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/TtmlParser;
+	public final fun isTtml (Ljava/lang/String;)Z
+	public final fun parse (Ljava/lang/String;)Ljava/util/List;
+	public final fun read (Ljava/lang/String;)Ljava/util/List;
+}
+
 public final class io/github/yuroyami/kiteplayer/subtitle/WebVttParser {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/WebVttParser;
 	public final fun parse (Ljava/lang/String;)Ljava/util/List;

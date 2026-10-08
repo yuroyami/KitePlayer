@@ -36,7 +36,7 @@ import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
 @AudioVizAuthoringApi
 public expect class ShaderProgram(source: String) {
 
-    /** False when this device cannot run shaders at all, or when [source] did not compile. */
+    /** False when this device cannot run shaders at all, or when the source did not compile. */
     public val available: Boolean
 
     /** What the compiler said, with line numbers, or null when it compiled. */

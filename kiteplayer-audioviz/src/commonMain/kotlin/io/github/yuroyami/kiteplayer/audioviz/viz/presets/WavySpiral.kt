@@ -32,8 +32,8 @@ import kotlin.math.tan
  *   (`scripts/spiral.js`), which the older repository's README names as the main one. The older copy
  *   is https://github.com/soniaboller/audible-visuals (`public/scripts/spiral.js`).
  * - Licence as found: the Apache License 2.0 text in `soniaboller/audible-visuals` (`LICENSE`), with
- *   the copyright line left as the unfilled template, "Copyright [yyyy] [name of copyright owner]". No
- *   licence file was found in `soniaboller/soniaboller.github.io`.
+ *   the copyright line left as the unfilled template, "Copyright \[yyyy\] \[name of copyright
+ *   owner\]". No licence file was found in `soniaboller/soniaboller.github.io`.
  * - Year: 2016
  *
  * Deviations from the original:

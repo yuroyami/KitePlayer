@@ -193,3 +193,10 @@ tasks.register("printJvmTestRuntimeClasspath") {
     doLast { println(classpath.joinToString(File.pathSeparator) { it.absolutePath }) }
 }
 
+// Dokka 2.3 analyses the source set that the JVM and Android share with no classpath of its own,
+// and then reports the types of other modules there as unresolved. The JVM's classpath has them.
+dokka {
+    dokkaSourceSets.matching { it.name == "jvmAndAndroidMain" }.configureEach {
+        classpath.from(configurations.named("jvmCompileClasspath"))
+    }
+}

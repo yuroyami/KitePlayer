@@ -22,7 +22,7 @@ import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.launch
 
 /**
- * The web output side: a clock and a sink, and no renderer.
+ * The web output side: a clock, a sink and a subtitle rasterizer, and no renderer.
  *
  * No renderer is not a gap, it is the same shape `DesktopOutputBackend` has. Compose draws the
  * frames through KiteVideo on both, so the backend supplies only what the platform alone can
@@ -36,8 +36,11 @@ public object WebOutputBackend : OutputBackend {
     override val clock: MonotonicClock get() = WebMonotonicClock
     override val audioSink: AudioSinkFactory = WebAudioSinkFactory
 
-    /** No web rasteriser yet; the text subtitle path draws through Compose above this layer. */
-    override val subtitleRasterizer: SubtitleRasterizer? get() = null
+    /**
+     * Draws text subtitles with the browser's own text engine, through a 2D canvas (#559). Null
+     * where there is no canvas, as under Node, and the player then draws no text cues.
+     */
+    override val subtitleRasterizer: SubtitleRasterizer? get() = WebSubtitleRasterizer.orNull()
 }
 
 /**

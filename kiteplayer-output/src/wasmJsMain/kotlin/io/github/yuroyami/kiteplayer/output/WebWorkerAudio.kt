@@ -85,7 +85,8 @@ public fun workerOutputBackend(
                 WebMonotonicClock,
             )
         }
-        override val subtitleRasterizer: SubtitleRasterizer? get() = null
+        // A worker has an OffscreenCanvas, so text cues are drawn there too (#559).
+        override val subtitleRasterizer: SubtitleRasterizer? get() = WebSubtitleRasterizer.orNull()
     }
 }
 

@@ -695,6 +695,9 @@ and labels it.
   primary track is typeset; a secondary track uses the built-in styling at the top of the picture.
 - On the web, libass is a separate module (see [Web setup](#web-setup)). A browser has no system
   font, so supply fonts as attachments or through `SubtitleConfig.fonts`.
+- On the web, SubRip, WebVTT, TTML and the built-in ASS styling are drawn with the browser's own
+  text engine and fonts, on the page and in the worker player. See
+  [the web section of the regions document](docs/subtitle-regions.md#the-web).
 
 </details>
 

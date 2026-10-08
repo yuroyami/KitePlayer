@@ -1,8 +1,7 @@
 # TTML regions
 
 The contract for the TTML and DFXP half of #492. TTML and DFXP files load as subtitle tracks and
-are drawn in their regions on the desktop, Android and Apple. The web draws no text cue of any
-format yet (#559).
+are drawn in their regions on the desktop, Android, Apple and the web.
 
 TTML is the subtitle format broadcasters and streaming services hand out, and DFXP is its older
 name. Unlike SubRip or WebVTT, a TTML file places its text in regions: boxes on the screen with a
@@ -148,10 +147,22 @@ message and offset.
 
 ## The web
 
-The web output has no text rasterizer today, for any format, so no text cue is drawn on the
-canvas there; a page that shows text cues reads them from `KitePlayer.subtitleCues`. TTML cues
-reach it there like any other, regions included. A browser raster path that draws them on the
-canvas is #559.
+The web output draws text cues of every format with the browser's own text engine, through a 2D
+canvas (#559). It uses an `OffscreenCanvas` where there is one, so it also works in the worker
+player. It goes through the same shared loop as the other rasterizers, so a cue and a region land
+at the same place as on the desktop.
+
+Three things differ from the other platforms, because a canvas draws text and does not lay it out:
+
+- Line breaking is the rasterizer's own. Lines break at spaces, and between the words that
+  `Intl.Segmenter` finds in scripts that write no spaces, such as Chinese, Japanese and Thai. A
+  word wider than the line is cut between characters.
+- A line of several styled spans is drawn span by span. A line that starts with a right-to-left
+  character is filled from its right end. Text that mixes directions inside one span is ordered by
+  the browser.
+- Underline and line-through are drawn as bars, because a canvas has no text decoration.
+
+Node has no canvas, so the rasterizer is absent there and no text cue is drawn.
 
 ## Order of work
 
@@ -163,8 +174,8 @@ canvas is #559.
    path. Done.
 4. Region layout in the shared rasterizer loop. Done, and tested with real text on the desktop
    rasterizer, on CoreText on a Mac and on the Android rasterizer on an emulator.
-5. A browser raster path for text cues, regions included. This is #559, because it is not about
-   one format.
+5. A browser raster path for text cues, regions included. Done in #559, for every text format,
+   and tested with real text in a headless browser.
 
 ## Tests
 

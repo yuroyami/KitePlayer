@@ -150,11 +150,12 @@ internal class KiteVideoRenderer(
     /**
      * The flash guard's mode (#500). This renderer guards the pictures it converts itself; it cannot
      * read a system setting, so [io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem] is off here.
-     * The GPU tier's pictures are not guarded yet.
+     * The platform GPU tier guards its own pictures in its blit, so the mode goes on to it.
      */
     override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
         // A change of mode starts the history afresh, as taking the picture off does.
         if (flashGuard.getAndSet(mode) != mode) guardForgets.value = true
+        hardwareRenderer?.setFlashGuard(mode)
     }
 
     private val flashGuard = atomic(io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem)

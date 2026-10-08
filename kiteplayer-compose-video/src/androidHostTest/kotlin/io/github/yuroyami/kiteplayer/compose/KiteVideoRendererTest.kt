@@ -72,6 +72,12 @@ private class FakeHardwareRenderer : KiteVideoHardwareRenderer {
         this.quality = quality
     }
 
+    var guardMode: io.github.yuroyami.kiteplayer.FlashGuard? = null
+
+    override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
+        guardMode = mode
+    }
+
     override val presentedFrames: Long get() = presented
     override val supersededFrames: Long get() = superseded
     override val failedFrames: Long get() = failed
@@ -197,6 +203,21 @@ class KiteVideoRendererTest {
                 hardware.quality,
                 "the WHOLE value must reach the GPU tier: it owns the two passes Compose cannot do",
             )
+        } finally {
+            h.renderer.close()
+        }
+    }
+
+    /** The GPU tier guards its own pictures in its blit, so the mode has to go on to it (#500). */
+    @Test
+    fun theFlashGuardReachesTheGpuTierBeneathIt() {
+        val hardware = FakeHardwareRenderer()
+        val h = Harness(hardwareRenderer = hardware)
+        try {
+            h.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+            assertEquals(io.github.yuroyami.kiteplayer.FlashGuard.On, hardware.guardMode)
+            h.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.Off)
+            assertEquals(io.github.yuroyami.kiteplayer.FlashGuard.Off, hardware.guardMode)
         } finally {
             h.renderer.close()
         }

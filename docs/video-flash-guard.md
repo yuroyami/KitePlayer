@@ -70,7 +70,8 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
   four by four points in each cell, 2,304 reads a frame and never the whole frame. It measures a
   frame before drawing it, so the frame that completes a run is already dimmed. The Compose canvas
   renderer measures on its worker, hands each picture to the draw with its factor, and the draw
-  folds the factor into the picture controls' colour filter; outside a run it draws with the
+  folds the factor into the picture controls' colour filter (a MediaCodec picture on Android is
+  dimmed earlier, in the GL blit, and the draw then applies the picture controls to it); outside a run it draws with the
   controls' own filter, or none, as before. The AWT canvas has no picture controls, so it lays black
   over the picture at `1 - k` before the cues, which leaves `k` of each encoded value under it, and
   a repaint of a held picture draws it at the factor it was shown with. The Core Graphics
@@ -108,7 +109,9 @@ on a system older than the setting, where `FollowSystem` is off.
    Mac and on an iPhone is owed. Core Graphics is done too, tested on a Mac and on the iOS
    simulator.
 6. Android GL and the Android software path. Done: the GL half is tested on an ASUS ROG Phone 9
-   and the software path on the host. The Compose renderer's hardware tier is next.
+   and the software path on the host. The Compose renderer's hardware tier is the same GL renderer:
+   the Compose renderer sends the mode on to it. On the phone a 5 Hz strobe played through
+   MediaCodec reads 81 of 255 at the centre of the screen once its run has started.
 7. The web canvas, once it has an adjustment stage.
 
 ## Tests

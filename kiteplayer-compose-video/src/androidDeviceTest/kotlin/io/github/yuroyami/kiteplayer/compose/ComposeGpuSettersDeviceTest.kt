@@ -11,6 +11,7 @@ import android.view.PixelCopy
 import android.view.Window
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.yuroyami.kiteplayer.FlashGuard
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -32,7 +33,7 @@ import kotlin.test.assertTrue
 
 /**
  * What the engine sets on [KiteVideo]'s renderer reaches the GL blit under it, on the path that
- * draws MediaCodec pictures: the render quality (#560). Each test plays
+ * draws MediaCodec pictures: the render quality (#560) and the flash guard (#500). Each test plays
  * `strobe-5hz.mp4`, a 640 by 360 black and white strobe, and looks at what came out.
  *
  * Runs on a phone. The flash guard half reads the screen while a clip plays in real time, which
@@ -123,6 +124,9 @@ internal class ComposeGpuSettersDeviceTest {
         return Color.red(bitmap.getPixel(0, 0))
     }
 
+    /** The readings of the last two seconds, when a strobe's run has long started. */
+    private fun Played.late(): List<Int> = reds.filter { it.first in (endedAtMillis - 2_300)..(endedAtMillis - 300) }.map { it.second }
+
     @Test
     fun theKernelReachesTheBlitWhichThenEnlargesThePicture() {
         val plain = play { }
@@ -130,6 +134,18 @@ internal class ComposeGpuSettersDeviceTest {
         Log.i(TAG, "widest image: plain=${plain.widestImage} kernel=${kernel.widestImage}")
         assertEquals(640, plain.widestImage, "with no kernel the image has the size of the clip")
         assertTrue(kernel.widestImage > 640, "the kernel never reached the blit: the image is ${kernel.widestImage} wide")
+    }
+
+    @Test
+    fun aStrobeIsDimmedOnTheScreenWithTheGuardOnAndWholeWithItOff() {
+        val whole = play { it.setFlashGuard(FlashGuard.Off) }.late()
+        val guarded = play { it.setFlashGuard(FlashGuard.On) }.late()
+        Log.i(TAG, "late reds: whole=${whole.size} readings up to ${whole.maxOrNull()}, guarded=${guarded.size} up to ${guarded.maxOrNull()}")
+        assertTrue(whole.size > 20 && guarded.size > 20, "too few readings: ${whole.size} and ${guarded.size}")
+        assertTrue(whole.max() > 200, "the strobe's white reads ${whole.max()} with the guard off")
+        // White is drawn at about a third once the run starts.
+        assertTrue(guarded.max() in 40..130, "the strobe's white reads ${guarded.max()} with the guard on")
+        assertTrue(guarded.min() < 20, "black is still black: ${guarded.min()}")
     }
 
     private companion object {

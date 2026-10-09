@@ -71,8 +71,10 @@ internal class Pipe : ShaderPreset(
         VizDrive(VizDriver.Level, VizProperty.Brightness),
         // One ring per sixteenth note of the cycles, which without a pulse run at the mood's rate.
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
-        VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.3f)),
-        VizDrive(VizDriver.BodyHit, VizProperty.Brightness, VizCurve.Discrete, VizResponse.lifetime(0.5f)),
+        // A kick squeezes the tube and pushes the flight on. Its flare on the nearest rings is small,
+        // because those rings carry the live spectrum. The snare's ring is not declared: it fades out
+        // before it reaches the large rings (#298), so at the survey's size it moves nothing.
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.3f)),
         VizDrive(VizDriver.Timbre, VizProperty.Shape),
         // A section glides the camera to another lane.
         VizDrive(VizDriver.Section, VizProperty.Camera, VizCurve.Discrete, VizResponse.envelope(0.5f)),

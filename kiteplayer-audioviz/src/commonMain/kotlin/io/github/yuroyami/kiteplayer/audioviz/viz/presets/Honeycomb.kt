@@ -78,13 +78,16 @@ import kotlin.random.Random
  *   where the page had a fixed red to pink ramp.
  * - The hive turns one notch on each beat and a form change flips the direction, where the page
  *   sheared the corners every 20 ms.
+ * - The hive shows three to six rings. A birth or a surge adds one, a breakdown takes it back to two,
+ *   and a kick opens the loud cells, none of which the page did.
  * - The page's SoundCloud player, track panel and controls are left out.
  *
  * A honeycomb of 127 hexagons lights up like a meter: the lowest frequency sits in the middle and the
  * rings climb the spectrum. Each tile takes its colour and opacity from its level, from the palette,
  * climbing it with the level, and falls back slowly from its peak. A loud tile gets a
  * white edge that fades over three seconds. The hive turns a notch on each beat, and on a loud passage
- * the tiles are pulled in and thrown through the middle. Grey star streaks rush outward
+ * the tiles are pulled in and thrown through the middle. The hive grows a ring on a birth and falls back
+ * to two on a breakdown, and a kick opens its loud cells. Grey star streaks rush outward
  * behind it, and the edges glow in the palette's colour with the volume.
  */
 internal class Honeycomb : Visualization {
@@ -144,6 +147,18 @@ internal class Honeycomb : Visualization {
         private set
     private var lastQuarter = -1
 
+    /** How many rings the hive is growing toward, 2 to 6. */
+    internal var ringsTarget = 3
+        private set
+
+    // How many rings the hive shows now, eased over about a cycle.
+    private var ringsShown = 3f
+    internal val ringsShownValue: Float get() = ringsShown
+
+    // How far the loud cells are open after a kick, 1 at the hit.
+    private var open = 0f
+    internal val openValue: Float get() = open
+
     /** Heard seconds not yet spent on 20 ms steps. */
     private var owed = 0.0
 
@@ -199,6 +214,11 @@ internal class Honeycomb : Visualization {
 
     private val path = Path()
 
+    // The pushed corners of the tile that tracePath last traced.
+    private val cornerX = FloatArray(SIDES)
+    private val cornerY = FloatArray(SIDES)
+    private val hole = Path()
+
     /** The canvas's 1 px line, with its default miter limit of 10. */
     private val hairline = Stroke(width = 1f, miter = 10f)
 
@@ -244,11 +264,17 @@ internal class Honeycomb : Visualization {
         lastQuarter = quarter
         // Without a beat the hive turns slowly with the drive, as the page turned.
         if (!gestures.pulseUsable) turnTarget += turnSign * state.paced(TURN_RATE) * dt * state.motionScale
+        val heard = dt.toDouble() * frame.audible
+        if (evolution.birth || gestures.surge) grow()
+        if (evolution.collapse) collapse()
+        // The shown rings follow the target over about a cycle of heard time.
+        ringsShown += (ringsTarget - ringsShown) * (1f - exp(-heard.toFloat() / gestures.cycleSeconds.coerceAtLeast(0.5f)))
+        // A kick opens the loud cells, and they close within a quarter second.
+        open = max(open * exp(-dt / 0.25f), gestures.kick)
         // `window.innerWidth` and `innerHeight` are whole CSS pixels.
         val pageWidth = floor(canvas.width / density + 0.5)
         val pageHeight = floor(canvas.height / density + 0.5)
         if (pageWidth != width || pageHeight != height) resize(pageWidth, pageHeight)
-        val heard = dt.toDouble() * frame.audible
         turn += (turnTarget - turn) * (1f - exp(-heard.toFloat() / NOTCH_SECONDS))
         owed += heard
         var steps = 0
@@ -485,12 +511,38 @@ internal class Honeycomb : Visualization {
     }
 
     private fun DrawScope.drawTiles(light: Float, palette: VizPalette, walk: Float) {
-        val dark = Color(DARK * light, DARK * light, DARK * light, 0.5f)
         for (num in 0 until TILES) {
             val value = shown[num]
+            val share = ringShare(num)
+            if (share <= 0f) continue
             if (!tracePath(num)) continue
-            drawPath(path, fillOf(value, light, palette, walk, ring[num]))
-            if (value > 20) drawPath(path, dark, style = hairline)
+            val fill = fillOf(value, light, palette, walk, ring[num])
+            drawPath(path, fill.copy(alpha = fill.alpha * share))
+            if (value > 20) drawPath(path, Color(DARK * light, DARK * light, DARK * light, 0.5f * share), style = hairline)
+            // A kick opens a loud cell: an inner hexagon of pale colour pours light out of the tile.
+            if (value > OPEN_LEVEL && open > 0.02f) {
+                var cx = 0f
+                var cy = 0f
+                for (corner in 0 until SIDES) {
+                    cx += cornerX[corner]
+                    cy += cornerY[corner]
+                }
+                cx /= SIDES
+                cy /= SIDES
+                val inward = 1f - 0.55f * open
+                hole.reset()
+                for (corner in 0 until SIDES) {
+                    val hx = cx + (cornerX[corner] - cx) * inward
+                    val hy = cy + (cornerY[corner] - cy) * inward
+                    if (corner == 0) hole.moveTo(hx, hy) else hole.lineTo(hx, hy)
+                }
+                hole.close()
+                val level = (value / 255.0).coerceIn(0.0, 1.0).toFloat()
+                drawPath(
+                    hole,
+                    palette.cycled(level * 0.7f + ring[num] * 0.04f + walk + 0.5f, 0.3f, light, alpha = (open * share).coerceIn(0f, 1f)),
+                )
+            }
         }
     }
 
@@ -499,8 +551,10 @@ internal class Honeycomb : Visualization {
         for (num in 0 until TILES) {
             val alpha = edge[num]
             if (alpha <= 0) continue
+            val share = ringShare(num)
+            if (share <= 0f) continue
             if (!tracePath(num)) continue
-            drawPath(path, Color(light, light, light, alpha.toFloat().coerceIn(0f, 1f)), style = hairline)
+            drawPath(path, Color(light, light, light, (alpha.toFloat() * share).coerceIn(0f, 1f)), style = hairline)
         }
     }
 
@@ -526,10 +580,18 @@ internal class Honeycomb : Visualization {
             }
             val px = (x + offsetX).toFloat()
             val py = (y + offsetY).toFloat()
+            cornerX[corner] = px
+            cornerY[corner] = py
             if (corner == 0) path.moveTo(px, py) else path.lineTo(px, py)
         }
         path.close()
         return true
+    }
+
+    /** How much of a tile shows: 1 inside the rings the hive has grown to, 0 beyond, eased between. */
+    private fun ringShare(num: Int): Float {
+        val t = (ringsShown - (ring[num] - 1f)).coerceIn(0f, 1f)
+        return t * t * (3f - 2f * t)
     }
 
     /** The ring a tile sits in, 0 for the centre and 6 for the outer ring. */
@@ -540,6 +602,16 @@ internal class Honeycomb : Visualization {
 
     /** What a tile shows this frame, on the page's 0 to 255 scale. */
     internal fun tileValue(num: Int): Double = shown[num]
+
+    /** A birth or a surge adds a ring to the hive, up to six. */
+    internal fun grow() {
+        ringsTarget = min(6, ringsTarget + 1)
+    }
+
+    /** A breakdown takes the hive back to the middle. */
+    internal fun collapse() {
+        ringsTarget = 2
+    }
 
     /** A form change turns the hive the other way. */
     internal fun onMorph() {
@@ -557,6 +629,9 @@ internal class Honeycomb : Visualization {
         turn = 0f
         turnSign = 1f
         lastQuarter = -1
+        ringsTarget = 3
+        ringsShown = 3f
+        open = 0f
         volume = 0
         factor = 0.0
         ticks = 0L
@@ -593,6 +668,9 @@ internal class Honeycomb : Visualization {
         const val GRADIENT_SAMPLES = 8
 
         const val DARK = 20f / 255f
+
+        /** The value above which a kick opens a cell, the page's highlight threshold. */
+        const val OPEN_LEVEL = 120.0
 
         /** The page writes e as 2.7182 in the tile's opacity. */
         const val E = 2.7182

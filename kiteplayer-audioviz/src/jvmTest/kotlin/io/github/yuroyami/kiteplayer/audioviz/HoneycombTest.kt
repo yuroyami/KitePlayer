@@ -229,6 +229,104 @@ class HoneycombTest {
         assertEquals(1f, honeycomb.turnSign)
     }
 
+    @Test
+    fun theHiveGrowsARingOnEachBirthAndShrinksOnABreakdown() {
+        val honeycomb = Honeycomb()
+        honeycomb.reset()
+        assertEquals(3, honeycomb.ringsTarget)
+        repeat(3) { honeycomb.grow() }
+        assertEquals(6, honeycomb.ringsTarget)
+        honeycomb.grow()
+        assertEquals(6, honeycomb.ringsTarget, "the hive stops at six rings")
+        honeycomb.collapse()
+        assertEquals(2, honeycomb.ringsTarget)
+        honeycomb.grow()
+        assertEquals(3, honeycomb.ringsTarget)
+
+        // The harness restarts the drawing before its first frame, so the growth is asked for after that.
+        val following = Honeycomb()
+        var grown = false
+        val shown = FloatArray(600)
+        RenderHarness.forEachFrameOf(
+            following, 64, 36, 600, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) },
+            beforeDraw = {
+                if (!grown) {
+                    following.grow()
+                    grown = true
+                }
+            },
+        ) { _, step ->
+            shown[step] = following.ringsShownValue
+        }
+        println("rings shown: step 29 ${shown[29]}, step 599 ${shown[599]}")
+        assertTrue(shown[29] > 3f && shown[29] < 4f, "half a second in the fourth ring is half grown, had ${shown[29]}")
+        assertTrue(shown[599] > 3.9f, "ten seconds in the fourth ring is fully grown, had ${shown[599]}")
+    }
+
+    @Test
+    fun aKickOpensTheLoudCells() {
+        val hit = InjectedFrames.HIT_STEPS[1]
+        val opens = HashMap<VizDriver?, FloatArray>()
+        val lumas = HashMap<VizDriver?, Float>()
+        for (driver in listOf(VizDriver.LowHit, null)) {
+            val honeycomb = Honeycomb()
+            val open = FloatArray(120)
+            RenderHarness.forEachFrameOf(
+                honeycomb, 160, 90, 120, VizPalette.Prism,
+                // Only the first hit counts.
+                source = { step -> loudCentre(InjectedFrames.frame(if (step < hit) driver else null, step)) },
+            ) { bitmap, step ->
+                open[step] = honeycomb.openValue
+                if (step == InjectedFrames.HIT_STEPS[0]) {
+                    val pixels = IntArray(160 * 90)
+                    bitmap.readPixels(pixels)
+                    var sum = 0f
+                    var count = 0
+                    for (y in 36 until 54) {
+                        for (x in 64 until 96) {
+                            val pixel = pixels[y * 160 + x]
+                            sum += (0.2126f * (pixel shr 16 and 0xFF) + 0.7152f * (pixel shr 8 and 0xFF) + 0.0722f * (pixel and 0xFF)) / 255f
+                            count++
+                        }
+                    }
+                    lumas[driver] = sum / count
+                }
+            }
+            opens[driver] = open
+        }
+        val kicked = opens.getValue(VizDriver.LowHit)
+        val still = opens.getValue(null)
+        val first = InjectedFrames.HIT_STEPS[0]
+        val kickedLuma = lumas.getValue(VizDriver.LowHit)
+        val stillLuma = lumas.getValue(null)
+        println("open at the hit ${kicked[first]}, 45 steps later ${kicked[first + 45]}")
+        println("middle luma at the hit: kick $kickedLuma, no kick $stillLuma")
+        assertTrue(kicked[first] > 0.5f, "a kick opens the cells, had ${kicked[first]}")
+        assertTrue(kicked[first + 45] < 0.1f, "they close within a second, had ${kicked[first + 45]}")
+        assertTrue(still.all { it == 0f }, "without a kick nothing opens")
+        assertTrue(abs(kickedLuma - stillLuma) > 0.01f, "the open cells light the middle: $kickedLuma against $stillLuma")
+    }
+
+    /** The baseline with the lowest eight bands raised, so the centre tiles are loud. */
+    private fun loudCentre(base: SpectrumFrame): SpectrumFrame {
+        val bands = base.bands.copyOf().also { for (b in 0 until 8) it[b] = 0.9f }
+        val peaks = base.peaks.copyOf().also { for (b in 0 until 8) it[b] = 0.95f }
+        val relative = base.bandsRel.copyOf().also { for (b in 0 until 8) it[b] = 0.9f }
+        return SpectrumFrame(
+            ptsMicros = base.ptsMicros, bands = bands, peaks = peaks, scope = base.scope,
+            level = base.level, bass = base.bass, mid = base.mid, treble = base.treble,
+            beat = base.beat, pulse = base.pulse, bandsRel = relative,
+            levelRel = base.levelRel, bassRel = base.bassRel, midRel = base.midRel,
+            trebleRel = base.trebleRel, kick = base.kick, snare = base.snare, hat = base.hat,
+            onsetStrength = base.onsetStrength, novelty = base.novelty, kickPulse = base.kickPulse,
+            snarePulse = base.snarePulse, hatPulse = base.hatPulse, energy = base.energy,
+            density = base.density, mood = base.mood, loudShort = base.loudShort,
+            loudLong = base.loudLong, trend = base.trend, generation = base.generation,
+            hasTimestamp = true, events = base.events,
+        )
+    }
+
     private fun colourDistance(a: Color, b: Color): Float = (abs(a.red - b.red) + abs(a.green - b.green) + abs(a.blue - b.blue)) / 3f
 
     /** Draws [honeycomb] for [seconds] at [rate] frames a second, the way a window does. */

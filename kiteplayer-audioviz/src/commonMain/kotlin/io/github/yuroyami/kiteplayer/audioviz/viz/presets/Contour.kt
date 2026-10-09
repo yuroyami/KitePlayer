@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.PixelImage
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
@@ -25,6 +26,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
 import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
 import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flow
 import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flows
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.LaceReaction
 import io.github.yuroyami.kiteplayer.audioviz.viz.field.MemoryField
 import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
@@ -48,17 +50,24 @@ import kotlin.math.sqrt
 
 /**
  * A living map seen straight down: neon contour lines on black, a white coastline at sea level and
- * a thicker index line every fourth level. Thirty two islands sit on a spiral, bass in the middle
- * and treble at the edges, and a loud band raises its island, so new lines appear at the summit and
- * ripple outward. Louder music lowers the sea.
+ * a thicker index line every fourth level. Thirty two islands stand on the bands, bass first and
+ * treble last, and a loud band raises its island, so new lines appear at the summit and ripple
+ * outward. Each island's coastline is the live waveform wrapped round it. Louder music lowers the sea.
  *
- * The sea is a memory field: kicks drop ink round the loudest bass island, and Marble's point
- * vortices comb it into currents. The shader draws the ink as contour lines of its own, in the cool
- * sea colours, only where the ground lies under the water, so land and sea speak one language. A
- * faint wash of the ground's colour keeps the map lit. Onsets and kicks send rings through the water
- * and hats make the edge islets flicker. A section raises a new archipelago, a breakdown brings high
- * tide and stills the sea, and a drop brings low tide for a cycle, over which the currents run on.
- * The camera never moves.
+ * The north of the map is the last seconds of the spectrum: new land rises at the top edge and
+ * drifts south as the music plays, at the music's pace, and stands still in a pause or a silence.
+ * The sea is a memory field: kicks drop ink round the loudest bass island and Marble's point
+ * vortices comb it into currents, drawn as contour lines of their own, in the cool sea colours, only
+ * where the ground lies under the water. A faint wash of the ground's colour keeps the map lit.
+ *
+ * Forms, at the pace of the evolution pacer: Archipelago (a spiral), Ridge (one chain across the
+ * map), Crater (the bass in the middle, the rest on a rim) and Delta (small islands in strong
+ * currents). A morph glides the islands to the next form over one to four cycles and turns the
+ * currents the other way; a birth raises a new island group where the loudest bands sit. A section
+ * raises a new archipelago. Onsets and kicks send rings through the water, a snare cracks an island,
+ * hats make the edge islets flicker. A breakdown brings high tide, stills the sea and grows lace foam
+ * in it; a drop brings low tide for a cycle, over which the currents run on in gold. The camera never
+ * moves.
  *
  * Where shaders cannot run, the stand-in draws the land's lines only: no sea and no wash.
  */
@@ -78,6 +87,8 @@ internal class Contour : ShaderPreset(
         VizDrive(VizDriver.Onset, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(RING_SECONDS)),
         VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.spring(0.4f)),
         VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(RING_SECONDS)),
+        // A snare cracks an island for a moment.
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(CRACK_SECONDS)),
         VizDrive(VizDriver.HighHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(FLICKER_SECONDS)),
         VizDrive(VizDriver.Level, VizProperty.Shape, response = VizResponse.envelope(SEA_SECONDS)),
         VizDrive(VizDriver.Level, VizProperty.Brightness),
@@ -200,8 +211,35 @@ internal class Contour : ShaderPreset(
     private var scope = FloatArray(0)
     private var scopeGain = 1f
 
+    // The form on the map, and a morph's glide from one layout to the next over one to four cycles.
+    private var form = ARCHIPELAGO
+    private val glideFromU = FloatArray(ISLANDS)
+    private val glideFromV = FloatArray(ISLANDS)
+    private val glideFromSize = FloatArray(ISLANDS)
+    private val glideToU = FloatArray(ISLANDS)
+    private val glideToV = FloatArray(ISLANDS)
+    private val glideToSize = FloatArray(ISLANDS)
+    private var glide = 1f
+    private var glideCycles = 1f
+    private var raised = 0
+
+    // Snare cracks: a narrow trench across one island, in cells, that heals over [CRACK_SECONDS].
+    private val crackX = FloatArray(CRACKS)
+    private val crackY = FloatArray(CRACKS)
+    private val crackAngle = FloatArray(CRACKS)
+    private val crackLength = FloatArray(CRACKS)
+    private val crackDepth = FloatArray(CRACKS)
+    private val crackAge = FloatArray(CRACKS) { -1f }
+    private var nextCrack = 0
+
+    // The breakdown's foam: lace grown in the still sea, in the field's extra channel.
+    private val lace = LaceReaction()
+    private var foamMask = FloatArray(0)
+    private var foamOwed = 0f
+    private var seeded = false
+
     init {
-        layOut(to)
+        layOut(to, ARCHIPELAGO)
         from.copyFrom(to)
     }
 
@@ -219,11 +257,22 @@ internal class Contour : ShaderPreset(
         scope = frame.scope
         scopeGain = frame.waveformGain
 
-        if (gestures.turn) {
-            highHeld = gestures.breakdown
-            if (morph >= 1f) newArchipelago()
+        // A section raises a new archipelago; a morph of the pacer glides to the next form; a birth
+        // raises a new island group. A breakdown holds high tide until the next turn.
+        if (gestures.turn) highHeld = gestures.breakdown
+        // A section that lands while an archipelago is still rising glides to the next form instead,
+        // so every morph the pacer counts changes the picture.
+        if (gestures.section && morph >= 1f) {
+            newArchipelago()
+        } else if (evolution.morph) {
+            morphTo((form + 1) % FORMS.size)
         }
+        if (evolution.birth) raiseGroup()
         morph = (morph + dt / bar).coerceAtMost(1f)
+        glideIslands(dt, bar)
+        for (island in 0 until ISLANDS) {
+            if (to.rise[island] < 1f) to.rise[island] = (to.rise[island] + dt / bar).coerceAtMost(1f)
+        }
         highTide = (highTide + (if (highHeld) 1f else -1f) * dt / bar).coerceIn(0f, 1f)
         if (gestures.surge) {
             lowClock = 0f
@@ -247,6 +296,8 @@ internal class Contour : ShaderPreset(
             val island = firedIsland()
             ring(shown.x[island], shown.y[island], ONSET_RING * (0.6f + 0.4f * onset), ONSET_WIDTH, 5f, 1.2f)
         }
+        if (gestures.snare > 0f) crack(shown, gestures.snare)
+        ageCracks(dt)
         if (gestures.hat > 0f) {
             val accent = gestures.hatAccent.coerceAtMost(1f)
             for (island in EDGE until ISLANDS) {
@@ -264,6 +315,7 @@ internal class Contour : ShaderPreset(
 
         raiseGround()
         tide(state, dt)
+        growFoam(state, dt)
         terrain.copyInto(heights, 0, 0, columns * rows)
         rings.addTo(heights, terrain, columns, rows, seaLevel)
         built++
@@ -377,67 +429,181 @@ internal class Contour : ShaderPreset(
         return sum / 3f
     }
 
-    /** The old archipelago starts to sink and a new one to rise, over one bar. */
+    /** The old archipelago starts to sink and a new one, of the next form, to rise, over one cycle. */
     private fun newArchipelago() {
+        form = (form + 1) % FORMS.size
+        spin = -spin
+        currentStrength = if (form == DELTA) DELTA_STIR else 1f
         val old = from
         from = to
         to = old
-        layOut(to)
+        layOut(to, form)
         morph = 0f
+        glide = 1f
     }
 
-    private fun layOut(into: Archipelago) {
+    /** The islands glide to the next form's layout over one to four cycles; the currents turn the other way. */
+    private fun morphTo(next: Int) {
+        form = next
+        spin = -spin
+        currentStrength = if (form == DELTA) DELTA_STIR else 1f
         val start = random.next() * TAU
         val hand = if (clockwise.on) 1f else -1f
-        val laps = turns.target
         for (island in 0 until ISLANDS) {
-            val along = (island + 0.5f) / ISLANDS
-            // Evenly spaced along an Archimedean spiral: out and round both grow with the square root.
-            val out = sqrt(along)
-            into.reach[island] = (out + 0.035f * random.signed()).coerceIn(0.06f, 1f)
-            into.angle[island] = start + hand * TAU * laps * out + 0.1f * random.signed()
-            into.size[island] = spread.target * (0.3f - 0.1f * along) * (0.8f + 0.4f * random.next())
+            glideFromU[island] = to.u[island]
+            glideFromV[island] = to.v[island]
+            glideFromSize[island] = to.size[island]
+            place(form, island, (island + 0.5f) / ISLANDS, start, hand, turns.target, glideToU, glideToV, glideToSize)
+        }
+        glideCycles = 1f + (random.next() * 4f).toInt().coerceAtMost(3)
+        glide = 0f
+    }
+
+    private fun glideIslands(dt: Float, bar: Float) {
+        if (glide >= 1f) return
+        glide = (glide + dt / (glideCycles * bar)).coerceAtMost(1f)
+        val eased = smooth(glide)
+        for (island in 0 until ISLANDS) {
+            to.u[island] = glideFromU[island] + (glideToU[island] - glideFromU[island]) * eased
+            to.v[island] = glideFromV[island] + (glideToV[island] - glideFromV[island]) * eased
+            to.size[island] = glideFromSize[island] + (glideToSize[island] - glideFromSize[island]) * eased
+        }
+        to.placed = false
+    }
+
+    /** A new archipelago of [form] in [into]: where its islands sit, how big and how high. */
+    private fun layOut(into: Archipelago, form: Int) {
+        val start = random.next() * TAU
+        val hand = if (clockwise.on) 1f else -1f
+        for (island in 0 until ISLANDS) {
+            place(form, island, (island + 0.5f) / ISLANDS, start, hand, turns.target, into.u, into.v, into.size)
             // The island's two bands stand side by side, so its shape leans with their balance.
             into.lean[island] = random.next() * TAU
             val tall = if (random.next() < 0.2f) 1f else 0f
-            into.rest[island] = relief.target * (2.8f + 2.2f * random.next() + tall)
+            into.rest[island] = relief.target * (2.8f + 2.2f * random.next() + tall) * (if (form == DELTA) DELTA_REST else 1f)
+            into.rise[island] = 1f
         }
         into.seed = (random.next() * 100_000f).toInt()
-        into.shapedColumns = 0
+        into.placed = false
     }
 
     /**
-     * Lays [layout] onto the grid for this frame's shape: where its islands sit in cells, and the
-     * parts of the ground the music does not move, which are only rebuilt when the layout or the
-     * frame changes.
+     * Where island [island] of [form] sits and how big it is, into [u], [v] and [size]. [along] is its
+     * place in band order, 0 for the bass and 1 for the treble.
+     */
+    private fun place(
+        form: Int, island: Int, along: Float, start: Float, hand: Float, laps: Float,
+        u: FloatArray, v: FloatArray, size: FloatArray,
+    ) {
+        when (form) {
+            RIDGE -> {
+                // One chain across the map, bass on the left, rising and falling like a range.
+                u[island] = -1f + 2f * along
+                v[island] = 0.35f * sin(along * TAU * 1.5f + start) + 0.08f * random.signed()
+                size[island] = spread.target * (0.22f - 0.06f * along) * (0.8f + 0.4f * random.next())
+            }
+            CRATER -> {
+                // The bass in a cluster in the middle, every other band on the rim round it.
+                if (island < CRATER_CORE) {
+                    val out = 0.22f * sqrt((island + 0.5f) / CRATER_CORE)
+                    val angle = start + island * GOLDEN_TURN
+                    u[island] = out * cos(angle)
+                    v[island] = out * sin(angle)
+                } else {
+                    val angle = start + hand * TAU * (island - CRATER_CORE) / (ISLANDS - CRATER_CORE) + 0.08f * random.signed()
+                    val out = 0.8f + 0.06f * random.signed()
+                    u[island] = out * cos(angle)
+                    v[island] = out * sin(angle)
+                }
+                size[island] = spread.target * (0.26f - 0.1f * along) * (0.8f + 0.4f * random.next())
+            }
+            DELTA -> {
+                // Many small islands spread down the map like a river's mouths, the bass upstream.
+                u[island] = (0.9f * random.signed() * (0.3f + 0.7f * along)).coerceIn(-1f, 1f)
+                v[island] = -0.9f + 1.8f * along + 0.06f * random.signed()
+                size[island] = spread.target * DELTA_SIZE * (0.7f + 0.6f * random.next())
+            }
+            else -> {
+                // The spiral: evenly spaced along an Archimedean spiral, pushed out towards the corners.
+                val out = sqrt(along)
+                val reach = (out + 0.035f * random.signed()).coerceIn(0.06f, 1f)
+                val angle = start + hand * TAU * laps * out + 0.1f * random.signed()
+                val c = cos(angle)
+                val s = sin(angle)
+                val square = 1f / sqrt(sqrt(c * c * c * c + s * s * s * s))
+                u[island] = reach * c * square
+                v[island] = reach * s * square
+                size[island] = spread.target * (0.3f - 0.1f * along) * (0.8f + 0.4f * random.next())
+            }
+        }
+    }
+
+    /** A new island group rises out of the sea where the loudest group of bands sits. */
+    private fun raiseGroup() {
+        var group = 0
+        var loudest = -1f
+        for (g in 0 until GROUPS) {
+            var sum = 0f
+            for (band in g * GROUP_BANDS until (g + 1) * GROUP_BANDS) sum += lifted[band]
+            if (sum > loudest) {
+                loudest = sum
+                group = g
+            }
+        }
+        val first = group * GROUP_ISLANDS
+        var cu = 0f
+        var cv = 0f
+        for (island in first until first + GROUP_ISLANDS) {
+            cu += to.u[island]
+            cv += to.v[island]
+        }
+        cu /= GROUP_ISLANDS
+        cv /= GROUP_ISLANDS
+        for (island in first until first + GROUP_ISLANDS) {
+            val angle = random.next() * TAU
+            val out = GROUP_SPREAD * (0.4f + 0.6f * random.next())
+            to.u[island] = (cu + out * cos(angle)).coerceIn(-1f, 1f)
+            to.v[island] = (cv + out * sin(angle)).coerceIn(-1f, 1f)
+            to.rise[island] = 0f
+            // A glide in progress keeps its course; the group's new places are where it heads.
+            glideFromU[island] = to.u[island]
+            glideToU[island] = to.u[island]
+            glideFromV[island] = to.v[island]
+            glideToV[island] = to.v[island]
+        }
+        to.placed = false
+        raised++
+    }
+
+    /**
+     * Lays [layout] onto the grid for this frame's shape: the ground the music does not move, rebuilt
+     * when the layout's seed or the frame changes, and where its islands sit in cells, rebuilt
+     * whenever an island moved. The islands keep below the north strip, where the map's past runs.
      */
     private fun shape(layout: Archipelago) {
-        if (layout.shapedColumns == columns && layout.shapedHalfX == halfX && layout.shapedHalfY == halfY) return
-        layout.shapedColumns = columns
-        layout.shapedHalfX = halfX
-        layout.shapedHalfY = halfY
+        if (layout.shapedColumns != columns || layout.shapedHalfX != halfX || layout.shapedHalfY != halfY ||
+            layout.shapedSeed != layout.seed) {
+            layout.shapedColumns = columns
+            layout.shapedHalfX = halfX
+            layout.shapedHalfY = halfY
+            layout.shapedSeed = layout.seed
+            for (cell in 0 until columns * rows) {
+                val x = cell % columns + 0.5f - columns / 2f
+                val y = cell / columns + 0.5f - rows / 2f
+                layout.relief[cell] = SEABED_LOW + SEABED_SWELL * noise(x / SEABED_SCALE, y / SEABED_SCALE, layout.seed)
+                layout.grain[cell] = 0.7f + 0.6f * noise(x / GRAIN_SCALE, y / GRAIN_SCALE, layout.seed + 7)
+            }
+            layout.placed = false
+        }
+        if (layout.placed) return
+        layout.placed = true
         val shortSide = min(halfX, halfY)
+        val middle = rows / 2f + halfY * NORTH_SHARE
+        val reachY = halfY * (1f - NORTH_SHARE)
         for (island in 0 until ISLANDS) {
-            val c = cos(layout.angle[island])
-            val s = sin(layout.angle[island])
-            // Pushed out towards the corners, so the spiral fills a rectangle rather than an ellipse.
-            val square = 1f / sqrt(sqrt(c * c * c * c + s * s * s * s))
-            layout.x[island] = columns / 2f + layout.reach[island] * c * square * halfX * MARGIN
-            // The islands keep below the north strip, where the map's past runs.
-            layout.y[island] = rows / 2f + halfY * NORTH_SHARE + layout.reach[island] * s * square * halfY * (1f - NORTH_SHARE) * MARGIN
+            layout.x[island] = columns / 2f + layout.u[island] * halfX * MARGIN
+            layout.y[island] = middle + layout.v[island] * reachY * MARGIN
             layout.radius[island] = layout.size[island] * shortSide
-        }
-        val cells = columns * rows
-        for (cell in 0 until cells) {
-            val x = cell % columns + 0.5f - columns / 2f
-            val y = cell / columns + 0.5f - rows / 2f
-            layout.relief[cell] = SEABED_LOW + SEABED_SWELL * noise(x / SEABED_SCALE, y / SEABED_SCALE, layout.seed)
-            layout.grain[cell] = 0.7f + 0.6f * noise(x / GRAIN_SCALE, y / GRAIN_SCALE, layout.seed + 7)
-        }
-        // Each island stands on a shelf twice its width, so the sea round it shoals in wide steps.
-        for (island in 0 until ISLANDS) {
-            dome(layout.relief, layout.grain, layout.x[island], layout.y[island],
-                layout.radius[island] * SHELF_WIDTH, layout.rest[island], null, 0f)
         }
     }
 
@@ -458,6 +624,7 @@ internal class Contour : ShaderPreset(
         if (m < 1f) raise(from, 1f - m)
         raise(to, m)
         raisePast()
+        cutCracks()
         var tallest = 0f
         var at = 0
         for (cell in 0 until cells) {
@@ -481,12 +648,17 @@ internal class Contour : ShaderPreset(
         return SOFT_FROM + room * (1f - exp(-(height - SOFT_FROM) / room))
     }
 
-    /** Adds [layout] to the ground, scaled by [weight]: its still relief, then each island's two bands. */
+    /** Adds [layout] to the ground, scaled by [weight]: its still relief, each island's shelf and two bands, and its coast wave. */
     private fun raise(layout: Archipelago, weight: Float) {
         if (weight <= 0f) return
         shape(layout)
         val cells = columns * rows
         for (cell in 0 until cells) terrain[cell] += weight * layout.relief[cell]
+        // Each island stands on a shelf twice its width, so the sea round it shoals in wide steps.
+        for (island in 0 until ISLANDS) {
+            dome(terrain, layout.grain, layout.x[island], layout.y[island], layout.radius[island] * SHELF_WIDTH,
+                layout.rest[island] * layout.rise[island] * weight, null, 0f)
+        }
         for (band in 0 until BANDS) {
             val island = band / 2
             val radius = layout.radius[island]
@@ -494,9 +666,9 @@ internal class Contour : ShaderPreset(
             val x = layout.x[island] + cos(layout.lean[island]) * side * radius
             val y = layout.y[island] + sin(layout.lean[island]) * side * radius
             val glint = if (island >= EDGE) flicker[island] * weight else 0f
-            dome(terrain, layout.grain, x, y, radius * BAND_WIDTH, heightOf(band) * weight, shimmer, glint)
+            dome(terrain, layout.grain, x, y, radius * BAND_WIDTH, heightOf(band) * weight * layout.rise[island], shimmer, glint)
         }
-        if (scope.size >= 2) for (island in 0 until ISLANDS) coastWave(layout, island, weight)
+        if (scope.size >= 2) for (island in 0 until ISLANDS) coastWave(layout, island, weight * layout.rise[island])
     }
 
     // The four history rows of one strip row, found once per row and sampled per column.
@@ -570,6 +742,99 @@ internal class Contour : ShaderPreset(
         }
     }
 
+    /** A snare: a crack across the island standing highest, as deep as the snare was hard. */
+    private fun crack(layout: Archipelago, strength: Float) {
+        var island = 0
+        for (other in 1 until ISLANDS) if (lift(other) > lift(island)) island = other
+        val slot = nextCrack
+        nextCrack = (nextCrack + 1) % CRACKS
+        crackX[slot] = layout.x[island]
+        crackY[slot] = layout.y[island]
+        crackAngle[slot] = random.next() * PI_F
+        crackLength[slot] = layout.radius[island] * CRACK_REACH
+        crackDepth[slot] = CRACK_DEPTH * (0.5f + 0.5f * strength.coerceIn(0f, 1f))
+        crackAge[slot] = 0f
+    }
+
+    private fun ageCracks(dt: Float) {
+        for (slot in 0 until CRACKS) {
+            if (crackAge[slot] < 0f) continue
+            crackAge[slot] += dt
+            if (crackAge[slot] >= CRACK_SECONDS) crackAge[slot] = -1f
+        }
+    }
+
+    /** Cuts every open crack into the ground: a narrow trench, deepest in its middle, healing as it ages. */
+    private fun cutCracks() {
+        for (slot in 0 until CRACKS) {
+            val age = crackAge[slot]
+            if (age < 0f) continue
+            val depth = crackDepth[slot] * (1f - age / CRACK_SECONDS)
+            val c = cos(crackAngle[slot])
+            val s = sin(crackAngle[slot])
+            val half = crackLength[slot]
+            val cx = crackX[slot]
+            val cy = crackY[slot]
+            val reach = half + CRACK_WIDTH + 1f
+            val left = floor(cx - reach).toInt().coerceAtLeast(0)
+            val right = floor(cx + reach).toInt().coerceAtMost(columns - 1)
+            val top = floor(cy - reach).toInt().coerceAtLeast(0)
+            val bottom = floor(cy + reach).toInt().coerceAtMost(rows - 1)
+            for (y in top..bottom) {
+                val dy = y + 0.5f - cy
+                for (x in left..right) {
+                    val dx = x + 0.5f - cx
+                    val along = dx * c + dy * s
+                    if (abs(along) > half) continue
+                    val across = 1f - abs(-dx * s + dy * c) / CRACK_WIDTH
+                    if (across <= 0f) continue
+                    val taper = 1f - (along / half) * (along / half)
+                    terrain[y * columns + x] -= depth * across * across * taper
+                }
+            }
+        }
+    }
+
+    /**
+     * A breakdown stills the sea and grows lace foam in it: Marble's reaction in the field's extra
+     * channel, inside the water, a little faster when the music is louder. The foam fades when the sea
+     * moves again, with the ink's half life.
+     */
+    private fun growFoam(state: VizRenderState, dt: Float) {
+        val growing = highHeld && stillness > 0.5f
+        foam = (foam + (if (growing) 1f else -1f) * dt / gestures.cycleSeconds.coerceAtLeast(0.4f)).coerceIn(0f, 1f)
+        if (!growing) seeded = false
+        if (!growing || dt <= 0f) return
+        wetMask()
+        if (!seeded) {
+            lace.sprout(currents, foamMask, FOAM_SEEDS, 1.6f, random)
+            seeded = true
+        }
+        foamOwed += dt * (FOAM_STEPS + FOAM_LOUD_STEPS * state.energy)
+        var steps = 0
+        while (foamOwed >= 1f && steps < MOST_FOAM_STEPS) {
+            foamOwed -= 1f
+            lace.step(currents, foamMask)
+            steps++
+        }
+        foamOwed = foamOwed.coerceAtMost(1f)
+    }
+
+    /** Marks the field's cells whose ground lies under the water, for the foam. */
+    private fun wetMask() {
+        val fieldColumns = currents.columns
+        val fieldRows = currents.rows
+        if (foamMask.size != fieldColumns * fieldRows) foamMask = FloatArray(fieldColumns * fieldRows)
+        for (row in 0 until fieldRows) {
+            val gy = (currents.yOf(row) * halfY + rows / 2f).toInt().coerceIn(0, rows - 1)
+            for (column in 0 until fieldColumns) {
+                val gx = (currents.xOf(column) * halfY + columns / 2f).toInt().coerceIn(0, columns - 1)
+                val under = seaLevel - terrain[gy * columns + gx]
+                foamMask[row * fieldColumns + column] = ((under - 0.3f) / 0.6f).coerceIn(0f, 1f)
+            }
+        }
+    }
+
     /**
      * Adds a smooth dome [height] levels high and [radius] cells wide to [into], its height taken by
      * each cell's [grain] so no two coasts are the same shape. With [glow] above zero it also lights
@@ -615,6 +880,8 @@ internal class Contour : ShaderPreset(
         sea += (SEA_DRY - sea) * out * state.motionScale * state.motionScale
         seaLevel = sea
         amber = out
+        // The drop's gold current runs for as long as the low tide does.
+        goldCurrent = out
         boost = LOW_TIDE_LIGHT * low
         light = state.lightScale * (IDLE_LIGHT + (1f - IDLE_LIGHT) * ((lightFor(state.energy) - 0.06f) / 0.94f).coerceIn(0f, 1f))
         // The wash follows the level alone, so a quiet map is darker than a loud one in its fill too.
@@ -970,7 +1237,7 @@ internal class Contour : ShaderPreset(
         settled.fill(0f)
         flicker.fill(0f)
         jump.reset()
-        layOut(to)
+        layOut(to, ARCHIPELAGO)
         from.copyFrom(to)
         morph = 1f
         rings.clear()
@@ -1008,6 +1275,14 @@ internal class Contour : ShaderPreset(
         mapTime = 0.0
         scope = FloatArray(0)
         scopeGain = 1f
+        form = ARCHIPELAGO
+        glide = 1f
+        raised = 0
+        crackAge.fill(-1f)
+        nextCrack = 0
+        lace.reset()
+        foamOwed = 0f
+        seeded = false
     }
 
     // For tests: what the map is doing, in levels and shares.
@@ -1077,6 +1352,36 @@ internal class Contour : ShaderPreset(
 
     /** The drawn ground at a grid cell, in levels, for tests. */
     internal fun heightAt(column: Int, row: Int): Float = heights[row * columns + column]
+
+    /** The form on the map: Archipelago, Ridge, Crater or Delta. */
+    internal val formName: String get() = FORMS[form]
+
+    override val forms: FormReadout get() = FormReadout(FORMS[form], evolution.morphs, evolution.births)
+
+    internal val groupsRaised: Int get() = raised
+    internal val cracksOpen: Int
+        get() {
+            var open = 0
+            for (slot in 0 until CRACKS) if (crackAge[slot] >= 0f) open++
+            return open
+        }
+    internal val goldShare: Float get() = goldCurrent
+    internal val foamLevel: Float get() = foam
+
+    /** Cells of the field holding lace, for tests. */
+    internal fun foamCells(): Int {
+        val values = currents.extra ?: return 0
+        var count = 0
+        for (value in values) if (value > 0.25f) count++
+        return count
+    }
+
+    /** Where island [island] of the newest layout sits, in grid cells, for tests. */
+    internal fun islandX(island: Int): Float = to.x[island]
+    internal fun islandY(island: Int): Float = to.y[island]
+
+    /** Starts a morph to the next form, as the pacer would, for the test of the glide. */
+    internal fun morphForTest() = morphTo((form + 1) % FORMS.size)
 
     private companion object {
         const val ISLANDS = 32
@@ -1207,26 +1512,62 @@ internal class Contour : ShaderPreset(
         const val COAST_WAVE = 0.45f
         const val COAST_BAND = 2f
 
+        /** The forms, in the order a morph moves through them. */
+        val FORMS = listOf("Archipelago", "Ridge", "Crater", "Delta")
+        const val ARCHIPELAGO = 0
+        const val RIDGE = 1
+        const val CRATER = 2
+        const val DELTA = 3
+        /** Islands in the crater's middle, and the golden angle that spreads them. */
+        const val CRATER_CORE = 6
+        const val GOLDEN_TURN = 2.3999631f
+        /** The delta's islands are small, low, and in strong currents. */
+        const val DELTA_SIZE = 0.12f
+        const val DELTA_REST = 0.7f
+        const val DELTA_STIR = 2f
+
+        /** A birth: eight groups of eight bands, four islands to a group, clustered this far apart in layout units. */
+        const val GROUPS = 8
+        const val GROUP_BANDS = 8
+        const val GROUP_ISLANDS = 4
+        const val GROUP_SPREAD = 0.18f
+
+        /** Snare cracks: at most four open, each this long in island radii, this deep and wide, healing over this long. */
+        const val CRACKS = 4
+        const val CRACK_REACH = 1.1f
+        const val CRACK_DEPTH = 4f
+        const val CRACK_WIDTH = 0.9f
+        const val CRACK_SECONDS = 0.9f
+        const val PI_F = 3.1415927f
+
+        /** The foam: seeds at the start, reaction steps a second (more when loud), and at most this many a frame. */
+        const val FOAM_SEEDS = 40
+        const val FOAM_STEPS = 60f
+        const val FOAM_LOUD_STEPS = 120f
+        const val MOST_FOAM_STEPS = 3
+
         const val OPAQUE = -0x1000000
     }
 }
 
 /** Where the islands of one archipelago sit, how big they are and how high their shelves stand. */
 private class Archipelago {
-    /** Round the spiral, in radians. */
-    val angle = FloatArray(32)
-    /** Out from the middle, 0 to 1 of the way to the frame's edge. */
-    val reach = FloatArray(32)
+    /** Where each island sits in layout units: -1 to 1 across the island area and -1 to 1 down it. */
+    val u = FloatArray(32)
+    val v = FloatArray(32)
     /** The island's radius, as a share of the frame's shorter half. */
     val size = FloatArray(32)
     /** Which way the island's two bands stand apart, in radians. */
     val lean = FloatArray(32)
     /** How high the island's shelf stands at rest, in levels. */
     val rest = FloatArray(32)
+    /** How far the island has risen out of the sea, 0 to 1. A birth starts its island group at 0. */
+    val rise = FloatArray(32) { 1f }
     var seed = 0
 
     // The layout on the grid as last shaped: island centres and radii in cells, and the ground the
-    // music does not move. Rebuilt when the layout or the frame's shape changes.
+    // music does not move. The ground is rebuilt when the seed or the frame's shape changes; the
+    // centres whenever an island moves.
     val x = FloatArray(32)
     val y = FloatArray(32)
     val radius = FloatArray(32)
@@ -1235,15 +1576,19 @@ private class Archipelago {
     var shapedColumns = 0
     var shapedHalfX = 0f
     var shapedHalfY = 0f
+    var shapedSeed = -1
+    var placed = false
 
     fun copyFrom(other: Archipelago) {
-        other.angle.copyInto(angle)
-        other.reach.copyInto(reach)
+        other.u.copyInto(u)
+        other.v.copyInto(v)
         other.size.copyInto(size)
         other.lean.copyInto(lean)
         other.rest.copyInto(rest)
+        other.rise.copyInto(rise)
         seed = other.seed
         shapedColumns = 0
+        placed = false
     }
 }
 

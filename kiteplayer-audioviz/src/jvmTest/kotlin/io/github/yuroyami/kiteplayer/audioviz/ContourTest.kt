@@ -14,6 +14,7 @@ import java.nio.ByteOrder
 import javax.imageio.ImageIO
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.test.Test
@@ -427,6 +428,90 @@ class ContourTest {
         var most = 0f
         for (column in 0 until a.gridColumns) most = maxOf(most, abs(a.heightAt(column, row) - b.heightAt(column, row)))
         return most
+    }
+
+    @Test
+    fun aFormChangeGlidesTheIslandsToTheNextLayout() {
+        val contour = Contour().apply { forcePortable = true }
+        val startX = FloatArray(32)
+        val startY = FloatArray(32)
+        var oneFrame = 0f
+        var formAfter = ""
+        var drawn = 0
+        RenderHarness.forEachFrameOf(contour, 96, 54, 900, VizPalette.Prism,
+            source = { InjectedFrames.frame(null, it) },
+            beforeDraw = { if (drawn++ == 30) contour.morphForTest() }) { _, step ->
+            if (step == 29) for (island in 0 until 32) {
+                startX[island] = contour.islandX(island)
+                startY[island] = contour.islandY(island)
+            }
+            if (step == 30) {
+                oneFrame = (0 until 32).maxOf { hypot(contour.islandX(it) - startX[it], contour.islandY(it) - startY[it]) }
+                formAfter = contour.formName
+            }
+        }
+        val total = (0 until 32).sumOf { hypot(contour.islandX(it) - startX[it], contour.islandY(it) - startY[it]).toDouble() }
+        println("contour: $oneFrame cells in the first frame of the glide, $total cells in all")
+        assertEquals("Ridge", formAfter)
+        assertTrue(oneFrame < 0.5f, "a morph glides, it does not jump: $oneFrame cells in one frame")
+        assertTrue(total > 40.0, "after the glide the islands stand somewhere else: $total cells in all")
+    }
+
+    @Test
+    fun theDrumLoopChangesTheFormsAndRaisesNewIslandGroups() {
+        val contour = Contour().apply { forcePortable = true }
+        val seen = LinkedHashSet<String>()
+        RenderHarness.forEachFrame(contour, 96, 54, 7_200, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ ->
+            seen += contour.formName
+        }
+        println("contour: forms seen $seen, ${contour.groupsRaised} island groups raised, ${contour.forms.morphs} morphs")
+        assertTrue(seen.size >= 3, "two minutes of drums must show at least three forms, showed $seen")
+        assertTrue(contour.groupsRaised >= 2, "two minutes of drums must raise at least two island groups")
+    }
+
+    @Test
+    fun aSnareCracksAnIsland() {
+        val hit = InjectedFrames.HIT_STEPS.first()
+        val plain = Contour().apply { forcePortable = true }
+        val snared = Contour().apply { forcePortable = true }
+        var open = 0
+        RenderHarness.forEachFrameOf(plain, 96, 54, hit + 1, VizPalette.Prism, source = { InjectedFrames.frame(null, it) }) { _, _ -> }
+        RenderHarness.forEachFrameOf(snared, 96, 54, hit + 1, VizPalette.Prism,
+            source = { InjectedFrames.frame(VizDriver.BodyHit, it) }) { _, step ->
+            if (step == hit) open = snared.cracksOpen
+        }
+        var deepest = 0f
+        for (row in 0 until plain.gridRows) for (column in 0 until plain.gridColumns) {
+            deepest = minOf(deepest, snared.heightAt(column, row) - plain.heightAt(column, row))
+        }
+        println("contour: the crack cut $deepest levels")
+        assertEquals(1, open, "one snare opens one crack")
+        assertTrue(deepest < -1f, "the crack cuts into the island, cut $deepest")
+    }
+
+    @Test
+    fun aDropTurnsTheCurrentsGold() {
+        val contour = Contour().apply { forcePortable = true }
+        val gold = FloatArray(200)
+        RenderHarness.forEachFrameOf(contour, 96, 54, 200, VizPalette.Prism,
+            source = { InjectedFrames.frame(VizDriver.Drop, it) }) { _, step -> gold[step] = contour.goldShare }
+        val drop = InjectedFrames.STRUCTURE_STEP
+        assertEquals(0f, gold[drop - 1], 1e-6f)
+        assertTrue(gold[drop + 60] > 0.99f, "a beat after the drop the currents are gold, ${gold[drop + 60]}")
+    }
+
+    @Test
+    fun aBreakdownStillsTheSeaAndGrowsFoam() {
+        val contour = Contour().apply { forcePortable = true }
+        var stirBefore = 0f
+        RenderHarness.forEachFrameOf(contour, 96, 54, 400, VizPalette.Prism,
+            source = { InjectedFrames.frame(VizDriver.Breakdown, it) }) { _, step ->
+            if (step == InjectedFrames.STRUCTURE_STEP - 1) stirBefore = contour.stirring
+        }
+        println("contour: stirring $stirBefore before the breakdown, ${contour.stirring} after, foam ${contour.foamLevel}, ${contour.foamCells()} cells of lace")
+        assertTrue(stirBefore > 0.05f && contour.stirring < 0.05f * stirBefore, "the breakdown stills the sea")
+        assertTrue(contour.foamLevel > 0.9f, "the foam shows, ${contour.foamLevel}")
+        assertTrue(contour.foamCells() > 0, "lace grows in the still sea")
     }
 
     private companion object {

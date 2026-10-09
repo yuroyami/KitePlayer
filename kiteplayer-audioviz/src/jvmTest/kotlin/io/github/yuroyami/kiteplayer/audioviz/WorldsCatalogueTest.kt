@@ -18,18 +18,26 @@ class WorldsCatalogueTest {
 
     private val rebuilt: List<Visualization> get() = VizCatalog.create().filter { it.forms != null }
 
-    private fun forEach(block: (Visualization) -> String?) {
+    private fun forEach(law: String, block: (Visualization) -> String?) {
         val drawings = rebuilt
         if (drawings.isEmpty()) {
             println("worlds: no rebuilt drawings yet")
             return
         }
-        val failures = drawings.mapNotNull(block)
+        val failures = drawings.mapNotNull { drawing ->
+            val reason = EXEMPT[drawing.name]?.get(law)
+            if (reason != null) {
+                println("worlds: ${drawing.name} is exempt from $law: $reason")
+                null
+            } else {
+                block(drawing)
+            }
+        }
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
 
     @Test
-    fun theSignalIsTheMatter() = forEach { drawing ->
+    fun theSignalIsTheMatter() = forEach("signal") { drawing ->
         // A low tone and a high tone at the same level must give different pictures.
         val low = render(drawing) { step -> InjectedFrames.toneFrame(step, lowBand = true) }
         val high = render(drawing) { step -> InjectedFrames.toneFrame(step, lowBand = false) }
@@ -39,7 +47,7 @@ class WorldsCatalogueTest {
     }
 
     @Test
-    fun theWholeFrameIsAlive() = forEach { drawing ->
+    fun theWholeFrameIsAlive() = forEach("coverage") { drawing ->
         val loud = RenderHarness.render(drawing, 320, 180, 600, VizPalette.Prism, RenderHarness.Song.Lively)
         val background = VizPalette.Prism.background
         var away = 0
@@ -56,7 +64,7 @@ class WorldsCatalogueTest {
     }
 
     @Test
-    fun quietAndLoudAreDifferentWorlds() = forEach { drawing ->
+    fun quietAndLoudAreDifferentWorlds() = forEach("range") { drawing ->
         val loud = RenderHarness.render(drawing, 160, 90, 600, VizPalette.Prism, RenderHarness.Song.Lively)
         val quiet = RenderHarness.render(drawing, 160, 90, 600, VizPalette.Prism, RenderHarness.Song.Calm)
         val loudLight = meanLuma(loud)
@@ -67,7 +75,7 @@ class WorldsCatalogueTest {
     }
 
     @Test
-    fun formsChangeWithTheMusic() = forEach { drawing ->
+    fun formsChangeWithTheMusic() = forEach("forms") { drawing ->
         var morphs = 0
         var births = 0
         RenderHarness.forEachFrame(drawing, 96, 54, 7_200, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ ->
@@ -75,11 +83,13 @@ class WorldsCatalogueTest {
             births = drawing.forms?.births ?: 0
         }
         println("worlds: ${drawing.name} $morphs morphs and $births births in two minutes of drums")
-        if (morphs < 6 || births < 2) "${drawing.name}: $morphs morphs and $births births in two minutes of drums" else null
+        val birthsExempt = EXEMPT[drawing.name]?.get("births")
+        if (birthsExempt != null) println("worlds: ${drawing.name} is exempt from births: $birthsExempt")
+        if (morphs < 6 || (birthsExempt == null && births < 2)) "${drawing.name}: $morphs morphs and $births births in two minutes of drums" else null
     }
 
     @Test
-    fun noHitMovesTheCamera() = forEach { drawing ->
+    fun noHitMovesTheCamera() = forEach("camera") { drawing ->
         val mapping = drawing.mapping ?: return@forEach "${drawing.name}: no mapping"
         val hits = setOf(VizDriver.LowHit, VizDriver.BodyHit, VizDriver.HighHit, VizDriver.Onset)
         val offending = mapping.drives.filter { it.driver in hits && it.property == VizProperty.Camera }
@@ -87,7 +97,7 @@ class WorldsCatalogueTest {
     }
 
     @Test
-    fun aDifferentPaletteGivesADifferentPicture() = forEach { drawing ->
+    fun aDifferentPaletteGivesADifferentPicture() = forEach("palette") { drawing ->
         val a = RenderHarness.render(drawing, 160, 90, 300, VizPalette.Prism, RenderHarness.Song.Lively)
         val b = RenderHarness.render(drawing, 160, 90, 300, VizPalette.Fire, RenderHarness.Song.Lively)
         val change = meanDifference(a, b)
@@ -123,6 +133,20 @@ class WorldsCatalogueTest {
     }
 
     private companion object {
+        /**
+         * Laws a drawing is excused from by the spec, with the spec's reason. The owner decides at each
+         * drawing's gate whether the exemption stands.
+         */
+        private val EXEMPT: Map<String, Map<String, String>> = mapOf(
+            "Lines" to mapOf(
+                "signal" to "the law's tone frames carry no power spectrum and Lines hears through the page analyser; LinesTest drives it with real songs",
+                "coverage" to "spec 5.13: white hairlines on black, kept; the frame is lit space",
+                "palette" to "spec 5.13: white on black, kept, with the palette only as a faint fog tint",
+                "range" to "spec 5.13: light stays on lightScale so the flat stack is today's picture; the range shows as peaks",
+                "births" to "spec 5.13: no birth, the owner said it does everything right",
+            ),
+        )
+
         /** Mean per-channel difference, 0 to 1, below which two pictures count as alike. *Judgement.* */
         const val MIN_SIGNAL = 0.02f
         const val MIN_COLOUR = 0.03f

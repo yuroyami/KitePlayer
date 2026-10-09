@@ -90,6 +90,10 @@ internal class Lines : Visualization {
         drives = listOf(
             // The level is a share of the analyser's byte range: above byte 100 a bin raises a peak.
             VizDrive(VizDriver.Bands, VizProperty.Shape, VizCurve.Threshold(KNEE / 255f), VizResponse.envelope(EASE_SECONDS)),
+            // The level dips the road.
+            VizDrive(VizDriver.Level, VizProperty.Shape, response = VizResponse.envelope(1.2f)),
+            // The mood sets the pace of the camera's glide on the slow cycle.
+            VizDrive(VizDriver.Mood, VizProperty.Camera, response = VizResponse.Rate),
         ),
         silence = VizSilence.Still,
     )

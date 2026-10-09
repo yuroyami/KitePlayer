@@ -90,6 +90,13 @@ internal class History(private val rows: Int = 200) {
         return data[row * width + index] * (1f - share) + data[row * width + next] * share
     }
 
+    /** How far back the kept rows reach, in the units of the times they were pushed with. 0 while fewer than two. */
+    fun span(): Double {
+        if (count < 2) return 0.0
+        val oldest = (newest - count + 1 + rows) % rows
+        return times[newest] - times[oldest]
+    }
+
     fun clear() {
         newest = -1
         count = 0

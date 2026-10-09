@@ -30,10 +30,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
+import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderPreset
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderProgram
 import io.github.yuroyami.kiteplayer.audioviz.viz.vividColour
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
@@ -71,6 +73,8 @@ internal class Contour : ShaderPreset(
 
     override val mapping: VizMapping by mappingOf(
         VizDrive(VizDriver.Bands, VizProperty.Shape, response = VizResponse.envelope(RISE_SECONDS)),
+        // Each island's coastline is the live waveform, wrapped round it.
+        VizDrive(VizDriver.Waveform, VizProperty.Shape),
         VizDrive(VizDriver.Onset, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(RING_SECONDS)),
         VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.spring(0.4f)),
         VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(RING_SECONDS)),
@@ -187,6 +191,15 @@ internal class Contour : ShaderPreset(
     private val seaFar = FloatArray(3)
     private val goldInk = FloatArray(3)
 
+    // The north of the map: the spectrum by map time, which runs at the music's pace and stops in a
+    // pause or a silence. Grid rows at the top show it, newest at the top edge.
+    private val past = History(rows = PAST_ROWS)
+    private var mapTime = 0.0
+
+    // This frame's waveform, read round each island's coast.
+    private var scope = FloatArray(0)
+    private var scopeGain = 1f
+
     init {
         layOut(to)
         from.copyFrom(to)
@@ -200,6 +213,11 @@ internal class Contour : ShaderPreset(
         frameFor(kit.aspect)
         currents.size(kit.aspect)
         readBands(frame.bandsRel, dt)
+        // The map scrolls at the music's pace; its north strip is the spectrum by map time.
+        mapTime += (dt * state.paced(SCROLL_PACE)).toDouble()
+        past.push(frame.bandsRel, mapTime)
+        scope = frame.scope
+        scopeGain = frame.waveformGain
 
         if (gestures.turn) {
             highHeld = gestures.breakdown
@@ -405,7 +423,8 @@ internal class Contour : ShaderPreset(
             // Pushed out towards the corners, so the spiral fills a rectangle rather than an ellipse.
             val square = 1f / sqrt(sqrt(c * c * c * c + s * s * s * s))
             layout.x[island] = columns / 2f + layout.reach[island] * c * square * halfX * MARGIN
-            layout.y[island] = rows / 2f + layout.reach[island] * s * square * halfY * MARGIN
+            // The islands keep below the north strip, where the map's past runs.
+            layout.y[island] = rows / 2f + halfY * NORTH_SHARE + layout.reach[island] * s * square * halfY * (1f - NORTH_SHARE) * MARGIN
             layout.radius[island] = layout.size[island] * shortSide
         }
         val cells = columns * rows
@@ -438,6 +457,7 @@ internal class Contour : ShaderPreset(
         val m = smooth(morph)
         if (m < 1f) raise(from, 1f - m)
         raise(to, m)
+        raisePast()
         var tallest = 0f
         var at = 0
         for (cell in 0 until cells) {
@@ -475,6 +495,78 @@ internal class Contour : ShaderPreset(
             val y = layout.y[island] + sin(layout.lean[island]) * side * radius
             val glint = if (island >= EDGE) flicker[island] * weight else 0f
             dome(terrain, layout.grain, x, y, radius * BAND_WIDTH, heightOf(band) * weight, shimmer, glint)
+        }
+        if (scope.size >= 2) for (island in 0 until ISLANDS) coastWave(layout, island, weight)
+    }
+
+    // The four history rows of one strip row, found once per row and sampled per column.
+    private val pastRows = IntArray(4)
+
+    /**
+     * The land north of the islands: grid row r of the top strip is the spectrum from r times
+     * [MAP_SECONDS_PER_ROW] of map time ago, bass on the left. Each row keeps the loudest of four
+     * moments in its span, so a short burst is not missed. New land rises at the top edge and drifts
+     * south towards the islands, where it sinks into the sea. A row the history does not reach yet
+     * fades in rather than appearing at once.
+     */
+    private fun raisePast() {
+        val known = past.span()
+        val top = (rows / 2f - halfY).toInt().coerceAtLeast(0)
+        val strip = (2f * halfY * NORTH_SHARE).toInt().coerceAtLeast(2)
+        val left = columns / 2f - halfX
+        val across = 2f * halfX
+        val grain = to.grain
+        for (r in 0 until strip) {
+            val y = top + r
+            if (y >= rows) break
+            val from = r * MAP_SECONDS_PER_ROW
+            if (from > known) break
+            val reached = ((known - from) / MAP_SECONDS_PER_ROW).toFloat().coerceIn(0f, 1f)
+            val fade = (1f - smooth((r - strip * 0.55f) / (strip * 0.45f))) * reached
+            // The four history rows of this strip row do not depend on the column, and finding one
+            // walks the history, so they are found once here and only sampled per column.
+            for (part in 0 until 4) pastRows[part] = past.row((from + part * MAP_SECONDS_PER_ROW / 4.0).toFloat())
+            for (x in 0 until columns) {
+                val position = ((x + 0.5f - left) / across).coerceIn(0f, 1f)
+                var loudest = 0f
+                for (part in 0 until 4) {
+                    val row = pastRows[part]
+                    if (row >= 0) loudest = max(loudest, past.sample(row, position))
+                }
+                val lift = ((loudest - BAND_FLOOR) / (BAND_FULL - BAND_FLOOR)).coerceIn(0f, 1f)
+                terrain[y * columns + x] += PAST_TOP * lift * fade * grain[y * columns + x]
+            }
+        }
+    }
+
+    /**
+     * The live waveform wrapped round island [island]: near its rim the ground rises and falls with
+     * the trace read round the island, so its coastline is the sound. It is a fraction of a level, so
+     * the coast stays one line. Only cells near the sea level are touched, which is where a coast is.
+     */
+    private fun coastWave(layout: Archipelago, island: Int, weight: Float) {
+        val radius = layout.radius[island] * COAST_REACH
+        if (radius < 1f || weight <= 0f) return
+        val cx = layout.x[island]
+        val cy = layout.y[island]
+        val left = floor(cx - radius).toInt().coerceAtLeast(0)
+        val right = floor(cx + radius).toInt().coerceAtMost(columns - 1)
+        val top = floor(cy - radius).toInt().coerceAtLeast(0)
+        val bottom = floor(cy + radius).toInt().coerceAtMost(rows - 1)
+        for (y in top..bottom) {
+            val dy = y + 0.5f - cy
+            for (x in left..right) {
+                val dx = x + 0.5f - cx
+                val q = sqrt(dx * dx + dy * dy) / radius
+                if (q < 0.35f || q >= 1f) continue
+                val cell = y * columns + x
+                if (abs(terrain[cell] - seaLevel) > COAST_BAND) continue
+                val spread = (q - 0.7f) / 0.18f
+                val ring = exp(-spread * spread)
+                val around = atan2(dy, dx) / TAU + 0.5f
+                val wave = (scope.sampleAt(around) * scopeGain).coerceIn(-1f, 1f)
+                terrain[cell] += COAST_WAVE * wave * ring * weight
+            }
         }
     }
 
@@ -912,6 +1004,10 @@ internal class Contour : ShaderPreset(
         goldCurrent = 0f
         foam = 0f
         drops = 0
+        past.clear()
+        mapTime = 0.0
+        scope = FloatArray(0)
+        scopeGain = 1f
     }
 
     // For tests: what the map is doing, in levels and shares.
@@ -969,6 +1065,18 @@ internal class Contour : ShaderPreset(
     internal fun pourInkForTest() {
         for (ring in 1..12) currents.ring(0f, 0f, ring * 0.15f, 2f, 1f)
     }
+
+    /** How far the map has scrolled, in map seconds. Still in a pause or a silence. For tests. */
+    internal val scroll: Double get() = mapTime
+
+    /** The first grid row of the north strip and how many rows it has, for tests. */
+    internal val northTop: Int get() = (rows / 2f - halfY).toInt().coerceAtLeast(0)
+    internal val northRows: Int get() = (2f * halfY * NORTH_SHARE).toInt().coerceAtLeast(2)
+    internal val gridColumns: Int get() = columns
+    internal val gridRows: Int get() = rows
+
+    /** The drawn ground at a grid cell, in levels, for tests. */
+    internal fun heightAt(column: Int, row: Int): Float = heights[row * columns + column]
 
     private companion object {
         const val ISLANDS = 32
@@ -1084,6 +1192,20 @@ internal class Contour : ShaderPreset(
         const val SEA_FAR_HUE = 238f
         const val SEA_NEAR_HUE = 192f
         const val GOLD_HUE = 85f
+
+        /** The north strip: its share of the visible height, map seconds per grid row, and its highest relief in levels. */
+        const val NORTH_SHARE = 0.28f
+        const val MAP_SECONDS_PER_ROW = 0.5
+        const val PAST_TOP = 6f
+        const val PAST_ROWS = 600
+
+        /** How fast map time runs at a motion rate of 1. */
+        const val SCROLL_PACE = 1.6f
+
+        /** The coast wave: how far round an island it reaches, its height in levels, and the band round the sea it touches. */
+        const val COAST_REACH = 1f
+        const val COAST_WAVE = 0.45f
+        const val COAST_BAND = 2f
 
         const val OPAQUE = -0x1000000
     }

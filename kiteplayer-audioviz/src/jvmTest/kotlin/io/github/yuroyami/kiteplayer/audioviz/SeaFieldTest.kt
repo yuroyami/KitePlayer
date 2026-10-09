@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
 import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flows
 import io.github.yuroyami.kiteplayer.audioviz.viz.field.LaceReaction
 import io.github.yuroyami.kiteplayer.audioviz.viz.field.MemoryField
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.History
 import kotlin.math.hypot
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -161,5 +162,18 @@ class SeaFieldTest {
         field.advance(Flows.Tunnel(5f), 0f)
         field.drop(0.2f, -0.2f, 0.1f, 1f)
         assertTrue(field.inkAt(0.2f, -0.2f) > 0.9f)
+    }
+
+    @Test
+    fun theHistoryKnowsHowFarBackItReaches() {
+        val history = History(rows = 10)
+        assertEquals(0.0, history.span())
+        history.push(floatArrayOf(1f), 0.0)
+        assertEquals(0.0, history.span())
+        history.push(floatArrayOf(1f), 0.5)
+        history.push(floatArrayOf(1f), 1.25)
+        assertEquals(1.25, history.span(), 1e-9)
+        repeat(20) { history.push(floatArrayOf(1f), 2.0 + it) }
+        assertEquals(9.0, history.span(), 1e-9)
     }
 }

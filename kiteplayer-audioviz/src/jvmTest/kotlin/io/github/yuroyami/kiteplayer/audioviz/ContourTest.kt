@@ -374,6 +374,61 @@ class ContourTest {
         return pixels
     }
 
+    @Test
+    fun theScrollStandsStillInSilenceAndMovesWithMusic() {
+        val quiet = Contour().apply { forcePortable = true }
+        RenderHarness.forEachFrame(quiet, 96, 54, 120, VizPalette.Prism, RenderHarness.Song.Silence) { _, _ -> }
+        val music = Contour().apply { forcePortable = true }
+        RenderHarness.forEachFrame(music, 96, 54, 120, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ -> }
+        println("contour: scrolled ${quiet.scroll} in silence, ${music.scroll} under the drum loop")
+        assertEquals(0.0, quiet.scroll, "a silent map does not scroll")
+        assertTrue(music.scroll > 0.2, "music scrolls the map, scrolled ${music.scroll}")
+    }
+
+    @Test
+    fun aLoudMomentDriftsSouthThroughTheNorthStrip() {
+        val burst = 60 until 90
+        val end = 130
+        val plain = Contour().apply { forcePortable = true }
+        val loud = Contour().apply { forcePortable = true }
+        RenderHarness.forEachFrameOf(plain, 96, 54, end + 1, VizPalette.Prism, source = { InjectedFrames.frame(null, it) }) { _, _ -> }
+        RenderHarness.forEachFrameOf(loud, 96, 54, end + 1, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(if (step in burst) VizDriver.Bands else null, step) }) { _, _ -> }
+        val top = loud.northTop
+        val newest = rowDifference(plain, loud, top)
+        var deeper = 0f
+        for (r in 1 until loud.northRows) deeper = maxOf(deeper, rowDifference(plain, loud, top + r))
+        println("contour: the newest north row differs by $newest, the rows below by up to $deeper")
+        assertTrue(newest < 0.05f, "the newest row is the music of now, not the burst: $newest")
+        assertTrue(deeper > 0.3f, "the burst of a second ago still stands in the north: $deeper")
+    }
+
+    @Test
+    fun theCoastlinesCarryTheWaveformAndStayOneLine() {
+        val plain = Contour().apply { forcePortable = true }
+        val wavy = Contour().apply { forcePortable = true }
+        RenderHarness.forEachFrameOf(plain, 96, 54, 80, VizPalette.Prism, source = { InjectedFrames.frame(null, it) }) { _, _ -> }
+        RenderHarness.forEachFrameOf(wavy, 96, 54, 80, VizPalette.Prism,
+            source = { InjectedFrames.frame(VizDriver.Waveform, it) }) { _, _ -> }
+        var total = 0f
+        var most = 0f
+        for (row in 0 until plain.gridRows) for (column in 0 until plain.gridColumns) {
+            val change = abs(plain.heightAt(column, row) - wavy.heightAt(column, row))
+            total += change
+            most = maxOf(most, change)
+        }
+        println("contour: the waveform moved the ground by $total levels in all, at most $most")
+        assertTrue(total > 2f, "a louder waveform should move the coasts, moved $total")
+        // Twice the coast wave of 0.45 levels: small enough that a coast stays one line.
+        assertTrue(most <= 0.9f, "the coast wave must stay small, reached $most levels")
+    }
+
+    private fun rowDifference(a: Contour, b: Contour, row: Int): Float {
+        var most = 0f
+        for (column in 0 until a.gridColumns) most = maxOf(most, abs(a.heightAt(column, row) - b.heightAt(column, row)))
+        return most
+    }
+
     private companion object {
         const val SEA_SAMPLES = 41 * 23
     }

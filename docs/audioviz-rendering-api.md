@@ -230,6 +230,29 @@ the gold of a drop and the arc limit. `WorldsCatalogueTest` checks that a low an
 different pictures, that the loud picture covers at least a fifth of the frame, that a calm pad is
 at least 40 percent dimmer than a drum loop, and that two palettes draw different pictures.
 
+## Iris, an eye
+
+`Iris` is an eye drawn with meshes, so it runs on every Android version. Its memory is geometry,
+not a field.
+
+- The fibres are Vissonance's Iris: 128 spokes round a pupil, the spectrum mirrored left and right
+  with the bass at the top, shaded by depth. Each fibre's hue comes from the palette, spread over at
+  least 120 degrees and walked by the genes; its saturation and light follow its own band. A frame
+  that carries no fine power spectrum feeds the fibres from its bands instead.
+- The petals are the stereo trace folded into wedges: the middle of the two channels along a wedge
+  and their difference across it. They are as large as the trace is loud.
+- The petals and the rings take the register's colour: where the weight of the spectrum sits turns
+  their hue round the palette, so dark music and bright music colour the flower differently.
+- The rings are past waveforms. One is born each visual cycle, on each kick and on each change of
+  form, and holds the waveform of that moment as 128 dots. It spreads outward at the music's pace
+  and fades over eight cycles, so its distance from the middle is how long ago it was born.
+- Two dark lids open with the level. A silence closes them to a slit, and so does a breakdown,
+  until the next turn.
+- The forms are Eye, Flower and Mandala, which take turns at the pace of the evolution pacer, and
+  Vortex, which runs for one cycle on a drop or a surge: the pupil opens, the rings fly inward and
+  the petals part into a magenta and a cyan image that slide back together.
+- A kick dilates the pupil, a snare throws shards off the petal tips, and a hat sparkles there.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative

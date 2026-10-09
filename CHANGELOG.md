@@ -10,6 +10,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
+### Changed
+
+- Iris is rebuilt as an eye with petals and rings: Kaleidoscope's folded stereo curve grows round
+  the fibres with the loudness, and rings of past waveforms spread outward and fade, after Wavy
+  Spiral's dots. Its form changes with the music, and it publishes the form through
+  `Visualization.forms`.
+
 ## [0.3.0] - 2026-10-09
 
 ### Upgrading from 0.2.0

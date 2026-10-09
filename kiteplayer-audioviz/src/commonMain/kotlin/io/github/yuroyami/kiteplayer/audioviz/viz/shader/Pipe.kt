@@ -26,6 +26,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.hatSpawn
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * A flight down a tube whose wall is lit square cells with black gaps.
@@ -39,8 +40,9 @@ import kotlin.math.sin
  * the camera. A gate ring passes at the start of each cycle while the beat is clear, and the rings
  * that start a beat have thicker gaps. A kick flares the nearest rings, squeezes the tube and
  * pushes the flight on for a moment. A snare sends a bright ring rushing in from the far point,
- * hats throw sparks, and the far point follows the tune. A section cuts to another lane and turns
- * the tube round, square or six-sided over one cycle. A breakdown halves the speed and leaves only
+ * hats throw sparks. The tube bends with the stereo balance and the tune, the camera banks into the
+ * bend, and past rings curve into view on the inside of a bend. A section cuts to another lane and
+ * turns the tube round, square or six-sided over one cycle. A breakdown halves the speed and leaves only
  * the cells' lit edges. On a drop the tube goes to light speed for one cycle and every cell
  * stretches into a streak, and on the next cycle's first beat they snap back.
  */
@@ -126,6 +128,11 @@ internal class Pipe : ShaderPreset(
 
     private val bendX = Slew(maxPerSecond = 0.5f)
     private val bendY = Slew(maxPerSecond = 0.5f)
+    /** How far the bend reaches. A morph moves it, so it is read every frame. */
+    private val bendGene = genes.number("bend", 0.5f, 1.3f, 0.9f)
+    /** Where the far point is, in half screen heights from the middle, so a test can read the bend. */
+    internal val bendXValue: Float get() = bendX.value
+    internal val bendYValue: Float get() = bendY.value
     private val debris = Sprites(160, 7_011L)
 
     private val ramp = Array(3) { FloatArray(3) }
@@ -201,10 +208,12 @@ internal class Pipe : ShaderPreset(
         }
         if (shapeMorph < 1f) shapeMorph = (shapeMorph + step / shapeSeconds).coerceAtMost(1f)
 
-        // The far point follows the tune: bright music pulls it right and up.
+        // The bend follows the stereo balance and the tune: a right-heavy mix and bright music curve the
+        // tube right, and bright music lifts the far point. A gene sets how far it goes.
+        val balance = balanceOf(frame.scopeLeft, frame.scopeRight) * frame.audible
         val tune = (frame.centroid - 0.5f) * frame.audible
-        bendX.advance(tune * 0.9f, dt)
-        bendY.advance(-tune * 0.35f, dt)
+        bendX.advance((balance * BEND_BALANCE + tune * BEND_TUNE_X) * bendGene.value, dt)
+        bendY.advance(-tune * BEND_TUNE_Y * bendGene.value, dt)
 
         // Hats throw sparks out of the far point.
         if (gestures.hat > 0f) {
@@ -354,6 +363,28 @@ internal class Pipe : ShaderPreset(
         private const val GOLD_HUE = 85f
         /** A kick pushes the flight on by this share for a moment. */
         private const val KICK_PACE = 0.6f
+        /** A small difference between the channels is made visible. */
+        private const val BALANCE_GAIN = 3f
+        /** How far the far point moves sideways, in half screen heights, for a full stereo balance. */
+        private const val BEND_BALANCE = 0.45f
+        /** How far the far point moves sideways, in half screen heights, for a full centroid swing. */
+        private const val BEND_TUNE_X = 0.5f
+        /** How far the far point moves up, in half screen heights, for a full centroid swing. */
+        private const val BEND_TUNE_Y = 0.35f
+
+        /** The stereo balance, from -1 for all left to 1 for all right, from the two channels' loudness. */
+        internal fun balanceOf(left: FloatArray, right: FloatArray): Float {
+            val l = rootMeanSquare(left)
+            val r = rootMeanSquare(right)
+            return ((r - l) / (r + l + 1e-4f) * BALANCE_GAIN).coerceIn(-1f, 1f)
+        }
+
+        private fun rootMeanSquare(trace: FloatArray): Float {
+            if (trace.isEmpty()) return 0f
+            var sum = 0f
+            for (sample in trace) sum += sample * sample
+            return sqrt(sum / trace.size)
+        }
 
         private val GLOW = PostSpec(bloom = 0.35f, bloomRadius = 0.03f, threshold = 0.9f, vignette = 0.2f,
             grain = 0f, glitch = false, aberration = 0f)
@@ -378,6 +409,8 @@ const float MOUTH = 0.42;
 const float SPACING = 0.26;
 // The newest ring is born at this depth, far down the tube, and streams toward the mouth.
 const float FAR_DEPTH = MOUTH + RINGS * SPACING;
+// How far the camera rolls into a full bend, in radians.
+const float BANK = 0.35;
 const float LIGHT_MAX = 1.25;
 
 // How far a ray from the lane runs across the tube before it meets the wall, for the tube's three
@@ -415,12 +448,21 @@ float4 ring(float cell, float index) {
 half4 main(float2 position) {
     float2 p = centred(position);
     float pixel = 2.0 / uResolution.y;
-    // The far end follows the tune: the nearer a pixel is to the middle, the more it moves.
-    float2 d = p - uBend * exp(-length(p) * 2.2);
+    // The camera banks into the bend. Then the wall hit is found for a straight tube and refined twice
+    // with the axis moved by the depth, so the tube really bends and past rings curve into view.
+    float2 q = rotate(p, -uBend.x * BANK);
+    float2 d = q;
     float len = max(length(d), 1e-4);
     float2 dir = d / len;
     float reach = wallReach(uLane.xy, dir) * uShape.w;
     float depth = reach / len;
+    for (int k = 0; k < 2; k++) {
+        d = q - uBend * (depth / FAR_DEPTH);
+        len = max(length(d), 1e-4);
+        dir = d / len;
+        reach = wallReach(uLane.xy, dir) * uShape.w;
+        depth = reach / len;
+    }
     float2 hit = uLane.xy + dir * reach;
     // Round the tube from the floor, which is down the screen, to the ceiling, the same both sides.
     float around = abs(atan(hit.x, hit.y)) / 3.14159265;
@@ -487,7 +529,7 @@ half4 main(float2 position) {
     if (index >= RINGS || index < 0.0) colour = float3(0.0);
 
     // The small white point far ahead.
-    float star = length(p - uBend) / pixel;
+    float star = length(q - uBend) / pixel;
     float size = 2.5 * gap * uHits.w;
     colour += float3(1.0) * (1.0 - smoothstep(size - 1.0, size + 1.0, star));
     colour += float3(1.0, 0.95, 0.85) * 0.35 * exp(-star / (size * 4.0));

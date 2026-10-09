@@ -1,9 +1,11 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Pipe
 import kotlin.math.abs
+import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -221,6 +223,61 @@ class PipeTest {
         println("pipe: a snare brightens the nearest rings by $near and the far rings by $far, most at step $farAt")
         assertTrue(far > 0.05f, "the snare's ring should still rush in from the far point, brightened it by $far")
         assertTrue(near < 0.02f, "the snare's ring lit the nearest rings by $near")
+    }
+
+    @Test
+    fun aRightHeavyTraceBendsTheTubeRight() {
+        val quiet = FloatArray(256) { 0.3f * sin(it * TAU / 32) }
+        val loud = FloatArray(256) { 0.6f * sin(it * TAU / 32) }
+        val toRight = Pipe.balanceOf(quiet, loud)
+        val toLeft = Pipe.balanceOf(loud, quiet)
+        val even = Pipe.balanceOf(quiet, quiet.copyOf())
+        println("pipe: balance right heavy $toRight, left heavy $toLeft, equal $even")
+        assertTrue(toRight > 0f && toRight <= 1f, "a louder right channel balances right, had $toRight")
+        assertTrue(toLeft < 0f && toLeft >= -1f, "a louder left channel balances left, had $toLeft")
+        assertEquals(0f, even, "equal channels are in balance")
+
+        // The Waveform driver puts its trace on the mono scope and the left channel only, so the frames
+        // are left heavy and the tube bends to the left.
+        val width = 160
+        val height = 90
+        val pipe = Pipe()
+        var last = IntArray(0)
+        RenderHarness.forEachFrameOf(pipe, width, height, 240, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Waveform, step) }) { bitmap, step ->
+            if (step == 239) {
+                last = IntArray(width * height)
+                bitmap.readPixels(last)
+            }
+        }
+        // The far point's star is the brightest light. Where several pixels share that, take their middle.
+        var brightest = 0f
+        for (pixel in last) brightest = maxOf(brightest, luma(pixel))
+        var sumX = 0f
+        var sumY = 0f
+        var count = 0
+        for (y in 0 until height) for (x in 0 until width) {
+            if (luma(last[y * width + x]) >= brightest) {
+                sumX += x
+                sumY += y
+                count++
+            }
+        }
+        val starX = sumX / count
+        val starY = sumY / count
+        println("pipe: bend x ${pipe.bendXValue}, y ${pipe.bendYValue}, brightest pixel at x $starX, y $starY ($count pixels at $brightest)")
+        assertTrue(pipe.bendXValue < -0.1f, "a left heavy trace bends the tube left, had ${pipe.bendXValue}")
+        assertTrue(starX < width / 2f - 2f, "the far point's star moved left of the middle, was at x $starX")
+    }
+
+    @Test
+    fun theFarPointFollowsTheCentroid() {
+        val pipe = Pipe()
+        RenderHarness.forEachFrameOf(pipe, 64, 36, 240, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Timbre, step) }) { _, _ -> }
+        println("pipe: bright music puts the far point at x ${pipe.bendXValue}, y ${pipe.bendYValue}")
+        assertTrue(pipe.bendXValue > 0.1f, "bright music bends the tube right, had ${pipe.bendXValue}")
+        assertTrue(pipe.bendYValue < -0.05f, "bright music lifts the far point, had ${pipe.bendYValue}")
     }
 
     @Test

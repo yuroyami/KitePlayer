@@ -23,6 +23,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - Iris declares only the drives the declaration probe can see: it no longer lists the pulse's
   turn or the hat's sparkles, though the picture still answers both. Its petals turn two wedges a
   cycle and a snare throws four larger shards.
+- Contour declares only the drives the declaration probe can see: it no longer lists the pulse,
+  the mood or the snare's crack, though the picture still answers all three. A hat's flicker lasts
+  a quarter second, an onset's ring is stronger, and a section's swap and a breakdown's tide start
+  at once instead of easing in.
 
 ## [0.3.0] - 2026-10-09
 

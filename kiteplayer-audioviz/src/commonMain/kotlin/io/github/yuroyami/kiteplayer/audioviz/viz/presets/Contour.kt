@@ -87,8 +87,8 @@ internal class Contour : ShaderPreset(
         VizDrive(VizDriver.Onset, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(RING_SECONDS)),
         VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.spring(0.4f)),
         VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(RING_SECONDS)),
-        // A snare cracks an island for a moment.
-        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(CRACK_SECONDS)),
+        // A snare cracks an island for a moment. That is not declared: the crack is one cell wide,
+        // under a pixel at the declaration probe's size, and the grid test proves it instead.
         VizDrive(VizDriver.HighHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(FLICKER_SECONDS)),
         VizDrive(VizDriver.Level, VizProperty.Shape, response = VizResponse.envelope(SEA_SECONDS)),
         VizDrive(VizDriver.Level, VizProperty.Brightness),
@@ -98,8 +98,6 @@ internal class Contour : ShaderPreset(
         VizDrive(VizDriver.Drop, VizProperty.Colour, VizCurve.Discrete, VizResponse.envelope(0.5f)),
         VizDrive(VizDriver.Drop, VizProperty.Brightness, VizCurve.Discrete, VizResponse.envelope(0.5f)),
         VizDrive(VizDriver.Key, VizProperty.Colour),
-        VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
-        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
         silence = VizSilence.Still,
     )
 
@@ -620,7 +618,9 @@ internal class Contour : ShaderPreset(
         val cells = columns * rows
         terrain.fill(0f, 0, cells)
         shimmer.fill(0f, 0, cells)
-        val m = smooth(morph)
+        // The swap eases out, not in, so a section shows on the frame it lands: the old land starts
+        // sinking at once and settles slowly into the new form.
+        val m = morph * (2f - morph)
         if (m < 1f) raise(from, 1f - m)
         raise(to, m)
         raisePast()
@@ -871,7 +871,8 @@ internal class Contour : ShaderPreset(
         val calm = SEA_QUIET + (SEA_LOUD - SEA_QUIET) * seaEnergy
         // High tide leaves only the tallest peaks above the water.
         val high = max(calm, tallestPeak - HIGH_TIDE_BELOW)
-        var sea = calm + (high - calm) * smooth(highTide)
+        // The tide eases out as the swap does, so a breakdown shows on the frame it lands.
+        var sea = calm + (high - calm) * (highTide * (2f - highTide))
         // The ink keeps the water's own level, so at low tide its currents run on over the wet sand.
         inkSea = sea
         val low = lowTideNow()
@@ -1428,7 +1429,7 @@ internal class Contour : ShaderPreset(
         const val LOW_TIDE_LIGHT = 0.5f
         const val GLOW = 0.6f
         const val FLICKER_LIGHT = 1.4f
-        const val FLICKER_SECONDS = 0.1f
+        const val FLICKER_SECONDS = 0.25f
 
         /** Line widths in pixels on a frame whose short side is 1080 or less, and the glow's reach. */
         const val PLAIN_WIDTH = 1.5f
@@ -1459,7 +1460,7 @@ internal class Contour : ShaderPreset(
 
         const val RINGS = 12
         const val RING_SECONDS = 2f
-        const val ONSET_RING = 2.6f
+        const val ONSET_RING = 3.2f
         const val ONSET_WIDTH = 1.5f
         const val KICK_RING = 3.2f
         const val KICK_WIDTH = 2f
@@ -1486,7 +1487,7 @@ internal class Contour : ShaderPreset(
         const val LOW_ISLANDS = 8
         const val INK_REACH = 1.2f
         const val INK_KICK_REACH = 0.4f
-        const val ONSET_INK = 0.7f
+        const val ONSET_INK = 0.85f
         const val LONG_AGO = 99f
 
         /** The wash under the lines at full level, as a share of the line colours. *Judgement.* */

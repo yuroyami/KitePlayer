@@ -14,8 +14,10 @@ import java.nio.ByteOrder
 import javax.imageio.ImageIO
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -216,15 +218,16 @@ class ContourTest {
     }
 
     @Test
-    fun theCanvasStandInDrawsTheSameMap() {
+    fun theCanvasStandInDrawsTheLand() {
         val shader = RenderHarness.render(Contour(), 320, 180, 40, VizPalette.Prism)
         val canvas = RenderHarness.render(Contour().apply { forcePortable = true }, 320, 180, 40, VizPalette.Prism)
         ImageIO.write(canvas, "png", File(directory, "stand-in.png"))
         ImageIO.write(shader, "png", File(directory, "shader.png"))
         val shaderInk = inkFraction(shader)
         val canvasInk = inkFraction(canvas)
-        assertTrue(canvasInk > 0.004f, "the stand-in should draw the map, had $canvasInk")
-        assertTrue(canvasInk in shaderInk * 0.4f..shaderInk * 2.5f, "the stand-in should draw about as much as the shader: $canvasInk against $shaderInk")
+        // The stand-in draws the land's lines only; the shader adds the sea and the wash.
+        assertTrue(canvasInk > 0.004f, "the stand-in should draw the land, had $canvasInk")
+        assertTrue(canvasInk <= shaderInk * 1.1f, "the stand-in should not draw more than the shader: $canvasInk against $shaderInk")
     }
 
     @Test
@@ -305,5 +308,73 @@ class ContourTest {
             if ((pixel shr 16 and 0xFF) > 245 && (pixel shr 8 and 0xFF) > 245 && (pixel and 0xFF) > 245) blown++
         }
         return blown.toFloat() / ((image.width / 2) * (image.height / 2))
+    }
+
+    @Test
+    fun inkDroppedByAKickIsStillInTheSeaASecondLaterAndHasMoved() {
+        val contour = Contour().apply { forcePortable = true }
+        val kick = InjectedFrames.HIT_STEPS.first()
+        val atKick = FloatArray(SEA_SAMPLES)
+        val later = FloatArray(SEA_SAMPLES)
+        RenderHarness.forEachFrameOf(contour, 96, 54, kick + 61, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(if (step == kick) VizDriver.LowHit else null, step) }) { _, step ->
+            if (step == kick) sampleSea(contour, atKick)
+            if (step == kick + 60) sampleSea(contour, later)
+        }
+        val before = atKick.sum()
+        val after = later.sum()
+        // A second of a three second half life.
+        val keep = 0.5f.pow(1f / 3f)
+        var moved = 0f
+        for (index in 0 until SEA_SAMPLES) moved += abs(atKick[index] * keep - later[index])
+        println("contour: ink $before at the kick, $after a second later, moved ${moved / (before * keep)}")
+        assertEquals(1, contour.drops, "one kick drops one drop of ink")
+        assertTrue(before > 1f, "the kick put ink in the sea, had $before")
+        assertTrue(after > before * 0.5f, "a second later most of the ink is still there: $before to $after")
+        assertTrue(moved > before * keep * 0.1f, "and the currents have moved it, moved $moved")
+    }
+
+    @Test
+    fun theSeaDrawsLinesOnlyBelowSeaLevel() {
+        val width = 320
+        val height = 180
+        val plain = seaPicture(Contour(), width, height, pour = false)
+        val pouredContour = Contour()
+        val poured = seaPicture(pouredContour, width, height, pour = true)
+        var differing = 0
+        var onLand = 0
+        for (y in 0 until height) for (x in 0 until width) {
+            val a = plain[y * width + x]
+            val b = poured[y * width + x]
+            val distance = abs((a shr 16 and 0xFF) - (b shr 16 and 0xFF)) +
+                abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF)) + abs((a and 0xFF) - (b and 0xFF))
+            if (distance <= 24) continue
+            differing++
+            if (pouredContour.depthAt(x.toFloat(), y.toFloat(), width.toFloat(), height.toFloat()) < -1f) onLand++
+        }
+        println("contour: the poured ink changed $differing pixels, $onLand of them on land")
+        assertTrue(differing > width * height / 100, "pouring ink should draw sea lines, changed $differing pixels")
+        assertTrue(onLand <= differing / 50, "ink lines must stay under the water, $onLand of $differing were on land")
+    }
+
+    private fun sampleSea(contour: Contour, into: FloatArray) {
+        var index = 0
+        for (row in 0 until 23) for (column in 0 until 41) {
+            into[index++] = contour.inkAt(-1.6f + column * 0.08f, -0.88f + row * 0.08f)
+        }
+    }
+
+    private fun seaPicture(contour: Contour, width: Int, height: Int, pour: Boolean): IntArray {
+        val pixels = IntArray(width * height)
+        RenderHarness.forEachFrameOf(contour, width, height, 30, VizPalette.Prism,
+            source = { InjectedFrames.frame(null, it) },
+            beforeDraw = { if (pour) contour.pourInkForTest() }) { bitmap, step ->
+            if (step == 29) bitmap.readPixels(pixels)
+        }
+        return pixels
+    }
+
+    private companion object {
+        const val SEA_SAMPLES = 41 * 23
     }
 }

@@ -23,6 +23,9 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
 import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flow
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flows
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.MemoryField
 import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
@@ -30,22 +33,32 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderPreset
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderProgram
 import io.github.yuroyami.kiteplayer.audioviz.viz.vividColour
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * A topographic map of an archipelago seen straight down: neon contour lines on black, a white
- * coastline at sea level and a thicker index line every fourth level. Thirty two islands sit on a
- * spiral, bass in the middle and treble at the edges, and a loud band raises its island, so new
- * lines appear at the summit and ripple outward. Louder music lowers the sea. Onsets and kicks send
- * rings through the water and hats make the edge islets flicker. A section raises a new
- * archipelago, a breakdown brings high tide, and a drop brings low tide for a bar. The camera never moves.
+ * A living map seen straight down: neon contour lines on black, a white coastline at sea level and
+ * a thicker index line every fourth level. Thirty two islands sit on a spiral, bass in the middle
+ * and treble at the edges, and a loud band raises its island, so new lines appear at the summit and
+ * ripple outward. Louder music lowers the sea.
+ *
+ * The sea is a memory field: kicks drop ink round the loudest bass island, and Marble's point
+ * vortices comb it into currents. The shader draws the ink as contour lines of its own, in the cool
+ * sea colours, only where the ground lies under the water, so land and sea speak one language. A
+ * faint wash of the ground's colour keeps the map lit. Onsets and kicks send rings through the water
+ * and hats make the edge islets flicker. A section raises a new archipelago, a breakdown brings high
+ * tide and stills the sea, and a drop brings low tide for a cycle, over which the currents run on.
+ * The camera never moves.
+ *
+ * Where shaders cannot run, the stand-in draws the land's lines only: no sea and no wash.
  */
 internal class Contour : ShaderPreset(
     source = ContourShader.SOURCE,
@@ -138,6 +151,42 @@ internal class Contour : ShaderPreset(
     private val shallow = FloatArray(3)
     private val land = FloatArray(3)
 
+    // The sea's memory: ink the kicks drop and the currents comb, drawn as lines under the water.
+    // `ShaderPreset` names it `field`; inside an accessor `field` means a backing field, so the code uses `currents`.
+    private val currents = MemoryField(rows = FIELD_ROWS, withExtra = true).also { it.halfLife = INK_HALF_LIFE }
+    override val field: MemoryField get() = currents
+
+    // Marble's point vortices, in the field's centred units, and their signed speeds.
+    private var vortexCount = 2
+    private val vortexX = FloatArray(MOST_VORTICES)
+    private val vortexY = FloatArray(MOST_VORTICES)
+    private val vortexSpeed = FloatArray(MOST_VORTICES)
+    private val vortexLevel = FloatArray(MOST_VORTICES)
+    private val stir: Flow = Flows.Vortices({ vortexCount }, vortexX, vortexY, vortexSpeed)
+
+    /** The vortices' direction: every morph flips it, so the sea never turns only one way. */
+    private var spin = 1f
+
+    /** How still the sea is: 1 in a breakdown, 0 otherwise, eased. */
+    private var stillness = 0f
+
+    /** After a drop the vortices line up across the middle for a cycle and comb the ink into feathers. */
+    private var combing = 0f
+    private var sinceDrum = LONG_AGO
+    private var sinceOnsetInk = LONG_AGO
+
+    /** How hard the currents stir for the form on the map. */
+    private var currentStrength = 1f
+
+    // What the sea shader reads: the level the ink lives under, the wash, the gold current and the foam.
+    private var inkSea = SEA_QUIET
+    private var wash = 0f
+    private var goldCurrent = 0f
+    private var foam = 0f
+    private val seaNear = FloatArray(3)
+    private val seaFar = FloatArray(3)
+    private val goldInk = FloatArray(3)
+
     init {
         layOut(to)
         from.copyFrom(to)
@@ -149,6 +198,7 @@ internal class Contour : ShaderPreset(
         val dt = state.stepSeconds
         val bar = gestures.cycleSeconds
         frameFor(kit.aspect)
+        currents.size(kit.aspect)
         readBands(frame.bandsRel, dt)
 
         if (gestures.turn) {
@@ -161,6 +211,7 @@ internal class Contour : ShaderPreset(
             lowClock = 0f
             lowBeat = gestures.beatSeconds
             lowBar = bar
+            combing = 1f
         } else if (lowClock >= 0f) {
             lowClock += dt
             if (lowClock >= lowBeat + 2f * lowBar) lowClock = -1f
@@ -188,6 +239,11 @@ internal class Contour : ShaderPreset(
         for (island in EDGE until ISLANDS) flicker[island] *= fade
         rings.advance(dt)
 
+        // The sea: place the vortices, drop this frame's ink, and let the currents carry it.
+        stirTheSea(state, dt)
+        dropInk(dt, onset, shown)
+        currents.advance(stir, dt)
+
         raiseGround()
         tide(state, dt)
         terrain.copyInto(heights, 0, 0, columns * rows)
@@ -195,6 +251,73 @@ internal class Contour : ShaderPreset(
         built++
         paint(state, dt)
         fresh = false
+    }
+
+    /** Places the vortices along the spectrum's shape and sets how hard each stirs, as Marble did. */
+    private fun stirTheSea(state: VizRenderState, dt: Float) {
+        val frame = state.frame
+        val bands = frame.bandsRel
+        stillness += ((if (highHeld) 1f else 0f) - stillness) * (1f - exp(-dt / STILL_SECONDS))
+        combing = (combing - dt / gestures.cycleSeconds.coerceAtLeast(0.5f)).coerceAtLeast(0f)
+        vortexCount = (2f + 3f * frame.mood).roundToInt().coerceIn(2, MOST_VORTICES)
+        val ease = 1f - exp(-dt / VORTEX_EASE_SECONDS)
+        val strength = (BASE_STIR + BASS_STIR * frame.bass) * (1f - stillness) *
+            (0.3f + 0.7f * state.motionScale) * (1f + 1.2f * combing) * currentStrength
+        val reach = currents.aspect
+        for (vortex in 0 until vortexCount) {
+            var level = 0f
+            if (bands.isNotEmpty()) {
+                val first = vortex * bands.size / vortexCount
+                val last = ((vortex + 1) * bands.size / vortexCount).coerceAtLeast(first + 1)
+                for (band in first until last) level += bands[band]
+                level /= (last - first)
+            }
+            vortexLevel[vortex] += (level - vortexLevel[vortex]) * ease
+            // Low bands on the left, high on the right, each as high up the sea as its band is loud.
+            // While a drop is being combed they line up across the middle, which makes feathers.
+            val wantX = -reach + 2f * reach * (vortex + 0.5f) / vortexCount
+            val wantY = (0.44f - 0.88f * vortexLevel[vortex].coerceIn(0f, 1f)) * (1f - combing)
+            vortexX[vortex] += (wantX - vortexX[vortex]) * ease
+            vortexY[vortex] += (wantY - vortexY[vortex]) * ease
+            val sign = (if (vortex % 2 == 0) 1f else -1f) * spin
+            vortexSpeed[vortex] = sign * strength * (0.35f + 0.65f * vortexLevel[vortex].coerceIn(0f, 1f) * 2f).coerceAtMost(1.3f)
+        }
+        for (vortex in vortexCount until MOST_VORTICES) vortexSpeed[vortex] = 0f
+    }
+
+    /**
+     * A kick drops ink round the island of the loudest bass band, wider than the island, so the ink
+     * spreads into the water round it and pushes the older ink out in rings. Music without drums drops
+     * smaller ink on its onsets instead, at most once a beat.
+     */
+    private fun dropInk(dt: Float, onset: Float, shown: Archipelago) {
+        sinceDrum += dt
+        sinceOnsetInk += dt
+        if (gestures.kick > 0f) {
+            dropAt(shown, loudestLowIsland(), INK_REACH + INK_KICK_REACH * gestures.kick.coerceIn(0f, 1f), 1f)
+            sinceDrum = 0f
+        } else if (onset > 0f && sinceDrum > gestures.cycleSeconds && sinceOnsetInk > gestures.beatSeconds * 0.9f) {
+            dropAt(shown, firedIsland(), INK_REACH * (0.6f + 0.4f * onset), ONSET_INK)
+            sinceOnsetInk = 0f
+        }
+    }
+
+    /** One drop of [ink] round island [island] of [layout], [reach] island radii wide. */
+    private fun dropAt(layout: Archipelago, island: Int, reach: Float, ink: Float) {
+        // From grid cells to the field's centred units: one unit is half the visible height, y down.
+        val x = (layout.x[island] - columns / 2f) / halfY
+        val y = (layout.y[island] - rows / 2f) / halfY
+        currents.drop(x, y, layout.radius[island] / halfY * reach, ink)
+        drops++
+        lastDropX = x
+        lastDropY = y
+    }
+
+    /** The bass island standing highest on its bands. */
+    private fun loudestLowIsland(): Int {
+        var best = 0
+        for (island in 1 until LOW_ISLANDS) if (lift(island) > lift(best)) best = island
+        return best
     }
 
     /** Picks the grid's orientation and how much of it a frame [aspect] wide shows, in cells. */
@@ -392,6 +515,8 @@ internal class Contour : ShaderPreset(
         // High tide leaves only the tallest peaks above the water.
         val high = max(calm, tallestPeak - HIGH_TIDE_BELOW)
         var sea = calm + (high - calm) * smooth(highTide)
+        // The ink keeps the water's own level, so at low tide its currents run on over the wet sand.
+        inkSea = sea
         val low = lowTideNow()
         val out = max(low, buildUp(state))
         // Under reduced motion the coastline all but stays put, and low tide is a change of colour and light.
@@ -400,6 +525,8 @@ internal class Contour : ShaderPreset(
         amber = out
         boost = LOW_TIDE_LIGHT * low
         light = state.lightScale * (IDLE_LIGHT + (1f - IDLE_LIGHT) * ((lightFor(state.energy) - 0.06f) / 0.94f).coerceIn(0f, 1f))
+        // The wash follows the level alone, so a quiet map is darker than a loud one in its fill too.
+        wash = WASH * ((lightFor(state.energy) - 0.06f) / 0.94f).coerceIn(0f, 1f)
     }
 
     /** Low tide after a drop: out in one beat, held for a bar, back over the next bar. */
@@ -470,16 +597,28 @@ internal class Contour : ShaderPreset(
         while (towards > 180f) towards -= 360f
         while (towards < -180f) towards += 360f
         keyLean.advance(towards.coerceIn(-KEY_TURN, KEY_TURN) * sure, dt)
-        val turn = keyLean.value
+        // The key leans every hue, and the genes' walk swings land and sea a little either way.
+        val turn = keyLean.value + WALK_SWING * sin(genes.walk * TAU)
         val palette = state.palette
         // A palette that spans the whole colour circle, the default one, has no two ends to give a
         // sea and a land, so the map keeps its own swatches under it. Any other palette replaces them.
         val own = ((palette.hueSpan - 300f) / 60f).coerceIn(0f, 1f)
         val deepHue = 262f + turn
+        // A chosen palette has no hue to turn, so the walk slides along its ramp instead: a tenth of
+        // the ramp either way, which keeps sea and land apart and still moves every colour.
+        val slide = 0.1f * sin(genes.walk * TAU)
         // Electric blue rather than a dark one: a 1.5 px line at a third of the light has to show on black.
-        put(deep, colourOf(0.54f, min(0.24f, mostChroma(0.54f, deepHue) - 0.01f), deepHue), palette.vividRamp(0.1f), own)
-        put(shallow, vividColour(205f + turn, headroom = 0.01f), palette.vividRamp(0.5f), own)
-        put(land, vividColour(70f + turn, lift = 0.02f, headroom = 0.01f), palette.vividRamp(1f), own)
+        put(deep, colourOf(0.54f, min(0.24f, mostChroma(0.54f, deepHue) - 0.01f), deepHue), palette.vividRamp((0.1f + slide).coerceIn(0f, 1f)), own)
+        put(shallow, vividColour(205f + turn, headroom = 0.01f), palette.vividRamp((0.5f + slide).coerceIn(0f, 1f)), own)
+        put(land, vividColour(70f + turn, lift = 0.02f, headroom = 0.01f), palette.vividRamp((0.9f + slide).coerceIn(0f, 1f)), own)
+        // The sea's ink lines: two cool hues, from the far blue of thin ink to the near cyan of thick ink.
+        put(seaFar, vividColour(SEA_FAR_HUE + turn, headroom = 0.01f), palette.vividRamp((0.2f + slide).coerceIn(0f, 1f)), own)
+        put(seaNear, vividColour(SEA_NEAR_HUE + turn, lift = 0.06f, headroom = 0.01f), palette.vividRamp((0.4f + slide).coerceIn(0f, 1f)), own)
+        // Gold is the declared accent: the drop's current, the same under any palette.
+        val gold = vividColour(GOLD_HUE, headroom = 0.01f)
+        goldInk[0] = gold.red
+        goldInk[1] = gold.green
+        goldInk[2] = gold.blue
     }
 
     private fun put(into: FloatArray, swatch: Color, chosen: Color, own: Float) {
@@ -529,6 +668,14 @@ internal class Contour : ShaderPreset(
         program.uniform("uShallow", shallow[0], shallow[1], shallow[2])
         program.uniform("uLand", land[0], land[1], land[2])
         program.uniform("uPeak", 1f, 1f, 1f)
+        program.uniform("uInkSea", inkSea)
+        program.uniform("uInkSteps", INK_STEPS)
+        program.uniform("uSeaNear", seaNear[0], seaNear[1], seaNear[2])
+        program.uniform("uSeaFar", seaFar[0], seaFar[1], seaFar[2])
+        program.uniform("uGoldInk", goldInk[0], goldInk[1], goldInk[2])
+        program.uniform("uGoldCurrent", goldCurrent)
+        program.uniform("uFoam", foam)
+        program.uniform("uWash", wash)
     }
 
     /**
@@ -748,6 +895,23 @@ internal class Contour : ShaderPreset(
         built = 0L
         uploaded = -1L
         uploadedTo = null
+        currents.clear()
+        vortexX.fill(0f)
+        vortexY.fill(0f)
+        vortexSpeed.fill(0f)
+        vortexLevel.fill(0f)
+        vortexCount = 2
+        spin = 1f
+        stillness = 0f
+        combing = 0f
+        sinceDrum = LONG_AGO
+        sinceOnsetInk = LONG_AGO
+        currentStrength = 1f
+        inkSea = SEA_QUIET
+        wash = 0f
+        goldCurrent = 0f
+        foam = 0f
+        drops = 0
     }
 
     // For tests: what the map is doing, in levels and shares.
@@ -772,6 +936,38 @@ internal class Contour : ShaderPreset(
             if (heights[y * columns + x] > seaLevel) landCells++
         }
         return if (seen == 0) 0f else landCells.toFloat() / seen
+    }
+
+    /** Drops of ink since the start, and where the last one landed in the field's centred units, for tests. */
+    internal var drops = 0
+        private set
+    internal var lastDropX = 0f
+        private set
+    internal var lastDropY = 0f
+        private set
+
+    /** Ink in the sea at a point in the field's centred units (y down), for tests. */
+    internal fun inkAt(x: Float, y: Float): Float = currents.inkAt(x, y)
+
+    /** How fast the vortices stir now: the largest speed, in centred units a second. For tests. */
+    internal val stirring: Float
+        get() {
+            var most = 0f
+            for (vortex in 0 until vortexCount) most = max(most, abs(vortexSpeed[vortex]))
+            return most
+        }
+
+    /** How far a pixel's ground lies under the water, in levels: positive under the sea, negative on land. */
+    internal fun depthAt(pixelX: Float, pixelY: Float, width: Float, height: Float): Float {
+        val cell = max(width / columns, height / rows)
+        val gx = ((pixelX + 0.5f - width / 2f) / cell + columns / 2f).toInt().coerceIn(0, columns - 1)
+        val gy = ((pixelY + 0.5f - height / 2f) / cell + rows / 2f).toInt().coerceIn(0, rows - 1)
+        return seaLevel - heights[gy * columns + gx]
+    }
+
+    /** Pours rings of ink across the whole sea, for the test that ink is drawn only under the water. */
+    internal fun pourInkForTest() {
+        for (ring in 1..12) currents.ring(0f, 0f, ring * 0.15f, 2f, 1f)
     }
 
     private companion object {
@@ -859,6 +1055,35 @@ internal class Contour : ShaderPreset(
         const val KEY_REFERENCE = 240f
         const val KEY_TURN = 20f
         const val KEY_TURN_PER_SECOND = 12f
+
+        /** The sea's memory field: 90 rows, so 160 by 90 on a 16 by 9 screen, and its ink's half life. */
+        const val FIELD_ROWS = 90
+        const val INK_HALF_LIFE = 3f
+        /** Ink steps between two sea lines' levels: a line at every seventh of full ink. */
+        const val INK_STEPS = 7f
+
+        /** Marble's vortices in centred units: at most five, a stir of 0.11 and 0.36 more with the bass. */
+        const val MOST_VORTICES = 5
+        const val BASE_STIR = 0.11f
+        const val BASS_STIR = 0.36f
+        const val VORTEX_EASE_SECONDS = 0.6f
+        const val STILL_SECONDS = 0.5f
+
+        /** A kick's ink: round the loudest of the first eight islands, 1.2 to 1.6 island radii wide. */
+        const val LOW_ISLANDS = 8
+        const val INK_REACH = 1.2f
+        const val INK_KICK_REACH = 0.4f
+        const val ONSET_INK = 0.7f
+        const val LONG_AGO = 99f
+
+        /** The wash under the lines at full level, as a share of the line colours. *Judgement.* */
+        const val WASH = 0.22f
+
+        /** How far the genes' walk swings land and sea, and the sea and gold hues, in degrees. */
+        const val WALK_SWING = 25f
+        const val SEA_FAR_HUE = 238f
+        const val SEA_NEAR_HUE = 192f
+        const val GOLD_HUE = 85f
 
         const val OPAQUE = -0x1000000
     }

@@ -2,14 +2,18 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 
 /**
  * The line pass of [Contour]: the height grid read smoothly and drawn as contour lines at the
- * screen's own resolution.
+ * screen's own resolution, and the sea drawn as contour lines of the ink its currents carry.
  *
  * The grid arrives as a small picture, one texel per cell. Its height is split over the red and
  * green channels, so it keeps sixteen bits; blue holds how much the edge islets flicker. Four
  * hardware-blended reads give a cubic B-spline of the grid, which is smooth enough that a line can
  * slide by a fraction of a pixel. Eight more reads give that same surface's slope, which turns the
  * gap between a height and a level into a distance in pixels, so every line keeps its width
- * however steep the ground is. There are no loops per pixel.
+ * however steep the ground is.
+ *
+ * The sea is the drawing's memory field, read with the shared field helpers, which the preset puts
+ * in front of this source. Its ink is drawn as lines only, and only where the ground lies under the
+ * water. A faint wash of the ground's own colour keeps the map from being a black field.
  */
 internal object ContourShader {
 
@@ -44,6 +48,16 @@ uniform float3 uDeep;
 uniform float3 uShallow;
 uniform float3 uLand;
 uniform float3 uPeak;
+// The sea: the level its ink lives under, ink steps per line, the two cool line colours, the drop's
+// gold current and how far it has spread, how much the breakdown's lace shows, and the ground's wash.
+uniform float uInkSea;
+uniform float uInkSteps;
+uniform float3 uSeaNear;
+uniform float3 uSeaFar;
+uniform float3 uGoldInk;
+uniform float uGoldCurrent;
+uniform float uFoam;
+uniform float uWash;
 
 // One blended read of the grid's height, 0 to 1. Blending the two channels separately and joining
 // them afterwards gives the same answer as blending the joined value, so the hardware stays exact.
@@ -84,6 +98,35 @@ float halo(float n, float level, float steep) {
     float hot = smoothstep(uWhiteFrom + 2.0, uWhiteTo + 1.0, n * uInterval - uSea);
     float away = max(abs(level - n * uInterval) / steep - uWidths.x, 0.0);
     return hot * exp(-away / uWidths.w);
+}
+
+// The sea's ink as lines: one at every step of ink, from the far colour of thin ink to the near
+// colour of thick ink, gold while the drop's current runs, and the breakdown's lace in pale foam.
+// The colour is in rgb and how much of the pixel the lines cover in a.
+float4 seaLines(float2 position) {
+    float2 ink = fieldAt(position);
+    float2 inkSlope = fieldSlope(position);
+    float best = 0.0;
+    float which = 0.0;
+    for (int i = 1; i < 8; i++) {
+        float inkLevel = float(i) / uInkSteps;
+        if (inkLevel >= 1.0) break;
+        float c = isoLine(ink.x, inkLevel, uWidths.x, inkSlope);
+        if (c > best) {
+            best = c;
+            which = inkLevel;
+        }
+    }
+    float3 colour = mix(uSeaFar, uSeaNear, which);
+    colour = mix(colour, uGoldInk, uGoldCurrent);
+    if (uFoam > 0.001) {
+        float laceCover = isoLine(fieldExtra(position), 0.3, uWidths.x, fieldExtraSlope(position)) * uFoam;
+        if (laceCover > best) {
+            best = laceCover;
+            colour = mix(uSeaNear, float3(1.0), 0.6);
+        }
+    }
+    return float4(colour, best);
 }
 
 half4 main(float2 position) {
@@ -132,6 +175,20 @@ half4 main(float2 position) {
     colour = mix(colour, tint(below + 1.0), cover(below + 1.0, level, steep));
     float shore = clamp(uWidths.z + 0.5 - abs(level - uSea) / steep, 0.0, 1.0) * uCoast;
     colour = mix(colour, uPeak, shore);
+
+    // The wash: a faint fill of the ground's own colour, deep blue under water and dim amber on land.
+    float underWater = 1.0 - smoothstep(-0.3, 0.3, level - uSea);
+    float3 waterWash = mix(uShallow, uDeep, clamp((uSea - level) / uDepth, 0.0, 1.0));
+    float3 landWash = mix(uLand, uPeak, 0.15);
+    colour = max(colour, mix(landWash, waterWash, underWater) * uWash);
+
+    // The sea's ink, only where the ground lies under the water the ink lives in.
+    float wet = 1.0 - smoothstep(uInkSea - 0.8, uInkSea - 0.2, level);
+    if (wet > 0.001) {
+        float4 sea = seaLines(position);
+        colour = mix(colour, sea.rgb, sea.a * wet);
+    }
+
     colour *= uLight * (1.0 + uBoost) * (1.0 + uFlicker * flicker);
     float heat = max(halo(below, level, steep), halo(below + 1.0, level, steep));
     colour += mix(uLand, uPeak, 0.6) * heat * uGlow * uLight;

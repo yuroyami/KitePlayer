@@ -10,7 +10,6 @@ import kotlin.math.max
 import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The port of Lines by Silvio Paganini: it draws, it holds still in silence, and it keeps the page's knee. */
@@ -127,7 +126,81 @@ class LinesTest {
         assertTrue(lines.eyeZ == 240f, "eyeZ is ${lines.eyeZ}")
         assertTrue(lines.bendValue == 0f, "bend is ${lines.bendValue}")
         assertTrue(lines.dipValue == 0f, "dip is ${lines.dipValue}")
-        assertNull(lines.forms)
+        assertEquals("Flat", lines.forms.form)
+        assertEquals(0, lines.forms.births)
+    }
+
+    @Test
+    fun theFormMorphsOverFourCyclesOnTheDrumLoop() {
+        val lines = Lines()
+        var settled = true
+        var startStep = 0
+        var startCycleSeconds = 0f
+        val closed = ArrayList<MorphInterval>()
+        RenderHarness.forEachFrame(lines, 64, 36, 7200, VizPalette.Prism, RenderHarness.Song.Lively) { _, step ->
+            val value = lines.morphValue
+            if (settled && value < 0.999f) {
+                settled = false
+                startStep = step
+                startCycleSeconds = lines.cycleSecondsValue
+            } else if (!settled && value >= 0.999f) {
+                settled = true
+                closed.add(MorphInterval(step - startStep, startCycleSeconds))
+            }
+        }
+        val morphs = lines.forms.morphs
+        println("morphs $morphs, closed intervals ${closed.size}: " + closed.joinToString { it.describe() })
+        assertTrue(morphs >= 3, "the drum loop should start at least 3 morphs, it started $morphs")
+        assertTrue(closed.size >= 2, "at least 2 morphs should settle, ${closed.size} did")
+        for (interval in closed) {
+            assertTrue(
+                interval.frames <= 5 * 60 * interval.cycleSeconds,
+                "a morph should settle within 5 cycles, this one took ${interval.describe()}",
+            )
+        }
+        val longest = closed.maxByOrNull { it.frames }
+        assertTrue(
+            longest != null && longest.frames >= 3 * 60 * longest.cycleSeconds,
+            "an uninterrupted morph should take about 4 cycles, the longest took ${longest?.describe()}",
+        )
+    }
+
+    @Test
+    fun theTunnelWrapsEveryLineRoundTheAxis() {
+        val lines = renderTwoSilentFramesIn("Tunnel")
+        val right = lines.screenXOf(10, 0)
+        val left = lines.screenXOf(10, 256)
+        val above = lines.screenYOf(10, 128)
+        val below = lines.screenYOf(10, 384)
+        println("tunnel on a 320 by 180 canvas: x at vertex 0 $right, at 256 $left, y at vertex 128 $above, at 384 $below")
+        assertTrue(right > 160f, "vertex 0 should sit right of the middle column, x is $right")
+        assertTrue(left < 160f, "vertex 256 should sit left of the middle column, x is $left")
+        assertTrue(above < 90f, "vertex 128 should sit above the middle row, y is $above")
+        assertTrue(below > 90f, "vertex 384 should sit below the middle row, y is $below")
+    }
+
+    @Test
+    fun theMirrorDrawsEachLineTwice() {
+        val mirror = renderTwoSilentFramesIn("Mirror")
+        val flat = renderTwoSilentFramesIn("Flat")
+        println("paths drawn: Mirror ${mirror.pathsDrawn}, Flat ${flat.pathsDrawn}")
+        assertEquals(44, mirror.pathsDrawn)
+        assertEquals(22, flat.pathsDrawn)
+    }
+
+    @Test
+    fun theFanRadiatesFromAPointWithTheBassLinesNearest() {
+        val lines = renderTwoSilentFramesIn("Fan")
+        val farX = (0 until Lines.LINES).map { lines.screenXOf(it, 0) }.filter { !it.isNaN() }
+        val nearX = (0 until Lines.LINES).map { lines.screenXOf(it, 511) }.filter { !it.isNaN() }
+        assertTrue(farX.isNotEmpty() && nearX.isNotEmpty(), "the fan should be on screen, far ${farX.size} near ${nearX.size}")
+        val farSpread = farX.max() - farX.min()
+        val nearSpread = nearX.max() - nearX.min()
+        val bassDepth = lines.depthOf(10, 256)
+        val trebleDepth = lines.depthOf(0, 256)
+        println("fan spread of x: far end $farSpread, near end $nearSpread; depth of the middle vertex: bass line $bassDepth, treble line $trebleDepth")
+        assertTrue(farSpread < nearSpread / 4f, "the lines should meet at the far point, far spread $farSpread near spread $nearSpread")
+        assertTrue(bassDepth < trebleDepth, "the bass line should be nearer, depth $bassDepth against $trebleDepth")
     }
 
     @Test
@@ -230,6 +303,23 @@ class LinesTest {
         for (step in sharpen.indices) {
             assertTrue(abs(scale[step] - (1f + Lines.SHARPEN * sharpen[step])) < 1e-5f, "scale follows the raise at step $step")
         }
+    }
+
+    /** A fresh drawing held in [form] for two silent frames of 320 by 180, so the camera and the blend are settled. */
+    private fun renderTwoSilentFramesIn(form: String): Lines {
+        val lines = Lines()
+        val silent = RenderHarness.player(RenderHarness.Song.Silence, 2f)
+        RenderHarness.forEachFrameOf(
+            lines, 320, 180, 2, VizPalette.Prism,
+            source = { silent.next(1f / 60f) },
+            beforeDraw = { lines.jumpTo(form) },
+        ) { _, _ -> }
+        return lines
+    }
+
+    /** One morph from its first frame below full weight to the frame it settled, with the cycle it was measured against. */
+    private class MorphInterval(val frames: Int, val cycleSeconds: Float) {
+        fun describe(): String = "$frames frames, ${"%.2f".format(frames / (60f * cycleSeconds))} cycles of ${"%.2f".format(cycleSeconds)} s"
     }
 
     /** One fresh render of 160 frames where only the first hit of [driver] lands: the wave per step, and the pixels of step 70. */

@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import io.github.yuroyami.kiteplayer.audioviz.viz.DisplayStep
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.Scene3D
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
@@ -24,6 +25,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Evolution
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Genes
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
+import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
@@ -67,6 +69,10 @@ import kotlin.random.Random
  * A kick lifts the two middle lines, and the lift runs outward through the stack one line per page frame.
  * A snare raises every peak by about a third for a beat.
  * At rest, the Flat picture is the port's picture.
+ * The forms are Flat, Tunnel (the lines wrap round the viewer), Mirror (the Flat picture reflected below)
+ * and Fan (the lines radiate from a far point, the bass lines nearest).
+ * The evolution pacer takes turns through them over four cycles. Weights blend the forms, so a morph never jumps.
+ * Lines has no birth, by the spec's decision. The form on screen is published through `forms`.
  *
  * Twenty-two thin white lines stand front to back in black fog, seen from a slightly raised camera.
  * Each line wobbles flat at its ends and rises into mirrored peaks at its centre. The middle lines of
@@ -161,16 +167,60 @@ internal class Lines : Visualization {
     internal val sharpenValue: Float get() = sharpen
     internal val targetScale: Float get() = 1f + SHARPEN * sharpen
 
-    // The camera: (0, 45, 240) at rest.
+    // The camera: (0, 45, 240) looking at the origin at rest.
     internal var eyeX = 0f
         private set
     internal var eyeY = EYE_Y
         private set
-    internal val eyeZ: Float get() = EYE_Z
+    internal var eyeZ = EYE_Z
+        private set
+    private var targetZ = 0f
+
+    // The form the pacer is morphing toward.
+    private var formTo = FLAT
+
+    // How far each form has come, 0 to 1. Every one moves toward its target, so a new morph never jumps.
+    private val blend = FloatArray(FORMS.size).also { it[FLAT] = 1f }
+
+    // The eased, normalized weights of this frame. They add up to 1.
+    private val formWeight = FloatArray(FORMS.size)
+
+    // Picks the next form. It is apart from the noise's generator, so the noise is unchanged.
+    private var formRandom = Random(SEED + 1)
+
+    // The eased weight of the form being morphed to, 1 when settled.
+    internal val morphValue: Float get() = formWeight[formTo]
+    internal val cycleSecondsValue: Float get() = gestures.cycleSeconds
+
+    // The reflection of each line in the Mirror form.
+    private val mirrorPaths = Array(LINES) { Path() }
+
+    // How many paths the last frame drew.
+    internal var pathsDrawn = 0
+        private set
+
+    // Where vertex d sits round the Tunnel's axis, as a cosine and a sine.
+    private val tunnelCos = FloatArray(POINTS)
+    private val tunnelSin = FloatArray(POINTS)
+
+    // How far along its line vertex d is, 0 to 1.
+    private val along = FloatArray(POINTS)
+
+    // The angle of each line in the Fan, as a sine and a cosine.
+    private val fanSin = FloatArray(LINES)
+    private val fanCos = FloatArray(LINES)
+
+    // The world position that place worked out.
+    private var placedX = 0f
+    private var placedY = 0f
+    private var placedZ = 0f
 
     // The colour each line was last drawn in.
     private val lineColour = Array(LINES) { Color.White }
     internal fun lineColourOf(index: Int): Color = lineColour[index]
+
+    /** The form on screen. Births are 0, because Lines has no birth by the spec's decision. */
+    override val forms: FormReadout get() = FormReadout(FORMS[strongestForm()], evolution.morphs, 0)
 
     init {
         val last = CONTROL_POINTS - 1
@@ -187,6 +237,18 @@ internal class Lines : Visualization {
             val t = (d - (POINTS - 1) / 2f) / 120f
             bell[d] = exp(-t * t)
         }
+        for (d in 0 until POINTS) {
+            val theta = d / (POINTS - 1f) * TAU
+            tunnelCos[d] = cos(theta)
+            tunnelSin[d] = sin(theta)
+            along[d] = d / (POINTS - 1f)
+        }
+        for (i in 0 until LINES) {
+            val alpha = (i - 10.5f) / 21f * FAN_SPREAD
+            fanSin[i] = sin(alpha)
+            fanCos[i] = cos(alpha)
+        }
+        updateWeights()
     }
 
     override fun DrawScope.draw(state: VizRenderState) {
@@ -201,18 +263,18 @@ internal class Lines : Visualization {
         // SIZE.x: half the longer side of the window, with a device pixel for each CSS pixel.
         placePoints(max(size.width, size.height) / 2f)
         scene.lens(size, FOV, NEAR, FAR)
-        scene.camera(eyeX, eyeY, EYE_Z, 0f, 0f, 0f)
+        scene.camera(eyeX, eyeY, eyeZ, 0f, 0f, targetZ)
+        pathsDrawn = 0
         val light = state.lightScale.coerceIn(0f, 1f)
         val tint = state.palette.ramp(TINT_AT)
         // Back to front, so the nearer line wins where two cross, as the depth test made it.
         for (index in 0 until LINES) {
             val path = paths[index]
             path.reset()
-            val vertex = vertices[index]
             var open = false
             for (d in 0 until POINTS) {
-                val y = lineY[index] + roadY[index] + vertex[d] + wave[index] * WAVE_HEIGHT * bell[d]
-                if (!scene.project(pointX[d] + roadX[index], y, lineZ[index])) {
+                place(index, d, heightAt(index, d))
+                if (!scene.project(placedX, placedY, placedZ)) {
                     open = false
                     continue
                 }
@@ -230,17 +292,113 @@ internal class Lines : Visualization {
             )
             lineColour[index] = colour
             drawPath(path, colour, style = hairline)
+            pathsDrawn++
+            // The Mirror form draws the Flat picture again, reflected in the water line and faded by its weight.
+            val mirror = formWeight[MIRROR]
+            if (mirror > 0.01f) {
+                val reflection = mirrorPaths[index]
+                reflection.reset()
+                var reflected = false
+                for (d in 0 until POINTS) {
+                    val lowered = 2f * MIRROR_Y - (lineY[index] + roadY[index] + heightAt(index, d))
+                    if (!scene.project(pointX[d] + roadX[index], lowered, lineZ[index])) {
+                        reflected = false
+                        continue
+                    }
+                    if (reflected) reflection.lineTo(scene.screenX, scene.screenY) else reflection.moveTo(scene.screenX, scene.screenY)
+                    reflected = true
+                }
+                drawPath(reflection, colour.copy(alpha = 0.5f * mirror), style = hairline)
+                pathsDrawn++
+            }
         }
     }
 
+    /** The height of vertex [d] of line [index] above its line: the eased target and the kick's lift. */
+    private fun heightAt(index: Int, d: Int): Float = vertices[index][d] + wave[index] * WAVE_HEIGHT * bell[d]
+
+    /** The world position of vertex [d] of line [i]: the forms' positions blended by this frame's weights. */
+    private fun place(i: Int, d: Int, h: Float) {
+        val x = pointX[d] + roadX[i]
+        val yBase = lineY[i] + roadY[i]
+        val z = lineZ[i]
+        var px = 0f
+        var py = 0f
+        var pz = 0f
+        for (f in formWeight.indices) {
+            val w = formWeight[f]
+            if (w < 1e-4f) continue
+            when (f) {
+                TUNNEL -> {
+                    val r = TUNNEL_R + h
+                    px += r * tunnelCos[d] * w
+                    py += r * tunnelSin[d] * w
+                    pz += z * w
+                }
+                FAN -> {
+                    val u = along[d]
+                    px += fanSin[i] * u * FAN_LENGTH * w
+                    py += (FAN_Y + h) * w
+                    pz += (FAN_Z + fanCos[i] * u * FAN_LENGTH) * w
+                }
+                else -> {
+                    px += x * w
+                    py += (yBase + h) * w
+                    pz += z * w
+                }
+            }
+        }
+        placedX = px
+        placedY = py
+        placedZ = pz
+    }
+
+    /** Projects one vertex under the last camera and answers whether it is on screen. */
+    private fun projectVertex(line: Int, vertex: Int): Boolean {
+        place(line, vertex, heightAt(line, vertex))
+        return scene.project(placedX, placedY, placedZ)
+    }
+
     /** For tests: the screen x of one vertex under the last camera, or NaN when it is not on screen. */
-    internal fun screenXOf(line: Int, vertex: Int): Float {
-        val onScreen = scene.project(
-            pointX[vertex] + roadX[line],
-            lineY[line] + roadY[line] + vertices[line][vertex] + wave[line] * WAVE_HEIGHT * bell[vertex],
-            lineZ[line],
-        )
-        return if (onScreen) scene.screenX else Float.NaN
+    internal fun screenXOf(line: Int, vertex: Int): Float = if (projectVertex(line, vertex)) scene.screenX else Float.NaN
+
+    /** For tests: the screen y of one vertex under the last camera, or NaN when it is not on screen. */
+    internal fun screenYOf(line: Int, vertex: Int): Float = if (projectVertex(line, vertex)) scene.screenY else Float.NaN
+
+    /** For tests: the depth of one vertex, 0 at the near plane and 1 at the far one, or NaN when it is not on screen. */
+    internal fun depthOf(line: Int, vertex: Int): Float = if (projectVertex(line, vertex)) scene.depth else Float.NaN
+
+    /** For tests: puts the drawing straight into [form], with no morph. */
+    internal fun jumpTo(form: String) {
+        val target = FORMS.indexOf(form)
+        require(target >= 0) { "no form named $form" }
+        formTo = target
+        blend.fill(0f)
+        blend[formTo] = 1f
+        updateWeights()
+    }
+
+    /** Eases each blend into a weight and divides by the sum, so the weights add up to 1. */
+    private fun updateWeights() {
+        var sum = 0f
+        for (f in blend.indices) {
+            val b = blend[f]
+            formWeight[f] = b * b * (3f - 2f * b)
+            sum += formWeight[f]
+        }
+        if (sum <= 0f) {
+            formWeight.fill(0f)
+            formWeight[formTo] = 1f
+        } else {
+            for (f in formWeight.indices) formWeight[f] /= sum
+        }
+    }
+
+    /** The index of the form with the largest weight. */
+    private fun strongestForm(): Int {
+        var best = 0
+        for (f in formWeight.indices) if (formWeight[f] > formWeight[best]) best = f
+        return best
     }
 
     private fun advance(state: VizRenderState) {
@@ -257,15 +415,51 @@ internal class Lines : Visualization {
         // A snare raises the peaks, and the raise is gone within a beat of heard time.
         val heardNow = dt * frame.audible
         sharpen = max(sharpen * exp(-heardNow * 3f / gestures.beatSeconds.coerceAtLeast(0.1f)), gestures.snare)
+        // The evolution pacer picks the next form. A morph that lands mid-morph turns the weights from where they are.
+        if (evolution.morph) {
+            formTo = (formTo + 1 + formRandom.nextInt(2)) % FORMS.size
+        }
+        val rate = heardNow / (MORPH_CYCLES * gestures.cycleSeconds.coerceAtLeast(0.5f))
+        for (f in blend.indices) {
+            val target = if (f == formTo) 1f else 0f
+            blend[f] += (target - blend[f]).coerceIn(-rate, rate)
+        }
+        updateWeights()
         for (index in 0 until LINES) {
             peaked[index].advance(peakedTarget[index], live)
             val share = (Z_NEAR - lineZ[index]) / Z_SPAN
             roadX[index] = bend.value * ROAD_REACH * share * share
             roadY[index] = -dip.value * DIP_REACH * share
         }
+        // The camera is the forms' cameras blended, plus the sway. Every form looks along the axis, so only
+        // the eye's height and distance and the target's distance differ.
+        var ey = 0f
+        var ez = 0f
+        var tz = 0f
+        for (f in formWeight.indices) {
+            val w = formWeight[f]
+            if (w < 1e-4f) continue
+            when (f) {
+                TUNNEL -> {
+                    ez += 240f * w
+                    tz += -200f * w
+                }
+                FAN -> {
+                    ey += 60f * w
+                    ez += 300f * w
+                    tz += -100f * w
+                }
+                else -> {
+                    ey += EYE_Y * w
+                    ez += EYE_Z * w
+                }
+            }
+        }
         val sway = present.value * state.motionScale
         eyeX = SWAY_X * sin(gestures.slowCyclePhase * TAU) * sway
-        eyeY = EYE_Y + SWAY_Y * sin(2f * gestures.slowCyclePhase * TAU) * sway
+        eyeY = ey + SWAY_Y * sin(2f * gestures.slowCyclePhase * TAU) * sway
+        eyeZ = ez
+        targetZ = tz
         if (!ready) {
             // The Line constructor: the vertices start on the first target.
             analyser.update(state.frame)
@@ -369,6 +563,14 @@ internal class Lines : Visualization {
         roadY.fill(0f)
         eyeX = 0f
         eyeY = EYE_Y
+        eyeZ = EYE_Z
+        targetZ = 0f
+        formTo = FLAT
+        blend.fill(0f)
+        blend[FLAT] = 1f
+        updateWeights()
+        formRandom = Random(SEED + 1)
+        pathsDrawn = 0
         lineColour.fill(Color.White)
     }
 
@@ -474,6 +676,42 @@ internal class Lines : Visualization {
         const val AMPLITUDE = 0.1f
         const val PERSISTENCE = 0.2f
         const val SEED = 20_150_617L
+
+        /** The names of the forms, in the order of the indices below. */
+        val FORMS = listOf("Flat", "Tunnel", "Mirror", "Fan")
+
+        /** The index of the port's picture. */
+        const val FLAT = 0
+
+        /** The index of the form where the lines wrap round the viewer. */
+        const val TUNNEL = 1
+
+        /** The index of the form with a reflection below. */
+        const val MIRROR = 2
+
+        /** The index of the form where the lines radiate from a far point. */
+        const val FAN = 3
+
+        /** A morph takes this many cycles. */
+        const val MORPH_CYCLES = 4f
+
+        /** The water line of the Mirror form, just under the lowest line's floor. */
+        const val MIRROR_Y = -36f
+
+        /** The Tunnel's radius, in world units. */
+        const val TUNNEL_R = 60f
+
+        /** The Fan's whole angle, in radians. */
+        const val FAN_SPREAD = TAU / 3f
+
+        /** How long each line of the Fan is, from its far point toward the viewer. */
+        const val FAN_LENGTH = 700f
+
+        /** The height of the Fan's lines at rest. */
+        const val FAN_Y = -10f
+
+        /** The z of the Fan's far point. */
+        const val FAN_Z = -400f
 
         /** The z of line 21, the nearest line, which the road never moves. */
         const val Z_NEAR = 100f

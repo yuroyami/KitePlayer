@@ -10,7 +10,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 import io.github.yuroyami.kiteplayer.audioviz.viz.DisplayStep
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
+import io.github.yuroyami.kiteplayer.audioviz.viz.Scene3D
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
@@ -67,7 +69,7 @@ import kotlin.random.Random
  *   resolution, where the page stretched a canvas of CSS pixels.
  * - A seeded generator places the stars instead of `Math.random()`, so a render repeats.
  * - A reduced-motion setting slows the spin and the star flight.
- * - The corners follow the page's `mentalFactor` at [FACTOR_SPEED] at most. The page jumps from 2 to
+ * - The corners follow the page's `mentalFactor` at `FACTOR_SPEED` at most. The page jumps from 2 to
  *   -20 in one read where the tangent passes its pole, which throws every tile off the screen for a
  *   frame. On a drum loop those jumps brought the picture to six flashes in its busiest second,
  *   against a limit of three.
@@ -89,6 +91,12 @@ import kotlin.random.Random
  * the tiles are pulled in and thrown through the middle. The hive grows a ring on a birth and falls back
  * to two on a breakdown, and a kick opens its loud cells. Grey star streaks rush outward
  * behind it, and the edges glow in the palette's colour with the volume.
+ *
+ * The hive has four forms. Disc is the flat page. Dome lifts the middle toward the viewer on a sphere
+ * and tilts the camera. Tunnel is a cone where each ring shows the spectrum one beat further back than
+ * the ring inside it, the middle deepest. Shatter flies the tiles apart on a drop, and they return
+ * within a cycle. The evolution pacer takes turns through Disc, Dome and Tunnel over two cycles each,
+ * as weights, so a morph never jumps. The form on screen is published through [forms].
  */
 internal class Honeycomb : Visualization {
 
@@ -121,7 +129,7 @@ internal class Honeycomb : Visualization {
         private set
 
     /**
-     * The page's [mentalFactor] as the corners use it this frame: followed at [FACTOR_SPEED] at most,
+     * The page's `mentalFactor` as the corners use it this frame: followed at `FACTOR_SPEED` at most,
      * so a crossing of the tangent's pole moves the tiles rather than blanking them.
      */
     internal var factor: Double = 0.0
@@ -138,6 +146,34 @@ internal class Honeycomb : Visualization {
     private val gestures = Gestures()
     private val evolution = Evolution()
     private val recipe = Genes(SEED)
+
+    // The 3D lens and the density of this frame. The hive is laid out in dp and projected in canvas pixels.
+    private val scene = Scene3D()
+    private var pixelDensity = 1f
+
+    // The form the pacer is morphing toward.
+    private var formTo = DISC
+
+    // How far each blended form has come, 0 to 1. Every one moves toward its target, so a morph never jumps.
+    private val blend = FloatArray(BLENDED).also { it[DISC] = 1f }
+
+    // The eased, normalized weights of this frame. They add up to 1.
+    private val formWeight = FloatArray(BLENDED)
+
+    // Picks the next form, apart from the star generator.
+    private var formRandom = Random(SEED + 1)
+
+    // How far the hive is shattered, 1 at a drop and gone within a cycle.
+    private var shatter = 0f
+    internal val shatterValue: Float get() = shatter
+
+    // The last few seconds of the spectrum, in heard seconds, for the Tunnel's rings.
+    private val history = History(HISTORY_ROWS)
+    private var heardSeconds = 0.0
+
+    init {
+        updateWeights()
+    }
 
     // The hive turns one notch, an outer ring tile, on each beat, and a form change flips the direction.
     private var turnTarget = 0f
@@ -178,6 +214,19 @@ internal class Honeycomb : Visualization {
     private val ring = IntArray(TILES)
     private val position = FloatArray(TILES)
 
+    // Where each tile sits round its ring, 0 to 1 from the positive x axis, and the same folded to 0 to 1 and back.
+    // In the Tunnel each ring is one past spectrum: the bass at the right, the treble at the left, mirrored top and bottom.
+    private val tileAngle = FloatArray(TILES)
+    private val spoke = FloatArray(TILES)
+
+    // A fixed random number of each tile, to scatter it in the Shatter form. Every resize gives the same values.
+    private val tileRandom = FloatArray(TILES)
+
+    // The hive's size in dp, set when the tiles are placed: the farthest corner from the middle, and the ring spacing.
+    private var outerRadius = 1f
+    private var domeRim = 0f
+    private var ringStep = 1f
+
     /** This frame's `val` of each tile. */
     private val shown = DoubleArray(TILES)
 
@@ -214,38 +263,44 @@ internal class Honeycomb : Visualization {
 
     private val path = Path()
 
-    // The pushed corners of the tile that tracePath last traced.
+    // The corners of the tile that tracePath last traced: in dp from the middle after the push, the turn and the
+    // shatter, and then in canvas pixels after the projection.
+    private val pageX = FloatArray(SIDES)
+    private val pageY = FloatArray(SIDES)
     private val cornerX = FloatArray(SIDES)
     private val cornerY = FloatArray(SIDES)
     private val hole = Path()
 
-    /** The canvas's 1 px line, with its default miter limit of 10. */
-    private val hairline = Stroke(width = 1f, miter = 10f)
+    /** The canvas's 1 px line, with its default miter limit of 10. It is `density` pixels wide in pixel space. */
+    private var hairline = Stroke(width = 1f, miter = 10f)
+    private var hairlineDensity = 1f
+
+    /** The form on screen. */
+    override val forms: FormReadout
+        get() = FormReadout(if (shatter > 0.5f) FORMS[SHATTER] else FORMS[strongestForm()], evolution.morphs, evolution.births)
 
     override fun DrawScope.draw(state: VizRenderState) {
         advance(state, size, density)
         val light = state.lightScale.coerceIn(0f, 1f)
         drawBackground(light, state.palette, recipe.walk)
-        withPage(turned = false) { drawStars(light) }
+        withPage { drawStars(light) }
     }
 
     override fun DrawScope.drawFront(state: VizRenderState) {
         advance(state, size, density)
         val light = state.lightScale.coerceIn(0f, 1f)
-        withPage(turned = true) {
-            drawTiles(light, state.palette, recipe.walk)
-            drawEdges(light)
-        }
+        // The tiles are projected to canvas pixels, so they are drawn with no transform.
+        drawTiles(light, state.palette, recipe.walk)
+        drawEdges(light)
     }
 
-    /** The page's translated context: dp from the middle of the screen, turned when [turned] is true. */
-    private inline fun DrawScope.withPage(turned: Boolean, block: DrawScope.() -> Unit) {
+    /** The page's translated context: dp from the middle of the screen. The stars use it. */
+    private inline fun DrawScope.withPage(block: DrawScope.() -> Unit) {
         val middleX = size.width / 2f
         val middleY = size.height / 2f
         val dp = density
         withTransform({
             translate(middleX, middleY)
-            if (turned) rotate(degrees = turn * (180f / PI.toFloat()), pivot = Offset.Zero)
             scale(dp, dp, Offset.Zero)
         }, block)
     }
@@ -257,6 +312,19 @@ internal class Honeycomb : Visualization {
         recipe.advance(gestures, if (state.frame.held) 0f else dt, evolution.morph)
         if (evolution.morph) onMorph()
         val frame = state.frame
+        val heard = dt.toDouble() * frame.audible
+        val heardNow = heard.toFloat()
+        // The evolution pacer picks the next form. The weights turn from where they are, so a morph never jumps.
+        if (evolution.morph) formTo = (formTo + 1 + formRandom.nextInt(BLENDED - 1)) % BLENDED
+        val rate = heardNow / (MORPH_CYCLES * gestures.cycleSeconds.coerceAtLeast(0.5f))
+        for (f in blend.indices) {
+            val target = if (f == formTo) 1f else 0f
+            blend[f] += (target - blend[f]).coerceIn(-rate, rate)
+        }
+        updateWeights()
+        // A drop shatters the hive, and the pieces fly back within a cycle of heard time.
+        if (evolution.bloom) shatter = 1f
+        shatter = max(0f, shatter - heardNow / gestures.cycleSeconds.coerceAtLeast(0.5f))
         val quarter = floor(gestures.cyclePhase * 4f).toInt()
         if (gestures.pulseUsable && lastQuarter >= 0 && quarter != lastQuarter && frame.audible > 0.5f) {
             turnTarget += turnSign * NOTCH * state.motionScale
@@ -264,7 +332,6 @@ internal class Honeycomb : Visualization {
         lastQuarter = quarter
         // Without a beat the hive turns slowly with the drive, as the page turned.
         if (!gestures.pulseUsable) turnTarget += turnSign * state.paced(TURN_RATE) * dt * state.motionScale
-        val heard = dt.toDouble() * frame.audible
         if (evolution.birth || gestures.surge) grow()
         if (evolution.collapse) collapse()
         // The shown rings follow the target over about a cycle of heard time.
@@ -275,6 +342,16 @@ internal class Honeycomb : Visualization {
         val pageWidth = floor(canvas.width / density + 0.5)
         val pageHeight = floor(canvas.height / density + 0.5)
         if (pageWidth != width || pageHeight != height) resize(pageWidth, pageHeight)
+        pixelDensity = density
+        if (hairlineDensity != density) {
+            hairline = Stroke(width = density, miter = 10f)
+            hairlineDensity = density
+        }
+        scene.lens(canvas, FOV, NEAR, FAR)
+        // The eye sits where a flat hive at z = 0 projects one to one: a page dp is a canvas pixel times density.
+        val distance = (canvas.height / 2f) / tan(FOV / 2f * PI.toFloat() / 180f)
+        val tilt = formWeight[DOME] * TILT
+        scene.camera(0f, distance * sin(tilt), distance * cos(tilt), 0f, 0f, 0f)
         turn += (turnTarget - turn) * (1f - exp(-heard.toFloat() / NOTCH_SECONDS))
         owed += heard
         var steps = 0
@@ -289,7 +366,9 @@ internal class Honeycomb : Visualization {
         // The page's per-frame steps, for a page drawing 60 frames a second.
         val frames = heard * 60.0
         moveStars(frames, state.motionScale.toDouble())
-        updateTiles(frames, frame)
+        heardSeconds += heard
+        history.push(frame.bandsRel, heardSeconds)
+        updateTiles(frames, frame, formWeight[TUNNEL])
     }
 
     /** What the page's two 20 ms timers and its 100 ms timer do. */
@@ -333,6 +412,16 @@ internal class Honeycomb : Visualization {
                 add(-layer, -y, layer)
             }
         }
+        ringStep = jsRound(cos(PI / 6) * tileSize * 2).toFloat()
+        var farthest = 0.0
+        for (corner in 0 until TILES * SIDES) {
+            farthest = max(farthest, sqrt(vertexX[corner] * vertexX[corner] + vertexY[corner] * vertexY[corner]))
+        }
+        outerRadius = farthest.toFloat()
+        val sphere = DOME_R * outerRadius
+        domeRim = sqrt(sphere * sphere - outerRadius * outerRadius)
+        val dice = Random(SEED + 2)
+        for (tile in 0 until TILES) tileRandom[tile] = dice.nextFloat()
     }
 
     /** The Polygon constructor: a centre on the 60 degree grid, and six corners from 90 degrees round. */
@@ -348,6 +437,8 @@ internal class Honeycomb : Visualization {
         ring[num] = layer
         // Where the tile sits round its ring, 0 to 1 from the positive x axis; the centre reads 0.
         val angle = if (layer == 0) 0f else ((atan2(centreY, centreX) / TAU.toDouble()).toFloat() + 1f) % 1f
+        tileAngle[num] = angle
+        spoke[num] = if (angle <= 0.5f) angle * 2f else (1f - angle) * 2f
         // The tile's place in the spectrum: the centre reads the bass, the outer ring the treble.
         position[num] = (layer + angle) / 7f
         high[num] = 0.0
@@ -425,10 +516,13 @@ internal class Honeycomb : Visualization {
     }
 
     /** Polygon.drawPolygon's reading and peak hold for every tile, then the highlight pass's fade. */
-    private fun updateTiles(frames: Double, frame: SpectrumFrame) {
+    private fun updateTiles(frames: Double, frame: SpectrumFrame, tunnelShare: Float) {
         for (num in 0 until TILES) {
             // Each tile reads the live spectrum at its place, on the page's 0 to 255 scale.
-            val rel = frame.bandsRel.sampleAt(position[num]).toDouble()
+            val live = frame.bandsRel.sampleAt(position[num])
+            // In the Tunnel ring r shows the spectrum r beats back. Ring 0 reads the newest row, the live frame.
+            val past = if (tunnelShare > 0f) history.sample(history.row(ring[num] * gestures.beatSeconds), spoke[num]) else live
+            val rel = (live + (past - live) * tunnelShare).toDouble()
             var value = rel * rel * 255
             if (num > 42) value *= 1.1
             if (value > high[num]) {
@@ -560,11 +654,14 @@ internal class Honeycomb : Visualization {
 
     /**
      * The tile's outline with every corner pushed along its own line from the middle
-     * (calculateOffset). False when the push is not a number, a tile whose peak has fallen below
-     * zero, where the canvas ignores every point and draws nothing.
+     * (calculateOffset), turned with the hive, scattered by the Shatter form and projected to canvas
+     * pixels. False when the push is not a number, a tile whose peak has fallen below zero, where the
+     * canvas ignores every point and draws nothing, or when a corner cannot be projected.
      */
     private fun tracePath(num: Int): Boolean {
         path.reset()
+        val c = cos(turn)
+        val s = sin(turn)
         for (corner in 0 until SIDES) {
             val x = vertexX[num * SIDES + corner]
             val y = vertexY[num * SIDES + corner]
@@ -580,9 +677,49 @@ internal class Honeycomb : Visualization {
             }
             val px = (x + offsetX).toFloat()
             val py = (y + offsetY).toFloat()
-            cornerX[corner] = px
-            cornerY[corner] = py
-            if (corner == 0) path.moveTo(px, py) else path.lineTo(px, py)
+            pageX[corner] = px * c - py * s
+            pageY[corner] = px * s + py * c
+        }
+        // Shatter: each tile spins about its own centre and flies outward along the line from the middle.
+        val e = shatter * shatter
+        if (e > 0f) {
+            var cx = 0f
+            var cy = 0f
+            for (corner in 0 until SIDES) {
+                cx += pageX[corner]
+                cy += pageY[corner]
+            }
+            cx /= SIDES
+            cy /= SIDES
+            val len = sqrt(cx * cx + cy * cy)
+            val ux = if (len < 1e-3f) 0f else cx / len
+            val uy = if (len < 1e-3f) 0f else cy / len
+            val spin = e * (2f * tileRandom[num] - 1f) * SHATTER_SPIN
+            val reach = e * SHATTER_REACH * len * (0.5f + 0.5f * tileRandom[num])
+            val sinSpin = sin(spin)
+            val cosSpin = cos(spin)
+            for (corner in 0 until SIDES) {
+                val dx = pageX[corner] - cx
+                val dy = pageY[corner] - cy
+                pageX[corner] = cx + dx * cosSpin - dy * sinSpin + ux * reach
+                pageY[corner] = cy + dx * sinSpin + dy * cosSpin + uy * reach
+            }
+        }
+        // Depth, then the projection. World y points up and page y points down, hence the minus.
+        val sphere = DOME_R * outerRadius
+        for (corner in 0 until SIDES) {
+            val x = pageX[corner]
+            val y = pageY[corner]
+            val r = sqrt(x * x + y * y)
+            // Dome: the rim stays at z = 0 and the middle rises toward the eye on a sphere of radius DOME_R times the hive.
+            val dome = sqrt(max(sphere * sphere - r * r, 0f)) - domeRim
+            // Tunnel: a cone that drops one TUNNEL_DEPTH for each ring inward, the middle deepest, the rim at z = 0.
+            val tunnel = -max(outerRadius - r, 0f) / ringStep * TUNNEL_DEPTH
+            val z = formWeight[DOME] * dome + formWeight[TUNNEL] * tunnel
+            if (!scene.project(x * pixelDensity, -y * pixelDensity, z * pixelDensity)) return false
+            cornerX[corner] = scene.screenX
+            cornerY[corner] = scene.screenY
+            if (corner == 0) path.moveTo(cornerX[corner], cornerY[corner]) else path.lineTo(cornerX[corner], cornerY[corner])
         }
         path.close()
         return true
@@ -602,6 +739,71 @@ internal class Honeycomb : Visualization {
 
     /** What a tile shows this frame, on the page's 0 to 255 scale. */
     internal fun tileValue(num: Int): Double = shown[num]
+
+    /** For tests: the tile of [ring] nearest [angle], 0 to 1 from the positive x axis. */
+    internal fun tileNearest(ring: Int, angle: Float): Int {
+        var best = -1
+        var bestDistance = Float.MAX_VALUE
+        for (num in 0 until TILES) {
+            if (this.ring[num] != ring) continue
+            val apart = abs(tileAngle[num] - angle)
+            val distance = min(apart, 1f - apart)
+            if (distance < bestDistance) {
+                bestDistance = distance
+                best = num
+            }
+        }
+        return best
+    }
+
+    /** For tests: the x of corner [corner] of tile [num] in dp from the middle, after the last frame. */
+    internal fun cornerPageX(num: Int, corner: Int): Float = if (tracePath(num)) pageX[corner] else Float.NaN
+
+    /** For tests: the y of corner [corner] of tile [num] in dp from the middle, after the last frame. */
+    internal fun cornerPageY(num: Int, corner: Int): Float = if (tracePath(num)) pageY[corner] else Float.NaN
+
+    /** For tests: the x of corner [corner] of tile [num] on the canvas in pixels, after the last frame. */
+    internal fun cornerScreenX(num: Int, corner: Int): Float = if (tracePath(num)) cornerX[corner] else Float.NaN
+
+    /** For tests: the y of corner [corner] of tile [num] on the canvas in pixels, after the last frame. */
+    internal fun cornerScreenY(num: Int, corner: Int): Float = if (tracePath(num)) cornerY[corner] else Float.NaN
+
+    /** For tests: puts the drawing straight into [form], with no morph. */
+    internal fun jumpTo(form: String) {
+        if (form == FORMS[SHATTER]) {
+            shatter = 1f
+            return
+        }
+        val target = FORMS.indexOf(form)
+        require(target in 0 until BLENDED) { "no form named $form" }
+        formTo = target
+        blend.fill(0f)
+        blend[formTo] = 1f
+        updateWeights()
+    }
+
+    /** Eases each blend into a weight and divides by the sum, so the weights add up to 1. */
+    private fun updateWeights() {
+        var sum = 0f
+        for (f in blend.indices) {
+            val b = blend[f]
+            formWeight[f] = b * b * (3f - 2f * b)
+            sum += formWeight[f]
+        }
+        if (sum <= 0f) {
+            formWeight.fill(0f)
+            formWeight[formTo] = 1f
+        } else {
+            for (f in formWeight.indices) formWeight[f] /= sum
+        }
+    }
+
+    /** The index of the blended form with the largest weight. */
+    private fun strongestForm(): Int {
+        var best = 0
+        for (f in formWeight.indices) if (formWeight[f] > formWeight[best]) best = f
+        return best
+    }
 
     /** A birth or a surge adds a ring to the hive, up to six. */
     internal fun grow() {
@@ -629,6 +831,14 @@ internal class Honeycomb : Visualization {
         turn = 0f
         turnSign = 1f
         lastQuarter = -1
+        formTo = DISC
+        blend.fill(0f)
+        blend[DISC] = 1f
+        updateWeights()
+        formRandom = Random(SEED + 1)
+        shatter = 0f
+        history.clear()
+        heardSeconds = 0.0
         ringsTarget = 3
         ringsShown = 3f
         open = 0f
@@ -676,6 +886,54 @@ internal class Honeycomb : Visualization {
         const val E = 2.7182
 
         const val SEED = 20_131_231L
+
+        /** The forms of the hive, by name. Disc, Dome and Tunnel blend; Shatter is an overlay. */
+        val FORMS = listOf("Disc", "Dome", "Tunnel", "Shatter")
+
+        /** The flat page. */
+        const val DISC = 0
+
+        /** The middle lifted toward the viewer on a sphere, under a tilted camera. */
+        const val DOME = 1
+
+        /** A cone where each ring shows the spectrum one beat further back. */
+        const val TUNNEL = 2
+
+        /** The tiles flown apart by a drop. It is no blended form, so it has no weight. */
+        const val SHATTER = 3
+
+        /** How many forms blend: the first three of [FORMS]. */
+        const val BLENDED = 3
+
+        /** Cycles a morph takes to settle. *Judgement.* */
+        const val MORPH_CYCLES = 2f
+
+        /** The lens's vertical field of view, in degrees. Kite3D's angle is vertical. */
+        const val FOV = 40f
+
+        /** The near plane, in canvas pixels. */
+        const val NEAR = 1f
+
+        /** The far plane, in canvas pixels. */
+        const val FAR = 20_000f
+
+        /** How far the camera tilts up in the full Dome, in radians: 35 degrees. */
+        const val TILT = 35f * PI.toFloat() / 180f
+
+        /** The Dome's sphere has this radius, as a multiple of the hive's radius. *Judgement.* */
+        const val DOME_R = 1.2f
+
+        /** How far the Tunnel drops for each ring inward, in dp. *Judgement.* */
+        const val TUNNEL_DEPTH = 120f
+
+        /** How far a shattered tile flies, as a share of its distance from the middle. *Judgement.* */
+        const val SHATTER_REACH = 0.9f
+
+        /** The most a shattered tile spins, in radians: 60 degrees. *Judgement.* */
+        const val SHATTER_SPIN = 60f * PI.toFloat() / 180f
+
+        /** How many spectrum rows the Tunnel keeps: about four seconds. */
+        const val HISTORY_ROWS = 240
 
         /** The analyser's time constant: smoothing 0.8 on every 20 ms read. */
         val ANALYSER_SECONDS: Float = (TICK_SECONDS / -ln(0.8)).toFloat()

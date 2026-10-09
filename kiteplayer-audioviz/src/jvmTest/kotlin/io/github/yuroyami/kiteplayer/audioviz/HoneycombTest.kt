@@ -308,6 +308,109 @@ class HoneycombTest {
         assertTrue(abs(kickedLuma - stillLuma) > 0.01f, "the open cells light the middle: $kickedLuma against $stillLuma")
     }
 
+    @Test
+    fun theDiscProjectsAsTheFlatLayout() {
+        val honeycomb = renderTwoSilentFramesIn("Disc", 960, 540)
+        println(
+            "disc, tile 0 corner 0: page (${honeycomb.cornerPageX(0, 0)}, ${honeycomb.cornerPageY(0, 0)}) " +
+                "screen (${honeycomb.cornerScreenX(0, 0)}, ${honeycomb.cornerScreenY(0, 0)})",
+        )
+        for (num in listOf(0, 126)) {
+            for (corner in 0 until Honeycomb.SIDES) {
+                val pageX = honeycomb.cornerPageX(num, corner)
+                val pageY = honeycomb.cornerPageY(num, corner)
+                val screenX = honeycomb.cornerScreenX(num, corner)
+                val screenY = honeycomb.cornerScreenY(num, corner)
+                assertTrue(abs(screenX - (480f + pageX)) < 0.5f, "tile $num corner $corner: screen x $screenX against 480 + page x $pageX")
+                assertTrue(abs(screenY - (270f + pageY)) < 0.5f, "tile $num corner $corner: screen y $screenY against 270 + page y $pageY")
+            }
+        }
+    }
+
+    @Test
+    fun theFormStartsAsADiscAndChangesOnTheDrumLoop() {
+        assertEquals("Disc", Honeycomb().forms.form)
+        val honeycomb = Honeycomb()
+        RenderHarness.forEachFrame(honeycomb, 64, 36, 7200, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ -> }
+        val forms = honeycomb.forms
+        println("drum loop, two minutes: ${forms.morphs} morphs, ${forms.births} births, ends on ${forms.form}")
+        assertTrue(forms.morphs >= 3, "the drum loop should morph at least three times, had ${forms.morphs}")
+        assertTrue(forms.births >= 1, "the drum loop should give at least one birth, had ${forms.births}")
+        assertTrue(forms.form in Honeycomb.FORMS, "the form should be one of the four, was ${forms.form}")
+    }
+
+    @Test
+    fun theDomeLiftsTheCentreTowardTheViewer() {
+        val disc = renderTwoSilentFramesIn("Disc", 960, 540)
+        val dome = renderTwoSilentFramesIn("Dome", 960, 540)
+        val discWidth = widthOf(disc, 0)
+        val domeWidth = widthOf(dome, 0)
+        val discRim = widthOf(disc, 126)
+        val domeRim = widthOf(dome, 126)
+        val centreGrowth = domeWidth / discWidth
+        val rimGrowth = domeRim / discRim
+        println("centre tile width: disc $discWidth, dome $domeWidth; rim tile 126 width: disc $discRim, dome $domeRim")
+        assertTrue(domeWidth >= 1.05f * discWidth, "the middle tile should be nearer the eye: width $domeWidth against $discWidth")
+        // The rim's corners sit on the sphere too and the tilt moves them, so the rim's width changes as well, 66 to 43
+        // on this canvas. The dome shows as the middle growing far more than the rim.
+        assertTrue(centreGrowth >= 1.2f * rimGrowth, "the middle should grow far more than the rim: $centreGrowth against $rimGrowth")
+    }
+
+    @Test
+    fun theTunnelShowsThePastInItsOuterRings() {
+        val honeycomb = Honeycomb()
+        RenderHarness.forEachFrameOf(
+            honeycomb, 160, 90, 300, VizPalette.Prism,
+            source = { step -> InjectedFrames.toneFrame(step, lowBand = step < 180) },
+            beforeDraw = { honeycomb.jumpTo("Tunnel") },
+        ) { _, _ -> }
+        // The low tone ran from step 60 to 179, then the high tone. Ring 3 reads about three beats back.
+        val tile = honeycomb.tileNearest(3, 0f)
+        val ringValue = honeycomb.tileValue(tile)
+        val centreValue = honeycomb.tileValue(0)
+        println("tunnel after 300 steps: ring 3 tile $tile shows $ringValue, centre shows $centreValue, ring 3 beat time ${3 * 0.78f} s")
+        assertTrue(ringValue > 150.0, "ring 3 should still show the low tone from three beats back, had $ringValue")
+        assertTrue(centreValue < 60.0, "the centre should show the live high tone at the bass position, had $centreValue")
+    }
+
+    @Test
+    fun aDropShattersTheHiveAndItReassemblesWithinACycle() {
+        val honeycomb = Honeycomb()
+        val shatter = FloatArray(400)
+        var formAtTen = ""
+        RenderHarness.forEachFrameOf(
+            honeycomb, 96, 54, 400, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Drop, step) },
+        ) { _, step ->
+            shatter[step] = honeycomb.shatterValue
+            if (step == InjectedFrames.STRUCTURE_STEP + 10) formAtTen = honeycomb.forms.form
+        }
+        val at = InjectedFrames.STRUCTURE_STEP
+        val peak = (at..at + 2).maxOf { shatter[it] }
+        println("drop: shatter peak $peak, 240 steps later ${shatter[at + 240]}, form ten steps after the drop $formAtTen")
+        assertTrue(peak > 0.8f, "a drop should shatter the hive, peak $peak")
+        assertTrue(shatter[at + 240] < 0.1f, "the hive should be whole within a cycle, had ${shatter[at + 240]}")
+        assertEquals("Shatter", formAtTen)
+    }
+
+    /** A fresh drawing held in [form] for two silent frames of [width] by [height], so the lens and the weights are settled. */
+    private fun renderTwoSilentFramesIn(form: String, width: Int, height: Int): Honeycomb {
+        val honeycomb = Honeycomb()
+        val silent = RenderHarness.player(RenderHarness.Song.Silence, 2f)
+        RenderHarness.forEachFrameOf(
+            honeycomb, width, height, 2, VizPalette.Prism,
+            source = { silent.next(1f / 60f) },
+            beforeDraw = { honeycomb.jumpTo(form) },
+        ) { _, _ -> }
+        return honeycomb
+    }
+
+    /** The width on the canvas of tile [num], from its corners. */
+    private fun widthOf(honeycomb: Honeycomb, num: Int): Float {
+        val xs = (0 until Honeycomb.SIDES).map { honeycomb.cornerScreenX(num, it) }
+        return xs.max() - xs.min()
+    }
+
     /** The baseline with the lowest eight bands raised, so the centre tiles are loud. */
     private fun loudCentre(base: SpectrumFrame): SpectrumFrame {
         val bands = base.bands.copyOf().also { for (b in 0 until 8) it[b] = 0.9f }

@@ -32,6 +32,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   cells take their colour from the palette with the live waveform as rails along the floor. Its
   form changes with the music (Round, Square, Hex, Chamber, Throat, Fork), published through
   `Visualization.forms`.
+- Lines is a road through sound: the stack bends with the stereo balance and dips with the level,
+  the camera glides on the slow cycle, a kick runs as a wave through the stack, a snare raises the
+  peaks, the fog takes a faint palette hue, and the stack takes the Flat, Tunnel, Mirror and Fan
+  forms at the music's pace. The Flat form at rest is the port's picture.
 
 ## [0.3.0] - 2026-10-09
 

@@ -293,6 +293,22 @@ tube with the bass along the floor and the treble across the ceiling.
   rings. A snare sends a bright ring rushing in from the far point. Hats throw sparks. Light follows
   the level.
 
+## Lines, a road through sound
+
+`Lines` keeps its port: black, 22 hairlines, one frequency band per line drawn bin by bin, the
+knee at byte 100, perspective and fog, flat in silence. Around that it is a road.
+
+- The stack follows a path in depth that bends with the stereo balance and dips with the level,
+  and the camera glides along it on the slow cycle. At rest the camera is the port's, so a song's
+  first seconds look as they did.
+- A kick lifts the two middle lines and the lift runs outward through the stack one line per
+  page frame. A snare raises the peaks for a beat. The ends shimmer as before.
+- The fog takes a faint hue from the palette on quiet far lines. Peaks stay white.
+- The forms are Flat, Tunnel (the lines wrap round the viewer), Mirror (reflected below) and Fan
+  (the lines radiate from a point, the bass lines nearest). The evolution pacer takes turns through
+  them over four cycles, as weights, so a morph never jumps. Lines has no birth. The form is
+  published through `Visualization.forms`.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative

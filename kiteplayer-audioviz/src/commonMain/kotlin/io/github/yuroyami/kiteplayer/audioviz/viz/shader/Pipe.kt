@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.PixelImage
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
@@ -20,6 +21,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
 import io.github.yuroyami.kiteplayer.audioviz.viz.vividColour
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprites
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.hatSpawn
@@ -41,17 +43,20 @@ import kotlin.math.sqrt
  * that start a beat have thicker gaps. A kick flares the nearest rings, squeezes the tube and
  * pushes the flight on for a moment. A snare sends a bright ring rushing in from the far point,
  * hats throw sparks. The tube bends with the stereo balance and the tune, the camera banks into the
- * bend, and past rings curve into view on the inside of a bend. A section cuts to another lane and
- * turns the tube round, square or six-sided over one cycle. A breakdown halves the speed and leaves only
- * the cells' lit edges. On a drop the tube goes to light speed for one cycle and every cell
- * stretches into a streak, and on the next cycle's first beat they snap back.
+ * bend, and past rings curve into view on the inside of a bend. A section glides the camera to
+ * another lane over about a cycle. The cross section turns into a round, square or six-sided tube on
+ * each morph of the evolution pacer, over one cycle. A breakdown halves the speed, narrows the tube to
+ * a throat and leaves only the cells' lit edges. On a drop the tube opens to a chamber twice as wide
+ * and goes to light speed for one cycle: every cell stretches into a streak, and on the next cycle's
+ * first beat they snap back. A birth forks the far point into a second branch for one cycle, and the
+ * lane glides to one branch. The form on screen is published through `forms`.
  */
 internal class Pipe : ShaderPreset(
     source = SOURCE,
     name = "Pipe",
     bucket = VizEnergy.Mid,
     seed = 7f,
-    // The camera holds still; the one camera move is the lane cut at a section, done here.
+    // The camera holds still; the one camera move is the lane glide at a section, done here.
     kit = Kit(701L, detailKind = null,
         camera = Camera2D(wander = 0f, punch = 0f, roll = 0f, shake = 0f, cuts = false, seed = 701)),
 ) {
@@ -65,6 +70,7 @@ internal class Pipe : ShaderPreset(
         VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.3f)),
         VizDrive(VizDriver.BodyHit, VizProperty.Brightness, VizCurve.Discrete, VizResponse.lifetime(0.5f)),
         VizDrive(VizDriver.Timbre, VizProperty.Shape),
+        // A section glides the camera to another lane.
         VizDrive(VizDriver.Section, VizProperty.Camera, VizCurve.Discrete, VizResponse.envelope(0.5f)),
         VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f)),
         // A breakdown darkens every cell's body and leaves its lit edges.
@@ -113,10 +119,36 @@ internal class Pipe : ShaderPreset(
         private set
     private var quiet = 0f
 
-    // The section's two changes: the lane the camera flies in and the shape of the tube.
+    /** The cycle count the chamber lasts to after a drop, or -1 when there is none. */
+    private var chamberUntil = -1
+    /** One while the tube is a chamber after a drop, easing in fast and out slowly. */
+    private val chamber = Envelope(attackPerSecond = 8f, releasePerSecond = 3f)
+
+    /** The tube's radius against its usual one: a chamber doubles it and a throat takes it to 0.6. */
+    internal val radiusFactor: Float
+        get() = (1f + CHAMBER_WIDEN * chamber.value) * (1f - THROAT_NARROW * calm)
+
+    /** One when a birth forks the far point, falling to zero over a cycle. */
+    private var fork = 0f
+    internal val forkValue: Float get() = fork
+    /** Where the second branch's far point sits against the first, in half screen heights. */
+    private var forkX = 0f
+    private var forkY = 0f
+    /** The last frame's motion scale, so a fork made between frames is as small as a section's lane. */
+    private var motionLast = 1f
+    /** The cycle length in seconds, so a test can time the fork. */
+    internal val cycleSecondsValue: Float get() = gestures.cycleSeconds
+
+    // The lane the camera flies in glides to its target, and the shape of the tube turns on each morph.
+    private val laneSlewX = Slew(maxPerSecond = 0.4f)
+    private val laneSlewY = Slew(maxPerSecond = 0.4f)
     internal var laneX = 0f
         private set
     internal var laneY = 0f
+        private set
+    internal var laneTargetX = 0f
+        private set
+    internal var laneTargetY = 0f
         private set
     private var shapeFrom = 0
     internal var shapeTo = 0
@@ -142,8 +174,9 @@ internal class Pipe : ShaderPreset(
         val dt = state.deltaSeconds
         val step = state.stepSeconds
         val frame = state.frame
-        // Reduced motion keeps the cut to another lane and the rush of light speed, but small.
+        // Reduced motion keeps the glide to another lane and the rush of light speed, but small.
         val motion = state.motionScale.coerceIn(0f, 1f)
+        motionLast = motion
 
         // Where the music is, in sixteenth notes: sixteen to a cycle of four pulses. The flight
         // moves only while music is heard, so a silence or a pause holds the tube where it is.
@@ -162,6 +195,14 @@ internal class Pipe : ShaderPreset(
         val lightSpeed = lightSpeedUntil >= 0 && gestures.cycles < lightSpeedUntil
         if (!lightSpeed) lightSpeedUntil = -1
         streak = if (lightSpeed) motion else 0f
+
+        // A drop also opens the tube to a chamber, for the same span as the light speed.
+        if (evolution.bloom) {
+            chamberUntil = gestures.cycles + if (gestures.cyclePhase > 0.5f) 2 else 1
+        }
+        val chambered = chamberUntil >= 0 && gestures.cycles < chamberUntil
+        if (!chambered) chamberUntil = -1
+        chamber.advance(if (chambered) 1f else 0f, dt)
 
         // A kick flares the nearest rings at once and squeezes the tube, which springs back.
         flare.kick(gestures.kick * 5f)
@@ -194,19 +235,24 @@ internal class Pipe : ShaderPreset(
             if (snareAge > gestures.beatSeconds) snareAge = -1f
         }
 
-        // A section: one camera move, a cut to another lane, and on the same beat the tube starts
-        // turning into another shape over one cycle.
-        if (gestures.turn) {
-            val angle = random.next() * TAU
-            val reach = 0.15f + 0.3f * random.next()
-            laneX = reach * cos(angle) * motion
-            laneY = reach * sin(angle) * motion
+        // A section is the one camera move: the camera glides to another lane over about a cycle,
+        // with no cut.
+        if (gestures.turn) glideToAnotherLane()
+        laneX = laneSlewX.advance(laneTargetX, dt)
+        laneY = laneSlewY.advance(laneTargetY, dt)
+
+        // The cross section turns into another shape on each morph of the evolution pacer, over one cycle.
+        if (evolution.morph) {
             shapeFrom = shapeTo
             shapeTo = (shapeTo + 1 + (random.next() * 2f).toInt().coerceAtMost(1)) % SHAPES
             shapeMorph = 0f
             shapeSeconds = gestures.cycleSeconds.coerceAtLeast(0.5f)
         }
         if (shapeMorph < 1f) shapeMorph = (shapeMorph + step / shapeSeconds).coerceAtMost(1f)
+
+        // A birth forks the far point into a second branch that fades over one cycle.
+        if (evolution.birth) fork()
+        if (fork > 0f) fork = (fork - step / gestures.cycleSeconds.coerceAtLeast(0.5f)).coerceAtLeast(0f)
 
         // The bend follows the stereo balance and the tune: a right-heavy mix and bright music curve the
         // tube right, and bright music lifts the far point. A gene sets how far it goes.
@@ -225,6 +271,38 @@ internal class Pipe : ShaderPreset(
 
         quiet += ((1f - frame.audible) - quiet) * (1f - exp(-dt / 0.5f))
     }
+
+    /** Picks a lane the camera glides to, as far out as the last frame's motion scale allows. */
+    private fun glideToAnotherLane() {
+        val angle = random.next() * TAU
+        val reach = 0.15f + 0.3f * random.next()
+        laneTargetX = reach * cos(angle) * motionLast
+        laneTargetY = reach * sin(angle) * motionLast
+    }
+
+    /** Forks the far point into a second branch for one cycle, and the lane glides to a branch. */
+    internal fun fork() {
+        fork = 1f
+        val angle = random.next() * TAU
+        val reach = 0.25f + 0.2f * random.next()
+        forkX = reach * cos(angle) * motionLast
+        forkY = reach * sin(angle) * motionLast
+        glideToAnotherLane()
+    }
+
+    /**
+     * The form on screen. A chamber, a throat and a fork show over the cross section while they last.
+     * A drop is also a birth, so a chamber is named before a fork, or a drop would never read as a chamber.
+     */
+    private val formName: String
+        get() = when {
+            chamber.value > 0.5f -> "Chamber"
+            calm > 0.5f -> "Throat"
+            fork > 0.5f -> "Fork"
+            else -> FORMS[shapeTo]
+        }
+
+    override val forms: FormReadout get() = FormReadout(formName, evolution.morphs, evolution.births)
 
     /** The current bands, folded into the newest ring's cells: the floor holds the bass. */
     private fun cellsFrom(bands: FloatArray, audible: Float, step: Float) {
@@ -278,7 +356,8 @@ internal class Pipe : ShaderPreset(
         weights[shapeTo] += eased
         val squeeze = 1f - 0.05f * flare.value.coerceIn(0f, 1.5f)
         program.uniform("uLane", laneX, laneY, 0f, 0f)
-        program.uniform("uShape", weights[0], weights[1], weights[2], squeeze)
+        program.uniform("uShape", weights[0], weights[1], weights[2], squeeze * radiusFactor)
+        program.uniform("uFork", forkX, forkY, 0f, fork)
         program.uniform("uFlow", flow, streak, calm, quiet)
         val snare = if (snareAge >= 0f) snareAge / gestures.beatSeconds.coerceAtLeast(0.05f) else -1f
         program.uniform("uHits",
@@ -333,8 +412,18 @@ internal class Pipe : ShaderPreset(
         lightSpeedUntil = -1
         streak = 0f
         quiet = 0f
+        laneSlewX.reset()
+        laneSlewY.reset()
         laneX = 0f
         laneY = 0f
+        laneTargetX = 0f
+        laneTargetY = 0f
+        chamberUntil = -1
+        chamber.reset()
+        fork = 0f
+        forkX = 0f
+        forkY = 0f
+        motionLast = 1f
         shapeFrom = 0
         shapeTo = 0
         shapeMorph = 1f
@@ -349,6 +438,14 @@ internal class Pipe : ShaderPreset(
         const val RINGS = 56
         const val CELLS = 16
         const val SHAPES = 3
+
+        /** The forms `forms` names: the three cross sections, then the four moments that override them. */
+        val FORMS = listOf("Round", "Square", "Hex", "Chamber", "Throat", "Fork")
+
+        /** A chamber widens the radius by this much: one doubles it. */
+        private const val CHAMBER_WIDEN = 1f
+        /** A throat narrows the radius by this much: 0.4 takes it to 0.6 of its size. */
+        private const val THROAT_NARROW = 0.4f
 
         /** The most light a cell holds: a new peak burns past full. */
         private const val LIGHT_MAX = 1.25f
@@ -395,6 +492,7 @@ uniform float4 uShape;
 uniform float4 uFlow;
 uniform float4 uHits;
 uniform float2 uBend;
+uniform float4 uFork;
 uniform float3 uRamp0;
 uniform float3 uRamp1;
 uniform float3 uRamp2;
@@ -411,6 +509,8 @@ const float SPACING = 0.26;
 const float FAR_DEPTH = MOUTH + RINGS * SPACING;
 // How far the camera rolls into a full bend, in radians.
 const float BANK = 0.35;
+// How many of the newest rings the fork's second branch shows.
+const float FORK_RINGS = 10.0;
 const float LIGHT_MAX = 1.25;
 
 // How far a ray from the lane runs across the tube before it meets the wall, for the tube's three
@@ -445,19 +545,19 @@ float4 ring(float cell, float index) {
     return uRings.eval(float2(cell + 0.5, index + 0.5));
 }
 
-half4 main(float2 position) {
-    float2 p = centred(position);
+// The tube seen from the camera: the wall's cells and gaps at the screen point q, for a tube whose far
+// point is at bend. A farOnly of one keeps only the newest rings, which fade out toward the viewer.
+float3 tube(float2 q, float2 bend, float farOnly) {
     float pixel = 2.0 / uResolution.y;
-    // The camera banks into the bend. Then the wall hit is found for a straight tube and refined twice
-    // with the axis moved by the depth, so the tube really bends and past rings curve into view.
-    float2 q = rotate(p, -uBend.x * BANK);
+    // The wall hit is found for a straight tube and refined twice with the axis moved by the
+    // depth, so the tube really bends and past rings curve into view.
     float2 d = q;
     float len = max(length(d), 1e-4);
     float2 dir = d / len;
     float reach = wallReach(uLane.xy, dir) * uShape.w;
     float depth = reach / len;
     for (int k = 0; k < 2; k++) {
-        d = q - uBend * (depth / FAR_DEPTH);
+        d = q - bend * (depth / FAR_DEPTH);
         len = max(length(d), 1e-4);
         dir = d / len;
         reach = wallReach(uLane.xy, dir) * uShape.w;
@@ -527,12 +627,28 @@ half4 main(float2 position) {
     // The tube fades into the distance.
     colour *= exp(-max(fromMouth, 0.0) * 0.045);
     if (index >= RINGS || index < 0.0) colour = float3(0.0);
+    colour *= mix(1.0, 1.0 - smoothstep(FORK_RINGS - 3.0, FORK_RINGS, index), farOnly);
+    return colour;
+}
 
-    // The small white point far ahead.
+half4 main(float2 position) {
+    float2 p = centred(position);
+    float pixel = 2.0 / uResolution.y;
+    float gap = max(0.8, uResolution.y / 1080.0);
+    // The camera banks into the bend.
+    float2 q = rotate(p, -uBend.x * BANK);
+    float3 colour = tube(q, uBend, 0.0);
+    // A birth forks the far point: a second branch, bent to its own far point, shows the newest rings.
+    if (uFork.w > 0.0) colour = max(colour, uFork.w * tube(q, uBend + uFork.xy, 1.0));
+
+    // The small white point far ahead, and a second one at the end of the fork.
     float star = length(q - uBend) / pixel;
     float size = 2.5 * gap * uHits.w;
     colour += float3(1.0) * (1.0 - smoothstep(size - 1.0, size + 1.0, star));
     colour += float3(1.0, 0.95, 0.85) * 0.35 * exp(-star / (size * 4.0));
+    float forkStar = length(q - uBend - uFork.xy) / pixel;
+    colour += uFork.w * float3(1.0) * (1.0 - smoothstep(size - 1.0, size + 1.0, forkStar));
+    colour += uFork.w * float3(1.0, 0.95, 0.85) * 0.35 * exp(-forkStar / (size * 4.0));
 
     return half4(clamp(colour * uGlow, 0.0, 1.0), 1.0);
 }

@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
+import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Pipe
@@ -133,22 +134,118 @@ class PipeTest {
     }
 
     @Test
-    fun aSectionCutsTheLaneAndStartsTheNewShapeOnTheSameFrame() {
+    fun aSectionStartsTheLaneGlideAndTheNewShapeOnTheSameFrame() {
         val pipe = Pipe()
-        var cutAt = -1
+        var glideAt = -1
         var morphAt = -1
         var settledAt = -1
+        var laneAfterOneFrame = 0f
         RenderHarness.forEachFrameOf(pipe, 64, 36, 400, VizPalette.Prism,
             source = { step -> InjectedFrames.frame(VizDriver.Section, step) }) { _, step ->
-            if (cutAt < 0 && (pipe.laneX != 0f || pipe.laneY != 0f)) cutAt = step
+            if (glideAt < 0 && (pipe.laneTargetX != 0f || pipe.laneTargetY != 0f)) glideAt = step
             if (morphAt < 0 && pipe.shapeMorph < 1f) morphAt = step
             if (morphAt >= 0 && settledAt < 0 && pipe.shapeMorph >= 1f) settledAt = step
+            if (glideAt >= 0 && step == glideAt + 1) laneAfterOneFrame = abs(pipe.laneX) + abs(pipe.laneY)
         }
-        println("pipe: lane cut at $cutAt, shape change from $morphAt to $settledAt")
-        assertTrue(cutAt >= InjectedFrames.STRUCTURE_STEP, "the lane cut waits for the section, came at $cutAt")
-        assertEquals(cutAt, morphAt, "the lane cut and the shape change start on the same frame")
+        val target = abs(pipe.laneTargetX) + abs(pipe.laneTargetY)
+        println("pipe: lane glide at $glideAt, shape change from $morphAt to $settledAt, " +
+            "lane $laneAfterOneFrame one frame later, target $target, final lane ${abs(pipe.laneX) + abs(pipe.laneY)}")
+        assertTrue(glideAt >= InjectedFrames.STRUCTURE_STEP, "the lane glide waits for the section, came at $glideAt")
+        assertEquals(glideAt, morphAt, "the lane glide and the shape change start on the same frame")
         assertTrue(pipe.shapeTo != 0, "the tube changes to another shape")
         assertTrue(settledAt > morphAt, "the shape turns over a cycle, not at once")
+        assertTrue(laneAfterOneFrame < 0.5f * target,
+            "the lane glides and does not cut: $laneAfterOneFrame one frame after the start, target $target")
+    }
+
+    @Test
+    fun aDropOpensAChamberForAboutACycle() {
+        val pipe = Pipe()
+        val at = InjectedFrames.STRUCTURE_STEP
+        var factorAtTwenty = 0f
+        var formAtTwenty = ""
+        var backAt = -1
+        var factorLate = 0f
+        var formLate = ""
+        RenderHarness.forEachFrameOf(pipe, 64, 36, 600, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Drop, step) }) { _, step ->
+            if (step == at + 20) {
+                factorAtTwenty = pipe.radiusFactor
+                formAtTwenty = pipe.forms.form
+            }
+            if (backAt < 0 && step > at + 60 && pipe.radiusFactor < 1.1f) backAt = step
+            if (step == at + 470) {
+                factorLate = pipe.radiusFactor
+                formLate = pipe.forms.form
+            }
+        }
+        println("pipe: chamber factor $factorAtTwenty as $formAtTwenty at +20, back under 1.1 at +${backAt - at}, " +
+            "factor $factorLate as $formLate at +470")
+        assertTrue(factorAtTwenty >= 1.6f, "a drop widens the tube, had $factorAtTwenty")
+        assertEquals("Chamber", formAtTwenty, "the form while the tube is wide")
+        assertTrue(factorLate < 1.1f, "the chamber closes again, had $factorLate")
+        assertTrue(formLate in listOf("Round", "Square", "Hex"), "the form after the chamber is a cross section, was $formLate")
+    }
+
+    @Test
+    fun aBreakdownNarrowsToAThroat() {
+        val pipe = Pipe()
+        var factor = 1f
+        var form = ""
+        RenderHarness.forEachFrameOf(pipe, 64, 36, 200, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Breakdown, step) }) { _, step ->
+            if (step == InjectedFrames.STRUCTURE_STEP + 60) {
+                factor = pipe.radiusFactor
+                form = pipe.forms.form
+            }
+        }
+        println("pipe: throat factor $factor as $form")
+        assertTrue(factor <= 0.7f, "a breakdown narrows the tube, had $factor")
+        assertEquals("Throat", form, "the form while the tube is narrow")
+    }
+
+    @Test
+    fun theFormIsPublishedAndMorphsOnTheDrumLoop() {
+        val pipe = Pipe()
+        val published: Visualization = pipe
+        assertTrue(published.forms != null, "Pipe publishes its form")
+        assertEquals("Round", pipe.forms.form, "the first form is the round tube")
+        RenderHarness.forEachFrame(pipe, 64, 36, 3600, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ -> }
+        println("pipe: ${pipe.forms.morphs} morphs and ${pipe.forms.births} births in a minute of drums, now ${pipe.forms.form}")
+        assertTrue(pipe.forms.morphs >= 1, "a minute of drums morphs the tube, had ${pipe.forms.morphs}")
+        assertTrue(pipe.forms.form in Pipe.FORMS, "the form is one of the named forms, was ${pipe.forms.form}")
+    }
+
+    @Test
+    fun aBirthForksTheFarPointForOneCycle() {
+        class Fork(var peak: Float = 0f, var firstAt: Int = -1, var cycleFrames: Int = 0, var returned: Boolean = false)
+
+        fun run(frames: Int, forkAt: Int): Fork {
+            val pipe = Pipe()
+            val seen = Fork()
+            RenderHarness.forEachFrame(pipe, 64, 36, frames, VizPalette.Prism, RenderHarness.Song.Lively) { _, step ->
+                seen.peak = maxOf(seen.peak, pipe.forkValue)
+                if (seen.firstAt < 0 && pipe.forkValue > 0.9f) {
+                    seen.firstAt = step
+                    seen.cycleFrames = (pipe.cycleSecondsValue * 60).toInt()
+                }
+                if (seen.firstAt in 0 until step && step <= seen.firstAt + (1.5f * seen.cycleFrames).toInt() &&
+                    pipe.forkValue == 0f) seen.returned = true
+                // This block runs after the draw, so a fork made here shows from the next frame.
+                if (step == forkAt) pipe.fork()
+            }
+            return seen
+        }
+        var how = "born from the music"
+        var seen = run(3600, -1)
+        if (seen.peak <= 0.9f) {
+            how = "made by hand at step 100"
+            seen = run(600, 100)
+        }
+        println("pipe: fork $how, peak ${seen.peak} first above 0.9 at step ${seen.firstAt}, " +
+            "cycle ${seen.cycleFrames} frames, back to zero in 1.5 cycles ${seen.returned}")
+        assertTrue(seen.peak > 0.9f, "a birth forks the far point, peak ${seen.peak}")
+        assertTrue(seen.returned, "the fork is gone within one and a half cycles")
     }
 
     @Test

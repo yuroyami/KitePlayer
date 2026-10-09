@@ -36,6 +36,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the camera glides on the slow cycle, a kick runs as a wave through the stack, a snare raises the
   peaks, the fog takes a faint palette hue, and the stack takes the Flat, Tunnel, Mirror and Fan
   forms at the music's pace. The Flat form at rest is the port's picture.
+- Honeycomb is a hive: its tiles read the whole spectrum by ring and angle in palette colour, it
+  turns in notches on the beat, it grows with births and surges and shrinks on a breakdown, a kick
+  opens its cells, and it takes the Disc, Dome, Tunnel and Shatter forms at the music's pace,
+  published through `Visualization.forms`.
 
 ## [0.3.0] - 2026-10-09
 

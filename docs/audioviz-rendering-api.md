@@ -309,6 +309,27 @@ knee at byte 100, perspective and fog, flat in silence. Around that it is a road
   them over four cycles, as weights, so a morph never jumps. Lines has no birth. The form is
   published through `Visualization.forms`.
 
+## Honeycomb, a hive
+
+`Honeycomb` keeps its port's hexagon tiles that light like a meter, the bass in the middle, the
+peak hold, the white edges, the stars and the glow. It is a hive that grows and turns.
+
+- The tiles read the spectrum bands by ring and angle, the bass at the centre and the treble on
+  the outermost ring the hive shows, so the whole hive lights whatever its size. Each tile's hue
+  comes from the palette by its level, rotated by its ring and walked by the genes; a quiet tile is
+  dim colour, not black.
+- The hive turns in notches, one outer tile's angle per beat while the pulse is usable, and turns
+  the other way at each morph. Without a pulse it turns slowly at the mood's pace. It is still in
+  silence.
+- The hive shows four to six rings: a birth or a surge adds one, a breakdown takes it back to two,
+  over a cycle. A kick opens the loud cells and light pours out. The push through the middle stays,
+  rate limited.
+- The forms are Disc, Dome (the hive bulges toward the viewer under a tilted camera) and Tunnel
+  (the rings sink into depth and each shows the spectrum of one beat earlier than the ring inside
+  it, so the sound steps outward), which the evolution pacer takes turns through over two cycles,
+  as weights, and Shatter, which a drop brings for one cycle. The form is published through
+  `Visualization.forms`.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative

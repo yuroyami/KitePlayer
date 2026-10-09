@@ -92,4 +92,28 @@ internal object Flows {
             out[1] += (spare[1] - out[1]) * mix
         }
     }
+
+    /**
+     * Marble's point vortices: each turns the water round its own centre, fastest at the edge of its
+     * [core], still at the centre and slower further out. The flow has no divergence, so ink keeps
+     * its area as it is combed. The drawing owns [xs], [ys] and [speeds] and moves them; [count] says
+     * how many stir now. A speed is the turning speed at the core's edge in centred units a second.
+     */
+    fun Vortices(count: () -> Int, xs: FloatArray, ys: FloatArray, speeds: FloatArray, core: Float = 0.28f): Flow {
+        val coreSquared = core * core
+        return Flow { x, y, _, out ->
+            var fx = 0f
+            var fy = 0f
+            val n = count().coerceIn(0, minOf(xs.size, ys.size, speeds.size))
+            for (v in 0 until n) {
+                val dx = x - xs[v]
+                val dy = y - ys[v]
+                val scale = speeds[v] * 2f * core / (coreSquared + dx * dx + dy * dy)
+                fx -= dy * scale
+                fy += dx * scale
+            }
+            out[0] = fx
+            out[1] = fy
+        }
+    }
 }

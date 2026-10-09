@@ -1,10 +1,6 @@
 <a name="top"></a>
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="art/readme/kiteplayer-banner-curtains.webp">
-    <source media="(prefers-color-scheme: light)" srcset="art/readme/kiteplayer-banner-matte.webp">
-    <img src="art/readme/kiteplayer-banner-matte.webp" width="100%" alt="KitePlayer. The power of FFmpeg. Built with Kotlin/Native.">
-  </picture>
+  <img src="art/readme/kiteplayer-banner.webp" width="100%" alt="KitePlayer. Media playback. Built with Kotlin/Native. One Kotlin engine with bundled FFmpeg for Android, iOS, macOS, Desktop JVM and Web.">
 </p>
 
 <p align="center">

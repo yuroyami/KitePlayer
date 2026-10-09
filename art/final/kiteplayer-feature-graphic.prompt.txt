@@ -1,30 +1,43 @@
 Use case: ads-marketing.
-Asset type: finished wide feature graphic / README banner for KitePlayer. Create one standalone opaque raster banner, exactly 2:1 landscape composition, high resolution.
+Intent: edit the existing KitePlayer feature graphic supplied as image 1. Image 2 is the existing brand logo, used only as identity reference. Produce a complete finished banner image, landscape 16:9; request native UHD 3840 x 2160 if available.
 
-Input image 1 is the user's unionKt feature graphic: STYLE REFERENCE ONLY. Borrow lightly its dark ink background, sophisticated gradient accents, large confident type and developer-facing code illustration. Do NOT copy its two stacked cards, downward arrow, rainbow top rule, layout details or unionKt identity.
-Input image 2 is KitePlayer's EXISTING BRAND LOGO: preserve its recognizable wind-loaded diamond silhouette, violet left sail, magenta upper sail, plum curved inner sail, coral lower/right sail, and rounded white right-facing play cutout. Transparent pixels outside it should take on the new dark backdrop. Do not redesign the logo into a rounded square or generic play button.
+The user's corrections are decisive: the colorful curtain-like ribbons behind the kite are disliked; make them very subdued. The tagline "Media playback, unleashed." sounds like sales copy and must disappear. Replace vague advertising with the factual capabilities listed below. Preserve the bottom platform row, which the user explicitly likes. Keep the technically correct code.
 
-Creative direction: a premium, visually striking developer-library feature graphic. Very deep midnight navy/ink background, with a subtle diffuse plum atmosphere around the media artwork. Restrained luminous violet, magenta and coral details from the existing KitePlayer brand. Crisp white and soft pale lavender typography. Intentional generous negative space. Elegant and technically credible, clean enough to remain readable at README and social-preview sizes. No orange-heavy unionKt palette: use the KitePlayer logo's own colors.
+Visual edit:
+Keep the current two-column composition, huge solid-white KitePlayer wordmark, attractive existing kite/play logo, near-black canvas, and broad frontal code panel. Shift the entire background to neutral deep charcoal. The folds/ribbons behind the logo are now extremely quiet graphite silk, almost monochrome: approximately 90% less saturation, much less brightness and contrast, no luminous pink, no coral, no blue neon, no purple clouds. At most a barely perceptible smoky violet undertone. Use only a couple of sparse folds in the upper right that fade into black, instead of a bright curtain sweeping all around the frame. No decorative ribbon visible behind the code or text. The ONLY saturated colorful visual object is the actual kite/play logo, whose violet, magenta, plum and coral fields must remain recognizable and unchanged in identity. Keep it fully visible and at a tasteful size. Code syntax can use muted lavender, muted warm coral strings and soft amber numbers. No glow border: the code panel has a very thin low-contrast charcoal/plum edge, simple dark matte interior, and precise monospace typography.
 
-Layout: a calm left text column and a distinctive media-and-code composition on the right. Left title very large, in bold contemporary sans serif; "Kite" in near-white and "Player" in a refined violet-to-magenta-to-coral gradient. A small unboxed widely-spaced eyebrow above the title. Beneath the title, a concise two-line subtitle. Quiet repository URL at the lower left. No additional marketing paragraph.
+Revise the typographic hierarchy to fit useful details without clutter:
+Left column: large "KitePlayer" toward the upper left; beneath it two lines reading "Media playback." and "Built with Kotlin/Native." in strong, clean white type. The product language must feel factual and developer-oriented, not promotional. Beneath this, in moderately sized white sans-serif, "One Kotlin engine. No player wrappers." and under that "No expect/actual glue in your app." Then a well-spaced compact stack of five feature lines in calm pale grey with a faint lavender cast. Use comfortable readable type and enough separation from the main heading. No badges, pills, individual feature cards, icons or bullet dots at the start of the lines. Content must remain clear at the same native output size as image 1. Adjust the wordmark position and scale slightly if needed to make room. Do not turn this into a tiny-type spec sheet.
 
-Right composition: the existing KitePlayer kite/play logo is a recognizable floating centerpiece above a SINGLE refined code panel. Behind the logo, a few broad faint curved wave contours and a very subtle horizontal audio-wave motif suggest playback and sound, with restrained soft depth. The entire logo is visible. The code panel sits beneath it with an understated fine violet/plum edge, dark interior, clean rounded corners, no rainbow border and no fake app toolbar. It should be large enough for truly legible code. Use beautiful real monospace typography and restrained syntax highlighting: lavender for types, coral for the string, muted white for the remaining code. Do not let decorative forms interfere with code or title.
+Right column: retain the kite logo above one clean code panel. Remove "Simple to start. Powerful to control." and replace that heading with the factual "Playback in Kotlin". Keep the code panel broad enough for the longest line, perfectly frontal, with every character readable, no text wrapping. Keep exactly the seven nonblank code lines and the separating blank line.
 
-ALL text must be rendered EXACTLY and ONLY as follows:
-Eyebrow: "VIDEO · AUDIO · SUBTITLES"
-Main title: "KitePlayer"
-Subtitle, two lines:
-"Media playback for"
-"Kotlin Multiplatform."
-Footer URL: "github.com/yuroyami/KitePlayer"
-Small code-panel heading: "Playback in Kotlin"
+Bottom: keep the exact platform line, aligned at lower left, and the exact repository address at lower right. Both safely inside wide margins and clearly legible.
 
-Verbatim code, preserving capitalization, punctuation, question marks, quotes, spaces and these FOUR line breaks:
-val player = KitePlayerPlatform.createOrNull()
-    ?: error("Player unavailable")
-player.open(MediaItem("movie.mp4"))
+Exact and ONLY permitted text on the final image:
+
+KitePlayer
+Media playback.
+Built with Kotlin/Native.
+One Kotlin engine. No player wrappers.
+No expect/actual glue in your app.
+Video · Audio · Styled SSA/ASS subtitles
+HLS · DASH · HDR · Dolby Vision
+Pitch-preserving speed control
+Direct Compose rendering
+FFmpeg bundled · ~10 MB per platform
+Playback in Kotlin
+Android · iOS · macOS · Desktop JVM · Web
+github.com/yuroyami/KitePlayer
+
+Exact code to preserve, including case, parentheses, spaces, decimals, quotes, and the blank fourth line:
+val player = KitePlayer()
+player.open(MediaItem("movie.mkv"))
 player.play()
 
-Keep those four lines in one code panel. They are a real Kotlin usage excerpt, so do not invent any additional methods, line numbers, imports, labels or annotations.
+player.setSpeed(1.25)
+player.seek(90.seconds)
+player.setSubtitleDelay(150.milliseconds)
+val frame = player.captureFrame()
 
-Avoid: copying unionKt composition verbatim, generic glowing tech spheres, glassmorphism dashboards, device mockups, busy chips, unnecessary grid backgrounds, excessive bloom, bevelled text, large UI playback controls, photographic clutter, arbitrary icons, platform logos, claims about speed or certification, KSP/union types, stars/forks, and watermarks. All important content stays safely inside broad canvas margins. The output must read immediately as KitePlayer, with a modest influence from the supplied dark developer banner.
+The ~10 MB line describes bundled FFmpeg per platform, not a hard maximum for a whole app. Do not change the approximation sign to an inequality. Do not add "full", "all formats", "identical everywhere", JavaScript library claims, or extra copy. Do not print these instructions.
+Absolutely no "unleashed", no slogan about power or control, no fireworks or luminous colorful curtains, no new identity, no miniature text, no tilted code, no line numbers, no browser toolbar, no watermarks. This should look like a beautifully designed open-source engineering project, confident in its actual capabilities.

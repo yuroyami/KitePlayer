@@ -27,6 +27,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the mood or the snare's crack, though the picture still answers all three. A hat's flicker lasts
   a quarter second, an onset's ring is stronger, and a section's swap and a breakdown's tide start
   at once instead of easing in.
+- Pipe flies forward: rings are born at the far point and stream toward the viewer, the tube bends
+  with the stereo balance and the centroid, a section glides the lane instead of cutting, and the
+  cells take their colour from the palette with the live waveform as rails along the floor. Its
+  form changes with the music (Round, Square, Hex, Chamber, Throat, Fork), published through
+  `Visualization.forms`.
 
 ## [0.3.0] - 2026-10-09
 

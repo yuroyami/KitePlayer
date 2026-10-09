@@ -85,9 +85,8 @@ geometry and scene weights without crossfading preset pictures.
 The consumed forms have no separate catalogue entries or duplicate implementations. Neon Lo-Fi
 uses its own `Scene` control, whose default is `Auto`. Manual choices still transform continuously.
 
-Pipe has no forms to choose. It is one shader: a tube of lit cells whose rings are past spectra.
-At a section the camera cuts to another lane, and on the same frame the cross section starts to
-turn round, square or six-sided over one cycle.
+Pipe is one shader, a flight forward through a tube of lit cells. Its forms change with the music;
+see "Pipe, a flight forward" below.
 
 Neon Lo-Fi replaces Terrain March. It is a drive at dusk: an indigo sky over a rose horizon, a gold
 to coral sun, black hills and twelve black towers, and terraces with black faces and cyan to
@@ -273,6 +272,26 @@ not a field.
   Vortex, which runs for one cycle on a drop or a surge: the pupil opens, the rings fly inward and
   the petals part into a magenta and a cyan image that slide back together.
 - A kick dilates the pupil, a snare throws shards off the petal tips, and a hat sparkles there.
+
+## Pipe, a flight forward
+
+`Pipe` is one shader: a tube whose wall is lit cells, each ring one past spectrum wrapped round the
+tube with the bass along the floor and the treble across the ceiling.
+
+- Rings are born at the far point, one for every sixteenth note, and stream toward the viewer. The
+  nearest rings are also lit by the live spectrum, in full at the mouth, so a hit is felt at the camera.
+- The tube bends with the stereo balance and the spectral centroid, and the camera banks into the
+  bend. Past rings curve into view on the inside of a bend.
+- The forms are Round, Square and Hex, which the evolution pacer takes turns through, Chamber (a
+  drop doubles the radius for about a cycle at light speed), Throat (a breakdown narrows the tube to
+  half speed and lit edges) and Fork (a birth splits the far point and the lane glides to one
+  branch over a cycle). The form is published through `Visualization.forms`.
+- Cells take their hue from the palette, the cool end at the floor and the warm end at the ceiling,
+  walked by the genes, with a new accent at each section. A new peak still burns white. The live
+  waveform runs as two rails along the floor, bright at the mouth.
+- A kick squeezes the tube and pushes the flight on for a moment, with a small flare on the nearest
+  rings. A snare sends a bright ring rushing in from the far point. Hats throw sparks. Light follows
+  the level.
 
 ## The flash guard
 

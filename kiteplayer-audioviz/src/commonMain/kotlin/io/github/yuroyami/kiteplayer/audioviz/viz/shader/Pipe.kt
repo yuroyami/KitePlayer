@@ -12,15 +12,13 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
-import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
-import io.github.yuroyami.kiteplayer.audioviz.viz.vividColour
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprites
+import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
@@ -35,11 +33,13 @@ import kotlin.math.sqrt
  *
  * Each ring of cells is one past spectrum wrapped round the tube, with the bass along the floor,
  * the treble across the ceiling, and the two sides mirrored. A cell is lit against its band's own
- * recent peak: dark ember below half of it, orange and gold near it, and white on a new peak. A new
- * ring is born at the small white point far ahead, one for every sixteenth note, and the rings
- * stream toward the viewer. The viewer flies into the newest sound, and the rings that pass by are
- * the song's recent past. The nearest ring is also lit by the live spectrum, so a hit is felt at
- * the camera. A gate ring passes at the start of each cycle while the beat is clear, and the rings
+ * recent peak, dark below half of it and bright near it, and white on a new peak. Its hue comes from
+ * the palette, the cool end at the floor and the warm end at the ceiling, walked by the genes, with a
+ * new accent at each section. The live waveform runs as two rails along the floor, bright at the
+ * mouth. A new ring is born at the small white point far ahead, one for every sixteenth note, and the
+ * rings stream toward the viewer. The viewer flies into the newest sound, and the rings that pass by
+ * are the song's recent past. The nearest four rings are also lit by the live spectrum, in full at the mouth, so a hit is
+ * felt at the camera. A gate ring passes at the start of each cycle while the beat is clear, and the rings
  * that start a beat have thicker gaps. A kick flares the nearest rings, squeezes the tube and
  * pushes the flight on for a moment. A snare sends a bright ring rushing in from the far point,
  * hats throw sparks. The tube bends with the stereo balance and the tune, the camera banks into the
@@ -65,6 +65,10 @@ internal class Pipe : ShaderPreset(
         // The wall is the spectrum's recent past; the current bands light the newest ring, at the far
         // point, and the nearest ring.
         VizDrive(VizDriver.Bands, VizProperty.Texture),
+        // The waveform runs as two rails along the floor, and the stereo balance bends the tube.
+        VizDrive(VizDriver.Waveform, VizProperty.Shape),
+        // Light follows the level.
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
         // One ring per sixteenth note of the cycles, which without a pulse run at the mood's rate.
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
         VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.3f)),
@@ -167,8 +171,9 @@ internal class Pipe : ShaderPreset(
     internal val bendYValue: Float get() = bendY.value
     private val debris = Sprites(160, 7_011L)
 
-    private val ramp = Array(3) { FloatArray(3) }
-    private var rampFor: VizPalette? = null
+    // A new accent hue at each section, glided in over a second.
+    private var accentTarget = 0f
+    private val accent = Slew(maxPerSecond = 0.3f)
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
@@ -237,7 +242,11 @@ internal class Pipe : ShaderPreset(
 
         // A section is the one camera move: the camera glides to another lane over about a cycle,
         // with no cut.
-        if (gestures.turn) glideToAnotherLane()
+        if (gestures.turn) {
+            glideToAnotherLane()
+            accentTarget = random.next() * 0.3f
+        }
+        accent.advance(accentTarget, dt)
         laneX = laneSlewX.advance(laneTargetX, dt)
         laneY = laneSlewY.advance(laneTargetY, dt)
 
@@ -338,6 +347,13 @@ internal class Pipe : ShaderPreset(
         beat[0] = if (ringsPassed % 4 == 0L) 1f else 0f
     }
 
+    /**
+     * The whole picture's light. It follows the level, so a quiet passage is a dark tube, with a floor
+     * so a silence still shows the tube as an ember. The flash guard's scale multiplies all of it.
+     */
+    private fun glowOf(state: VizRenderState): Float =
+        (state.lightScale * (GLOW_FLOOR + (1f - GLOW_FLOOR) * lightFor(state.frame.energy))).coerceIn(0f, 1f)
+
     override fun extraUniforms(program: ShaderProgram, state: VizRenderState) {
         for (ring in 0 until RINGS) {
             for (cell in 0 until CELLS) {
@@ -367,32 +383,12 @@ internal class Pipe : ShaderPreset(
             if (snare >= 0f) 0.4f + 0.6f * snare else 0f,
             1f + calm)
         program.uniform("uBend", bendX.value, bendY.value)
-        updateRamp(state.palette)
-        program.uniform("uRamp0", ramp[0][0], ramp[0][1], ramp[0][2])
-        program.uniform("uRamp1", ramp[1][0], ramp[1][1], ramp[1][2])
-        program.uniform("uRamp2", ramp[2][0], ramp[2][1], ramp[2][2])
-        program.uniform("uGlow", state.lightScale.coerceIn(0f, 1f))
-    }
-
-    /** Ember, orange and gold when no palette is chosen, or the chosen palette's ramp. White is the shader's. */
-    private fun updateRamp(palette: VizPalette) {
-        if (palette === rampFor) return
-        rampFor = palette
-        val stops = if (palette.name == VizPalette.Prism.name) {
-            listOf(colourOf(0.30f, 0.09f, 40f), vividColour(ORANGE_HUE), vividColour(GOLD_HUE))
-        } else {
-            listOf(0.12f, 0.5f, 0.88f).map { palette.vividRamp(it) }
-        }
-        for ((index, colour) in stops.withIndex()) {
-            ramp[index][0] = colour.red
-            ramp[index][1] = colour.green
-            ramp[index][2] = colour.blue
-        }
+        program.uniform("uTone", accent.value, 0f, 0f, 0f)
+        program.uniform("uGlow", glowOf(state))
     }
 
     override fun DrawScope.drawTop(state: VizRenderState) {
-        val palette = if (state.palette.name == VizPalette.Prism.name) VizPalette.Ember else state.palette
-        with(debris) { drawSprites(palette, 0f, alpha = state.lightScale.coerceIn(0f, 1f)) }
+        with(debris) { drawSprites(state.palette, 0f, alpha = glowOf(state)) }
     }
 
     override fun onReset() {
@@ -430,7 +426,8 @@ internal class Pipe : ShaderPreset(
         bendX.reset()
         bendY.reset()
         debris.clear()
-        rampFor = null
+        accentTarget = 0f
+        accent.reset()
     }
 
     internal companion object {
@@ -456,10 +453,10 @@ internal class Pipe : ShaderPreset(
         private const val PEAK_FLOOR = 0.2f
         /** A loud band's usual height: every cell starts from it, so a song's first seconds are not all lit. */
         private const val PEAK_START = 0.6f
-        private const val ORANGE_HUE = 50f
-        private const val GOLD_HUE = 85f
         /** A kick pushes the flight on by this share for a moment. */
         private const val KICK_PACE = 0.6f
+        /** The light a silent tube keeps, as a share of full: the ember. Above it the light follows the level. */
+        private const val GLOW_FLOOR = 0.25f
         /** A small difference between the channels is made visible. */
         private const val BALANCE_GAIN = 3f
         /** How far the far point moves sideways, in half screen heights, for a full stereo balance. */
@@ -493,9 +490,8 @@ uniform float4 uFlow;
 uniform float4 uHits;
 uniform float2 uBend;
 uniform float4 uFork;
-uniform float3 uRamp0;
-uniform float3 uRamp1;
-uniform float3 uRamp2;
+// The section's accent hue shift, in x.
+uniform float4 uTone;
 uniform float uGlow;
 uniform shader uRings;
 
@@ -511,6 +507,13 @@ const float FAR_DEPTH = MOUTH + RINGS * SPACING;
 const float BANK = 0.35;
 // How many of the newest rings the fork's second branch shows.
 const float FORK_RINGS = 10.0;
+// How much of its palette colour an unlit cell glows, so the whole wall reads as one body even where
+// nothing plays.
+const float EMBER = 0.22;
+// Where the two rails sit, as a share of the half turn from the floor.
+const float RAIL = 0.09;
+// How many of the nearest rings take the live spectrum.
+const float LIVE_RINGS = 4.0;
 const float LIGHT_MAX = 1.25;
 
 // How far a ray from the lane runs across the tube before it meets the wall, for the tube's three
@@ -533,11 +536,6 @@ float wallReach(float2 from, float2 dir) {
         hex = min(hex, (side * 0.93 - dot(from, n)) / (along + side * 1e-5));
     }
     return uShape.x * circle + uShape.y * square + uShape.z * hex;
-}
-
-float3 ramp(float x) {
-    float3 low = mix(uRamp0, uRamp1, clamp(x * 2.0, 0.0, 1.0));
-    return mix(low, uRamp2, clamp(x * 2.0 - 1.0, 0.0, 1.0));
 }
 
 float4 ring(float cell, float index) {
@@ -584,9 +582,10 @@ float3 tube(float2 q, float2 bend, float farOnly) {
     // ring rushes in from the far point.
     float kick = uHits.x * clamp(1.0 - (fromMouth - 1.0) / 5.0, 0.0, 1.0);
     lit = min(lit * (1.0 + 2.0 * kick) + 0.4 * kick, max(lit, 0.85));
-    // The nearest ring also takes the live spectrum, so a hit is felt at the camera.
+    // The nearest rings take the live spectrum, in full at the mouth and fading over four rings, so a
+    // hit is felt at the camera and the live sound is never only a point far ahead.
     float live = ring(cell, 0.0).r * LIGHT_MAX;
-    lit = max(lit, 0.6 * live * (1.0 - smoothstep(0.0, 1.0, fromMouth)));
+    lit = max(lit, live * clamp(1.0 - fromMouth / LIVE_RINGS, 0.0, 1.0));
     // The snare's ring lights whole cells: the ring it has reached, and the one behind at half. It
     // rushes in from the far point and shows only past the nearest rings: those rings are large, and
     // hats and chord stabs are heard as snares too, so lighting them would be a strobe.
@@ -614,18 +613,28 @@ float3 tube(float2 q, float2 bend, float farOnly) {
 
     // A breakdown leaves only the lit edges; a silence keeps the edges at a third.
     float body = mix(fill, rim, uFlow.z);
-    // A lit cell shows its ramp colour at full strength and an unlit one glows dark ember, so the
-    // wall reads as clean cells and not as a dim gradient, and the tube shows even where nothing plays.
-    float3 colour = ramp(lit) * smoothstep(0.08, 0.45, lit) * body;
-    colour += uRamp0 * 0.4 * body;
-    // New peaks burn white only past the nearest rings. The nearest rings cover
-    // much of the screen, and a broadband hit turning them white on every beat would be a strobe.
+    // Each cell's hue comes from the palette: the cool end at the floor, the warm end at the ceiling,
+    // walked by the genes and shifted by the section's accent. A lit cell shows it bright and an unlit
+    // one glows dim, so the wall reads as clean cells and shows even where nothing plays.
+    float where = 0.2 + 0.6 * cell / (CELLS - 1.0) + uWalk + uTone.x;
+    float3 base = paletteCycled(where);
+    float3 colour = base * (0.35 + 0.65 * lit) * smoothstep(0.08, 0.45, lit) * body;
+    colour += base * EMBER * body;
+    // New peaks burn white only past the nearest rings. The nearest rings cover much of the screen,
+    // and a broadband hit turning them white on every beat would be a strobe.
     colour = mix(colour, float3(1.0), smoothstep(1.0, 1.2, lit) * smoothstep(2.0, 4.5, fromMouth) * body);
-    colour += ramp(0.6) * rim * 0.3 * uFlow.w;
-    // A gate ring: every edge of the ring lit pale gold, below the glow's threshold.
-    colour = max(colour, mix(uRamp2, float3(1.0), 0.35) * rim * texel.g);
+    colour += palette(0.6) * rim * 0.3 * uFlow.w;
+    // A gate ring: every edge of the ring lit pale, below the glow's threshold.
+    colour = max(colour, mix(palette(0.9), float3(1.0), 0.35) * rim * texel.g);
     // The tube fades into the distance.
     colour *= exp(-max(fromMouth, 0.0) * 0.045);
+    // The live waveform as two rails along the floor, bright at the mouth and fading into the tube.
+    // The second branch of a fork has none.
+    float side = atan(hit.x, hit.y) / 3.14159265;
+    float wave = scopeAt(clamp(fromMouth / RINGS, 0.0, 1.0));
+    float railLine = 1.0 - smoothstep(0.0, 0.02 + 0.03 * abs(wave), abs(abs(side) - RAIL));
+    float rail = railLine * (0.3 + 1.2 * abs(wave)) * exp(-max(fromMouth, 0.0) * 0.08) * (1.0 - 0.5 * uFlow.z) * (1.0 - farOnly);
+    colour += palette(0.95) * rail;
     if (index >= RINGS || index < 0.0) colour = float3(0.0);
     colour *= mix(1.0, 1.0 - smoothstep(FORK_RINGS - 3.0, FORK_RINGS, index), farOnly);
     return colour;

@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Pipe
+import java.awt.image.BufferedImage
 import kotlin.math.abs
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -318,7 +319,8 @@ class PipeTest {
             }
         }
         println("pipe: a snare brightens the nearest rings by $near and the far rings by $far, most at step $farAt")
-        assertTrue(far > 0.05f, "the snare's ring should still rush in from the far point, brightened it by $far")
+        // The light follows the level, so at the fixture's energy the frame is at about 0.7 of full.
+        assertTrue(far > 0.03f, "the snare's ring should still rush in from the far point, brightened it by $far")
         assertTrue(near < 0.02f, "the snare's ring lit the nearest rings by $near")
     }
 
@@ -403,6 +405,50 @@ class PipeTest {
         assertTrue(firstInk > 0.02f, "the first silent frame still shows the tube, had $firstInk")
     }
 
+    @Test
+    fun thePaletteColoursTheCells() {
+        val prism = RenderHarness.render(Pipe(), 160, 90, 300, VizPalette.Prism, RenderHarness.Song.Lively)
+        val fire = RenderHarness.render(Pipe(), 160, 90, 300, VizPalette.Fire, RenderHarness.Song.Lively)
+        val change = meanDifference(prism, fire)
+        println("pipe: Prism and Fire differ by $change")
+        assertTrue(change > 0.03f, "the palette should colour the cells, Prism and Fire differ by $change")
+    }
+
+    @Test
+    fun theWaveformRailsLightTheFloorNearTheMouth() {
+        val width = 160
+        val height = 90
+        fun run(driver: VizDriver?): IntArray {
+            var at = IntArray(0)
+            RenderHarness.forEachFrameOf(Pipe(), width, height, 100, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(driver, step) }) { bitmap, step ->
+                if (step == 90) {
+                    at = IntArray(width * height)
+                    bitmap.readPixels(at)
+                }
+            }
+            return at
+        }
+        // Region A is the floor near the mouth, region B the ceiling, both within a fifth of the middle column.
+        fun mean(pixels: IntArray, fromY: Int, toY: Int): Float {
+            var sum = 0f
+            var count = 0
+            for (y in fromY..toY) for (x in 64..96) {
+                sum += luma(pixels[y * width + x])
+                count++
+            }
+            return sum / count
+        }
+        val wave = run(VizDriver.Waveform)
+        val still = run(null)
+        val floorGain = mean(wave, 76, 89) - mean(still, 76, 89)
+        val ceilingGain = mean(wave, 0, 13) - mean(still, 0, 13)
+        println("pipe: the waveform lights the floor by $floorGain and the ceiling by $ceilingGain")
+        assertTrue(floorGain > 0.02f, "the rails should light the floor near the mouth, had $floorGain")
+        assertTrue(abs(ceilingGain) < 0.5f * floorGain,
+            "the ceiling should stay out of it, floor $floorGain and ceiling $ceilingGain")
+    }
+
     /**
      * The mean light of the nearest rings, out towards the corners, and of the far rings around the
      * middle. Distances are in half heights from the middle, as the shader measures them.
@@ -426,6 +472,18 @@ class PipeTest {
             }
         }
         return floatArrayOf(near / nearCount, far / farCount)
+    }
+
+    /** The mean difference of the three channels between two renders, 0 for equal and 1 for black against white. */
+    private fun meanDifference(a: BufferedImage, b: BufferedImage): Float {
+        var total = 0L
+        for (y in 0 until a.height) for (x in 0 until a.width) {
+            val p = a.getRGB(x, y)
+            val q = b.getRGB(x, y)
+            total += abs((p shr 16 and 0xFF) - (q shr 16 and 0xFF)) +
+                abs((p shr 8 and 0xFF) - (q shr 8 and 0xFF)) + abs((p and 0xFF) - (q and 0xFF))
+        }
+        return total / (a.width * a.height * 3f * 255f)
     }
 
     private fun luma(pixel: Int): Float =

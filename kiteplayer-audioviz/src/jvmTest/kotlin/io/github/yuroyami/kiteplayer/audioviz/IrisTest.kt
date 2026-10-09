@@ -179,6 +179,16 @@ class IrisTest {
         assertTrue(lit < 0.05f, "a closed eye shows little more than a slit, lit $lit")
     }
 
+    @Test
+    fun aFrameWithoutAFineSpectrumFeedsTheBarsFromItsBands() {
+        val iris = Iris()
+        RenderHarness.forEachFrameOf(iris, 96, 54, 300, VizPalette.Prism, source = { InjectedFrames.toneFrame(it, lowBand = true) }) { _, _ -> }
+        val bass = iris.visual[0]
+        val top = iris.visual[Iris.NUM_BARS / 2 - 1]
+        println("iris: bar 0 at $bass and the top bar at $top with the bass raised and no power spectrum")
+        assertTrue(bass > top + 50f, "the lowest bar should stand far above the highest: $bass against $top")
+    }
+
     private fun pixels(bitmap: ImageBitmap): IntArray = IntArray(bitmap.width * bitmap.height).also { bitmap.readPixels(it) }
 
     private fun brightestOnRing(image: BufferedImage, radius: Float): Int {

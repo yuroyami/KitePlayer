@@ -42,8 +42,10 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -106,7 +108,8 @@ internal class Iris : Layered(
 ) {
 
     override val mapping: VizMapping by mappingOf(
-        // Each fibre's saturation and light follow its own band; its inner end follows the page's analyser.
+        // Each fibre's saturation and light follow its own band, and its inner end follows the page's
+        // analyser. The petals and the rings lean their hue with the register, where the spectrum's weight sits.
         VizDrive(VizDriver.Bands, VizProperty.Colour),
         // The petals are the stereo trace, and every new ring keeps the waveform it was born with.
         VizDrive(VizDriver.Waveform, VizProperty.Shape),
@@ -229,6 +232,9 @@ internal class Iris : Layered(
 
     private val keyLean = Slew(maxPerSecond = KEY_TURN_PER_SECOND)
 
+    // Where the spectrum's weight sits, 0 low to 1 high, settled over REGISTER_SECONDS. Below zero until the first frame.
+    private var register = -1f
+
     // The pupil's mean radius in centred units, from the last advance.
     private var pupilUnits = FOCAL * INNER_BASE / FAR_DEPTH
 
@@ -261,6 +267,7 @@ internal class Iris : Layered(
         readAnalyser(frame, dt)
         if (live) petals.read(frame.scopeLeft, frame.scopeRight, frame.waveformGain)
         leanTowardsKey(frame, state.palette, heard)
+        followRegister(frame, heard)
 
         // A breakdown closes the eye until the next turn; a drop or a surge opens the Vortex for a cycle.
         if (evolution.collapse) {
@@ -345,11 +352,34 @@ internal class Iris : Layered(
             due
         }
         if (reads > 0) {
-            analyser.update(frame)
-            val bytes = analyser.frequencyBytes
-            loudness = VissonanceBins.loudness(bytes)
-            bins.visualBins(bytes, visual)
+            if (frame.power != null) {
+                analyser.update(frame)
+                val bytes = analyser.frequencyBytes
+                loudness = VissonanceBins.loudness(bytes)
+                bins.visualBins(bytes, visual)
+            } else {
+                repeat(reads) { barsFromBands(frame.bandsRel) }
+            }
         }
+    }
+
+    /**
+     * A frame without a fine spectrum, such as one an embedder builds from bands alone, feeds the bars
+     * from its bands instead of leaving the fibres still. Each bar takes the band its fibre's colour
+     * takes, through the page's gate, and settles as the page's analyser smooths.
+     */
+    private fun barsFromBands(bands: FloatArray) {
+        val keep = analyser.smoothing
+        val last = NUM_BARS / 2 - 1f
+        var sum = 0f
+        for (bar in 0 until NUM_BARS / 2) {
+            val band = bands.sampleAt(bar / last).coerceIn(0f, 1f)
+            val byte = max((band.toDouble().pow(bins.exponent(bar)) * VissonanceBins.HEIGHT).toFloat(), 1f)
+            visual[bar] += (byte - visual[bar]) * (1f - keep)
+            sum += band
+        }
+        val mean = sum / (NUM_BARS / 2) * VissonanceBins.HEIGHT.toFloat()
+        loudness += (mean - loudness) * (1f - keep)
     }
 
     /** Turns every hue up to [KEY_TURN] degrees towards the key, as sure as the key is. */
@@ -360,6 +390,25 @@ internal class Iris : Layered(
         while (towards < -180f) towards += 360f
         keyLean.advance(towards.coerceIn(-KEY_TURN, KEY_TURN) * sure, heard)
     }
+
+    /** Follows where the weight of the spectrum sits, so the petals and the rings can take the register's colour. */
+    private fun followRegister(frame: SpectrumFrame, heard: Float) {
+        val bands = frame.bandsRel
+        if (bands.size < 2) return
+        var total = 0f
+        var weighted = 0f
+        for (band in bands.indices) {
+            val value = bands[band].coerceIn(0f, 1f)
+            total += value
+            weighted += value * band
+        }
+        if (total < REGISTER_LEAST) return
+        val target = weighted / total / (bands.size - 1)
+        register = if (register < 0f) target else register + (target - register) * (1f - exp(-heard / REGISTER_SECONDS))
+    }
+
+    /** The hue lean of the petals and the rings, in degrees: dark music turns one way round the wheel, bright music the other. */
+    private fun registerLean(): Float = if (register < 0f) 0f else (register - REGISTER_MIDDLE) * REGISTER_TURN
 
     /** The next settled form in turn, with targets chosen inside it. Eye, Flower and Mandala take turns. */
     private fun morph() {
@@ -523,7 +572,7 @@ internal class Iris : Layered(
         paintTones(state.palette)
         drawPetalSets(middleX, middleY, light)
         with(rings) {
-            drawRings(dotMesh, middleX, middleY, middleY, state.palette.baseHue, spanOf(state.palette), keyLean.value, genes.walk, light)
+            drawRings(dotMesh, middleX, middleY, middleY, state.palette.baseHue, spanOf(state.palette), keyLean.value + registerLean(), genes.walk, light)
         }
         drawSparks(light)
         drawLids(state.palette, light)
@@ -539,11 +588,12 @@ internal class Iris : Layered(
         val last = NUM_BARS / 2 - 1f
         for (bar in 0 until NUM_BARS / 2) {
             val share = bar / last
-            val hue = palette.baseHue + Ease.pingPong(FIBRE_HUE + genes.walk + share * FIBRE_SPREAD) * span + keyLean.value
             val band = bands.sampleAt(share).coerceIn(0f, 1f)
+            val hue = palette.baseHue + Ease.pingPong(FIBRE_HUE + genes.walk + share * FIBRE_SPREAD + band * FIBRE_HEAT) * span + keyLean.value
             val chroma = (FIBRE_GREY + (1f - FIBRE_GREY) * band) * mostChroma(FIBRE_LIGHTNESS, hue)
             val colour = colourOf(FIBRE_LIGHTNESS, chroma, hue)
-            val value = FIBRE_FLOOR + (1f - FIBRE_FLOOR) * band
+            // The light rises with the square of the band, so a loud band's fibre stands out from the rest.
+            val value = FIBRE_FLOOR + (1f - FIBRE_FLOOR) * band * band
             barRed[bar] = colour.red * value
             barGreen[bar] = colour.green * value
             barBlue[bar] = colour.blue * value
@@ -555,9 +605,9 @@ internal class Iris : Layered(
         val span = spanOf(palette)
         for (step in 0 until IrisPetals.TONES) {
             val code = step * 2f / (IrisPetals.TONES - 1) - 1f
-            val hue = palette.baseHue + Ease.pingPong(PETAL_HUE + genes.walk + code * TONE_SPREAD) * span + keyLean.value
+            val hue = palette.baseHue + Ease.pingPong(PETAL_HUE + genes.walk + code * TONE_SPREAD) * span + keyLean.value + registerLean()
             val lightness = PETAL_LIGHTNESS - 0.1f * abs(code)
-            val chroma = (0.25f + 0.75f * abs(code)) * mostChroma(lightness, hue)
+            val chroma = (0.65f + 0.35f * abs(code)) * mostChroma(lightness, hue)
             tones[step] = colourOf(lightness, chroma, hue).toArgb() and 0xFFFFFF
         }
     }
@@ -720,6 +770,7 @@ internal class Iris : Layered(
         loudness = 0f
         owed = 0f
         started = false
+        register = -1f
         petals.rest()
         rings.clear()
         particles.clear()
@@ -781,8 +832,8 @@ internal class Iris : Layered(
         val NEAR_DEPTH: Float = (250.0 - 250.0 * sin(PI / 1.8)).toFloat()
         val NEAR_Y: Float = (60.0 + 250.0 * cos(PI / 1.8)).toFloat()
 
-        /** Half of `PlaneBufferGeometry(3, 500)`'s width. */
-        const val HALF_WIDTH = 1.5f
+        /** Half a fibre's width. The page's strip is 3 units wide; a sixth more keeps a fibre visible on a small screen. */
+        const val HALF_WIDTH = 1.75f
 
         /** The fragment shader's `-pos.z / 180.0`: a spoke is full colour 180 units away and brighter beyond. */
         const val BRIGHTNESS_DEPTH = 180f
@@ -845,7 +896,7 @@ internal class Iris : Layered(
 
         const val RING_POOL = 12
         const val RING_DOTS = 128
-        const val RING_KEEP_LEAST = 4
+        const val RING_KEEP_LEAST = 6
 
         /** How far a ring spreads in a second at a motion rate of 1, in centred units. */
         const val RING_SPEED = 0.3f
@@ -875,14 +926,28 @@ internal class Iris : Layered(
         const val MIN_SPAN = 120f
         const val FIBRE_HUE = 0.05f
         const val FIBRE_SPREAD = 0.45f
+
+        /** How far along the palette a loud band slides its fibre. */
+        const val FIBRE_HEAT = 0.2f
+
         const val FIBRE_LIGHTNESS = 0.62f
-        const val FIBRE_GREY = 0.35f
+        const val FIBRE_GREY = 0.75f
         const val FIBRE_FLOOR = 0.3f
         const val PETAL_HUE = 0.35f
         const val PETAL_LIGHTNESS = 0.78f
         const val TONE_SPREAD = 0.12f
         const val KEY_TURN = 30f
         const val KEY_TURN_PER_SECOND = 12f
+
+        /**
+         * The register: where the spectrum's weight sits, 0 to 1, settled over [REGISTER_SECONDS]. The petals
+         * and the rings turn their hue [REGISTER_TURN] degrees for each unit it moves from [REGISTER_MIDDLE].
+         * A spectrum lighter than [REGISTER_LEAST] in total, which is silence, keeps the register it had.
+         */
+        const val REGISTER_SECONDS = 0.5f
+        const val REGISTER_MIDDLE = 0.35f
+        const val REGISTER_TURN = 240f
+        const val REGISTER_LEAST = 0.05f
 
         /** The drop's images: how far each moves as a share of the width, and the lookahead. */
         const val SPLIT = 0.125f

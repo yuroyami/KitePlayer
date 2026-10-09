@@ -223,7 +223,7 @@ internal class IrisRings(private val capacity: Int = 12, private val dots: Int =
         const val TONE_STEPS = 9
 
         /** A dot's radius at rest, as a share of a centred unit, and how far a sample moves its hue. */
-        const val DOT_SHARE = 0.012f
+        const val DOT_SHARE = 0.016f
         const val SPECKLE = 0.08f
         const val MIN_ALPHA = 0.004f
 

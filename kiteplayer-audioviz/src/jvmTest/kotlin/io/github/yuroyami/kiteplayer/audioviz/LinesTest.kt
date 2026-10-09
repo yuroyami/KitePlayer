@@ -1,13 +1,16 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Lines
 import java.awt.image.BufferedImage
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The port of Lines by Silvio Paganini: it draws, it holds still in silence, and it keeps the page's knee. */
@@ -113,6 +116,77 @@ class LinesTest {
             inRun = on
         }
         assertTrue(runs >= 10, "only $runs lines show below the front ridge at x = $ridgeX")
+    }
+
+    @Test
+    fun theFlatFormAtRestHasTodaysCamera() {
+        val lines = Lines()
+        RenderHarness.forEachFrame(lines, 320, 180, 2, VizPalette.Prism, RenderHarness.Song.Silence) { _, _ -> }
+        assertTrue(lines.eyeX == 0f, "eyeX is ${lines.eyeX}")
+        assertTrue(lines.eyeY == 45f, "eyeY is ${lines.eyeY}")
+        assertTrue(lines.eyeZ == 240f, "eyeZ is ${lines.eyeZ}")
+        assertTrue(lines.bendValue == 0f, "bend is ${lines.bendValue}")
+        assertTrue(lines.dipValue == 0f, "dip is ${lines.dipValue}")
+        assertNull(lines.forms)
+    }
+
+    @Test
+    fun aRightHeavyTraceIsAPositiveBalance() {
+        val quiet = FloatArray(64) { 0.25f }
+        val loud = FloatArray(64) { 0.5f }
+        assertTrue(Lines.balanceOf(quiet, loud) > 0f, "right heavy gave ${Lines.balanceOf(quiet, loud)}")
+        assertTrue(Lines.balanceOf(loud, quiet) < 0f, "left heavy gave ${Lines.balanceOf(loud, quiet)}")
+        assertEquals(0f, Lines.balanceOf(loud, loud.copyOf()), 1e-4f)
+    }
+
+    @Test
+    fun aLeftHeavyTraceBendsTheRoadLeft() {
+        val lines = Lines()
+        RenderHarness.forEachFrameOf(
+            lines, 160, 90, 240, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Waveform, step) },
+        ) { _, _ -> }
+        val middle = lines.screenXOf(0, 256)
+        println("left heavy trace: bend ${lines.bendValue}, farthest middle vertex at x $middle of 160")
+        assertTrue(lines.bendValue < -0.1f, "the road should bend left, bend is ${lines.bendValue}")
+        assertTrue(middle < 80f - 2f, "the farthest line should sit left of the middle column, x is $middle")
+    }
+
+    @Test
+    fun theCameraSwaysOnTheSlowCycleAndRestsInSilence() {
+        // One run, loud then silent: a second harness run would restart the drawing and prove nothing.
+        val lines = Lines()
+        val lively = RenderHarness.player(RenderHarness.Song.Lively, 14f)
+        val silent = RenderHarness.player(RenderHarness.Song.Silence, 8f)
+        var sway = 0f
+        RenderHarness.forEachFrameOf(
+            lines, 96, 54, 840, VizPalette.Prism,
+            source = { step -> if (step < 600) lively.next(1f / 60f) else silent.next(1f / 60f) },
+        ) { _, step ->
+            if (step < 600) sway = max(sway, abs(lines.eyeX))
+        }
+        val rest = abs(lines.eyeX)
+        println("camera sway in music $sway, eyeX after silence $rest")
+        assertTrue(sway > 2f, "the camera should glide under music, the widest eyeX was $sway")
+        assertTrue(rest < 0.5f, "the camera should come home in silence, eyeX is $rest")
+    }
+
+    @Test
+    fun aQuietFarLineTakesTheFogTintAndAPeakedLineStaysWhite() {
+        val calm = Lines()
+        RenderHarness.forEachFrame(calm, 160, 90, 120, VizPalette.Prism, RenderHarness.Song.Calm) { _, _ -> }
+        val far = calm.lineColourOf(0)
+        println("far quiet line: red ${far.red}, green ${far.green}, blue ${far.blue}")
+        assertTrue(abs(far.red - far.blue) > 0.01f, "the far line should carry the tint, red ${far.red} blue ${far.blue}")
+
+        val tone = FloatArray(48_000 * 7) { 0.5f * sin(2.0 * PI * 14_500.0 * it / 48_000.0).toFloat() }
+        val player = SongPlayer(tone, bandCount = 48)
+        val peaked = Lines()
+        RenderHarness.forEachFrameOf(peaked, 160, 90, 120, VizPalette.Prism, source = { player.next(1f / 60f) }) { _, _ -> }
+        val front = peaked.lineColourOf(21)
+        println("peaked front line: red ${front.red}, green ${front.green}, blue ${front.blue}")
+        assertTrue(abs(front.red - front.green) < 0.005f, "the front line should stay white, red ${front.red} green ${front.green}")
+        assertTrue(abs(front.green - front.blue) < 0.005f, "the front line should stay white, green ${front.green} blue ${front.blue}")
     }
 
     /** The mean frame-to-frame change over the last second of three, and the ink of the last frame. */

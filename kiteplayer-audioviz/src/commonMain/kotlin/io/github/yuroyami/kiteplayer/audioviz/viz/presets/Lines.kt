@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import io.github.yuroyami.kiteplayer.audioviz.viz.DisplayStep
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.Scene3D
+import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
@@ -18,10 +19,16 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
 import io.github.yuroyami.kiteplayer.audioviz.viz.WebAudioAnalyser
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Evolution
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Genes
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
 
@@ -52,6 +59,11 @@ import kotlin.random.Random
  *   The page measured its window once. This drawing measures the canvas every frame.
  * - A seeded generator gives the noise instead of `Math.random()`, so a render repeats.
  * - The flash guard's light scale multiplies the brightness. It is 1 unless the picture would flash.
+ *
+ * World: the road bends with the stereo balance and dips with the level. The farthest line moves most,
+ * and the nearest line does not move. The camera glides on the slow cycle and comes home in a silence.
+ * Far quiet lines take a tint from the palette through the fog, and a line with a peak stays white.
+ * At rest, the Flat picture is the port's picture.
  *
  * Twenty-two thin white lines stand front to back in black fog, seen from a slightly raised camera.
  * Each line wobbles flat at its ends and rises into mirrored peaks at its centre. The middle lines of
@@ -108,6 +120,42 @@ internal class Lines : Visualization {
     private val paths = Array(LINES) { Path() }
     private val hairline = Stroke(width = Stroke.HairlineWidth)
 
+    // The shared pieces every world drawing reads. A later task reads the recipe; it is not named `genes`
+    // because Visualization already has a public member of that name.
+    private val gestures = Gestures()
+    private val evolution = Evolution()
+    private val recipe = Genes(SEED)
+
+    // The road's bend, from the stereo balance.
+    private val bend = Slew(maxPerSecond = 0.4f)
+    internal val bendValue: Float get() = bend.value
+
+    // The road's dip, from the level.
+    private val dip = Envelope(attackPerSecond = 1.5f, releasePerSecond = 0.8f)
+    internal val dipValue: Float get() = dip.value
+
+    // How much of the camera's glide is on. It follows `audible`, so a silence brings the camera home.
+    private val present = Envelope(attackPerSecond = 2f, releasePerSecond = 2f)
+
+    // 1 for a line whose band has a bin above the knee this frame, eased so the tint does not flicker.
+    private val peaked = Array(LINES) { Envelope() }
+    private val peakedTarget = FloatArray(LINES)
+
+    // Where the road moves each line this frame. Line 21 never moves and line 0 moves most.
+    private val roadX = FloatArray(LINES)
+    private val roadY = FloatArray(LINES)
+
+    // The camera: (0, 45, 240) at rest.
+    internal var eyeX = 0f
+        private set
+    internal var eyeY = EYE_Y
+        private set
+    internal val eyeZ: Float get() = EYE_Z
+
+    // The colour each line was last drawn in.
+    private val lineColour = Array(LINES) { Color.White }
+    internal fun lineColourOf(index: Int): Color = lineColour[index]
+
     init {
         val last = CONTROL_POINTS - 1
         for (d in 0 until POINTS) {
@@ -133,8 +181,9 @@ internal class Lines : Visualization {
         // SIZE.x: half the longer side of the window, with a device pixel for each CSS pixel.
         placePoints(max(size.width, size.height) / 2f)
         scene.lens(size, FOV, NEAR, FAR)
-        scene.camera(0f, EYE_Y, EYE_Z, 0f, 0f, 0f)
+        scene.camera(eyeX, eyeY, EYE_Z, 0f, 0f, 0f)
         val light = state.lightScale.coerceIn(0f, 1f)
+        val tint = state.palette.ramp(TINT_AT)
         // Back to front, so the nearer line wins where two cross, as the depth test made it.
         for (index in 0 until LINES) {
             val path = paths[index]
@@ -142,20 +191,57 @@ internal class Lines : Visualization {
             val vertex = vertices[index]
             var open = false
             for (d in 0 until POINTS) {
-                if (!scene.project(pointX[d], lineY[index] + vertex[d], lineZ[index])) {
+                if (!scene.project(pointX[d] + roadX[index], lineY[index] + roadY[index] + vertex[d], lineZ[index])) {
                     open = false
                     continue
                 }
                 if (open) path.lineTo(scene.screenX, scene.screenY) else path.moveTo(scene.screenX, scene.screenY)
                 open = true
             }
+            // Far quiet lines take a tint from the palette through the fog. A line with a peak, and the whole
+            // stack in a loud passage, stays the page's white.
             val grey = visibility[index] * light
-            drawPath(path, Color(grey, grey, grey), style = hairline)
+            val tintShare = TINT * (1f - visibility[index]) * (1f - peaked[index].value) * (1f - dip.value)
+            val colour = Color(
+                (1f - tintShare + tintShare * tint.red) * grey,
+                (1f - tintShare + tintShare * tint.green) * grey,
+                (1f - tintShare + tintShare * tint.blue) * grey,
+            )
+            lineColour[index] = colour
+            drawPath(path, colour, style = hairline)
         }
+    }
+
+    /** For tests: the screen x of one vertex under the last camera, or NaN when it is not on screen. */
+    internal fun screenXOf(line: Int, vertex: Int): Float {
+        val onScreen = scene.project(
+            pointX[vertex] + roadX[line],
+            lineY[line] + roadY[line] + vertices[line][vertex],
+            lineZ[line],
+        )
+        return if (onScreen) scene.screenX else Float.NaN
     }
 
     private fun advance(state: VizRenderState) {
         val dt = step.of(state) ?: return
+        gestures.update(state)
+        evolution.update(state, gestures)
+        // A pause holds everything. A silence lets the road straighten and the camera come home.
+        val live = if (state.frame.held) 0f else dt
+        recipe.advance(gestures, live, evolution.morph)
+        val frame = state.frame
+        bend.advance(balanceOf(frame.scopeLeft, frame.scopeRight) * frame.audible, live)
+        dip.advance(frame.levelRel * frame.audible, live)
+        present.advance(frame.audible, live)
+        for (index in 0 until LINES) {
+            peaked[index].advance(peakedTarget[index], live)
+            val share = (Z_NEAR - lineZ[index]) / Z_SPAN
+            roadX[index] = bend.value * ROAD_REACH * share * share
+            roadY[index] = -dip.value * DIP_REACH * share
+        }
+        val sway = present.value * state.motionScale
+        eyeX = SWAY_X * sin(gestures.slowCyclePhase * TAU) * sway
+        eyeY = EYE_Y + SWAY_Y * sin(2f * gestures.slowCyclePhase * TAU) * sway
         if (!ready) {
             // The Line constructor: the vertices start on the first target.
             analyser.update(state.frame)
@@ -188,7 +274,13 @@ internal class Lines : Visualization {
         for (i in 0 until NOISE_POINTS) heights[i] *= 10f
         val start = bandStart(index)
         var at = NOISE_POINTS
-        for (i in RANGE + start downTo start) heights[at++] = heightOf(bins[i])
+        var peak = false
+        for (i in RANGE + start downTo start) {
+            val height = heightOf(bins[i])
+            if (height > FLOOR) peak = true
+            heights[at++] = height
+        }
+        peakedTarget[index] = if (peak) 1f else 0f
         for (i in 0 until HALF) heights[HALF + i] = heights[HALF - 1 - i]
         for (d in 0 until POINTS) {
             out[d] = catmullRom(heights[point0[d]], heights[point1[d]], heights[point2[d]], heights[point3[d]], weight[d])
@@ -225,6 +317,19 @@ internal class Lines : Visualization {
         analyser.reset()
         random = Random(SEED)
         ready = false
+        gestures.reset()
+        evolution.reset()
+        recipe.restart()
+        bend.reset()
+        dip.reset()
+        present.reset()
+        for (envelope in peaked) envelope.reset()
+        peakedTarget.fill(0f)
+        roadX.fill(0f)
+        roadY.fill(0f)
+        eyeX = 0f
+        eyeY = EYE_Y
+        lineColour.fill(Color.White)
     }
 
     /**
@@ -330,8 +435,52 @@ internal class Lines : Visualization {
         const val PERSISTENCE = 0.2f
         const val SEED = 20_150_617L
 
+        /** The z of line 21, the nearest line, which the road never moves. */
+        const val Z_NEAR = 100f
+
+        /** The distance in z from line 21 to line 0, which stands at -320. */
+        const val Z_SPAN = 420f
+
+        /** How far the farthest line moves sideways at a full bend, in world units. */
+        const val ROAD_REACH = 120f
+
+        /** How far the farthest line drops at full level, in world units. */
+        const val DIP_REACH = 40f
+
+        /** The camera's sideways glide on the slow cycle, in world units. */
+        const val SWAY_X = 30f
+
+        /** The camera's vertical glide on the slow cycle, in world units. */
+        const val SWAY_Y = 6f
+
+        /** How much of the palette colour the fog lends a far quiet line. */
+        const val TINT = 0.35f
+
+        /** Where on the palette ramp the tint is read. */
+        const val TINT_AT = 0.35f
+
+        /** How strongly the balance is stretched: a channel twice as loud is already a full bend. */
+        const val BALANCE_GAIN = 3f
+
         /** The easing's time constant: a vertex covers 63 percent of a step in about 0.41 seconds. */
         val EASE_SECONDS: Float = (-1.0 / (60.0 * ln(1.0 - EASE))).toFloat()
+
+        /**
+         * The stereo balance, -1 for a left heavy trace and 1 for a right heavy one.
+         * A channel twice as loud is already full.
+         */
+        fun balanceOf(left: FloatArray, right: FloatArray): Float {
+            val l = rootMeanSquare(left)
+            val r = rootMeanSquare(right)
+            return ((r - l) / (r + l + 1e-4f) * BALANCE_GAIN).coerceIn(-1f, 1f)
+        }
+
+        private fun rootMeanSquare(trace: FloatArray): Float {
+            if (trace.isEmpty()) return 0f
+            var sum = 0f
+            for (value in trace) sum += value * value
+            return sqrt(sum / trace.size)
+        }
 
         /** Line.js: `a = bin / 5; a = a > 20 ? a * 1.5 : a / 50; a = max(5, a)`. A height is 5, or 30.3 to 76.5. */
         fun heightOf(byte: Int): Float {

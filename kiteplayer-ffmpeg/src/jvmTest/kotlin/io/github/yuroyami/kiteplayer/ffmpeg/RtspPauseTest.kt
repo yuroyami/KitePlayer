@@ -20,6 +20,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * The whole player on an RTSP camera that ends a session it does not hear from within two seconds
@@ -58,9 +59,9 @@ class RtspPauseTest {
                 assertEquals(playsBefore, camera.plays.get(), "the camera played during the pause:\n${camera.transcript}")
                 player.play()
                 awaitPlaying(player, camera.transcript)
-                delay(1.seconds)
+                val statuses = awaitSteadyPlaying(player)
                 val moved = player.position() - pausedAt
-                val log = "status ${player.state.value.status}, error ${player.state.value.error}, moved $moved\n${camera.transcript}"
+                val log = "statuses $statuses, error ${player.state.value.error}, moved $moved\n${camera.transcript}"
                 assertEquals(0, camera.expired.get(), "the camera ended the session: $log")
                 assertEquals(1, camera.connections, "the stream was opened again: $log")
                 assertEquals(1, camera.pauses.get() - pausesBefore, "the camera was not told of the pause once: $log")
@@ -89,8 +90,8 @@ class RtspPauseTest {
                 delay(PAUSE)
                 player.play()
                 awaitPlaying(player, camera.transcript)
-                delay(1.seconds)
-                val log = "status ${player.state.value.status}, error ${player.state.value.error}\n${camera.transcript}"
+                val statuses = awaitSteadyPlaying(player)
+                val log = "statuses $statuses, error ${player.state.value.error}\n${camera.transcript}"
                 assertEquals(1, camera.expired.get(), "the camera kept the session: $log")
                 assertEquals(2, camera.connections, "the stream was not opened again: $log")
                 assertTrue(
@@ -135,7 +136,35 @@ class RtspPauseTest {
         }
     }
 
+    /**
+     * Waits until the player has been Playing for one second without a break, and answers every
+     * status it went through with its time. A live stream is read at the speed it is sent, so a
+     * player that plays on at the live edge has under a second buffered, and a machine that stalls
+     * for that long makes it buffer once more. One reading a second after play caught that moment
+     * on a busy machine and read Buffering from a player that was working (#571).
+     */
+    private suspend fun awaitSteadyPlaying(player: KitePlayer): String {
+        val started = TimeSource.Monotonic.markNow()
+        val seen = mutableListOf<String>()
+        var last: PlaybackStatus? = null
+        var playingSince = started
+        while (started.elapsedNow() < STEADY_DEADLINE) {
+            val status = player.state.value.status
+            if (status != last) {
+                seen += "$status at ${started.elapsedNow().inWholeMilliseconds} ms"
+                last = status
+                playingSince = TimeSource.Monotonic.markNow()
+            }
+            if (status == PlaybackStatus.Playing && playingSince.elapsedNow() >= 1.seconds) break
+            delay(20)
+        }
+        return seen.joinToString()
+    }
+
     private companion object {
+        /** How long a player may take to settle on Playing after play. */
+        val STEADY_DEADLINE: Duration = 10.seconds
+
         /** Longer than the camera's session timeout, so only a keepalive keeps the session. */
         val PAUSE: Duration = 5.seconds
     }

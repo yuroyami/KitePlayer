@@ -579,10 +579,10 @@ internal class Honeycomb : Visualization {
         val stops = ArrayList<Pair<Float, Color>>(GRADIENT_SAMPLES + 3)
         fun addStop(distance: Double) {
             // The canvas interpolates colour and alpha unpremultiplied, from clear black at 0 to the
-            // edge colour at alpha 0.6 at 0.8, so over black the light rises with the square of the way.
+            // edge colour at alpha 0.4 at 0.8, so over black the light rises with the square of the way.
             val along = ((distance - inner) / (outer - inner)).coerceIn(0.0, 1.0)
             val share = min(along / 0.8, 1.0)
-            val lit = (0.6 * share * share).toFloat() * light
+            val lit = (0.4 * share * share).toFloat() * light
             stops += (distance / reach).toFloat() to Color(tint.red * lit, tint.green * lit, tint.blue * lit)
         }
         addStop(0.0)

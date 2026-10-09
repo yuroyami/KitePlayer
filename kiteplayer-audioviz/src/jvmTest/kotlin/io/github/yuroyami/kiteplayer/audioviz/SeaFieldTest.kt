@@ -1,6 +1,9 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
 import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flows
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.LaceReaction
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.MemoryField
 import kotlin.math.hypot
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -50,5 +53,56 @@ class SeaFieldTest {
         val near = hypot(out[0], out[1])
         flow.at(1f, 0f, 1f, out)
         assertTrue(hypot(out[0], out[1]) < 0.5f * near, "four cores out the water turns far slower")
+    }
+
+    @Test
+    fun theExtraChannelIsCarriedWithTheInk() {
+        val field = MemoryField(rows = 36, withExtra = true)
+        field.size(1f)
+        field.halfLife = 100f
+        val lace = checkNotNull(field.extra)
+        val column = 9
+        for (row in 16 until 20) for (c in column until column + 4) lace[row * field.columns + c] = 1f
+        val before = field.extraAt(field.xOf(column + 2), field.yOf(18))
+        field.advance(Flows.Drift(0.5f, 0f), 1f)
+        assertTrue(before > 0.8f, "the lace was written, read $before")
+        assertTrue(field.extraAt(field.xOf(column + 2) + 0.5f, field.yOf(18)) > 0.6f, "the lace moved with the flow")
+        assertTrue(field.extraAt(field.xOf(column + 2), field.yOf(18)) < 0.3f, "and left its old place")
+    }
+
+    @Test
+    fun aFieldWithoutAnExtraChannelGrowsNoLace() {
+        val field = MemoryField(rows = 36)
+        field.size(1f)
+        LaceReaction().step(field, FloatArray(field.columns * field.rows) { 1f })
+        assertEquals(null, field.extra)
+        assertEquals(0f, field.extraAt(0f, 0f))
+    }
+
+    @Test
+    fun laceGrowsInsideTheMaskAndNowhereElse() {
+        val field = MemoryField(rows = 36, withExtra = true)
+        field.size(16f / 9f)
+        val columns = field.columns
+        val mask = FloatArray(columns * field.rows) { cell -> if (cell % columns < columns / 2) 1f else 0f }
+        val reaction = LaceReaction()
+        reaction.sprout(field, mask, 12, 1.6f, Rng(7L))
+        val start = laced(field, leftHalf = true)
+        repeat(1_500) { reaction.step(field, mask) }
+        val grown = laced(field, leftHalf = true)
+        println("lace: $start cells seeded, $grown laced after 1500 steps")
+        assertTrue(start > 0, "the seeds were planted inside the mask")
+        assertTrue(grown > start, "the lace grows inside the mask: $start to $grown")
+        assertEquals(0, laced(field, leftHalf = false), "nothing grows outside the mask")
+    }
+
+    private fun laced(field: MemoryField, leftHalf: Boolean): Int {
+        val lace = checkNotNull(field.extra)
+        var count = 0
+        for (cell in lace.indices) {
+            val inLeft = cell % field.columns < field.columns / 2
+            if (inLeft == leftHalf && lace[cell] > 0.25f) count++
+        }
+        return count
     }
 }

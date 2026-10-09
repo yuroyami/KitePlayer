@@ -21,7 +21,7 @@ import kotlin.math.sqrt
  * row of the picture. The grid covers the whole screen, [rows] cells tall and as many columns as the
  * aspect ratio asks for, so a cell is square on any screen.
  */
-internal class MemoryField(val rows: Int = 108) {
+internal class MemoryField(val rows: Int = 108, private val withExtra: Boolean = false) {
     var columns: Int = (rows * 16 / 9)
         private set
     var aspect: Float = 16f / 9f
@@ -34,6 +34,14 @@ internal class MemoryField(val rows: Int = 108) {
     private var age = FloatArray(columns * rows)
     private var spareInk = FloatArray(columns * rows)
     private var spareAge = FloatArray(columns * rows)
+
+    /**
+     * A third channel carried with the ink and faded with it, or null. Contour keeps its lace here.
+     * It goes to the shader in the blue channel.
+     */
+    var extra: FloatArray? = if (withExtra) FloatArray(columns * rows) else null
+        private set
+    private var spareExtra: FloatArray? = if (withExtra) FloatArray(columns * rows) else null
     private var texture = PixelImage(columns, rows)
     private val flowOut = FloatArray(2)
     private var dirty = true
@@ -48,15 +56,21 @@ internal class MemoryField(val rows: Int = 108) {
         age = FloatArray(columns * rows)
         spareInk = FloatArray(columns * rows)
         spareAge = FloatArray(columns * rows)
+        if (withExtra) {
+            extra = FloatArray(columns * rows)
+            spareExtra = FloatArray(columns * rows)
+        }
         texture = PixelImage(columns, rows)
         dirty = true
     }
 
-    /** Carries the ink along [flow] for [heardSeconds] and fades it. Nothing happens for zero. */
+    /** Carries the ink, its age and the extra channel along [flow] for [heardSeconds], and fades them. Nothing happens for zero. */
     fun advance(flow: Flow, heardSeconds: Float) {
         if (heardSeconds <= 0f) return
         val keep = 2f.pow(-heardSeconds / max(halfLife, 0.01f))
         val cellsPerUnit = rows * 0.5f
+        val extraNow = extra
+        val extraNext = spareExtra
         for (row in 0 until rows) {
             val y = (row + 0.5f) / cellsPerUnit - 1f
             for (column in 0 until columns) {
@@ -68,11 +82,24 @@ internal class MemoryField(val rows: Int = 108) {
                 val cell = row * columns + column
                 spareInk[cell] = sample(ink, backX, backY) * keep
                 spareAge[cell] = sample(age, backX, backY) + heardSeconds
+                if (extraNow != null && extraNext != null) extraNext[cell] = sample(extraNow, backX, backY) * keep
             }
         }
-        val oldInk = ink; ink = spareInk; spareInk = oldInk
-        val oldAge = age; age = spareAge; spareAge = oldAge
+        swap()
         dirty = true
+    }
+
+    /** The spare set becomes the field, and the field becomes the spare set. */
+    private fun swap() {
+        val oldInk = ink
+        ink = spareInk
+        spareInk = oldInk
+        val oldAge = age
+        age = spareAge
+        spareAge = oldAge
+        val oldExtra = extra
+        extra = spareExtra
+        spareExtra = oldExtra
     }
 
     /** A polyline of [count] points, [width] cells wide, inked at [ink] with an age of zero. */
@@ -106,13 +133,31 @@ internal class MemoryField(val rows: Int = 108) {
     /** The age of the ink at a point, in heard seconds. */
     fun ageAt(x: Float, y: Float): Float = sample(age, toCellX(x), toCellY(y))
 
+    /** The extra channel at a point, or 0 for a field without one. */
+    fun extraAt(x: Float, y: Float): Float {
+        val values = extra ?: return 0f
+        return sample(values, toCellX(x), toCellY(y))
+    }
+
+    /** Marks the field for upload after something other than the field wrote into it, such as a reaction. */
+    fun markChanged() {
+        dirty = true
+    }
+
+    /** The centred x of the middle of [column]. */
+    fun xOf(column: Int): Float = (column + 0.5f) / (rows * 0.5f) - aspect
+
+    /** The centred y of the middle of [row]; -1 is the top of the screen. */
+    fun yOf(row: Int): Float = (row + 0.5f) / (rows * 0.5f) - 1f
+
     /** Uploads the grid when it changed and hands it to [program] as `uField` with `uFieldSize`. */
     fun bindTo(program: ShaderProgram) {
         if (dirty) {
             for (cell in ink.indices) {
                 val r = (ink[cell].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
                 val g = ((age[cell] / MOST_AGE).coerceIn(0f, 1f) * 255f + 0.5f).toInt()
-                texture.pixels[cell] = 0xFF000000.toInt() or (r shl 16) or (g shl 8)
+                val b = ((extra?.get(cell) ?: 0f).coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+                texture.pixels[cell] = 0xFF000000.toInt() or (r shl 16) or (g shl 8) or b
             }
             texture.upload()
             dirty = false
@@ -125,6 +170,7 @@ internal class MemoryField(val rows: Int = 108) {
     fun clear() {
         ink.fill(0f)
         age.fill(0f)
+        extra?.fill(0f)
         dirty = true
     }
 

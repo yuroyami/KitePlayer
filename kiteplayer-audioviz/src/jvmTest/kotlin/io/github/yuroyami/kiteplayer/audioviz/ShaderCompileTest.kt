@@ -117,4 +117,16 @@ half4 main(float2 position) {
         val program = ShaderProgram(ShaderLibrary.HEADER + FieldShader.SOURCE + reads)
         assertTrue(program.available, "the field helpers do not compile:\n${program.error}")
     }
+
+    @Test
+    fun theFieldsExtraChannelCompiles() {
+        val reads = """
+half4 main(float2 position) {
+    float sum = fieldExtra(position) + fieldExtraSlope(position).x;
+    return half4(half3(sum), 1.0);
+}
+"""
+        val program = ShaderProgram(ShaderLibrary.HEADER + FieldShader.SOURCE + reads)
+        assertTrue(program.available, "the extra channel helpers do not compile:\n${program.error}")
+    }
 }

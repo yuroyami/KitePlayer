@@ -15,6 +15,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.Scene3D
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
@@ -80,12 +81,13 @@ import kotlin.random.Random
  *   where the page had a fixed red to pink ramp.
  * - The hive turns one notch on each beat and a form change flips the direction, where the page
  *   sheared the corners every 20 ms.
- * - The hive shows three to six rings. A birth or a surge adds one, a breakdown takes it back to two,
- *   and a kick opens the loud cells, none of which the page did.
+ * - The hive starts at four rings and shows up to six. A birth or a surge adds one, a breakdown takes
+ *   it back to two, and a kick opens the loud cells, none of which the page did.
  * - The page's SoundCloud player, track panel and controls are left out.
  *
  * A honeycomb of 127 hexagons lights up like a meter: the lowest frequency sits in the middle and the
- * rings climb the spectrum. Each tile takes its colour and opacity from its level, from the palette,
+ * rings climb the spectrum. The spectrum spreads over the rings the hive shows, so a small hive still
+ * shows all of it. Each tile takes its colour and opacity from its level, from the palette,
  * climbing it with the level, and falls back slowly from its peak. A loud tile gets a
  * white edge that fades over three seconds. The hive turns a notch on each beat, and on a loud passage
  * the tiles are pulled in and thrown through the middle. The hive grows a ring on a birth and falls back
@@ -111,12 +113,15 @@ internal class Honeycomb : Visualization {
             VizDrive(VizDriver.Bands, VizProperty.Colour, response = VizResponse.envelope(ANALYSER_SECONDS)),
             VizDrive(VizDriver.Bands, VizProperty.Brightness, response = VizResponse.envelope(ANALYSER_SECONDS)),
             VizDrive(VizDriver.Bands, VizProperty.Shape, response = VizResponse.envelope(ANALYSER_SECONDS)),
-            // The page's volume, the sum of its lowest 80 bins, pushes the corners and sets the turn,
-            // the star flight, the streak length and the background's colour.
+            // The page's volume, the sum of its lowest 80 bins, pushes the corners and sets the star
+            // flight, the streak length and the background's colour.
             VizDrive(VizDriver.Level, VizProperty.Shape, response = VizResponse.envelope(ANALYSER_SECONDS)),
-            VizDrive(VizDriver.Level, VizProperty.Speed, response = VizResponse.Rate),
             VizDrive(VizDriver.Level, VizProperty.Size, response = VizResponse.envelope(ANALYSER_SECONDS)),
             VizDrive(VizDriver.Level, VizProperty.Colour, response = VizResponse.envelope(ANALYSER_SECONDS)),
+            // A drop shatters the hive, and it reassembles within a cycle.
+            VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(3f)),
+            // A section starts a morph to another form, over two cycles.
+            VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(6f)),
         ),
         silence = VizSilence.Still,
     )
@@ -184,11 +189,11 @@ internal class Honeycomb : Visualization {
     private var lastQuarter = -1
 
     /** How many rings the hive is growing toward, 2 to 6. */
-    internal var ringsTarget = 3
+    internal var ringsTarget = 4
         private set
 
     // How many rings the hive shows now, eased over about a cycle.
-    private var ringsShown = 3f
+    private var ringsShown = 4f
     internal val ringsShownValue: Float get() = ringsShown
 
     // How far the loud cells are open after a kick, 1 at the hit.
@@ -212,7 +217,6 @@ internal class Honeycomb : Visualization {
     private val high = DoubleArray(TILES)
     private val highlight = DoubleArray(TILES)
     private val ring = IntArray(TILES)
-    private val position = FloatArray(TILES)
 
     // Where each tile sits round its ring, 0 to 1 from the positive x axis, and the same folded to 0 to 1 and back.
     // In the Tunnel each ring is one past spectrum: the bass at the right, the treble at the left, mirrored top and bottom.
@@ -281,14 +285,14 @@ internal class Honeycomb : Visualization {
 
     override fun DrawScope.draw(state: VizRenderState) {
         advance(state, size, density)
-        val light = state.lightScale.coerceIn(0f, 1f)
+        val light = state.lift.coerceIn(0f, 1f)
         drawBackground(light, state.palette, recipe.walk)
         withPage { drawStars(light) }
     }
 
     override fun DrawScope.drawFront(state: VizRenderState) {
         advance(state, size, density)
-        val light = state.lightScale.coerceIn(0f, 1f)
+        val light = state.lift.coerceIn(0f, 1f)
         // The tiles are projected to canvas pixels, so they are drawn with no transform.
         drawTiles(light, state.palette, recipe.walk)
         drawEdges(light)
@@ -439,8 +443,6 @@ internal class Honeycomb : Visualization {
         val angle = if (layer == 0) 0f else ((atan2(centreY, centreX) / TAU.toDouble()).toFloat() + 1f) % 1f
         tileAngle[num] = angle
         spoke[num] = if (angle <= 0.5f) angle * 2f else (1f - angle) * 2f
-        // The tile's place in the spectrum: the centre reads the bass, the outer ring the treble.
-        position[num] = (layer + angle) / 7f
         high[num] = 0.0
         highlight[num] = 0.0
         shown[num] = 0.0
@@ -519,7 +521,7 @@ internal class Honeycomb : Visualization {
     private fun updateTiles(frames: Double, frame: SpectrumFrame, tunnelShare: Float) {
         for (num in 0 until TILES) {
             // Each tile reads the live spectrum at its place, on the page's 0 to 255 scale.
-            val live = frame.bandsRel.sampleAt(position[num])
+            val live = frame.bandsRel.sampleAt(positionOf(num))
             // In the Tunnel ring r shows the spectrum r beats back. Ring 0 reads the newest row, the live frame.
             val past = if (tunnelShare > 0f) history.sample(history.row(ring[num] * gestures.beatSeconds), spoke[num]) else live
             val rel = (live + (past - live) * tunnelShare).toDouble()
@@ -549,17 +551,19 @@ internal class Honeycomb : Visualization {
         drawRect(Color.Black)
         // The walk is rounded to 0.02, so the brush is not rebuilt on every frame.
         val rounded = (walk * 50f).roundToInt() / 50f
+        // The light follows the energy, so it is rounded to 0.02 too, or the brush rebuilds on every frame.
+        val lightKey = (light * 50f).roundToInt() / 50f
         if (backgroundVolume != brushVolume || size.width != brushWidth || size.height != brushHeight ||
-            density != brushDensity || light != brushLight || palette !== brushPalette || rounded != brushWalk
+            density != brushDensity || lightKey != brushLight || palette !== brushPalette || rounded != brushWalk
         ) {
             brushVolume = backgroundVolume
             brushWidth = size.width
             brushHeight = size.height
             brushDensity = density
-            brushLight = light
+            brushLight = lightKey
             brushPalette = palette
             brushWalk = rounded
-            background = backgroundBrush(light, palette, rounded)
+            background = backgroundBrush(lightKey, palette, rounded)
         }
         background?.let { drawRect(it) }
     }
@@ -575,10 +579,10 @@ internal class Honeycomb : Visualization {
         val stops = ArrayList<Pair<Float, Color>>(GRADIENT_SAMPLES + 3)
         fun addStop(distance: Double) {
             // The canvas interpolates colour and alpha unpremultiplied, from clear black at 0 to the
-            // edge colour at alpha 0.4 at 0.8, so over black the light rises with the square of the way.
+            // edge colour at alpha 0.6 at 0.8, so over black the light rises with the square of the way.
             val along = ((distance - inner) / (outer - inner)).coerceIn(0.0, 1.0)
             val share = min(along / 0.8, 1.0)
-            val lit = (0.4 * share * share).toFloat() * light
+            val lit = (0.6 * share * share).toFloat() * light
             stops += (distance / reach).toFloat() to Color(tint.red * lit, tint.green * lit, tint.blue * lit)
         }
         addStop(0.0)
@@ -634,7 +638,7 @@ internal class Honeycomb : Visualization {
                 val level = (value / 255.0).coerceIn(0.0, 1.0).toFloat()
                 drawPath(
                     hole,
-                    palette.cycled(level * 0.7f + ring[num] * 0.04f + walk + 0.5f, 0.3f, light, alpha = (open * share).coerceIn(0f, 1f)),
+                    palette.cycled(level * 0.7f + ring[num] * RING_HUE_STEP + walk + 0.5f, 0.3f, light, alpha = (open * share).coerceIn(0f, 1f)),
                 )
             }
         }
@@ -734,8 +738,8 @@ internal class Honeycomb : Visualization {
     /** The ring a tile sits in, 0 for the centre and 6 for the outer ring. */
     internal fun ringOf(num: Int): Int = ring[num]
 
-    /** Where a tile reads the spectrum, 0 for the bass up to just under 1 for the treble. */
-    internal fun positionOf(num: Int): Float = position[num]
+    /** Where a tile reads the spectrum this frame: the bass at the centre, the treble on the outermost shown ring. */
+    internal fun positionOf(num: Int): Float = (ring[num] + tileAngle[num]) / (ringsShown + 1f)
 
     /** What a tile shows this frame, on the page's 0 to 255 scale. */
     internal fun tileValue(num: Int): Double = shown[num]
@@ -839,8 +843,8 @@ internal class Honeycomb : Visualization {
         shatter = 0f
         history.clear()
         heardSeconds = 0.0
-        ringsTarget = 3
-        ringsShown = 3f
+        ringsTarget = 4
+        ringsShown = 4f
         open = 0f
         volume = 0
         factor = 0.0
@@ -964,16 +968,24 @@ internal class Honeycomb : Visualization {
             (distance / 3).pow(2) * (volume / 2000000.0) * (high.pow(1.3) / 300) * factor
 
         /** How much a tile shows at a value of 0, so the hive reads as one body where nothing plays. */
-        const val ALPHA_FLOOR = 0.3f
+        const val ALPHA_FLOOR = 0.45f
 
         /**
-         * A tile's fill: its hue walks the palette with its level and a little with its ring, its colour
-         * and its light rise with the level, and its alpha is the page's ramp with a floor.
+         * How far round the palette's span each ring sits from the one inside it, so the seven rings
+         * of a quiet hive wear the whole span: Prism's rings run red to violet outward, Fire's orange
+         * to yellow. At 0.04 all seven rings sat inside the span's warm start, and a Prism hive read
+         * like a Fire one.
+         */
+        const val RING_HUE_STEP = 0.14f
+
+        /**
+         * A tile's fill: its hue walks the palette with its level and steps round it with its ring, its
+         * colour and its light rise with the level, and its alpha is the page's ramp with a floor.
          */
         fun fillOf(value: Double, light: Float, palette: VizPalette, walk: Float, ring: Int): Color {
             val level = (value / 255.0).coerceIn(0.0, 1.0).toFloat()
             return palette.cycled(
-                position = level * 0.7f + ring * 0.04f + walk,
+                position = level * 0.7f + ring * RING_HUE_STEP + walk,
                 saturation = 0.55f + 0.45f * level,
                 value = (0.3f + 0.7f * level) * light,
                 alpha = max(ALPHA_FLOOR, alphaOf(value).toFloat().coerceIn(0f, 1f)),

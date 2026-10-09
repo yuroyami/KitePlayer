@@ -134,7 +134,7 @@ class HoneycombTest {
             assertEquals(6, honeycomb.ringOf(126))
             for (num in 0 until Honeycomb.TILES) {
                 val p = honeycomb.positionOf(num)
-                assertTrue(p >= 0f && p < 1f, "tile $num at $p")
+                assertTrue(p >= 0f && p < (honeycomb.ringOf(num) + 1f) / (4 + 1), "tile $num at $p")
             }
             assertEquals(0f, honeycomb.positionOf(0))
         }
@@ -158,13 +158,13 @@ class HoneycombTest {
         val high = Honeycomb()
         RenderHarness.forEachFrameOf(high, 160, 90, 120, VizPalette.Prism, source = { step -> InjectedFrames.toneFrame(step, lowBand = false) }) { _, _ -> }
         val highCentre = high.tileValue(0)
-        val highMiddle = (37..90).maxOf { high.tileValue(it) }
+        val highMiddle = (19..36).maxOf { high.tileValue(it) }
         println("bass tone: centre tile $lowCentre, mean of ring 6 $lowOuter")
-        println("treble tone: centre tile $highCentre, largest of rings 4 and 5 $highMiddle")
+        println("treble tone: centre tile $highCentre, largest of ring 3 $highMiddle")
         assertTrue(lowCentre > 150.0, "a bass tone lights the centre, had $lowCentre")
         assertTrue(lowOuter < 20.0, "a bass tone leaves the outer ring dim, had $lowOuter")
         assertTrue(highCentre < 60.0, "a treble tone leaves the centre dim, had $highCentre")
-        assertTrue(highMiddle > 150.0, "a treble tone lights rings 4 and 5, had $highMiddle")
+        assertTrue(highMiddle > 150.0, "a treble tone lights ring 3, had $highMiddle")
     }
 
     @Test
@@ -233,8 +233,8 @@ class HoneycombTest {
     fun theHiveGrowsARingOnEachBirthAndShrinksOnABreakdown() {
         val honeycomb = Honeycomb()
         honeycomb.reset()
-        assertEquals(3, honeycomb.ringsTarget)
-        repeat(3) { honeycomb.grow() }
+        assertEquals(4, honeycomb.ringsTarget)
+        repeat(2) { honeycomb.grow() }
         assertEquals(6, honeycomb.ringsTarget)
         honeycomb.grow()
         assertEquals(6, honeycomb.ringsTarget, "the hive stops at six rings")
@@ -260,8 +260,8 @@ class HoneycombTest {
             shown[step] = following.ringsShownValue
         }
         println("rings shown: step 29 ${shown[29]}, step 599 ${shown[599]}")
-        assertTrue(shown[29] > 3f && shown[29] < 4f, "half a second in the fourth ring is half grown, had ${shown[29]}")
-        assertTrue(shown[599] > 3.9f, "ten seconds in the fourth ring is fully grown, had ${shown[599]}")
+        assertTrue(shown[29] > 4f && shown[29] < 5f, "half a second in the fifth ring is half grown, had ${shown[29]}")
+        assertTrue(shown[599] > 4.9f, "ten seconds in the fifth ring is fully grown, had ${shown[599]}")
     }
 
     @Test
@@ -411,11 +411,11 @@ class HoneycombTest {
         return xs.max() - xs.min()
     }
 
-    /** The baseline with the lowest eight bands raised, so the centre tiles are loud. */
+    /** The baseline with the lowest twenty bands raised, so the centre tiles are loud. */
     private fun loudCentre(base: SpectrumFrame): SpectrumFrame {
-        val bands = base.bands.copyOf().also { for (b in 0 until 8) it[b] = 0.9f }
-        val peaks = base.peaks.copyOf().also { for (b in 0 until 8) it[b] = 0.95f }
-        val relative = base.bandsRel.copyOf().also { for (b in 0 until 8) it[b] = 0.9f }
+        val bands = base.bands.copyOf().also { for (b in 0 until 20) it[b] = 0.9f }
+        val peaks = base.peaks.copyOf().also { for (b in 0 until 20) it[b] = 0.95f }
+        val relative = base.bandsRel.copyOf().also { for (b in 0 until 20) it[b] = 0.9f }
         return SpectrumFrame(
             ptsMicros = base.ptsMicros, bands = bands, peaks = peaks, scope = base.scope,
             level = base.level, bass = base.bass, mid = base.mid, treble = base.treble,

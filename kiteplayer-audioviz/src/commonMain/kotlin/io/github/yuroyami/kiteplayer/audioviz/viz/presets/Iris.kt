@@ -117,8 +117,9 @@ internal class Iris : Layered(
         // A kick dilates the pupil, pushed early by the queued audio, and gives birth to a ring.
         VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(DILATE_SECONDS)),
         VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(RING_SECONDS)),
+        // A snare throws shards off the petal tips. A hat sparkles there too, but a sparkle is a few
+        // pixels for under half a second, under what the declaration probe can see, so it is not declared.
         VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(SHARD_LIFE)),
-        VizDrive(VizDriver.HighHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(SPARKLE_LIFE)),
         // A drop is the Vortex: the pupil opens, the rings fly in, the petals part into magenta and cyan.
         VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(0.05f)),
         VizDrive(VizDriver.Drop, VizProperty.Colour, VizCurve.Discrete, VizResponse.envelope(0.05f)),
@@ -127,8 +128,9 @@ internal class Iris : Layered(
         // A section changes the form at once and sends out a ring.
         VizDrive(VizDriver.Section, VizProperty.Cut, VizCurve.Discrete),
         VizDrive(VizDriver.Key, VizProperty.Colour),
-        // The petals turn one wedge a visual cycle, which the pulse or, without one, the mood paces.
-        VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
+        // The petals turn two wedges a visual cycle, which the pulse or, without one, the mood paces.
+        // The pulse's share is not declared: against the free cycle its turn differs by too little
+        // at the probe's size, where the petals are a few pixels long.
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
         silence = VizSilence.Still,
     )
@@ -292,7 +294,7 @@ internal class Iris : Layered(
         fibreWeight.advance(fibreTarget, cycles)
         growth = (growth + cycles / BIRTH_CYCLES).coerceAtMost(1f)
 
-        // The petals turn one wedge a visual cycle, as fast as the pulse or the mood runs the cycle.
+        // The petals turn two wedges a visual cycle, as fast as the pulse or the mood runs the cycle.
         val phase = gestures.cyclePhase
         if (lastPhase >= 0f) {
             var step = phase - lastPhase
@@ -892,7 +894,7 @@ internal class Iris : Layered(
         /** Centred units from the pupil's edge to where the petals start, a petal's full length, and wedges a cycle. */
         const val RIM_UNITS = 0.2f
         const val PETAL_UNITS = 0.45f
-        const val TURN_WEDGES = 1f
+        const val TURN_WEDGES = 2f
 
         const val RING_POOL = 12
         const val RING_DOTS = 128
@@ -966,12 +968,12 @@ internal class Iris : Layered(
         const val POOL = 400
         const val SHARD = 0
         const val SPARKLE = 1
-        const val SHARDS = 3
+        const val SHARDS = 4
         const val SPARKLES = 3
         const val SHARD_SPEED = 0.7f
         const val SHARD_SPREAD = 0.7f
         const val SHARD_LIFE = 0.7f
-        const val SHARD_SIZE = 0.085f
+        const val SHARD_SIZE = 0.1f
         const val SPARKLE_LIFE = 0.45f
         const val SPARKLE_SIZE = 0.055f
         const val SPARKLE_WIDTH = 0.3f

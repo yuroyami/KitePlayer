@@ -20,6 +20,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   contour lines; its north scrolls from the last seconds of the spectrum; each coastline is the live
   waveform; its islands glide between four forms with the music. It publishes its form through
   `Visualization.forms`.
+- Iris declares only the drives the declaration probe can see: it no longer lists the pulse's
+  turn or the hat's sparkles, though the picture still answers both. Its petals turn two wedges a
+  cycle and a snare throws four larger shards.
 
 ## [0.3.0] - 2026-10-09
 

@@ -31,7 +31,7 @@ class PipeTest {
     }
 
     @Test
-    fun oneRingLeavesTheMouthForEverySixteenthNote() {
+    fun oneRingIsBornAtTheFarPointForEverySixteenthNote() {
         val pipe = Pipe()
         var atStart = 0L
         RenderHarness.forEachFrameOf(pipe, 64, 36, 600, VizPalette.Prism,
@@ -40,8 +40,62 @@ class PipeTest {
         }
         // 120 beats a minute is eight sixteenth notes a second, over the last eight seconds.
         val passed = pipe.ringsPassed - atStart
-        println("pipe: $passed rings in eight seconds at 120 beats a minute")
-        assertTrue(abs(passed - 64L) <= 4L, "one ring per sixteenth note is 64 in eight seconds, had $passed")
+        println("pipe: $passed rings born at the far point in eight seconds at 120 beats a minute")
+        assertTrue(abs(passed - 64L) <= 4L, "one ring born at the far point per sixteenth note is 64 in eight seconds, had $passed")
+    }
+
+    @Test
+    fun theNewestSoundIsAtTheFarPointAndReachesTheMouthLater() {
+        val width = 64
+        val height = 36
+        val pipe = Pipe()
+        var far59 = 0f
+        var far300 = 0f
+        var far899 = 0f
+        var newestAt70 = 0f
+        var middleAt70 = 1f
+        var floorAt899 = 0f
+        var ceilingAt899 = 1f
+        RenderHarness.forEachFrameOf(pipe, width, height, 900, VizPalette.Prism,
+            source = { step ->
+                // The Bass driver moves only the scalar bass, which Pipe does not read, so the bass bands
+                // are raised by hand. The frame is built at the step the sound starts or later, so its band
+                // array is fresh and safe to change. Before that every band is quiet.
+                val frame = InjectedFrames.frame(VizDriver.Bands, step.coerceAtLeast(InjectedFrames.STEP_AT))
+                for (band in frame.bandsRel.indices) {
+                    val bass = step >= InjectedFrames.STEP_AT && band < frame.bandsRel.size / 4
+                    frame.bandsRel[band] = if (bass) 1f else 0.05f
+                }
+                frame
+            }) { bitmap, step ->
+            if (step == 70) {
+                newestAt70 = pipe.ringLight(0, 0)
+                middleAt70 = pipe.ringLight(Pipe.RINGS / 2, 0)
+            }
+            if (step == 899) {
+                floorAt899 = pipe.ringLight(Pipe.RINGS / 2, 0)
+                ceilingAt899 = pipe.ringLight(Pipe.RINGS / 2, Pipe.CELLS - 1)
+            }
+            if (step == 59 || step == 300 || step == 899) {
+                val pixels = IntArray(width * height)
+                bitmap.readPixels(pixels)
+                val far = nearAndFar(pixels, width, height)[1]
+                when (step) {
+                    59 -> far59 = far
+                    300 -> far300 = far
+                    else -> far899 = far
+                }
+            }
+        }
+        println("pipe: bass at step 70 newest ring floor $newestAt70, middle ring floor $middleAt70")
+        println("pipe: bass at step 899 middle ring floor $floorAt899, ceiling $ceilingAt899")
+        println("pipe: far region at steps 59, 300 and 899 is $far59, $far300, $far899, rings born ${pipe.ringsPassed}")
+        assertTrue(newestAt70 > 0.5f, "the newest ring carries the bass at once, had $newestAt70")
+        assertTrue(middleAt70 < 0.2f, "the bass has not yet reached the middle ring, had $middleAt70")
+        assertTrue(floorAt899 > 0.5f, "the bass has reached the middle ring's floor, had $floorAt899")
+        assertTrue(ceilingAt899 < 0.2f, "the bass does not light the ceiling, had $ceilingAt899")
+        assertTrue((far300 - far59) < 0.5f * (far899 - far59),
+            "the far region brightens later: $far59, $far300, $far899")
     }
 
     @Test
@@ -132,16 +186,20 @@ class PipeTest {
     }
 
     @Test
-    fun aSnareRingRunsOutWithoutLightingTheNearestRings() {
+    fun aSnareRingRushesInWithoutLightingTheNearestRings() {
         // The nearest rings cover much of the screen. A snare's ring that lit them for a frame made a
         // drum loop flash five times in its busiest second, because hats and chord stabs are heard as
-        // snares too (#298).
+        // snares too (#298). The ring now starts at the far point and arrives at the mouth within a beat.
         val width = 160
         val height = 90
+        val first = InjectedFrames.HIT_STEPS.first()
+        // Only the first hit counts: the next hit would restart the ring before it reaches the mouth.
         fun run(driver: VizDriver?): List<FloatArray> {
             val out = ArrayList<FloatArray>()
-            RenderHarness.forEachFrameOf(Pipe(), width, height, 80, VizPalette.Prism,
-                source = { step -> InjectedFrames.frame(driver, step) }) { bitmap, _ ->
+            RenderHarness.forEachFrameOf(Pipe(), width, height, first + 70, VizPalette.Prism,
+                source = { step ->
+                    InjectedFrames.frame(if (step < InjectedFrames.HIT_STEPS[1]) driver else null, step)
+                }) { bitmap, _ ->
                 val pixels = IntArray(width * height)
                 bitmap.readPixels(pixels)
                 out += nearAndFar(pixels, width, height)
@@ -150,15 +208,18 @@ class PipeTest {
         }
         val still = run(null)
         val hit = run(VizDriver.BodyHit)
-        val first = InjectedFrames.HIT_STEPS.first()
         var near = 0f
         var far = 0f
-        for (step in first until first + 12) {
+        var farAt = -1
+        for (step in first until first + 70) {
             near = maxOf(near, hit[step][0] - still[step][0])
-            far = maxOf(far, hit[step][1] - still[step][1])
+            if (hit[step][1] - still[step][1] > far) {
+                far = hit[step][1] - still[step][1]
+                farAt = step
+            }
         }
-        println("pipe: a snare brightens the nearest rings by $near and the far rings by $far")
-        assertTrue(far > 0.05f, "the snare's ring should still run out to the far point, brightened it by $far")
+        println("pipe: a snare brightens the nearest rings by $near and the far rings by $far, most at step $farAt")
+        assertTrue(far > 0.05f, "the snare's ring should still rush in from the far point, brightened it by $far")
         assertTrue(near < 0.02f, "the snare's ring lit the nearest rings by $near")
     }
 

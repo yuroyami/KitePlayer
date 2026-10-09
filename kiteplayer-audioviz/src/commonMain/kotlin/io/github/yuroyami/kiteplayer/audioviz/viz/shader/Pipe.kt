@@ -32,16 +32,17 @@ import kotlin.math.sin
  *
  * Each ring of cells is one past spectrum wrapped round the tube, with the bass along the floor,
  * the treble across the ceiling, and the two sides mirrored. A cell is lit against its band's own
- * recent peak: dark ember below half of it, orange and gold near it, and white on a new peak. The
- * current spectrum lights the ring at the mouth, and one ring leaves the mouth for every sixteenth
- * note, so the tube is the song's recent past running away to a small white point far ahead. A gate
- * ring passes at the start of each cycle while the beat is clear, and the rings that start a beat
- * have thicker gaps. A kick flares the nearest rings and squeezes the tube, a snare sends a bright
- * ring from just past the nearest rings out to the far point, hats throw sparks, and the far point
- * follows the tune. A section cuts to another lane and turns the tube round, square or six-sided
- * over one cycle. A breakdown halves the speed and leaves only the cells' lit edges. On a drop the
- * tube goes to light speed for one cycle and every cell stretches into a streak, and on the next
- * cycle's first beat they snap back.
+ * recent peak: dark ember below half of it, orange and gold near it, and white on a new peak. A new
+ * ring is born at the small white point far ahead, one for every sixteenth note, and the rings
+ * stream toward the viewer. The viewer flies into the newest sound, and the rings that pass by are
+ * the song's recent past. The nearest ring is also lit by the live spectrum, so a hit is felt at
+ * the camera. A gate ring passes at the start of each cycle while the beat is clear, and the rings
+ * that start a beat have thicker gaps. A kick flares the nearest rings, squeezes the tube and
+ * pushes the flight on for a moment. A snare sends a bright ring rushing in from the far point,
+ * hats throw sparks, and the far point follows the tune. A section cuts to another lane and turns
+ * the tube round, square or six-sided over one cycle. A breakdown halves the speed and leaves only
+ * the cells' lit edges. On a drop the tube goes to light speed for one cycle and every cell
+ * stretches into a streak, and on the next cycle's first beat they snap back.
  */
 internal class Pipe : ShaderPreset(
     source = SOURCE,
@@ -54,7 +55,8 @@ internal class Pipe : ShaderPreset(
 ) {
 
     override val mapping: VizMapping by mappingOf(
-        // The wall is the spectrum's recent past; the current bands light the ring at the mouth.
+        // The wall is the spectrum's recent past; the current bands light the newest ring, at the far
+        // point, and the nearest ring.
         VizDrive(VizDriver.Bands, VizProperty.Texture),
         // One ring per sixteenth note of the cycles, which without a pulse run at the mood's rate.
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
@@ -75,8 +77,10 @@ internal class Pipe : ShaderPreset(
     // The debris is drawn over the shader, which does not move with a camera.
     override val frontParallax: Float get() = 0f
 
-    /** The light of every cell: ring 0 is the live ring at the mouth, cell 0 is the floor. */
+    /** The light of every cell: ring 0 is the newest ring, born at the far point, and cell 0 is the floor. */
     private val light = FloatArray(RINGS * CELLS)
+    /** The light of one cell, so a test can read the model. */
+    internal fun ringLight(index: Int, cell: Int): Float = light[index * CELLS + cell]
     /** One for a gate ring. */
     private val gate = FloatArray(RINGS)
     /** One for a ring that starts a beat: its gaps are drawn thicker, so the flight shows on any sound. */
@@ -85,12 +89,12 @@ internal class Pipe : ShaderPreset(
     private val peak = FloatArray(CELLS) { PEAK_START }
     private val image = PixelImage(CELLS, RINGS)
 
-    /** Where the music was last frame, in sixteenth notes, and how far the mouth ring has moved on. */
+    /** Where the music was last frame, in sixteenth notes, and how far the newest ring has moved on. */
     private var position = -1.0
-    /** How far the current ring has left the mouth, 0 to 1. Internal so a test can watch the flow. */
+    /** How far the newest ring has moved from the far point, 0 to 1. Internal so a test can watch the flow. */
     internal var flow = 0f
         private set
-    /** Rings that have left the mouth since the start. */
+    /** Rings born at the far point since the start. */
     internal var ringsPassed = 0L
         private set
     private var lastCycle = -1
@@ -151,9 +155,17 @@ internal class Pipe : ShaderPreset(
         val lightSpeed = lightSpeedUntil >= 0 && gestures.cycles < lightSpeedUntil
         if (!lightSpeed) lightSpeedUntil = -1
         streak = if (lightSpeed) motion else 0f
-        val pace = (if (lightSpeed) 1f + 2f * motion else 1f) * (1f - 0.5f * calm)
 
-        // The live ring at the mouth follows the current spectrum until it leaves. On the first
+        // A kick flares the nearest rings at once and squeezes the tube, which springs back.
+        flare.kick(gestures.kick * 5f)
+        flare.advance(dt)
+        kickLight = maxOf(kickLight * exp(-dt / 0.15f), gestures.kick)
+
+        // The same kick pushes the flight on for a moment.
+        val pace = (if (lightSpeed) 1f + 2f * motion else 1f) * (1f - 0.5f * calm) *
+            (1f + KICK_PACE * kickLight * motion)
+
+        // The newest ring follows the current spectrum until the next ring is born. On the first
         // frame every ring takes it, so the tube is whole from the start rather than filling up.
         val first = moved == 0.0 && ringsPassed == 0L && flow == 0f
         cellsFrom(frame.bandsRel, frame.audible, step)
@@ -168,12 +180,7 @@ internal class Pipe : ShaderPreset(
         if (lastCycle >= 0 && gestures.cycles != lastCycle && frame.audible > 0.5f && gestures.pulseUsable) gate[0] = 1f
         lastCycle = gestures.cycles
 
-        // A kick flares the nearest rings at once and squeezes the tube, which springs back.
-        flare.kick(gestures.kick * 5f)
-        flare.advance(dt)
-        kickLight = maxOf(kickLight * exp(-dt / 0.15f), gestures.kick)
-
-        // A snare sends a bright ring from the mouth to the far point in one beat.
+        // A snare sends a bright ring rushing in from the far point in one beat.
         if (gestures.snare > 0f) snareAge = 0f
         if (snareAge >= 0f) {
             snareAge += step
@@ -210,7 +217,7 @@ internal class Pipe : ShaderPreset(
         quiet += ((1f - frame.audible) - quiet) * (1f - exp(-dt / 0.5f))
     }
 
-    /** The current bands, folded into the live ring's cells: the floor holds the bass. */
+    /** The current bands, folded into the newest ring's cells: the floor holds the bass. */
     private fun cellsFrom(bands: FloatArray, audible: Float, step: Float) {
         if (bands.isEmpty()) {
             for (cell in 0 until CELLS) light[cell] = 0f
@@ -234,7 +241,7 @@ internal class Pipe : ShaderPreset(
         }
     }
 
-    /** The live ring leaves the mouth: every ring moves one back, and a new live ring starts. */
+    /** A new ring is born at the far point: every ring ages by one, and a new newest ring starts. */
     private fun push() {
         light.copyInto(light, CELLS, 0, (RINGS - 1) * CELLS)
         gate.copyInto(gate, 1, 0, RINGS - 1)
@@ -268,7 +275,8 @@ internal class Pipe : ShaderPreset(
         program.uniform("uHits",
             (kickLight * 0.7f).coerceIn(0f, 1f),
             if (snare >= 0f) snare * RINGS else -99f,
-            if (snare >= 0f) 1f - 0.6f * snare else 0f,
+            // The ring grows brighter as it nears, from 0.4 at the far point to full past the nearest rings.
+            if (snare >= 0f) 0.4f + 0.6f * snare else 0f,
             1f + calm)
         program.uniform("uBend", bendX.value, bendY.value)
         updateRamp(state.palette)
@@ -344,6 +352,8 @@ internal class Pipe : ShaderPreset(
         private const val PEAK_START = 0.6f
         private const val ORANGE_HUE = 50f
         private const val GOLD_HUE = 85f
+        /** A kick pushes the flight on by this share for a moment. */
+        private const val KICK_PACE = 0.6f
 
         private val GLOW = PostSpec(bloom = 0.35f, bloomRadius = 0.03f, threshold = 0.9f, vignette = 0.2f,
             grain = 0f, glitch = false, aberration = 0f)
@@ -366,6 +376,8 @@ const float RINGS = 56.0;
 const float CELLS = 16.0;
 const float MOUTH = 0.42;
 const float SPACING = 0.26;
+// The newest ring is born at this depth, far down the tube, and streams toward the mouth.
+const float FAR_DEPTH = MOUTH + RINGS * SPACING;
 const float LIGHT_MAX = 1.25;
 
 // How far a ray from the lane runs across the tube before it meets the wall, for the tube's three
@@ -413,26 +425,31 @@ half4 main(float2 position) {
     // Round the tube from the floor, which is down the screen, to the ceiling, the same both sides.
     float around = abs(atan(hit.x, hit.y)) / 3.14159265;
     float cell = min(floor(around * CELLS), CELLS - 1.0);
-    // Along the tube: which ring, counted from the live ring at the mouth, and where in it.
-    float along = (depth - MOUTH) / SPACING + 1.0 - uFlow.x;
+    // Along the tube: which ring, counted from the newest ring at the far point, and where in it.
+    float along = (FAR_DEPTH - depth) / SPACING - uFlow.x;
     float index = floor(along);
     float v = along - index;
+    float fromMouth = RINGS - 1.0 - index;
 
     float4 texel = ring(cell, index);
     float lit = texel.r * LIGHT_MAX;
-    // Light speed: each cell smears back along the tube into a streak of its own colour.
-    lit = max(lit, uFlow.y * 0.85 * LIGHT_MAX * ring(cell, index + 1.0).r);
-    lit = max(lit, uFlow.y * 0.65 * LIGHT_MAX * ring(cell, index + 2.0).r);
+    // Light speed: each cell smears into a streak of its own colour, trailing toward the far point,
+    // behind the ring's motion.
+    lit = max(lit, uFlow.y * 0.85 * LIGHT_MAX * ring(cell, index - 1.0).r);
+    lit = max(lit, uFlow.y * 0.65 * LIGHT_MAX * ring(cell, index - 2.0).r);
     // A kick brightens the nearest rings in view and keeps their pattern. It stops short of white:
     // those rings are large, and a white flash over them on every kick would be a strobe. A snare's
-    // ring runs out to the far point.
-    float kick = uHits.x * clamp(1.0 - (index - 1.0) / 5.0, 0.0, 1.0);
+    // ring rushes in from the far point.
+    float kick = uHits.x * clamp(1.0 - (fromMouth - 1.0) / 5.0, 0.0, 1.0);
     lit = min(lit * (1.0 + 2.0 * kick) + 0.4 * kick, max(lit, 0.85));
+    // The nearest ring also takes the live spectrum, so a hit is felt at the camera.
+    float live = ring(cell, 0.0).r * LIGHT_MAX;
+    lit = max(lit, 0.6 * live * (1.0 - smoothstep(0.0, 1.0, fromMouth)));
     // The snare's ring lights whole cells: the ring it has reached, and the one behind at half. It
-    // shows only past the nearest rings: those rings are large, and hats and chord stabs are heard
-    // as snares too, so lighting them would be a strobe.
+    // rushes in from the far point and shows only past the nearest rings: those rings are large, and
+    // hats and chord stabs are heard as snares too, so lighting them would be a strobe.
     float behind = floor(uHits.y) - index;
-    lit += uHits.z * (behind == 0.0 ? 1.0 : (behind == 1.0 ? 0.5 : 0.0)) * smoothstep(3.0, 6.0, index);
+    lit += uHits.z * (behind == 0.0 ? 1.0 : (behind == 1.0 ? 0.5 : 0.0)) * smoothstep(3.0, 6.0, fromMouth);
     // Light speed gathers light along each streak, and the whole tube rushes brighter.
     lit = lit * (1.0 + 0.35 * uFlow.y) + 0.2 * uFlow.y;
     lit = clamp(lit, 0.0, 1.3);
@@ -459,14 +476,14 @@ half4 main(float2 position) {
     // wall reads as clean cells and not as a dim gradient, and the tube shows even where nothing plays.
     float3 colour = ramp(lit) * smoothstep(0.08, 0.45, lit) * body;
     colour += uRamp0 * 0.4 * body;
-    // New peaks burn white once their ring has moved away from the mouth. The nearest rings cover
+    // New peaks burn white only past the nearest rings. The nearest rings cover
     // much of the screen, and a broadband hit turning them white on every beat would be a strobe.
-    colour = mix(colour, float3(1.0), smoothstep(1.0, 1.2, lit) * smoothstep(2.0, 4.5, index) * body);
+    colour = mix(colour, float3(1.0), smoothstep(1.0, 1.2, lit) * smoothstep(2.0, 4.5, fromMouth) * body);
     colour += ramp(0.6) * rim * 0.3 * uFlow.w;
     // A gate ring: every edge of the ring lit pale gold, below the glow's threshold.
     colour = max(colour, mix(uRamp2, float3(1.0), 0.35) * rim * texel.g);
     // The tube fades into the distance.
-    colour *= exp(-max(index, 0.0) * 0.045);
+    colour *= exp(-max(fromMouth, 0.0) * 0.045);
     if (index >= RINGS || index < 0.0) colour = float3(0.0);
 
     // The small white point far ahead.

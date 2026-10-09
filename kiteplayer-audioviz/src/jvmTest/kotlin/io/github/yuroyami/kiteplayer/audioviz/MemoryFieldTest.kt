@@ -7,6 +7,9 @@ import kotlin.test.assertTrue
 
 class MemoryFieldTest {
 
+    // The field's texture is a Compose bitmap, so the test needs the Skia graphics even on its own.
+    init { useSkiaGraphics() }
+
     private val out = FloatArray(2)
 
     @Test

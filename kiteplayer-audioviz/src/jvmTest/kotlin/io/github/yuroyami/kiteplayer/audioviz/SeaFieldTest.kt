@@ -12,6 +12,9 @@ import kotlin.test.assertTrue
 /** The shared pieces Contour's sea is built from: vortices, the extra channel, the lace and the drop. */
 class SeaFieldTest {
 
+    // The field's texture is a Compose bitmap, so the test needs the Skia graphics even on its own.
+    init { useSkiaGraphics() }
+
     private val out = FloatArray(2)
 
     @Test
@@ -104,5 +107,59 @@ class SeaFieldTest {
             if (inLeft == leftHalf && lace[cell] > 0.25f) count++
         }
         return count
+    }
+
+    @Test
+    fun aDropFillsItsDiscWithNewInk() {
+        val field = MemoryField(rows = 36)
+        field.size(1f)
+        field.drop(0f, 0f, 0.3f, 0.8f)
+        assertEquals(0.8f, field.inkAt(0f, 0f), 0.01f)
+        assertEquals(0f, field.inkAt(0.6f, 0f), 0.01f)
+        assertEquals(0f, field.ageAt(0f, 0f), 0.01f)
+    }
+
+    @Test
+    fun aDropPushesTheOldInkOutwardIntoARing() {
+        val field = MemoryField(rows = 36)
+        field.size(1f)
+        field.disc(0f, 0f, 0.3f, 1f)
+        field.drop(0f, 0f, 0.3f, 0.5f)
+        // The old disc, 0 to 0.3 out, now lies from 0.3 to 0.42 out, round the new drop.
+        assertEquals(0.5f, field.inkAt(0f, 0f), 0.02f)
+        assertTrue(field.inkAt(0.36f, 0f) > 0.7f, "the old ink is a ring to the right, read ${field.inkAt(0.36f, 0f)}")
+        assertTrue(field.inkAt(0f, 0.36f) > 0.7f, "and below, read ${field.inkAt(0f, 0.36f)}")
+        assertTrue(field.inkAt(0.55f, 0f) < 0.1f, "and nothing lies beyond it, read ${field.inkAt(0.55f, 0f)}")
+    }
+
+    @Test
+    fun aDropKeepsTheAgeOfTheInkItPushes() {
+        val field = MemoryField(rows = 36)
+        field.size(1f)
+        field.halfLife = 100f
+        field.disc(0f, 0f, 0.3f, 1f)
+        field.advance(Flows.Drift(0f, 0f), 2f)
+        field.drop(0f, 0f, 0.3f, 0.5f)
+        assertEquals(2f, field.ageAt(0.36f, 0f), 0.2f)
+        assertEquals(0f, field.ageAt(0f, 0f), 0.05f)
+    }
+
+    @Test
+    fun aDropPushesTheExtraChannelAndClearsItInside() {
+        val field = MemoryField(rows = 36, withExtra = true)
+        field.size(1f)
+        checkNotNull(field.extra).fill(0.6f)
+        field.drop(0f, 0f, 0.3f, 1f)
+        assertEquals(0f, field.extraAt(0f, 0f), 0.01f)
+        assertEquals(0.6f, field.extraAt(0.6f, 0f), 0.02f)
+    }
+
+    @Test
+    fun aDropOnAHeldFieldStillLandsBecauseAHitIsAnEvent() {
+        val field = MemoryField(rows = 36)
+        field.size(1f)
+        field.advance(Flows.Tunnel(5f), 0f)
+        field.drop(0.2f, -0.2f, 0.1f, 1f)
+        assertTrue(field.inkAt(0.2f, -0.2f) > 0.9f)
     }
 }

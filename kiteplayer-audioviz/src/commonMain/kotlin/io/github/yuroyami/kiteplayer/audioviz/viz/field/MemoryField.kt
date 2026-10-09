@@ -127,6 +127,50 @@ internal class MemoryField(val rows: Int = 108, private val withExtra: Boolean =
         }
     }
 
+    /**
+     * A drop of [ink], [radius] centred units across, at [x], [y], the way paint lands on a marbling
+     * tray: every point outside the drop moves outward to the square root of its distance squared plus
+     * the radius squared, so the old ink closes into rings round the new drop and keeps its area. The
+     * drop's own ink is new, with an age of zero, and the extra channel is cleared inside it.
+     */
+    fun drop(x: Float, y: Float, radius: Float, ink: Float) {
+        val cx = toCellX(x)
+        val cy = toCellY(y)
+        val r = radius * rows * 0.5f
+        val squared = r * r
+        val extraNow = extra
+        val extraNext = spareExtra
+        for (row in 0 until rows) {
+            for (column in 0 until columns) {
+                val cell = row * columns + column
+                val dx = column + 0.5f - cx
+                val dy = row + 0.5f - cy
+                val distance = sqrt(dx * dx + dy * dy)
+                if (distance > 1e-4f && distance * distance > squared) {
+                    val shrink = sqrt(1f - squared / (distance * distance))
+                    val fromX = cx + dx * shrink
+                    val fromY = cy + dy * shrink
+                    spareInk[cell] = sample(this.ink, fromX, fromY)
+                    spareAge[cell] = sample(age, fromX, fromY)
+                    if (extraNow != null && extraNext != null) extraNext[cell] = sample(extraNow, fromX, fromY)
+                } else {
+                    spareInk[cell] = 0f
+                    spareAge[cell] = 0f
+                    if (extraNext != null) extraNext[cell] = 0f
+                }
+                // New ink fills the drop, blended across its edge cell so the circle stays round.
+                val inside = (r - distance + 0.5f).coerceIn(0f, 1f)
+                if (inside > 0f) {
+                    spareInk[cell] += (ink - spareInk[cell]) * inside
+                    spareAge[cell] *= 1f - inside
+                    if (extraNext != null) extraNext[cell] *= 1f - inside
+                }
+            }
+        }
+        swap()
+        dirty = true
+    }
+
     /** The ink at a point, 0 to 1, read between cells. */
     fun inkAt(x: Float, y: Float): Float = sample(ink, toCellX(x), toCellY(y))
 

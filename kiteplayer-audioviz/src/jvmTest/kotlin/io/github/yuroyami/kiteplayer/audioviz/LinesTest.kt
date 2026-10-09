@@ -189,6 +189,67 @@ class LinesTest {
         assertTrue(abs(front.green - front.blue) < 0.005f, "the front line should stay white, green ${front.green} blue ${front.blue}")
     }
 
+    @Test
+    fun aKickSendsAWaveOutwardThroughTheStack() {
+        val hit = InjectedFrames.HIT_STEPS[0]
+        val kicked = runWithOnlyTheFirstHit(VizDriver.LowHit)
+        val still = runWithOnlyTheFirstHit(null)
+        val atHit = kicked.first[hit]
+        assertTrue(atHit[10] > 0.5f && atHit[11] > 0.5f, "the hit should lift both middle lines, got ${atHit[10]} and ${atHit[11]}")
+        val later = kicked.first[hit + 6]
+        val back = checkNotNull((0..9).maxByOrNull { later[it] })
+        val front = checkNotNull((12..21).maxByOrNull { later[it] })
+        val pixelDifference = difference(kicked.second, still.second)
+        println("kick wave six steps on: back peak at line $back, front peak at line $front, line 10 at ${later[10]}, pixel difference $pixelDifference")
+        assertTrue(back <= 5, "the lift should run to the back, its peak is at line $back")
+        assertTrue(front >= 16, "the lift should run to the front, its peak is at line $front")
+        assertTrue(later[10] < 0.3f, "the middle should have let go, line 10 is ${later[10]}")
+        for (step in still.first.indices) {
+            assertTrue(still.first[step].all { it == 0f }, "without a kick the wave stays 0, step $step")
+        }
+        assertTrue(pixelDifference > 0.0005f, "the lift should show in the picture, the difference is $pixelDifference")
+    }
+
+    @Test
+    fun aSnareRaisesThePeaksForABeat() {
+        val lines = Lines()
+        val sharpen = FloatArray(200)
+        val scale = FloatArray(200)
+        RenderHarness.forEachFrameOf(
+            lines, 64, 36, 200, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(if (step < InjectedFrames.HIT_STEPS[1]) VizDriver.BodyHit else null, step) },
+        ) { _, step ->
+            sharpen[step] = lines.sharpenValue
+            scale[step] = lines.targetScale
+        }
+        val hit = InjectedFrames.HIT_STEPS[0]
+        println("snare raise: at the hit ${sharpen[hit]}, two beats on ${sharpen[hit + 94]}, scale at the hit ${scale[hit]}")
+        assertTrue(sharpen[hit] > 0.5f, "the hit should raise the peaks, got ${sharpen[hit]}")
+        assertTrue(sharpen[hit + 94] < 0.1f, "the raise should be gone two beats on, got ${sharpen[hit + 94]}")
+        assertTrue(scale[hit] > 1.1f, "the targets should grow at the hit, scale is ${scale[hit]}")
+        for (step in sharpen.indices) {
+            assertTrue(abs(scale[step] - (1f + Lines.SHARPEN * sharpen[step])) < 1e-5f, "scale follows the raise at step $step")
+        }
+    }
+
+    /** One fresh render of 160 frames where only the first hit of [driver] lands: the wave per step, and the pixels of step 70. */
+    private fun runWithOnlyTheFirstHit(driver: VizDriver?): Pair<List<FloatArray>, IntArray> {
+        val lines = Lines()
+        val waves = ArrayList<FloatArray>()
+        var pixels = IntArray(0)
+        RenderHarness.forEachFrameOf(
+            lines, 96, 54, 160, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(if (step < InjectedFrames.HIT_STEPS[1]) driver else null, step) },
+        ) { bitmap, step ->
+            waves.add(FloatArray(Lines.LINES) { lines.waveAt(it) })
+            if (step == 70) {
+                pixels = IntArray(96 * 54)
+                bitmap.readPixels(pixels)
+            }
+        }
+        return waves to pixels
+    }
+
     /** The mean frame-to-frame change over the last second of three, and the ink of the last frame. */
     private fun changeAndInk(song: RenderHarness.Song): Pair<Float, Float> {
         var previous: IntArray? = null

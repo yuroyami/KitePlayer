@@ -24,6 +24,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Evolution
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Genes
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.max
@@ -63,6 +64,8 @@ import kotlin.random.Random
  * World: the road bends with the stereo balance and dips with the level. The farthest line moves most,
  * and the nearest line does not move. The camera glides on the slow cycle and comes home in a silence.
  * Far quiet lines take a tint from the palette through the fog, and a line with a peak stays white.
+ * A kick lifts the two middle lines, and the lift runs outward through the stack one line per page frame.
+ * A snare raises every peak by about a third for a beat.
  * At rest, the Flat picture is the port's picture.
  *
  * Twenty-two thin white lines stand front to back in black fog, seen from a slightly raised camera.
@@ -145,6 +148,19 @@ internal class Lines : Visualization {
     private val roadX = FloatArray(LINES)
     private val roadY = FloatArray(LINES)
 
+    // A kick's lift on each line, 0 to 1, which runs outward one line per page frame.
+    private var wave = FloatArray(LINES)
+    private var waveNext = FloatArray(LINES)
+    internal fun waveAt(line: Int): Float = wave[line]
+
+    // The shape of the lift along a line: a bell at the middle.
+    private val bell = FloatArray(POINTS)
+
+    // A snare's raise of the peaks, 1 at the hit and gone within a beat.
+    private var sharpen = 0f
+    internal val sharpenValue: Float get() = sharpen
+    internal val targetScale: Float get() = 1f + SHARPEN * sharpen
+
     // The camera: (0, 45, 240) at rest.
     internal var eyeX = 0f
         private set
@@ -166,6 +182,10 @@ internal class Lines : Visualization {
             point1[d] = intPoint
             point2[d] = if (intPoint > CONTROL_POINTS - 2) CONTROL_POINTS - 1 else intPoint + 1
             point3[d] = if (intPoint > CONTROL_POINTS - 3) CONTROL_POINTS - 1 else intPoint + 2
+        }
+        for (d in 0 until POINTS) {
+            val t = (d - (POINTS - 1) / 2f) / 120f
+            bell[d] = exp(-t * t)
         }
     }
 
@@ -191,7 +211,8 @@ internal class Lines : Visualization {
             val vertex = vertices[index]
             var open = false
             for (d in 0 until POINTS) {
-                if (!scene.project(pointX[d] + roadX[index], lineY[index] + roadY[index] + vertex[d], lineZ[index])) {
+                val y = lineY[index] + roadY[index] + vertex[d] + wave[index] * WAVE_HEIGHT * bell[d]
+                if (!scene.project(pointX[d] + roadX[index], y, lineZ[index])) {
                     open = false
                     continue
                 }
@@ -216,7 +237,7 @@ internal class Lines : Visualization {
     internal fun screenXOf(line: Int, vertex: Int): Float {
         val onScreen = scene.project(
             pointX[vertex] + roadX[line],
-            lineY[line] + roadY[line] + vertices[line][vertex],
+            lineY[line] + roadY[line] + vertices[line][vertex] + wave[line] * WAVE_HEIGHT * bell[vertex],
             lineZ[line],
         )
         return if (onScreen) scene.screenX else Float.NaN
@@ -233,6 +254,9 @@ internal class Lines : Visualization {
         bend.advance(balanceOf(frame.scopeLeft, frame.scopeRight) * frame.audible, live)
         dip.advance(frame.levelRel * frame.audible, live)
         present.advance(frame.audible, live)
+        // A snare raises the peaks, and the raise is gone within a beat of heard time.
+        val heardNow = dt * frame.audible
+        sharpen = max(sharpen * exp(-heardNow * 3f / gestures.beatSeconds.coerceAtLeast(0.1f)), gestures.snare)
         for (index in 0 until LINES) {
             peaked[index].advance(peakedTarget[index], live)
             val share = (Z_NEAR - lineZ[index]) / Z_SPAN
@@ -257,6 +281,14 @@ internal class Lines : Visualization {
         val frames = pageFrames.advance(heard)
         var easing = heard
         for (pageFrame in 1..frames) {
+            // The wave runs one line outward per page frame and fades as it goes; the middle keeps a trace.
+            for (i in 0 until LINES) {
+                val from = if (i < 10) wave[i + 1] else if (i > 11) wave[i - 1] else wave[i] * 0.3f
+                waveNext[i] = from * WAVE_KEEP
+            }
+            val swap = wave
+            wave = waveNext
+            waveNext = swap
             // A screen frame carries one analysis, so the analyser smooths once however many page frames it covers.
             if (pageFrame == 1) analyser.update(state.frame)
             for (index in 0 until LINES) generatePoints(index, analyser.frequencyBytes, targets[index])
@@ -266,6 +298,11 @@ internal class Lines : Visualization {
             }
         }
         ease(easing)
+        // A kick lifts the two middle lines. It lands after the shift, so the hit frame shows it in full.
+        if (gestures.kick > 0f) {
+            wave[10] = max(wave[10], gestures.kick)
+            wave[11] = max(wave[11], gestures.kick)
+        }
     }
 
     /** Line.js `generatedPoints` for line [index]: 386 heights resampled to 512 by a Catmull-Rom spline. */
@@ -278,7 +315,7 @@ internal class Lines : Visualization {
         for (i in RANGE + start downTo start) {
             val height = heightOf(bins[i])
             if (height > FLOOR) peak = true
-            heights[at++] = height
+            heights[at++] = FLOOR + (height - FLOOR) * targetScale
         }
         peakedTarget[index] = if (peak) 1f else 0f
         for (i in 0 until HALF) heights[HALF + i] = heights[HALF - 1 - i]
@@ -324,6 +361,9 @@ internal class Lines : Visualization {
         dip.reset()
         present.reset()
         for (envelope in peaked) envelope.reset()
+        wave.fill(0f)
+        waveNext.fill(0f)
+        sharpen = 0f
         peakedTarget.fill(0f)
         roadX.fill(0f)
         roadY.fill(0f)
@@ -458,6 +498,15 @@ internal class Lines : Visualization {
 
         /** Where on the palette ramp the tint is read. */
         const val TINT_AT = 0.35f
+
+        /** How much of the lift survives each step outward. */
+        const val WAVE_KEEP = 0.9f
+
+        /** The lift of a full kick at the middle of a line, in world units. */
+        const val WAVE_HEIGHT = 25f
+
+        /** How much a snare raises the peaks above the floor, as a share. */
+        const val SHARPEN = 0.35f
 
         /** How strongly the balance is stretched: a channel twice as loud is already a full bend. */
         const val BALANCE_GAIN = 3f

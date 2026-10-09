@@ -16,6 +16,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the fibres with the loudness, and rings of past waveforms spread outward and fade, after Wavy
   Spiral's dots. Its form changes with the music, and it publishes the form through
   `Visualization.forms`.
+- Contour is a living map: its sea carries ink that kicks drop and point vortices comb, drawn as
+  contour lines; its north scrolls from the last seconds of the spectrum; each coastline is the live
+  waveform; its islands glide between four forms with the music. It publishes its form through
+  `Visualization.forms`.
 
 ## [0.3.0] - 2026-10-09
 

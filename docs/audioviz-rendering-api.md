@@ -199,6 +199,27 @@ stops the vortices while the lace keeps growing, and a drop lands one large gold
 kick that pushes the old ink outward, the growth of the lace, the breakdown and the gold drop.
 `PausedPictureTest` covers the pause.
 
+## Contour, a living map
+
+`Contour` is a map seen straight down, drawn as contour lines by one shader, with a Canvas
+stand-in where runtime shaders cannot run. The stand-in draws the land's lines only.
+
+- The land: 32 islands stand on the bands, bass first. A loud band raises its island, and each
+  island's coastline is the live waveform wrapped round it, a fraction of a level high.
+- The north of the map is the last eight seconds of the spectrum by map time. Map time runs at the
+  music's pace and stops in a pause or a silence, so new land rises at the top edge and drifts south.
+- The sea keeps a memory field of 90 rows (160 by 90 on a 16 by 9 screen) with a half life of three
+  seconds. A kick drops ink round the loudest bass island; every point outside the drop moves outward,
+  as paint does on a marbling tray. Up to five point vortices comb the ink. The shader draws the ink
+  as contour lines of its own, only where the ground lies under the water.
+- A faint wash of the ground's colour keeps the map lit, at most 22 percent of the line colours.
+- The forms are Archipelago, Ridge, Crater and Delta. A morph of the evolution pacer glides the
+  islands to the next form over one to four cycles and turns the currents the other way; a birth
+  raises a new group of four islands where the loudest bands sit. A section raises a new archipelago.
+- A snare cracks an island for under a second. A breakdown brings high tide, stills the sea and
+  grows lace foam in it with a Gray-Scott reaction in the field's third channel. A drop brings low
+  tide for a cycle, over which the currents run on in gold.
+
 ## Alchemy, a memory field
 
 `Alchemy` keeps a memory field: a grid of 108 rows and as many columns as the screen's shape asks

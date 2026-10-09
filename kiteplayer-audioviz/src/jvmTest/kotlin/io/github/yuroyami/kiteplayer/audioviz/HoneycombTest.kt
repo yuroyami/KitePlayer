@@ -2,10 +2,12 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Honeycomb
@@ -15,7 +17,6 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** The port of Soundcloud Visualizer by Michael Bromley: it draws, it stands still in silence, and it keeps the page's volume and its pole. */
@@ -114,14 +115,6 @@ class HoneycombTest {
     }
 
     @Test
-    fun theTurnReversesAboveAVolumeOf10000() {
-        assertEquals(0.001, Honeycomb.rotationStep(0))
-        assertEquals(0.001, Honeycomb.rotationStep(10_000))
-        assertTrue(Honeycomb.rotationStep(10_001) < 0.0)
-        assertEquals(0.001 - kotlin.math.sin(14_000 / 800_000.0), Honeycomb.rotationStep(14_000))
-    }
-
-    @Test
     fun theHoneycombHas127TilesSizedByTheLongerSideInDp() {
         for ((density, scale) in listOf(1f to 1, 2f to 2, 3f to 3)) {
             val honeycomb = Honeycomb()
@@ -136,29 +129,107 @@ class HoneycombTest {
             }
             // Six rings of tiles 67 dp apart, plus a tile size.
             assertTrue(farthest in 400.0..450.0, "the outer ring's corners reach $farthest dp")
+            assertEquals(0, honeycomb.ringOf(0))
+            for (num in 1..6) assertEquals(1, honeycomb.ringOf(num), "tile $num")
+            assertEquals(6, honeycomb.ringOf(126))
+            for (num in 0 until Honeycomb.TILES) {
+                val p = honeycomb.positionOf(num)
+                assertTrue(p >= 0f && p < 1f, "tile $num at $p")
+            }
+            assertEquals(0f, honeycomb.positionOf(0))
         }
-        val buckets = (0 until Honeycomb.TILES).map { Honeycomb.bucketOf(it) }
-        assertEquals(0, buckets.first())
-        assertEquals(2, buckets[1])
-        assertEquals(127, buckets.last())
-        assertFalse(1 in buckets, "Math.ceil(128 / 127 * num) skips bin 1")
     }
 
     @Test
-    fun thePaletteStopsAreThePagesColours() {
-        val stops = mapOf(
-            0.0 to 0xFF4040, 32.0 to 0xDB04B4, 64.0 to 0x8011FD, 96.0 to 0x255FDF, 128.0 to 0x00C073,
-            160.0 to 0x40FCA5, 200.0 to 0x90E0FF, 230.0 to 0xCC8FFF, 255.0 to 0xFE43FF,
-        )
-        for ((value, rgb) in stops) {
-            assertEquals(rgb.toString(16), Honeycomb.rgbOf(value).toString(16), "the fill at $value")
-        }
+    fun theAlphaRampIsThePages() {
         assertEquals(0.024, Honeycomb.alphaOf(0.0), 0.001)
         assertEquals(0.34, Honeycomb.alphaOf(32.0), 0.01)
         assertEquals(0.68, Honeycomb.alphaOf(64.0), 0.01)
         assertEquals(0.88, Honeycomb.alphaOf(96.0), 0.01)
         assertTrue(Honeycomb.alphaOf(160.0) > 0.99)
     }
+
+    @Test
+    fun theTilesReadTheWholeSpectrumWithTheBassInTheMiddle() {
+        val low = Honeycomb()
+        RenderHarness.forEachFrameOf(low, 160, 90, 120, VizPalette.Prism, source = { step -> InjectedFrames.toneFrame(step, lowBand = true) }) { _, _ -> }
+        val lowCentre = low.tileValue(0)
+        val lowOuter = (91..126).map { low.tileValue(it) }.average()
+        val high = Honeycomb()
+        RenderHarness.forEachFrameOf(high, 160, 90, 120, VizPalette.Prism, source = { step -> InjectedFrames.toneFrame(step, lowBand = false) }) { _, _ -> }
+        val highCentre = high.tileValue(0)
+        val highMiddle = (37..90).maxOf { high.tileValue(it) }
+        println("bass tone: centre tile $lowCentre, mean of ring 6 $lowOuter")
+        println("treble tone: centre tile $highCentre, largest of rings 4 and 5 $highMiddle")
+        assertTrue(lowCentre > 150.0, "a bass tone lights the centre, had $lowCentre")
+        assertTrue(lowOuter < 20.0, "a bass tone leaves the outer ring dim, had $lowOuter")
+        assertTrue(highCentre < 60.0, "a treble tone leaves the centre dim, had $highCentre")
+        assertTrue(highMiddle > 150.0, "a treble tone lights rings 4 and 5, had $highMiddle")
+    }
+
+    @Test
+    fun aTilesHueMovesWithItsLevelOverThePalette() {
+        val dim = Honeycomb.fillOf(20.0, 1f, VizPalette.Prism, 0f, 0)
+        val middle = Honeycomb.fillOf(120.0, 1f, VizPalette.Prism, 0f, 0)
+        val bright = Honeycomb.fillOf(240.0, 1f, VizPalette.Prism, 0f, 0)
+        val fire = Honeycomb.fillOf(200.0, 1f, VizPalette.Fire, 0f, 0)
+        val prism = Honeycomb.fillOf(200.0, 1f, VizPalette.Prism, 0f, 0)
+        println("fills: 20 $dim, 120 $middle, 240 $bright, Prism 200 $prism, Fire 200 $fire")
+        println(
+            "fill distances: 20 to 120 ${colourDistance(dim, middle)}, 120 to 240 ${colourDistance(middle, bright)}, " +
+                "20 to 240 ${colourDistance(dim, bright)}, Prism to Fire ${colourDistance(prism, fire)}",
+        )
+        // A dim tile keeps the palette's lightness floor, so its distance to the middle tile is the smallest.
+        assertTrue(colourDistance(dim, middle) > 0.12f, "20 against 120: ${colourDistance(dim, middle)}")
+        assertTrue(colourDistance(middle, bright) > 0.12f, "120 against 240: ${colourDistance(middle, bright)}")
+        assertTrue(colourDistance(dim, bright) > 0.12f, "20 against 240: ${colourDistance(dim, bright)}")
+        assertTrue(colourDistance(prism, fire) > 0.12f, "Prism against Fire: ${colourDistance(prism, fire)}")
+        assertTrue(Honeycomb.fillOf(0.0, 1f, VizPalette.Prism, 0f, 0).alpha >= Honeycomb.ALPHA_FLOOR)
+    }
+
+    @Test
+    fun theHiveTurnsANotchOnEachBeatAndIsStillInSilence() {
+        // One run, a pulse then silence: a second harness run would restart the drawing and prove nothing.
+        val honeycomb = Honeycomb()
+        val silent = RenderHarness.player(RenderHarness.Song.Silence, 8f)
+        val turns = FloatArray(840)
+        RenderHarness.forEachFrameOf(
+            honeycomb, 96, 54, 840, VizPalette.Prism,
+            source = { step -> if (step < 600) InjectedFrames.frame(VizDriver.Pulse, step) else silent.next(1f / 60f) },
+        ) { _, step ->
+            turns[step] = honeycomb.turnValue
+        }
+        val notch = Honeycomb.NOTCH
+        assertTrue(abs(turns[599]) >= 14 * notch && abs(turns[599]) <= 20 * notch, "the turn ended at ${turns[599] / notch} notches")
+        var still = 0
+        var snapped = 0
+        for (step in 61..599) {
+            val moved = abs(turns[step] - turns[step - 1])
+            if (moved < notch / 20) still++
+            if (moved > notch / 4) snapped++
+        }
+        println("final turn ${turns[599] / notch} notches, $still still frames, $snapped snapping frames")
+        assertTrue(still >= 10, "the turn should hold between beats, held on $still frames")
+        assertTrue(snapped >= 10, "the turn should step on a beat, stepped on $snapped frames")
+
+        var widest = 0f
+        for (step in 720..839) widest = maxOf(widest, abs(turns[step] - turns[step - 1]))
+        println("silence: widest change between two frames $widest")
+        assertTrue(widest < 1e-4f, "a silence should hold the turn, it moved $widest")
+    }
+
+    @Test
+    fun aMorphFlipsTheTurn() {
+        val honeycomb = Honeycomb()
+        honeycomb.reset()
+        assertEquals(1f, honeycomb.turnSign)
+        honeycomb.onMorph()
+        assertEquals(-1f, honeycomb.turnSign)
+        honeycomb.onMorph()
+        assertEquals(1f, honeycomb.turnSign)
+    }
+
+    private fun colourDistance(a: Color, b: Color): Float = (abs(a.red - b.red) + abs(a.green - b.green) + abs(a.blue - b.blue)) / 3f
 
     /** Draws [honeycomb] for [seconds] at [rate] frames a second, the way a window does. */
     private fun run(

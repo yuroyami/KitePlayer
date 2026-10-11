@@ -1,7 +1,9 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import androidx.compose.ui.graphics.ImageBitmap
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
+import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Odyssey
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -189,13 +191,15 @@ class OdysseyTest {
             if (step == 399) bitmap.readPixels(a399)
         }
         var steadyStarted = false
+        var facing = Pair(0f, 0f)
         RenderHarness.forEachFrameOf(steady, 160, 90, 400, VizPalette.Prism,
             source = { step -> InjectedFrames.toneFrame(step, lowBand = true) },
             beforeDraw = { if (!steadyStarted) { steady.jumpTo(1); steadyStarted = true } }) { bitmap, step ->
-            if (step == 230) bitmap.readPixels(b230)
+            // The orbit moves the disc, so the facing point is read on the frame it is compared on.
+            if (step == 230) { bitmap.readPixels(b230); facing = steady.facingPixel(160f, 90f) }
             if (step == 399) bitmap.readPixels(b399)
         }
-        val (fx, facingY) = steady.facingPixel(160f, 90f)
+        val (fx, facingY) = facing
         // The newest half second, with the churn of the stripe edges, spans about 0.45 radii each side,
         // so the side patches sit at 0.6 radii. The patches sit 0.15 radii above the facing row: clear
         // of the ring's bright line below and of the great storm above right, which neither run changes.
@@ -262,6 +266,131 @@ class OdysseyTest {
             most = maxOf(most, planet.cloudInkShare())
         }
         assertEquals(0f, most)
+    }
+
+    @Test
+    fun theCameraOrbitsWithoutACutOnTheDrumLoop() {
+        val planet = Odyssey()
+        val last = FloatArray(3)
+        var biggest = 0f
+        var travelled = 0f
+        var lastPhase = 0f
+        val signs = mutableSetOf<Float>()
+        RenderHarness.forEachFrame(planet, 64, 36, 3600, VizPalette.Prism, RenderHarness.Song.Lively) { _, step ->
+            if (step > 0) for (i in 0..2) biggest = maxOf(biggest, abs(planet.shownValue(i) - last[i]))
+            for (i in 0..2) last[i] = planet.shownValue(i)
+            travelled += abs(planet.orbitPhaseValue - lastPhase)
+            lastPhase = planet.orbitPhaseValue
+            signs += planet.orbitSignValue
+        }
+        println("odyssey: the view moved at most $biggest a frame, the orbit travelled $travelled turns, signs $signs")
+        assertTrue(biggest < 0.004f, "the camera never cuts, moved $biggest in one frame")
+        assertTrue(travelled > 0.3f, "the camera orbits with the music, travelled $travelled turns")
+        assertEquals(setOf(1f, -1f), signs, "a morph turns the orbit the other way")
+
+        val still = Odyssey()
+        var phaseAt60 = 0f
+        var xAt60 = 0f
+        RenderHarness.forEachFrame(still, 64, 36, 300, VizPalette.Prism, RenderHarness.Song.Silence) { _, step ->
+            if (step == 60) { phaseAt60 = still.orbitPhaseValue; xAt60 = still.shownValue(0) }
+        }
+        assertEquals(phaseAt60, still.orbitPhaseValue, "a silence holds the orbit")
+        assertEquals(xAt60, still.shownValue(0), "a silence holds the view")
+    }
+
+    @Test
+    fun theViewsCycleInOrderAndABreakdownIsTheShadow() {
+        val sectioned = Odyssey()
+        RenderHarness.forEachFrameOf(sectioned, 64, 36, 90, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Section, step) }) { _, _ -> }
+        assertEquals(1, sectioned.view, "a section moves from the day side to the ring plane")
+        assertEquals("Ring plane", sectioned.forms.form)
+
+        val broken = Odyssey()
+        var at70 = -1
+        RenderHarness.forEachFrameOf(broken, 64, 36, 90, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Breakdown, step) }) { _, step ->
+            if (step == 70) at70 = broken.view
+        }
+        assertEquals(Odyssey.BREAKDOWN_VIEW, at70, "a breakdown drifts into the shadow")
+        assertEquals("Shadow", broken.forms.form)
+    }
+
+    @Test
+    fun theFormNamesMatchTheLitShareOfEachView() {
+        val shares = mutableMapOf<String, Float>()
+        for (index in 0..2) {
+            val planet = Odyssey()
+            var share = 0f
+            // The harness resets the drawing before its first frame, so the view is set inside the run.
+            RenderHarness.forEachFrameOf(planet, 160, 90, 30, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(null, step) },
+                beforeDraw = { if (planet.view != index) planet.jumpTo(index) }) { bitmap, step ->
+                if (step != 29) return@forEachFrameOf
+                val pixels = IntArray(160 * 90).also { bitmap.readPixels(it) }
+                val (cx, cy) = planet.facingPixel(160f, 90f)
+                val radius = planet.planetRadiusPixels(90f)
+                var inside = 0
+                var lit = 0
+                for (y in 0 until 90) for (x in 0 until 160) {
+                    if (hypot(x + 0.5f - cx, y + 0.5f - cy) > radius) continue
+                    inside++
+                    if (luma(pixels[y * 160 + x]) > 0.08f) lit++
+                }
+                share = lit.toFloat() / inside.coerceAtLeast(1)
+            }
+            shares[Odyssey.FORM_NAMES[index]] = share
+        }
+        println("odyssey: lit share of the disc by view $shares")
+        assertTrue(shares.getValue("Day side") > shares.getValue("Ring plane") + 0.1f, "the day side is the most lit: $shares")
+        assertTrue(shares.getValue("Ring plane") > shares.getValue("Night side") + 0.1f, "the night side is the least lit: $shares")
+    }
+
+    @Test
+    fun aBirthSendsACometAcrossTheSky() {
+        val born = Odyssey()
+        val still = Odyssey()
+        var at71 = 0f
+        var at360 = 1f
+        var bornLuma = 0f
+        var stillLuma = 0f
+        RenderHarness.forEachFrameOf(born, 160, 90, 361, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }) { bitmap, step ->
+            if (step == 70) born.birth()
+            if (step == 71) at71 = born.cometValue
+            if (step == 360) at360 = born.cometValue
+            if (step == 100) bornLuma = meanLuma(bitmap)
+        }
+        RenderHarness.forEachFrameOf(still, 160, 90, 101, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }) { bitmap, step ->
+            if (step == 100) stillLuma = meanLuma(bitmap)
+        }
+        println("odyssey: the comet at $at71 a frame after its birth and $at360 later; luma $bornLuma against $stillLuma")
+        assertTrue(at71 > 0.9f, "a birth starts a comet, had $at71")
+        assertEquals(0f, at360, "the comet has crossed the sky by a cycle and a half")
+        assertTrue(bornLuma > stillLuma, "the comet adds light: $bornLuma against $stillLuma")
+    }
+
+    @Test
+    fun theLightFollowsTheLevelAndKeepsAThirdInSilence() {
+        val loud = Odyssey()
+        var heard = 0f
+        var energy = 0f
+        RenderHarness.forEachFrameOf(loud, 64, 36, 91, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step).also { if (step == 90) energy = it.energy } },
+            beforeDraw = { it.lightScale = 1f }) { _, step ->
+            if (step == 90) heard = loud.lightValue
+        }
+        val quiet = Odyssey()
+        RenderHarness.forEachFrame(quiet, 64, 36, 120, VizPalette.Prism, RenderHarness.Song.Silence) { _, _ -> }
+        println("odyssey: light $heard at energy $energy, ${quiet.lightValue} in a silence")
+        assertEquals(lightFor(energy), heard, 0.02f, "the light follows the level")
+        assertEquals(Odyssey.IDLE_LIGHT, quiet.lightValue, 0.02f, "a silence keeps the idle light")
+    }
+
+    private fun meanLuma(bitmap: ImageBitmap): Float {
+        val pixels = IntArray(bitmap.width * bitmap.height).also { bitmap.readPixels(it) }
+        return pixels.sumOf { luma(it).toDouble() }.toFloat() / pixels.size
     }
 
     private fun inverted(base: SpectrumFrame): SpectrumFrame {

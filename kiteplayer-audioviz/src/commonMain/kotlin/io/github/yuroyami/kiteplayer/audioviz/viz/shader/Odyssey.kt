@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 import androidx.compose.ui.graphics.Color
 import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.PixelImage
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
@@ -17,11 +18,14 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
+import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
 import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flow
 import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flows
 import io.github.yuroyami.kiteplayer.audioviz.viz.field.MemoryField
+import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import kotlin.math.PI
 import kotlin.math.abs
@@ -48,9 +52,13 @@ import kotlin.math.sqrt
  * grows loud. A ring of 64 ringlets crosses
  * in front, each lit by its band, and the ring and the planet shadow each other. A kick sends a
  * ripple out through the rings, a snare flickers lightning on the night side, and hats make the
- * stars twinkle and the rings glint. The inner moon crosses the planet once a bar. Each section
- * brings a new view over one bar: above the rings, edge on, or from the night side. A breakdown
- * drifts into the planet's shadow, and on a drop the sun rises over its edge.
+ * stars twinkle and the rings glint. The inner moon crosses the planet once a bar.
+ *
+ * The camera orbits. Each morph eases it to the next of three views, Day side, Ring plane and
+ * Night side, over at least one cycle, and turns the orbit the other way. A breakdown drifts into
+ * the planet's Shadow. On top of the view the disc moves on a small ellipse at the music's drive,
+ * its distance breathes on the slow cycle and its axis tilts with the walk. On a drop the sun rises
+ * over the planet's edge, and each birth sends a comet across the sky.
  */
 internal class Odyssey : ShaderPreset(
     source = SOURCE,
@@ -75,6 +83,8 @@ internal class Odyssey : ShaderPreset(
         // A new view eases in over a bar, so its first change shows a few frames after the boundary.
         VizDrive(VizDriver.Section, VizProperty.Camera, VizCurve.Discrete, VizResponse.envelope(2f, delaySeconds = 0.15f)),
         VizDrive(VizDriver.Breakdown, VizProperty.Camera, VizCurve.Discrete, VizResponse.envelope(2f, delaySeconds = 0.15f)),
+        // The orbit's speed.
+        VizDrive(VizDriver.Level, VizProperty.Camera, response = VizResponse.Rate),
         VizDrive(VizDriver.Drop, VizProperty.Brightness, VizCurve.Discrete, VizResponse.lifetime(1f)),
         VizDrive(VizDriver.Key, VizProperty.Colour),
         silence = VizSilence.Still,
@@ -82,6 +92,8 @@ internal class Odyssey : ShaderPreset(
 
     // Glow only where light is hottest: the atmosphere's rim and the rising sun.
     override val post: PostSpec get() = GLOW
+
+    override val forms: FormReadout get() = FormReadout(FORM_NAMES[viewTo], evolution.morphs, evolution.births)
 
     private val planetSize = VizParam("Planet size", 0.8f, 1.2f, 1f)
     private val ringLight = VizParam("Ring light", 0.4f, 1.5f, 1f)
@@ -110,6 +122,22 @@ internal class Odyssey : ShaderPreset(
     private val shown = FloatArray(VIEW_SIZE)
     private val from = FloatArray(VIEW_SIZE)
     private val target = FloatArray(VIEW_SIZE)
+    /** The eased view before the orbit is added; a new move starts from here. */
+    private val eased = FloatArray(VIEW_SIZE)
+    private var lastDay = 0
+
+    // The orbit on top of the view: its phase in turns, its direction, and how present the music is.
+    private var orbitPhase = 0f
+    private var orbitSign = 1f
+    private val presence = Envelope(2f, 0.5f)
+    private val tiltX = Slew(TILT_SPEED)
+    private val tiltZ = Slew(TILT_SPEED)
+
+    // The comet a birth sends across the sky: its age in cycles, its path, and its head and direction now.
+    private var cometAge = LONG_AGO
+    private var cometSeed = 0f
+    private var comet = 0f
+    private val cometHead = FloatArray(4)
 
     private var cloudPhase = 0f
     private var spin = 0f
@@ -191,6 +219,7 @@ internal class Odyssey : ShaderPreset(
 
     init {
         views(0, shown)
+        views(0, eased)
         startingClouds()
     }
 
@@ -269,7 +298,22 @@ internal class Odyssey : ShaderPreset(
         viewTo = index
         views(index, shown)
         views(index, from)
+        views(index, eased)
         viewBlend = 1f
+    }
+
+    internal val orbitSignValue: Float get() = orbitSign
+    internal val orbitPhaseValue: Float get() = orbitPhase
+    internal val cometValue: Float get() = comet
+    internal val lightValue: Float get() = light
+
+    /** Entry [i] of the view as drawn: 0 and 1 place the disc, 2 is its size. */
+    internal fun shownValue(i: Int): Float = shown[i]
+
+    /** Sends a comet across the sky, as the music's own birth does. */
+    internal fun birth() {
+        cometAge = 0f
+        cometSeed = random.next()
     }
 
     override fun advance(state: VizRenderState) {
@@ -278,22 +322,51 @@ internal class Odyssey : ShaderPreset(
         // Reduced motion slows the camera moves and every turn of the planet, the storm and the clouds.
         val pace = 0.3f + 0.7f * state.motionScale.coerceIn(0f, 1f)
         aspect = kit.aspect
-        val loud = frame.energy.coerceIn(0f, 1f).pow(0.6f)
-        light = state.lightScale.coerceIn(0f, 1f) * (IDLE_LIGHT + (1f - IDLE_LIGHT) * loud)
+        // The light follows the level; the idle share stands only while nothing is heard.
+        light = state.lightScale.coerceIn(0f, 1f) * max(IDLE_LIGHT * (1f - frame.audible), lightFor(frame.energy))
         updateColours(state, step)
 
-        // A section is the one camera move: a new view over one bar. A breakdown drifts into the
-        // planet's shadow until the next section or drop.
-        if (gestures.breakdown && !inBreakdown) {
-            inBreakdown = true
-            moveTo(BREAKDOWN_VIEW)
-        } else if (gestures.turn || gestures.surge) {
-            val leaving = inBreakdown
+        // The forms: one frame can carry several events, so they are read in one chain. A morph eases
+        // to the next day view and turns the orbit; a breakdown drifts into the planet's shadow until
+        // the next turn or drop.
+        if (evolution.bloom) {
             inBreakdown = false
-            if (gestures.turn || leaving) moveTo(if (leaving) viewFrom.coerceAtMost(2) else (viewTo + 1 + (random.next() * 2f).toInt()) % 3)
+            moveTo(nextDay())
+        } else if (evolution.collapse) {
+            if (!inBreakdown) {
+                inBreakdown = true
+                moveTo(BREAKDOWN_VIEW)
+            }
+        } else if (inBreakdown && (gestures.turn || gestures.surge)) {
+            inBreakdown = false
+            moveTo(nextDay())
+        } else if (evolution.morph) {
+            orbitSign = -orbitSign
+            moveTo(nextDay())
         }
+        if (evolution.birth) birth()
         if (viewBlend < 1f) viewBlend = (viewBlend + step * pace / viewSeconds).coerceAtMost(1f)
-        blendViews()
+        // A pause holds the orbit where it is; a silence lets the presence fall and the orbit settle home.
+        presence.advance(frame.audible, if (frame.held) 0f else state.deltaSeconds)
+        orbitPhase += step * pace * ORBIT_RATE * (0.3f + 0.7f * state.drive) * orbitSign
+        // The walk is not wrapped, so it is read only through a sine; the tilt follows it on heard time.
+        tiltX.advance(ORBIT_TILT * sin(genes.walk * TAU), step)
+        tiltZ.advance(ORBIT_TILT * cos(genes.walk * TAU), step)
+        blendViews(presence.value * state.motionScale.coerceIn(0f, 1f))
+
+        cometAge += step / gestures.cycleSeconds.coerceAtLeast(0.5f)
+        comet = if (cometAge < 1f) 1f - cometAge else 0f
+        if (comet > 0f) {
+            val startY = 0.9f - 0.6f * cometSeed
+            val endY = 0.3f - 0.6f * cometSeed
+            cometHead[0] = -aspect + 2f * aspect * cometAge
+            cometHead[1] = startY + (endY - startY) * cometAge
+            val dx = 2f * aspect
+            val dy = endY - startY
+            val length = sqrt(dx * dx + dy * dy)
+            cometHead[2] = dx / length
+            cometHead[3] = dy / length
+        }
 
         // On a drop the sun rises over the planet's edge: its light runs across the clouds and
         // the rings over one beat, after a short flare over the rim.
@@ -392,20 +465,35 @@ internal class Odyssey : ShaderPreset(
         stormDrift[slot] = way * STREAM
     }
 
-    /** Starts the move to view [index] from wherever the view is now. */
+    /** Starts the move to view [index] from wherever the eased view is now. */
     private fun moveTo(index: Int) {
-        shown.copyInto(from)
+        eased.copyInto(from)
         viewFrom = viewTo
         viewTo = index
         viewBlend = 0f
-        viewSeconds = gestures.cycleSeconds.coerceIn(0.8f, 4f)
+        // At least a cycle, and never under three seconds: the Shadow view is far, and a faster ease would cut.
+        viewSeconds = gestures.cycleSeconds.coerceIn(3f, 8f)
     }
 
-    private fun blendViews() {
+    /** The next of the three day views, in order. */
+    private fun nextDay(): Int {
+        lastDay = (lastDay + 1) % 3
+        return lastDay
+    }
+
+    /** Eases from the last view to the target, then adds the orbit, scaled by [orbit]. */
+    private fun blendViews(orbit: Float) {
         views(viewTo, target)
         val t = viewBlend * viewBlend * (3f - 2f * viewBlend)
-        for (i in 0 until VIEW_SIZE) shown[i] = from[i] + (target[i] - from[i]) * t
+        for (i in 0 until VIEW_SIZE) eased[i] = from[i] + (target[i] - from[i]) * t
         if (viewBlend >= 1f) target.copyInto(from)
+        eased.copyInto(shown)
+        // The disc moves on a small ellipse, its distance breathes on the slow cycle, and its axis tilts with the walk.
+        shown[0] += ORBIT_X * cos(orbitPhase * TAU) * orbit
+        shown[1] += ORBIT_Y * sin(orbitPhase * TAU) * orbit
+        shown[2] *= 1f + ORBIT_DISTANCE * sin(gestures.slowCyclePhase * TAU) * orbit
+        shown[3] += tiltX.value
+        shown[5] += tiltZ.value
     }
 
     /** A column of stripe levels every eighth of a second of music: the stripes' recent past. */
@@ -558,13 +646,17 @@ internal class Odyssey : ShaderPreset(
             swatch(0.35f, 0.16f, 320f + degrees).into(colours[0])
             swatch(0.65f, 0.21f, CORAL_HUE + degrees).into(colours[1])
             swatch(0.84f, 0.17f, 85f + degrees).into(colours[2])
+            swatch(0.92f, 0.06f, 210f).into(colours[3])
+            swatch(0.86f, 0.14f, 205f).into(colours[4])
         } else {
             palette.vividRamp(0.1f).into(colours[0])
             palette.vividRamp(0.5f).into(colours[1])
             palette.vividRamp(0.9f).into(colours[2])
+            // The ring is the palette's brightest end, paled as ice is; the rim its middle.
+            palette.vividRamp(0.95f).into(colours[3])
+            for (c in 0..2) colours[3][c] = colours[3][c] * 0.6f + 0.35f
+            palette.vividRamp(0.7f).into(colours[4])
         }
-        swatch(0.92f, 0.06f, 210f).into(colours[3])
-        swatch(0.86f, 0.14f, 205f).into(colours[4])
     }
 
     private fun swatch(lightness: Float, chroma: Float, hue: Float): Color =
@@ -597,7 +689,8 @@ internal class Odyssey : ShaderPreset(
         program.uniform("uSun", sun[0], sun[1], sun[2], NIGHT)
         // The churn's phase, and the great storm, the one thing on the planet that shows its spin.
         program.uniform("uFlow", cloudPhase, stormLongitude + spin, stormSize, stormSpin)
-        program.uniform("uWeather", aurora, faceLon, softness, 0f)
+        program.uniform("uWeather", aurora, faceLon, softness, comet)
+        program.uniform("uComet", cometHead[0], cometHead[1], cometHead[2], cometHead[3])
         val rippleRadius = RING_IN + rippleAge * 1.8f
         program.uniform("uRing", rippleRadius, if (rippleRadius > RING_OUT + 0.3f) 0f else rippleStrength, glint, stir)
         program.uniform("uFlash", flash[0], flash[1], flash[2], lightning)
@@ -623,7 +716,9 @@ internal class Odyssey : ShaderPreset(
         columnCredit = 0f
         startingClouds()
         viewFrom = 0; viewTo = 0; viewBlend = 1f; inBreakdown = false
-        views(0, shown); views(0, from)
+        views(0, shown); views(0, from); views(0, eased)
+        lastDay = 0; orbitPhase = 0f; orbitSign = 1f; presence.reset(); tiltX.reset(); tiltZ.reset()
+        cometAge = LONG_AGO; cometSeed = 0f; comet = 0f; cometHead.fill(0f)
         cloudPhase = 0f; spin = 0f; stormSize = 1f; stormSpin = 0f; stormLongitude = -0.4f; stir = 0.5f
         rippleAge = 99f; rippleStrength = 0f
         lightning = 0f; sinceLightning = 99f; glint = 0f; flash.fill(0f)
@@ -669,6 +764,18 @@ internal class Odyssey : ShaderPreset(
         const val STORM_SLOWING = 4f
         const val LONG_AGO = 99f
         const val AURORA_SECONDS = 0.6f
+
+        /** The form named by each row of [VIEWS]; the three day views run from the most lit to the least. */
+        val FORM_NAMES = arrayOf("Day side", "Ring plane", "Night side", "Shadow")
+
+        // The orbit: turns a heard second at full drive, the ellipse's reach, the breathing of the distance, the axis tilt.
+        const val ORBIT_RATE = 0.05f
+        const val ORBIT_X = 0.06f
+        const val ORBIT_Y = 0.04f
+        const val ORBIT_DISTANCE = 0.06f
+        const val ORBIT_TILT = 0.12f
+        /** How fast the tilt follows the walk: about twice the walk's own fastest pace. */
+        const val TILT_SPEED = 0.02f
         /** The terminator's softness in quiet music, and what loud music adds. */
         const val SOFT_QUIET = 0.02f
         const val SOFT_LOUD = 0.10f
@@ -708,6 +815,7 @@ uniform float3 uNorth;
 uniform float4 uSun;      // direction to the sun, night-side lift
 uniform float4 uFlow;     // the churn's phase, storm longitude, storm size, storm spin
 uniform float4 uWeather;  // aurora, the longitude facing the camera, the terminator's softness, comet
+uniform float4 uComet;    // the comet's head on screen and its direction
 uniform float4 uRing;     // ripple radius, ripple strength, glint, the bass that stirs the clouds
 uniform float4 uFlash;    // where the lightning strikes, as a unit vector from the centre, and its strength
 uniform float4 uMoonA;
@@ -773,6 +881,14 @@ half4 main(float2 position) {
     float2 cell = floor(position / 3.0);
     float star = step(0.9965, hash(cell)) * step(length(fract(position / 3.0) - 0.5), 0.34);
     float3 colour = float3(star * (0.35 + 0.4 * hash(cell + 7.0)) * (1.0 + 1.6 * uLook.y * step(0.5, hash(cell + 3.0))) * uTune.y);
+
+    // A birth's comet: a thin tail behind a bright head. The planet, drawn after it, hides it.
+    if (uWeather.w > 0.001) {
+        float behind = dot(p - uComet.xy, -uComet.zw);
+        float2 nearest = uComet.xy - uComet.zw * clamp(behind, 0.0, 0.5);
+        float dc = length(p - nearest);
+        colour += float3(0.9, 0.95, 1.0) * uWeather.w * exp(-dc / 0.006) * (1.0 - clamp(behind, 0.0, 0.5) / 0.5);
+    }
 
     float tP = sphereHit(float3(0.0), d, uPlanet);
     float tA = sphereHit(float3(0.0), d, uMoonA);
@@ -852,7 +968,7 @@ half4 main(float2 position) {
         if (cover > 0.0) {
             float u = (r - RING_IN) / (RING_OUT - RING_IN) * RINGLETS;
             float level = uRinglets.eval(float2(floor(u) + 0.5, 0.5)).r;
-            float3 ring = uIce * (0.45 + 0.75 * level) * (0.75 + 0.25 * abs(dot(L, N))) * uTune.x;
+            float3 ring = uIce * (0.35 + 0.7 * level) * (0.75 + 0.25 * abs(dot(L, N))) * uTune.x;
             // The planet's shadow across the ring.
             if (sphereHit(H, L, uPlanet) > 0.0) ring *= 0.07;
             // A kick's ripple running outward, and the glint of a hat.

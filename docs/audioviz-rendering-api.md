@@ -486,6 +486,32 @@ one slit is now a cracked plane of many shards.
 - The page's white clear is a dim space now, and the flat ground keeps a faint glow near the
   camera. Light follows the level, with a quarter kept in a silence.
 
+## Glitch, a broadcast that keeps breaking
+
+`Glitch` keeps its six swatches, one set of three per section, the waveform trace, the datamosh,
+the stall before a drop and the scanlines.
+
+- The picture is the spectrogram as large blocks. Across is time, four heard seconds scrolling to
+  the left. Up is band, with the bass at the bottom. A block takes the first, second or third
+  swatch of the set by its level.
+- For the eyes: every block is at least 24 px on both sides, neighbouring blocks differ in light
+  by at most half, and the hues change only with the set. The flash guard dims every layer,
+  including the split, the tears, the static and the datamosh.
+- The faults: a kick splits the red, green and blue layers for about 120 ms, a snare tears slices
+  sideways (further when the spectrum changed more), and a hat slips one row of blocks one to two
+  blocks sideways for two to four frames. Dense music joins the blocks into pairs and fours, and
+  a slow tracking roll follows the cycle.
+- A section changes the channel to the next set behind three frames of static. A drop freezes
+  the frame into a datamosh until a first beat. A breakdown is dead air: the picture collapses
+  into one bright line over a faint static until the music turns.
+- The forms are Broadcast, Tracking (the roll reaches twice as far), Mosh (a datamosh starts
+  every cycle with no drop) and Dead air. They are published through `Visualization.forms`. A
+  birth wipes the next set in from the top.
+- The key biases which set the next section brings, and the slow colour walk turns the hues a
+  little within a set. The palette does not choose the swatches.
+- There is no camera: it is a screen. Light follows the level. In a silence the blocks keep 30
+  percent light and the trace lies flat.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative

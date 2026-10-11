@@ -70,6 +70,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   roll alternates with the beat and flips at each morph, Threads's dust flies over the cracks,
   and Corridor, Spiral, Shatter and Fuse forms are published through `Visualization.forms`. It
   hears the engine's bands, and the clear is no longer white.
+- Glitch's signal is a scrolling spectrogram of blocks at least 24 px on each side, in place of
+  the 64 stripes. A hat slips a row of blocks in place of the melt, the flash guard now reaches
+  the static and the datamosh, and Broadcast, Tracking, Mosh and Dead air forms are published
+  through `Visualization.forms`.
 
 ## [0.3.0] - 2026-10-09
 

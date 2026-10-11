@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
@@ -29,7 +30,13 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
+import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
+import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprites
 import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.FieldShader
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flows
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.LaceReaction
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.MemoryField
 import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
@@ -37,6 +44,9 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.glow
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.polygon
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.spark
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderProgram
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.canDrawRuntimeShaders
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Impulses
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import kotlin.math.abs
@@ -63,6 +73,12 @@ import kotlin.math.sqrt
  * and a breakdown heals them. On the
  * drop the ice breaks along the rings and along straight lines out of the wells, and the pieces carry
  * the picture away, shrinking into the water over one bar, while new rings start on fresh water.
+ *
+ * Hats lay snow into a drift, a memory field that fades over eight heard seconds, and the snow that
+ * falls on a young ring front settles along it. The forms are Lake, Frost (a breakdown: lace grows inside the rings),
+ * Shatter (a drop: the break) and Underwater (the rings as caustic light and bubbles from hats, until
+ * the next section or eight cycles). A morph turns the glide and swaps the wells. The camera glides
+ * over the lake on the slow cycle and dives over a cycle after a drop; it never cuts.
  */
 internal class ThinIce : Layered(
     name = "Thin Ice",
@@ -73,7 +89,7 @@ internal class ThinIce : Layered(
     ),
 ) {
 
-    // The camera holds still: the rings move, the view does not.
+    // The kit's camera holds still; the drawing glides and dives its own view, and never on a hit.
     override val cameraOnEcho: Boolean get() = false
     override val frontParallax: Float get() = 0f
 
@@ -104,7 +120,10 @@ internal class ThinIce : Layered(
         VizDrive(VizDriver.Section, VizProperty.Spawn, VizCurve.Discrete, VizResponse.lifetime(8f)),
         VizDrive(VizDriver.Key, VizProperty.Colour),
         VizDrive(VizDriver.Breakdown, VizProperty.Brightness, VizCurve.Discrete, VizResponse.envelope(2f)),
+        // A breakdown is Frost, a drop breaks the ice and goes under it, and a section freezes a new lake.
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f)),
         VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.lifetime(2f)),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
         silence = VizSilence.Still,
     )
 
@@ -229,6 +248,9 @@ internal class ThinIce : Layered(
 
     internal fun ringCentreY(slot: Int): Float = centreY[slot]
 
+    /** The radius of ring [slot], in shorter sides, for tests. */
+    internal fun radiusOf(slot: Int): Float = radius[slot]
+
     /** The slot of the newest ring, -1 before the first. For tests. */
     internal val newestRing: Int get() = lastSpawned
 
@@ -249,6 +271,57 @@ internal class ThinIce : Layered(
     }
 
     private var lastFrame: SpectrumFrame? = null
+
+    // The snow: hats settle into a drift that fades over eight heard seconds, and the ring fronts
+    // gather it. In Frost, lace grows inside the rings in the drift's extra channel.
+    private val drift = MemoryField(rows = DRIFT_ROWS, withExtra = true).also { it.halfLife = DRIFT_HALF_LIFE }
+    private val driftFlow = Flows.Drift(DRIFT_X, DRIFT_Y)
+    private val driftProgram: ShaderProgram by lazy { ShaderProgram(DRIFT) }
+    private val lace = LaceReaction()
+    private var laceMask = FloatArray(0)
+    private var laceOwed = 0f
+
+    // The form, how long the lake has been under water, and the bubbles hats send up there.
+    private var form = LAKE
+    private var underwaterAge = 0f
+    private val bubbles = Sprites(120, 1_213L)
+
+    // The camera: a glide over the lake on the slow cycle, and a dive under it after a drop.
+    private val presence = Envelope(2f, 0.5f)
+    private val glideXSlew = Slew(GLIDE_RATE)
+    private val glideYSlew = Slew(GLIDE_RATE)
+    private val diveSlew = Slew(DIVE_RATE, 1f)
+    private var glideSign = 1f
+
+    override val forms: FormReadout get() = FormReadout(FORMS[form], evolution.morphs, evolution.births)
+
+    /** Sets the form at once, for tests. */
+    internal fun jumpTo(form: Int) {
+        enter(form)
+    }
+
+    /** The camera's glide, in shares of the width and the height, and its dive, for tests. */
+    internal val glideX: Float get() = glideXSlew.value
+    internal val glideY: Float get() = glideYSlew.value
+    internal val diveValue: Float get() = diveSlew.value
+
+    /** The share of the drift's cells that hold snow, for tests. */
+    internal fun driftInkShare(): Float = shareOf { column, row -> drift.inkAt(drift.xOf(column), drift.yOf(row)) > 0.05f }
+
+    /** The drift's snow at [x], [y] in shares of the screen, for tests. */
+    internal fun driftInkAt(x: Float, y: Float): Float = drift.inkAt((x - 0.5f) * 2f * kit.aspect, (y - 0.5f) * 2f)
+
+    /** The share of the drift's cells that hold lace, for tests. */
+    internal fun laceShare(): Float = shareOf { column, row -> drift.extraAt(drift.xOf(column), drift.yOf(row)) > 0.5f }
+
+    /** Bubbles rising now, for tests. */
+    internal fun bubbleCount(): Int = (0 until bubbles.capacity).count { bubbles.pool.remaining(it) > 0f }
+
+    private inline fun shareOf(test: (Int, Int) -> Boolean): Float {
+        var count = 0
+        for (row in 0 until drift.rows) for (column in 0 until drift.columns) if (test(column, row)) count++
+        return count / (drift.rows * drift.columns).toFloat()
+    }
 
     /** Pieces of broken ice still sinking. For tests. */
     internal val sinking: Int get() = if (breakAge < 0f) 0 else pieceCount
@@ -359,6 +432,121 @@ internal class ThinIce : Layered(
             breakAge += step
             if (breakAge > breakBar * 1.1f) breakAge = -1f
         }
+        chooseForm(frame)
+        settleSnow(step, state.energy)
+        moveCamera(state)
+    }
+
+    /**
+     * One chain a frame: a drop shatters the ice, a breakdown brings Frost, a turn or a surge ends
+     * Frost, a section or eight cycles freeze a new lake over the water, and a morph turns the glide
+     * and swaps the wells. The ice goes under water once the last piece has sunk.
+     */
+    private fun chooseForm(frame: SpectrumFrame) {
+        if (evolution.bloom || gestures.surge) {
+            enter(SHATTER)
+        } else if (evolution.collapse) {
+            enter(FROST)
+        } else if (form == FROST && (gestures.turn || gestures.surge)) {
+            enter(LAKE)
+        } else if (form == UNDERWATER && (gestures.section || underwaterAge > UNDERWATER_CYCLES * gestures.cycleSeconds)) {
+            freezeNewLake(frame)
+        } else if (evolution.morph) {
+            glideSign = -glideSign
+            leader = 1 - leader
+        }
+        if (form == SHATTER && (breakAge < 0f || breakAge > breakBar) && !breakPending) enter(UNDERWATER)
+    }
+
+    private fun enter(next: Int) {
+        if (next == FROST && form != FROST) sproutLace = true
+        if (next == UNDERWATER && form != UNDERWATER) underwaterAge = 0f
+        form = next
+    }
+
+    private var sproutLace = false
+
+    /** The rings clear, two rings start from the wells, and the lake is ice again. */
+    private fun freezeNewLake(frame: SpectrumFrame) {
+        alive.fill(false)
+        spawn(0, 0.6f, frame)
+        spawn(1, 0.6f, frame)
+        enter(LAKE)
+    }
+
+    /**
+     * Hats lay snow where they land and along every young ring front, and the drift creeps on heard time.
+     * In Frost, lace grows inside the rings.
+     */
+    private fun settleSnow(step: Float, energy: Float) {
+        drift.size(kit.aspect)
+        if (form == UNDERWATER) underwaterAge += step
+        val hat = gestures.hat
+        if (hat > 0f) {
+            drift.disc((hitX - 0.5f) * 2f * kit.aspect, (hitY - 0.5f) * 2f, SNOW_RADIUS, SNOW_INK * hat)
+            // The snow that falls on a young ring front settles along it, so each hat leaves the fronts as they stood.
+            val toField = 2f * min(screenW, screenH) / screenH
+            for (slot in 0 until SLOTS) {
+                if (!alive[slot] || age[slot] > GATHER_SECONDS) continue
+                drift.ring((centreX[slot] - 0.5f) * 2f * kit.aspect, (centreY[slot] - 0.5f) * 2f,
+                    radius[slot] * toField, GATHER_WIDTH, GATHER_INK * strength[slot] * hat)
+            }
+            if (form == UNDERWATER) {
+                bubbles.burst(hitX, hitY, BUBBLES, 0.3f, 2f, 0.01f, 0.5f, Sprite.RING, UP, 0.3f)
+            }
+        }
+        drift.advance(driftFlow, step)
+        bubbles.advance(step, drag = 0.1f, gravity = -0.2f)
+        if (form == FROST && step > 0f) {
+            fillLaceMask()
+            if (sproutLace) {
+                lace.sprout(drift, laceMask, LACE_SEEDS, 1.6f, random)
+                sproutLace = false
+            }
+            // Contour's pace: about one reaction step a heard frame, up to three when the music is loud.
+            laceOwed += step * (LACE_STEPS + LACE_LOUD_STEPS * energy)
+            var steps = 0
+            while (laceOwed >= 1f && steps < MOST_LACE_STEPS) {
+                laceOwed -= 1f
+                lace.step(drift, laceMask)
+                steps++
+            }
+            laceOwed = laceOwed.coerceAtMost(1f)
+        }
+    }
+
+    /** Marks the drift's cells that lie inside a live ring. */
+    private fun fillLaceMask() {
+        val cells = drift.columns * drift.rows
+        if (laceMask.size != cells) laceMask = FloatArray(cells)
+        for (row in 0 until drift.rows) {
+            val y = (drift.yOf(row) * 0.5f + 0.5f) * screenH
+            for (column in 0 until drift.columns) {
+                val x = (drift.xOf(column) / kit.aspect * 0.5f + 0.5f) * screenW
+                var inside = 0f
+                for (slot in 0 until SLOTS) {
+                    if (!alive[slot]) continue
+                    val dx = x - centreX[slot] * screenW
+                    val dy = y - centreY[slot] * screenH
+                    if (dx * dx + dy * dy < radius[slot] * radius[slot]) {
+                        inside = 1f
+                        break
+                    }
+                }
+                laceMask[row * drift.columns + column] = inside
+            }
+        }
+    }
+
+    /** The glide follows the slow cycle while music plays; the dive goes under after a drop. A pause holds both. */
+    private fun moveCamera(state: VizRenderState) {
+        val live = if (state.frame.held) 0f else state.deltaSeconds
+        presence.advance(state.frame.audible, live)
+        val reach = presence.value * state.motionScale.coerceIn(0f, 1f) * glideSign
+        val phase = gestures.slowCyclePhase * TAU
+        glideXSlew.advance(GLIDE_REACH * sin(phase) * reach, live)
+        glideYSlew.advance(GLIDE_REACH_Y * cos(phase) * reach, live)
+        diveSlew.advance(if (form == SHATTER || form == UNDERWATER) DIVE else 1f, live)
     }
 
     /**
@@ -681,8 +869,29 @@ internal class ThinIce : Layered(
             breakPending = false
             breakIce(state)
         }
-        drawIce(state, broken = false)
-        if (breakAge >= 0f) drawPieces(state)
+        val dive = diveSlew.value
+        withTransform({
+            translate(glideXSlew.value * size.width, glideYSlew.value * size.height)
+            scale(dive, dive, Offset(size.width * 0.5f, size.height * 0.5f))
+        }) {
+            if (form == UNDERWATER) {
+                drawRect(Color(cool[0][0] * UNDER_LIGHT * light, cool[0][1] * UNDER_LIGHT * light, cool[0][2] * UNDER_LIGHT * light))
+            }
+            drawDrift()
+            drawIce(state, broken = false)
+            if (breakAge >= 0f) drawPieces(state)
+            if (form == UNDERWATER) with(bubbles) { drawSprites(state.palette, genes.walk, alpha = light) }
+        }
+    }
+
+    /** The snow as soft white and the lace as a thin white lattice, both under the allowed light. */
+    private fun DrawScope.drawDrift() {
+        if (!driftProgram.available || !canDrawRuntimeShaders()) return
+        drift.bindTo(driftProgram)
+        driftProgram.uniform("uResolution", size.width, size.height)
+        driftProgram.uniform("uLight", light)
+        val brush = driftProgram.brush() ?: return
+        drawRect(brush)
     }
 
     /** The rings, the crossings, the wells and the cracks, as they stand. */
@@ -691,28 +900,33 @@ internal class ThinIce : Layered(
         rings.clear()
         marks.clear()
         glows.clear()
-        for (slot in 0 until SLOTS) if (alive[slot]) ringInto(slot, unit)
-        crossings(unit)
-        wells(unit)
-        crackLines(unit)
+        val under = form == UNDERWATER && !broken
+        for (slot in 0 until SLOTS) if (alive[slot]) ringInto(slot, unit, under)
+        // Under water the rings are caustic light: no white crossings, no cracks.
+        if (!under) {
+            crossings(unit)
+            wells(unit)
+            crackLines(unit)
+        }
         if (broken) breakLines(unit)
-        drawMesh(rings)
+        drawMesh(rings, if (under) BlendMode.Plus else BlendMode.SrcOver)
         drawMesh(glows, BlendMode.Plus)
         drawMesh(marks)
     }
 
     /** One ring: a band round its well, bent by its waveform and lit by its spectrum. */
-    private fun ringInto(slot: Int, unit: Float) {
+    private fun ringInto(slot: Int, unit: Float, under: Boolean) {
         val well = slot / PER_WELL
         val r = radius[slot]
         val spread = (r / reachFrom(centreX[slot], centreY[slot])).coerceIn(0f, 1f)
         // A ring is thicker and brighter for a moment as it is born.
         val fresh = exp(-age[slot] / 0.12f)
-        val half = max(0.6f, thickness[slot] * (1f + 0.6f * calm + 1.5f * fresh) * unit * 0.5f)
+        val wide = if (under) CAUSTIC_WIDTH else 1f
+        val half = max(0.6f, thickness[slot] * (1f + 0.6f * calm + 1.5f * fresh) * unit * 0.5f * wide)
         val fadeOut = ((1f - spread) / 0.15f).coerceIn(0f, 1f)
-        val level = strength[slot] * light * fadeOut * (1f + 0.8f * fresh)
-        val warm = hot[well]
-        val cold = cool[well]
+        val level = strength[slot] * light * fadeOut * (1f + 0.8f * fresh) * (if (under) CAUSTIC_LIGHT else 1f)
+        val warm = if (under) hot[0] else hot[well]
+        val cold = if (under) hot[0] else cool[well]
         bandInto(
             centreX[slot] * screenW * unit, centreY[slot] * screenH * unit, r * unit, amplitude(slot) * unit, half,
             warm[0] + (cold[0] - warm[0]) * spread, warm[1] + (cold[1] - warm[1]) * spread, warm[2] + (cold[2] - warm[2]) * spread,
@@ -1056,6 +1270,19 @@ internal class ThinIce : Layered(
         lastFrame = null
         hitX = 0.5f
         hitY = 0.5f
+        drift.clear()
+        lace.reset()
+        laceMask.fill(0f)
+        laceOwed = 0f
+        sproutLace = false
+        form = LAKE
+        underwaterAge = 0f
+        bubbles.pool.clear()
+        presence.reset()
+        glideXSlew.reset()
+        glideYSlew.reset()
+        diveSlew.reset(1f)
+        glideSign = 1f
         wellFlash.fill(0f)
         liveProfile.fill(0f)
         liveLevel.fill(0f)
@@ -1114,6 +1341,44 @@ internal class ThinIce : Layered(
         const val START_ACROSS = 0.55f
 
         /** The mix: quarters of the bands, how fast their levels ease, how fast the wells slew, and how far the balance moves a place across. */
+        val FORMS = listOf("Lake", "Frost", "Shatter", "Underwater")
+        const val LAKE = 0
+        const val FROST = 1
+        const val SHATTER = 2
+        const val UNDERWATER = 3
+        /** Cycles the lake stays under water before a new lake freezes over it, when no section comes first. */
+        const val UNDERWATER_CYCLES = 8
+
+        /** The drift: rows of cells, half life in heard seconds, creep in centred units a second, and the snow a hat lays. */
+        const val DRIFT_ROWS = 54
+        const val DRIFT_HALF_LIFE = 8f
+        const val DRIFT_X = 0.02f
+        const val DRIFT_Y = 0.012f
+        const val SNOW_RADIUS = 0.05f
+        const val SNOW_INK = 0.6f
+        /** How wide in cells and how thick a ring front gathers the snow. */
+        const val GATHER_WIDTH = 1.5f
+        const val GATHER_INK = 0.3f
+        const val GATHER_SECONDS = 2f
+        const val LACE_SEEDS = 40
+        const val LACE_STEPS = 60f
+        const val LACE_LOUD_STEPS = 120f
+        const val MOST_LACE_STEPS = 3
+
+        /** Under water: the light of the deep, the rings as wide soft caustics, bubbles per hat, and up. */
+        const val UNDER_LIGHT = 0.3f
+        const val CAUSTIC_WIDTH = 3f
+        const val CAUSTIC_LIGHT = 0.25f
+        const val BUBBLES = 4
+        const val UP = -TAU / 4f
+
+        /** The camera: the glide's reach across and down, its pace, and the dive's depth and pace. */
+        const val GLIDE_REACH = 0.06f
+        const val GLIDE_REACH_Y = 0.04f
+        const val GLIDE_RATE = 0.1f
+        const val DIVE = 1.6f
+        const val DIVE_RATE = 0.25f
+
         const val GROUPS = 4
         const val GROUP_SECONDS = 1f
         const val WELL_RATE = 0.4f
@@ -1150,6 +1415,19 @@ internal class ThinIce : Layered(
         const val DEEP_VIOLET_L = 0.32f
         const val DEEP_VIOLET_C = 0.16f
         const val DEEP_VIOLET_HUE = 300f
+
+        /** The drift: the snow as soft white, and the lace as a thin white lattice. */
+        val DRIFT: String = """
+uniform float2 uResolution;
+uniform float uLight;
+""" + FieldShader.SOURCE + """
+half4 main(float2 position) {
+    float snow = 0.35 * uLight * clamp(fieldAt(position).x, 0.0, 1.0);
+    float lace = isoLine(fieldExtra(position), 0.5, 0.02, fieldExtraSlope(position)) * uLight;
+    float alpha = clamp(snow + lace, 0.0, 1.0);
+    return half4(half3(alpha), half(alpha));
+}
+"""
 
         /** The value at [along], 0 to 1, of [count] samples starting at [from], read between samples. */
         fun sample(values: FloatArray, from: Int, count: Int, along: Float): Float {

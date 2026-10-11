@@ -13,6 +13,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.restart
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFuture
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ThinIce
 import kotlin.math.abs
 import kotlin.math.min
@@ -152,11 +153,15 @@ class ThinIceTest {
             }
         }
         val unit = min(width, height).toFloat()
+        // The camera glides and dives the whole picture about the middle.
+        val glideX = ice.glideX * width
+        val glideY = ice.glideY * height
+        val dive = ice.diveValue
         var checked = 0
         var white = 0
         for ((x, y) in points) {
-            val px = (x * unit).toInt()
-            val py = (y * unit).toInt()
+            val px = ((x * unit - width / 2f) * dive + width / 2f + glideX).toInt()
+            val py = ((y * unit - height / 2f) * dive + height / 2f + glideY).toInt()
             if (px !in 2 until width - 2 || py !in 2 until height - 2) continue
             checked++
             var best = 0
@@ -342,6 +347,137 @@ class ThinIceTest {
         RenderHarness.forEachFrameOf(ice, 64, 36, 140, VizPalette.Prism,
             source = { step -> InjectedFrames.frame(VizDriver.LowHit, step) }) { _, _ -> }
         assertTrue(ice.impulseCount == 3, "three kicks put three hits in the impulse list, had ${ice.impulseCount}")
+    }
+
+    @Test
+    fun theSnowRemembersTheHats() {
+        val ice = ThinIce()
+        val share = FloatArray(300)
+        var front = 0f
+        var inside = 0f
+        RenderHarness.forEachFrameOf(ice, 96, 54, 300, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.HighHit, step) }) { _, step ->
+            share[step] = ice.driftInkShare()
+            if (step == 100) {
+                // The newest ring is the hat's; its front gathers snow, its middle does not.
+                val slot = ice.newestRing
+                val cx = ice.ringCentreX(slot)
+                val cy = ice.ringCentreY(slot)
+                val r = ice.radiusOf(slot)
+                // Radii are in shorter sides; the screen is 54 high, so a shorter side is the height.
+                front = ice.driftInkAt(cx + r * 54f / 96f, cy)
+                inside = ice.driftInkAt(cx + 0.5f * r * 54f / 96f, cy)
+            }
+        }
+        val still = ThinIce()
+        var stillShare = 0f
+        RenderHarness.forEachFrameOf(still, 96, 54, 300, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }) { _, _ -> stillShare = maxOf(stillShare, still.driftInkShare()) }
+        println("thin ice: snow ${share[60]} at step 60, ${share[100]} at 100, ${share[299]} at 299; front $front, inside $inside; still $stillShare")
+        assertTrue(share[60] == 0f, "no snow before the first hat, had ${share[60]}")
+        assertTrue(share[100] > 0.002f && share[299] > 0.001f, "the hats lay snow that lasts, had ${share[100]} and ${share[299]}")
+        assertTrue(stillShare == 0f, "no hats, no snow, had $stillShare")
+        assertTrue(front > inside, "the ring front gathers snow: $front at the front, $inside inside")
+    }
+
+    @Test
+    fun theFormsFollowTheSong() {
+        fun formAt(driver: VizDriver?, step: Int, song: RenderHarness.Song? = null, start: Int = -1): String {
+            val ice = ThinIce()
+            var form = ""
+            if (song != null) {
+                RenderHarness.forEachFrame(ice, 64, 36, step + 1, VizPalette.Prism, song) { _, at -> if (at == step) form = ice.forms.form }
+            } else {
+                RenderHarness.forEachFrameOf(ice, 64, 36, step + 1, VizPalette.Prism,
+                    source = { at -> InjectedFrames.frame(driver, at) },
+                    beforeDraw = { if (start >= 0 && ice.forms.form == "Lake" && it.frame.ptsMicros == 0L) ice.jumpTo(start) }) { _, at ->
+                    if (at == step) form = ice.forms.form
+                }
+            }
+            return form
+        }
+        val frost = formAt(VizDriver.Breakdown, 126)
+        val shatter = formAt(VizDriver.Drop, 70)
+        val under = formAt(VizDriver.Drop, 66 + 200)
+        val lakeAgain = formAt(VizDriver.Section, 76, start = ThinIce.UNDERWATER)
+        val silent = formAt(null, 120, RenderHarness.Song.Silence)
+        val lively = formAt(null, 120, RenderHarness.Song.Lively)
+        println("thin ice: breakdown $frost, drop $shatter then $under, section after under water $lakeAgain, silence $silent, lively $lively")
+        assertTrue(frost == "Frost" && shatter == "Shatter" && under == "Underwater", "the forms follow the song")
+        assertTrue(lakeAgain == "Lake", "a section freezes a new lake, was $lakeAgain")
+        assertTrue(silent == "Lake" && lively == "Lake", "a steady song stays a lake")
+        val ice = ThinIce()
+        var lace = 0f
+        RenderHarness.forEachFrameOf(ice, 64, 36, 187, VizPalette.Prism,
+            source = { at -> InjectedFrames.frame(VizDriver.Breakdown, at) }) { _, at -> if (at == 186) lace = ice.laceShare() }
+        println("thin ice: lace share $lace in a breakdown")
+        assertTrue(lace > 0f, "frost grows lace, had $lace")
+    }
+
+    @Test
+    fun underwaterShowsTheRingsAsLightAndBubblesFromHats() {
+        val ice = ThinIce()
+        var bubblesBefore = -1
+        var bubblesAfter = 0
+        var mean = 0f
+        var white = 0
+        RenderHarness.forEachFrameOf(ice, 160, 90, 90, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.HighHit, step) },
+            beforeDraw = { ice.jumpTo(ThinIce.UNDERWATER) }) { bitmap, step ->
+            if (step == 65) bubblesBefore = ice.bubbleCount()
+            if (step == 89) {
+                bubblesAfter = ice.bubbleCount()
+                val pixels = IntArray(160 * 90)
+                bitmap.readPixels(pixels)
+                mean = pixels.sumOf { luma(it).toDouble() }.toFloat() / pixels.size
+                white = pixels.count { minOf(it shr 16 and 0xFF, it shr 8 and 0xFF, it and 0xFF) > 230 }
+            }
+        }
+        println("thin ice: under water bubbles $bubblesBefore then $bubblesAfter, mean luma $mean, white pixels $white")
+        assertTrue(bubblesAfter > bubblesBefore, "a hat under water sends up bubbles")
+        assertTrue(mean > 0.02f, "the deep is lit, mean luma $mean")
+        assertTrue(white < 5, "no white ring lines under water, had $white")
+    }
+
+    @Test
+    fun theCameraGlidesOnTheSlowCycleAndDivesOnADrop() {
+        val ice = ThinIce()
+        var lowest = 0f
+        var highest = 0f
+        var steepest = 0f
+        var last = 0f
+        RenderHarness.forEachFrame(ice, 64, 36, 1800, VizPalette.Prism, RenderHarness.Song.Lively) { _, step ->
+            val x = ice.glideX
+            if (step > 0) steepest = maxOf(steepest, abs(x - last))
+            last = x
+            lowest = minOf(lowest, x)
+            highest = maxOf(highest, x)
+        }
+        val quiet = ThinIce()
+        var quietMoved = 0f
+        var quietAt60 = 0f
+        RenderHarness.forEachFrame(quiet, 64, 36, 300, VizPalette.Prism, RenderHarness.Song.Silence) { _, step ->
+            if (step == 60) quietAt60 = quiet.glideX
+            if (step > 60) quietMoved = maxOf(quietMoved, abs(quiet.glideX - quietAt60))
+        }
+        val diver = ThinIce()
+        val dive = FloatArray(260)
+        RenderHarness.forEachFrameOf(diver, 64, 36, 260, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Drop, step) }) { _, step -> dive[step] = diver.diveValue }
+        val diveStep = (1 until 260).maxOf { abs(dive[it] - dive[it - 1]) }
+        println("thin ice: glide $lowest to $highest, steepest $steepest a frame; silence moved $quietMoved; dive ${dive[65]} to ${dive[256]}, steepest $diveStep")
+        assertTrue(lowest < 0f && highest > 0f, "the glide takes both sides")
+        assertTrue(steepest <= 0.002f, "the glide never jumps, moved $steepest in a frame")
+        assertTrue(quietMoved == 0f, "a silence holds the camera, moved $quietMoved")
+        assertTrue(dive[65] == 1f && dive[256] > 1.5f, "the drop dives under the ice, ${dive[65]} to ${dive[256]}")
+        assertTrue(diveStep <= 0.25f / 60f + 1e-4f, "the dive never cuts, moved $diveStep in a frame")
+    }
+
+    @Test
+    fun noHitDriverDeclaresTheCamera() {
+        val hits = setOf(VizDriver.LowHit, VizDriver.BodyHit, VizDriver.HighHit, VizDriver.Onset)
+        val drives = checkNotNull(ThinIce().mapping).drives
+        assertTrue(drives.none { it.driver in hits && it.property == VizProperty.Camera }, "a hit moves the camera")
     }
 
     private fun luma(pixel: Int): Float =

@@ -29,6 +29,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.shader.canDrawRuntimeShaders
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.math.tan
@@ -72,7 +73,12 @@ import kotlin.math.tan
  * form blends every point of the sheet from one placement to the other, and the strand fades into
  * the sheet. A drop lays the cloth out, a breakdown hangs it as a veil, and a birth weaves a second
  * strand in. The camera orbits on the slow cycle and moves closer in a bright mood; in the Tube it
- * rolls round the axis instead. Nothing moves on the beat.
+ * rolls round the axis instead. The camera never moves on the beat.
+ *
+ * The hits move the sheet itself. A kick sends a crest from the front row to the back at sixty rows
+ * a heard second, each kick its own crest. A snare pleats the sheet across, as Fluctus folded, and
+ * a hat makes the threads shimmer. The bass billows the cloth in a slow wave; a drop lifts the
+ * billow to full for a cycle, and a breakdown stills it until the music turns again.
  */
 internal class Silk : Layered(
     name = "Silk",
@@ -91,6 +97,13 @@ internal class Silk : Layered(
         VizDrive(VizDriver.Waveform, VizProperty.Shape),
         VizDrive(VizDriver.Level, VizProperty.Speed, VizCurve.Linear, VizResponse.Rate),
         VizDrive(VizDriver.Mood, VizProperty.Camera, response = VizResponse.Rate),
+        // The impacts: the crest, the pleat, the shimmer and the billow.
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(1f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.25f)),
+        VizDrive(VizDriver.HighHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.4f)),
+        VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f)),
         silence = VizSilence.Still,
     )
 
@@ -137,6 +150,19 @@ internal class Silk : Layered(
     private var secondFade = 0f
     private var thicker = 0f
     private var cycleSeconds = 2f
+
+    // The impacts. The crest's row runs from 0 at the front; -1 means no crest.
+    /** The row the last kick's crest has reached, or -1 when there is none. */
+    internal var crestAt = -1f
+        private set
+    private var crestStrength = 0f
+    private var pleat = 0f
+    private var shimmer = 0f
+    private var billow = 0f
+    private var billowHold = 0f
+    private var inCollapse = false
+    /** The heard steps so far, for the shimmer's flicker. */
+    private var shimmerTick = 0
 
     // The camera: how present the music is, the orbit on the slow cycle, the dolly by mood.
     private val presence = Envelope(2f, 0.5f)
@@ -185,6 +211,12 @@ internal class Silk : Layered(
         else if (evolution.collapse) morphTo(VEIL, cycleSeconds * 2f)
         else if (evolution.morph) morph()
         if (evolution.birth) birth()
+        if (evolution.collapse) inCollapse = true else if (gestures.turn || gestures.surge) inCollapse = false
+        if (evolution.bloom) {
+            billow = 1f
+            billowHold = cycleSeconds
+        }
+        impacts(step, frame.bass)
         if (morph < 1f) morph = (morph + step / morphSeconds.coerceAtLeast(0.1f)).coerceAtMost(1f)
         // The second strand fades in over half a cycle.
         if (strandCount == 2) secondFade = (secondFade + 2f * step / cycleSeconds).coerceAtMost(1f)
@@ -200,6 +232,45 @@ internal class Silk : Layered(
         dolly.advance(1f + DOLLY_REACH * (frame.mood - 0.5f) * reach, live)
         placeLattice()
     }
+
+    /** Moves the crest, the pleat, the shimmer and the billow on heard time, then takes this frame's hits. */
+    private fun impacts(step: Float, bass: Float) {
+        if (crestAt >= 0f) {
+            crestAt += step * CREST_ROWS_PER_SECOND
+            if (crestAt > ROWS + CREST_WIDTH_ROWS) crestAt = -1f
+        }
+        if (gestures.kick > 0f) {
+            crestAt = 0f
+            crestStrength = gestures.kick
+        }
+        pleat *= exp(-step / PLEAT_SECONDS)
+        if (gestures.snare > 0f) pleat = gestures.snare
+        shimmer *= exp(-step / SHIMMER_SECONDS)
+        if (gestures.hat > 0f) shimmer = gestures.hat
+        if (step > 0f) shimmerTick++
+        billowHold = (billowHold - step).coerceAtLeast(0f)
+        val target = when {
+            inCollapse -> 0f
+            billowHold > 0f -> 1f
+            else -> bass.coerceIn(0f, 1f)
+        }
+        billow += (target - billow) * (1f - exp(-step / BILLOW_SECONDS))
+    }
+
+    /** The crest's lift of [row] in world units. */
+    internal fun rowLift(row: Int): Float {
+        if (crestAt < 0f) return 0f
+        val off = row - crestAt
+        return crestStrength * CREST_LIFT * exp(-off * off / CREST_SPREAD)
+    }
+
+    internal val pleatValue: Float get() = pleat
+    internal val shimmerValue: Float get() = shimmer
+    internal val billowValue: Float get() = billow
+
+    /** The shimmer's share of a thread's ink at [step] of [row]: 1 with no hat. */
+    private fun shimmerAt(step: Int, row: Int): Float =
+        1f + shimmer * SHIMMER * sin(step * 0.9f + row * 1.7f + shimmerTick * 0.9f)
 
     /** Shows [form] at once, with no morph. */
     internal fun jumpTo(form: Int) {
@@ -279,6 +350,8 @@ internal class Silk : Layered(
         val blend = morph < 1f && formFrom != STRAND && formTo != STRAND
         for (row in 0 until ROWS) {
             val past = if (row == 0) -1 else history.row(row * ROW_SECONDS)
+            val lift = rowLift(row)
+            val swell = billow * BILLOW * sin(row / ROWS.toFloat() * PI.toFloat())
             for (step in 0 until ACROSS) {
                 val across = step / (ACROSS - 1f)
                 val level = if (row == 0) liveBands.sampleAt(across) else history.sample(past, across)
@@ -286,13 +359,15 @@ internal class Silk : Layered(
                 rowLevel[index] = level.coerceIn(0f, 1f)
                 // The front row carries the live waveform on its edge.
                 val height = level * CLOTH_HEIGHT + if (row == 0) liveScope.sampleAt(across) * WAVE_EDGE else 0f
-                place(sheet, row, across, height, point)
+                val fold = pleat * PLEAT * sin(across * TAU * 6f + row * 0.4f)
+                val wave = swell * sin(across * PI.toFloat())
+                place(sheet, row, across, height, lift, fold, wave, point)
                 if (blend) {
                     val toX = point[0]; val toY = point[1]; val toZ = point[2]
                     if (fromFrozen) {
                         point[0] = frozenX[index]; point[1] = frozenY[index]; point[2] = frozenZ[index]
                     } else {
-                        place(formFrom, row, across, height, point)
+                        place(formFrom, row, across, height, lift, fold, wave, point)
                     }
                     point[0] += (toX - point[0]) * eased
                     point[1] += (toY - point[1]) * eased
@@ -303,28 +378,32 @@ internal class Silk : Layered(
         }
     }
 
-    /** Where [row] at [across] sits in [form], with [height] the level and the edge in world units. */
-    private fun place(form: Int, row: Int, across: Float, height: Float, into: FloatArray) {
+    /**
+     * Where [row] at [across] sits in [form], with [height] the level and the edge in world units.
+     * The crest's [lift] raises every form, the pleat's [fold] moves it across, and the billow's
+     * [wave] lifts only the cloth.
+     */
+    private fun place(form: Int, row: Int, across: Float, height: Float, lift: Float, fold: Float, wave: Float, into: FloatArray) {
         val depth = -row / (ROWS - 1f) * CLOTH_DEPTH + CLOTH_DEPTH * 0.3f
         when (form) {
             // The tube: across wraps round the axis, the level pulls a point toward it.
             TUBE -> {
                 val theta = across * TAU
-                val radius = TUBE_RADIUS - height * 0.5f
-                into[0] = sin(theta) * radius
+                val radius = TUBE_RADIUS - height * 0.5f - lift
+                into[0] = sin(theta) * radius + fold
                 into[1] = TUBE_AXIS_Y + cos(theta) * radius
                 into[2] = depth
             }
             // The veil: hung from above, time running down, the level pushing it toward the viewer.
             VEIL -> {
-                into[0] = (across - 0.5f) * CLOTH_WIDTH
-                into[1] = CLOTH_Y + 60f - row / (ROWS - 1f) * CLOTH_DEPTH * 0.6f
+                into[0] = (across - 0.5f) * CLOTH_WIDTH + fold
+                into[1] = CLOTH_Y + 60f - row / (ROWS - 1f) * CLOTH_DEPTH * 0.6f + lift
                 into[2] = -20f + height * 0.4f
             }
             // The cloth: across to x, time back along z, the level up.
             else -> {
-                into[0] = (across - 0.5f) * CLOTH_WIDTH
-                into[1] = CLOTH_Y + height
+                into[0] = (across - 0.5f) * CLOTH_WIDTH + fold
+                into[1] = CLOTH_Y + height + lift + wave
                 into[2] = depth
             }
         }
@@ -412,12 +491,12 @@ internal class Silk : Layered(
         one.frame(size.width, size.height, twist.toFloat())
         // The walk turns the strand's hues, slowly, over minutes of music.
         one.hueTurn = wrap(genes.walk)
-        rowAlpha.fill(OPACITY * weight)
         // Painter's order by line index, with no depth test, as on the page.
         for (first in 0 until one.lines step BATCH) {
             mesh.clear()
             for (line in first until minOf(first + BATCH, one.lines)) {
                 one.line(line)
+                for (step in 0 until STEPS) rowAlpha[step] = OPACITY * weight * shimmerAt(step, line)
                 addRibbon(one.centreX, one.centreY, one.offsetX, one.offsetY, one.colour, rowAlpha, light)
             }
             drawMesh(mesh)
@@ -441,7 +520,7 @@ internal class Silk : Layered(
             if (!projectRow(row, shadow = false)) continue
             val rgb = state.palette.argb(row / (ROWS - 1f) * 0.5f + genes.walk, saturation = 0.55f, value = 0.45f) and 0xFFFFFF
             rowColour.fill(rgb)
-            for (step in 0 until ACROSS) rowAlpha[step] = OPACITY * (0.35f + 0.65f * rowLevel[row * ACROSS + step]) * weight
+            for (step in 0 until ACROSS) rowAlpha[step] = OPACITY * (0.35f + 0.65f * rowLevel[row * ACROSS + step]) * weight * shimmerAt(step, row)
             addRibbon(rowX, rowY, rowOffsetX, rowOffsetY, rowColour, rowAlpha, light)
             for (step in 0 until ACROSS) if (!rowX[step].isNaN()) clothBottom = maxOf(clothBottom, rowY[step])
             if (++batched == BATCH) { drawMesh(mesh); mesh.clear(); batched = 0 }
@@ -563,6 +642,14 @@ internal class Silk : Layered(
         orbit.reset()
         dolly.reset(1f)
         clothBottom = -1f
+        crestAt = -1f
+        crestStrength = 0f
+        pleat = 0f
+        shimmer = 0f
+        billow = 0f
+        billowHold = 0f
+        inCollapse = false
+        shimmerTick = 0
     }
 
     internal companion object {
@@ -591,6 +678,18 @@ internal class Silk : Layered(
         const val TUBE_RADIUS = 26f
         const val TUBE_AXIS_Y = CLOTH_Y + 10f
         const val VEIL_ELEVATION = 8f
+
+        // The impacts: the crest in rows and world units, the pleat, the shimmer and the billow.
+        const val CREST_ROWS_PER_SECOND = 60f
+        const val CREST_LIFT = 8f
+        const val CREST_SPREAD = 6f
+        const val CREST_WIDTH_ROWS = 8f
+        const val PLEAT = 4f
+        const val PLEAT_SECONDS = 0.25f
+        const val SHIMMER = 0.5f
+        const val SHIMMER_SECONDS = 0.4f
+        const val BILLOW = 10f
+        const val BILLOW_SECONDS = 0.3f
 
         /** The twist's pace in the page's time units a heard second, at no energy to full. */
         const val TWIST_RATE = 0.6f

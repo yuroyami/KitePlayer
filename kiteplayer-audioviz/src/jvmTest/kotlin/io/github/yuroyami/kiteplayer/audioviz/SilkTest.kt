@@ -268,6 +268,82 @@ class SilkTest {
     }
 
     @Test
+    fun aKickSendsACrestFromTheFrontToTheBack() {
+        val silk = Silk()
+        var started = false
+        var at66 = -2f
+        var at76 = -2f
+        var at106 = -2f
+        var near = 0f
+        var far = 0f
+        // One hit, at step 66; the hit at 96 would start a new crest.
+        RenderHarness.forEachFrameOf(silk, 64, 36, 140, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(if (step < 90) VizDriver.LowHit else null, step) },
+            beforeDraw = { if (!started) { silk.jumpTo(Silk.CLOTH); started = true } }) { _, step ->
+            if (step == 66) at66 = silk.crestAt
+            if (step == 76) at76 = silk.crestAt
+            if (step == 106) at106 = silk.crestAt
+            if (step == 72) { near = silk.rowLift(5); far = silk.rowLift(40) }
+        }
+        println("silk: the crest at row $at66, $at76 and $at106 at steps 66, 76 and 106; at step 72 row 5 lifts $near and row 40 $far")
+        assertEquals(0f, at66, "the kick starts a crest at the front row")
+        assertTrue(at76 > 8f, "the crest runs back, at row $at76 ten steps later")
+        assertTrue(at106 > 35f, "the crest runs back at sixty rows a second, at row $at106")
+        assertTrue(near > far, "the crest lifts the front rows first, $near against $far")
+    }
+
+    @Test
+    fun aSnarePleatsTheClothAndAHatShimmersIt() {
+        fun follow(driver: VizDriver, read: (Silk) -> Float): Pair<Float, Float> {
+            val silk = Silk()
+            var started = false
+            var at67 = -1f
+            var at127 = -1f
+            RenderHarness.forEachFrameOf(silk, 64, 36, 128, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(if (step < 90) driver else null, step) },
+                beforeDraw = { if (!started) { silk.jumpTo(Silk.CLOTH); started = true } }) { _, step ->
+                if (step == 67) at67 = read(silk)
+                if (step == 127) at127 = read(silk)
+            }
+            return at67 to at127
+        }
+        val (pleat, pleatLater) = follow(VizDriver.BodyHit) { it.pleatValue }
+        val (shimmer, shimmerLater) = follow(VizDriver.HighHit) { it.shimmerValue }
+        println("silk: the pleat $pleat after a snare and $pleatLater a second later; the shimmer $shimmer after a hat and $shimmerLater")
+        assertTrue(pleat > 0.5f, "a snare pleats the cloth, $pleat")
+        assertTrue(pleatLater < 0.1f, "the pleat falls within a second, $pleatLater")
+        assertTrue(shimmer > 0.5f, "a hat shimmers the threads, $shimmer")
+        assertTrue(shimmerLater < 0.1f, "the shimmer falls within a second, $shimmerLater")
+    }
+
+    @Test
+    fun aDropBillowsAndABreakdownStillsTheCloth() {
+        val dropped = Silk()
+        var started = false
+        var billowAt70 = -1f
+        var dropForm = ""
+        RenderHarness.forEachFrameOf(dropped, 64, 36, 257, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Drop, step) },
+            beforeDraw = { if (!started) { dropped.jumpTo(Silk.TUBE); started = true } }) { _, step ->
+            if (step == 70) billowAt70 = dropped.billowValue
+            if (step == 256) dropForm = dropped.forms.form
+        }
+        val stilled = Silk()
+        var billowAt126 = -1f
+        var breakdownForm = ""
+        RenderHarness.forEachFrameOf(stilled, 64, 36, 447, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Breakdown, step) }) { _, step ->
+            if (step == 126) billowAt126 = stilled.billowValue
+            if (step == 446) breakdownForm = stilled.forms.form
+        }
+        println("silk: the billow $billowAt70 after a drop, form $dropForm; $billowAt126 after a breakdown, form $breakdownForm")
+        assertTrue(billowAt70 > 0.5f, "a drop billows the cloth, $billowAt70")
+        assertEquals("Cloth", dropForm)
+        assertTrue(billowAt126 < 0.1f, "a breakdown stills the billow, $billowAt126")
+        assertEquals("Veil", breakdownForm)
+    }
+
+    @Test
     fun theCameraOrbitsOnTheSlowCycleAndNeverCuts() {
         val silk = Silk()
         var started = false

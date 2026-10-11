@@ -330,6 +330,29 @@ peak hold, the white edges, the stars and the glow. It is a hive that grows and 
   as weights, and Shatter, which a drop brings for one cycle. The form is published through
   `Visualization.forms`.
 
+## Bars, a city
+
+`Bars` keeps its meter: the fixed height map, the falling caps, the cells, the complementary bar,
+the sweep and the embers. The meter is now the front row of a city.
+
+- Behind the front row stand 64 rows of the spectrum's past, one row per fifteenth of a second,
+  receding into fog. The walls and the ceiling reflect them.
+- The live waveform runs as a bright rail along the floor's front edge. In a silence the hall is
+  empty: a floor grid and a faint flat rail.
+- The forms are Hall, Canyon (each half of the spectrum stands on one wall), Lake (the rows stand
+  further apart and mirror below the water line, with the rail as the shore) and Tower (the rows
+  are floors stacked upward, which the camera rises along). The rows bend from one form to the
+  next over two to four cycles at the evolution pace, and on a birth the front row bursts into
+  embers. The form is published through `Visualization.forms`.
+- A kick sends a wave back through the rows, sixty rows a second. A snare runs the sweep over the
+  caps. Hats and a steady trickle raise embers, at most two hundred a second. A drop lifts every
+  row toward its peak and the room light to full for a cycle. A breakdown sinks the rows to a
+  quarter of their height until the next turn, and only the rail plays.
+- The camera looks down on the city from above and cranes round it on the slow cycle, rolling at
+  most 0.02 rad. A pause holds it and a silence brings it home. It never cuts, shakes or punches.
+- Each bar wears the palette by band, walked by the genes; the caps are white; the room light
+  follows the level. The bloom is 0.5.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative
@@ -441,10 +464,6 @@ drawing: the surface draws the background and returns.
 
 ## Still open
 
-- **Bars glows by default.** The standard says glow is an additional layer, off unless the drawing
-  asks for it. Bars is the one drawing that inherits the bloom of 0.8 from `PostSpec.Default`.
-  Seventeen drawings turn the finishing pass off and six set a smaller bloom of their own. Changing
-  Bars changes its look, so it is a decision for the owner rather than a mechanical fix.
 - **No evidence of the destination backend on a phone.** A shader compiled by Skia does not prove
   its destination is the graphics card. The desktop benchmark reports the window's graphics backend,
   and Android and iOS have no such evidence yet. That needs a device.

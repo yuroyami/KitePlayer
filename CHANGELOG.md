@@ -40,6 +40,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   turns in notches on the beat, it grows with births and surges and shrinks on a breakdown, a kick
   opens its cells, and it takes the Disc, Dome, Tunnel and Shatter forms at the music's pace,
   published through `Visualization.forms`.
+- Bars is a city: 64 rows of the spectrum's past recede behind the meter, a rail of the live
+  waveform runs along the floor, a kick's wave runs back through the rows, and the camera cranes
+  round it on the slow cycle. It takes the Hall, Canyon, Lake and Tower forms at the music's pace,
+  published through `Visualization.forms`. Its bloom is 0.5, and the eleven controls that drove
+  its ghost spectra, overlapping layers, stage motion and side meters are gone.
 
 ## [0.3.0] - 2026-10-09
 

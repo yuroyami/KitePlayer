@@ -14,6 +14,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
@@ -71,14 +72,19 @@ import kotlin.math.tan
  *   phones at 1080p. The surface is the same, with about half the corners.
  * - The strips are painted far to near with a colour at each corner, where the page used a depth buffer and a
  *   colour per pixel. A ridge is cut where it passes the opposite surface, which is where the depth buffer hid it.
+ * - The flat ground under the strips keeps 18 percent of its colour near the camera, where the page's was black,
+ *   so the floor reads as faintly lit glass. The ridges keep the page's shading.
  * - The page cleared to white. Here the clear is a dim space, the palette's background lifted toward its low
  *   colour, and every colour follows the level, with a quarter of the light kept in a silence.
  * - A drop bursts the shards outward for one cycle, and a breakdown fuses them: the tilt and the roll stop and
  *   the cracks heal into one plane until the music turns. The flight runs at half speed with no drive and at
  *   the page's speed at full drive.
- * - The floor and the ceiling carry twelve cracks of light. A kick runs one crack again from its start, a snare
- *   flips one shard's tilt, a hat glints the dust, and a birth grows a new crack network. The main crack runs
- *   down the middle of the floor and carries the live waveform. The strip hue turns up to 30 degrees toward the
+ * - On Prism the strips keep the page's one hue from the loudness. On any other palette each column takes its hue
+ *   from the palette, by band and by the slow colour walk.
+ * - The floor and the ceiling carry twelve cracks of light. A kick runs four cracks again from their start, a
+ *   snare flips a pane of four shards, a hat glints the dust, and a birth grows a new crack network. The main
+ *   crack runs down the middle of the floor and carries the live waveform. A morph turns every shard's tilt the
+ *   other way along with the roll. The strip hue turns up to 30 degrees toward the
  *   music's key.
  *
  * A flight down an endless corridor through a dim space. The floor and the ceiling are 64 thin strips each, and
@@ -109,13 +115,15 @@ internal class Fracture : Visualization {
             ),
             // A section is a morph: the roll turns the other way.
             VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
-            // A kick runs a crack again, a snare flips a shard, a hat glints the dust and the main crack.
+            // A kick runs cracks again and a snare flips a pane of shards. A hat glints the dust, which the
+            // fixture cannot hear, so it is not declared.
             VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(CRACK_SECONDS)),
             VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(FLIP_SECONDS)),
-            VizDrive(VizDriver.HighHit, VizProperty.Colour, VizCurve.Scaled, VizResponse.envelope(GLINT_SECONDS)),
             // The main crack carries the waveform, and the strip hue turns toward the key.
             VizDrive(VizDriver.Waveform, VizProperty.Shape),
             VizDrive(VizDriver.Key, VizProperty.Colour),
+            // The drive sets the flight speed, which moves every strip along the corridor.
+            VizDrive(VizDriver.Mood, VizProperty.Shape, response = VizResponse.Rate),
             // A drop bursts the shards outward, and a breakdown fuses them into one plane.
             VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
             VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f)),
@@ -196,7 +204,7 @@ internal class Fracture : Visualization {
     /** The largest waveform sample the main crack drew in the last frame. */
     internal fun crackWave(): Float = waveMax
 
-    // A snare flips one strip's tilt for a moment, and a hat glints the dust.
+    // A snare flips a pane of strips for a moment, and a hat glints the dust.
     private val flip = FloatArray(NUM_BANDS)
     private var glint = 0f
 
@@ -327,6 +335,11 @@ internal class Fracture : Visualization {
     private val clipCorners = IntArray(3)
     private val polygon = IntArray(4)
 
+    // Each column's colour this frame: the page's one hue on Prism, the palette by band and walk on any other.
+    private val columnRed = FloatArray(NUM_BARS + 1)
+    private val columnGreen = FloatArray(NUM_BARS + 1)
+    private val columnBlue = FloatArray(NUM_BARS + 1)
+
     // This frame's view: the canvas middle, the lens, the roll, the light, and the two planes.
     private var frameWidth = 0f
     private var frameHeight = 0f
@@ -363,6 +376,7 @@ internal class Fracture : Visualization {
         // group.position.y is -10 plus the squeeze and each strip sits 10 lower; the ceiling is the same turned over.
         floorY = PLANE_Y - GROUP_Y + squeeze
         ceilingY = GROUP_Y - PLANE_Y - squeeze
+        colourColumns(state.palette)
 
         // Slot m holds strip (steps + m) mod 64, its near edge 10m - 15 - offset units ahead of the camera. Both
         // edges come from one expression, so neighbouring strips share their corners exactly.
@@ -415,6 +429,24 @@ internal class Fracture : Visualization {
         drawMesh(mesh)
     }
 
+    /** Fills the column colours: the page's hue on Prism, or the palette by band and walk. */
+    private fun colourColumns(palette: VizPalette) {
+        if (palette.name == VizPalette.Prism.name) {
+            columnRed.fill(red)
+            columnGreen.fill(green)
+            columnBlue.fill(blue)
+            return
+        }
+        // The key moves the colours along the palette as far as the analysis is sure of it.
+        val start = recipe.walk + KEY_TURN / 360f * keyConfidence
+        for (column in 0..NUM_BARS) {
+            val colour = palette.cycled(position = column / (NUM_BARS - 1f) * SHARD_SPAN + start)
+            columnRed[column] = colour.red
+            columnGreen[column] = colour.green
+            columnBlue[column] = colour.blue
+        }
+    }
+
     /** Places strip [strip]'s floor and ceiling, pushed from the axis by a burst. */
     private fun spread(strip: Int) {
         val factor = spreadOf(strip)
@@ -427,8 +459,8 @@ internal class Fracture : Visualization {
      * tilt by its level, alternate strips the other way, and the other way again while a snare has it flipped.
      */
     private fun turn(slot: Int, strip: Int) {
-        val sign = (if (strip % 2 != 0) -1f else 1f) * (if (flip[strip] > 0.5f) -1f else 1f)
-        val tilt = TILT * sliceLevel(slot, 0.5f) / 255f * sign * tiltShare
+        val sign = (if (strip % 2 != 0) -1f else 1f) * (if (flip[strip] > 0.5f) -1f else 1f) * morphSign
+        val tilt = (TILT * sliceLevel(slot, 0.5f) / 255f + FLIP_TURN * flip[strip]) * sign * tiltShare
         val angle = roll + tilt
         cosRoll = cos(angle).toFloat()
         sinRoll = sin(angle).toFloat()
@@ -450,7 +482,7 @@ internal class Fracture : Visualization {
                 inCollapse = false
             }
             evolution.collapse -> inCollapse = true
-            gestures.turn || gestures.surge -> inCollapse = false
+            inCollapse && (gestures.turn || gestures.surge) -> inCollapse = false
             evolution.morph -> morph()
         }
         light = state.lightScale.coerceIn(0f, 1f) * max(IDLE_LIGHT * (1f - state.frame.audible), lightFor(state.energy))
@@ -498,19 +530,22 @@ internal class Fracture : Visualization {
         roll = (roll + heard * rollRate * sign * motionScale) % FULL_TURN
     }
 
-    /** The hits: a kick runs a crack again, a snare flips a shard and a hat glints the dust. Then the cracks grow. */
+    /** The hits: a kick runs cracks again, a snare flips a pane of shards and a hat glints the dust. Then the cracks grow. */
     private fun strike(heard: Float) {
         if (heard <= 0f) return
         if (gestures.kick > 0f) {
-            crackLength[nextCrack] = 0f
-            nextCrack = (nextCrack + 1) % CRACKS
+            repeat(KICK_CRACKS) {
+                crackLength[nextCrack] = 0f
+                nextCrack = (nextCrack + 1) % CRACKS
+            }
         }
         val flipKeep = exp(-heard / FLIP_SECONDS)
         for (strip in 0 until NUM_BANDS) flip[strip] *= flipKeep
         if (gestures.snare > 0f) {
             // A strip near enough to see: slot 2 to 25 of the corridor.
             val steps = (travel / BAR_GAP).toInt().coerceIn(0, NUM_BANDS - 1)
-            flip[(steps + FLIP_NEAREST + (random.next() * FLIP_SLOTS).toInt()) % NUM_BANDS] = 1f
+            val first = steps + FLIP_NEAREST + (random.next() * FLIP_SLOTS).toInt()
+            for (k in 0 until FLIP_WIDTH) flip[(first + k) % NUM_BANDS] = 1f
         }
         glint = maxOf(glint * exp(-heard / GLINT_SECONDS), gestures.hat.coerceIn(0f, 1f))
         // A fuse heals the cracks: none reaches further than the share of the tilt that is left.
@@ -591,9 +626,10 @@ internal class Fracture : Visualization {
             val t = u - k
             val sample = if (scope.isEmpty()) 0f else scope.sampleAt(along)
             waveMax = maxOf(waveMax, abs(sample))
-            val x = crackX[base + k] + (crackX[base + k + 1] - crackX[base + k]) * t + sample * WAVE_REACH
             val z = crackDepth[base + k] + (crackDepth[base + k + 1] - crackDepth[base + k]) * t
-            if (s > 0) addLine(lastX, floorY, lastZ, x, floorY, z, width, mainColour)
+            // The sideways reach grows with depth, so the waveform keeps one size on the screen.
+            val x = crackX[base + k] + (crackX[base + k + 1] - crackX[base + k]) * t + sample * WAVE_REACH * z
+            if (s > 0) addLine(lastX, floorY, lastZ, x, floorY, z, width * MAIN_WIDTH, mainColour)
             lastX = x
             lastZ = z
         }
@@ -640,8 +676,9 @@ internal class Fracture : Visualization {
 
     /** One flat band of the floor or the ceiling at height [y], from depth [near] to depth [far], 300 wide. */
     private fun addBand(y: Float, near: Float, far: Float) {
-        val nearColour = colourAt(near, red, green, blue, light)
-        val farColour = colourAt(far, red, green, blue, light)
+        // The flat ground is never darker than it looks GLOW_DEPTH units away: a faintly lit glass floor.
+        val nearColour = colourAt(max(near, GLOW_DEPTH), columnRed[BAND_COLUMN], columnGreen[BAND_COLUMN], columnBlue[BAND_COLUMN], light)
+        val farColour = colourAt(max(far, GLOW_DEPTH), columnRed[BAND_COLUMN], columnGreen[BAND_COLUMN], columnBlue[BAND_COLUMN], light)
         val a = mesh.vertex(projectX(-BAR_LEN_F, y, near), projectY(-BAR_LEN_F, y, near), nearColour)
         val b = mesh.vertex(projectX(BAR_LEN_F, y, near), projectY(BAR_LEN_F, y, near), nearColour)
         val c = mesh.vertex(projectX(BAR_LEN_F, y, far), projectY(BAR_LEN_F, y, far), farColour)
@@ -665,14 +702,15 @@ internal class Fracture : Visualization {
         val side = if (floor == odd) 1f else -1f
         val base = if (floor) floorY else ceilingY
         val up = if (floor) 1f else -1f
-        val nearColour = colourAt(near, red, green, blue, light)
-        val farColour = colourAt(far, red, green, blue, light)
         val first = mesh.vertexCount
         for (column in 0..NUM_BARS) {
             val x = side * columnX[column]
             val lift = if (column < NUM_BARS) history.sample(sliceRow[slot], column / (NUM_BARS - 1f)) / HEIGHT_DIVISOR else 0f
-            corner(2 * column, x, base + up * reach * lift, near, nearColour)
-            corner(2 * column + 1, x, base + up * lift, far, farColour)
+            val r = columnRed[column]
+            val g = columnGreen[column]
+            val b = columnBlue[column]
+            corner(2 * column, x, base + up * reach * lift, near, colourAt(near, r, g, b, light))
+            corner(2 * column + 1, x, base + up * lift, far, colourAt(far, r, g, b, light))
         }
         // The page's two triangles per column, (a, b, d) and (b, c, d), outer columns first.
         for (column in 0 until NUM_BARS) {
@@ -740,7 +778,11 @@ internal class Fracture : Visualization {
                 val t = (limit - cornerY[p]) / (cornerY[q] - cornerY[p])
                 val x = cornerX[p] + (cornerX[q] - cornerX[p]) * t
                 val depth = cornerDepth[p] + (cornerDepth[q] - cornerDepth[p]) * t
-                val added = mesh.vertex(projectX(x, limit, depth), projectY(x, limit, depth), colourAt(depth, red, green, blue, light))
+                val column = p / 2
+                val added = mesh.vertex(
+                    projectX(x, limit, depth), projectY(x, limit, depth),
+                    colourAt(depth, columnRed[column], columnGreen[column], columnBlue[column], light),
+                )
                 if (added < 0) return
                 polygon[count++] = added
             }
@@ -815,7 +857,7 @@ internal class Fracture : Visualization {
 
         /** How far a burst pushes the strips from the axis at most, and the fuse's rise and fall a second. */
         const val BURST = 0.6f
-        const val FUSE_RISE = 1.5f
+        const val FUSE_RISE = 4f
         const val FUSE_FALL = 0.5f
 
         /** The dust's opacity over the corridor. */
@@ -826,6 +868,7 @@ internal class Fracture : Visualization {
         const val CRACK_POINTS = 7
         const val CRACK_GROW = 2f
         const val CRACK_SECONDS = 0.5f
+        const val KICK_CRACKS = 4
         const val MAIN_CRACK = 0
 
         /** Where the crack seeds lie on the floor, how far a crack wanders, and where the main crack runs, in world units. */
@@ -842,9 +885,13 @@ internal class Fracture : Visualization {
         const val CRACK_LIGHT = 0.6f
         const val MAIN_GLINT = 0.3f
 
-        /** The waveform on the main crack: samples drawn along it, and the sideways reach of a full-scale sample. */
+        /**
+         * The waveform on the main crack: samples drawn along it, the sideways reach of a full-scale sample per unit
+         * of depth (about a ninth of the frame height to the side), and the main crack's width against the others.
+         */
         const val WAVE_SAMPLES = CRACK_POINTS * 8
-        const val WAVE_REACH = 3f
+        const val WAVE_REACH = 0.08f
+        const val MAIN_WIDTH = 3f
 
         /** A snare's flip and a hat's glint fade with these time constants, in heard seconds. */
         const val FLIP_SECONDS = 0.3f
@@ -852,14 +899,24 @@ internal class Fracture : Visualization {
         private const val FLIP_NEAREST = 2
         private const val FLIP_SLOTS = 24
 
+        /** A snare flips this many neighbouring strips, each turned this far at the start of the flip, in radians. */
+        const val FLIP_WIDTH = 4
+        const val FLIP_TURN = 0.35f
+
         /** The most the strip hue turns toward the key, in degrees. */
         const val KEY_TURN = 30f
+
+        /** How much of the palette's span the columns cover. */
+        const val SHARD_SPAN = 0.6f
 
         const val FFT_SIZE = 4096
         const val PAGE_SAMPLE_RATE = 44_100
 
         /** `numBars`: bars per read, and the lifted columns of every strip. */
         const val NUM_BARS = 128
+
+        /** The column the flat bands take their colour from. */
+        private const val BAND_COLUMN = NUM_BARS / 2
 
         /** `numBands`: strips on the floor, and the same strips again on the ceiling. */
         const val NUM_BANDS = 64
@@ -898,6 +955,9 @@ internal class Fracture : Visualization {
 
         /** The fragment shader's `-pos.z / 500.0`: a strip is black at the camera and full colour 500 units away. */
         const val BRIGHTNESS_DEPTH = 500f
+
+        /** The flat ground under the strips keeps the shade of this depth near the camera, 18 percent of its colour. */
+        const val GLOW_DEPTH = 90f
 
         /** `1 / tan(35 degrees)` for the page's vertical field of view of 70 degrees. */
         val FOCAL: Float = (1.0 / tan(35.0 * PI / 180.0)).toFloat()

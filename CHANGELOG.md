@@ -49,6 +49,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   of the moon's path on each row and treble ripples on the swell. It takes the Glass, Swell, Storm
   and Tide forms with the music, published through `Visualization.forms`. The camera glides on
   the slow cycle, and the moon moves only with the walk.
+- Odyssey's weather is the music: kicks breed storms in a cloud memory field that drift with the
+  stripes, hats light an aurora, and the newest clouds face the camera. The camera orbits between
+  its Day side, Ring plane, Night side and Shadow views instead of cutting, published through
+  `Visualization.forms`, and a birth sends a comet across the sky. Its light follows the level,
+  and its ring takes the palette's brightest end.
 
 ## [0.3.0] - 2026-10-09
 

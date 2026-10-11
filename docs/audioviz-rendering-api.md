@@ -22,24 +22,28 @@ number as a time, and the surface fades by `2^(-dt / half life)`.
 ## Odyssey, a ringed planet
 
 `Odyssey` is a giant planet with a ring, drawn by one shader with exact sphere and plane tests:
-each pixel's line of sight meets the planet, the ring plane, the two moons, or nothing. Nothing is
-stepped, so it costs less than a distance-field drawing.
+each pixel's line of sight meets the planet, the ring plane, the two moons, or nothing.
 
-- The planet always overhangs the frame by about a third, in landscape and in portrait. Its disc
-  radius is measured in the screen's shorter half-side for that reason.
-- Each stripe of latitude is one band's recent past. The host writes a column of stripe levels
-  every eighth of a second of music into a 96 by 24 picture read as a ring buffer, and the clouds
-  glide between columns rather than stepping. Neighbouring stripes stream in opposite directions.
-- The ring has 64 ringlets, one per band now, with dark gaps between them. Where one pixel covers
-  several ringlets, their gaps average out instead of shimmering.
-- The ring's shadow lies on the clouds and the planet's shadow lies across the ring, from the same
-  exact tests. The ring's shadow is the ringlets' average.
-- A new view comes at each section, over one bar: under the ring plane, nearly edge on, or from
-  the night side. A breakdown drifts into the planet's shadow until the next section or drop.
+- The planet always overhangs the frame by about a third, in landscape and in portrait.
+- Each stripe of latitude is one band's recent past, twelve seconds of it. The newest column is
+  written at the longitude facing the camera and streams away from it on both sides, so "now"
+  is always in view and the oldest columns meet behind the planet.
+- The planet's weather is the music. A kick breeds a storm: an eddy dropped into a cloud memory
+  field of 96 by 48 cells at the stripe of the loudest low band. The storm shows as a swirl with
+  slope lighting, drifts with its stripe and fades over seconds. A snare strikes lightning on the
+  night side. A hat lights an aurora at the poles. The terminator softens with the energy.
+- The ring has 64 ringlets, one per band now. The ring's shadow lies on the clouds and the
+  planet's shadow lies across the ring. A kick also sends a ripple out through the ring.
+- The ring takes the palette's brightest end. Under the default palette it stays ice blue.
+- The camera orbits and never cuts. The four views are its targets: Day side, Ring plane and
+  Night side in turn at each morph, over at least one cycle, and Shadow on a breakdown. On top of
+  the target, the disc moves on a small ellipse at a speed from the drive. Its distance breathes
+  on the slow cycle and its axis tilts with the walk. The form is published through
+  `Visualization.forms`. A birth sends a comet across the sky.
 - On a drop the sun rises over the planet's limb over one beat, after a short flare. When the audio
-  ahead already holds the drop, at most 100 ms ahead, the sun sets behind the planet just before it.
-- The planet keeps 35 percent of its light in a silence, and the night side is lifted to about
-  four percent by light off the ring.
+  ahead already holds the drop, the sun sets behind the planet just before it.
+- Light follows the level. The planet keeps 35 percent of its light in a silence, and the night
+  side is lifted to about four percent by light off the ring.
 
 ## Flat preset catalogue
 

@@ -76,9 +76,9 @@ internal class Odyssey : ShaderPreset(
         // Loud music lights the planet and streams its clouds faster. The bass grows and spins the
         // storm and churns the stripes' edges: fine detail, so it is not declared as a whole-picture change.
         VizDrive(VizDriver.Level, VizProperty.Brightness),
-        // A kick breeds a storm in the clouds that outlives the ring's ripple.
-        VizDrive(VizDriver.LowHit, VizProperty.Texture, VizCurve.Scaled, VizResponse.lifetime(8f)),
-        VizDrive(VizDriver.BodyHit, VizProperty.Brightness, VizCurve.Discrete, VizResponse.lifetime(0.3f)),
+        // A kick breeds a bright storm in the clouds that outlives the ring's ripple. A snare's
+        // lightning needs a night spot in view, so it is too rare to declare as a whole-picture change.
+        VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.lifetime(8f)),
         VizDrive(VizDriver.HighHit, VizProperty.Texture, VizCurve.Scaled, VizResponse.lifetime(0.3f)),
         // A new view eases in over a bar, so its first change shows a few frames after the boundary.
         VizDrive(VizDriver.Section, VizProperty.Camera, VizCurve.Discrete, VizResponse.envelope(2f, delaySeconds = 0.15f)),

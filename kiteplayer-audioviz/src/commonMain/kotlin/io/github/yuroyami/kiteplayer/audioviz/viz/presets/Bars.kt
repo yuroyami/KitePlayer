@@ -37,6 +37,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.max
@@ -62,6 +63,11 @@ import kotlin.math.sin
  * morph bends every row from one form to the next over two to four cycles; on a birth the front row
  * bursts into embers. The camera cranes round the city on the slow cycle, held in a pause and
  * brought home in a silence, and it never cuts, shakes or punches.
+ *
+ * A kick sends a wave back through the rows, sixty rows a heard second. A snare jumps the caps and
+ * runs the sweep. Hats and the trickle raise embers, at most two hundred a heard second. A drop
+ * lifts every row to its peak and the room light to full for a cycle. A breakdown sinks the rows to
+ * glass until the next turn, and only the rail plays.
  */
 internal class Bars : Layered(
     name = "Bars",
@@ -73,13 +79,15 @@ internal class Bars : Layered(
     override val mapping: VizMapping by mappingOf(
         VizDrive(VizDriver.Bands, VizProperty.Size),
         VizDrive(VizDriver.Level, VizProperty.Spawn),
-        VizDrive(VizDriver.Mood, VizProperty.Colour),
-        VizDrive(VizDriver.Onset, VizProperty.Colour),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(1f)),
         VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.5f)),
         VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
         VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
         VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
+        VizDrive(VizDriver.Waveform, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
     )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.72f, livelyTrail = 0.62f, calmDriftY = 0.3f, livelyDriftY = 0.34f)
     override val post: PostSpec get() = PostSpec.Default.copy(bloom = 0.5f)
@@ -132,6 +140,23 @@ internal class Bars : Layered(
     private var railPeak = 0f
     private val embers = Sprites(400, 1_201L)
     private var emberCredit = 0f
+    // Hat and trickle embers spend from this: a small burst that refills at a fixed heard rate.
+    private var emberBudget = EMBER_BURST
+
+    /** Hat and trickle embers spawned so far, a running total. */
+    internal var embersSpawned = 0
+        private set
+
+    /** Birth embers spawned so far, a running total. */
+    internal var birthEmbers = 0
+        private set
+
+    private var waveAt = -1f
+    private var waveStrength = 0f
+    private val dropLift = Envelope(8f, 0.6f)
+    private var bloomUntil = 0
+    private val collapse = Envelope(2f, 1f)
+    private var inCollapse = false
 
     private val scene = Scene3D()
     private val city = TriangleMesh(CITY_VERTICES, CITY_INDICES)
@@ -207,6 +232,7 @@ internal class Bars : Layered(
         for (index in heights.indices) {
             val u = bandCentre(index, heights.size)
             embers.burst(frontX(u, peaks[index]), frontY(u, peaks[index]), BIRTH_EMBERS, 0.9f, 1.6f, 0.02f, hot(heights[index]), kind, UP, 0.5f)
+            birthEmbers += BIRTH_EMBERS
         }
     }
 
@@ -226,6 +252,31 @@ internal class Bars : Layered(
     /** The room light, after the flash guard. */
     internal val glowValue: Float get() = glow
 
+    /** How far a kick's wave lifts [row] this frame, as a share of its height. */
+    internal fun rowLift(row: Int): Float {
+        if (waveAt < 0f) return 0f
+        val off = row - waveAt
+        return waveStrength * WAVE_LIFT * exp(-off * off / 8f)
+    }
+
+    /** The drop's lift, 0 to 1. */
+    internal val bloomValue: Float get() = dropLift.value
+
+    /** The breakdown's sink, 0 to 1. */
+    internal val collapseValue: Float get() = collapse.value
+
+    /** The share of their height the rows keep under a breakdown. */
+    internal val rowScaleValue: Float get() = rowScale()
+
+    /** The height of [row] at [position] as drawn, with the wave, the drop and the breakdown. */
+    internal fun rowLevelShown(row: Int, position: Float): Float =
+        shownLevel(row, rowLevel(row, position), peaks.sampleAt(position))
+
+    private fun rowScale(): Float = 1f - 0.85f * collapse.value
+
+    private fun shownLevel(row: Int, level: Float, peak: Float): Float =
+        min(1f, max(level * (1f + rowLift(row)), peak * dropLift.value)) * rowScale()
+
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         val frame = state.frame
@@ -244,6 +295,7 @@ internal class Bars : Layered(
             if (snareSweep >= 1f) snareSweep = -1f
         }
         if (lastPeak.size != bands.size) lastPeak = FloatArray(bands.size)
+        emberBudget = min(EMBER_BURST, emberBudget + state.stepSeconds * EMBER_RATE)
         val kind = emberSprite()
         var loudest = 0
         for (index in bands.indices) {
@@ -251,8 +303,10 @@ internal class Bars : Layered(
             // An ember leaves each cap as it is pushed up to a new peak, and rises to the top edge.
             if (frontReady && peak > lastPeak[index] + 0.01f && peak > 0.12f && emberAmount.value > 0f) {
                 val u = bandCentre(index, bands.size)
-                val count = (emberAmount.value + random.next()).toInt()
-                embers.burst(frontX(u, peak), frontY(u, peak), count, 0.7f + 0.6f * peak, 1.6f, 0.02f, hot(bands[index]), kind, UP, 0.5f)
+                val count = min((emberAmount.value + random.next()).toInt(), emberBudget.toInt())
+                emberBudget -= count
+                embersSpawned += count
+                if (count > 0) embers.burst(frontX(u, peak), frontY(u, peak), count, 0.7f + 0.6f * peak, 1.6f, 0.02f, hot(bands[index]), kind, UP, 0.5f)
             }
             lastPeak[index] = peak
             if (bands[index] > bands[loudest]) loudest = index
@@ -263,7 +317,9 @@ internal class Bars : Layered(
         while (emberCredit >= 1f && bands.isNotEmpty()) {
             emberCredit -= 1f
             val index = (random.next() * bands.size).toInt().coerceIn(0, bands.size - 1)
-            if (bands[index] < 0.03f || !frontReady) continue
+            if (bands[index] < 0.03f || !frontReady || emberBudget < 1f) continue
+            emberBudget -= 1f
+            embersSpawned++
             val u = bandCentre(index, bands.size)
             embers.burst(frontX(u, peaks[index]), frontY(u, peaks[index]), 1, 0.5f + 0.5f * bands[index], 1.6f, 0.02f, hot(bands[index]), kind, UP, 0.5f)
         }
@@ -277,20 +333,33 @@ internal class Bars : Layered(
         }
         for (row in 0 until ROW_COUNT) rowIndex[row] = history.row(row / ROWS_PER_SECOND)
 
+        // Each kick starts its own wave at its own strength; the wave runs back sixty rows a heard second.
+        if (gestures.kick > 0f) {
+            waveAt = 0f
+            waveStrength = gestures.kick
+        }
+        if (waveAt >= 0f) {
+            waveAt += state.stepSeconds * WAVE_ROWS_PER_SECOND
+            if (waveAt > ROW_COUNT + 4) waveAt = -1f
+        }
         // A drop or a breakdown is also a morph on the same frame; only a plain morph turns the form.
         if (evolution.bloom) {
-            // The drop's impact is drawn by the impacts.
+            bloomUntil = gestures.cycles + 1
         } else if (evolution.collapse) {
-            // The breakdown's impact is drawn by the impacts.
+            inCollapse = true
         } else if (evolution.morph) {
             morphTo((formTo + 1) % FORMS.size)
         }
+        if (!evolution.collapse && (gestures.turn || gestures.surge)) inCollapse = false
         if (evolution.birth) birth()
         morph = (morph + state.stepSeconds / morphSeconds).coerceAtMost(1f)
 
         // A pause holds the camera where it is; a silence lets the presence fall and brings it home.
         val live = if (frame.held) 0f else dt
         presence.advance(frame.audible, live)
+        dropLift.advance(if (gestures.cycles < bloomUntil) 1f else 0f, live)
+        collapse.advance(if (evolution.collapse || inCollapse) 1f else 0f, live)
+        glow = max(glow, dropLift.value * state.lightScale.coerceIn(0f, 1f))
         val reach = presence.value * state.motionScale
         val phase = gestures.slowCyclePhase * TAU
         val shown = eased()
@@ -516,32 +585,34 @@ internal class Bars : Layered(
         val lake = (if (formFrom == LAKE) 1f - shown else 0f) + (if (formTo == LAKE) shown else 0f)
         val wall = half + WALL_GAP
         val mirror = BAR_HEIGHT + CEILING_GAP
+        // A breakdown sinks the rows to glass.
+        val sunk = 1f - 0.6f * collapse.value
         city.clear()
         for (row in ROW_COUNT - 1 downTo 1) {
             val index = rowIndex[row]
             if (index < 0) continue
             blendRow(row, half)
-            val alpha = scene.fog(EYE_Z - world[2]) * (0.25f * light + 0.75f * glow)
+            val alpha = scene.fog(EYE_Z - world[2]) * (0.25f * light + 0.75f * glow) * sunk
             if (alpha <= 0.003f) continue
-            if (lake > 0.01f && projectRow(1f, 0f, -1f, 0f, rowFrame)) addRow(state, index, LAKE_ALPHA * lake * alpha)
+            if (lake > 0.01f && projectRow(1f, 0f, -1f, 0f, rowFrame)) addRow(state, row, index, LAKE_ALPHA * lake * alpha)
             if (depth.value <= 0f || row % 2 != 0) continue
             // Mirrored in x about each wall, so the band order reverses, and in y about the ceiling.
-            if (projectRow(-1f, 2f * wall, 1f, 0f, rowFrame)) addRow(state, index, WALL_ALPHA * depth.value * alpha)
-            if (projectRow(-1f, -2f * wall, 1f, 0f, rowFrame)) addRow(state, index, WALL_ALPHA * depth.value * alpha)
-            if (projectRow(1f, 0f, -1f, 2f * mirror, rowFrame)) addRow(state, index, CEILING_ALPHA * depth.value * alpha)
+            if (projectRow(-1f, 2f * wall, 1f, 0f, rowFrame)) addRow(state, row, index, WALL_ALPHA * depth.value * alpha)
+            if (projectRow(-1f, -2f * wall, 1f, 0f, rowFrame)) addRow(state, row, index, WALL_ALPHA * depth.value * alpha)
+            if (projectRow(1f, 0f, -1f, 2f * mirror, rowFrame)) addRow(state, row, index, CEILING_ALPHA * depth.value * alpha)
         }
         for (row in ROW_COUNT - 1 downTo 1) {
             val index = rowIndex[row]
             if (index < 0) continue
             blendRow(row, half)
-            val alpha = scene.fog(EYE_Z - world[2]) * (0.25f * light + 0.75f * glow)
+            val alpha = scene.fog(EYE_Z - world[2]) * (0.25f * light + 0.75f * glow) * sunk
             if (alpha <= 0.003f) continue
-            if (projectRow(1f, 0f, 1f, 0f, rowFrame)) addRow(state, index, alpha)
+            if (projectRow(1f, 0f, 1f, 0f, rowFrame)) addRow(state, row, index, alpha)
         }
         drawMesh(city)
     }
 
-    private fun DrawScope.addRow(state: VizRenderState, index: Int, alpha: Float) {
+    private fun DrawScope.addRow(state: VizRenderState, row: Int, index: Int, alpha: Float) {
         val count = heights.size
         if (city.vertexCount + 4 * count > city.maxVertices) {
             drawMesh(city)
@@ -549,7 +620,8 @@ internal class Bars : Layered(
         }
         val wide = width.value
         for (band in 0 until count) {
-            val level = history.sample(index, band / max(1f, count - 1f))
+            val position = band / max(1f, count - 1f)
+            val level = shownLevel(row, history.sample(index, position), peaks.getOrElse(band) { 0f })
             if (level < 0.003f) continue
             val u0 = (band + (1f - wide) * 0.5f) / count
             city.barCell(rowFrame, u0, u0 + wide / count, 0f, level, barColour(state, band, count, level, alpha))
@@ -582,20 +654,21 @@ internal class Bars : Layered(
         val count = heights.size
         val wide = width.value
         val paired = opposing.value >= 0.5f
+        val sunk = 1f - 0.6f * collapse.value
         val white = Color.White.copy(alpha = glow.coerceIn(0f, 1f)).toArgb()
         for (band in 0 until count) {
             val u0 = (band + (1f - wide) * 0.5f) / count
             val u1 = u0 + wide / count
-            val value = heights[band]
-            appendColumn(u0, u1, 0f, value, barColour(state, band, count, hot(value), glow))
+            val value = shownLevel(0, heights[band], peaks[band])
+            appendColumn(u0, u1, 0f, value, barColour(state, band, count, hot(value), glow * sunk))
             if (paired) {
                 // Complementary height, not another copy of the spectrum: a rising lower bar
                 // shortens its upper partner. Their cells stay aligned even at the moving gap.
-                val alpha = glow * opposingOpacity.value * (0.25f + 0.75f * value)
+                val alpha = glow * sunk * opposingOpacity.value * (0.25f + 0.75f * value)
                 appendColumn(u0, u1, min(1f, value + opposingGap.value), 1f, barColour(state, band, count, hot(value) * 0.85f, alpha))
             }
             if (peaks[band] > 0.003f) {
-                val cap = min(1f - CAP, peaks[band])
+                val cap = min(1f - CAP, max(peaks[band] * rowScale(), value))
                 meter.barCell(front, u0, u1, cap, cap + CAP, white)
             }
             if ((band + 1) % COLUMN_BATCH == 0) {
@@ -710,6 +783,15 @@ internal class Bars : Layered(
         morph = 1f
         morphSeconds = 1f
         presence.reset()
+        emberBudget = EMBER_BURST
+        embersSpawned = 0
+        birthEmbers = 0
+        waveAt = -1f
+        waveStrength = 0f
+        dropLift.reset()
+        bloomUntil = 0
+        collapse.reset()
+        inCollapse = false
         yaw.reset()
         rise.reset()
         roll.reset()
@@ -733,6 +815,11 @@ internal class Bars : Layered(
         private const val FLOOR_STEP = 0.6f
         private const val TOWER_STEP = 0.25f
         private const val BIRTH_EMBERS = 3
+        private const val WAVE_ROWS_PER_SECOND = 60f
+        private const val WAVE_LIFT = 0.25f
+        // At most 50 stored and 150 more a heard second, so no second spawns more than 200.
+        private const val EMBER_BURST = 50f
+        private const val EMBER_RATE = 150f
         private const val YAW_REACH = 0.35f
         private const val ROLL_REACH = 0.02f
         private val RISE_REACH = floatArrayOf(3f, 2f, 3f, 12f)

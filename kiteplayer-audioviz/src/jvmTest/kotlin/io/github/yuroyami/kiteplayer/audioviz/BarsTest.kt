@@ -221,6 +221,91 @@ class BarsTest {
         assertTrue(offending.isEmpty(), "no hit may move the camera, had $offending")
     }
 
+    @Test
+    fun aKickSendsAWaveBackThroughTheRows() {
+        val bars = Bars()
+        val read = FloatArray(4)
+        // The driver hits at 66, 96 and 126; only the first lands, so a second kick cannot restart the wave.
+        RenderHarness.forEachFrameOf(bars, 64, 36, 140, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(if (step < 90) VizDriver.LowHit else null, step) }) { _, step ->
+            if (step == 76) {
+                read[0] = bars.rowLift(10)
+                read[1] = bars.rowLift(40)
+            }
+            if (step == 106) {
+                read[2] = bars.rowLift(10)
+                read[3] = bars.rowLift(40)
+            }
+        }
+        println("bars: wave at step 76 row 10 ${read[0]} row 40 ${read[1]}, at step 106 row 10 ${read[2]} row 40 ${read[3]}")
+        assertTrue(read[0] > 0.05f && read[0] > read[1], "the wave is near the front first")
+        assertTrue(read[3] > read[2], "half a second later the wave is far back")
+    }
+
+    @Test
+    fun aDropLiftsEveryRowAndTheRoomLight() {
+        val bars = Bars()
+        val lowAt = indexOfMax(InjectedFrames.toneFrame(60, true).bandsRel) / 47f
+        var bloom = 0f
+        var shown = 0f
+        var level = 0f
+        var lightBefore = 0f
+        var lightAfter = 0f
+        RenderHarness.forEachFrameOf(bars, 64, 36, 140, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Drop, step) }) { _, step ->
+            if (step == 60) lightBefore = bars.glowValue
+            if (step == 76) {
+                bloom = bars.bloomValue
+                shown = bars.rowLevelShown(30, lowAt)
+                level = bars.rowLevel(30, lowAt)
+                lightAfter = bars.glowValue
+            }
+        }
+        println("bars: drop bloom $bloom, row 30 shown $shown against $level, light $lightBefore then $lightAfter")
+        assertTrue(bloom > 0.5f, "the drop lifts the city, had $bloom")
+        assertTrue(shown >= level, "a lifted row is drawn at least as high, had $shown against $level")
+        assertTrue(lightAfter > lightBefore, "the room light rises on the drop, had $lightBefore then $lightAfter")
+    }
+
+    @Test
+    fun aBreakdownSinksTheRowsAndKeepsTheRail() {
+        val bars = Bars()
+        var collapse = 0f
+        var scale = 1f
+        var rail = 0f
+        RenderHarness.forEachFrameOf(bars, 64, 36, 200, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Breakdown, step) }) { _, step ->
+            if (step == 126) {
+                collapse = bars.collapseValue
+                scale = bars.rowScaleValue
+                rail = bars.railAmplitude()
+            }
+        }
+        val still = Bars()
+        var stillRail = 0f
+        RenderHarness.forEachFrameOf(still, 64, 36, 200, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }) { _, step ->
+            if (step == 126) stillRail = still.railAmplitude()
+        }
+        println("bars: breakdown collapse $collapse, row scale $scale, rail $rail against $stillRail")
+        assertTrue(collapse > 0.5f, "the breakdown sinks the city, had $collapse")
+        assertTrue(scale < 0.3f, "the rows keep under a third of their height, had $scale")
+        assertEquals(stillRail, rail, 0.01f)
+    }
+
+    @Test
+    fun theEmbersStayUnderTwoHundredASecond() {
+        val bars = Bars()
+        val spawned = IntArray(600)
+        RenderHarness.forEachFrame(bars, 64, 36, 600, VizPalette.Prism, RenderHarness.Song.Lively) { _, step ->
+            spawned[step] = bars.embersSpawned
+        }
+        var most = 0
+        for (end in 59 until 600) most = maxOf(most, spawned[end] - (if (end >= 60) spawned[end - 60] else 0))
+        println("bars: at most $most hat and trickle embers in one second, ${bars.embersSpawned} in all, ${bars.birthEmbers} from births")
+        assertTrue(most <= 200, "at most two hundred embers a second, had $most")
+    }
+
     private fun indexOfMax(values: FloatArray): Int = values.indices.maxBy { values[it] }
 
     /** The mean difference of the three channels between two renders, 0 for equal and 1 for black against white. */

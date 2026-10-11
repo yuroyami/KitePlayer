@@ -353,6 +353,28 @@ the sweep and the embers. The meter is now the front row of a city.
 - Each bar wears the palette by band, walked by the genes; the caps are white; the room light
   follows the level. The bloom is 0.5.
 
+## Ocean Mist, a sea that remembers
+
+`Ocean Mist` keeps its sea under a moon: the front row is the live waveform, with the kick's crest,
+the snare's spray, the hats' glitter, the drop's wave and its break, the mist and the key lean.
+
+- Every row behind the front one is the waveform one thirtieth of a heard second earlier, 96 rows
+  from the shared row history, so the swell rolling to the horizon is the last three seconds of
+  sound. Each row is a line over dark water of its own colour. The bass raises the long swell and
+  the treble adds fine ripples.
+- The moon's reflection is the spectrum: the width of the glitter column on each row is that
+  row's band, the bass in front and the treble far out. The moon breathes with the bass and
+  crosses the sky once per walk of the genes, never on a section.
+- The forms are Glass, Swell and Storm, which the energy and the mood move between, and Tide,
+  which a breakdown brings: the water draws back and leaves wet sand with the moon's streak on
+  it. At each morph the swell turns, from the front row out, and the horizon moves. At each birth
+  a front with its own hue rolls in from the horizon. The form is published through
+  `Visualization.forms`.
+- The viewer glides forward and down on the slow cycle and never cuts. The horizon drifts with
+  the mood. A drop also lights the sky for a tenth of a second, under the flash guard. The sky
+  walks from dusk to night to dawn over the song.
+- The weather, the horizon, the moon and the sky move on heard time, so a silence holds them.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative

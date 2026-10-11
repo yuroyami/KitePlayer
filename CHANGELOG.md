@@ -45,6 +45,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   round it on the slow cycle. It takes the Hall, Canyon, Lake and Tower forms at the music's pace,
   published through `Visualization.forms`. Its bloom is 0.5, and the eleven controls that drove
   its ghost spectra, overlapping layers, stage motion and side meters are gone.
+- Ocean Mist's sea is memory: 96 rows at a thirtieth of a second, with the spectrum as the width
+  of the moon's path on each row and treble ripples on the swell. It takes the Glass, Swell, Storm
+  and Tide forms with the music, published through `Visualization.forms`. The camera glides on
+  the slow cycle, and the moon moves only with the walk.
 
 ## [0.3.0] - 2026-10-09
 

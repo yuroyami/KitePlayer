@@ -7,10 +7,12 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fracture
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.FractureDust
 import io.github.yuroyami.kiteplayer.audioviz.viz.restart
 import java.awt.image.BufferedImage
 import kotlin.math.abs
@@ -232,6 +234,176 @@ class FractureTest {
         println("fracture: light $heard while heard, $quiet in silence")
         assertEquals(lightFor(0.45f), heard, 0.02f)
         assertEquals(Fracture.IDLE_LIGHT, quiet, 0.02f)
+    }
+
+    @Test
+    fun theDustGateKeepsQuietBandsOffThePage() {
+        val fracture = Fracture()
+        val dust = fracture.dust
+        // GetVisualBins(dataArray, 512, 6, 1300): the first bars take one bin each from bin 6.
+        assertEquals(512, dust.bins.count)
+        assertEquals(listOf(6, 7, 8), dust.bins.firstBins.take(3))
+        assertTrue(dust.bins.firstBins.last() < 1300)
+        // The gate's power runs from 5 at the bass bar to about 3 at the treble bar.
+        assertEquals(5.0, dust.bins.exponent(0), 1e-12)
+        assertEquals(3.0039, dust.bins.exponent(511), 1e-4)
+
+        // Every bin at half of the byte range: the bass hexagons stay under a tenth of a unit.
+        fracture.dustFeed(IntArray(2048) { 128 })
+        assertEquals(8.12f, dust.visual[0], 0.01f)
+        assertTrue(FractureDust.RADIUS * dust.scale[0] < 0.08f, "a half-level bass band is a dot, radius ${FractureDust.RADIUS * dust.scale[0]}")
+        val largest = dust.scale.max() * FractureDust.RADIUS
+        assertTrue(largest < 0.35f, "no half-level band grows past a third of a unit, had $largest")
+        assertTrue(FractureDust.RADIUS * FractureDust.scaleOf(128f) > 1.1f)
+
+        // Every bin at full scale: the bass hexagon reaches 2.32 units, in hsl(20.5, 90%, 60%).
+        fracture.dustFeed(IntArray(2048) { 255 })
+        assertEquals(255f, dust.visual[0])
+        assertEquals(2.3197f, FractureDust.RADIUS * dust.scale[0], 1e-3f)
+        assertEquals(0xFFF57C3D.toInt(), dust.packed(0), "the loudest band is orange-red, was ${hex(dust.packed(0))}")
+    }
+
+    @Test
+    fun aDustMoteClimbsThirtyUnitsThenSnapsBackToTheCentreLine() {
+        val fracture = Fracture()
+        val dust = fracture.dust
+        fracture.dustFeed(IntArray(2048) { 255 })
+        assertEquals(127.5f, dust.loudness)
+        repeat(129) { dust.climbBy(1f) }
+        assertEquals(129f * dust.scale[0], dust.climb[0], 1e-3f)
+        assertTrue(dust.climb[0] in 29.8f..30f)
+        dust.climbBy(1f)
+        assertEquals(0f, dust.climb[0], "past 30 units the hexagon snaps back to the centre line")
+
+        // The smoothed loudness halves each silent read; every hexagon is sent back once it is 1 or less.
+        repeat(10) { dust.climbBy(1f) }
+        dust.listen(IntArray(2048), count = 6)
+        dust.climbBy(0f)
+        assertTrue(dust.loudness > 1f && dust.climb[0] > 2f, "loudness ${dust.loudness} still holds the climb")
+        dust.listen(IntArray(2048), count = 1)
+        dust.climbBy(0f)
+        assertTrue(dust.loudness <= 1f)
+        assertTrue(dust.climb.all { it == 0f }, "silence puts every hexagon on the centre line")
+    }
+
+    @Test
+    fun theDustMirrorsFourWaysAtThePagesScale() {
+        // A 1080-pixel-high view is 70.02 units high at the hexagons' depth: 15.42 pixels a unit.
+        assertEquals(15.424f, FractureDust.pixelsPerUnit(1080f), 1e-3f)
+        assertEquals(3f, FractureDust.BAR_X[0])
+        assertEquals(64.32f, FractureDust.BAR_X[511], 1e-3f)
+
+        val loud = IntArray(2048) { 200 }
+        fun render(fed: Boolean): Pair<Fracture, IntArray> {
+            val fracture = Fracture()
+            val pixels = IntArray(320 * 200)
+            RenderHarness.forEachFrameOf(fracture, 320, 200, 90, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(null, step) },
+                beforeDraw = { if (fed) fracture.dustFeed(loud) }) { bitmap, step ->
+                if (step == 89) bitmap.readPixels(pixels)
+            }
+            return fracture to pixels
+        }
+        val (fracture, withDust) = render(true)
+        val (_, without) = render(false)
+        val change = difference(withDust, without)
+        println("fracture: the dust changes the frame by $change")
+        assertTrue(change > 0.002f, "the dust should show over the corridor, changed $change")
+        for (band in listOf(0, 100, 300)) {
+            val centres = fracture.dust.centresOf(band, 320f, 200f)
+            assertTrue(fracture.dust.climb[band] > 0f, "band $band climbed")
+            assertEquals(320f, centres[0].first + centres[1].first, 1e-3f)
+            assertEquals(200f, centres[0].second + centres[1].second, 1e-3f)
+            assertEquals(centres[1].first to centres[0].second, centres[2])
+            assertEquals(centres[0].first to centres[1].second, centres[3])
+        }
+    }
+
+    @Test
+    fun aBirthGrowsANewCrackNetwork() {
+        val fracture = Fracture()
+        var before = -1
+        var after = -1
+        var right = -1f
+        var later = -1f
+        RenderHarness.forEachFrameOf(fracture, 64, 36, 100, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }) { _, step ->
+            if (step == 60) {
+                before = fracture.crackSeed
+                fracture.birth()
+                after = fracture.crackSeed
+                right = fracture.crackReach(0)
+            }
+            if (step == 92) later = fracture.crackReach(0)
+        }
+        assertTrue(after != before, "a birth seeds a new network")
+        assertEquals(0f, right, "the new network starts from nothing")
+        assertTrue(later >= 0.999f, "the main crack grows in half a second, reached $later")
+    }
+
+    @Test
+    fun aKickPropagatesACrackAndASnareFlipsAShard() {
+        val kicked = Fracture()
+        var atHit = -1f
+        var after = -1f
+        RenderHarness.forEachFrameOf(kicked, 64, 36, 100, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.LowHit, step) }) { _, step ->
+            if (step == 66) atHit = kicked.crackReach(0)
+            if (step == 95) after = kicked.crackReach(0)
+        }
+        println("fracture: the kicked crack reached $atHit at the kick and $after half a second on")
+        assertTrue(atHit < 0.2f, "a kick runs the crack again from its start, reach $atHit")
+        assertTrue(after > 0.8f, "the crack grows at two a second, reach $after")
+
+        val snared = Fracture()
+        val flips = FloatArray(3)
+        RenderHarness.forEachFrameOf(snared, 64, 36, 92, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.BodyHit, step) }) { _, step ->
+            val most = (0 until Fracture.NUM_BANDS).maxOf { snared.flipValue(it) }
+            when (step) {
+                67 -> flips[0] = most
+                75 -> flips[1] = most
+                90 -> flips[2] = most
+            }
+        }
+        println("fracture: the flipped shard reads ${flips.toList()}")
+        assertTrue(flips[0] > 0.5f && flips[1] > 0.5f, "a snare flips a shard for a moment, ${flips.toList()}")
+        assertTrue(flips[2] < 0.5f, "the flip falls back within half a second, ${flips.toList()}")
+    }
+
+    @Test
+    fun aHatGlintsTheDust() {
+        val fracture = Fracture()
+        val loud = IntArray(2048) { 200 }
+        var before = -1f
+        var glint = -1f
+        RenderHarness.forEachFrameOf(fracture, 64, 36, 70, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.HighHit, step) },
+            beforeDraw = { fracture.dustFeed(loud) }) { _, step ->
+            if (step == 65) before = fracture.glintValue
+            if (step == 67) glint = fracture.glintValue
+        }
+        println("fracture: the glint read $before before the hat and $glint after")
+        assertTrue(before < 0.1f, "no glint before the hat, had $before")
+        assertTrue(glint > 0.5f, "a hat glints the dust, had $glint")
+    }
+
+    @Test
+    fun theWaveformRunsAlongTheMainCrack() {
+        fun wave(driver: VizDriver?): Float {
+            val fracture = Fracture()
+            var wave = -1f
+            RenderHarness.forEachFrameOf(fracture, 64, 36, 92, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(driver, step) }) { _, step ->
+                if (step == 90) wave = fracture.crackWave()
+            }
+            return wave
+        }
+        val moving = wave(VizDriver.Waveform)
+        val still = wave(null)
+        println("fracture: the main crack carried $moving with the waveform and $still without")
+        assertTrue(moving > 0.5f, "the waveform runs along the main crack, had $moving")
+        assertTrue(still < 0.35f, "the baseline waveform is small, had $still")
     }
 
     /** The mean colour change between consecutive frames over the last second of three. */

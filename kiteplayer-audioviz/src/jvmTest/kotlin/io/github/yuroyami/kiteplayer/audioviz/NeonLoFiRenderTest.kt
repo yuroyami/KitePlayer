@@ -51,10 +51,42 @@ class NeonLoFiRenderTest {
                     NeonLoFiGpuFixture.write(viz, state, fixtureFolder, scene)
                     ImageIO.write(with(RenderHarness) { image.toBufferedImage() }, "png", File(fixtureFolder, "neon-$scene-reference.png"))
                 }
+                // The floor's count includes the road's edges and the wet road's streaks.
                 val triangles = viz.floor.triangles + viz.decor.city.indexCount / 3 + viz.decor.sky.indexCount / 3 + viz.decor.rain.indexCount / 3
-                println("Neon scene=$scene $w x $h portable=$portable triangles=$triangles meshCopy=${viz.floor.copiedBytes}")
+                println("Neon scene=$scene $w x $h portable=$portable triangles=$triangles floor=${viz.floor.triangles} meshCopy=${viz.floor.copiedBytes}")
                 assertTrue(triangles <= if (portable) 1500 else 6000, "Triangle budget $triangles")
             }
         }
+    }
+
+    @Test fun theRoadEdgesAreTheWaveformAndTheWetRoadReflectsTheTerraces() {
+        fun run(driver: VizDriver?, keep: Int): Pair<NeonLoFi, java.awt.image.BufferedImage?> {
+            val viz = NeonLoFi()
+            var kept: java.awt.image.BufferedImage? = null
+            RenderHarness.forEachFrameOf(viz, 320, 180, keep + 1, VizPalette.Prism,
+                source = { InjectedFrames.frame(driver, it) }) { bitmap, step ->
+                if (step == keep) kept = with(RenderHarness) { bitmap.toBufferedImage() }
+            }
+            return viz to kept
+        }
+        val waved = run(VizDriver.Waveform, 100).first.floor.edgeAmplitude
+        val plain = run(null, 100).first.floor.edgeAmplitude
+        println("neon road edges: waveform $waved, plain $plain")
+        assertTrue(waved > 0.5f, "the road's edges swing by only $waved")
+        assertTrue(waved > plain, "the waveform does not swing the edges more than the plain run")
+        fun roadLuma(image: java.awt.image.BufferedImage): Float {
+            var sum = 0.0; var count = 0
+            for (y in (image.height * 0.62f).toInt() until (image.height * 0.95f).toInt())
+                for (x in (image.width * 0.4f).toInt() until (image.width * 0.6f).toInt()) {
+                    val p = image.getRGB(x, y)
+                    sum += 0.2126 * (p shr 16 and 255) / 255 + 0.7152 * (p shr 8 and 255) / 255 + 0.0722 * (p and 255) / 255
+                    count++
+                }
+            return (sum / count).toFloat()
+        }
+        val wet = roadLuma(run(VizDriver.Breakdown, 126).second!!)
+        val dry = roadLuma(run(null, 126).second!!)
+        println("neon road centre: wet $wet, dry $dry")
+        assertTrue(wet > dry + 0.01f, "the wet road is not brighter: $wet against $dry")
     }
 }

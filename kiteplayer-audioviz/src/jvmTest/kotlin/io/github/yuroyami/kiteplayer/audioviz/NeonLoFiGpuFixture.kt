@@ -17,8 +17,8 @@ internal object NeonLoFiGpuFixture {
         val uniforms = linkedMapOf<String, FloatArray>("uResolution" to floatArrayOf(view.width, view.height))
         uniforms.putAll(viz.shaderUniforms())
         File(folder, "neon-$mode.properties").writeText(uniforms.entries.joinToString("\n") { (name, data) -> "$name=${data.joinToString(",")}" })
-        // Two rows of ridges from the history, then the waveform the coast's stripes read.
-        val ridge = BufferedImage(256, 3, BufferedImage.TYPE_INT_ARGB)
+        // Two rows of ridges from the history, the waveform the coast's stripes read, then the sun's gaps.
+        val ridge = BufferedImage(256, 4, BufferedImage.TYPE_INT_ARGB)
         for (i in w.profile.indices) {
             val byte = (w.profile[i].coerceIn(0f, 1f) * 255).roundToInt()
             ridge.setRGB(i % 256, i / 256, -0x1000000 or (byte shl 16) or (byte shl 8) or byte)
@@ -26,6 +26,10 @@ internal object NeonLoFiGpuFixture {
         for (i in w.wave.indices) {
             val byte = (w.wave[i].coerceIn(0f, 1f) * 255).roundToInt()
             ridge.setRGB(i, 2, -0x1000000 or (byte shl 16) or (byte shl 8) or byte)
+        }
+        for (i in w.gaps.indices) {
+            val byte = (w.gaps[i].coerceIn(0f, 1f) * 255).roundToInt()
+            ridge.setRGB(i, NeonLoFi.GAP_ROW, -0x1000000 or (byte shl 16) or (byte shl 8) or byte)
         }
         ImageIO.write(ridge, "png", File(folder, "neon-$mode-ridges.png"))
         val bands = BufferedImage(64, 1, BufferedImage.TYPE_INT_ARGB)

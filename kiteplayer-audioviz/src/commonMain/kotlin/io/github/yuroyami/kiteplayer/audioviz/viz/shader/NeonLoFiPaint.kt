@@ -111,6 +111,9 @@ internal class NeonLoFiPaint {
     }
 }
 
+/** How far a breakdown's retreat lowers the sun, as a share of the height. */
+private const val SUN_RETREAT = 0.08f
+
 internal class NeonLoFiView {
     var width = 1f; private set
     var height = 1f; private set
@@ -119,7 +122,8 @@ internal class NeonLoFiView {
         this.width = width; this.height = height
         val aspect = width / height
         val radius = min(0.115f * world.controls[7] * (1f + 0.04f * world.slowLevel + 0.02f * world.release), aspect * 0.37f)
-        val x = 0f; val y = -0.175f
+        // A breakdown's retreat lowers the sun a little toward the horizon.
+        val x = 0f; val y = -0.175f + SUN_RETREAT * world.retreat
         val c = cos(world.flight.bank); val s = sin(world.flight.bank)
         // Fit the actual rotated circle, including the maximum size control and narrow viewports.
         val sx = (x * c - y * s).coerceIn(-aspect * 0.5f + radius + aspect * 0.05f, aspect * 0.5f - radius - aspect * 0.05f)

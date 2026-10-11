@@ -20,19 +20,19 @@ internal class NeonLoFiFallback {
                 paint.mix(NeonLoFiPaint.MID, NeonLoFiPaint.LOW, 0.5f, 1f), paint.color(NeonLoFiPaint.MID, 1f)),
                 horizon - h * 0.5f, horizon), Offset(-w, -h), Size(w * 3, h + horizon))
             val center = Offset(w * 0.5f + view.sun[0] * h, horizon + view.sun[1] * h)
-            val radius = view.sun[2] * h * (1f + 0.03f * world.kick)
+            val radius = view.sun[2] * h * (1f + 0.03f * world.kick + 0.06f * world.bass)
             drawCircle(Brush.radialGradient(listOf(paint.mix(NeonLoFiPaint.HIGH, NeonLoFiPaint.CAP, 0.5f, 0.2f), Color.Transparent),
                 center, radius * 1.3f), radius * 1.3f, center)
             val disc = Path().apply { addOval(androidx.compose.ui.geometry.Rect(center - Offset(radius, radius), Size(radius * 2, radius * 2))) }
             clipPath(disc) {
-                val power = 1.5f + 0.35f * world.kick
+                val power = (1.5f + 0.35f * world.kick) * (1f - NeonLoFi.SUN_DIM * world.retreat)
                 val brush = Brush.verticalGradient(listOf(paint.color(NeonLoFiPaint.HIGH, power), paint.color(NeonLoFiPaint.CAP, power)),
                     center.y - radius, center.y + radius)
-                // The disc between its eight gaps, bass at the bottom, each gap as wide as its band is loud.
+                // The disc between its 32 gaps, bass at the bottom, each gap as wide as its band is loud.
                 var top = center.y - radius
                 for (k in NeonLoFiWorld.GAPS - 1 downTo 0) {
-                    val middle = center.y + (0.9f - k * 0.12f) * radius
-                    val half = (0.012f + 0.05f * world.gaps[k]) * (1f - lift) * radius
+                    val middle = center.y + (0.97f - k * (1.94f / (NeonLoFiWorld.GAPS - 1))) * radius
+                    val half = (0.006f + 0.04f * world.gaps[k]) * (1f - lift) * radius
                     if (middle - half > top) drawRect(brush, Offset(center.x - radius, top), Size(radius * 2, middle - half - top))
                     top = max(top, middle + half)
                 }

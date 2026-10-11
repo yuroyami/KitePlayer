@@ -8,14 +8,18 @@ import kotlin.math.*
 /**
  * A night drive at dusk toward a sun on the horizon.
  *
- * The sky runs from indigo overhead to a rose glow, and the gold to coral sun is cut by eight gaps,
- * one band each, bass at the bottom. Twelve towers stand on the horizon, one per note name, and a
- * tower's windows light while its note sounds. Terraces beside the road have black faces and neon
- * edges, cyan near and magenta far, and a face lights while its band is loud. The road passes one
- * white dash a beat and one pair of amber lamps a bar. A kick pulses the sun and the road's edges,
- * a snare sends a shooting star, and hats make the stars twinkle. A section drives on to the next
- * region: highway, mountain pass, city or coast. A breakdown slows the car into rain on a wet road
- * that mirrors the sun, and a drop lifts the view off the road for a bar before it lands again.
+ * The sky runs from indigo overhead to a rose glow, and the gold to coral sun is cut by 32 stripes
+ * over the whole disc, the bands with bass at the bottom. The bass swells it, and its light is warmer
+ * while the sound is low. Twelve towers stand on the horizon, one per note name, and a tower's
+ * windows light while its note sounds. Terraces beside the road have black faces and neon edges, cyan
+ * near and magenta far, and a face lights while its band is loud. The terraces are the spectrum back
+ * in time: the nearest is now, and each row further out is a quarter second earlier, four seconds in
+ * all. The road's edges carry the waveform, and on a wet road the terraces nearest it streak their
+ * light down onto it. The road passes one white dash a beat and one pair of amber lamps a bar. A kick
+ * pulses the sun and the road's edges, a snare sends a shooting star, and hats make the stars
+ * twinkle. A section drives on to the next region: highway, mountain pass, city or coast. A breakdown
+ * slows the car into rain on a wet road that mirrors the sun, and the sun dims and sinks a little. A
+ * drop lifts the view off the road for a bar before it lands again.
  */
 internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEnergy.Mid, 31f, Kit(31_007L, camera = Camera2D(wander = 0f, punch = 0f, roll = 0f,
         shake = 0f, cuts = false, minZoom = 1f, maxZoom = 1f))) {
@@ -43,7 +47,7 @@ internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEner
     internal val paint = NeonLoFiPaint()
     internal val view = NeonLoFiView()
     private val fallback = NeonLoFiFallback()
-    private val ridges by lazy { PixelImage(256, 3) }
+    private val ridges by lazy { PixelImage(256, 4) }
     internal var forcePortable = false
     /** The drop's lift-off: where it is heading, how far it has come, and the cycle it lands on. */
     private var liftTarget = 0f
@@ -122,7 +126,7 @@ internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEner
             "nSun" to view.sun.copyOf(),
             "nLens" to floatArrayOf(f.horizontalFocal(view.width, view.height) / view.height),
             "nTexture" to floatArrayOf(world.texture),
-            "nGaps0" to world.gaps.copyOfRange(0, 4), "nGaps1" to world.gaps.copyOfRange(4, 8),
+            "nSunDim" to floatArrayOf(1f - SUN_DIM * world.retreat),
             // The sun stands whole through a lift-off even when reduced motion keeps the camera down.
             "nPulse" to floatArrayOf(world.kick * world.controls[10] * 0.85f, world.rain.coerceIn(0f, 1f),
                 liftShown, f.horizon),
@@ -148,6 +152,11 @@ internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEner
                 val byte = (world.wave[i].coerceIn(0f, 1f) * 255f).roundToInt()
                 ridges.pixels[world.profile.size + i] = -0x1000000 or (byte shl 16) or (byte shl 8) or byte
             }
+            // The fourth row starts with the sun's gaps.
+            for (i in world.gaps.indices) {
+                val byte = (world.gaps[i].coerceIn(0f, 1f) * 255f).roundToInt()
+                ridges.pixels[GAP_ROW * 256 + i] = -0x1000000 or (byte shl 16) or (byte shl 8) or byte
+            }
             ridges.upload()
         }
         program.child("nRidges", ridges.image)
@@ -168,6 +177,12 @@ internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEner
     override fun onReset() {
         world.reset(); paint.reset()
         liftTarget = 0f; landAt = -1; liftShown = 0f
+    }
+
+    internal companion object {
+        /** How much a breakdown's retreat dims the sun, and the row of the ridges picture its gaps fill. */
+        const val SUN_DIM = 0.4f
+        const val GAP_ROW = 3
     }
 }
 

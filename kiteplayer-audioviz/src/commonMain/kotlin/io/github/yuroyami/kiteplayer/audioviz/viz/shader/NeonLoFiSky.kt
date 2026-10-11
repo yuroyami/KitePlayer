@@ -17,8 +17,7 @@ uniform float3 nSun;
 uniform float nLens;
 uniform float nTexture;
 uniform float4 nRegions;
-uniform float4 nGaps0; // the sun's gaps, bass at the bottom
-uniform float4 nGaps1;
+uniform float nSunDim; // a breakdown dims the sun
 uniform float4 nPulse; // kick, wet road, lift-off, horizon
 uniform shader nRidges;
 // Light is scaled on its brightest channel above the knee, so a bright colour keeps its hue.
@@ -43,25 +42,28 @@ float3 nSky(float2 p) {
     // The only gradient in the scene: a rose glow at the horizon under an indigo sky.
     float up = clamp(-p.y / 0.5, 0.0, 1.0);
     float3 col = mix(nMid, nLow, smoothstep(0.0, 0.75, up));
-    // The sun, gold at the top and coral at the bottom, pulsing with the kick.
-    float r = nSun.z * (1.0 + 0.03 * nPulse.x);
+    // The sun, gold at the top and coral at the bottom, pulsing with the kick and the bass.
+    float r = nSun.z * (1.0 + 0.03 * nPulse.x + 0.06 * uBass);
     float d = length(p - nSun.xy);
     float edge = (1.1 + 5.0 * nPulse.y) / uResolution.y;
     float disc = 1.0 - smoothstep(r - edge, r + edge, d);
     float y = (p.y - nSun.y) / r;
-    // Eight gaps across its lower half, bass at the bottom, each as wide as its band is loud. A
-    // silence leaves thin, even gaps; a lift-off closes them and the sun stands whole.
+    // Thirty two gaps over the whole disc, bass at the bottom, each as wide as its band is loud. The
+    // levels are the fourth row of the ridges picture. A silence leaves thin, even gaps; a lift-off
+    // closes them and the sun stands whole.
     float pixel = 1.0 / (uResolution.y * r);
     float cut = 1.0;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 32; i++) {
         float k = float(i);
-        float level = k < 4.0 ? dot(nGaps0, nOneHot(k)) : dot(nGaps1, nOneHot(k - 4.0));
-        float centre = 0.9 - k * 0.12;
-        float gap = (0.012 + 0.05 * level) * (1.0 - nPulse.z);
+        float level = nRidges.eval(float2(k + 0.5, 3.5)).r;
+        float centre = 0.97 - k * (1.94 / 31.0);
+        float gap = (0.006 + 0.04 * level) * (1.0 - nPulse.z);
         cut *= smoothstep(gap - pixel, gap + pixel, abs(y - centre));
     }
     disc *= cut;
-    float3 sun = mix(nHigh, nCap, clamp(y * 0.5 + 0.5, 0.0, 1.0)) * (1.5 + 0.35 * nPulse.x);
+    float3 sun = mix(nHigh, nCap, clamp(y * 0.5 + 0.5, 0.0, 1.0)) * (1.5 + 0.35 * nPulse.x) * nSunDim;
+    // Warmer while the sound is low, cooler while it is bright.
+    sun *= mix(float3(1.06, 0.92, 0.82), float3(0.9, 0.97, 1.12), uCentroid);
     // A thin halo, which a wet night hazes out.
     float halo = exp(-max(d - r, 0.0) / (0.015 + 0.05 * nPulse.y)) * (0.18 + 0.3 * nPulse.y);
     col = mix(col, sun, disc) + mix(nHigh, nCap, 0.5) * halo * (1.0 - disc);

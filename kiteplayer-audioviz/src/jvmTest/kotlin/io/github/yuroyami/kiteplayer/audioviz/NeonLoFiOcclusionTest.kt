@@ -43,7 +43,7 @@ class NeonLoFiOcclusionTest {
                 var closest = Float.POSITIVE_INFINITY; var expected = 0; var edgeDistance = 0f
                 val projectedFace = FloatArray(8)
                 for (side in listOf(-1, 1)) for (row in 0..11) for (lane in 0..15) {
-                    val z0 = max(start + row * 4, cameraZ + 1.8f); val z1 = start + (row + 1) * 4 - 0.04f
+                    val z0 = max(start + row * 4, cameraZ + 1.8f); val z1 = start + (row + 1) * 4f
                     if (z1 <= z0) continue
                     val h = floor.lastHeights[(if (side == 1) 1 else 0) * 192 + row * 16 + lane]
                     val inner = NeonLoFiFlight.CORRIDOR + lane * laneWidth; val outer = inner + laneWidth - 0.035f

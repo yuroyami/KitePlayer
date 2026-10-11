@@ -9,10 +9,13 @@ import kotlin.math.*
  * Opaque, depth-ordered terraces with black faces and neon edges, cyan near the viewer and magenta
  * toward the horizon. A terrace's top lights in its edge colour while its band is loud, and a kick
  * flashes the nearest edges. Treble is beside the road, bass outside: bass cannot hide quieter lanes.
+ * The rows touch, and depth is time, so the field is the spectrum of the last four seconds. The road's
+ * edges carry the waveform, and on a wet road the terraces nearest it streak their light onto it.
  */
 internal class NeonLoFiFloor {
     val mesh = TriangleMesh(14_000, 21_000)
     private val points = FloatArray(16)
+    private val heights = FloatArray(16)
     private val edgeColors = IntArray(ROWS * 16)
     private val tops = IntArray(ROWS * 16)
     private val fronts = IntArray(ROWS * 16)
@@ -25,6 +28,8 @@ internal class NeonLoFiFloor {
     var copiedBytes = 0; private set
     var portable = false
     val lastHeights = FloatArray(16 * 12 * 2)
+    /** The largest waveform swing the road's edges drew in the last build, 0 to 1. */
+    var edgeAmplitude = 0f; private set
 
     fun build(world: NeonLoFiWorld, paint: NeonLoFiPaint, width: Float, height: Float) {
         mesh.clear(); lastHeights.fill(0f)
@@ -37,9 +42,11 @@ internal class NeonLoFiFloor {
         val pixelCore = max(0.7f, min(width, height) / 650f)
         val neon = world.controls[11]
         val face = paint.packed(NeonLoFiPaint.INK, 1f)
+        // The road's edges lie on the ground, so they go first and every terrace face covers them.
+        roadEdges(world, paint, width, height, start + rows * stride, pixelCore, neon)
         for (row in rows - 1 downTo 0) {
             val z0 = max(start + row * stride, flight.travel.toFloat() + 1.8f)
-            val z1 = start + (row + 1) * stride - 0.04f
+            val z1 = start + (row + 1) * stride
             if (z1 <= z0) continue
             val distance = (z0 + z1) * 0.5f - flight.travel.toFloat()
             val fade = NeonLoFiHistory.smooth(52f, 37f, distance)
@@ -57,13 +64,17 @@ internal class NeonLoFiFloor {
                 fronts[at] = face
                 sides[at] = face
             }
-            for (side in intArrayOf(-1, 1)) for (lane in lanes - 1 downTo 0) {
+            for (side in intArrayOf(-1, 1)) {
+            for (lane in 0 until lanes) {
                 var h = 0f
                 for (b in lane * 16 / lanes until (lane + 1) * 16 / lanes) h += world.floorHeight(15 - b, (z0 + z1) * 0.5f)
                 h /= (16 / lanes)
                 // The shore eases down into the analytic water, without moving the protected road.
                 val coast = if (side == 1) 1f - world.regions.weights[3] * NeonLoFiHistory.smooth(0f, 4f, lane.toFloat()) else 1f
-                h *= fade * coast * if (lane == 0) 0.55f else 1f
+                heights[lane] = h * fade * coast * if (lane == 0) 0.55f else 1f
+            }
+            for (lane in lanes - 1 downTo 0) {
+                val h = heights[lane]
                 lastHeights[(if (side == 1) 1 else 0) * 192 + row * 16 + lane] = h
                 val inner = NeonLoFiFlight.CORRIDOR + lane * laneWidth
                 val outer = inner + laneWidth - 0.035f
@@ -80,11 +91,16 @@ internal class NeonLoFiFloor {
                     (x0 > width + 4f && x1 > width + 4f && x2 > width + 4f && x3 > width + 4f)) continue
                 // A face at an equal/lower depth is submitted later. Each cell is opaque even in silence.
                 val at = row * 16 + lane
+                // A wet road: the two lanes nearest it streak their edge light down onto the road.
+                if (!portable && lane < 2 && world.rain > 0.01f) streak(flight, width, height, side, lane, z0, z1,
+                    pixelCore, edgeColors[at], (0.15f + 0.35f * world.rain) * neon)
                 if (h < flight.height) {
                     face(0, 2, 4, 6, tops[at])
                     line(points[4], points[5], points[6], points[7], pixelCore, edgeColors[at])
                 }
-                face(0, 6, 12, 8, sides[at])
+                // The side faces the road, so a terrace no taller than its inner neighbour hides it: that
+                // neighbour is drawn later and covers it.
+                if (lane == 0 || h > heights[lane - 1]) face(0, 6, 12, 8, sides[at])
                 face(0, 8, 10, 2, fronts[at])
                 line(points[0], points[1], points[6], points[7], pixelCore, edgeColors[at])
                 var frontEdge = edgeColors[at]
@@ -101,11 +117,51 @@ internal class NeonLoFiFloor {
                 }
                 line(points[0], points[1], points[2], points[3], pixelCore, frontEdge)
             }
+            }
             if (!portable) palms(world, paint, width, height, z0, z1, pixelCore)
         }
         triangles = mesh.indexCount / 3
         copiedBytes = mesh.vertexCount * 12 + mesh.indexCount * 2
     }
+    /**
+     * The two road edges from the nearest row to [far], each swung sideways by the waveform along its
+     * length, in the near edge colour and pulsed by the kick.
+     */
+    private fun roadEdges(world: NeonLoFiWorld, paint: NeonLoFiPaint, width: Float, height: Float, far: Float,
+        core: Float, neon: Float) {
+        val flight = world.flight
+        val near = flight.travel.toFloat() + 1.8f
+        if (far <= near) return
+        val color = paint.color(NeonLoFiPaint.NEAR, EDGE_LIGHT * neon * (1f + 0.9f * world.kick)).toArgb()
+        val wave = world.wave
+        var most = 0f
+        val steps = if (portable) PORTABLE_EDGE_STEPS else EDGE_STEPS
+        for (side in intArrayOf(-1, 1)) {
+            var px = 0f; var py = 0f
+            for (i in 0..steps) {
+                val t = i / steps.toFloat()
+                val z = near + (far - near) * t * t
+                val swing = (wave[(t * (wave.size - 1)).roundToInt()] - 0.5f) * 2f
+                most = max(most, abs(swing))
+                flight.project(flight.road(z) + side * (ROAD_HALF + swing * EDGE_REACH), 0f, z, width, height, points, 0)
+                if (i > 0) line(px, py, points[0], points[1], core * 1.5f, color)
+                px = points[0]; py = points[1]
+            }
+        }
+        edgeAmplitude = most
+    }
+
+    /** A streak of [color] at [alpha] on the road, under a terrace's road side edge, toward the viewer. */
+    private fun streak(flight: NeonLoFiFlight, width: Float, height: Float, side: Int, lane: Int, z0: Float, z1: Float,
+        core: Float, color: Int, alpha: Float) {
+        val x = ROAD_HALF - 0.5f - lane * 0.7f
+        val near = max(z0 - (z1 - z0), flight.travel.toFloat() + 1.8f)
+        flight.project(flight.road(z1) + x * side, 0f, z1, width, height, points, 0)
+        flight.project(flight.road(near) + x * side, 0f, near, width, height, points, 2)
+        val a = (alpha.coerceIn(0f, 1f) * 255f).roundToInt()
+        line(points[0], points[1], points[2], points[3], core * 2f, (color and 0x00FFFFFF) or (a shl 24))
+    }
+
     private fun face(a: Int, b: Int, c: Int, d: Int, color: Int) {
         val v = mesh.vertex(points[a], points[a + 1], color)
         mesh.vertex(points[b], points[b + 1], color); mesh.vertex(points[c], points[c + 1], color); mesh.vertex(points[d], points[d + 1], color)
@@ -147,5 +203,15 @@ internal class NeonLoFiFloor {
         }
     }
     fun DrawScope.draw() { drawMesh(mesh) }
-    companion object { const val ROWS = 12 }
+    companion object {
+        const val ROWS = 12
+
+        /** The painted road's half width, how far the waveform swings its edges, and their light. */
+        const val ROAD_HALF = 3.25f
+        const val EDGE_REACH = 0.3f
+        const val EDGE_LIGHT = 1.2f
+        /** Segments per road edge, spaced closer near the viewer. They fit inside the triangle budgets. */
+        const val EDGE_STEPS = 20
+        const val PORTABLE_EDGE_STEPS = 12
+    }
 }

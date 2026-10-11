@@ -16,6 +16,70 @@ class NeonLoFiWorldTest {
             world.advance(state(neonFrame((t * 1e6).toLong(), value), t, 1f / fps, motion), settings, 0.37f)
         }
     }
+    private fun bandsFrame(t: Float, bands: FloatArray, held: Boolean = false) = SpectrumFrame(
+        (t * 1e6).toLong(), bands, bands, FloatArray(0), 0.5f, 0f, 0f, 0f, 0f, 0f, energy = 0.5f, held = held)
+
+    @Test fun theSunHasThirtyTwoGapsFromTheBands() {
+        assertEquals(32, NeonLoFiWorld.GAPS)
+        val low = NeonLoFiWorld()
+        val bass = FloatArray(48) { if (it < 3) 0.9f else 0.02f }
+        for (i in 1..60) low.advance(state(bandsFrame(i / 60f, bass), i / 60f), low.controls, 0.37f)
+        assertTrue(low.gaps[0] > 0.5f, "the bottom gap is ${low.gaps[0]}")
+        assertTrue(low.gaps[31] < 0.1f, "the top gap is ${low.gaps[31]}")
+        val high = NeonLoFiWorld()
+        val treble = FloatArray(48) { if (it >= 40) 0.9f else 0.02f }
+        for (i in 1..60) high.advance(state(bandsFrame(i / 60f, treble), i / 60f), high.controls, 0.37f)
+        assertTrue(high.gaps[31] > 0.5f, "the top gap is ${high.gaps[31]}")
+        assertTrue(high.gaps[0] < 0.1f, "the bottom gap is ${high.gaps[0]}")
+    }
+
+    @Test fun theTerracesAreTheSpectrumBackInTime() {
+        val w = NeonLoFiWorld()
+        val settings = w.controls.copyOf().apply { this[6] = 0f }
+        val first = FloatArray(48) { if (it in 9..11) 0.9f else 0.02f }
+        val second = FloatArray(48) { if (it in 36..38) 0.9f else 0.02f }
+        var t = 0f
+        repeat(30) { t += 1f / 60f; w.advance(state(bandsFrame(t, first), t), settings, 0.37f) }
+        repeat(180) { t += 1f / 60f; w.advance(state(bandsFrame(t, second), t), settings, 0.37f) }
+        val travel = w.flight.travel.toFloat()
+        assertEquals(0f, travel)
+        val nearHigh = w.floorHeight(12, travel + 1f); val nearLow = w.floorHeight(3, travel + 1f)
+        val backHigh = w.floorHeight(12, travel + 40f); val backLow = w.floorHeight(3, travel + 40f)
+        assertTrue(nearHigh > nearLow, "now the high lane stands taller: $nearHigh against $nearLow")
+        assertTrue(backLow > backHigh, "3.3 s back the low lane stands taller: $backLow against $backHigh")
+        // A paused player stamps no row.
+        val terrace = w.terrace.copyOf()
+        repeat(120) { t += 1f / 60f; w.advance(state(bandsFrame(t, first, held = true), t), settings, 0.37f) }
+        assertContentEquals(terrace, w.terrace)
+    }
+
+    @Test fun theTerracesAreContinuousBetweenRows() {
+        val w = NeonLoFiWorld()
+        val settings = w.controls.copyOf().apply { this[6] = 0f }
+        for (i in 1..300) {
+            val t = i / 60f
+            // A new loud lane every half second, so neighbouring rows differ.
+            val loud = (i / 30) % 16
+            val bands = FloatArray(48) { if (it / 3 == loud) 0.9f else 0.05f }
+            w.advance(state(bandsFrame(t, bands), t), settings, 0.37f)
+        }
+        var checked = 0
+        for (lane in 0..15) {
+            var fine = 0f; var row = 0f
+            var z = 2f
+            while (z < 44f) {
+                fine = max(fine, abs(w.floorHeight(lane, z + 0.1f) - w.floorHeight(lane, z)))
+                row = max(row, abs(w.floorHeight(lane, z + 3f) - w.floorHeight(lane, z)))
+                z += 0.1f
+            }
+            // Only the lanes that were loud inside the last four seconds change between rows.
+            if (row < 0.05f) continue
+            checked++
+            assertTrue(fine < row * 0.25f, "lane $lane jumps $fine in a tenth of a unit against $row a row")
+        }
+        assertTrue(checked >= 6, "only $checked lanes changed between rows")
+    }
+
     @Test fun heldFreezesEveryActorWhileSilenceRecordsZerosAndSettles() {
         val w = NeonLoFiWorld(); run(w, 5f)
         val before = w.lanes.copyOf(); val profile = w.profile.copyOf(); val travel = w.flight.travel

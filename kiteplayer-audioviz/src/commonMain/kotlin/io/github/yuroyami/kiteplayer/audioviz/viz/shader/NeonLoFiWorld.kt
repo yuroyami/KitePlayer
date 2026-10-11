@@ -11,13 +11,20 @@ internal class NeonLoFiWorld {
     val regions = NeonLoFiRegions()
     val lanes = FloatArray(16)
     val slowLanes = FloatArray(16)
-    val flex = FloatArray(16)
     val impulses = FloatArray(16)
     val profile = FloatArray(512)
     val accents = Array(8) { Accent() }
     val controls = floatArrayOf(0f, 1f, 1f, 1f, 0.5f, 1f, 1f, 1f, 0.6f, 1f, 0.7f, 1f, 1.1f)
-    /** The sun's gaps, bass at the bottom: each is two lanes of the spectrum. */
+    /** The sun's gaps, bass at the bottom: the bands sampled at [GAPS] places. */
     val gaps = FloatArray(GAPS)
+    /**
+     * The terraces back in time: a ring of [TERRACE_ROWS] rows of the 16 lanes, one row stamped every
+     * [TERRACE_STEP] seconds of heard time. [terraceHead] is the newest row.
+     */
+    val terrace = FloatArray(TERRACE_ROWS * 16)
+    private var terraceHead = 0
+    private var terraceRows = 0
+    private var terraceClock = 0f
     /** How strongly each note name, C to B, sounds now: the twelve towers' windows. */
     val notes = FloatArray(12)
     /** The waveform now, 0 to 1 either side of a half: the coast's reflection stripes. */
@@ -89,7 +96,6 @@ internal class NeonLoFiWorld {
             val before = lanes[i]
             lanes[i] = NeonLoFiFlight.approach(before, wanted[i], dt, if (wanted[i] > before) 0.035f else 0.18f)
             slowLanes[i] = NeonLoFiFlight.approach(slowLanes[i], wanted[i], dt, 0.35f)
-            flex[i] = (flex[i] * exp(-dt * 6f) + max(0f, lanes[i] - before)).coerceAtMost(0.65f)
             impulses[i] *= exp(-dt * 7f)
         }
         for (a in accents) a.age += dt
@@ -145,8 +151,19 @@ internal class NeonLoFiWorld {
         layoutInitialized = true
         flight.motion = state.motionScale.coerceIn(0f, 1f)
         flight.advance(dt, audible, if (available) f.mood else 0f, controls[6] * (1f - 0.45f * retreat), f.pulse, beatSeconds)
-        // The sun's gaps are the spectrum, two lanes a gap. Silence closes them to thin, even lines.
-        for (g in 0 until GAPS) gaps[g] = NeonLoFiFlight.approach(gaps[g], 0.5f * (lanes[g * 2] + lanes[g * 2 + 1]) * audible, dt, 0.06f)
+        // The terraces take a row of the lanes every quarter second of heard time, so back is time.
+        terraceClock += dt
+        while (terraceClock >= TERRACE_STEP) {
+            terraceClock -= TERRACE_STEP
+            terraceHead = (terraceHead + 1) % TERRACE_ROWS
+            lanes.copyInto(terrace, terraceHead * 16)
+            terraceRows = min(terraceRows + 1, TERRACE_ROWS)
+        }
+        // The sun's gaps are the bands at 32 places, bass at the bottom. Silence closes them to thin, even lines.
+        for (g in 0 until GAPS) {
+            val level = if (available) bandAt(f.bands, g / (GAPS - 1f)) else 0f
+            gaps[g] = NeonLoFiFlight.approach(gaps[g], level * audible, dt, 0.06f)
+        }
         // A tower's windows light while its note sounds: each note against the loudest one now.
         val chroma = f.chroma
         var loudest = 0f
@@ -202,19 +219,58 @@ internal class NeonLoFiWorld {
     }
 
     companion object {
-        const val GAPS = 8
+        const val GAPS = 32
         const val STAR_SECONDS = 0.9f
+
+        /** The terrace ring: how many rows, how many heard seconds apart, and the depth that spans them. */
+        const val TERRACE_ROWS = 16
+        const val TERRACE_STEP = 0.25f
+        const val FIELD_DEPTH = 48f
+        const val FIELD_SECONDS = 4f
+
+        /** [bands] at [position], 0 the lowest band and 1 the highest, between the two nearest. */
+        fun bandAt(bands: FloatArray, position: Float): Float {
+            if (bands.isEmpty()) return 0f
+            val at = position.coerceIn(0f, 1f) * (bands.size - 1)
+            val low = at.toInt().coerceAtMost(bands.size - 1)
+            val high = min(low + 1, bands.size - 1)
+            val v = bands[low] + (bands[high] - bands[low]) * (at - low)
+            return if (v.isFinite()) v.coerceIn(0f, 1f) else 0f
+        }
     }
 
+    /**
+     * A terrace's height at [worldZ]. Depth is time: the nearest quarter second is the live lanes, and
+     * further back the terrace ring, blended between its rows so the field is continuous.
+     */
     fun floorHeight(lane: Int, worldZ: Float, edge: Float = 1f): Float {
         val regional = when { lane < 4 -> bass; lane < 10 -> body; else -> air }
-        val local = lanes[lane] * 0.72f + slowLanes[lane] * 0.18f + regional * 0.10f
-        val articulation = flex[lane] * (0.5f + 0.5f * cos(worldZ * 0.6f + lane * 0.8f))
+        val local = laneAgo(lane, ((worldZ - flight.travel.toFloat()) / FIELD_DEPTH * FIELD_SECONDS).coerceAtLeast(0f)) * 0.72f +
+            slowLanes[lane] * 0.18f + regional * 0.10f
         val crest = impulses[lane] * controls[10]
-        return ((local.pow(0.8f) * 2.3f + articulation * 1.8f + crest) * controls[1] * edge).coerceIn(0f, 6f)
+        return ((local.pow(0.8f) * 2.3f + crest) * controls[1] * edge).coerceIn(0f, 6f)
+    }
+
+    /** [lane] as it was [ago] heard seconds back: the live lane blended into the ring's rows. */
+    private fun laneAgo(lane: Int, ago: Float): Float {
+        if (terraceRows == 0) return lanes[lane]
+        // The newest row was stamped terraceClock ago, and each row before it a step earlier.
+        if (ago <= terraceClock) {
+            val newest = terrace[terraceHead * 16 + lane]
+            return if (terraceClock <= 0f) newest else lanes[lane] + (newest - lanes[lane]) * (ago / terraceClock)
+        }
+        val back = (ago - terraceClock) / TERRACE_STEP
+        val last = terraceRows - 1
+        val near = min(back.toInt(), last)
+        val far = min(near + 1, last)
+        val t = if (far == near) 0f else back - near
+        val a = terrace[((terraceHead - near + TERRACE_ROWS) % TERRACE_ROWS) * 16 + lane]
+        val b = terrace[((terraceHead - far + TERRACE_ROWS) % TERRACE_ROWS) * 16 + lane]
+        return a + (b - a) * t
     }
     private fun clearActors() {
-        lanes.fill(0f); slowLanes.fill(0f); flex.fill(0f); impulses.fill(0f); profile.fill(0f)
+        lanes.fill(0f); slowLanes.fill(0f); impulses.fill(0f); profile.fill(0f)
+        terrace.fill(0f); terraceHead = 0; terraceRows = 0; terraceClock = 0f
         accents.forEach { it.age = 10f; it.timestamp = Long.MIN_VALUE }
         seen.fill(null); seenAt = 0; flight.reset(); regions.reset(); quiet = 0f; time = 0f
         eventCount = 0; compoundCount = 0; acceptedStrength = 0f; rain = 0f; rainWanted = false

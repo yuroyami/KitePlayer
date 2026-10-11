@@ -26,7 +26,8 @@ class SilkTest {
         var ink = 0f
         var blown = 0f
         var grain = 0f
-        RenderHarness.forEachFrame(silk, 320, 180, 60, VizPalette.Prism, RenderHarness.Song.Lively) { bitmap, step ->
+        RenderHarness.forEachFrame(silk, 320, 180, 60, VizPalette.Prism, RenderHarness.Song.Lively,
+            beforeDraw = { silk.jumpTo(Silk.STRAND) }) { bitmap, step ->
             if (step < 30) return@forEachFrame
             val pixels = pixels(bitmap)
             ink = maxOf(ink, ribbonShare(pixels))
@@ -84,11 +85,14 @@ class SilkTest {
         var right = -1
         val width = 480
         val height = 270
-        RenderHarness.forEachFrame(Silk(), width, height, 60, VizPalette.Prism, RenderHarness.Song.Lively) { bitmap, step ->
+        val silk = Silk()
+        RenderHarness.forEachFrame(silk, width, height, 60, VizPalette.Prism, RenderHarness.Song.Lively,
+            beforeDraw = { silk.jumpTo(Silk.STRAND) }) { bitmap, step ->
             if (step < 30) return@forEachFrame
             val pixels = pixels(bitmap)
+            val paper = paperChroma(pixels)
             for (y in 0 until height) for (x in 0 until width) {
-                if (chroma(pixels[y * width + x]) > RIBBON_CHROMA) {
+                if (chroma(pixels[y * width + x]) - paper > RIBBON_CHROMA) {
                     left = minOf(left, x)
                     right = maxOf(right, x)
                 }
@@ -252,11 +256,16 @@ class SilkTest {
             var ink = 0f
             var count = 0
             RenderHarness.forEachFrameOf(silk, 160, 90, 151, VizPalette.Prism,
-                source = { step -> InjectedFrames.frame(null, step) }) { bitmap, step ->
+                source = { step -> InjectedFrames.frame(null, step) },
+                beforeDraw = { silk.jumpTo(Silk.STRAND) }) { bitmap, step ->
                 if (born && step == 70) silk.birth()
                 if (step == 71) count = silk.strandCount
-                // The total colour, so faint ribbons count by how much ink they carry.
-                if (step == 150) ink = pixels(bitmap).sumOf { chroma(it).toLong() }.toFloat()
+                // The total colour above the paper's, so faint ribbons count by how much ink they carry.
+                if (step == 150) {
+                    val pixels = pixels(bitmap)
+                    val paper = paperChroma(pixels)
+                    ink = pixels.sumOf { maxOf(chroma(it) - paper, 0).toLong() }.toFloat()
+                }
             }
             return ink to count
         }
@@ -264,7 +273,33 @@ class SilkTest {
         val (born, count) = inkAt150(born = true)
         println("silk: ink $born with a second strand, $still without; $count strands after the birth")
         assertEquals(2, count)
-        assertTrue(born > still * 1.2f, "the second strand adds ink: $born against $still")
+        // The wash's share of each ribbon pixel is taken out with the paper, so the gain reads lower than the lines added.
+        assertTrue(born > still * 1.1f, "the second strand adds ink: $born against $still")
+    }
+
+    @Test
+    fun quietAndLoudAreDifferentClothsByInk() {
+        // On light paper more music is more ink. A pixel is inked when it is darker by 0.1 than the
+        // same pixel in silence, so the vignette's dark corners do not count.
+        fun last(song: RenderHarness.Song): java.awt.image.BufferedImage {
+            var image: java.awt.image.BufferedImage? = null
+            RenderHarness.forEachFrame(Silk(), 160, 90, 600, VizPalette.Prism, song) { bitmap, step ->
+                if (step == 599) image = with(RenderHarness) { bitmap.toBufferedImage() }
+            }
+            return image!!
+        }
+        val paper = last(RenderHarness.Song.Silence)
+        fun inkShare(image: java.awt.image.BufferedImage): Float {
+            var inked = 0
+            for (y in 0 until image.height) for (x in 0 until image.width) {
+                if (luma(image.getRGB(x, y)) < luma(paper.getRGB(x, y)) - 0.1f) inked++
+            }
+            return inked / (image.width * image.height).toFloat()
+        }
+        val calm = inkShare(last(RenderHarness.Song.Calm))
+        val lively = inkShare(last(RenderHarness.Song.Lively))
+        println("silk: ink covers $calm of the frame on the calm song and $lively on the lively one")
+        assertTrue(lively >= calm * 1.4f, "loud music inks more of the paper, $calm against $lively")
     }
 
     @Test
@@ -431,7 +466,13 @@ class SilkTest {
         IntArray(bitmap.width * bitmap.height).also { bitmap.readPixels(it) }
 
     /** The share of pixels coloured by a ribbon. The vignette is grey, with grain of a few levels. */
-    private fun ribbonShare(pixels: IntArray): Float = pixels.count { chroma(it) > RIBBON_CHROMA }.toFloat() / pixels.size
+    private fun ribbonShare(pixels: IntArray): Float {
+        val paper = paperChroma(pixels)
+        return pixels.count { chroma(it) - paper > RIBBON_CHROMA }.toFloat() / pixels.size
+    }
+
+    /** The paper's own colour under the palette wash: the median pixel's chroma, as most pixels are paper. */
+    private fun paperChroma(pixels: IntArray): Int = pixels.map { chroma(it) }.sorted()[pixels.size / 2]
 
     private fun blownShare(pixels: IntArray): Float = pixels.count {
         (it shr 16 and 0xFF) > 245 && (it shr 8 and 0xFF) > 245 && (it and 0xFF) > 245

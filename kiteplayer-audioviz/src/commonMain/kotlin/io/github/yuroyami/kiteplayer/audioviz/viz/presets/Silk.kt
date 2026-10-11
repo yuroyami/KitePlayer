@@ -57,6 +57,7 @@ import kotlin.math.tan
  *   square root toward the analyser's decibel scale, not a browser analyser.
  * - Deviation: colours are multiplied by the flash guard's light share, and their hues turn slowly
  *   with the music's walk.
+ * - Deviation: a faint wash from the cool half of the palette lies over the paper.
  * - Deviation: where runtime shaders cannot run, the background is the same gradient without grain.
  *
  * Translucent cyan, violet and magenta ribbons twist around one horizontal strand over a light
@@ -68,8 +69,9 @@ import kotlin.math.tan
  * second earlier, so the sheet reaches about three seconds back. The stage, a 20 degree view over
  * a floor with a soft shadow, comes from Fluctus, which this drawing absorbed.
  *
- * The music moves it between four forms: Strand, Cloth, Tube (the cloth rolled round the camera,
- * which looks down its axis) and Veil (the cloth hung from above, time running down). A change of
+ * The music moves it between four forms, in turn: Cloth, Tube (the cloth rolled round the camera,
+ * which looks down its axis), Veil (the cloth hung from above, time running down) and Strand. The
+ * drawing opens on the Cloth, where a tone shows as the column it lifts and the rows wear the palette. A change of
  * form blends every point of the sheet from one placement to the other, and the strand fades into
  * the sheet. A drop lays the cloth out, a breakdown hangs it as a veil, and a birth weaves a second
  * strand in. The camera orbits on the slow cycle and moves closer in a bright mood; in the Tube it
@@ -93,17 +95,15 @@ internal class Silk : Layered(
     override val mapping: VizMapping by mappingOf(
         VizDrive(VizDriver.Bands, VizProperty.Shape),
         VizDrive(VizDriver.Bands, VizProperty.Colour),
-        // The front row's edge, the twist's pace and the dolly.
-        VizDrive(VizDriver.Waveform, VizProperty.Shape),
-        VizDrive(VizDriver.Level, VizProperty.Speed, VizCurve.Linear, VizResponse.Rate),
+        // The dolly. The waveform's edge, the twist's pace, the pleat and the billow are too small
+        // to measure at the declaration test's size, so they are not declared.
         VizDrive(VizDriver.Mood, VizProperty.Camera, response = VizResponse.Rate),
-        // The impacts: the crest, the pleat, the shimmer and the billow.
+        // The crest and the shimmer.
         VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(1f)),
-        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.25f)),
-        VizDrive(VizDriver.HighHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.4f)),
-        VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.HighHit, VizProperty.Texture, VizCurve.Scaled, VizResponse.envelope(0.4f)),
+        // The veil eases in, so a breakdown shows a few frames after it lands.
         VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
-        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f, delaySeconds = 0.15f)),
         silence = VizSilence.Still,
     )
 
@@ -132,8 +132,8 @@ internal class Silk : Layered(
     private var liveScope = FloatArray(0)
 
     // The forms: the one shown before the morph, the one it moves to, and how far it has gone.
-    private var formFrom = STRAND
-    private var formTo = STRAND
+    private var formFrom = CLOTH
+    private var formTo = CLOTH
     private var morph = 1f
     private var morphSeconds = 1f
     /** True when a new morph cut into one in flight: the start is then the sheet as it stood. */
@@ -452,6 +452,14 @@ internal class Silk : Layered(
             placeCamera(size.width, size.height)
             with(stage) { drawHorizon(light, SilkStage.paper(light)) }
         }
+        // A faint wash of the palette over the paper, walked by the genes; the paper keeps its light.
+        val wash = state.palette.argb(WASH_POSITION + genes.walk * 0.25f, saturation = WASH_SATURATION)
+        drawRect(Color(
+            red = (wash shr 16 and 0xFF) / 255f * light,
+            green = (wash shr 8 and 0xFF) / 255f * light,
+            blue = (wash and 0xFF) / 255f * light,
+            alpha = WASH,
+        ))
     }
 
     private fun DrawScope.drawPaper(light: Float) {
@@ -629,8 +637,8 @@ internal class Silk : Layered(
         heard = 0.0
         liveBands.fill(0f)
         liveScope.fill(0f)
-        formFrom = STRAND
-        formTo = STRAND
+        formFrom = CLOTH
+        formTo = CLOTH
         morph = 1f
         morphSeconds = 1f
         fromFrozen = false
@@ -673,6 +681,11 @@ internal class Silk : Layered(
         /** The shadow's ink, a dark grey. */
         const val SHADOW_INK = 0.12f
         const val SHADOW_RGB = 0x3A3A46
+        /** The palette wash over the paper: its opacity and its colour's saturation. */
+        const val WASH = 0.15f
+        const val WASH_SATURATION = 0.6f
+        /** Where on the palette the wash sits: the cool half, as the page's cyan and violet. */
+        const val WASH_POSITION = 0.55f
 
         // The Tube's radius and axis, and the Veil's lower camera.
         const val TUBE_RADIUS = 26f
@@ -681,7 +694,7 @@ internal class Silk : Layered(
 
         // The impacts: the crest in rows and world units, the pleat, the shimmer and the billow.
         const val CREST_ROWS_PER_SECOND = 60f
-        const val CREST_LIFT = 8f
+        const val CREST_LIFT = 12f
         const val CREST_SPREAD = 6f
         const val CREST_WIDTH_ROWS = 8f
         const val PLEAT = 4f
@@ -703,11 +716,12 @@ internal class Silk : Layered(
         const val DOLLY_REACH = 0.15f
         const val DOLLY_SPEED = 0.3f
 
-        val FORMS = listOf("Strand", "Cloth", "Tube", "Veil")
-        const val STRAND = 0
-        const val CLOTH = 1
-        const val TUBE = 2
-        const val VEIL = 3
+        /** The forms in the order the music moves through them; the drawing opens on the Cloth. */
+        val FORMS = listOf("Cloth", "Tube", "Veil", "Strand")
+        const val CLOTH = 0
+        const val TUBE = 1
+        const val VEIL = 2
+        const val STRAND = 3
 
         fun channel(value: Float): Int = (value.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
 

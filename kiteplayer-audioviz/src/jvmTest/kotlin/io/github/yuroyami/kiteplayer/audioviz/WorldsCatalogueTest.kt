@@ -145,6 +145,9 @@ class WorldsCatalogueTest {
                 "range" to "spec 5.13: light stays on lightScale so the flat stack is today's picture; the range shows as peaks",
                 "births" to "spec 5.13: no birth, the owner said it does everything right",
             ),
+            "Silk" to mapOf(
+                "range" to "light paper: more music is more ink and a darker frame, so the mean luma falls the wrong way; SilkTest.quietAndLoudAreDifferentClothsByInk measures the ink share instead",
+            ),
         )
 
         /** Mean per-channel difference, 0 to 1, below which two pictures count as alike. *Judgement.* */

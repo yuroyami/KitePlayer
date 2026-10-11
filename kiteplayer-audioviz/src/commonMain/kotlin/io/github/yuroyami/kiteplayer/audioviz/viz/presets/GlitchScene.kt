@@ -2,33 +2,66 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 
 import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
+import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.WaveformResampler
+import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.math.tanh
 
 /**
- * The broken broadcast of [Glitch] as numbers: where the bars stand and how much light each gives,
+ * The broken broadcast of [Glitch] as numbers: the spectrogram's blocks and how much light each gives,
  * the trace, and which faults break the picture at this instant.
+ *
+ * The blocks are a grid of [columns] by [rows]. Across is time, scrolling one column per
+ * [SPAN_SECONDS] / [columns] heard seconds, the newest column on the right. Up is band, bass in row 0
+ * at the bottom.
  *
  * Nothing here draws, so the rules of the picture can be checked without a canvas. [GlitchGeometry]
  * turns it into shapes and [GlitchFields] into the frozen frame of a datamosh and the static.
  */
 internal class GlitchScene {
 
-    /** Where each bar's slot starts, as a share of the width. The last entry is 1. */
-    val edges = FloatArray(BARS + 1)
+    /** How many columns and rows of blocks the screen holds, from the last [layout]. */
+    var columns: Int = COLUMNS_MOST
+        private set
+    var rows: Int = ROWS_MOST
+        private set
 
-    /** How much light each bar gives, in linear light: [IDLE_LIGHT] in silence, 1 at the loudest. */
-    val exposure = FloatArray(BARS) { IDLE_LIGHT }
+    /** Each block's level, 0 to 1, by column and row. A column keeps the bands of its moment. */
+    private val level = FloatArray(COLUMNS_MOST * ROWS_MOST)
 
-    /** How far each bar has gone to white, 0 to 1. Only a loud band of loud music gets there. */
-    val white = FloatArray(BARS)
+    /** How much light each block gives, in linear light: [IDLE_LIGHT] in silence, 1 at the loudest. */
+    val light = FloatArray(COLUMNS_MOST * ROWS_MOST) { IDLE_LIGHT }
+
+    /** How far each block has gone to white, 0 to 1. Only a loud band of loud music gets there. */
+    val white = FloatArray(COLUMNS_MOST * ROWS_MOST)
+
+    /** The light of the block in [column] and [row], after [present]. */
+    fun blockLight(column: Int, row: Int): Float = light[column * ROWS_MOST + row]
+
+    /** The level the block in [column] and [row] shows, 0 to 1, after coarse blocks are merged. */
+    fun blockLevel(column: Int, row: Int): Float = shown[column * ROWS_MOST + row]
+    private val shown = FloatArray(COLUMNS_MOST * ROWS_MOST)
+
+    /** The mean level of [column], for the speed of a datamosh column. */
+    fun columnLevel(column: Int): Float {
+        var sum = 0f
+        for (row in 0 until rows) sum += level[column * ROWS_MOST + row]
+        return sum / rows
+    }
+
+    /** How far the whole picture is rolled down, as a share of the height. It wraps round. */
+    var trackingY: Float = 0f
+        private set
 
     /** The waveform across the width, 1 being full scale. */
     val trace = FloatArray(TRACE_POINTS)
@@ -104,8 +137,6 @@ internal class GlitchScene {
     /** How loud each band has been lately. The datamosh reads it for its column speeds. */
     val glow = FloatArray(BARS)
 
-    private val shape = FloatArray(BARS)
-    private val weight = FloatArray(BARS)
     private val scope = FloatArray(TRACE_POINTS)
     private val resampler = WaveformResampler()
     private var splitFrom = 0f
@@ -120,9 +151,26 @@ internal class GlitchScene {
     private var moshPending = 0f
     private var moshStarting = false
     private var refreshCredit = 1f
+    private var columnClock = 0f
+    private var owedSeconds = 0f
+    private val presence = Envelope(PRESENCE_RISE, PRESENCE_FALL)
 
-    init {
-        layoutEvenly()
+    /**
+     * Fits the grid to a screen of [width] by [height] pixels: as many blocks as fit at [BLOCK_PX] or more on
+     * each side, up to [COLUMNS_MOST] by [ROWS_MOST], with a clear band of [TRACE_BAND] of the height for the
+     * ribbon. The rows are even, so the band sits at the middle with as many rows above it as below. A new
+     * size starts the grid again from the idle light.
+     */
+    fun layout(width: Float, height: Float) {
+        val across = min(COLUMNS_MOST, (width / BLOCK_PX).toInt()).coerceAtLeast(1)
+        val up = (min(ROWS_MOST, (height * (1f - TRACE_BAND) / BLOCK_PX).toInt()) / 2 * 2).coerceAtLeast(2)
+        if (across == columns && up == rows) return
+        columns = across
+        rows = up
+        level.fill(0f)
+        shown.fill(0f)
+        light.fill(IDLE_LIGHT)
+        white.fill(0f)
     }
 
     /** Moves the picture on by one frame. [gestures] must already have read this frame. */
@@ -132,12 +180,15 @@ internal class GlitchScene {
         val motion = state.motionScale.within(0f, 1f)
         cycleSeconds = gestures.cycleSeconds.within(0.5f, 8f)
         val bands = state.frame.bands
+        // A paused player repeats its last frame, and the picture holds what it showed.
+        val listen = if (state.frame.held) 0f else dt
         for (bar in 0 until BARS) {
             val value = if (bands.isEmpty()) 0f else bands.sampleAt(bar / (BARS - 1f)).within(0f, 1f)
-            shape[bar] = follow(shape[bar], value, dt, WIDTH_RISE, WIDTH_FALL)
-            glow[bar] = follow(glow[bar], value, dt, GLOW_RISE, GLOW_FALL)
+            glow[bar] = follow(glow[bar], value, listen, GLOW_RISE, GLOW_FALL)
         }
+        owedSeconds += step
         roll(state, gestures, step, dt)
+        track(state, gestures, step)
         breakOnHits(gestures, random, dt, motion)
         changeChannel(state, gestures, random, dt, motion)
         mosh(gestures, step, motion)
@@ -159,14 +210,18 @@ internal class GlitchScene {
     }
 
     fun reset() {
-        shape.fill(0f)
         glow.fill(0f)
-        exposure.fill(IDLE_LIGHT)
+        level.fill(0f)
+        light.fill(IDLE_LIGHT)
         white.fill(0f)
         trace.fill(0f)
         melt.fill(-1f)
         meltSeed.fill(0)
-        layoutEvenly()
+        columnClock = 0f
+        owedSeconds = 0f
+        presence.reset()
+        shown.fill(0f)
+        trackingY = 0f
         traceExposure = TRACE_IDLE
         channel = 0
         scanAt = -SCAN_HALF
@@ -214,6 +269,12 @@ internal class GlitchScene {
         scanAt = -SCAN_HALF + phase * (1f + 2f * SCAN_HALF)
         // Presence keeps its level while paused, so a paused picture keeps its scan bar.
         scanStrength = follow(scanStrength, state.presence, dt, SCAN_RISE, SCAN_FALL)
+    }
+
+    /** The tracking roll: a slow offset of the whole picture on the cycle, there only while the music is heard. */
+    private fun track(state: VizRenderState, gestures: Gestures, step: Float) {
+        presence.advance(state.frame.audible, step)
+        trackingY = TRACK_REACH * sin(gestures.cyclePhase * TAU) * presence.value * state.motionScale.within(0f, 1f)
     }
 
     /** A kick splits the colour layers, a snare tears slices sideways, a hat melts the brightest bars. */
@@ -335,28 +396,64 @@ internal class GlitchScene {
         return true
     }
 
-    /** Lays the bars out by loudness, lights them, and reads the trace. */
+    /** Scrolls the grid, writes the newest column, lights every block, and reads the trace. */
     private fun present(state: VizRenderState) {
-        var total = 0f
-        for (bar in 0 until BARS) {
-            weight[bar] = WIDTH_FLOOR + (1f - WIDTH_FLOOR) * response(shape[bar]).pow(WIDTH_POWER)
-            total += weight[bar]
+        // One column a step of heard time; a stall owes its seconds until the picture takes a frame.
+        columnClock += owedSeconds * columns / SPAN_SECONDS
+        owedSeconds = 0f
+        while (columnClock >= 1f) {
+            columnClock -= 1f
+            level.copyInto(level, 0, ROWS_MOST, columns * ROWS_MOST)
         }
-        var at = 0f
-        for (bar in 0 until BARS) {
-            edges[bar] = at / total
-            at += weight[bar]
+        // The newest column is the bands now, bass in row 0: each row is the mean of its share of the bars.
+        val newest = (columns - 1) * ROWS_MOST
+        for (row in 0 until rows) {
+            val from = row * BARS / rows
+            val to = ((row + 1) * BARS / rows).coerceAtLeast(from + 1)
+            var sum = 0f
+            for (bar in from until to) sum += glow[bar]
+            level[newest + row] = sum / (to - from)
         }
-        edges[BARS] = 1f
-        // Light follows the shared lift, so the flash guard reaches every bar.
+        // Dense music coarsens the blocks: pairs of columns, then fours, from the newest, show their mean.
+        val coarse = ((state.frame.density - COARSE_FROM) * COARSE_SCALE).within(0f, 1f)
+        val merge = if (coarse > COARSE_FOURS) 4 else if (coarse > COARSE_PAIRS) 2 else 1
+        for (row in 0 until rows) {
+            var end = columns
+            while (end > 0) {
+                val start = (end - merge).coerceAtLeast(0)
+                var sum = 0f
+                for (column in start until end) sum += level[column * ROWS_MOST + row]
+                val mean = sum / (end - start)
+                for (column in start until end) shown[column * ROWS_MOST + row] = mean
+                end = start
+            }
+        }
+        // The guard's scale reaches the idle light too, and the light follows the level of the music.
+        val scale = state.lightScale.within(0f, 1f)
+        val loud = lightFor(state.frame.energy.within(0f, 1f))
         val lift = state.lift.within(0f, 1f)
-        for (bar in 0 until BARS) {
-            exposure[bar] = IDLE_LIGHT + (1f - IDLE_LIGHT) * lift * response(glow[bar])
+        for (column in 0 until columns) for (row in 0 until rows) {
+            val at = column * ROWS_MOST + row
+            light[at] = scale * (IDLE_LIGHT + (1f - IDLE_LIGHT) * loud * response(shown[at]))
             // White needs a band that is high in any song, not merely the loudest of a quiet one.
-            val peak = ((glow[bar] - WHITE_FROM) / (WHITE_TO - WHITE_FROM)).within(0f, 1f)
-            white[bar] = lift * peak * peak * (3f - 2f * peak)
+            val peak = ((shown[at] - WHITE_FROM) / (WHITE_TO - WHITE_FROM)).within(0f, 1f)
+            white[at] = lift * peak * peak * (3f - 2f * peak)
         }
-        traceExposure = TRACE_IDLE + (1f - TRACE_IDLE) * lift
+        // Neighbouring blocks never differ in light by more than half, from the bottom left.
+        for (column in 0 until columns) for (row in 0 until rows) {
+            val at = column * ROWS_MOST + row
+            var value = light[at]
+            if (column > 0) {
+                val left = light[at - ROWS_MOST]
+                value = value.coerceIn(left - MOST_STEP_LIGHT, left + MOST_STEP_LIGHT)
+            }
+            if (row > 0) {
+                val below = light[at - 1]
+                value = value.coerceIn(below - MOST_STEP_LIGHT, below + MOST_STEP_LIGHT)
+            }
+            light[at] = value
+        }
+        traceExposure = scale * (TRACE_IDLE + (1f - TRACE_IDLE) * loud)
         val frame = state.frame
         resampler.resample(frame.scope, scope)
         val gain = frame.waveformGain.within(0f, MOST_GAIN)
@@ -364,12 +461,32 @@ internal class GlitchScene {
         for (point in trace.indices) trace[point] = TRACE_CLIP * tanh((scope[point] * gain).within(-8f, 8f) / TRACE_CLIP)
     }
 
-    private fun layoutEvenly() {
-        for (bar in 0..BARS) edges[bar] = bar / BARS.toFloat()
-    }
-
     internal companion object {
+        /** The bands are read at this many points across the spectrum, then shared out among the rows. */
         const val BARS = 64
+
+        /** The most columns and rows of blocks, the least size of a block in pixels, and the heard seconds across. */
+        const val COLUMNS_MOST = 64
+        const val ROWS_MOST = 16
+        const val BLOCK_PX = 24f
+        const val SPAN_SECONDS = 4f
+
+        /** The clear band for the ribbon across the middle, as a share of the height. */
+        const val TRACE_BAND = 0.12f
+
+        /** The most two neighbouring blocks may differ in light. */
+        const val MOST_STEP_LIGHT = 0.5f
+
+        /** The tracking roll's reach, as a share of the height, and how fast it comes and goes with the music. */
+        const val TRACK_REACH = 0.02f
+        const val PRESENCE_RISE = 2f
+        const val PRESENCE_FALL = 0.5f
+
+        /** Density above [COARSE_FROM] coarsens the blocks: past [COARSE_PAIRS] in pairs, past [COARSE_FOURS] in fours. */
+        const val COARSE_FROM = 0.6f
+        const val COARSE_SCALE = 2.5f
+        const val COARSE_PAIRS = 0.5f
+        const val COARSE_FOURS = 0.9f
         const val TRACE_POINTS = 128
         const val MOST_SLICES = 8
 
@@ -379,7 +496,7 @@ internal class GlitchScene {
          */
         const val TEAR_GAP = 0.25f
 
-        /** How much light the bars give in silence and in the first frame, in linear light. */
+        /** How much light the blocks give in silence and in the first frame, in linear light. */
         const val IDLE_LIGHT = 0.3f
 
         /** How much light the trace gives in silence. */
@@ -388,13 +505,7 @@ internal class GlitchScene {
         /** A band at this height or above answers in full. *Judgement.* */
         const val FULL_LEVEL = 0.5f
 
-        /** The quietest slot against the loudest, like the narrow and wide bars of a barcode. */
-        const val WIDTH_FLOOR = 0.25f
-        const val WIDTH_POWER = 1.3f
-
-        /** Widths follow the bands fast; light follows them slower, so a kick pumps no flash train. */
-        const val WIDTH_RISE = 0.03f
-        const val WIDTH_FALL = 0.14f
+        /** Light follows the bands this fast up and this slow down, so a kick pumps no flash train. */
         const val GLOW_RISE = 0.05f
         const val GLOW_FALL = 0.4f
 

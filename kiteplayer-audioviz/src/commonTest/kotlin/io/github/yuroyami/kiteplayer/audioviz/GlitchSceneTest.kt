@@ -18,26 +18,30 @@ import kotlin.test.assertTrue
 class GlitchSceneTest {
 
     @Test
-    fun theBarsFillTheWidthAndALoudBandIsWider() {
-        val run = Run()
-        val bands = FloatArray(48) { if (it < 24) 0.45f else 0.02f }
-        repeat(30) { run.next(bands = bands) }
-        val edges = run.scene.edges
-        assertEquals(0f, edges[0])
-        assertEquals(1f, edges[GlitchScene.BARS])
-        for (bar in 0 until GlitchScene.BARS) assertTrue(edges[bar + 1] > edges[bar], "slot $bar has no width")
-        val loud = edges[1] - edges[0]
-        val quiet = edges[GlitchScene.BARS] - edges[GlitchScene.BARS - 1]
-        assertTrue(loud > quiet * 2f, "a loud band takes $loud of the width and a quiet one $quiet")
+    fun theBlocksFillTheScreenAndALoudBandIsBrighter() {
+        val scene = GlitchScene()
+        scene.layout(width = 1920f, height = 1080f)
+        assertEquals(64, scene.columns)
+        assertEquals(16, scene.rows)
+        assertTrue(1920f / scene.columns >= GlitchScene.BLOCK_PX, "a block is ${1920f / scene.columns} px wide")
+        val tall = 1080f * (1f - GlitchScene.TRACE_BAND) / scene.rows
+        assertTrue(tall >= GlitchScene.BLOCK_PX, "a block is $tall px high")
+        // One loud band, the 25th of 48, for a second: its row of the newest column is the brightest.
+        val run = Run(scene)
+        val bands = FloatArray(48) { if (it == 24) 0.6f else 0.02f }
+        repeat(60) { run.next(bands = bands) }
+        val newest = scene.columns - 1
+        val brightest = (0 until scene.rows).maxBy { scene.blockLight(newest, it) }
+        assertEquals(24 * scene.rows / 48, brightest, "the loud band lights its own row")
     }
 
     @Test
-    fun theFirstFrameAndASilenceShowTheBarcodeAtThirtyPercentWithAFlatTrace() {
+    fun theFirstFrameAndASilenceShowTheScreenAtThirtyPercentWithAFlatTrace() {
         val scene = GlitchScene()
-        assertTrue(scene.exposure.all { it == GlitchScene.IDLE_LIGHT }, "the first frame is lit before any music")
+        assertTrue(scene.light.all { it == GlitchScene.IDLE_LIGHT }, "the first frame is lit before any music")
         val run = Run(scene)
         repeat(240) { run.next(bands = FloatArray(48), level = 0f) }
-        assertTrue(scene.exposure.all { abs(it - GlitchScene.IDLE_LIGHT) < 0.01f }, "silence keeps the idle light")
+        assertTrue(scene.light.all { abs(it - GlitchScene.IDLE_LIGHT) < 0.01f }, "silence keeps the idle light")
         assertTrue(scene.trace.all { it == 0f }, "the trace lies flat in silence")
         assertEquals(0f, scene.split)
         assertEquals(0, scene.slices)
@@ -45,6 +49,60 @@ class GlitchSceneTest {
         assertFalse(scene.moshing)
         assertTrue(scene.melt.all { it < 0f })
         assertTrue(scene.scanStrength < 0.01f, "no scan bar rolls in silence")
+    }
+
+    @Test
+    fun theColumnsScrollAndAColumnIsTheBandsOfItsMoment() {
+        val scene = GlitchScene()
+        scene.layout(1920f, 1080f)
+        val run = Run(scene)
+        // The lowest sixteenth of the bands for 1.5 s, then the highest sixteenth for 2.5 s.
+        val low = FloatArray(48) { if (it <= 2) 0.6f else 0.02f }
+        val high = FloatArray(48) { if (it >= 45) 0.6f else 0.02f }
+        repeat(90) { run.next(bands = low) }
+        repeat(150) { run.next(bands = high) }
+        val newest = scene.columns - 1
+        val back = newest - 48
+        println("glitch: now low ${scene.blockLight(newest, 0)} high ${scene.blockLight(newest, 15)}; " +
+            "three seconds back low ${scene.blockLight(back, 0)} high ${scene.blockLight(back, 15)}")
+        assertTrue(scene.blockLight(newest, 15) > scene.blockLight(newest, 0) + 0.2f, "the newest column shows the high bands")
+        assertTrue(scene.blockLight(back, 0) > scene.blockLight(back, 15) + 0.2f, "three seconds back shows the low bands")
+        // A pause holds the columns where they are.
+        val before = scene.light.copyOf()
+        repeat(60) { run.next(bands = high, held = true) }
+        assertTrue(scene.light.contentEquals(before), "a paused picture does not scroll")
+    }
+
+    @Test
+    fun neighbouringBlocksNeverStepByMoreThanHalf() {
+        val scene = GlitchScene()
+        scene.layout(1920f, 1080f)
+        val run = Run(scene)
+        repeat(600) { frame ->
+            val bands = FloatArray(48) { band ->
+                val h = (frame * 7_919 + band * 104_729) * 1_103_515_245
+                ((h ushr 8) and 0xFFFF) / 65_535f * 0.9f
+            }
+            run.next(bands = bands, level = 0.9f)
+        }
+        var steepest = 0f
+        for (column in 0 until scene.columns) for (row in 0 until scene.rows) {
+            val here = scene.blockLight(column, row)
+            if (column > 0) steepest = maxOf(steepest, abs(here - scene.blockLight(column - 1, row)))
+            if (row > 0) steepest = maxOf(steepest, abs(here - scene.blockLight(column, row - 1)))
+        }
+        println("glitch: the steepest step between neighbouring blocks is $steepest")
+        assertTrue(steepest <= GlitchScene.MOST_STEP_LIGHT + 1e-5f, "neighbouring blocks step by $steepest")
+    }
+
+    @Test
+    fun aSmallScreenKeepsBlocksAtTwentyFourPixels() {
+        val scene = GlitchScene()
+        scene.layout(160f, 90f)
+        assertEquals(6, scene.columns)
+        // Three rows would fit, but the rows are even so the ribbon's band sits at the middle.
+        assertEquals(2, scene.rows)
+        assertTrue((90f * (1f - GlitchScene.TRACE_BAND)) / scene.rows >= GlitchScene.BLOCK_PX)
     }
 
     @Test
@@ -178,12 +236,12 @@ class GlitchSceneTest {
         fun changes(ahead: Float?): Int {
             val run = Run(future = ahead?.let { dropIn(it) })
             var count = 0
-            var before = run.scene.edges.copyOf()
+            var before = run.scene.light.copyOf()
             for (frame in 0 until 60) {
                 val bands = FloatArray(48) { band -> 0.2f + 0.15f * sin(frame * 0.4f + band * 0.3f) }
                 run.next(bands = bands)
-                if (!run.scene.edges.contentEquals(before)) count++
-                before = run.scene.edges.copyOf()
+                if (!run.scene.light.contentEquals(before)) count++
+                before = run.scene.light.copyOf()
             }
             return count
         }
@@ -207,7 +265,7 @@ class GlitchSceneTest {
                 }
                 run.next(bands = bands, hits = hits, structure = if (frame == 100) AudioEventKind.Drop else null)
             }
-            return scene.edges.toList() + scene.exposure.toList() + scene.white.toList() + scene.melt.toList() +
+            return scene.light.toList() + scene.white.toList() + scene.melt.toList() +
                 scene.sliceTop.toList() + scene.sliceShift.toList() +
                 listOf(scene.split, scene.collapse, scene.scanAt, scene.channel.toFloat(), scene.slices.toFloat())
         }

@@ -11,6 +11,7 @@ import io.github.yuroyami.kiteplayer.audioviz.RenderHarness.toBufferedImage
 import io.github.yuroyami.kiteplayer.audioviz.viz.VisualizerSurface
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
@@ -29,7 +30,7 @@ class GlitchRenderTest {
     private val directory = File("build/glitch-preview").apply { mkdirs() }
 
     @Test
-    fun drawsABarcodeWithInkAndNoBlowOutOnTheLivelySong() {
+    fun drawsASpectrogramWithInkAndNoBlowOutOnTheLivelySong() {
         var ink = 0f
         var blown = 0f
         var last: BufferedImage? = null
@@ -45,42 +46,66 @@ class GlitchRenderTest {
     }
 
     @Test
-    fun silenceHoldsAStillBarcodeThatIsLitNotBlack() {
+    fun silenceHoldsAStillSpectrogramThatIsLitNotBlack() {
         val quiet = motion(RenderHarness.Song.Silence)
         val music = motion(RenderHarness.Song.Lively)
         assertTrue(music.first > 0.004f, "the music barely moves the picture: ${music.first}")
         assertTrue(quiet.first <= 0.05f * music.first, "silence moves ${quiet.first} against ${music.first} with music")
-        assertTrue(quiet.second > 0.04f, "the idle barcode is lit, mean light ${quiet.second}")
+        assertTrue(quiet.second > 0.04f, "the idle spectrogram is lit, mean light ${quiet.second}")
     }
 
     @Test
-    fun everyBarRunsTheFullHeightAndALoudBandIsWider() {
-        val image = render(WIDTH, HEIGHT, 90, { it == 89 }) { GlitchFrames.frame(it, LOUD_LOW) }.getValue(89)
+    fun everyBlockIsAtLeastTwentyFourPixelsAndALoudBandIsBrighter() {
+        val width = 640
+        val height = 360
+        val drawing = Glitch()
+        val image = render(width, height, 90, { it == 89 }, drawing) { GlitchFrames.frame(it, LOUD_LOW) }.getValue(89)
         ImageIO.write(image, "png", File(directory, "clean.png"))
-        for (x in 0 until WIDTH) {
-            assertEquals(image.getRGB(x, 1), image.getRGB(x, HEIGHT - 2), "column $x changes between top and bottom")
+        val scene = drawing.scene
+        assertEquals(26, scene.columns)
+        assertTrue(scene.columns * GlitchScene.BLOCK_PX <= width)
+        // Along a row of blocks, every lit run of one colour is a whole block less its gap.
+        for (y in listOf(12, height - 12)) {
+            var start = 0
+            for (x in 1..width) {
+                val ends = x == width || image.getRGB(x, y) != image.getRGB(start, y)
+                if (!ends) continue
+                if (brightest(image.getRGB(start, y)) > 30 && start > 0 && x < width) {
+                    assertTrue(x - start >= 22, "a run of one colour at y $y from $start is ${x - start} px")
+                }
+                start = x
+            }
         }
-        val runs = litRuns(image, 20)
-        assertTrue(runs.size in 40..64, "expected the bars as separate runs, found ${runs.size}")
-        val loud = runs.take(8).average()
-        val quiet = runs.takeLast(8).average()
-        assertTrue(loud > quiet * 1.5, "loud bars are $loud px wide and quiet bars $quiet px")
+        // The loud low bands light the bottom rows of the newest columns more than the top rows.
+        val from = width - width / 4
+        var bottom = 0.0
+        var top = 0.0
+        for (x in from until width) {
+            for (y in height - 40 until height) bottom += luma(image.getRGB(x, y))
+            for (y in 0 until 40) top += luma(image.getRGB(x, y))
+        }
+        assertTrue(bottom > top * 1.3, "the loud low bands light the bottom rows: $bottom against $top")
     }
 
     @Test
     fun aKickFringesTheEdgesInRedGreenAndBlueAndTheyAreCleanAgain120MillisecondsLater() {
-        val keep = { step: Int -> step == 90 || step == 97 }
-        val base = render(WIDTH, HEIGHT, 98, keep) { GlitchFrames.frame(it, LOUD_LOW) }
-        val kicked = render(WIDTH, HEIGHT, 98, keep) {
-            GlitchFrames.frame(it, LOUD_LOW, hits = if (it == 90) listOf(AudioEventKind.LowTransient to 0.9f) else emptyList())
+        // The kick lands once four seconds of music fill every column.
+        val keep = { step: Int -> step == 270 || step == 277 }
+        val base = render(WIDTH, HEIGHT, 278, keep) { GlitchFrames.frame(it, LOUD_LOW) }
+        val kicked = render(WIDTH, HEIGHT, 278, keep) {
+            GlitchFrames.frame(it, LOUD_LOW, hits = if (it == 270) listOf(AudioEventKind.LowTransient to 0.9f) else emptyList())
         }
-        ImageIO.write(kicked.getValue(90), "png", File(directory, "kick.png"))
-        assertEquals(0, fringes(base.getValue(90)).sum(), "a clean frame has no red, green or blue")
-        val split = fringes(kicked.getValue(90))
-        for ((channel, name) in listOf("red", "green", "blue").withIndex()) {
-            assertTrue(split[channel] > WIDTH * HEIGHT / 200, "a kick shows $name fringes: ${split[channel]} pixels")
-        }
-        assertContentEquals(pixels(base.getValue(97)), pixels(kicked.getValue(97)), "117 ms after the kick the edges are clean")
+        ImageIO.write(kicked.getValue(270), "png", File(directory, "kick.png"))
+        assertEquals(0, fringes(base.getValue(270)).sum(), "a clean frame has no red, green or blue")
+        // Blocks sit one pixel apart, so most of a split shows as shifted colour where blocks meet. A pure
+        // edge shows only in a channel the neighbouring swatches leave dark: with cyan and yellow blocks,
+        // green and blue edges and no red ones.
+        val split = fringes(kicked.getValue(270))
+        println("glitch: a kick fringes ${split.toList()} pixels and changes ${changedShare(base.getValue(270), kicked.getValue(270))}")
+        assertTrue(split.sum() > WIDTH * HEIGHT / 200, "a kick shows pure fringes: ${split.toList()} pixels")
+        assertTrue(split.count { it > WIDTH * HEIGHT / 400 } >= 2, "a kick fringes two channels at least: ${split.toList()}")
+        assertTrue(changedShare(base.getValue(270), kicked.getValue(270)) > 0.05f, "a kick shifts the colour at every block edge")
+        assertContentEquals(pixels(base.getValue(277)), pixels(kicked.getValue(277)), "117 ms after the kick the edges are clean")
     }
 
     @Test
@@ -151,20 +176,23 @@ class GlitchRenderTest {
     }
 
     @Test
-    fun barsTakeTheirSetInTurnAndNoBarIsRedGreenOrBlue() {
+    fun blocksTakeTheirSetInTurnAndNoBlockIsRedGreenOrBlue() {
+        val newest = ArrayList<Float>()
         for (set in 0..2) {
             val sections = (1..set).map { 30 + it * 10 }.toSet()
             val image = render(WIDTH, HEIGHT, 80, { it == 79 }) {
                 GlitchFrames.frame(it, EVEN, structure = if (it in sections) AudioEventKind.SectionBoundary else null)
             }.getValue(79)
             ImageIO.write(image, "png", File(directory, "set-$set.png"))
-            assertEquals(0, fringes(image).sum(), "set $set draws a red, green or blue bar")
-            val hues = litRuns(image, 20, centres = true).map { hueOf(image.getRGB(it, 20)) }
-            assertTrue(hues.size >= 12)
-            for (bar in 0 until 9) {
-                assertTrue(hueDistance(hues[bar], hues[bar + 3]) < 12f, "bars $bar and ${bar + 3} of set $set differ")
-                assertTrue(hueDistance(hues[bar], hues[bar + 1]) > 30f, "bars $bar and ${bar + 1} of set $set look alike")
-            }
+            assertEquals(0, fringes(image).sum(), "set $set draws a red, green or blue block")
+            // The newest blocks heard the same even bands, so they share one swatch of the set.
+            val hues = litRuns(image, 20, centres = true).filter { it > WIDTH - WIDTH / 6 }.map { hueOf(image.getRGB(it, 20)) }
+            assertTrue(hues.size >= 2, "set $set shows ${hues.size} new blocks")
+            for (hue in hues) assertTrue(hueDistance(hue, hues[0]) < 12f, "the new blocks of set $set differ: $hues")
+            newest += hues[0]
+        }
+        for (a in 0..2) for (b in a + 1..2) {
+            assertTrue(hueDistance(newest[a], newest[b]) > 30f, "sets $a and $b look alike: $newest")
         }
     }
 

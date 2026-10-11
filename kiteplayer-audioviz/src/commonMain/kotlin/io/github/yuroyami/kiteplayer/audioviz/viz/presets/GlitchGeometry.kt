@@ -11,9 +11,11 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.BARS
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.ROWS_MOST
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.SCAN_HALF
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.TRACE_BAND
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.TRACE_POINTS
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -21,11 +23,11 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * The clean picture of [Glitch] as one batch of shapes: the bars, the streaks of a melt and the trace.
+ * The clean picture of [Glitch] as one batch of shapes: the blocks of the spectrogram and the trace.
  *
- * The bars keep hard pixel edges. When the colour layers split, the batch is drawn three times, once
- * per channel, each on a layer of its own that adds its light, so where the layers meet the colour is
- * the same and only the edges show red, green and blue.
+ * The blocks keep hard pixel edges and a one pixel gap. When the colour layers split, the batch is drawn
+ * three times, once per channel, each on a layer of its own that adds its light, so where the layers meet
+ * the colour is the same and only the edges show red, green and blue.
  */
 internal class GlitchGeometry {
 
@@ -34,8 +36,6 @@ internal class GlitchGeometry {
 
     private val saved = IntArray(MOST_VERTICES)
     private val adding = Paint().apply { blendMode = BlendMode.Plus }
-    private val rowY = FloatArray(5)
-    private val rowColour = IntArray(5)
     private val traceX = FloatArray(TRACE_POINTS)
     private val traceY = FloatArray(TRACE_POINTS)
 
@@ -43,28 +43,96 @@ internal class GlitchGeometry {
     fun build(scene: GlitchScene, width: Float, height: Float) {
         picture.clear()
         if (width <= 0f || height <= 0f) return
-        val collapse = scene.collapse
         val middle = height * 0.5f
+        val set = scene.channel % SETS.size
+        if (scene.collapse >= MERGE_AT) addLine(scene, set, width, height, middle) else addBlocks(scene, set, width, height, middle)
+        addTrace(scene, width, height, middle, scene.collapse)
+    }
+
+    /**
+     * The spectrogram: bass in the bottom row, the newest column on the right, a clear band across the middle
+     * for the ribbon. A collapse folds the rows toward the middle; the tracking roll moves them and wraps.
+     */
+    private fun addBlocks(scene: GlitchScene, set: Int, width: Float, height: Float, middle: Float) {
+        val collapse = scene.collapse
+        val columns = scene.columns
+        val rows = scene.rows
+        val cellWidth = width / columns
+        val band = height * TRACE_BAND
+        val cellHeight = (height - band) / rows
+        val lower = rows / 2
+        val fold = 1f - collapse * (1f - LINE_SHARE)
+        val roll = scene.trackingY * height * (1f - collapse)
+        val scan = scene.scanStrength * (1f - collapse)
+        val scanY = scene.scanAt * height
+        val scanReach = SCAN_HALF * height
+        for (column in 0 until columns) {
+            val left = (column * cellWidth).roundToInt().toFloat()
+            val right = ((column + 1) * cellWidth).roundToInt().toFloat() - GAP
+            if (right <= left) continue
+            for (row in 0 until rows) {
+                val floor = if (row < lower) height - row * cellHeight else height - row * cellHeight - band
+                val top = (middle + (floor - cellHeight - middle) * fold + roll).roundToInt().toFloat()
+                val bottom = (middle + (floor - middle) * fold + roll).roundToInt().toFloat() - GAP
+                if (bottom <= top) continue
+                var light = scene.blockLight(column, row)
+                if (scan >= 0.01f) {
+                    val near = (1f - abs((top + bottom) * 0.5f - scanY) / scanReach).coerceIn(0f, 1f)
+                    light += (1f - light) * SCAN_LIFT * scan * near
+                }
+                light += (1f - light) * collapse * LINE_LIGHT
+                var white = scene.white[column * ROWS_MOST + row]
+                white += (1f - white) * collapse * LINE_WHITE
+                val colour = colour(swatchOf(set, scene.blockLevel(column, row)), light, white)
+                addWrapped(left, right, top, bottom, height, colour)
+            }
+        }
+    }
+
+    /** One block, the part rolled past an edge drawn at the other edge. */
+    private fun addWrapped(left: Float, right: Float, top: Float, bottom: Float, height: Float, colour: Int) {
+        when {
+            bottom > height -> {
+                if (top < height) picture.bar(left, right, top, height, colour, colour)
+                picture.bar(left, right, max(0f, top - height), bottom - height, colour, colour)
+            }
+            top < 0f -> {
+                if (bottom > 0f) picture.bar(left, right, 0f, bottom, colour, colour)
+                picture.bar(left, right, top + height, min(height, bottom + height), colour, colour)
+            }
+            else -> picture.bar(left, right, top, bottom, colour, colour)
+        }
+    }
+
+    /** The line of a breakdown: one bright bar per column, closing its gaps as the picture folds away. */
+    private fun addLine(scene: GlitchScene, set: Int, width: Float, height: Float, middle: Float) {
+        val collapse = scene.collapse
         val half = max(height * 0.5f * (1f - collapse * (1f - LINE_SHARE)), 1f)
         val top = (middle - half).roundToInt().toFloat()
         val bottom = (middle + half).roundToInt().toFloat().coerceAtLeast(top + 1f)
-        val set = scene.channel % SETS.size
-        // Collapsing, the bars also close their gaps, so the line of a breakdown is unbroken.
         val share = BAR_SHARE + (1f - BAR_SHARE) * collapse
-        for (bar in 0 until BARS) {
-            val left = (scene.edges[bar] * width).roundToInt().toFloat()
-            val slot = (scene.edges[bar + 1] * width).roundToInt().toFloat() - left
+        val columns = scene.columns
+        for (column in 0 until columns) {
+            val left = (column * width / columns).roundToInt().toFloat()
+            val slot = ((column + 1) * width / columns).roundToInt().toFloat() - left
             if (slot < 1f) continue
             val right = left + max(1f, (slot * share).roundToInt().toFloat())
-            val hue = SETS[set][bar % 3]
-            val light = scene.exposure[bar] + (1f - scene.exposure[bar]) * collapse * LINE_LIGHT
-            val white = scene.white[bar] + (1f - scene.white[bar]) * collapse * LINE_WHITE
-            addBar(scene, hue, left, right, top, bottom, light, white, collapse)
-            if (scene.melt[bar] >= 0f && collapse < 0.5f) {
-                addMelt(scene, bar, hue, left, right, top, bottom, light, white)
+            var light = 0f
+            var white = 0f
+            var level = 0f
+            for (row in 0 until scene.rows) {
+                light += scene.blockLight(column, row)
+                white += scene.white[column * ROWS_MOST + row]
+                level += scene.blockLevel(column, row)
             }
+            light /= scene.rows
+            white /= scene.rows
+            level /= scene.rows
+            light += (1f - light) * collapse * LINE_LIGHT
+            white += (1f - white) * collapse * LINE_WHITE
+            val colour = colour(swatchOf(set, level), light, white)
+            picture.bar(left, right, top, bottom, colour, colour)
         }
-        addTrace(scene, width, height, middle, collapse)
     }
 
     /**
@@ -91,78 +159,6 @@ internal class GlitchGeometry {
             }
         }
         saved.copyInto(picture.colors, 0, 0, count)
-    }
-
-    /** One bar, from [top] to [bottom], brighter where the scan bar crosses it. */
-    private fun addBar(scene: GlitchScene, hue: Int, left: Float, right: Float, top: Float, bottom: Float,
-        light: Float, white: Float, collapse: Float) {
-        val scan = scene.scanStrength * (1f - collapse)
-        val base = colour(hue, light, white)
-        if (scan < 0.01f) {
-            picture.bar(left, right, top, bottom, base, base)
-            return
-        }
-        val tall = bottom - top
-        val centre = top + scene.scanAt * tall
-        val reach = SCAN_HALF * tall
-        rowY[0] = top
-        rowY[1] = (centre - reach).coerceIn(top, bottom)
-        rowY[2] = centre.coerceIn(top, bottom)
-        rowY[3] = (centre + reach).coerceIn(top, bottom)
-        rowY[4] = bottom
-        for (row in rowY.indices) {
-            val near = (1f - kotlin.math.abs(rowY[row] - centre) / reach).coerceIn(0f, 1f)
-            rowColour[row] = if (near <= 0f) base else colour(hue, light + (1f - light) * SCAN_LIFT * scan * near, white)
-        }
-        for (row in 0 until 4) {
-            if (rowY[row + 1] <= rowY[row]) continue
-            picture.bar(left, right, rowY[row], rowY[row + 1], rowColour[row], rowColour[row + 1])
-        }
-    }
-
-    /**
-     * A melting bar, the way a column looks once it is sorted by brightness: its light pours down,
-     * dark at the top and bright at the foot, and in each thin strip a short white streak falls.
-     * Each strip starts and falls on its own, so the bar breaks into streaks, and as the melt runs
-     * out the bar returns to its own colour.
-     */
-    private fun addMelt(scene: GlitchScene, bar: Int, hue: Int, left: Float, right: Float, top: Float, bottom: Float,
-        light: Float, white: Float) {
-        val run = scene.melt[bar]
-        val strength = 1f - run * run
-        val tall = bottom - top
-        val drained = colour(hue, light * (1f - 0.7f * strength), white)
-        val pooled = colour(hue, light + (1f - light) * 0.8f * strength, white + (1f - white) * 0.3f * strength)
-        picture.bar(left, right, top, bottom, drained, pooled)
-        val hot = colour(hue, light + (1f - light) * strength, white + (1f - white) * 0.85f * strength)
-        val wide = right - left
-        val strips = (wide / MELT_STRIP).toInt().coerceIn(1, MOST_STRIPS)
-        val seed = scene.meltSeed[bar]
-        for (strip in 0 until strips) {
-            val from = left + (wide * strip / strips).roundToInt()
-            val to = left + (wide * (strip + 1) / strips).roundToInt()
-            if (to <= from) continue
-            val start = 0.06f + 0.44f * hash(seed, strip * 3)
-            val length = 0.07f + 0.13f * hash(seed, strip * 3 + 1)
-            val fallen = (0.25f + 0.35f * hash(seed, strip * 3 + 2)) * run.pow(0.7f) * scene.fall
-            val head = (top + (start + length + fallen) * tall).coerceAtMost(bottom).roundToInt().toFloat()
-            val tail = (top + (start + fallen * 0.5f) * tall).coerceAtMost(head).roundToInt().toFloat()
-            if (head - tail < 1f) continue
-            // The streak leaves the sorted bar at the colour the bar has there, so only its head shows.
-            picture.bar(from, to, tail, head, blend(drained, pooled, (tail - top) / tall), hot)
-        }
-    }
-
-    /** The colour [amount] of the way from [from] to [to], channel by channel, as the mesh blends them. */
-    private fun blend(from: Int, to: Int, amount: Float): Int {
-        val t = amount.coerceIn(0f, 1f)
-        var out = 0
-        for (shift in 0..24 step 8) {
-            val a = from ushr shift and 0xFF
-            val b = to ushr shift and 0xFF
-            out = out or ((a + (b - a) * t).roundToInt().coerceIn(0, 255) shl shift)
-        }
-        return out
     }
 
     /** The waveform as a thick white ribbon across the middle, or along the line of a breakdown. */
@@ -207,10 +203,16 @@ internal class GlitchGeometry {
     }
 
     private companion object {
-        const val MOST_VERTICES = 2_800
-        const val MOST_INDICES = 4_800
+        const val MOST_VERTICES = 6_000
+        const val MOST_INDICES = 9_000
 
-        /** How much of its slot a bar fills. The rest is black, like the gaps between subpixels. */
+        /** The black gap below and to the right of every block, in pixels. */
+        const val GAP = 1f
+
+        /** Past this much collapse the rows merge into one bar per column. */
+        const val MERGE_AT = 0.5f
+
+        /** How much of its slot a column of the line fills before the line closes. */
         const val BAR_SHARE = 0.7f
 
         /** The line of a breakdown, as a share of the height, and how bright and white it glows. */
@@ -223,12 +225,8 @@ internal class GlitchGeometry {
         const val LINE_REACH = 0.08f
         const val TRACE_THICKNESS = 0.011f
 
-        /** How much of the way to full light the scan bar lifts a bar. */
+        /** How much of the way to full light the scan bar lifts a block. */
         const val SCAN_LIFT = 0.6f
-
-        /** A melt's strips are about this many pixels wide, and a bar has at most this many. */
-        const val MELT_STRIP = 3f
-        const val MOST_STRIPS = 5
 
         /** Red, green and blue alone, alpha kept. */
         val CHANNELS = intArrayOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt())
@@ -240,18 +238,13 @@ internal class GlitchGeometry {
         val SWATCH_HUE = floatArrayOf(0f, 205f, 350f, 105f, 85f, 320f, 50f)
 
         /**
-         * Three colours at a time, in turn across the bars like the subpixels of a screen seen up
-         * close. A channel change moves to the next set, and every bar changes colour with it. No set
-         * holds red, green or blue: those appear only as the fringes of a split.
+         * Three colours at a time: a quiet block takes the first, a loud one the third. A channel change
+         * moves to the next set, and every block changes colour with it. No set holds red, green or blue:
+         * those appear only as the fringes of a split.
          */
         val SETS = arrayOf(intArrayOf(1, 2, 3), intArrayOf(4, 1, 5), intArrayOf(5, 6, 1))
 
-        /** A repeatable number from 0 to 1 for [seed] and [index]. */
-        fun hash(seed: Int, index: Int): Float {
-            var h = seed * 374_761_393 + index * 668_265_263
-            h = (h xor (h ushr 13)) * 1_274_126_177
-            h = h xor (h ushr 16)
-            return (h and 0xFFFF) / 65_535f
-        }
+        /** The swatch of [set] for a block at [level]: its strength in thirds. */
+        fun swatchOf(set: Int, level: Float): Int = SETS[set][min(2, (GlitchScene.response(level) * 3f).toInt())]
     }
 }

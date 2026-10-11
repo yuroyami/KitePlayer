@@ -22,7 +22,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.PixelImage
 import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.BARS
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -33,7 +32,7 @@ import kotlin.math.roundToInt
  * the static of a channel change.
  *
  * A datamosh keeps the last clean frame at half the screen's resolution and moves it down in columns
- * of 16 screen pixels, each at the speed its band sets. What each column leaves behind at the top is
+ * of 16 screen pixels, each at the speed the spectrogram column under it sets. What each column leaves behind at the top is
  * the new picture, a few rows a frame, so the old frame smears into the new one. It is drawn with no
  * filtering, which keeps the hard pixel edges of damaged video. Two bitmaps are kept and swapped, and
  * nothing is allocated while no datamosh runs.
@@ -65,12 +64,10 @@ internal class GlitchFields {
         }
         block = (BLOCK_PIXELS * SCALE).roundToInt().coerceAtLeast(1)
         columns = min((width + block - 1) / block, MOST_COLUMNS)
-        // Each column moves at the speed of the band whose slot it stood in when the frame froze.
-        var slot = 0
+        // Each column moves at the speed of the spectrogram column it stood in when the frame froze.
         for (column in 0 until columns) {
             val at = (column + 0.5f) * block / width
-            while (slot < BARS - 1 && scene.edges[slot + 1] <= at) slot++
-            band[column] = slot
+            band[column] = (at * scene.columns).toInt().coerceIn(0, scene.columns - 1)
             carried[column] = 0f
         }
     }
@@ -87,7 +84,7 @@ internal class GlitchFields {
         val width = from.width
         val height = from.height
         for (column in 0 until columns) {
-            val speed = (SLOWEST + FASTEST * GlitchScene.response(scene.glow[band[column]])) / scene.cycleSeconds
+            val speed = (SLOWEST + FASTEST * GlitchScene.response(scene.columnLevel(band[column]))) / scene.cycleSeconds
             carried[column] += speed * scene.moshMotion * seconds * height
             val whole = floor(carried[column]).toInt().coerceIn(0, height)
             moved[column] = whole

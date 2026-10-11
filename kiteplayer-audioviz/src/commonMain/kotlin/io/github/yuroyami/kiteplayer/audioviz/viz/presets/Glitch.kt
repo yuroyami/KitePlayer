@@ -22,9 +22,10 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
 import kotlin.math.roundToInt
 
 /**
- * The music's own signal as a broken broadcast. Sixty-four bars in cyan, magenta and yellow run the
- * full height and share the width by loudness, like a barcode, with the waveform as a thick white
- * trace across the middle and a brighter scan bar rolling down once a bar.
+ * The music's own signal as a broken broadcast: the spectrogram as large blocks. Across is time, four
+ * heard seconds scrolling to the left; up is band, with the bass at the bottom. A block takes the first,
+ * second or third swatch of the set by its level. The waveform is a thick white trace across a clear band
+ * in the middle, and a brighter scan bar rolls down once a bar.
  *
  * The drums break it the way damaged video breaks: a kick splits the red, green and blue layers for
  * a moment, a snare tears slices sideways, a hat melts the brightest bars. A section changes the
@@ -42,7 +43,8 @@ internal class Glitch : Layered(
 
     override val mapping: VizMapping by mappingOf(
         VizDrive(VizDriver.Bands, VizProperty.Brightness, response = VizResponse.envelope(GlitchScene.GLOW_RISE)),
-        VizDrive(VizDriver.Bands, VizProperty.Shape, response = VizResponse.envelope(GlitchScene.WIDTH_RISE)),
+        // The newest column of blocks is the bands now.
+        VizDrive(VizDriver.Bands, VizProperty.Shape, response = VizResponse.envelope(GlitchScene.GLOW_RISE)),
         VizDrive(VizDriver.Level, VizProperty.Brightness),
         VizDrive(VizDriver.Waveform, VizProperty.Shape),
         VizDrive(VizDriver.LowHit, VizProperty.Colour, VizCurve.Scaled, VizResponse.lifetime(GlitchScene.SPLIT_SECONDS)),
@@ -80,6 +82,7 @@ internal class Glitch : Layered(
     override fun DrawScope.drawTop(state: VizRenderState) {
         // The frame last shown is still in the batch until it is rebuilt, so it is the one that freezes.
         if (scene.takeMoshStart()) with(fields) { freeze(geometry.picture, scene) }
+        scene.layout(size.width, size.height)
         geometry.build(scene, size.width, size.height)
         if (scene.moshing) with(fields) { slide(geometry.picture, scene, scene.takeMoshSeconds()) }
         drawRect(Color.Black)

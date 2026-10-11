@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
  * second or third swatch of the set by its level. The waveform is a thick white trace across a clear band
  * in the middle, and a brighter scan bar rolls down once a bar. Dense music coarsens the blocks into
  * pairs and fours; that reads the frame's density, which no driver names, so the mapping declares nothing
- * for it.
+ * for it. The key biases only which set the next section brings, so it declares nothing either.
  *
  * The drums break it the way damaged video breaks: a kick splits the red, green and blue layers for
  * a moment, a snare tears slices sideways by how much the spectrum changed, and a hat slips one row of
@@ -68,8 +68,6 @@ internal class Glitch : Layered(
         VizDrive(VizDriver.Mood, VizProperty.Shape, response = VizResponse.Rate),
         VizDrive(VizDriver.Section, VizProperty.Colour, VizCurve.Discrete),
         VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
-        // The key biases which set the next channel shows.
-        VizDrive(VizDriver.Key, VizProperty.Colour),
         VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete),
         VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete),
         silence = VizSilence.Still,

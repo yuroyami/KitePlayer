@@ -402,7 +402,8 @@ internal class GlitchScene {
         if (gestures.hats > 0 && !held) {
             slipRow = (random.next() * rows).toInt().coerceIn(0, rows - 1)
             val sign = if (random.next() < 0.5f) -1f else 1f
-            slipShift = SLIP * (0.5f + 0.5f * random.next()) * sign * motion
+            // One to two blocks, so the slip reads as a broken row at any size.
+            slipShift = SLIP_BLOCKS * (1f + random.next()) / columns * sign * motion
             slipFrames = 2 + (random.next() * 3f).toInt().coerceAtMost(2)
         }
     }
@@ -615,8 +616,8 @@ internal class GlitchScene {
         const val SPLIT_MOST = 0.007f
         const val SPLIT_SECONDS = 0.12f
 
-        /** The most a hat slips a row sideways, as a share of the width. */
-        const val SLIP = 0.03f
+        /** The least a hat slips a row sideways, in blocks. It slips up to twice as far. */
+        const val SLIP_BLOCKS = 1f
 
         /** The forms, in the order a morph moves through the first three. */
         val FORMS = listOf("Broadcast", "Tracking", "Mosh", "Dead air")

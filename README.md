@@ -11,6 +11,11 @@
 </p>
 
 <p align="center">
+  <sub>AI tools wrote much of the code, tests and documentation in this project, under the direction
+  and review of its author.</sub>
+</p>
+
+<p align="center">
   <kbd>&nbsp;Android&nbsp;</kbd>&nbsp;
   <kbd>&nbsp;iOS&nbsp;</kbd>&nbsp;
   <kbd>&nbsp;macOS&nbsp;</kbd>&nbsp;

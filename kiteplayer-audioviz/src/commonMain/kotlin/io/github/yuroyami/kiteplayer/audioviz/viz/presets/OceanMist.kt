@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.toArgb
 import io.github.yuroyami.kiteplayer.audioviz.AudioEvent
 import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.Particles
@@ -29,6 +30,8 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.glow
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import io.github.yuroyami.kiteplayer.audioviz.viz.retentionOf
 import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import io.github.yuroyami.kiteplayer.audioviz.viz.toOklab
@@ -53,7 +56,12 @@ import kotlin.math.tanh
  * band, the bass in front and the treble at the horizon, and the moon breathes with the bass. Mist
  * lies on the horizon. The level sets the light, a kick lifts the front rows, a snare throws spray,
  * and the hats thicken the glitter. On a drop a wave three times the normal swell rolls in over a bar
- * and breaks across the whole width.
+ * and breaks across the whole width, under a short flash of lightning in the sky.
+ *
+ * The weather sets the form: Glass when the music is calm, Swell, Storm when it is loud and dark,
+ * and Tide in a breakdown, when the water draws back off a band of wet sand. A morph turns the swell
+ * the other way and moves the horizon; a birth rolls a front of a new hue in from the horizon. The
+ * viewer glides forward and down on the slow cycle, and the moon and the sky walk from dusk to night.
  */
 internal class OceanMist : Layered(
     name = "Ocean Mist",
@@ -75,8 +83,9 @@ internal class OceanMist : Layered(
         VizDrive(VizDriver.HighHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.envelope(HAT_SECONDS)),
         VizDrive(VizDriver.Width, VizProperty.Size, response = VizResponse.envelope(WIDTH_SECONDS)),
         VizDrive(VizDriver.Mood, VizProperty.Shape, response = VizResponse.envelope(MOOD_SECONDS)),
-        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(BREAKDOWN_SECONDS)),
-        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(GLIDE_SECONDS)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
+        // The morph: the swell turns and the horizon moves.
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
         VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(WAVE_SECONDS)),
         VizDrive(VizDriver.Key, VizProperty.Colour, response = VizResponse.envelope(KEY_SECONDS)),
         echoes = true,
@@ -85,6 +94,8 @@ internal class OceanMist : Layered(
     override val cameraOnEcho: Boolean get() = false
     override val frontParallax: Float get() = 0f
     override val post: PostSpec get() = FINISH
+
+    override val forms: FormReadout get() = FormReadout(formName, evolution.morphs, evolution.births)
 
     /** The background trail: how long the moon's glow lingers. The sea itself never smears. */
     override val trail: Float get() = trails.value
@@ -132,9 +143,34 @@ internal class OceanMist : Layered(
     private var crestX = 0.5f
     private var crestHeight = 0f
     private var breakdown = 0f
-    private var breakdownHeld = false
-    private var breakdownCycles = 0
-    private var cyclesSeen = 0
+
+    // The weather and its forms: the tide a breakdown brings, the swell's direction and the horizon a morph moves.
+    private var weather = 0.5f
+    private var storm = 0f
+    private var glass = 0f
+    private val tide = Envelope(1f, 0.5f)
+    private var inTide = false
+    private var swellSign = 1f
+    private var horizonTarget = HORIZON
+    private val horizonSlew = Slew(HORIZON_SPEED, HORIZON)
+    private var horizon = HORIZON
+    private var front = FRONT
+
+    // The weather front a birth rolls in from the horizon, as a hue turn in degrees.
+    private var frontMarker = 0f
+    private var frontOn = false
+    private var bornTurn = 0f
+    private var seaTurn = 0f
+
+    // The camera glide on the slow cycle, the drop's lightning and the walking sky.
+    private val presence = Envelope(2f, 0.5f)
+    private val glide = Slew(GLIDE_SPEED)
+    private var lightning = 0f
+    private var skyTurn = 0f
+    private var skyLift = WALK_LIFT
+    private val moonSlew = Slew(MOON_SPEED, MOON_LEFT)
+    private val turnSlew = Slew(WALK_TURN_SPEED)
+    private val liftSlew = Slew(WALK_LIFT_SPEED, WALK_LIFT)
 
     // The wave: its progress over one bar, how long that bar is, the break it ends in, and the mist it blows off.
     private var waveOn = false
@@ -146,11 +182,9 @@ internal class OceanMist : Layered(
     private var foam = 0f
     private var anticipated: AudioEvent? = null
 
-    // The moon, in shares of the screen, gliding to a new place at a section.
-    private var moonX = MOON_X
-    private var moonRise = MOON_RISE
-    private var moonToX = MOON_X
-    private var moonToRise = MOON_RISE
+    // The moon, in shares of the screen, placed by the walk.
+    private var moonX = MOON_LEFT
+    private var moonRise = MOON_RISE_LOW
 
     // Slow clocks: the glitter shimmer, which keeps a slow pace in silence, and the drift of the mist.
     private var shimmer = 0f
@@ -205,6 +239,48 @@ internal class OceanMist : Layered(
     /** The moon's radius, as a share of the picture's shorter side. */
     internal val moonRadiusValue: Float get() = MOON_RADIUS * (1f + MOON_BREATH * bass)
 
+    /** The form on screen: Tide while the tide is in, else the weather's Glass, Swell or Storm. */
+    internal val formName: String
+        get() = when {
+            tide.value > 0.5f -> FORMS[3]
+            weather < GLASS_BELOW -> FORMS[0]
+            weather > STORM_ABOVE -> FORMS[2]
+            else -> FORMS[1]
+        }
+
+    internal val swellSignValue: Float get() = swellSign
+    internal val horizonTargetValue: Float get() = horizonAim()
+    internal val horizonValue: Float get() = horizonSlew.value
+    internal val frontMarkerValue: Float get() = frontMarker
+    internal val glideValue: Float get() = glide.value
+    internal val moonXValue: Float get() = moonX
+    internal val moonRiseValue: Float get() = moonRise
+    internal val walkValue: Float get() = genes.walk
+
+    /** The hue turn of row [slot], in degrees: the arriving front's near its marker, the sea's own elsewhere. */
+    internal fun rowHueOffset(slot: Float): Float =
+        if (frontOn && abs(slot - frontMarker) <= FRONT_ROWS) bornTurn else seaTurn
+
+    /** Turns the swell the other way and moves the horizon, as the music's own morph does. */
+    internal fun morph() {
+        swellSign = -swellSign
+        // Always a move the eye can see: away from where the horizon stands, toward the other half of its range.
+        val reach = HORIZON_STEP + HORIZON_STEP_MORE * random.next()
+        val middle = 0.5f * (HORIZON_LOW + HORIZON_HIGH)
+        horizonTarget = (horizonTarget + if (horizonTarget > middle) -reach else reach).coerceIn(HORIZON_LOW, HORIZON_HIGH)
+    }
+
+    /** Rolls a front of a new hue in from the horizon, as the music's own birth does. */
+    internal fun birth() {
+        frontMarker = ROWS - 1f
+        frontOn = true
+        val span = min(cachedPalette?.hueSpan ?: FRONT_SPAN, FRONT_SPAN)
+        val size = (0.25f + 0.5f * random.next()) * span
+        bornTurn = if (seaTurn > 0f) -size else size
+    }
+
+    private fun horizonAim(): Float = horizonTarget + MOOD_HORIZON * (mood - 0.5f) - STORM_HORIZON * storm
+
     /** Row [row] of the sea at its 48 points: row 0 is the live row, row k is the front row k thirtieths of a second ago. */
     internal fun rowSamples(row: Int): FloatArray {
         if (row == 0) return live.copyOf()
@@ -237,6 +313,12 @@ internal class OceanMist : Layered(
         hats *= exp(-own / HAT_SECONDS)
         if (gestures.hat > 0f) hats = min(HAT_MOST, hats + HAT_JUMP * gestures.hatAccent)
         leanTowardsKey(frame.keyHue, frame.keyConfidence, own)
+
+        // The weather is the music's: it changes on the heard clock and holds through a silence.
+        weather += (0.5f * frame.energy + 0.5f * frame.mood - weather) * settle(step, MOOD_SECONDS)
+        storm = ((weather - STORM_ABOVE) / (1f - STORM_ABOVE)).coerceIn(0f, 1f)
+        glass = ((GLASS_BELOW - weather) / GLASS_BELOW).coerceIn(0f, 1f)
+        followForms(state, step, own)
 
         readRows(state, own)
         heard += step
@@ -285,12 +367,19 @@ internal class OceanMist : Layered(
                 extract(middle, count, gain, swell, reading)
                 extract(left, count, gain, swell, readingLeft)
                 extract(right, count, gain, swell, readingRight)
+                if (swellSign < 0f) {
+                    reading.reverse()
+                    readingLeft.reverse()
+                    readingRight.reverse()
+                }
                 blendInto(leftRow, readingLeft, follow)
                 blendInto(rightRow, readingRight, follow)
                 blendInto(live, reading, follow)
             }
         } else if (frame.scope.size >= MIN_SCOPE) {
             extract(frame.scope, min(SCOPE_USE, frame.scope.size), gain, swell, reading)
+            // A turned swell enters the front row mirrored, and rolls out to the horizon with the rows.
+            if (swellSign < 0f) reading.reverse()
             blendInto(live, reading, follow)
             live.copyInto(leftRow)
             live.copyInto(rightRow)
@@ -358,7 +447,7 @@ internal class OceanMist : Layered(
     private fun throwSpray(count: Int, motion: Float) {
         val aspect = kit.aspect
         val unit = min(aspect, 1f)
-        val top = FRONT - unit * SWELL * waveHeight.value * crestHeight
+        val top = front - unit * SWELL * waveHeight.value * crestHeight
         repeat(min(count, SPRAY_BURST_MOST)) {
             val angle = -1.5707964f + (random.next() - 0.5f) * 1.8f
             val speed = unit * (0.35f + 0.55f * random.next()) * (0.4f + 0.6f * motion)
@@ -374,34 +463,57 @@ internal class OceanMist : Layered(
         }
     }
 
-    /** The section, the breakdown and the drop: the moon, the mist and the wave. */
+    /**
+     * The forms: a drop's lightning, a breakdown's tide, a morph's turn and a birth's front, then the
+     * glide on the slow cycle and the moon and the sky on the walk.
+     */
+    private fun followForms(state: VizRenderState, step: Float, own: Float) {
+        // One frame can carry several events: a drop is also a section and a surge, a breakdown also a section.
+        if (evolution.bloom) {
+            lightning = 1f
+        } else if (evolution.collapse) {
+            inTide = true
+        } else if (evolution.morph) {
+            morph()
+        }
+        if (evolution.collapse) inTide = true else if (gestures.turn || gestures.surge) inTide = false
+        if (evolution.birth) birth()
+        lightning *= exp(-own / LIGHTNING_SECONDS)
+
+        tide.advance(if (inTide) 1f else 0f, own)
+        breakdown = tide.value
+        front = FRONT - TIDE_RECEDE * tide.value
+        horizonSlew.advance(horizonAim(), step)
+
+        if (frontOn) {
+            frontMarker -= step * ROWS / (2f * gestures.cycleSeconds.coerceAtLeast(0.5f))
+            if (frontMarker <= 0f) {
+                frontMarker = 0f
+                seaTurn = bornTurn
+                frontOn = false
+            }
+        }
+
+        // Paused, the camera holds; in a silence the presence falls and the viewer comes home.
+        presence.advance(state.frame.audible, own)
+        val swing = 0.5f - 0.5f * cos(gestures.slowCyclePhase * TAU)
+        glide.advance(swing * presence.value * state.motionScale.coerceIn(0f, 1f), own)
+        horizon = horizonSlew.value - GLIDE_DOWN * glide.value
+
+        // The walk is not wrapped, so it is read only through a cosine. Its cycles run on in a silence,
+        // so the moon and the sky follow it on the heard clock and hold still until the music returns.
+        val share = 0.5f - 0.5f * cos(genes.walk * TAU)
+        moonX = moonSlew.advance(MOON_LEFT + (MOON_RIGHT - MOON_LEFT) * share, step)
+        val placed = ((moonX - MOON_LEFT) / (MOON_RIGHT - MOON_LEFT)).coerceIn(0f, 1f)
+        moonRise = MOON_RISE_LOW + (MOON_RISE_HIGH - MOON_RISE_LOW) * sin(PI_F * placed)
+        skyTurn = turnSlew.advance(skyHueOffsetFor(genes.walk), step)
+        skyLift = liftSlew.advance(skyLiftFor(genes.walk), step)
+    }
+
+    /** The drop's wave and its foam. */
     private fun followStructure(state: VizRenderState, step: Float, own: Float) {
         val bar = gestures.cycleSeconds.coerceIn(WAVE_BAR_SHORTEST, WAVE_BAR_LONGEST)
         val motion = state.motionScale.coerceIn(0f, 1f)
-
-        if (gestures.turn) {
-            var target = 0.2f + 0.6f * random.next()
-            if (abs(target - moonX) < 0.18f) target = if (moonX > 0.5f) target - 0.3f else target + 0.3f
-            target = target.coerceIn(MOON_LEFT, MOON_RIGHT)
-            moonToX = moonX + (target - moonX) * motion
-            moonToRise = MOON_RISE_LOW + (MOON_RISE_HIGH - MOON_RISE_LOW) * random.next()
-        }
-        // An easing that starts at once and settles within the first bar.
-        val glide = settle(step, bar / 4f)
-        moonX += (moonToX - moonX) * glide
-        moonRise += (moonToRise - moonRise) * glide
-
-        if (gestures.cycles != cyclesSeen) {
-            cyclesSeen = gestures.cycles
-            if (breakdownHeld && ++breakdownCycles >= BREAKDOWN_CYCLES) breakdownHeld = false
-        }
-        if (gestures.breakdown) {
-            breakdownHeld = true
-            breakdownCycles = 0
-        } else if (gestures.section || gestures.surge) {
-            breakdownHeld = false
-        }
-        breakdown += ((if (breakdownHeld) 1f else 0f) - breakdown) * settle(own, BREAKDOWN_SECONDS)
 
         // The wave starts on the drop, or earlier when the queued audio already shows the drop coming.
         val upcoming = state.future?.nextEvent(AudioEventKind.Drop)
@@ -440,7 +552,7 @@ internal class OceanMist : Layered(
         val aspect = kit.aspect
         val unit = min(aspect, 1f)
         val amplitude = unit * SWELL * waveHeight.value * RATIO.pow(slot * AMP_POWER)
-        val top = HORIZON + (FRONT - HORIZON) * near - amplitude * WAVE_HEIGHT
+        val top = horizon + (front - horizon) * near - amplitude * WAVE_HEIGHT
         while (foam >= 1f) {
             foam -= 1f
             val angle = -1.5707964f + (random.next() - 0.5f) * 1.4f
@@ -469,7 +581,7 @@ internal class OceanMist : Layered(
         repeat(count) {
             val x = random.next()
             val point = (x * (POINTS - 1)).toInt()
-            val top = FRONT - unit * SWELL * waveHeight.value * (WAVE_HEIGHT + live[point])
+            val top = front - unit * SWELL * waveHeight.value * (WAVE_HEIGHT + live[point])
             val angle = -1.5707964f + (random.next() - 0.5f) * 2.2f
             val speed = unit * (0.3f + 0.8f * random.next()) * (0.4f + 0.6f * motion)
             spray.spawn(
@@ -500,11 +612,21 @@ internal class OceanMist : Layered(
         val unit = size.minDimension
         val radius = unit * moonRadiusValue
         val x = moonX * size.width
-        val y = HORIZON * size.height - moonRise * unit
+        val y = horizon * size.height - moonRise * unit
         val alpha = (HALO_FLOOR + HALO_BASS * glow) * state.lightScale * keep
         halo.clear()
         halo.glow(x, y, radius * 2.6f, withAlpha(haloArgb, alpha), sides = 32)
         halo.glow(x, y, radius * 7f, withAlpha(haloArgb, alpha * 0.5f), sides = 32)
+        // The drop's lightning: one short lift of the sky alone, under the flash guard.
+        if (lightning > 0.01f) {
+            val flash = withAlpha(haloArgb, LIGHTNING * lightning * state.lightScale)
+            val sky = horizon * size.height
+            val a = halo.vertex(0f, 0f, flash)
+            val b = halo.vertex(size.width, 0f, flash)
+            val c = halo.vertex(size.width, sky, flash)
+            val d = halo.vertex(0f, sky, flash)
+            halo.quad(a, b, c, d)
+        }
         drawMesh(halo, BlendMode.Plus)
     }
 
@@ -528,8 +650,8 @@ internal class OceanMist : Layered(
         }
         // A palette that walks the whole circle names no colour of its own, so the sea keeps its swatches.
         val own = ((palette.hueSpan - 300f) / 60f).coerceIn(0f, 1f)
-        horizonHue = mixHue(lowHue, OWN_HORIZON_HUE + lean, own)
-        frontHue = mixHue(highHue, OWN_FRONT_HUE + lean, own)
+        horizonHue = mixHue(lowHue, OWN_HORIZON_HUE + lean, own) + skyTurn
+        frontHue = mixHue(highHue, OWN_FRONT_HUE + lean, own) + skyTurn
         val glitterHue = mixHue(capHue, OWN_GLITTER_HUE, own)
         val mistHue = mixHue(midHue, OWN_MIST_HUE, own)
         // The light follows the level; the idle share stands only while nothing is heard, and hands over smoothly.
@@ -546,13 +668,18 @@ internal class OceanMist : Layered(
         groundArgb = palette.background.toArgb()
     }
 
-    /** The row colour [along] the way from the horizon (0) to the front (1), at the screen's strongest chroma. */
-    private fun rowArgb(along: Float): Int {
+    /**
+     * The row colour [along] the way from the horizon (0) to the front (1), at the screen's strongest
+     * chroma, turned by [extra] degrees. The walking sky lifts the far rows at dusk and lowers them at night.
+     */
+    private fun rowArgb(along: Float, extra: Float = 0f): Int {
         var turn = frontHue - horizonHue
         while (turn > 180f) turn -= 360f
         while (turn < -180f) turn += 360f
-        val hue = horizonHue + turn * along
-        val lightness = min(cuspOf(hue) - HORIZON_DEPTH * (1f - along), 0.5f + 0.5f * along)
+        var hue = horizonHue + turn * along + extra
+        hue -= 360f * kotlin.math.floor(hue / 360f)
+        val lightness = (min(cuspOf(hue) - HORIZON_DEPTH * (1f - along), 0.5f + 0.5f * along) + skyLift * (1f - along))
+            .coerceIn(0.05f, 0.95f)
         return colourOf(lightness, max(0f, limitOf(lightness, hue) - HEADROOM), hue).toArgb()
     }
 
@@ -560,7 +687,7 @@ internal class OceanMist : Layered(
         val unit = size.minDimension
         val radius = unit * moonRadiusValue
         val x = moonX * size.width
-        val y = HORIZON * size.height - moonRise * unit
+        val y = horizon * size.height - moonRise * unit
         val white = (MOON_LIGHT + (1f - MOON_LIGHT) * lit) * state.lightScale
         // The rim is a little darker than the middle, as on the real moon, so the disc reads as a
         // sphere rather than as a lamp; the soft grey seas give it the moon's face.
@@ -604,8 +731,10 @@ internal class OceanMist : Layered(
             }
             val depth = (1f - slot / (ROWS - 1)).coerceIn(0f, 1f)
             val fade = (ROWS - slot).coerceIn(0f, 1f)
-            val colour = scaled(rowArgb(depth.pow(COLOUR_CURVE)), light * fade)
-            addBand(ysFar, ysNear, points, scaled(colour, FILL_LIGHT))
+            val colour = scaled(rowArgb(depth.pow(COLOUR_CURVE), rowHueOffset(slot)), light * fade)
+            // Under the front row the tide leaves wet sand where the water was.
+            val water = scaled(colour, FILL_LIGHT)
+            addBand(ysFar, ysNear, points, if (nearest) blend(water, scaled(rowArgb(1f), light * SAND_LIGHT), tide.value) else water)
             val white = scaled(WHITE, light * fade)
             val half = lineHalf(slot, unit)
             if (orderRing[entry] == LIVE && stereoOn) {
@@ -622,7 +751,25 @@ internal class OceanMist : Layered(
             whiteFar = whiteNear
             whiteNear = swapWhite
         }
+        if (tide.value > 0.01f) addStreak(w, h, unit)
         drawMesh(sea)
+    }
+
+    /** The moon's light on the wet sand: a soft vertical streak under the moon, below the water's edge. */
+    private fun addStreak(w: Float, h: Float, unit: Float) {
+        val half = MOON_RADIUS * unit
+        val top = front * h
+        val argb = withAlpha(haloArgb, STREAK * tide.value * light)
+        val clear = argb and 0x00FFFFFF
+        val x = moonX * w
+        val a = sea.vertex(x - half, top, clear)
+        val b = sea.vertex(x, top, argb)
+        val c = sea.vertex(x + half, top, clear)
+        val d = sea.vertex(x - half, h, clear)
+        val e = sea.vertex(x, h, withAlpha(haloArgb, 0f))
+        val f = sea.vertex(x + half, h, clear)
+        sea.quad(a, b, e, d)
+        sea.quad(b, c, f, e)
     }
 
     private fun pointsFor(width: Float): Int = (width / PIXELS_PER_POINT).toInt().coerceIn(MIN_POINTS, MAX_POINTS)
@@ -719,18 +866,18 @@ internal class OceanMist : Layered(
         points: Int,
         ys: FloatArray,
         white: FloatArray,
-        front: Boolean,
+        liveRow: Boolean,
         seed: Int,
         w: Float,
         h: Float,
         unit: Float,
     ) {
         val near = nearness(slot)
-        val amplitude = unit * SWELL * waveHeight.value * RATIO.pow(slot * AMP_POWER)
-        val base = HORIZON * h + (FRONT - HORIZON) * h * near
+        val amplitude = unit * SWELL * waveHeight.value * RATIO.pow(slot * AMP_POWER) * (1f + GLIDE_SWELL * glide.value)
+        val base = horizon * h + (front - horizon) * h * near
         val repeats = 1f + (REPEAT_FAR - 1f) * (1f - near)
-        val phase = if (front) 0f else hash01(seed) * (repeats - 1f) / (REPEAT_FAR - 1f)
-        val flatten = 1f - FLATTEN * breakdown
+        val phase = if (liveRow) 0f else hash01(seed) * (repeats - 1f) / (REPEAT_FAR - 1f)
+        val flatten = (1f - FLATTEN * breakdown) * (1f - GLASS_FLATTEN * glass)
         // Under reduced motion the wave is a sweep of white light rather than a wall.
         val wave = waveLift(slot) * motion
         val lift = kickLift * KICK_LIFT * unit * exp(-slot / KICK_DEPTH)
@@ -747,7 +894,7 @@ internal class OceanMist : Layered(
             val fine = ripple * sin(TAU * (across * RIPPLE_WAVES + slot * 0.37f + shimmer * 0.5f))
             ys[index] = base - amplitude * (value + wave * ridge) - lift - fine
             var whiteness = crest(value)
-            if (front) whiteness = max(whiteness, runnerWhite(across * w, w))
+            if (liveRow) whiteness = max(whiteness, runnerWhite(across * w, w))
             white[index] = max(max(whiteness, waveWhite), breakWhite).coerceAtMost(1f)
         }
     }
@@ -794,7 +941,11 @@ internal class OceanMist : Layered(
     private fun crest(value: Float): Float = smoothstep(CREST, CREST + CREST_SOFT, value)
 
     /** Share of the way from the horizon (0) to the front row (1) at which row [slot] lies. */
-    private fun nearness(slot: Float): Float = FAR + (1f - FAR) * (RATIO.pow(slot) - RATIO_LAST) / (1f - RATIO_LAST)
+    private fun nearness(slot: Float): Float {
+        // The glide carries the viewer forward, so each row lies a little farther out; none passes the horizon.
+        val at = slot + GLIDE_ROWS * glide.value
+        return (FAR + (1f - FAR) * (RATIO.pow(at) - RATIO_LAST) / (1f - RATIO_LAST)).coerceAtLeast(0f)
+    }
 
     private fun lineHalf(slot: Float, unit: Float): Float {
         val scale = sqrt(unit.coerceAtLeast(1f) / REFERENCE_HEIGHT).coerceIn(0.6f, 1.6f)
@@ -915,20 +1066,21 @@ internal class OceanMist : Layered(
     private fun DrawScope.drawMist(state: VizRenderState) {
         val w = size.width
         val h = size.height
-        val horizon = HORIZON * h
+        val horizonY = horizon * h
         val lifted = blow * MIST_BLOW * h
-        val farHalf = HORIZON * h + (FRONT - HORIZON) * h * nearness(ROWS * 0.5f)
-        val strength = ((MIST_IDLE + (MIST_PLAYING - MIST_IDLE) * awake * (0.5f + 0.5f * lit) + MIST_BREAKDOWN * breakdown) *
+        val farHalf = horizon * h + (front - horizon) * h * nearness(ROWS * 0.5f)
+        val strength = ((MIST_IDLE + (MIST_PLAYING - MIST_IDLE) * awake * (0.5f + 0.5f * lit) + MIST_BREAKDOWN * breakdown +
+            STORM_MIST * storm) *
             mistAmount.value * (1f - 0.85f * blow)).coerceIn(0f, MIST_MOST) * state.lightScale
         if (strength <= 0.002f) return
         val moon = moonX * w
         mist.clear()
         addBank(
-            w, horizon - lifted, h * MIST_UP * (0.7f + 0.3f * awake),
-            h * MIST_DOWN + breakdown * (farHalf - horizon - h * MIST_DOWN), h * MIST_TAIL,
+            w, horizonY - lifted, h * MIST_UP * (0.7f + 0.3f * awake),
+            h * MIST_DOWN + breakdown * (farHalf - horizonY - h * MIST_DOWN), h * MIST_TAIL,
             strength, drift, broken = false, moon,
         )
-        val nearY = horizon + (FRONT - HORIZON) * h * NEAR_BANK - lifted * 0.5f
+        val nearY = horizonY + (front - horizon) * h * NEAR_BANK - lifted * 0.5f
         addBank(w, nearY, h * NEAR_UP, h * NEAR_DOWN, h * NEAR_TAIL, strength * NEAR_SHARE, -0.7f * drift + 0.37f, broken = true, moon)
         drawMesh(mist, BlendMode.Plus)
     }
@@ -1021,9 +1173,28 @@ internal class OceanMist : Layered(
         crestX = 0.5f
         crestHeight = 0f
         breakdown = 0f
-        breakdownHeld = false
-        breakdownCycles = 0
-        cyclesSeen = 0
+        weather = 0.5f
+        storm = 0f
+        glass = 0f
+        tide.reset()
+        inTide = false
+        swellSign = 1f
+        horizonTarget = HORIZON
+        horizonSlew.reset(HORIZON)
+        horizon = HORIZON
+        front = FRONT
+        frontMarker = 0f
+        frontOn = false
+        bornTurn = 0f
+        seaTurn = 0f
+        presence.reset()
+        glide.reset()
+        lightning = 0f
+        skyTurn = 0f
+        skyLift = WALK_LIFT
+        moonSlew.reset(MOON_LEFT)
+        turnSlew.reset()
+        liftSlew.reset(WALK_LIFT)
         waveOn = false
         waveAt = 0f
         waveBar = 2f
@@ -1032,10 +1203,8 @@ internal class OceanMist : Layered(
         blow = 0f
         foam = 0f
         anticipated = null
-        moonX = MOON_X
-        moonRise = MOON_RISE
-        moonToX = MOON_X
-        moonToRise = MOON_RISE
+        moonX = MOON_LEFT
+        moonRise = MOON_RISE_LOW
         shimmer = 0f
         drift = 0f
         spray.clear()
@@ -1173,13 +1342,10 @@ internal class OceanMist : Layered(
         val MARIA_Y = floatArrayOf(-0.25f, 0.05f, 0.42f, -0.42f)
         val MARIA_R = floatArrayOf(0.4f, 0.3f, 0.24f, 0.16f)
         val MARIA_ALPHA = floatArrayOf(0.55f, 0.5f, 0.45f, 0.35f)
-        const val MOON_X = 0.64f
-        const val MOON_RISE = 0.11f
         const val MOON_RISE_LOW = 0.085f
         const val MOON_RISE_HIGH = 0.15f
         const val MOON_LEFT = 0.2f
         const val MOON_RIGHT = 0.8f
-        const val GLIDE_SECONDS = 0.6f
 
         // The glitter.
         const val COLUMN_MONO = 0.05f
@@ -1245,10 +1411,58 @@ internal class OceanMist : Layered(
         const val MIST_DRIFT = 0.05f
         const val BLOW_RETURN = 3f
 
-        // The breakdown.
+        // The breakdown's tide: how much it flattens the swell and how far the water draws back.
         const val FLATTEN = 0.55f
-        const val BREAKDOWN_SECONDS = 0.2f
-        const val BREAKDOWN_CYCLES = 16
+        const val TIDE_RECEDE = 0.12f
+        /** The wet sand's light, as a share of the sea's, and the moon's streak on it. */
+        const val SAND_LIGHT = 0.25f
+        const val STREAK = 0.3f
+
+        // The weather and its forms.
+        val FORMS = listOf("Glass", "Swell", "Storm", "Tide")
+        const val GLASS_BELOW = 0.3f
+        const val STORM_ABOVE = 0.65f
+        /** How much a storm lowers the horizon and thickens the mist, and how much glass flattens the swell. */
+        const val STORM_HORIZON = 0.04f
+        const val STORM_MIST = 0.5f
+        const val GLASS_FLATTEN = 0.5f
+
+        // The morph: the horizon's range, how far one morph moves it at least and at most, and how fast it follows.
+        const val HORIZON_LOW = 0.33f
+        const val HORIZON_HIGH = 0.43f
+        const val HORIZON_STEP = 0.03f
+        const val HORIZON_STEP_MORE = 0.04f
+        const val HORIZON_SPEED = 0.06f
+        const val MOOD_HORIZON = 0.03f
+
+        /** The birth's front: the rows it covers on each side of its marker, and the most of a palette's span it turns. */
+        const val FRONT_ROWS = 6f
+        const val FRONT_SPAN = 60f
+
+        // The camera glide: its speed, how many rows it carries the viewer forward, how it grows the swell and lowers the horizon.
+        const val GLIDE_SPEED = 0.15f
+        const val GLIDE_ROWS = 3f
+        const val GLIDE_SWELL = 0.12f
+        const val GLIDE_DOWN = 0.02f
+
+        // The drop's lightning, a share of the allowed light over the sky.
+        const val LIGHTNING = 0.3f
+        const val LIGHTNING_SECONDS = 0.12f
+
+        // The walking sky: the hue turn in degrees and the lift of the far rows' lightness.
+        const val WALK_TURN = 35f
+        const val WALK_LIFT = 0.06f
+        /** How fast the moon, the sky's turn and its lift follow the walk: about twice the walk's own fastest pace. */
+        const val MOON_SPEED = 0.05f
+        const val WALK_TURN_SPEED = 6f
+        const val WALK_LIFT_SPEED = 0.01f
+        const val PI_F = 3.1415927f
+
+        /** The sky's hue turn in degrees at [walk]: a sine, since the walk is not wrapped. */
+        fun skyHueOffsetFor(walk: Float): Float = WALK_TURN * sin(walk * TAU)
+
+        /** The lift of the far rows' lightness at [walk]: dusk at 0, night at a half, dawn at 1. */
+        fun skyLiftFor(walk: Float): Float = WALK_LIFT * cos(walk * TAU)
 
         // The wave.
         const val WAVE_SECONDS = 2f

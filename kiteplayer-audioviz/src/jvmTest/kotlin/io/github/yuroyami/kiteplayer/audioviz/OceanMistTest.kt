@@ -14,6 +14,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -73,9 +74,14 @@ class OceanMistTest {
     fun inSilenceOnlyTheGlitterChanges() {
         val before = IntArray(WIDTH * HEIGHT)
         val after = IntArray(WIDTH * HEIGHT)
-        RenderHarness.forEachFrame(OceanMist(), WIDTH, HEIGHT, 200, VizPalette.Prism, RenderHarness.Song.Silence) { bitmap, step ->
+        val sea = OceanMist()
+        var moon = 0f
+        RenderHarness.forEachFrame(sea, WIDTH, HEIGHT, 200, VizPalette.Prism, RenderHarness.Song.Silence) { bitmap, step ->
             if (step == 170) bitmap.readPixels(before)
-            if (step == 199) bitmap.readPixels(after)
+            if (step == 199) {
+                bitmap.readPixels(after)
+                moon = sea.moonXValue
+            }
         }
         var changed = 0
         var outside = 0
@@ -83,8 +89,8 @@ class OceanMistTest {
             if (abs(luma(before[index]) - luma(after[index])) < 0.03f) continue
             changed++
             val x = (index % WIDTH).toFloat() / WIDTH
-            // The glitter column hangs under the moon, which starts at 0.64 of the width.
-            if (x !in 0.44f..0.84f) outside++
+            // The glitter column hangs under the moon, which the walk places.
+            if (x !in (moon - 0.2f)..(moon + 0.2f)) outside++
         }
         println("silence: $changed pixels changed, $outside outside the glitter column")
         assertTrue(changed > 0, "the glitter should still shimmer in a silence")
@@ -212,6 +218,183 @@ class OceanMistTest {
         println("ripple: treble $high, bass $low")
         assertTrue(high > 0.3f, "the treble should ripple the rows, was $high")
         assertTrue(low < 0.1f, "the bass alone should leave the rows smooth, was $low")
+    }
+
+    @Test
+    fun theFormFollowsTheWeather() {
+        val calm = OceanMist()
+        RenderHarness.forEachFrame(calm, 64, 36, 300, VizPalette.Prism, RenderHarness.Song.Calm) { _, _ -> }
+        val lively = OceanMist()
+        RenderHarness.forEachFrame(lively, 64, 36, 300, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ -> }
+        val tidal = OceanMist()
+        var tide = ""
+        RenderHarness.forEachFrameOf(tidal, 64, 36, 127, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Breakdown, step) }) { _, step ->
+            if (step == 126) tide = tidal.forms!!.form
+        }
+        val calmForm = calm.forms!!.form
+        val livelyForm = lively.forms!!.form
+        println("forms: calm $calmForm, lively $livelyForm, breakdown $tide")
+        assertTrue(calmForm == "Glass" || calmForm == "Swell", "calm music should be Glass or Swell, was $calmForm")
+        assertTrue(livelyForm == "Swell" || livelyForm == "Storm", "lively music should be Swell or Storm, was $livelyForm")
+        assertEquals("Tide", tide)
+    }
+
+    @Test
+    fun aMorphTurnsTheSwellAndMovesTheHorizon() {
+        val sea = OceanMist()
+        var signBefore = 0f
+        var targetBefore = 0f
+        var signAfter = 0f
+        var targetAfter = 0f
+        var reached = -1
+        var largestStep = 0f
+        var last = Float.NaN
+        RenderHarness.forEachFrameOf(sea, 64, 36, 300, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }) { _, step ->
+            val now = sea.horizonValue
+            if (!last.isNaN()) largestStep = maxOf(largestStep, abs(now - last))
+            last = now
+            if (step == 69) {
+                signBefore = sea.swellSignValue
+                targetBefore = sea.horizonTargetValue
+                sea.morph()
+            }
+            if (step == 70) {
+                signAfter = sea.swellSignValue
+                targetAfter = sea.horizonTargetValue
+            }
+            if (step > 70 && reached < 0 && abs(now - sea.horizonTargetValue) < 1e-3f) reached = step
+        }
+        println("swell $signBefore to $signAfter, horizon aim $targetBefore to $targetAfter, reached at step $reached, largest step $largestStep")
+        assertEquals(-signBefore, signAfter)
+        assertTrue(abs(targetAfter - targetBefore) > 0.02f, "a morph should move the horizon, $targetBefore to $targetAfter")
+        assertTrue(reached in 71..260, "the horizon should reach its aim within a cycle, reached at $reached")
+        assertTrue(largestStep <= 0.002f, "the horizon should glide, moved $largestStep in a frame")
+    }
+
+    @Test
+    fun aBirthRollsANewFrontInFromTheHorizon() {
+        val sea = OceanMist()
+        var marker80 = 0f
+        var marker450 = 0f
+        var far80 = 0f
+        var near80 = 0f
+        var far450 = 0f
+        var near450 = 0f
+        RenderHarness.forEachFrameOf(sea, 64, 36, 451, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }) { _, step ->
+            when (step) {
+                70 -> sea.birth()
+                80 -> {
+                    marker80 = sea.frontMarkerValue
+                    far80 = sea.rowHueOffset(90f)
+                    near80 = sea.rowHueOffset(5f)
+                }
+                450 -> {
+                    marker450 = sea.frontMarkerValue
+                    far450 = sea.rowHueOffset(90f)
+                    near450 = sea.rowHueOffset(5f)
+                }
+            }
+        }
+        println("front marker $marker80 then $marker450; turn far $far80 near $near80, later far $far450 near $near450")
+        assertTrue(marker80 > 80f, "the front should start at the horizon, was at $marker80")
+        assertTrue(marker450 < 1f, "the front should reach the front row within two cycles, was at $marker450")
+        assertTrue(far80 != 0f, "the far rows should take the front's hue")
+        assertEquals(0f, near80)
+        assertEquals(far450, near450)
+    }
+
+    @Test
+    fun theMoonMovesOnlyWithTheWalk() {
+        val sectioned = OceanMist()
+        var at60 = 0f
+        var at199 = 0f
+        RenderHarness.forEachFrameOf(sectioned, 64, 36, 200, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Section, step) }) { _, step ->
+            if (step == 60) at60 = sectioned.moonXValue
+            if (step == 199) at199 = sectioned.moonXValue
+        }
+        println("moon across a section: $at60 then $at199")
+        assertEquals(at60, at199, 0.01f)
+        val sea = OceanMist()
+        var lowest = Float.MAX_VALUE
+        RenderHarness.forEachFrame(sea, 64, 36, 7_200, VizPalette.Prism, RenderHarness.Song.Lively) { _, step ->
+            lowest = minOf(lowest, sea.moonRiseValue)
+            if (step == 600 || step == 3_600 || step == 7_199) {
+                val share = 0.5f - 0.5f * cos(sea.walkValue * 2f * PI.toFloat())
+                val expected = OceanMist.MOON_LEFT + (OceanMist.MOON_RIGHT - OceanMist.MOON_LEFT) * share
+                println("moon at step $step: walk ${sea.walkValue}, x ${sea.moonXValue}, expected $expected")
+                assertEquals(expected, sea.moonXValue, 0.02f)
+            }
+        }
+        assertTrue(lowest >= OceanMist.MOON_RISE_LOW - 1e-4f, "the moon should never sink below its low rise, was $lowest")
+    }
+
+    @Test
+    fun theCameraGlidesOnTheSlowCycleAndNeverCuts() {
+        val sea = OceanMist()
+        var lowest = Float.MAX_VALUE
+        var highest = 0f
+        var largestStep = 0f
+        var last = Float.NaN
+        RenderHarness.forEachFrame(sea, 64, 36, 1_800, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ ->
+            val now = sea.glideValue
+            if (!last.isNaN()) largestStep = maxOf(largestStep, abs(now - last))
+            last = now
+            lowest = minOf(lowest, now)
+            highest = maxOf(highest, now)
+        }
+        val silent = OceanMist()
+        var quietStep = 0f
+        var quietLast = Float.NaN
+        RenderHarness.forEachFrame(silent, 64, 36, 300, VizPalette.Prism, RenderHarness.Song.Silence) { _, step ->
+            val now = silent.glideValue
+            if (step > 60 && !quietLast.isNaN()) quietStep = maxOf(quietStep, abs(now - quietLast))
+            quietLast = now
+        }
+        println("glide from $lowest to $highest, largest step $largestStep; in silence $quietStep")
+        assertTrue(highest > 0.3f && lowest < 0.1f, "the glide should swing on the slow cycle, $lowest to $highest")
+        assertTrue(largestStep <= 0.01f, "the glide should never cut, moved $largestStep in a frame")
+        assertTrue(quietStep < 0.001f, "a silence should hold the viewer still, moved $quietStep")
+    }
+
+    @Test
+    fun aDropFlashesTheSkyUnderTheGuard() {
+        val full = skyLift(1f)
+        val guarded = skyLift(0.25f)
+        println("sky lift on the drop: full light $full, guarded $guarded")
+        assertTrue(full > 0f, "a drop should light the sky, lifted $full")
+        assertTrue(guarded <= 0.4f * full, "the flash guard should hold the lightning down: $guarded against $full")
+    }
+
+    @Test
+    fun theSkyWalksFromDuskToNight() {
+        val quarter = OceanMist.skyHueOffsetFor(0.25f)
+        val threeQuarters = OceanMist.skyHueOffsetFor(0.75f)
+        println("sky turn $quarter at a quarter walk, $threeQuarters at three quarters")
+        assertTrue(abs(quarter - threeQuarters) > 10f, "the sky should turn with the walk")
+        assertTrue(abs(OceanMist.skyLiftFor(0f) - OceanMist.skyLiftFor(0.5f)) > 0.05f, "dusk and night should differ in light")
+        assertEquals(quarter, OceanMist.skyHueOffsetFor(1.25f), 0.01f)
+    }
+
+    private fun skyLift(lightScale: Float): Float {
+        val sea = OceanMist()
+        val pixels = IntArray(WIDTH * HEIGHT)
+        var before = 0f
+        var after = 0f
+        RenderHarness.forEachFrameOf(sea, WIDTH, HEIGHT, 68, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Drop, step) },
+            beforeDraw = { it.lightScale = lightScale }) { bitmap, step ->
+            if (step == 65 || step == 67) {
+                bitmap.readPixels(pixels)
+                val sky = rows(pixels, 0f, 0.25f)
+                val mean = sky.sumOf { luma(it).toDouble() }.toFloat() / sky.size
+                if (step == 65) before = mean else after = mean
+            }
+        }
+        return after - before
     }
 
     private fun farthest(a: FloatArray, b: FloatArray): Float = a.indices.maxOf { abs(a[it] - b[it]) }

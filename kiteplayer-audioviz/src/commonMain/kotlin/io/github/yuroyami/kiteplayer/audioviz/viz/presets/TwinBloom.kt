@@ -19,6 +19,8 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
+import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
+import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
@@ -26,6 +28,8 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.glow
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.spark
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.streak
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
 import io.github.yuroyami.kiteplayer.audioviz.viz.vividLightness
 import kotlin.math.PI
@@ -42,12 +46,19 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Two flowers made of the spectrum circle each other like a binary star: the low half in magenta on
- * violet, the high half in gold on burnt orange, each three rings of elements round a white core.
- * Every element is one band, drawn as one outline that can be a spoke, a petal or a disc. The mood
- * picks the shape and a section steps it on, and each change runs ring by ring on the beat, so for
- * a few beats a figure wears two shapes. A kick shoots, opens or swells the elements, a snare breaks
- * a few off, a hat makes tips sparkle, and a drop throws every element as a disc to the frame edges.
+ * A garden of flowers made of the spectrum. Each bloom is three rings of elements round a white core,
+ * and every element is one band, from the bass in the inner ring to the treble in the outer one,
+ * drawn as one outline that can be a spoke, a petal or a disc. A petal's length runs from a fifth of
+ * its full length in silence to all of it at full level. The mood picks the shape and a section
+ * steps it on, and each change runs ring by ring on the beat, so for a few beats a bloom wears two
+ * shapes. A kick shoots, opens or swells the elements, a snare breaks a few off, a hat makes tips
+ * sparkle, and a drop throws every element as a disc to the frame edges.
+ *
+ * The garden starts as one bud on the ground. Each birth plants a new bloom where the mix puts it:
+ * across from the stereo balance, and further back the brighter the sound. A sixth birth replaces
+ * the oldest bloom. Each bloom grows up on a stem as it hears energy, and the live waveform runs
+ * along the stem. Each bloom takes its own place on the palette by birth order, walked by the genes
+ * and leaned toward the key. The view is fixed: the blooms only sway a little with the cycle.
  */
 internal class TwinBloom : Layered(
     name = "Twin Bloom",
@@ -79,8 +90,6 @@ internal class TwinBloom : Layered(
         VizDrive(VizDriver.Drop, VizProperty.Spawn, VizCurve.Discrete, VizResponse.lifetime(2f)),
     )
 
-    private val tilt = genes.number("Orbit tilt", 0.3f, 0.6f, 0.45f)
-    private val backwards = genes.toggle("Turn backwards", start = false)
     private val stagger = genes.number("Ring stagger", 0.25f, 0.5f, 0.33f)
     private val coreSize = genes.number("Core size", 0.1f, 0.15f, 0.12f)
 
@@ -93,8 +102,6 @@ internal class TwinBloom : Layered(
     private var perRing = 8
 
     private var breath = 0f
-    private var orbitTarget = START_TURN
-    private var orbitShown = START_TURN
     private var lastBeat = -1
     private var beatsSinceChange = LOCK_BEATS
     private var shape = PETAL
@@ -103,10 +110,8 @@ internal class TwinBloom : Layered(
     private var stereo = 0f
     private var inBreakdown = false
     private var breakdownBeats = 0
-    private var budSide = 1f
     private var budding = 0f
     private var throwAge = 1f
-    private var throwMotion = 0f
     private var flare = 0f
     private var colourSurge = 0f
     private var buildUp = 0f
@@ -114,10 +119,31 @@ internal class TwinBloom : Layered(
 
     // Each ring's change of shape: the weights it started from, where it is heading, how far it has
     // come, and how many beats it still waits before it starts.
-    private val fromWeight = FloatArray(FIGURES * RINGS * SHAPES)
-    private val target = IntArray(FIGURES * RINGS) { PETAL }
-    private val morph = FloatArray(FIGURES * RINGS) { 1f }
-    private val wait = IntArray(FIGURES * RINGS)
+    private val fromWeight = FloatArray(BLOOMS * RINGS * SHAPES)
+    private val target = IntArray(BLOOMS * RINGS) { PETAL }
+    private val morph = FloatArray(BLOOMS * RINGS) { 1f }
+    private val wait = IntArray(BLOOMS * RINGS)
+
+    // The garden: which blooms live, where each was planted, how long ago, how tall its stem has
+    // grown, and its birth order, which picks its place on the palette.
+    private val alive = BooleanArray(BLOOMS)
+    private val plantedX = FloatArray(BLOOMS)
+    private val plantedDepth = FloatArray(BLOOMS)
+    private val age = FloatArray(BLOOMS)
+    private val stem = FloatArray(BLOOMS)
+    private val order = IntArray(BLOOMS)
+    private var births = 0
+    /** The stereo balance, -1 all left to 1 all right, eased over half a second of heard time. */
+    private var balance = 0f
+    private val presence = Envelope(2f, 0.5f)
+    private val keyLean = Slew(maxPerSecond = KEY_TURN_PER_SECOND)
+    private var sway = 0f
+    private var light = IDLE_LIGHT
+    // The far-to-near drawing order, and the live waveform along a stem.
+    private val drawOrder = IntArray(BLOOMS)
+    private val stemWave = FloatArray(STEM_POINTS)
+    private val stemColour = IntArray(BLOOMS)
+    private val chosen = IntArray(BLOOMS)
 
     // Every element as it stands this frame, in shorter sides of the screen, and its colours.
     private val regrow = FloatArray(SLOTS) { 1f }
@@ -134,15 +160,14 @@ internal class TwinBloom : Layered(
     private val rimRoot = IntArray(SLOTS)
     private val rimTip = IntArray(SLOTS)
 
-    private val centreX = FloatArray(FIGURES)
-    private val centreY = FloatArray(FIGURES)
-    private val depth = FloatArray(FIGURES)
-    private val coreRadius = FloatArray(FIGURES)
-    private val coreColour = IntArray(FIGURES)
-    private val coreGlow = IntArray(FIGURES)
-    private val sparkColour = IntArray(FIGURES)
-    // Lightness, chroma and hue of each figure's root and tip, fill and rim, at full light.
-    private val family = FloatArray(FIGURES * 4 * 3)
+    private val centreX = FloatArray(BLOOMS)
+    private val centreY = FloatArray(BLOOMS)
+    private val coreRadius = FloatArray(BLOOMS)
+    private val coreColour = IntArray(BLOOMS)
+    private val coreGlow = IntArray(BLOOMS)
+    private val sparkColour = IntArray(BLOOMS)
+    // Lightness, chroma and hue of each bloom's root and tip, fill and rim, at full light.
+    private val family = FloatArray(BLOOMS * 4 * 3)
 
     // Pieces in flight: elements a snare broke off, and discs a drop threw.
     private val pieceX = FloatArray(PIECES)
@@ -177,11 +202,12 @@ internal class TwinBloom : Layered(
     private val outlineY = FloatArray(TwinBloomOutline.POINTS)
     private val normalX = FloatArray(TwinBloomOutline.POINTS)
     private val normalY = FloatArray(TwinBloomOutline.POINTS)
-    private val front = TriangleMesh(maxVertices = 16_500)
-    private val glows = TriangleMesh(maxVertices = 2_800)
+    private val front = TriangleMesh(maxVertices = 32_000)
+    private val glows = TriangleMesh(maxVertices = 7_000)
 
     init {
         restoreRings()
+        plantFirstBud()
     }
 
     /** How many changes of shape have started, for tests. */
@@ -190,12 +216,72 @@ internal class TwinBloom : Layered(
     /** The length of a bar as the drawing reads it, for tests. */
     internal val barSeconds: Float get() = gestures.cycleSeconds
 
-    /** The named shape ring [ring] of [figure] leans to most right now, for tests. */
-    internal fun shapeOf(figure: Int, ring: Int): TwinBloomShape {
-        val at = figure * RINGS + ring
+    /** The named shape ring [ring] of [bloom] leans to most right now, for tests. */
+    internal fun shapeOf(bloom: Int, ring: Int): TwinBloomShape {
+        val at = bloom * RINGS + ring
         var best = 0
         for (candidate in 1 until SHAPES) if (weight(at, candidate) > weight(at, best)) best = candidate
         return TwinBloomShape.entries[best]
+    }
+
+    /** How many blooms the garden holds now. */
+    internal val bloomCount: Int get() = alive.count { it }
+
+    /** Where bloom [i] stands across the screen as drawn, 0 left to 1 right. */
+    internal fun bloomX(i: Int): Float = centreX[i] / screenWide
+
+    /** How far back bloom [i] was planted, 0 near to 1 far. */
+    internal fun bloomDepth(i: Int): Float = plantedDepth[i]
+
+    /** The heard seconds since bloom [i] was planted. */
+    internal fun bloomAge(i: Int): Float = age[i]
+
+    /** How tall bloom [i]'s stem has grown, 0 to 1. */
+    internal fun stemHeight(i: Int): Float = stem[i]
+
+    /** The light the blooms give this frame. */
+    internal val lightValue: Float get() = light
+
+    /**
+     * Plants a bloom: in a free slot, or in place of the oldest when all five live. The oldest's
+     * elements are thrown off first. It stands where the stereo balance puts it, further back the
+     * brighter the sound, and grows its stem from the ground.
+     */
+    internal fun birth(centroid: Float = lastCentroid) {
+        var slot = alive.indexOfFirst { !it }
+        if (slot < 0) {
+            slot = 0
+            for (i in 1 until BLOOMS) if (age[i] > age[slot]) slot = i
+            throwCoins(slot)
+        }
+        alive[slot] = true
+        plantedX[slot] = 0.5f + BALANCE_REACH * balance
+        plantedDepth[slot] = centroid.coerceIn(0f, 1f)
+        age[slot] = 0f
+        stem[slot] = 0f
+        order[slot] = ++births
+        // A new bloom wears the garden's shape at once.
+        for (ring in 0 until RINGS) {
+            val at = slot * RINGS + ring
+            for (candidate in 0 until SHAPES) fromWeight[at * SHAPES + candidate] = if (candidate == shape) 1f else 0f
+            target[at] = shape
+            morph[at] = 1f
+            wait[at] = 0
+        }
+        for (element in 0 until RINGS * MOST) regrow[slot * RINGS * MOST + element] = 1f
+    }
+
+    private var lastCentroid = 0f
+
+    private fun plantFirstBud() {
+        alive.fill(false)
+        alive[0] = true
+        plantedX[0] = 0.5f
+        plantedDepth[0] = FIRST_DEPTH
+        age.fill(0f)
+        stem.fill(0f)
+        order.fill(0)
+        births = 0
     }
 
     override fun advance(state: VizRenderState) {
@@ -213,15 +299,6 @@ internal class TwinBloom : Layered(
         val beatIndex = gestures.cycles * 4 + (gestures.cyclePhase * 4f).toInt().coerceIn(0, 3)
         val onBeat = lastBeat >= 0 && beatIndex > lastBeat && frame.audible > 0.5f
         if (beatIndex > lastBeat) lastBeat = beatIndex
-        val way = if (backwards.on) -1f else 1f
-        if (gestures.pulseUsable) {
-            // The pair steps a sixteenth of a turn on each beat and eases into place: a tick.
-            if (onBeat) orbitTarget += way / STEPS_PER_TURN
-        } else {
-            // Without a pulse there is no beat to tick on, so the pair turns at the same pace smoothly.
-            orbitTarget += way * step / (beat * STEPS_PER_TURN)
-        }
-        orbitShown += (orbitTarget - orbitShown) * (1f - exp(-step * TICK / beat))
         if (onBeat) {
             beatsSinceChange++
             breakdownBeats++
@@ -233,6 +310,23 @@ internal class TwinBloom : Layered(
         punch.advance(dt)
         impulse.apply(frame, state.future?.nextEvent(AudioEventKind.LowTransient), KICK * (0.25f + 0.75f * state.motionScale))
         stereo += (frame.width.coerceIn(0f, 1f) - stereo) * (1f - exp(-step / WIDTH_SECONDS))
+        val left = energyOf(frame.scopeLeft)
+        val right = energyOf(frame.scopeRight)
+        val leaning = if (left + right > 1e-9f) (right - left) / (right + left) else 0f
+        balance += (leaning - balance) * (1f - exp(-step / BALANCE_SECONDS))
+        lastCentroid = frame.centroid
+        // The stems grow with the energy heard, and the blooms age, on heard time.
+        for (i in 0 until BLOOMS) {
+            if (!alive[i]) continue
+            age[i] += step
+            stem[i] = min(1f, stem[i] + step * frame.energy.coerceIn(0f, 1f) / STEM_SECONDS)
+        }
+        for (i in 0 until STEM_POINTS) stemWave[i] = frame.scope.sampleAt(i / (STEM_POINTS - 1f))
+        // A pause holds the sway; a silence lets it settle.
+        presence.advance(frame.audible, if (frame.held) 0f else dt)
+        sway = sin(gestures.cyclePhase * TAU) * presence.value * state.motionScale.coerceIn(0f, 1f)
+        leanTowardsKey(frame, state.palette, step)
+        light = state.lightScale.coerceIn(0f, 1f) * max(IDLE_LIGHT * (1f - frame.audible), lightFor(state.energy))
         val upcoming = state.future?.nextEvent(AudioEventKind.Drop)
         val nearing = if (upcoming != null && upcoming.secondsUntil in 0f..BUILD_SECONDS) 1f - upcoming.secondsUntil / BUILD_SECONDS else 0f
         buildUp += (nearing - buildUp) * (1f - exp(-step / 0.15f))
@@ -247,9 +341,8 @@ internal class TwinBloom : Layered(
         flare = (flare - step / FLARE_SECONDS).coerceAtLeast(0f)
         colourSurge = (colourSurge - step / bar).coerceAtLeast(0f)
 
-        // A breakdown parts the twins and closes them into buds until the next turn, two bars at least.
+        // A breakdown closes the blooms into buds until the next turn, two bars at least.
         if (gestures.breakdown) {
-            if (!inBreakdown) budSide = if (cos(orbitShown * TAU) >= 0f) 1f else -1f
             inBreakdown = true
             breakdownBeats = 0
         } else if (inBreakdown && breakdownBeats >= BUD_BEATS && gestures.turn) {
@@ -274,14 +367,29 @@ internal class TwinBloom : Layered(
             }
         }
 
+        if (evolution.birth) birth()
         twinkle(step)
         layout(state)
         if (gestures.snare > 0f) breakOff(state, (2 + gestures.snareSpawn(3)).coerceIn(3, 6))
         if (gestures.hat > 0f) sparkle(gestures.hatSpawn(5), gestures.hat)
         fly(step)
-        val near = if (depth[0] > depth[1]) 0 else 1
-        kit.place(0, centreX[near] / screenWide, centreY[near] / screenTall, parallax = 0f)
-        kit.place(1, centreX[1 - near] / screenWide, centreY[1 - near] / screenTall, parallax = 0f)
+        for (i in 0 until BLOOMS) kit.place(i, centreX[i] / screenWide, centreY[i] / screenTall, parallax = 0f)
+    }
+
+    /** The mean square of a waveform. */
+    private fun energyOf(wave: FloatArray): Float {
+        var sum = 0f
+        for (sample in wave) sum += sample * sample
+        return if (wave.isEmpty()) 0f else sum / wave.size
+    }
+
+    /** Turns every bloom's hue up to [KEY_TURN] degrees towards the key, as sure as the key is, on heard time. */
+    private fun leanTowardsKey(frame: io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame, palette: VizPalette, heard: Float) {
+        val sure = ((frame.keyConfidence - 0.6f) / 0.4f).coerceIn(0f, 1f)
+        var towards = frame.keyHue * 360f - (palette.baseHue + 0.5f * palette.hueSpan)
+        while (towards > 180f) towards -= 360f
+        while (towards < -180f) towards += 360f
+        keyLean.advance(towards.coerceIn(-KEY_TURN, KEY_TURN) * sure, heard)
     }
 
     /** The next shape a section steps to: spoke, petal, disc and round again. Calm music skips the disc. */
@@ -295,14 +403,14 @@ internal class TwinBloom : Layered(
         shape = to
         beatsSinceChange = 0
         cascades++
-        for (figure in 0 until FIGURES) startCascade(figure, to, bands)
+        for (bloom in 0 until BLOOMS) startCascade(bloom, to, bands)
     }
 
     /** Starts a change at the ring that holds the loudest band; each ring further out or in waits a beat more. */
-    private fun startCascade(figure: Int, to: Int, bands: FloatArray) {
-        val first = loudestRing(figure, bands)
+    private fun startCascade(bloom: Int, to: Int, bands: FloatArray) {
+        val first = loudestRing(bands)
         for (ring in 0 until RINGS) {
-            val at = figure * RINGS + ring
+            val at = bloom * RINGS + ring
             val spoke = weight(at, SPOKE)
             val petal = weight(at, PETAL)
             val disc = weight(at, DISC)
@@ -315,12 +423,12 @@ internal class TwinBloom : Layered(
         }
     }
 
-    private fun loudestRing(figure: Int, bands: FloatArray): Int {
+    private fun loudestRing(bands: FloatArray): Int {
         var best = 0
         var most = -1f
         for (ring in 0 until RINGS) {
             for (element in 0 until perRing) {
-                val level = response(bands, figure, ring, element)
+                val level = response(bands, ring, element)
                 if (level > most) {
                     most = level
                     best = ring
@@ -343,22 +451,18 @@ internal class TwinBloom : Layered(
      * The low sixths carry far more energy than the high ones, so each sixth has its own top: about
      * the level its loudest tenth reaches across six songs of different kinds. *Judgement.*
      */
-    private fun response(bands: FloatArray, figure: Int, ring: Int, element: Int): Float {
+    private fun response(bands: FloatArray, ring: Int, element: Int): Float {
         if (bands.isEmpty()) return 0f
-        val half = bands.size / 2f
         val along = (ring * perRing + element + 0.5f) / (RINGS * perRing)
-        val at = figure * half + along * half - 0.5f
+        val at = along * bands.size - 0.5f
         val lower = floor(at).toInt().coerceIn(0, bands.size - 1)
         val upper = (lower + 1).coerceAtMost(bands.size - 1)
         val mix = (at - floor(at)).coerceIn(0f, 1f)
         val raw = bands[lower] + (bands[upper] - bands[lower]) * mix
-        val top = TOPS[figure * RINGS + ring]
+        val top = TOPS[(along * TOPS.size).toInt().coerceIn(0, TOPS.size - 1)]
         return ((raw - BAND_FLOOR) / (top - BAND_FLOOR)).coerceIn(0f, 1f)
     }
 
-    /** The light the figures give: 35 percent in silence, all of it when loud, and held back by the flash guard. */
-    private fun lightOf(state: VizRenderState): Float =
-        state.lightScale.coerceIn(0f, 1f) * (IDLE_LIGHT + (1f - IDLE_LIGHT) * loudOf(state))
 
     /** How loud the music is on the shared light curve, 0 in silence and 1 when loud. */
     private fun loudOf(state: VizRenderState): Float {
@@ -367,53 +471,40 @@ internal class TwinBloom : Layered(
         return ((state.lift / scale - LIGHT_FLOOR) / (1f - LIGHT_FLOOR)).coerceIn(0f, 1f)
     }
 
-    /** Places the twins and every element for this frame, and colours them. */
+    /** Places every bloom and its elements for this frame, and colours them. */
     private fun layout(state: VizRenderState) {
         val bands = state.frame.bands
         paint(state.palette)
-        val light = lightOf(state)
         val loud = loudOf(state)
         val kick = punch.value.coerceIn(-0.3f, 1.4f)
-        val theta = orbitShown * TAU
-        val landscape = screenWide >= screenTall
-        val longSide = max(screenWide, screenTall)
-        var discs = 0f
-        for (at in 0 until FIGURES * RINGS) discs += weight(at, DISC)
-        discs /= FIGURES * RINGS
-        // Mono music overlaps the twins and wide music parts them, as far as the long side allows.
-        var apart = (SEP_MONO + SEP_WIDE * stereo).coerceAtMost((longSide - 2.1f * RADIUS).coerceAtLeast(SEP_MONO))
-        apart += SHOVE * kick.coerceAtLeast(0f) * discs
-        apart *= 1f - 0.35f * buildUp
-        apart += FLING * fling(throwAge) * throwMotion
         val open = OPEN_REST + (1f - OPEN_REST) * loud
-        for (figure in 0 until FIGURES) {
-            val turn = theta + figure * PI.toFloat()
-            val along = cos(turn) * apart * 0.5f
-            val across = sin(turn) * apart * 0.5f * tilt.value
-            var x = screenWide * 0.5f + if (landscape) along else across
-            var y = screenTall * 0.5f + if (landscape) across else along
-            val side = if (figure == 0) budSide else -budSide
-            val sideX = screenWide * 0.5f + if (landscape) side * BUD_SIDE * screenWide else 0f
-            val sideY = screenTall * 0.5f + if (landscape) 0f else side * BUD_SIDE * screenTall
-            x += (sideX - x) * budding
-            y += (sideY - y) * budding
-            centreX[figure] = x
-            centreY[figure] = y
-            // Seen from a little above the orbit: the nearer twin is lower on screen, a touch larger, and in front.
-            depth[figure] = sin(turn)
-            val scale = RADIUS * (1f + 0.05f * depth[figure])
-            coreRadius[figure] = coreSize.value * scale * (1f + 0.06f * sin(breath)) *
+        for (bloom in 0 until BLOOMS) {
+            if (!alive[bloom]) {
+                coreRadius[bloom] = 0f
+                for (slot in bloom * RINGS * MOST until (bloom + 1) * RINGS * MOST) length[slot] = 0f
+                continue
+            }
+            // A drop on the way gathers the garden a little toward the middle.
+            val planted = plantedX[bloom] + (0.5f - plantedX[bloom]) * GATHER * buildUp
+            val x = (planted + SWAY * sway) * screenWide
+            val y = (GROUND_Y - stem[bloom] * STEM_REACH) * screenTall
+            centreX[bloom] = x
+            centreY[bloom] = y
+            // A bloom further back is smaller.
+            val scale = RADIUS * (0.6f + 0.4f * (1f - plantedDepth[bloom]))
+            coreRadius[bloom] = coreSize.value * scale * (1f + 0.06f * sin(breath)) *
                 (1f + 0.3f * kick.coerceAtLeast(0f)) * (1f + 0.3f * flare) * (1f - 0.3f * budding)
             val coreLight = (light * (1f + 0.12f * sin(breath)) + 0.7f * flare * state.lightScale).coerceIn(0f, 1f)
-            coreColour[figure] = colourOf(cbrt(coreLight), 0f, 0f).toArgb()
-            // The core's glow takes the figure's own tip colour, so each twin lights its own flower.
-            val tipHue = family[(figure * 4 + TIP_FILL) * 3 + 2]
+            coreColour[bloom] = colourOf(cbrt(coreLight), 0f, 0f).toArgb()
+            // The core's glow takes the bloom's own tip colour, so each bloom lights its own flower.
+            val tipHue = family[(bloom * 4 + TIP_FILL) * 3 + 2]
             val glowAlpha = ((0.3f + 0.3f * loud) * light + 0.5f * flare * state.lightScale).coerceIn(0f, 1f)
-            val glowChroma = min(0.5f * family[(figure * 4 + TIP_FILL) * 3 + 1], mostChroma(0.85f, tipHue))
-            coreGlow[figure] = colourOf(0.85f, glowChroma, tipHue, glowAlpha).toArgb()
-            sparkColour[figure] = colourOf(0.97f * cbrt(light), 0.05f * cbrt(light), tipHue).toArgb()
+            val glowChroma = min(0.5f * family[(bloom * 4 + TIP_FILL) * 3 + 1], mostChroma(0.85f, tipHue))
+            coreGlow[bloom] = colourOf(0.85f, glowChroma, tipHue, glowAlpha).toArgb()
+            sparkColour[bloom] = colourOf(0.97f * cbrt(light), 0.05f * cbrt(light), tipHue).toArgb()
+            stemColour[bloom] = withAlpha(shade(bloom, ROOT_RIM, cbrt(light.coerceIn(0f, 1f)), 0f), STEM_ALPHA)
             for (ring in 0 until RINGS) {
-                val at = figure * RINGS + ring
+                val at = bloom * RINGS + ring
                 val spoke = weight(at, SPOKE)
                 val petal = weight(at, PETAL)
                 val disc = weight(at, DISC)
@@ -431,9 +522,9 @@ internal class TwinBloom : Layered(
                 val push = 1f + KICK_SHOVE * kick * disc
                 for (element in 0 until perRing) {
                     val slot = at * MOST + element
-                    val level = response(bands, figure, ring, element)
+                    val level = response(bands, ring, element)
                     val grow = regrow[slot]
-                    val body = base * (REST + (1f - REST) * level) * grow * swell
+                    val body = base * petalLengthFor(level) * grow * swell
                     val long = body * shoot * (1f - 0.55f * budding)
                     val wide = body * aspect * opening * (1f - 0.3f * budding)
                     val zig = if (element % 2 == 0) 1f else -1f
@@ -452,43 +543,36 @@ internal class TwinBloom : Layered(
                     // A quiet band is a little darker; mostly it is shorter, so the colours stay vivid.
                     val k = cbrt((light * (0.85f + 0.15f * level)).coerceIn(0f, 1f))
                     val pale = (glint[slot] * 0.85f + colourSurge * 0.45f).coerceAtMost(1f)
-                    fillRoot[slot] = shade(figure, ROOT_FILL, k, (glint[slot] * 0.35f + colourSurge * 0.2f).coerceAtMost(1f))
-                    fillTip[slot] = shade(figure, TIP_FILL, k, pale)
-                    rimRoot[slot] = shade(figure, ROOT_RIM, k, 0f)
-                    rimTip[slot] = shade(figure, TIP_RIM, k, pale)
+                    fillRoot[slot] = shade(bloom, ROOT_FILL, k, (glint[slot] * 0.35f + colourSurge * 0.2f).coerceAtMost(1f))
+                    fillTip[slot] = shade(bloom, TIP_FILL, k, pale)
+                    rimRoot[slot] = shade(bloom, ROOT_RIM, k, 0f)
+                    rimTip[slot] = shade(bloom, TIP_RIM, k, pale)
                 }
             }
         }
     }
 
-    /** How far the twins are flung, over the bar after a throw: out fast, then back together. */
-    private fun fling(age: Float): Float = when {
-        age >= 1f -> 0f
-        age < FLING_OUT -> (age / FLING_OUT).let { 1f - (1f - it) * (1f - it) }
-        else -> ((age - FLING_OUT) / (1f - FLING_OUT)).let { 1f - it * it * (3f - 2f * it) }
-    }
-
     /**
-     * Reads each figure's two colour families: the drawing's own swatches, turned with the key the way
-     * the palette is, or a chosen palette's low and high halves, both through the vivid read.
+     * Reads each bloom's colour family from its place on the palette: the genes' walk plus a step for
+     * each birth before it, leaned toward the key. The tip takes that place and the root a little
+     * before it, both through the vivid read.
      */
     private fun paint(palette: VizPalette) {
-        val own = palette.name == VizPalette.Prism.name
-        // The surface turns the default palette towards the key; the swatches turn by the same angle.
-        var lean = palette.baseHue - VizPalette.Prism.baseHue
-        while (lean > 180f) lean -= 360f
-        while (lean < -180f) lean += 360f
-        for (figure in 0 until FIGURES) {
-            val rootHue = if (own) OWN_ROOT_HUE[figure] + lean else palette.baseHue + ROOT_AT[figure] * palette.hueSpan
-            val tipHue = if (own) OWN_TIP_HUE[figure] + lean else palette.baseHue + TIP_AT[figure] * palette.hueSpan
-            val rootLight = ROOT_LIGHTNESS[figure]
+        for (bloom in 0 until BLOOMS) {
+            if (!alive[bloom]) continue
+            val place = genes.walk + order[bloom] * HUE_STEP
+            val tipHue = hueAt(palette, place) + keyLean.value
+            val rootHue = hueAt(palette, place - ROOT_STEP) + keyLean.value
             val cusp = cuspOf(tipHue)
-            store(figure, ROOT_FILL, rootLight, rootHue)
-            store(figure, TIP_FILL, vividLightness(tipHue, cusp, (cusp + FILL_LIFT).coerceIn(0f, 1f)), tipHue)
-            store(figure, ROOT_RIM, (rootLight + ROOT_RIM_LIFT).coerceAtMost(1f), rootHue)
-            store(figure, TIP_RIM, vividLightness(tipHue, cusp, (cusp + RIM_LIFT).coerceIn(0f, 1f)), tipHue)
+            store(bloom, ROOT_FILL, ROOT_LIGHTNESS, rootHue)
+            store(bloom, TIP_FILL, vividLightness(tipHue, cusp, (cusp + FILL_LIFT).coerceIn(0f, 1f)), tipHue)
+            store(bloom, ROOT_RIM, (ROOT_LIGHTNESS + ROOT_RIM_LIFT).coerceAtMost(1f), rootHue)
+            store(bloom, TIP_RIM, vividLightness(tipHue, cusp, (cusp + RIM_LIFT).coerceIn(0f, 1f)), tipHue)
         }
     }
+
+    /** The hue at [place] on [palette], wrapped as the palette's own cycle wraps it. */
+    private fun hueAt(palette: VizPalette, place: Float): Float = palette.baseHue + (place - floor(place)) * palette.hueSpan
 
     /**
      * The lightness where [hue] is most colourful, searched from 0.2 upwards.
@@ -512,19 +596,19 @@ internal class TwinBloom : Layered(
         return best
     }
 
-    private fun store(figure: Int, which: Int, lightness: Float, hue: Float) {
-        val at = (figure * 4 + which) * 3
+    private fun store(bloom: Int, which: Int, lightness: Float, hue: Float) {
+        val at = (bloom * 4 + which) * 3
         family[at] = lightness
         family[at + 1] = (mostChroma(lightness, hue) - HEADROOM).coerceAtLeast(0f)
         family[at + 2] = hue
     }
 
     /**
-     * One colour of a figure at light [k], the cube root of the share of light, so the colour dims
+     * One colour of a bloom at light [k], the cube root of the share of light, so the colour dims
      * without greying. [pale] moves it towards white, for a sparkle or the drop under reduced motion.
      */
-    private fun shade(figure: Int, which: Int, k: Float, pale: Float): Int {
-        val at = (figure * 4 + which) * 3
+    private fun shade(bloom: Int, which: Int, k: Float, pale: Float): Int {
+        val at = (bloom * 4 + which) * 3
         var lightness = family[at]
         var chroma = family[at + 1]
         if (pale > 0f) {
@@ -536,7 +620,7 @@ internal class TwinBloom : Layered(
 
     /**
      * The drop. Every ring turns to discs at once and every disc is thrown, fast enough to reach the
-     * edge of the frame within a bar, while the twins fling apart and new elements grow from the cores.
+     * edge of the frame within a bar, while new elements grow from the cores.
      * Under reduced motion the moment plays as colour and light instead.
      */
     private fun throwAll(state: VizRenderState) {
@@ -548,7 +632,7 @@ internal class TwinBloom : Layered(
         flare = 1f
         throwAge = 0f
         if (state.motionScale >= 0.5f) {
-            for (at in 0 until FIGURES * RINGS) {
+            for (at in 0 until BLOOMS * RINGS) {
                 for (candidate in 0 until SHAPES) fromWeight[at * SHAPES + candidate] = if (candidate == DISC) 1f else 0f
                 target[at] = DISC
                 morph[at] = 1f
@@ -556,38 +640,42 @@ internal class TwinBloom : Layered(
             }
             regrow.fill(1f)
             layout(state)
-            throwCoins()
+            for (bloom in 0 until BLOOMS) if (alive[bloom]) throwCoins(bloom)
             regrow.fill(0f)
-            throwMotion = state.motionScale
         } else {
-            for (figure in 0 until FIGURES) startCascade(figure, DISC, state.frame.bands)
+            for (bloom in 0 until BLOOMS) startCascade(bloom, DISC, state.frame.bands)
             colourSurge = 1f
-            throwMotion = 0f
         }
     }
 
-    private fun throwCoins() {
+    /** Throws every element of [bloom] as a disc, out from its core and away from the rest of the garden. */
+    private fun throwCoins(bloom: Int) {
         val bar = gestures.cycleSeconds.coerceAtLeast(0.4f)
-        for (figure in 0 until FIGURES) {
-            var awayX = centreX[figure] - centreX[1 - figure]
-            var awayY = centreY[figure] - centreY[1 - figure]
-            val apart = sqrt(awayX * awayX + awayY * awayY)
-            if (apart < 1e-3f) {
-                awayX = if (figure == 0) -1f else 1f
-                awayY = 0f
-            } else {
-                awayX /= apart
-                awayY /= apart
-            }
+        var meanX = 0f
+        var meanY = 0f
+        var count = 0
+        for (i in 0 until BLOOMS) if (alive[i]) { meanX += centreX[i]; meanY += centreY[i]; count++ }
+        if (count > 0) { meanX /= count; meanY /= count }
+        var awayX = centreX[bloom] - meanX
+        var awayY = centreY[bloom] - meanY
+        val apart = sqrt(awayX * awayX + awayY * awayY)
+        if (apart < 1e-3f) {
+            awayX = 0f
+            awayY = 0f
+        } else {
+            awayX /= apart
+            awayY /= apart
+        }
+        run {
             for (ring in 0 until RINGS) {
                 for (element in 0 until perRing) {
-                    val slot = (figure * RINGS + ring) * MOST + element
+                    val slot = (bloom * RINGS + ring) * MOST + element
                     val long = length[slot]
                     if (long <= 0f) continue
                     val a = angle[slot]
                     val x = rootX[slot] + cos(a) * long * 0.5f
                     val y = rootY[slot] + sin(a) * long * 0.5f
-                    // Out from the core and away from the other twin, scattered a little like a handful of coins.
+                    // Out from the core and away from the rest of the garden, scattered a little like a handful of coins.
                     val scatter = random.signed() * 0.25f
                     val outX = cos(a + scatter) + 0.6f * awayX
                     val outY = sin(a + scatter) + 0.6f * awayY
@@ -623,13 +711,15 @@ internal class TwinBloom : Layered(
     private fun breakOff(state: VizRenderState, count: Int) {
         val beat = gestures.beatSeconds.coerceAtLeast(0.1f)
         val motion = 0.3f + 0.7f * state.motionScale
+        val living = gather()
+        if (living == 0) return
         var made = 0
         var tries = 0
         while (made < count && tries < count * 4) {
             tries++
-            val figure = (snareTurn + made) % FIGURES
+            val bloom = chosen[(snareTurn + made) % living]
             val element = (random.next() * perRing).toInt().coerceIn(0, perRing - 1)
-            val slot = (figure * RINGS + RINGS - 1) * MOST + element
+            val slot = (bloom * RINGS + RINGS - 1) * MOST + element
             if (length[slot] <= 0f || regrow[slot] < 0.7f) continue
             val a = angle[slot]
             val long = length[slot]
@@ -700,11 +790,13 @@ internal class TwinBloom : Layered(
 
     /** A hat makes a few tips sparkle, the outer ones most often: they flash pale and a small star shines on each. */
     private fun sparkle(count: Int, strength: Float) {
+        val living = gather()
+        if (living == 0) return
         for (made in 0 until count) {
-            val figure = (random.next() * FIGURES).toInt().coerceIn(0, FIGURES - 1)
+            val bloom = chosen[(random.next() * living).toInt().coerceIn(0, living - 1)]
             val ring = if (random.next() < 0.7f) RINGS - 1 else RINGS - 2
             val element = (random.next() * perRing).toInt().coerceIn(0, perRing - 1)
-            val slot = (figure * RINGS + ring) * MOST + element
+            val slot = (bloom * RINGS + ring) * MOST + element
             if (length[slot] <= 0f) continue
             sparkSlot[nextSpark] = slot
             sparkAge[nextSpark] = 0f
@@ -712,6 +804,13 @@ internal class TwinBloom : Layered(
             sparkAlive[nextSpark] = true
             nextSpark = (nextSpark + 1) % SPARKS
         }
+    }
+
+    /** Writes the living blooms into [chosen] and returns how many there are. */
+    private fun gather(): Int {
+        var living = 0
+        for (i in 0 until BLOOMS) if (alive[i]) chosen[living++] = i
+        return living
     }
 
     private fun twinkle(step: Float) {
@@ -731,12 +830,12 @@ internal class TwinBloom : Layered(
     override fun DrawScope.drawEcho(state: VizRenderState) {
         val unit = size.minDimension
         glows.clear()
-        for (figure in 0 until FIGURES) {
-            val radius = coreRadius[figure] * unit * (CORE_GLOW + 2f * flare)
-            glows.glow(centreX[figure] * unit, centreY[figure] * unit, radius, coreGlow[figure], 24)
+        for (bloom in 0 until BLOOMS) {
+            if (!alive[bloom]) continue
+            val radius = coreRadius[bloom] * unit * (CORE_GLOW + 2f * flare)
+            glows.glow(centreX[bloom] * unit, centreY[bloom] * unit, radius, coreGlow[bloom], 24)
         }
         // Only the tips past four fifths of their reach glow: the hottest tenth of the picture.
-        val light = lightOf(state)
         for (slot in 0 until SLOTS) {
             val hot = (heat[slot] - HOT) / (1f - HOT)
             if (hot <= 0f || length[slot] <= 0f || slot % MOST >= perRing) continue
@@ -766,9 +865,22 @@ internal class TwinBloom : Layered(
         // A broken-off element leaves from the back ring, so it flies out from under the figures; a
         // thrown disc flies towards the viewer, over them.
         addPieces(unit, rim, coins = false)
-        val far = if (depth[0] <= depth[1]) 0 else 1
-        addFigure(far, unit, rim)
-        addFigure(1 - far, unit, rim)
+        // Far blooms first, so the nearer ones lie over them; each stem just before its bloom.
+        val living = gather()
+        for (i in 0 until living) drawOrder[i] = chosen[i]
+        for (i in 1 until living) {
+            val bloom = drawOrder[i]
+            var j = i - 1
+            while (j >= 0 && plantedDepth[drawOrder[j]] < plantedDepth[bloom]) {
+                drawOrder[j + 1] = drawOrder[j]
+                j--
+            }
+            drawOrder[j + 1] = bloom
+        }
+        for (i in 0 until living) {
+            addStem(drawOrder[i], unit)
+            addFigure(drawOrder[i], unit, rim)
+        }
         addPieces(unit, rim, coins = true)
         for (at in 0 until SPARKS) {
             if (!sparkAlive[at]) continue
@@ -779,8 +891,8 @@ internal class TwinBloom : Layered(
             val x = (rootX[slot] + cos(a) * length[slot]) * unit
             val y = (rootY[slot] + sin(a) * length[slot]) * unit
             val arm = SPARK_ARM * RADIUS * unit * (0.6f + 0.4f * sparkStrength[at]) * (0.4f + 0.6f * left)
-            val figure = slot / (RINGS * MOST)
-            front.spark(x, y, arm, max(1f, arm * 0.14f), withAlpha(sparkColour[figure], left))
+            val bloom = slot / (RINGS * MOST)
+            front.spark(x, y, arm, max(1f, arm * 0.14f), withAlpha(sparkColour[bloom], left))
         }
         drawMesh(front)
     }
@@ -804,7 +916,27 @@ internal class TwinBloom : Layered(
 
     private fun coinFade(at: Int): Float = 1f - ((pieceAge[at] / pieceLife[at] - 0.75f) / 0.25f).coerceIn(0f, 1f)
 
-    /** A figure, far ring first, so the inner rings lie over the outer ones, and its core last. */
+    /** A stem from the ground up to [bloom], with the live waveform running along it. */
+    private fun addStem(bloom: Int, unit: Float) {
+        val groundY = GROUND_Y * screenTall * unit
+        val topY = centreY[bloom] * unit
+        if (groundY - topY < 1f || front.vertexCount + 2 * STEM_POINTS > front.maxVertices) return
+        val half = max(STEM_WIDTH_PIXELS, STEM_WIDTH * screenTall * unit) * 0.5f
+        val x = centreX[bloom] * unit
+        val colour = stemColour[bloom]
+        var before = -1
+        for (i in 0 until STEM_POINTS) {
+            val t = i / (STEM_POINTS - 1f)
+            val y = groundY + (topY - groundY) * t
+            val wave = stemWave[i] * STEM_WAVE * unit
+            val a = front.vertex(x + wave - half, y, colour)
+            front.vertex(x + wave + half, y, colour)
+            if (before >= 0 && a >= 0) front.quad(before, before + 1, a + 1, a)
+            before = a
+        }
+    }
+
+    /** A bloom, far ring first, so the inner rings lie over the outer ones, and its core last. */
     private fun addFigure(figure: Int, unit: Float, rim: Float) {
         for (ring in RINGS - 1 downTo 0) {
             for (element in 0 until perRing) {
@@ -904,7 +1036,7 @@ internal class TwinBloom : Layered(
 
     private fun restoreRings() {
         fromWeight.fill(0f)
-        for (at in 0 until FIGURES * RINGS) fromWeight[at * SHAPES + PETAL] = 1f
+        for (at in 0 until BLOOMS * RINGS) fromWeight[at * SHAPES + PETAL] = 1f
         target.fill(PETAL)
         morph.fill(1f)
         wait.fill(0)
@@ -914,8 +1046,6 @@ internal class TwinBloom : Layered(
         punch.reset()
         impulse.reset()
         breath = 0f
-        orbitTarget = START_TURN
-        orbitShown = START_TURN
         lastBeat = -1
         beatsSinceChange = LOCK_BEATS
         shape = PETAL
@@ -924,10 +1054,8 @@ internal class TwinBloom : Layered(
         stereo = 0f
         inBreakdown = false
         breakdownBeats = 0
-        budSide = 1f
         budding = 0f
         throwAge = 1f
-        throwMotion = 0f
         flare = 0f
         colourSurge = 0f
         buildUp = 0f
@@ -940,10 +1068,19 @@ internal class TwinBloom : Layered(
         nextPiece = 0
         sparkAlive.fill(false)
         nextSpark = 0
+        plantFirstBud()
+        balance = 0f
+        lastCentroid = 0f
+        presence.reset()
+        keyLean.reset()
+        sway = 0f
+        light = IDLE_LIGHT
+        coreRadius.fill(0f)
     }
 
-    private companion object {
-        const val FIGURES = 2
+    internal companion object {
+        /** The most blooms the garden holds. */
+        const val BLOOMS = 5
         const val RINGS = 3
         const val SHAPES = 3
         const val SPOKE = 0
@@ -953,21 +1090,18 @@ internal class TwinBloom : Layered(
         /** The most elements a ring holds, so a figure has up to 72, and the fewest. */
         const val MOST = 24
         const val FEWEST = 4
-        const val SLOTS = FIGURES * RINGS * MOST
+        const val SLOTS = BLOOMS * RINGS * MOST
         const val PIECES = 176
         const val SPARKS = 32
 
-        /**
-         * A figure's radius, in shorter sides of the screen. An idle figure spans about 61 percent of
-         * the shorter side, ordinary music about 68 percent, and a loud passage about 80.
-         */
+        /** A near bloom's radius at full length, in shorter sides of the screen. */
         const val RADIUS = 0.33f
 
-        /**
-         * How long an element is in silence, as a share of its full length; the band adds the rest.
-         * High, so a silent figure still fills most of the shorter side.
-         */
-        const val REST = 0.74f
+        /** How long an element is in silence, as a share of its full length; the band adds the rest. */
+        const val PETAL_FLOOR = 0.2f
+
+        /** An element's length for a band at [level], as a share of its full length. */
+        fun petalLengthFor(level: Float): Float = PETAL_FLOOR + (1f - PETAL_FLOOR) * level.coerceIn(0f, 1f)
 
         /** How far open a petal is in silence, as a share of fully open. */
         const val OPEN_REST = 0.62f
@@ -1011,23 +1145,42 @@ internal class TwinBloom : Layered(
         const val KICK_DISC = 0.5f
         const val KICK_SHOVE = 0.25f
 
-        /** How far apart the twins' centres are, in shorter sides: for mono, and added for a wide image. */
-        const val SEP_MONO = 0.42f
-        const val SEP_WIDE = 0.8f
-        const val SHOVE = 0.08f
-        const val FLING = 0.55f
-        const val FLING_OUT = 0.12f
         const val WIDTH_SECONDS = 0.8f
 
-        const val STEPS_PER_TURN = 16f
-        const val START_TURN = 0.07f
-        const val TICK = 10f
+        // The garden: the first bud's depth, how far the balance moves a birth across, and how fast
+        // the balance follows the mix.
+        const val FIRST_DEPTH = 0.3f
+        const val BALANCE_REACH = 0.35f
+        const val BALANCE_SECONDS = 0.5f
+        /** How far a coming drop gathers the blooms toward the middle. */
+        const val GATHER = 0.35f
+        /** The sway across, as a share of the screen's width. */
+        const val SWAY = 0.01f
+
+        // The stems: the ground line and the reach up from it as shares of the height, the heard
+        // seconds of full energy a stem takes to grow, and the waveform along it.
+        const val GROUND_Y = 0.82f
+        const val STEM_REACH = 0.5f
+        const val STEM_SECONDS = 20f
+        const val STEM_POINTS = 32
+        const val STEM_WAVE = 0.02f
+        const val STEM_WIDTH = 0.003f
+        const val STEM_WIDTH_PIXELS = 1.5f
+        const val STEM_ALPHA = 0.5f
+
+        // Each bloom's colour: the step on the palette per birth, the root's place before the tip,
+        // and the lean toward the key.
+        const val HUE_STEP = 0.13f
+        const val ROOT_STEP = 0.1f
+        const val ROOT_LIGHTNESS = 0.45f
+        const val KEY_TURN = 20f
+        const val KEY_TURN_PER_SECOND = 12f
+
         const val LOCK_BEATS = 16
         const val MORPH_BEATS = 0.8f
         const val REGROW_BEATS = 1.5f
         const val BUD_BEATS = 8
         const val BUD_BARS = 0.35f
-        const val BUD_SIDE = 0.27f
         const val BREATH_SECONDS = 4f
         const val BUILD_SECONDS = 1f
 
@@ -1046,15 +1199,6 @@ internal class TwinBloom : Layered(
         const val TIP_FILL = 1
         const val ROOT_RIM = 2
         const val TIP_RIM = 3
-
-        /** The drawing's own swatches: violet and burnt orange roots, magenta and gold tips. */
-        val OWN_ROOT_HUE = floatArrayOf(300f, 45f)
-        val OWN_TIP_HUE = floatArrayOf(350f, 85f)
-        val ROOT_LIGHTNESS = floatArrayOf(0.4f, 0.55f)
-
-        /** Where a chosen palette's span is read: the low half for the first twin, the high half for the second. */
-        val ROOT_AT = floatArrayOf(0.02f, 0.6f)
-        val TIP_AT = floatArrayOf(0.38f, 0.97f)
 
         const val CUSP_FROM = 0.2f
         const val CUSP_STEP = 0.005f

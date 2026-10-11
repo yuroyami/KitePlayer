@@ -12,11 +12,12 @@ import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Twin Bloom on its own, before it joins the catalogue: the one outline its elements share, the
- * picture it draws, how still it keeps in silence, the cascade and the throw.
+ * Twin Bloom on its own: the one outline its elements share, the picture it draws, how still it keeps
+ * in silence, the cascade, the throw and the garden.
  */
 class TwinBloomTest {
 
@@ -48,7 +49,7 @@ class TwinBloomTest {
     }
 
     @Test
-    fun drawsTheTwinsOnTheLivelySong() {
+    fun drawsTheGardenOnTheLivelySong() {
         var peakInk = 0f
         var peakBlown = 0f
         RenderHarness.forEachFrame(TwinBloom(), 320, 200, 60, VizPalette.Prism, RenderHarness.Song.Lively) { bitmap, step ->
@@ -57,27 +58,115 @@ class TwinBloomTest {
             peakInk = max(peakInk, inkFraction(image))
             peakBlown = max(peakBlown, blownFraction(image))
         }
-        assertTrue(peakInk > 0.004f, "the twins put down ink on only ${peakInk * 100}% of the picture")
+        assertTrue(peakInk > 0.004f, "the garden puts down ink on only ${peakInk * 100}% of the picture")
         assertTrue(peakBlown <= 0.3f, "${peakBlown * 100}% of the picture saturated to white")
     }
 
     @Test
-    fun theFirstFrameShowsBothTwinsAcrossMostOfTheShorterSide() {
+    fun theFirstFrameShowsOneBudAndTheLivelySongGrowsAGarden() {
         for ((width, height) in listOf(320 to 200, 200 to 320)) {
             val image = RenderHarness.render(TwinBloom(), width, height, 1, VizPalette.Prism, RenderHarness.Song.Silence)
-            val ink = inkFraction(image)
-            assertTrue(ink > 0.1f, "the first frame at ${width}x$height is nearly black: ${ink * 100}% ink")
             val (across, down) = litSpan(image)
             val shorter = minOf(width, height)
-            assertTrue(minOf(across, down) >= 0.6f * shorter, "the twins span only ${across}x$down of ${width}x$height")
+            val span = maxOf(across, down) / shorter.toFloat()
+            println("twin bloom: the first bud spans $across by $down of ${width}x$height, $span of the shorter side")
+            assertTrue(span in 0.05f..0.25f, "the first frame shows one bud, spanning $span of the shorter side")
         }
+        val garden = TwinBloom()
+        RenderHarness.forEachFrame(garden, 96, 54, 3600, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ -> }
+        println("twin bloom: ${garden.bloomCount} blooms after a minute of drums")
+        assertTrue(garden.bloomCount >= 2, "the drums grow a garden, ${garden.bloomCount} blooms")
     }
 
     @Test
-    fun silenceMovesTheTwinsFarLessThanMusic() {
+    fun petalLengthRunsTheFullRange() {
+        assertEquals(0.2f, TwinBloom.petalLengthFor(0f), 0.001f)
+        assertEquals(1f, TwinBloom.petalLengthFor(1f), 0.001f)
+    }
+
+    @Test
+    fun aBirthPlantsABloomWhereTheMixPutsIt() {
+        fun plant(driver: VizDriver?): TwinBloom {
+            val drawing = TwinBloom()
+            RenderHarness.forEachFrameOf(drawing, 96, 54, 102, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(driver, step) }) { _, step ->
+                if (step == 100) drawing.birth()
+            }
+            return drawing
+        }
+        val leaning = plant(VizDriver.Waveform)
+        val bright = plant(VizDriver.Timbre)
+        val plain = plant(null)
+        println("twin bloom: a birth under a left-heavy mix stands at ${leaning.bloomX(1)} against the bud at ${leaning.bloomX(0)}; " +
+            "depth ${bright.bloomDepth(1)} under a bright sound, ${plain.bloomDepth(1)} under the baseline")
+        assertEquals(2, leaning.bloomCount)
+        assertTrue(leaning.bloomX(0) - leaning.bloomX(1) > 0.15f, "a left-heavy mix plants to the left")
+        assertTrue(bright.bloomDepth(1) > plain.bloomDepth(1), "a bright sound plants further back")
+    }
+
+    @Test
+    fun theSixthBirthWiltsTheOldest() {
+        val drawing = TwinBloom()
+        var afterFourth = 0
+        var fifthAge = -1f
+        var sixthAge = -1f
+        var sixthOldest = -1f
+        RenderHarness.forEachFrameOf(drawing, 96, 54, 72, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }) { _, step ->
+            if (step in listOf(10, 20, 30, 40, 50, 60)) drawing.birth()
+            if (step == 41) afterFourth = drawing.bloomCount
+            if (step == 51) fifthAge = drawing.bloomAge(0)
+            if (step == 61) { sixthAge = drawing.bloomAge(1); sixthOldest = drawing.bloomAge(0) }
+        }
+        println("twin bloom: $afterFourth blooms after four births; the fifth reborn at age $fifthAge, the sixth at $sixthAge with slot 0 at $sixthOldest")
+        assertEquals(5, afterFourth)
+        assertTrue(fifthAge < 0.05f, "the fifth birth replaces the first bud")
+        assertTrue(sixthAge < 0.05f && sixthOldest > 0.1f, "the sixth replaces the next oldest")
+        assertEquals(5, drawing.bloomCount)
+    }
+
+    @Test
+    fun theStemGrowsWithTheEnergyHeard() {
+        fun grown(song: RenderHarness.Song): TwinBloom {
+            val drawing = TwinBloom()
+            RenderHarness.forEachFrame(drawing, 96, 54, 300, VizPalette.Prism, song) { _, _ -> }
+            return drawing
+        }
+        val lively = grown(RenderHarness.Song.Lively).stemHeight(0)
+        val calm = grown(RenderHarness.Song.Calm).stemHeight(0)
+        val quiet = TwinBloom()
+        var first = -1f
+        var last = -1f
+        RenderHarness.forEachFrame(quiet, 96, 54, 120, VizPalette.Prism, RenderHarness.Song.Silence) { _, step ->
+            if (step == 0) first = quiet.stemHeight(0)
+            last = quiet.stemHeight(0)
+        }
+        println("twin bloom: the stem grew to $lively on the drums and $calm on the pad; $first to $last in silence")
+        assertTrue(lively > calm, "more energy grows a taller stem")
+        assertEquals(first, last, "a silence grows nothing")
+    }
+
+    @Test
+    fun theOrbitIsGone() {
+        val drawing = TwinBloom()
+        var first = Float.NaN
+        var widest = 0f
+        RenderHarness.forEachFrame(drawing, 96, 54, 300, VizPalette.Prism, RenderHarness.Song.Lively) { _, step ->
+            if (step == 0) first = drawing.bloomX(0)
+            widest = max(widest, abs(drawing.bloomX(0) - first))
+        }
+        println("twin bloom: the first bud moved at most $widest of the screen across")
+        assertTrue(widest <= 0.02f, "the bud only sways, $widest")
+        assertTrue(drawing.genes.all.none { "Backwards" in it.name || "backwards" in it.name }, "no backwards gene")
+    }
+
+    @Test
+    fun silenceMovesTheGardenFarLessThanMusic() {
         val music = meanChange(RenderHarness.Song.Lively)
         val quiet = meanChange(RenderHarness.Song.Silence)
-        assertTrue(music > 0.004f, "the music render barely moves: $music")
+        println("twin bloom: frames change by $music on the drums and $quiet in silence")
+        // The garden opens as one bud, which covers less of the frame than a full flower.
+        assertTrue(music > 0.003f, "the music render barely moves: $music")
         assertTrue(quiet <= 0.2f * music, "silence moves ${quiet / music} as much as the music does")
     }
 
@@ -113,21 +202,15 @@ class TwinBloomTest {
         var edgeBefore = 0f
         var edgeAfter = 0f
         var reachedAt = -1
-        var apartBefore = 0f
-        var apartMost = 0f
         RenderHarness.forEachFrameOf(
             drawing, width, height, drop + 300, VizPalette.Prism,
             source = { step -> InjectedFrames.frame(VizDriver.Drop, step) },
         ) { bitmap, step ->
             if (step == drop) bar = drawing.barSeconds
-            val anchors = drawing.anchors
-            val apart = hypot((anchors[0].x - anchors[1].x) * width, (anchors[0].y - anchors[1].y) * height)
-            if (step == drop - 1) apartBefore = apart
             val image = bitmap.toBufferedImage()
             val edge = edgeInk(image)
             if (step in drop - 20 until drop) edgeBefore = max(edgeBefore, edge)
             if (step >= drop) {
-                apartMost = max(apartMost, apart)
                 if (step - drop <= bar * 60f) edgeAfter = max(edgeAfter, edge)
                 if (reachedAt < 0 && edge > 0.03f) reachedAt = step
             }
@@ -136,7 +219,6 @@ class TwinBloomTest {
         assertTrue(edgeBefore < 0.01f, "the frame edges were lit before the drop: $edgeBefore")
         assertTrue(edgeAfter > 0.03f, "the thrown discs never reached the frame edges within a bar: $edgeAfter")
         assertTrue(reachedAt - drop <= bar * 60f, "the discs reached the edges ${reachedAt - drop} frames after the drop")
-        assertTrue(apartMost > 1.5f * apartBefore, "the twins did not fling apart: $apartBefore to at most $apartMost")
     }
 
     /** The full width along the length, for a length of one. */

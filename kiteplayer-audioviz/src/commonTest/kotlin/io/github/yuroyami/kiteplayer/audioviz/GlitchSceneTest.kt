@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFuture
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Evolution
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene
 import kotlin.math.abs
@@ -12,6 +13,7 @@ import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /** The rules of the broken broadcast, checked on its numbers without drawing it. */
@@ -47,7 +49,7 @@ class GlitchSceneTest {
         assertEquals(0, scene.slices)
         assertFalse(scene.staticOn)
         assertFalse(scene.moshing)
-        assertTrue(scene.melt.all { it < 0f })
+        assertEquals(-1, scene.slipRow)
         assertTrue(scene.scanStrength < 0.01f, "no scan bar rolls in silence")
     }
 
@@ -129,6 +131,12 @@ class GlitchSceneTest {
 
     @Test
     fun aSnareTearsThreeToEightSlicesForTwoToFourFrames() {
+        fun reach(novelty: Float): Float {
+            val run = Run()
+            repeat(30) { run.next(novelty = novelty) }
+            run.next(hits = listOf(AudioEventKind.BodyTransient to 0.6f), novelty = novelty)
+            return (0 until run.scene.slices).sumOf { abs(run.scene.sliceShift[it]).toDouble() }.toFloat()
+        }
         fun tear(strength: Float): Pair<Int, Int> {
             val run = Run()
             repeat(30) { run.next() }
@@ -144,25 +152,86 @@ class GlitchSceneTest {
         }
         assertEquals(3 to 2, tear(0f))
         assertEquals(8 to 4, tear(1f))
+        val changed = reach(0.9f)
+        val steady = reach(0.1f)
+        assertTrue(changed > steady * 2f, "a tear reaches further when the spectrum changed: $changed against $steady")
     }
 
     @Test
-    fun aHatMeltsOnlyTheBrightestBarsAboveAFixedLevel() {
-        val quietBands = FloatArray(48) { 0.05f }
-        val quiet = Run()
-        repeat(60) { quiet.next(bands = quietBands) }
-        quiet.next(bands = quietBands, hits = listOf(AudioEventKind.HighTransient to 0.9f))
-        assertTrue(quiet.scene.melt.all { it < 0f }, "nothing melts in a passage with no bright bar")
+    fun aHatSlipsOneRowForTwoToFourFrames() {
+        val run = Run()
+        repeat(30) { run.next() }
+        repeat(6) { hat ->
+            run.next(hits = listOf(AudioEventKind.HighTransient to 0.8f))
+            assertTrue(run.scene.slipRow in 0 until run.scene.rows, "hat $hat slipped row ${run.scene.slipRow}")
+            assertTrue(run.scene.slipShift != 0f, "hat $hat slipped its row by nothing")
+            var frames = 1
+            while (run.scene.slipRow >= 0 && frames < 10) {
+                run.next()
+                if (run.scene.slipRow >= 0) frames++
+            }
+            assertTrue(frames in 2..4, "hat $hat slipped its row for $frames frames")
+            assertEquals(0f, run.scene.slipShift)
+        }
+    }
 
-        val loudBands = FloatArray(48) { if (it < 20) 0.3f else 0.05f }
-        val loud = Run()
-        repeat(60) { loud.next(bands = loudBands) }
-        loud.next(bands = loudBands, hits = listOf(AudioEventKind.HighTransient to 0.9f))
-        val melting = (0 until GlitchScene.BARS).filter { loud.scene.melt[it] >= 0f }
-        assertTrue(melting.size in 1..6, "one hat melts a few bars, not ${melting.size}")
-        assertTrue(melting.all { loud.scene.glow[it] >= 0.16f }, "only bright bars melt")
-        repeat(20) { loud.next(bands = loudBands) }
-        assertTrue(loud.scene.melt.all { it < 0f }, "a melt runs out and the bar is clean again")
+    @Test
+    fun theFormsFollowTheMusic() {
+        val run = Run()
+        repeat(30) { run.next() }
+        assertEquals("Broadcast", GlitchScene.FORMS[run.scene.form])
+        val reach = run.scene.trackingReach
+        run.scene.morph()
+        assertEquals("Tracking", GlitchScene.FORMS[run.scene.form])
+        assertEquals(reach * 2f, run.scene.trackingReach, 1e-6f)
+        run.scene.morph()
+        assertEquals("Mosh", GlitchScene.FORMS[run.scene.form])
+        // A freeze starts within one cycle, with no drop.
+        var frames = 0
+        val most = (run.scene.cycleSeconds / DELTA).toInt() + 2
+        while (!run.scene.moshing && frames < most) {
+            run.next()
+            frames++
+        }
+        assertTrue(run.scene.moshing, "the Mosh form froze nothing in a cycle")
+        run.next(structure = AudioEventKind.Breakdown)
+        assertEquals("Dead air", GlitchScene.FORMS[run.scene.form])
+        assertTrue(run.scene.deadAir)
+        repeat(30) { run.next() }
+        assertTrue(run.scene.collapse > 0.5f, "dead air collapsed only to ${run.scene.collapse}")
+        run.next(structure = AudioEventKind.SectionBoundary)
+        assertEquals("Broadcast", GlitchScene.FORMS[run.scene.form])
+    }
+
+    @Test
+    fun aBirthTearsANewSetInFromTheTop() {
+        val scene = GlitchScene()
+        scene.layout(1920f, 1080f)
+        val run = Run(scene)
+        repeat(30) { run.next() }
+        val old = scene.set
+        scene.birth()
+        assertEquals(0f, scene.wipeY)
+        run.next()
+        run.next()
+        assertTrue(scene.wipeY in 0f..0.99f, "the wipe is part way down at ${scene.wipeY}")
+        assertNotEquals(scene.setOfRow(0), scene.setOfRow(scene.rows - 1), "the rows above the wipe show the new set")
+        assertEquals(old, scene.setOfRow(0), "the bottom row keeps the old set until the wipe reaches it")
+        repeat(30) { run.next() }
+        assertEquals(1f, scene.wipeY)
+        assertTrue((0 until scene.rows).all { scene.setOfRow(it) == scene.set }, "the new set covers the screen")
+        assertNotEquals(old, scene.set)
+    }
+
+    @Test
+    fun theKeyBiasesTheNextSet() {
+        fun next(keyHue: Float): Int {
+            val run = Run()
+            repeat(30) { run.next(keyHue = keyHue) }
+            run.next(keyHue = keyHue, structure = AudioEventKind.SectionBoundary)
+            return run.scene.set
+        }
+        assertNotEquals(next(0.1f), next(0.6f), "the key does not change which set comes next")
     }
 
     @Test
@@ -265,9 +334,10 @@ class GlitchSceneTest {
                 }
                 run.next(bands = bands, hits = hits, structure = if (frame == 100) AudioEventKind.Drop else null)
             }
-            return scene.light.toList() + scene.white.toList() + scene.melt.toList() +
+            return scene.light.toList() + scene.white.toList() + listOf(scene.slipRow.toFloat(), scene.slipShift) +
                 scene.sliceTop.toList() + scene.sliceShift.toList() +
-                listOf(scene.split, scene.collapse, scene.scanAt, scene.channel.toFloat(), scene.slices.toFloat())
+                listOf(scene.split, scene.collapse, scene.scanAt, scene.channel.toFloat(), scene.slices.toFloat(),
+                    scene.form.toFloat(), scene.set.toFloat())
         }
         val first = play()
         scene.reset()
@@ -277,6 +347,7 @@ class GlitchSceneTest {
     /** One run of frames at sixty a second, with the gestures the drawing's kit would keep. */
     private class Run(val scene: GlitchScene = GlitchScene(), private val future: VizFuture? = null) {
         private val gestures = Gestures()
+        private val evolution = Evolution()
         private val random = Rng(5L)
         private var frame = 0
         private var sequence = 0L
@@ -287,6 +358,8 @@ class GlitchSceneTest {
             hits: List<Pair<AudioEventKind, Float>> = emptyList(),
             structure: AudioEventKind? = null,
             held: Boolean = false,
+            novelty: Float = 0.2f,
+            keyHue: Float = 0f,
         ) {
             frame++
             val pts = frame * 1_000_000L / 60L
@@ -295,12 +368,14 @@ class GlitchSceneTest {
             if (structure != null) events += delivered(structure, pts, 0.7f, AudioEventSource.LiveStructure)
             val analysis = SpectrumFrame(
                 pts, bands, bands, FloatArray(128), level, level, level, level, 0f, 0f,
-                energy = level, mood = 0.5f, density = 0.4f, held = held,
+                energy = level, mood = 0.5f, novelty = novelty, density = 0.4f, held = held,
+                keyHue = keyHue, keyConfidence = 1f,
                 events = AudioEventDelivery(Generation.Initial, 0L, pts, events.toTypedArray()),
             )
             val state = VizRenderState(analysis, frame * DELTA, DELTA, VizPalette.Prism, future = future)
             gestures.update(state)
-            scene.advance(state, gestures, random)
+            evolution.update(state, gestures)
+            scene.advance(state, gestures, evolution, random)
         }
 
         private fun delivered(kind: AudioEventKind, pts: Long, strength: Float, source: AudioEventSource) =

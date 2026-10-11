@@ -18,7 +18,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -39,21 +38,25 @@ internal class GlitchGeometry {
     private val traceX = FloatArray(TRACE_POINTS)
     private val traceY = FloatArray(TRACE_POINTS)
 
+    // How far the walk turns every swatch hue in this build, in degrees.
+    private var turn = 0f
+
     /** Builds [picture] from [scene] for a canvas of [width] by [height] pixels. */
     fun build(scene: GlitchScene, width: Float, height: Float) {
         picture.clear()
         if (width <= 0f || height <= 0f) return
         val middle = height * 0.5f
-        val set = scene.channel % SETS.size
-        if (scene.collapse >= MERGE_AT) addLine(scene, set, width, height, middle) else addBlocks(scene, set, width, height, middle)
+        turn = scene.walkTurn
+        if (scene.collapse >= MERGE_AT) addLine(scene, scene.set, width, height, middle) else addBlocks(scene, width, height, middle)
         addTrace(scene, width, height, middle, scene.collapse)
     }
 
     /**
      * The spectrogram: bass in the bottom row, the newest column on the right, a clear band across the middle
-     * for the ribbon. A collapse folds the rows toward the middle; the tracking roll moves them and wraps.
+     * for the ribbon. A collapse folds the rows toward the middle; the tracking roll moves them and wraps. A
+     * hat's slipped row slides sideways and wraps round.
      */
-    private fun addBlocks(scene: GlitchScene, set: Int, width: Float, height: Float, middle: Float) {
+    private fun addBlocks(scene: GlitchScene, width: Float, height: Float, middle: Float) {
         val collapse = scene.collapse
         val columns = scene.columns
         val rows = scene.rows
@@ -66,11 +69,13 @@ internal class GlitchGeometry {
         val scan = scene.scanStrength * (1f - collapse)
         val scanY = scene.scanAt * height
         val scanReach = SCAN_HALF * height
+        val slip = (scene.slipShift * width).roundToInt().toFloat()
         for (column in 0 until columns) {
             val left = (column * cellWidth).roundToInt().toFloat()
             val right = ((column + 1) * cellWidth).roundToInt().toFloat() - GAP
             if (right <= left) continue
             for (row in 0 until rows) {
+                val shift = if (row == scene.slipRow) slip else 0f
                 val floor = if (row < lower) height - row * cellHeight else height - row * cellHeight - band
                 val top = (middle + (floor - cellHeight - middle) * fold + roll).roundToInt().toFloat()
                 val bottom = (middle + (floor - middle) * fold + roll).roundToInt().toFloat() - GAP
@@ -83,8 +88,17 @@ internal class GlitchGeometry {
                 light += (1f - light) * collapse * LINE_LIGHT
                 var white = scene.white[column * ROWS_MOST + row]
                 white += (1f - white) * collapse * LINE_WHITE
-                val colour = colour(swatchOf(set, scene.blockLevel(column, row)), light, white)
-                addWrapped(left, right, top, bottom, height, colour)
+                val colour = colour(swatchOf(scene.setOfRow(row), scene.blockLevel(column, row)), light, white)
+                if (shift == 0f) {
+                    addWrapped(left, right, top, bottom, height, colour)
+                } else {
+                    // A slipped block that leaves one side of the screen comes back on the other.
+                    addWrapped(left + shift, right + shift, top, bottom, height, colour)
+                    val wrap = if (shift > 0f) -width else width
+                    if (left + shift < 0f || right + shift > width) {
+                        addWrapped(left + shift + wrap, right + shift + wrap, top, bottom, height, colour)
+                    }
+                }
             }
         }
     }
@@ -188,18 +202,19 @@ internal class GlitchGeometry {
     }
 
     /**
-     * A swatch at [light], in linear light, moved [white] of the way to white. The swatches are the
-     * idea of this drawing, so no palette and no key changes them.
+     * A swatch at [light], in linear light, moved [white] of the way to white, its hue turned by the walk.
+     * The swatches are the idea of this drawing, so no palette changes them.
      */
     private fun colour(hue: Int, light: Float, white: Float): Int {
         val lightness = SWATCH_LIGHTNESS[hue]
         val chroma = SWATCH_CHROMA[hue]
         val towards = white.coerceIn(0f, 1f)
         val lifted = lightness + (1f - lightness) * towards
-        val colourful = min(chroma * (1f - towards), mostChroma(lifted, SWATCH_HUE[hue]))
-        // Scaling linear light by k scales Oklab's lightness and chroma by its cube root.
-        val scale = light.coerceIn(0f, 1f).pow(1f / 3f)
-        return colourOf(lifted * scale, colourful * scale, SWATCH_HUE[hue]).toArgb()
+        val colourful = min(chroma * (1f - towards), mostChroma(lifted, SWATCH_HUE[hue] + turn))
+        // The light scales lightness and chroma as the other drawings scale their colours, so a calm song
+        // reads as a dimmer screen and not only as a different swatch.
+        val scale = light.coerceIn(0f, 1f)
+        return colourOf(lifted * scale, colourful * scale, SWATCH_HUE[hue] + turn).toArgb()
     }
 
     private companion object {

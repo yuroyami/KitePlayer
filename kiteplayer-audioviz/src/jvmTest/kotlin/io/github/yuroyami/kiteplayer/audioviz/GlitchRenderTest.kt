@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.Density
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.audioviz.RenderHarness.toBufferedImage
 import io.github.yuroyami.kiteplayer.audioviz.viz.VisualizerSurface
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene
@@ -97,13 +98,13 @@ class GlitchRenderTest {
         }
         ImageIO.write(kicked.getValue(270), "png", File(directory, "kick.png"))
         assertEquals(0, fringes(base.getValue(270)).sum(), "a clean frame has no red, green or blue")
-        // Blocks sit one pixel apart, so most of a split shows as shifted colour where blocks meet. A pure
-        // edge shows only in a channel the neighbouring swatches leave dark: with cyan and yellow blocks,
-        // green and blue edges and no red ones.
-        val split = fringes(kicked.getValue(270))
-        println("glitch: a kick fringes ${split.toList()} pixels and changes ${changedShare(base.getValue(270), kicked.getValue(270))}")
-        assertTrue(split.sum() > WIDTH * HEIGHT / 200, "a kick shows pure fringes: ${split.toList()} pixels")
-        assertTrue(split.count { it > WIDTH * HEIGHT / 400 } >= 2, "a kick fringes two channels at least: ${split.toList()}")
+        // Blocks sit one pixel apart, so most of a split shows as shifted colour where blocks meet. Whether
+        // an edge reads as pure red, green or blue depends on the swatch, its light and the walk's hue, so the
+        // split is counted by the colour layers that moved.
+        val moved = movedChannels(base.getValue(270), kicked.getValue(270))
+        println("glitch: a kick fringes ${fringes(kicked.getValue(270)).toList()} pixels, moves ${moved.toList()} " +
+            "and changes ${changedShare(base.getValue(270), kicked.getValue(270))}")
+        assertTrue(moved.count { it > WIDTH * HEIGHT / 200 } >= 2, "a kick moves two layers at least: ${moved.toList()}")
         assertTrue(changedShare(base.getValue(270), kicked.getValue(270)) > 0.05f, "a kick shifts the colour at every block edge")
         assertContentEquals(pixels(base.getValue(277)), pixels(kicked.getValue(277)), "117 ms after the kick the edges are clean")
     }
@@ -142,9 +143,11 @@ class GlitchRenderTest {
         }.getValue(99)
         ImageIO.write(image, "png", File(directory, "breakdown.png"))
         val middle = HEIGHT / 2
+        // Away from the line there is only the faint static of dead air.
+        val faint = (255f * GlitchScene.DEAD_AIR_STATIC * 1.5f).toInt()
         for (y in 0 until HEIGHT) {
             if (abs(y - middle) <= HEIGHT * 0.08f) continue
-            for (x in 0 until WIDTH) assertTrue(brightest(image.getRGB(x, y)) < 16, "($x, $y) is lit away from the line")
+            for (x in 0 until WIDTH) assertTrue(brightest(image.getRGB(x, y)) < faint, "($x, $y) is lit away from the line")
         }
         val lit = (0 until WIDTH).count { x -> (middle - 3..middle + 3).any { luma(image.getRGB(x, it)) > 0.5f } }
         assertTrue(lit > WIDTH * 0.9f, "the line is bright across the width: $lit of $WIDTH columns")
@@ -160,8 +163,16 @@ class GlitchRenderTest {
         val moshed = render(WIDTH, HEIGHT, frames, { it == 59 || it == 60 || it == 90 || it == ended }, drawing, afterFrame = { step ->
             if (ended < 0 && step > 60 && !drawing.scene.moshing) ended = step
         }) { GlitchFrames.frame(it, if (it < 60) LOUD_LOW else LOUD_HIGH, structure = if (it == 60) AudioEventKind.Drop else null) }
-        // The same music with a plain section at the same moment, so both end on the same colours.
-        val clean = render(WIDTH, HEIGHT, frames, { it == 90 || it == ended }) {
+        // The same music with a plain section at the same moment, so both end on the same colours. The
+        // section also moves the form on, and a drop is a surge, which brings a new set in. So the clean run
+        // is moved back to Broadcast, where a drop leaves it, and given the drop's new set.
+        val plain = Glitch()
+        val clean = render(WIDTH, HEIGHT, frames, { it == 90 || it == ended }, plain, afterFrame = { step ->
+            if (step == 60) {
+                repeat(GlitchScene.FORMS.size - 2) { plain.scene.morph() }
+                plain.scene.birth()
+            }
+        }) {
             GlitchFrames.frame(it, if (it < 60) LOUD_LOW else LOUD_HIGH, structure = if (it == 60) AudioEventKind.SectionBoundary else null)
         }
         assertTrue(ended > 0, "the datamosh never ended")
@@ -173,6 +184,30 @@ class GlitchRenderTest {
         assertTrue(changedShare(clean.getValue(90), moshed.getValue(90)) > 0.1f, "the datamosh is not the clean picture")
         assertTrue(changedShare(moshed.getValue(60), moshed.getValue(90)) > 0.05f, "the frozen blocks slide")
         assertContentEquals(pixels(clean.getValue(ended)), pixels(moshed.getValue(ended)), "a clean frame snaps back, sharp")
+    }
+
+    @Test
+    fun theGuardReachesTheStaticAndTheDatamosh() {
+        fun meanLuma(driver: VizDriver, at: Int, light: Float, check: (Glitch) -> Boolean): Float {
+            val drawing = Glitch()
+            var mean = -1f
+            RenderHarness.forEachFrameOf(drawing, 320, 180, at + 1, VizPalette.Prism,
+                source = { InjectedFrames.frame(driver, it) }, beforeDraw = { it.lightScale = light }) { bitmap, step ->
+                if (step != at) return@forEachFrameOf
+                assertTrue(check(drawing), "$driver shows no fault at step $at")
+                val image = bitmap.toBufferedImage()
+                mean = pixels(image).sumOf { luma(it).toDouble() }.toFloat() / (image.width * image.height)
+            }
+            return mean
+        }
+        val staticFull = meanLuma(VizDriver.Section, 67, 1f) { it.scene.staticOn }
+        val staticQuarter = meanLuma(VizDriver.Section, 67, 0.25f) { it.scene.staticOn }
+        val moshFull = meanLuma(VizDriver.Drop, 90, 1f) { it.scene.moshing }
+        val moshQuarter = meanLuma(VizDriver.Drop, 90, 0.25f) { it.scene.moshing }
+        println("glitch guard: static $staticFull at full light, $staticQuarter at a quarter; " +
+            "datamosh $moshFull at full light, $moshQuarter at a quarter")
+        assertTrue(staticQuarter <= staticFull * 0.4f, "the guard does not reach the static")
+        assertTrue(moshQuarter <= moshFull * 0.4f, "the guard does not reach the datamosh")
     }
 
     @Test
@@ -382,6 +417,18 @@ private fun fringes(image: BufferedImage): IntArray {
         val strongest = (0..2).maxBy { channels[it] }
         val next = (0..2).filter { it != strongest }.maxOf { channels[it] }
         if (channels[strongest] >= 120 && channels[strongest] >= next * 2.5f) out[strongest]++
+    }
+    return out
+}
+
+/** Pixels whose red, green or blue changed by more than a quarter, counted per channel. */
+private fun movedChannels(a: BufferedImage, b: BufferedImage): IntArray {
+    val out = IntArray(3)
+    val first = pixels(a)
+    val second = pixels(b)
+    for (i in first.indices) for (channel in 0..2) {
+        val shift = 16 - 8 * channel
+        if (abs((first[i] shr shift and 0xFF) - (second[i] shr shift and 0xFF)) > 64) out[channel]++
     }
     return out
 }

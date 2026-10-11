@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
@@ -25,12 +26,23 @@ import kotlin.math.roundToInt
  * The music's own signal as a broken broadcast: the spectrogram as large blocks. Across is time, four
  * heard seconds scrolling to the left; up is band, with the bass at the bottom. A block takes the first,
  * second or third swatch of the set by its level. The waveform is a thick white trace across a clear band
- * in the middle, and a brighter scan bar rolls down once a bar.
+ * in the middle, and a brighter scan bar rolls down once a bar. Dense music coarsens the blocks into
+ * pairs and fours; that reads the frame's density, which no driver names, so the mapping declares nothing
+ * for it.
  *
  * The drums break it the way damaged video breaks: a kick splits the red, green and blue layers for
- * a moment, a snare tears slices sideways, a hat melts the brightest bars. A section changes the
- * channel, a breakdown collapses the picture into one bright line, and a drop freezes the frame into
- * a datamosh that smears into the new picture until a clean frame snaps back on the next first beat.
+ * a moment, a snare tears slices sideways by how much the spectrum changed, and a hat slips one row of
+ * blocks. A section changes the channel to the next set, which the key biases, and the walk turns the
+ * hues a little within a set. A breakdown collapses the picture into one bright line over a faint
+ * static, and a drop freezes the frame into a datamosh that smears into the new picture until a clean
+ * frame snaps back on the next first beat.
+ *
+ * The forms are Broadcast, Tracking (the roll reaches twice as far), Mosh (a datamosh every cycle) and
+ * Dead air (the breakdown). A birth tears a new set in from the top.
+ *
+ * For the eyes: every block is at least 24 pixels, the hues change only with the set, neighbouring blocks
+ * step by at most half the light, nothing is a hairline, and the flash guard dims every layer, the static
+ * and the datamosh included.
  */
 internal class Glitch : Layered(
     "Glitch", VizEnergy.Mid,
@@ -49,11 +61,15 @@ internal class Glitch : Layered(
         VizDrive(VizDriver.Waveform, VizProperty.Shape),
         VizDrive(VizDriver.LowHit, VizProperty.Colour, VizCurve.Scaled, VizResponse.lifetime(GlitchScene.SPLIT_SECONDS)),
         VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.lifetime(4f / 60f)),
-        VizDrive(VizDriver.HighHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.lifetime(GlitchScene.MELT_SECONDS)),
+        // A hat slips one row of blocks for two to four frames.
+        VizDrive(VizDriver.HighHit, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(0.07f)),
         // The pulse, or the mood while no pulse is known, sets how fast the scan bar rolls.
         VizDrive(VizDriver.Pulse, VizProperty.Shape, response = VizResponse.Rate),
         VizDrive(VizDriver.Mood, VizProperty.Shape, response = VizResponse.Rate),
         VizDrive(VizDriver.Section, VizProperty.Colour, VizCurve.Discrete),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
+        // The key biases which set the next channel shows.
+        VizDrive(VizDriver.Key, VizProperty.Colour),
         VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete),
         VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete),
         silence = VizSilence.Still,
@@ -72,8 +88,11 @@ internal class Glitch : Layered(
     private val geometry = GlitchGeometry()
     private val fields = GlitchFields()
 
+    override val forms: FormReadout
+        get() = FormReadout(GlitchScene.FORMS[scene.form], evolution.morphs, evolution.births)
+
     override fun advance(state: VizRenderState) {
-        scene.advance(state, gestures, random)
+        scene.advance(state, gestures, evolution, random, genes.walk)
     }
 
     // Everything is drawn sharp in the front. The datamosh keeps its own frames.
@@ -86,13 +105,16 @@ internal class Glitch : Layered(
         geometry.build(scene, size.width, size.height)
         if (scene.moshing) with(fields) { slide(geometry.picture, scene, scene.takeMoshSeconds()) }
         drawRect(Color.Black)
+        val light = state.lightScale.coerceIn(0f, 1f)
         if (scene.staticOn) {
-            with(fields) { drawStatic(scene) }
+            with(fields) { drawStatic(scene, light) }
             return
         }
+        // Dead air: a faint static under the line of a breakdown.
+        if (scene.deadAir) with(fields) { drawStatic(scene, light * GlitchScene.DEAD_AIR_STATIC / GlitchFields.STATIC_LIGHT) }
         val split = (scene.split * size.width).roundToInt().toFloat()
         val reduced = state.motionScale < 1f
-        signal(split, reduced)
+        signal(split, reduced, light)
         for (slice in 0 until scene.slices) {
             val top = (scene.sliceTop[slice] * size.height).roundToInt().toFloat()
             val bottom = ((scene.sliceTop[slice] + scene.sliceHeight[slice]) * size.height).roundToInt().toFloat()
@@ -102,15 +124,15 @@ internal class Glitch : Layered(
             val wrap = if (shift > 0f) shift - size.width else shift + size.width
             clipRect(0f, top, size.width, bottom) {
                 drawRect(Color.Black, Offset(0f, top), Size(size.width, bottom - top))
-                translate(shift, 0f) { signal(split, reduced) }
-                translate(wrap, 0f) { signal(split, reduced) }
+                translate(shift, 0f) { signal(split, reduced, light) }
+                translate(wrap, 0f) { signal(split, reduced, light) }
             }
         }
     }
 
-    /** The picture, or the datamosh while one runs. */
-    private fun DrawScope.signal(split: Float, reduced: Boolean) {
-        if (scene.moshing) with(fields) { drawMosh(split, reduced) } else with(geometry) { drawPicture(split) }
+    /** The picture, or the datamosh at [light] while one runs. The picture is already lit. */
+    private fun DrawScope.signal(split: Float, reduced: Boolean, light: Float) {
+        if (scene.moshing) with(fields) { drawMosh(split, reduced, light) } else with(geometry) { drawPicture(split) }
     }
 
     override fun onReset() {

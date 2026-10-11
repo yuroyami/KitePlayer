@@ -116,33 +116,37 @@ internal class GlitchFields {
     }
 
     /**
-     * Draws the datamosh over the whole canvas with its colour layers [split] pixels apart. Under
-     * reduced motion its blocks barely move, so it greys and dims instead, the moment as a change of
-     * colour and light.
+     * Draws the datamosh over the whole canvas with its colour layers [split] pixels apart, at [light] so the
+     * flash guard reaches it. Under reduced motion its blocks barely move, so it greys and dims instead, the
+     * moment as a change of colour and light.
      */
-    fun DrawScope.drawMosh(split: Float, reduced: Boolean) {
+    fun DrawScope.drawMosh(split: Float, reduced: Boolean, light: Float) {
         val image = shown ?: return
         val whole = IntSize(size.width.roundToInt().coerceAtLeast(1), size.height.roundToInt().coerceAtLeast(1))
+        val alpha = light.coerceIn(0f, 1f)
         if (split < 1f) {
-            drawImage(image, dstSize = whole, colorFilter = if (reduced) GREYED else null,
+            drawImage(image, dstSize = whole, alpha = alpha, colorFilter = if (reduced) GREYED else null,
                 filterQuality = FilterQuality.None)
             return
         }
         for (channel in CHANNELS.indices) {
             translate((channel - 1) * split, 0f) {
-                drawImage(image, dstSize = whole, colorFilter = CHANNELS[channel], blendMode = BlendMode.Plus,
+                drawImage(image, dstSize = whole, alpha = alpha, colorFilter = CHANNELS[channel], blendMode = BlendMode.Plus,
                     filterQuality = FilterQuality.None)
             }
         }
     }
 
-    /** Fine static at 40 percent light at most, one noise pixel per screen pixel, placed anew each frame. */
-    fun DrawScope.drawStatic(scene: GlitchScene) {
+    /**
+     * Fine static at 40 percent light at most, times [light], one noise pixel per screen pixel, placed anew
+     * each frame.
+     */
+    fun DrawScope.drawStatic(scene: GlitchScene, light: Float) {
         val brush = noise ?: ShaderBrush(ImageShader(noiseTile().image, TileMode.Repeated, TileMode.Repeated))
             .also { noise = it }
         val span = TILE.toFloat()
         translate(-floor(scene.staticX * span), -floor(scene.staticY * span)) {
-            drawRect(brush, Offset.Zero, Size(size.width + span, size.height + span))
+            drawRect(brush, Offset.Zero, Size(size.width + span, size.height + span), alpha = light.coerceIn(0f, 1f))
         }
     }
 
@@ -172,7 +176,7 @@ internal class GlitchFields {
         tile = image
     }
 
-    private companion object {
+    internal companion object {
         /** The datamosh runs at half the screen's resolution, drawn back without filtering. */
         const val SCALE = 0.5f
 
@@ -185,6 +189,7 @@ internal class GlitchFields {
         const val FASTEST = 1.1f
 
         const val TILE = 128
+        /** The static's brightest pixel, as light. */
         const val STATIC_LIGHT = 0.4f
         const val NOISE_SEED = 90_211L
 

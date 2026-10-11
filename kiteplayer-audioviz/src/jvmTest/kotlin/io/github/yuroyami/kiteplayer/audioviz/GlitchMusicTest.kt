@@ -25,29 +25,25 @@ class GlitchMusicTest {
         val drawing = Glitch()
         var split = 0
         var sliced = 0
-        var melted = 0
-        var mostMelting = 0
+        var slipped = 0
         val frames = (seconds * 60).toInt()
         RenderHarness.forEachFrameOf(drawing, 160, 100, frames, VizPalette.Prism, { player.next(1f / 60f) }, { player.future }) { _, _ ->
             val scene = drawing.scene
-            val melting = scene.melt.count { it >= 0f }
             if (scene.split > 0f) split++
             if (scene.slices > 0) sliced++
-            if (melting > 0) melted++
-            mostMelting = maxOf(mostMelting, melting)
+            if (scene.slipRow >= 0) slipped++
         }
-        println("glitch over $frames frames: split $split, sliced $sliced, melting $melted, most bars melting $mostMelting")
+        println("glitch over $frames frames: split $split, sliced $sliced, slipped $slipped")
         // Each fault shows and then clears: the picture is broken by the drums, not broken for good.
         assertTrue(split in 1..frames * 6 / 10, "a kick splits the colour layers and they rejoin: $split of $frames frames")
         assertTrue(sliced in 1..frames * 3 / 10, "a snare tears slices and they return: $sliced of $frames frames")
-        assertTrue(melted in 1..frames * 9 / 10, "a hat melts bars and they recover: $melted of $frames frames")
-        assertTrue(mostMelting <= 16, "only the brightest bars melt, at most $mostMelting at once")
+        assertTrue(slipped in 1..frames * 9 / 10, "a hat slips a row and it returns: $slipped of $frames frames")
     }
 
     /**
      * Lists every fault in real songs and pictures the first of each kind, so a viewer can see the
      * moments a still at a fixed second rarely catches: a kick's fringes and the clean edges 117 ms
-     * later, a snare's tear, a melt, a channel change, the datamosh and its snap back, a breakdown.
+     * later, a snare's tear, a slipped row, a channel change, the datamosh and its snap back, a breakdown.
      * `GLITCH_PCM` is a comma list of 48 kHz mono float32 files and `GLITCH_OUT` a directory. Seconds
      * are counted the way the stills tool counts them. It skips unless `GLITCH_PCM` is set.
      */
@@ -71,6 +67,7 @@ class GlitchMusicTest {
             var channel = 0
             var moshing = false
             var breakdown = false
+            var slipRow = -1
             fun once(kind: String, step: Int, vararg later: Pair<Int, String>) {
                 if (step < 6 * 60 || !seen.add(kind)) return
                 wanted[step] = kind
@@ -79,7 +76,6 @@ class GlitchMusicTest {
             RenderHarness.forEachFrameOf(drawing, 480, 270, frames, VizPalette.Prism, { player.next(1f / 60f) }, { player.future }) { bitmap, step ->
                 val scene = drawing.scene
                 val at = "%.2f".format(step / 60f)
-                val melting = scene.melt.count { it == 0f }
                 if (scene.split > split) {
                     lines += "$at kick split ${"%.4f".format(scene.split)}"
                     if (scene.split >= 0.004f) once("kick", step, 7 to "kick +117 ms")
@@ -88,8 +84,8 @@ class GlitchMusicTest {
                     lines += "$at snare ${scene.slices} slices"
                     once("snare", step)
                 }
-                if (melting > 0) {
-                    lines += "$at hat $melting bars melt"
+                if (scene.slipRow >= 0 && slipRow < 0) {
+                    lines += "$at hat slips row ${scene.slipRow}"
                     once("hat", step, 4 to "hat +67 ms")
                 }
                 if (scene.channel != channel) {
@@ -110,6 +106,7 @@ class GlitchMusicTest {
                 channel = scene.channel
                 moshing = scene.moshing
                 breakdown = scene.breakdown
+                slipRow = scene.slipRow
             }
             File(out, "$name-faults.txt").writeText(lines.joinToString("\n"))
             if (stills.isNotEmpty()) ImageIO.write(strip(stills), "png", File(out, "$name-moments.png"))

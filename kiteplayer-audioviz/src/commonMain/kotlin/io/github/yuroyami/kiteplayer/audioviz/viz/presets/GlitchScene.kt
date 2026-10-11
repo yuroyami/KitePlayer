@@ -7,10 +7,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.WaveformResampler
 import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Evolution
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -70,9 +72,49 @@ internal class GlitchScene {
     var traceExposure: Float = TRACE_IDLE
         private set
 
-    /** How many channel changes there have been. It picks the colour set. */
+    /** How many channel changes there have been. */
     var channel: Int = 0
         private set
+
+    /** The swatch set the picture shows, and the one a wipe is bringing in from the top. */
+    var set: Int = 0
+        private set
+    private var wipeSet = 0
+
+    /** How far a birth's new set has torn in from the top, 0 to 1. At 1 the whole picture shows [set]. */
+    var wipeY: Float = 1f
+        private set
+
+    /** The set the next section or birth brings: the next in turn, moved on by the key. */
+    val nextSet: Int get() = (channel + 1 + keyShift) % SETS
+    private var keyShift = 0
+
+    /** The set of [row]: the new one above the wipe, the old one below it. */
+    fun setOfRow(row: Int): Int = if (wipeY < 1f && row.toFloat() / rows >= 1f - wipeY) wipeSet else set
+
+    /** How far the walk turns the swatch hues, in degrees. */
+    var walkTurn: Float = 0f
+        private set
+
+    /** The form now, an index into [FORMS]. */
+    var form: Int = BROADCAST
+        private set
+
+    /** How far the tracking roll reaches, as a share of the height: twice as far in the Tracking form. */
+    val trackingReach: Float get() = if (form == TRACKING) TRACK_REACH * 2f else TRACK_REACH
+
+    /** True in the dead air of a breakdown, which shows a faint static under the line. */
+    val deadAir: Boolean get() = form == DEAD_AIR
+
+    // How far from heard the music is, 1 in silence: the share of the idle light the blocks keep.
+    private var quiet = 1f
+
+    /** The row a hat slipped sideways, or -1, and how far, as a share of the width. */
+    var slipRow: Int = -1
+        private set
+    var slipShift: Float = 0f
+        private set
+    private var slipFrames = 0
 
     /** The middle of the scan bar, as a share of the height. */
     var scanAt: Float = -SCAN_HALF
@@ -94,16 +136,6 @@ internal class GlitchScene {
 
     /** How far each slice is torn, as a share of the width. */
     val sliceShift = FloatArray(MOST_SLICES)
-
-    /** How far each bar's melt has run, 0 to 1, or -1 for a bar that is not melting. */
-    val melt = FloatArray(BARS) { -1f }
-
-    /** A number per melting bar, so its streaks keep their places while it melts. */
-    val meltSeed = IntArray(BARS)
-
-    /** How far a melt's streaks may fall: 1 normally, small under reduced motion. */
-    var fall: Float = 1f
-        private set
 
     /** Whether the fine static of a channel change covers the picture. */
     val staticOn: Boolean get() = staticLeft > EPSILON
@@ -173,8 +205,27 @@ internal class GlitchScene {
         white.fill(0f)
     }
 
-    /** Moves the picture on by one frame. [gestures] must already have read this frame. */
-    fun advance(state: VizRenderState, gestures: Gestures, random: Rng) {
+    /** A morph: the form moves on from Broadcast to Tracking to Mosh and back. */
+    fun morph() {
+        form = when (form) {
+            BROADCAST -> TRACKING
+            TRACKING -> MOSH
+            else -> BROADCAST
+        }
+    }
+
+    /** A birth: the next set tears in from the top over [WIPE_SECONDS]. */
+    fun birth() {
+        if (wipeY < 1f) set = wipeSet
+        wipeSet = nextSet
+        wipeY = 0f
+    }
+
+    /**
+     * Moves the picture on by one frame. [gestures] and [evolution] must already have read this frame, and
+     * [walk] is the slow colour walk.
+     */
+    fun advance(state: VizRenderState, gestures: Gestures, evolution: Evolution, random: Rng, walk: Float = 0f) {
         val dt = state.deltaSeconds.within(0f, MOST_STEP)
         val step = state.stepSeconds.within(0f, MOST_STEP)
         val motion = state.motionScale.within(0f, 1f)
@@ -187,10 +238,18 @@ internal class GlitchScene {
             glow[bar] = follow(glow[bar], value, listen, GLOW_RISE, GLOW_FALL)
         }
         owedSeconds += step
+        keyShift = (state.frame.keyHue.within(0f, 0.999f) * SETS).toInt()
+        walkTurn = WALK_TURN * sin(walk * TAU)
         roll(state, gestures, step, dt)
+        changeForm(gestures, evolution)
         track(state, gestures, step)
-        breakOnHits(gestures, random, dt, motion)
+        breakOnHits(state, gestures, random, dt, motion)
         changeChannel(state, gestures, random, dt, motion)
+        if (evolution.birth) birth()
+        if (wipeY < 1f) {
+            wipeY = (wipeY + step / WIPE_SECONDS).within(0f, 1f)
+            if (wipeY >= 1f) set = wipeSet
+        }
         mosh(gestures, step, motion)
         if (refreshed(state, dt)) present(state)
     }
@@ -215,8 +274,16 @@ internal class GlitchScene {
         light.fill(IDLE_LIGHT)
         white.fill(0f)
         trace.fill(0f)
-        melt.fill(-1f)
-        meltSeed.fill(0)
+        set = 0
+        wipeSet = 0
+        wipeY = 1f
+        keyShift = 0
+        walkTurn = 0f
+        form = BROADCAST
+        slipRow = -1
+        slipShift = 0f
+        slipFrames = 0
+        quiet = 1f
         columnClock = 0f
         owedSeconds = 0f
         presence.reset()
@@ -232,7 +299,6 @@ internal class GlitchScene {
         slices = 0
         sliceAge = TEAR_GAP
         sliceSeconds = 0f
-        fall = 1f
         staticLeft = 0f
         staticX = 0f
         staticY = 0f
@@ -274,11 +340,28 @@ internal class GlitchScene {
     /** The tracking roll: a slow offset of the whole picture on the cycle, there only while the music is heard. */
     private fun track(state: VizRenderState, gestures: Gestures, step: Float) {
         presence.advance(state.frame.audible, step)
-        trackingY = TRACK_REACH * sin(gestures.cyclePhase * TAU) * presence.value * state.motionScale.within(0f, 1f)
+        trackingY = trackingReach * sin(gestures.cyclePhase * TAU) * presence.value * state.motionScale.within(0f, 1f)
     }
 
-    /** A kick splits the colour layers, a snare tears slices sideways, a hat melts the brightest bars. */
-    private fun breakOnHits(gestures: Gestures, random: Rng, dt: Float, motion: Float) {
+    /**
+     * The form chain: a drop is the kept datamosh in Broadcast, a breakdown is dead air until the music turns,
+     * and a morph moves the form on.
+     */
+    private fun changeForm(gestures: Gestures, evolution: Evolution) {
+        when {
+            evolution.bloom -> form = BROADCAST
+            evolution.collapse -> form = DEAD_AIR
+            // A breakdown frame is a turn too, which is why this follows the collapse and is not its own test.
+            form == DEAD_AIR && (gestures.turn || gestures.surge) -> form = BROADCAST
+            evolution.morph && form != DEAD_AIR -> morph()
+        }
+    }
+
+    /**
+     * A kick splits the colour layers, a snare tears slices sideways by how much the spectrum changed, and a
+     * hat slips one row of blocks for two to four frames.
+     */
+    private fun breakOnHits(state: VizRenderState, gestures: Gestures, random: Rng, dt: Float, motion: Float) {
         splitAge += dt
         if (gestures.kicks > 0) {
             val wanted = SPLIT_MOST * (0.3f + 0.7f * gestures.kick.within(0f, 1f)) * motion
@@ -296,34 +379,31 @@ internal class GlitchScene {
             slices = (3 + (5f * hit).roundToInt()).coerceIn(3, MOST_SLICES)
             sliceSeconds = (2 + (2f * hit).roundToInt()) / 60f
             sliceAge = 0f
+            // The tear reaches further when the spectrum changed more.
+            val change = 0.5f + 1.5f * state.frame.novelty.within(0f, 1f)
             for (slice in 0 until slices) {
                 sliceHeight[slice] = 0.02f + 0.09f * random.next()
                 sliceTop[slice] = random.next() * (1f - sliceHeight[slice])
-                val reach = (0.03f + 0.12f * hit * (0.4f + 0.6f * random.next())) * motion
+                val reach = (0.03f + 0.12f * hit * (0.4f + 0.6f * random.next())) * change * motion
                 sliceShift[slice] = if (random.next() < 0.5f) -reach else reach
             }
         }
         if (slices > 0 && sliceAge >= sliceSeconds - EPSILON) slices = 0
 
-        fall = motion
-        for (bar in 0 until BARS) {
-            if (melt[bar] < 0f) continue
-            melt[bar] += dt / MELT_SECONDS
-            if (melt[bar] >= 1f) melt[bar] = -1f
-        }
-        if (gestures.hats > 0) {
-            // The brightest bars above a fixed level, so a quiet passage melts fewer of them.
-            val count = (1.5f + 3f * gestures.hatAccent).roundToInt().coerceIn(1, MOST_MELTS)
-            for (pick in 0 until count) {
-                var best = -1
-                for (bar in 0 until BARS) {
-                    if (melt[bar] >= 0f || glow[bar] < MELT_LEVEL) continue
-                    if (best < 0 || glow[bar] > glow[best]) best = bar
-                }
-                if (best < 0) break
-                melt[best] = 0f
-                meltSeed[best] = (random.next() * 65_535f).toInt()
+        // The slip counts frames, as the tears do: it is the grammar of a broken signal, not a motion.
+        val held = state.frame.held
+        if (slipFrames > 0 && !held) {
+            slipFrames--
+            if (slipFrames == 0) {
+                slipRow = -1
+                slipShift = 0f
             }
+        }
+        if (gestures.hats > 0 && !held) {
+            slipRow = (random.next() * rows).toInt().coerceIn(0, rows - 1)
+            val sign = if (random.next() < 0.5f) -1f else 1f
+            slipShift = SLIP * (0.5f + 0.5f * random.next()) * sign * motion
+            slipFrames = 2 + (random.next() * 3f).toInt().coerceAtMost(2)
         }
     }
 
@@ -339,7 +419,11 @@ internal class GlitchScene {
             collapseAge = 0f
         } else if (gestures.turn && state.frame.audible > 0f) {
             breakdown = false
+            val next = nextSet
             channel++
+            set = next
+            wipeSet = next
+            wipeY = 1f
             // Under reduced motion the colours change without the static, which is a rapid cut.
             if (!gestures.surge && !moshing && motion >= 1f) staticLeft = STATIC_SECONDS
         }
@@ -360,7 +444,8 @@ internal class GlitchScene {
      */
     private fun mosh(gestures: Gestures, step: Float, motion: Float) {
         moshMotion = motion * motion
-        if (gestures.surge && !moshing) {
+        // In the Mosh form a freeze starts on the first beat of a cycle, with no drop needed.
+        if ((gestures.surge || (form == MOSH && wrapped && step > 0f)) && !moshing) {
             moshing = true
             moshStarting = true
             moshAge = 0f
@@ -428,13 +513,17 @@ internal class GlitchScene {
                 end = start
             }
         }
-        // The guard's scale reaches the idle light too, and the light follows the level of the music.
+        // The guard's scale reaches the idle light too. The light follows the level of the music, and the
+        // idle light holds only in silence, so a calm song is a dimmer screen than a loud one.
         val scale = state.lightScale.within(0f, 1f)
         val loud = lightFor(state.frame.energy.within(0f, 1f))
         val lift = state.lift.within(0f, 1f)
+        // A paused frame is not heard, but the picture it holds was.
+        if (!state.frame.held) quiet = 1f - state.frame.audible.within(0f, 1f)
         for (column in 0 until columns) for (row in 0 until rows) {
             val at = column * ROWS_MOST + row
-            light[at] = scale * (IDLE_LIGHT + (1f - IDLE_LIGHT) * loud * response(shown[at]))
+            val lit = loud * (LEAST_LIT + (1f - LEAST_LIT) * response(shown[at]))
+            light[at] = scale * max(IDLE_LIGHT * quiet, lit)
             // White needs a band that is high in any song, not merely the loudest of a quiet one.
             val peak = ((shown[at] - WHITE_FROM) / (WHITE_TO - WHITE_FROM)).within(0f, 1f)
             white[at] = lift * peak * peak * (3f - 2f * peak)
@@ -453,7 +542,7 @@ internal class GlitchScene {
             }
             light[at] = value
         }
-        traceExposure = scale * (TRACE_IDLE + (1f - TRACE_IDLE) * loud)
+        traceExposure = scale * max(TRACE_IDLE * quiet, loud)
         val frame = state.frame
         resampler.resample(frame.scope, scope)
         val gain = frame.waveformGain.within(0f, MOST_GAIN)
@@ -499,6 +588,9 @@ internal class GlitchScene {
         /** How much light the blocks give in silence and in the first frame, in linear light. */
         const val IDLE_LIGHT = 0.3f
 
+        /** The share of the music's light an empty block keeps while music plays. */
+        const val LEAST_LIT = 0.3f
+
         /** How much light the trace gives in silence. */
         const val TRACE_IDLE = 0.42f
 
@@ -523,13 +615,23 @@ internal class GlitchScene {
         const val SPLIT_MOST = 0.007f
         const val SPLIT_SECONDS = 0.12f
 
-        /**
-         * How long a melt runs, the level a bar needs to melt, and how many one hit may melt. A melt
-         * is shorter than the gap between off-beat hats, so the bars come back clean between them.
-         */
-        const val MELT_SECONDS = 0.18f
-        const val MELT_LEVEL = 0.16f
-        const val MOST_MELTS = 6
+        /** The most a hat slips a row sideways, as a share of the width. */
+        const val SLIP = 0.03f
+
+        /** The forms, in the order a morph moves through the first three. */
+        val FORMS = listOf("Broadcast", "Tracking", "Mosh", "Dead air")
+        const val BROADCAST = 0
+        const val TRACKING = 1
+        const val MOSH = 2
+        const val DEAD_AIR = 3
+
+        /** How many swatch sets there are, how long a birth's wipe takes, and how far the walk turns a hue. */
+        const val SETS = 3
+        const val WIPE_SECONDS = 0.5f
+        const val WALK_TURN = 12f
+
+        /** The faint static of dead air, as light. */
+        const val DEAD_AIR_STATIC = 0.08f
 
         /** Three frames at sixty a second. */
         const val STATIC_SECONDS = 3f / 60f

@@ -59,6 +59,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   kick sends a crest through the cloth, a snare pleats it and a hat makes it shimmer. The twist
   follows the energy, the camera orbits on the slow cycle, and the drawing hears the engine's
   bands.
+- Twin Bloom is a garden: up to five blooms born where the mix puts them, petals at full range, a
+  carpet of fallen petals as a memory field, and Bud, Bloom, Field and Storm forms published
+  through `Visualization.forms`. The orbit and the fixed pair are gone.
 
 ## [0.3.0] - 2026-10-09
 

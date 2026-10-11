@@ -406,6 +406,32 @@ now take one of four forms.
   allowed light, and the ink follows the level. On this light paper more music means more ink,
   so a loud frame is darker than a quiet one.
 
+## Twin Bloom, a garden
+
+`Twin Bloom` keeps its radial blooms whose petals are bands, the spring that answers a kick with
+lookahead, the petals that break off on a snare, the sparkles on a hat, the throw on a drop and
+the buds of a breakdown. It is a garden now.
+
+- The garden starts as one bud on a short stem. Each birth plants a new bloom where the mix puts
+  it: across from the stereo balance, and further back the brighter the sound. The sixth birth
+  replaces the oldest bloom. A stem's height is the energy heard since its birth, and the live
+  waveform runs along it.
+- Every petal is one band, from the bass in the inner ring to the treble in the outer ring. Its
+  length runs the full range, from 0.2 of its full length in silence to all of it at full level.
+- Fallen petals settle on the ground into a carpet. The carpet is a memory field with a four
+  second half life that drifts slowly sideways, drawn as lit ink in four flat steps. On a device
+  without runtime shaders the carpet is not drawn.
+- The forms are Bud, Bloom, Field and Storm, named by what the garden shows and published
+  through `Visualization.forms`. At each change of form the blooms open or wilt with the slow
+  level over two cycles.
+- The view is fixed, with no orbit. One sway on the cycle moves three layers at three speeds: the
+  ground at half, the blooms at one, and a faint foreground petal at twice. The foreground petal
+  comes in with the music.
+- Each bloom takes its own place on the palette by birth order, walked by the genes and leaned
+  toward the key, so a garden holds several flowers. The rings of one bloom sit a step apart on
+  the palette. A faint ground in the palette's low colour lies under the garden. Light follows
+  the level, with a floor in silence.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative

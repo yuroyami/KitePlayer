@@ -1,13 +1,16 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Bars
 import java.awt.image.BufferedImage
 import kotlin.math.abs
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** Bars: the meter as the front row of a city of its own past, with a rail of the live waveform. */
@@ -115,6 +118,107 @@ class BarsTest {
         println("bars: light $heard while heard, $quiet in silence")
         assertEquals(lightFor(0.45f), heard, 0.02f)
         assertEquals(Bars.IDLE_LIGHT, quiet, 0.02f)
+    }
+
+    @Test
+    fun theFormIsPublishedAndMorphsOnTheDrumLoop() {
+        val bars = Bars()
+        assertEquals("Hall", assertNotNull(bars.forms).form)
+        RenderHarness.forEachFrame(bars, 64, 36, 3600, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ -> }
+        val forms = assertNotNull(bars.forms)
+        println("bars: ${forms.morphs} morphs, ${forms.births} births, form ${forms.form}")
+        assertTrue(forms.morphs >= 1, "the drum loop should morph the city at least once")
+        assertTrue(forms.form in Bars.FORMS, "the form is one of the four, had ${forms.form}")
+    }
+
+    @Test
+    fun aMorphBendsTheGridOverTwoToFourCycles() {
+        val bars = Bars()
+        val read = FloatArray(3)
+        var started = false
+        // The harness restarts the drawing before frame 0, so the morph starts on the first draw.
+        RenderHarness.forEachFrameOf(bars, 64, 36, 900, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) },
+            beforeDraw = { if (!started) { bars.morphTo(Bars.CANYON); started = true } }) { _, step ->
+            when (step) {
+                60 -> read[0] = bars.morphValue
+                120 -> read[1] = bars.morphValue
+                899 -> read[2] = bars.morphValue
+            }
+        }
+        println("bars: morph ${read[0]} at step 60, ${read[1]} at 120, ${read[2]} at 899")
+        assertTrue(read[0] < 0.5f, "the morph is slow, had ${read[0]} after a second")
+        assertTrue(read[1] > 0f, "the morph moves, had ${read[1]}")
+        assertEquals(1f, read[2], 1e-4f)
+    }
+
+    @Test
+    fun theFourFormsPlaceTheBarsDifferently() {
+        val bars = Bars()
+        val heads = Array(4) { FloatArray(3) }
+        for (form in 0 until 4) {
+            bars.jumpTo(form)
+            bars.barHead(row = 10, band = 20, into = heads[form])
+        }
+        for (a in 0 until 4) for (b in a + 1 until 4) {
+            val dx = heads[a][0] - heads[b][0]
+            val dy = heads[a][1] - heads[b][1]
+            val dz = heads[a][2] - heads[b][2]
+            val apart = sqrt(dx * dx + dy * dy + dz * dz)
+            println("bars: ${Bars.FORMS[a]} and ${Bars.FORMS[b]} are $apart apart")
+            assertTrue(apart > 2f, "${Bars.FORMS[a]} and ${Bars.FORMS[b]} place the bar only $apart apart")
+        }
+    }
+
+    @Test
+    fun aBirthBurstsTheFrontRowIntoEmbers() {
+        val bars = Bars()
+        var before = 0
+        var after = 0
+        RenderHarness.forEachFrameOf(bars, 64, 36, 71, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }) { _, step ->
+            if (step == 69) {
+                before = bars.emberCount()
+                bars.birth()
+            }
+            if (step == 70) after = bars.emberCount()
+        }
+        println("bars: $before embers before the birth, $after after")
+        assertTrue(after - before >= 40, "a birth bursts the front row into embers, had $before then $after")
+    }
+
+    @Test
+    fun theCameraMovesOnTheSlowCycleAndNeverCuts() {
+        val bars = Bars()
+        var lowest = 0f
+        var highest = 0f
+        var largestStep = 0f
+        var last = Float.NaN
+        RenderHarness.forEachFrame(bars, 96, 54, 1800, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ ->
+            val now = bars.cameraYaw
+            lowest = minOf(lowest, now)
+            highest = maxOf(highest, now)
+            if (!last.isNaN()) largestStep = maxOf(largestStep, abs(now - last))
+            last = now
+        }
+        val silent = Bars()
+        var atSixty = 0f
+        var atEnd = 0f
+        RenderHarness.forEachFrame(silent, 96, 54, 300, VizPalette.Prism, RenderHarness.Song.Silence) { _, step ->
+            if (step == 60) atSixty = silent.cameraYaw
+            if (step == 299) atEnd = silent.cameraYaw
+        }
+        println("bars: yaw from $lowest to $highest, largest step $largestStep, silence moved ${abs(atEnd - atSixty)}")
+        assertTrue(lowest < 0f && highest > 0f, "the camera swings both ways, had $lowest to $highest")
+        assertTrue(largestStep <= 0.25f / 60f + 1e-4f, "the camera never cuts, had a step of $largestStep")
+        assertTrue(abs(atEnd - atSixty) < 0.001f, "a silence keeps the camera home")
+    }
+
+    @Test
+    fun noHitDriverDeclaresTheCamera() {
+        val hits = setOf(VizDriver.LowHit, VizDriver.BodyHit, VizDriver.HighHit, VizDriver.Onset)
+        val offending = assertNotNull(Bars().mapping).drives.filter { it.driver in hits && it.property == VizProperty.Camera }
+        assertTrue(offending.isEmpty(), "no hit may move the camera, had $offending")
     }
 
     private fun indexOfMax(values: FloatArray): Int = values.indices.maxBy { values[it] }

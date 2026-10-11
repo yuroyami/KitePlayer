@@ -22,6 +22,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.WebAudioAnalyser
 import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Evolution
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Genes
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
@@ -30,6 +31,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.pow
@@ -71,6 +73,9 @@ import kotlin.math.tan
  *   colour per pixel. A ridge is cut where it passes the opposite surface, which is where the depth buffer hid it.
  * - The page cleared to white. Here the clear is a dim space, the palette's background lifted toward its low
  *   colour, and every colour follows the level, with a quarter of the light kept in a silence.
+ * - A drop bursts the shards outward for one cycle, and a breakdown fuses them: the tilt and the roll stop and
+ *   the cracks heal into one plane until the music turns. The flight runs at half speed with no drive and at
+ *   the page's speed at full drive.
  * - The floor and the ceiling carry twelve cracks of light. A kick runs one crack again from its start, a snare
  *   flips one shard's tilt, a hat glints the dust, and a birth grows a new crack network. The main crack runs
  *   down the middle of the floor and carries the live waveform. The strip hue turns up to 30 degrees toward the
@@ -80,7 +85,7 @@ import kotlin.math.tan
  * the spectrum lifts the far edge of every strip into a jagged ridge, with the bass at the outer edge. Strips
  * near the camera are black, and far strips glow in one hue that follows the loudness: violet when quiet, green
  * in the middle, orange when loud. Loud music pushes the floor and the ceiling toward eye level and speeds the
- * flight. The forms are Corridor and Spiral, when the roll runs fast.
+ * flight. The forms are Corridor, Spiral when the roll runs fast, Shatter after a drop and Fuse in a breakdown.
  */
 internal class Fracture : Visualization {
 
@@ -111,6 +116,9 @@ internal class Fracture : Visualization {
             // The main crack carries the waveform, and the strip hue turns toward the key.
             VizDrive(VizDriver.Waveform, VizProperty.Shape),
             VizDrive(VizDriver.Key, VizProperty.Colour),
+            // A drop bursts the shards outward, and a breakdown fuses them into one plane.
+            VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
+            VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f)),
         ),
         silence = VizSilence.Still,
     )
@@ -200,6 +208,34 @@ internal class Fracture : Visualization {
     // The key the strip hue turns toward, as a hue from 0 to 1, and how sure the analysis is of it.
     private var keyHue = 0f
     private var keyConfidence = 0f
+
+    // A drop's burst, 1 to 0 over a cycle, and a breakdown's fuse, 0 to 1 while it lasts.
+    private var burst = 0f
+    private var inCollapse = false
+    private val fuse = Envelope(FUSE_RISE, FUSE_FALL)
+
+    internal val burstValue: Float get() = burst
+    internal val fuseValue: Float get() = fuse.value
+
+    /** How much of a shard's tilt and of the roll is left, 0 when the shards are fused. */
+    internal val tiltShare: Float get() = 1f - fuse.value
+
+    /** How far the corridor has flown, for tests. */
+    internal val travelValue: Double get() = travel
+
+    /** The strips' mean distance from the corridor's axis, in world units. */
+    internal fun shardSpread(): Float {
+        var sum = 0f
+        for (strip in 0 until NUM_BANDS) sum += spreadOf(strip)
+        return sum / NUM_BANDS * (GROUP_Y - PLANE_Y - squeeze)
+    }
+
+    /** How far a burst pushes strip [strip] from the axis, as a factor; each strip goes its own way. */
+    private fun spreadOf(strip: Int): Float {
+        val noise = sin(strip * 12.9898f) * 43_758.547f
+        val hash = noise - floor(noise)
+        return 1f + BURST * burst * (0.5f + 0.5f * hash)
+    }
 
     /** A birth: a new crack network grows from nothing. */
     internal fun birth() {
@@ -344,6 +380,7 @@ internal class Fracture : Visualization {
             if (far <= NEAR_CLIP) continue
             val near = max((BAR_GAP_UNITS * slot - NEAR_EDGE).toFloat() - offset, NEAR_CLIP)
             turn(slot, (steps + slot) % NUM_BANDS)
+            spread((steps + slot) % NUM_BANDS)
             addBand(floorY, near, far)
             addBand(ceilingY, near, far)
         }
@@ -361,18 +398,28 @@ internal class Fracture : Visualization {
                 mesh.clear()
             }
             turn(slot, (steps + slot) % NUM_BANDS)
+            spread((steps + slot) % NUM_BANDS)
             addRidge(slot, floor = true, odd = odd, near = near, far = far, reach = reach)
             addRidge(slot, floor = false, odd = odd, near = near, far = far, reach = reach)
         }
         drawMesh(mesh)
         mesh.clear()
 
-        // The cracks and the dust go over the strips, unturned by any shard's tilt.
+        // The cracks and the dust go over the strips, unturned by any shard's tilt and unmoved by a burst.
+        floorY = PLANE_Y - GROUP_Y + squeeze
+        ceilingY = GROUP_Y - PLANE_Y - squeeze
         cosRoll = cos(roll).toFloat()
         sinRoll = sin(roll).toFloat()
         addCracks(state.frame.scope)
         dust.addTo(mesh, frameWidth, frameHeight, light, DUST_ALPHA, glint)
         drawMesh(mesh)
+    }
+
+    /** Places strip [strip]'s floor and ceiling, pushed from the axis by a burst. */
+    private fun spread(strip: Int) {
+        val factor = spreadOf(strip)
+        floorY = (PLANE_Y - GROUP_Y + squeeze) * factor
+        ceilingY = (GROUP_Y - PLANE_Y - squeeze) * factor
     }
 
     /**
@@ -381,7 +428,7 @@ internal class Fracture : Visualization {
      */
     private fun turn(slot: Int, strip: Int) {
         val sign = (if (strip % 2 != 0) -1f else 1f) * (if (flip[strip] > 0.5f) -1f else 1f)
-        val tilt = TILT * sliceLevel(slot, 0.5f) / 255f * sign
+        val tilt = TILT * sliceLevel(slot, 0.5f) / 255f * sign * tiltShare
         val angle = roll + tilt
         cosRoll = cos(angle).toFloat()
         sinRoll = sin(angle).toFloat()
@@ -395,7 +442,17 @@ internal class Fracture : Visualization {
         evolution.update(state, gestures)
         // A pause holds the walk; a silence holds everything that moves on heard time.
         recipe.advance(gestures, if (state.frame.held) 0f else dt, evolution.morph)
-        if (evolution.morph) morph()
+        // The form chain: a drop bursts the shards, a breakdown fuses them, a turn or a surge ends the fuse, and a
+        // morph turns the roll the other way.
+        when {
+            evolution.bloom -> {
+                burst = 1f
+                inCollapse = false
+            }
+            evolution.collapse -> inCollapse = true
+            gestures.turn || gestures.surge -> inCollapse = false
+            evolution.morph -> morph()
+        }
         light = state.lightScale.coerceIn(0f, 1f) * max(IDLE_LIGHT * (1f - state.frame.audible), lightFor(state.energy))
         val reads = if (!started) {
             // The page renders once as soon as the visualiser is made, whatever is playing.
@@ -414,12 +471,21 @@ internal class Fracture : Visualization {
         if (reads > 0) read(state.frame, reads)
         heardTime += heard
         history.push(visual, heardTime)
-        fly(heard * PAGE_RATE * state.motionScale)
+        burst = maxOf(0f, burst - heard / gestures.cycleSeconds.coerceAtLeast(0.1f))
+        fuse.advance(if (inCollapse) 1f else 0f, heard)
+        fly(heard * PAGE_RATE * state.motionScale * (0.5f + 0.5f * state.drive.coerceIn(0f, 1f)))
         rollBy(heard, state.motionScale)
         if (evolution.birth) birth()
         strike(heard)
         dust.climbBy(heard * PAGE_RATE * state.motionScale)
-        formName = FORMS[if (rollRate > SPIRAL_SHARE * ROLL_RATE && !gestures.surge) SPIRAL_FORM else CORRIDOR_FORM]
+        formName = FORMS[
+            when {
+                inCollapse -> FUSE_FORM
+                burst > 0f -> SHATTER_FORM
+                rollRate > SPIRAL_SHARE * ROLL_RATE && !gestures.surge -> SPIRAL_FORM
+                else -> CORRIDOR_FORM
+            }
+        ]
     }
 
     /**
@@ -427,7 +493,7 @@ internal class Fracture : Visualization {
      * each cycle and back in the second, and the other way round after a morph.
      */
     private fun rollBy(heard: Float, motionScale: Float) {
-        rollRate = ROLL_RATE * (0.3f + 0.7f * (loudness / 255f).coerceIn(0f, 1f))
+        rollRate = ROLL_RATE * (0.3f + 0.7f * (loudness / 255f).coerceIn(0f, 1f)) * tiltShare
         val sign = -sin(gestures.cyclePhase * TAU) * morphSign
         roll = (roll + heard * rollRate * sign * motionScale) % FULL_TURN
     }
@@ -447,7 +513,8 @@ internal class Fracture : Visualization {
             flip[(steps + FLIP_NEAREST + (random.next() * FLIP_SLOTS).toInt()) % NUM_BANDS] = 1f
         }
         glint = maxOf(glint * exp(-heard / GLINT_SECONDS), gestures.hat.coerceIn(0f, 1f))
-        for (i in 0 until CRACKS) crackLength[i] = minOf(1f, crackLength[i] + CRACK_GROW * heard)
+        // A fuse heals the cracks: none reaches further than the share of the tilt that is left.
+        for (i in 0 until CRACKS) crackLength[i] = minOf(tiltShare, crackLength[i] + CRACK_GROW * heard)
     }
 
     /** `render()` up to the motion: the analyser, the bars, the loudness, the squeeze and the colour. */
@@ -720,6 +787,9 @@ internal class Fracture : Visualization {
         glint = 0f
         keyHue = 0f
         keyConfidence = 0f
+        burst = 0f
+        inCollapse = false
+        fuse.reset()
     }
 
     internal companion object {
@@ -742,6 +812,11 @@ internal class Fracture : Visualization {
         const val TILT = 0.12f
         const val SLICE_SECONDS = 4.0
         const val HISTORY_ROWS = 256
+
+        /** How far a burst pushes the strips from the axis at most, and the fuse's rise and fall a second. */
+        const val BURST = 0.6f
+        const val FUSE_RISE = 1.5f
+        const val FUSE_FALL = 0.5f
 
         /** The dust's opacity over the corridor. */
         const val DUST_ALPHA = 0.7f

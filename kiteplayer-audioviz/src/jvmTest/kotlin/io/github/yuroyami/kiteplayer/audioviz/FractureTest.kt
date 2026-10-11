@@ -406,6 +406,72 @@ class FractureTest {
         assertTrue(still < 0.35f, "the baseline waveform is small, had $still")
     }
 
+    @Test
+    fun aDropBurstsTheShardsOutwardAndABreakdownFusesThem() {
+        fun spreadAt76(driver: VizDriver?): Float {
+            val fracture = Fracture()
+            var spread = 0f
+            RenderHarness.forEachFrameOf(fracture, 64, 36, 80, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(driver, step) }) { _, step ->
+                if (step == 70 && driver != null) {
+                    assertTrue(fracture.burstValue > 0.5f, "a drop bursts the shards, burst ${fracture.burstValue}")
+                    assertEquals("Shatter", assertNotNull(fracture.forms).form)
+                }
+                if (step == 76) spread = fracture.shardSpread()
+            }
+            return spread
+        }
+        val burst = spreadAt76(VizDriver.Drop)
+        val still = spreadAt76(null)
+        println("fracture: the shards sit $burst from the axis after a drop and $still without")
+        assertTrue(burst > still, "a drop pushes the shards outward, $burst against $still")
+
+        val fused = Fracture()
+        var fuse = 0f
+        var form = ""
+        var cracks = 1f
+        var tilt = 1f
+        RenderHarness.forEachFrameOf(fused, 64, 36, 190, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Breakdown, step) }) { _, step ->
+            if (step == 126) {
+                fuse = fused.fuseValue
+                form = assertNotNull(fused.forms).form
+            }
+            if (step == 186) {
+                cracks = (0 until Fracture.CRACKS).maxOf { fused.crackReach(it) }
+                tilt = fused.tiltShare
+            }
+        }
+        println("fracture: fuse $fuse a second into a breakdown, form $form; two seconds in the cracks reach $cracks and the tilt keeps $tilt")
+        assertTrue(fuse > 0.5f, "a breakdown fuses the shards, fuse $fuse")
+        assertEquals("Fuse", form)
+        assertTrue(cracks < 0.2f, "the cracks heal, the longest reaches $cracks")
+        assertTrue(tilt < 0.1f, "the shards stop tilting, $tilt of the tilt left")
+    }
+
+    @Test
+    fun theFlightSpeedFollowsTheDrive() {
+        fun flown(song: RenderHarness.Song): Pair<Double, Double> {
+            val fracture = Fracture()
+            var at60 = 0.0
+            var total = 0.0
+            var last = 0.0
+            RenderHarness.forEachFrame(fracture, 64, 36, 300, VizPalette.Prism, song) { _, step ->
+                val travel = fracture.travelValue
+                if (step > 0) total += ((travel - last) % Fracture.CORRIDOR + Fracture.CORRIDOR) % Fracture.CORRIDOR
+                last = travel
+                if (step == 60) at60 = travel
+            }
+            return total to (last - at60)
+        }
+        val (lively, _) = flown(RenderHarness.Song.Lively)
+        val (calm, _) = flown(RenderHarness.Song.Calm)
+        val (_, silentAfter60) = flown(RenderHarness.Song.Silence)
+        println("fracture: flew $lively units to the lively song, $calm to the calm one, $silentAfter60 in silence")
+        assertTrue(lively > calm, "a stronger drive flies faster, $lively against $calm")
+        assertEquals(0.0, silentAfter60, 1e-9)
+    }
+
     /** The mean colour change between consecutive frames over the last second of three. */
     private fun meanChange(song: RenderHarness.Song): Float {
         var previous: IntArray? = null

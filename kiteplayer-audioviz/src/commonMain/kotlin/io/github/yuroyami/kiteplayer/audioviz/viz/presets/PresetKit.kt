@@ -70,7 +70,8 @@ internal class History(private val rows: Int = 200) {
     /** The row stored about [ago] seconds back, or the oldest one kept. -1 while empty. */
     fun row(ago: Float): Int {
         if (count == 0) return -1
-        val target = times[newest] - ago
+        // A microsecond of slack, so float steps that add up a hair past a whole second do not skip its row.
+        val target = times[newest] - ago - 1e-6
         var row = newest
         for (step in 1 until count) {
             val older = (row - 1 + rows) % rows
@@ -89,6 +90,19 @@ internal class History(private val rows: Int = 200) {
         val share = at - index
         return data[row * width + index] * (1f - share) + data[row * width + next] * share
     }
+
+    /** The newest row, -1 while empty. */
+    val newestRow: Int get() = newest
+
+    /** The row stored just before [row], or -1 when [row] is the oldest kept. */
+    fun older(row: Int): Int {
+        if (row < 0 || count == 0) return -1
+        val oldest = (newest - count + 1 + rows) % rows
+        return if (row == oldest) -1 else (row - 1 + rows) % rows
+    }
+
+    /** The time [row] was pushed with. */
+    fun time(row: Int): Double = times[row]
 
     /** How far back the kept rows reach, in the units of the times they were pushed with. 0 while fewer than two. */
     fun span(): Double {

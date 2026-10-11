@@ -30,6 +30,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.glow
 import io.github.yuroyami.kiteplayer.audioviz.viz.retentionOf
+import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import io.github.yuroyami.kiteplayer.audioviz.viz.toOklab
 import kotlin.math.abs
 import kotlin.math.cos
@@ -42,12 +43,17 @@ import kotlin.math.sqrt
 import kotlin.math.tanh
 
 /**
- * A night sea seen from a low cliff, under a low white moon. The sea is eighty rows of the waveform
- * laid out in depth: the front row is the sound now, and each older row lies farther out, smaller and
- * nearer the horizon, hiding the rows behind it. Glitter runs down the sea from the moon, and mist lies
- * on the horizon. The bass raises the swell, the level sets the light and how fast the rows roll out,
- * a kick lifts the front rows, a snare throws spray, and the hats thicken the glitter. On a drop a wave
- * three times the normal swell rolls in over a bar and breaks across the whole width.
+ * A night sea seen from a low cliff, under a low white moon. The sea is the memory of the song: the
+ * front row is the waveform now, and each of the 95 rows behind it is the waveform one thirtieth of a
+ * second earlier, so the swell rolling to the horizon is the last three seconds of sound. Each row is
+ * a line over a band of dark water of its own colour, so the rows read as one surface. The treble
+ * ripples the rows finely and the bass raises the long swell.
+ *
+ * The moon's reflection is the spectrum: the glitter column on each row is as wide as that row's
+ * band, the bass in front and the treble at the horizon, and the moon breathes with the bass. Mist
+ * lies on the horizon. The level sets the light, a kick lifts the front rows, a snare throws spray,
+ * and the hats thicken the glitter. On a drop a wave three times the normal swell rolls in over a bar
+ * and breaks across the whole width.
  */
 internal class OceanMist : Layered(
     name = "Ocean Mist",
@@ -89,13 +95,13 @@ internal class OceanMist : Layered(
     private val stereo = VizParam("Stereo traces", 0f, 1f, 0f).apply { step = 1f; toggle = true }
     override val params: List<VizParam> = listOf(waveHeight, mistAmount, trails, stereo)
 
-    // The rows of the sea, newest last in a ring. Each is POINTS heights in swell units, both ends at zero.
-    private val store = FloatArray(STORE * POINTS)
-    private val identity = IntArray(STORE)
-    private var newest = -1
-    private var stored = 0
-    private var captures = 0
-    private var roll = 0f
+    // The front row as it was, one row per sixtieth of a heard second. Each is POINTS heights in swell units.
+    private val history = History()
+
+    /** Heard seconds since the drawing started, the clock of [history]. */
+    private var heard = 0.0
+    private var treble = 0f
+    private var bands = FloatArray(0)
 
     // The live front row, what it was a frame ago, this frame's reading, and the two stereo traces.
     private val live = FloatArray(POINTS)
@@ -187,11 +193,27 @@ internal class OceanMist : Layered(
     private val ysRight = FloatArray(MAX_POINTS)
     private val whiteLeft = FloatArray(MAX_POINTS)
     private val whiteRight = FloatArray(MAX_POINTS)
-    private val orderRing = IntArray(STORE + 1)
-    private val orderSlot = FloatArray(STORE + 1)
+    private val orderRing = IntArray(ROWS + 1)
+    private val orderSlot = FloatArray(ROWS + 1)
 
     /** The front row as it is drawn now, in swell units, with both ends at the level. */
     internal val frontRow: FloatArray get() = live
+
+    /** How strongly the treble ripples the rows, 0 to about 1. */
+    internal val rippleValue: Float get() = treble
+
+    /** The moon's radius, as a share of the picture's shorter side. */
+    internal val moonRadiusValue: Float get() = MOON_RADIUS * (1f + MOON_BREATH * bass)
+
+    /** Row [row] of the sea at its 48 points: row 0 is the live row, row k is the front row k thirtieths of a second ago. */
+    internal fun rowSamples(row: Int): FloatArray {
+        if (row == 0) return live.copyOf()
+        val stored = history.row(row / ROWS_PER_SECOND)
+        return FloatArray(POINTS) { history.sample(stored, it / (POINTS - 1f)) }
+    }
+
+    /** The width of the moon's glitter column on row [slot], as a share of the picture's width. */
+    internal fun columnWidthAt(slot: Float): Float = columnWidth(slot, 1f, min(1f, 1f / kit.aspect))
 
     init {
         calmSea()
@@ -217,7 +239,14 @@ internal class OceanMist : Layered(
         leanTowardsKey(frame.keyHue, frame.keyConfidence, own)
 
         readRows(state, own)
-        rollRows(step)
+        heard += step
+        history.push(live, heard)
+        bands = frame.bandsRel
+        val top = bands.size - bands.size / 3
+        var high = 0f
+        for (band in top until bands.size) high += bands[band]
+        if (bands.size > top) high /= bands.size - top
+        treble += (high - treble) * settle(own, TREBLE_SECONDS)
         findCrest()
 
         kickLift *= exp(-own / KICK_SECONDS)
@@ -314,26 +343,6 @@ internal class OceanMist : Layered(
         var sum = 0f
         for (offset in -2..2) sum += source[(at + offset).coerceIn(0, available - 1)]
         return sum
-    }
-
-    /** Moves the rows out by the music clock, storing the front row each time a whole row has rolled. */
-    private fun rollRows(step: Float) {
-        roll += step * (ROWS_CALM + ROWS_BUSY * energy)
-        val whole = roll.toInt()
-        if (whole > 0) {
-            roll -= whole
-            val count = min(whole, STORE)
-            for (index in count downTo 1) {
-                // Rows stored between two frames lie between the front row then and now.
-                val share = 1f - (index - 1).toFloat() / count
-                newest = (newest + 1) % STORE
-                val at = newest * POINTS
-                for (point in 0 until POINTS) store[at + point] = before[point] + (live[point] - before[point]) * share
-                identity[newest] = captures++
-                if (stored < STORE) stored++
-            }
-        }
-        live.copyInto(before)
     }
 
     /** Where the front row stands highest, which is where spray leaves and a kick's white crest starts. */
@@ -489,7 +498,7 @@ internal class OceanMist : Layered(
         // The moon's glow, the one soft light in the sky. A longer trail keeps it longer, at the same brightness.
         val keep = 1f - retentionOf(trail, state.deltaSeconds)
         val unit = size.minDimension
-        val radius = unit * MOON_RADIUS
+        val radius = unit * moonRadiusValue
         val x = moonX * size.width
         val y = HORIZON * size.height - moonRise * unit
         val alpha = (HALO_FLOOR + HALO_BASS * glow) * state.lightScale * keep
@@ -523,11 +532,11 @@ internal class OceanMist : Layered(
         frontHue = mixHue(highHue, OWN_FRONT_HUE + lean, own)
         val glitterHue = mixHue(capHue, OWN_GLITTER_HUE, own)
         val mistHue = mixHue(midHue, OWN_MIST_HUE, own)
-        // Squared, so a quieter passage reads clearly darker while a silence keeps the idle light.
-        val level = ((lightFor(energy) - LIGHT_FLOOR) / (1f - LIGHT_FLOOR)).coerceIn(0f, 1f)
-        lit = level * level
+        // The light follows the level; the idle share stands only while nothing is heard, and hands over smoothly.
+        val base = max(IDLE_LIGHT * (1f - awake), lightFor(energy))
+        lit = ((base - IDLE_LIGHT) / (1f - IDLE_LIGHT)).coerceIn(0f, 1f)
         allowed = state.lightScale.coerceIn(0f, 1f)
-        light = (IDLE_LIGHT + (1f - IDLE_LIGHT) * lit) * allowed
+        light = base * allowed
         glitterArgb = colourOf(GLITTER_L, min(GLITTER_C, limitOf(GLITTER_L, glitterHue)), glitterHue).toArgb()
         mistArgb = colourOf(MIST_L, min(MIST_C, limitOf(MIST_L, mistHue)), mistHue).toArgb()
         haloArgb = colourOf(HALO_L, min(HALO_C, limitOf(HALO_L, mistHue)), mistHue).toArgb()
@@ -549,7 +558,7 @@ internal class OceanMist : Layered(
 
     private fun DrawScope.drawMoon(state: VizRenderState) {
         val unit = size.minDimension
-        val radius = unit * MOON_RADIUS
+        val radius = unit * moonRadiusValue
         val x = moonX * size.width
         val y = HORIZON * size.height - moonRise * unit
         val white = (MOON_LIGHT + (1f - MOON_LIGHT) * lit) * state.lightScale
@@ -593,10 +602,10 @@ internal class OceanMist : Layered(
                 drawMesh(sea)
                 sea.clear()
             }
-            addBand(ysFar, ysNear, points)
             val depth = (1f - slot / (ROWS - 1)).coerceIn(0f, 1f)
             val fade = (ROWS - slot).coerceIn(0f, 1f)
             val colour = scaled(rowArgb(depth.pow(COLOUR_CURVE)), light * fade)
+            addBand(ysFar, ysNear, points, scaled(colour, FILL_LIGHT))
             val white = scaled(WHITE, light * fade)
             val half = lineHalf(slot, unit)
             if (orderRing[entry] == LIVE && stereoOn) {
@@ -629,16 +638,28 @@ internal class OceanMist : Layered(
             farGap * 3f >= MIN_GAP -> 3
             else -> 4
         }
+        // One remembered row for each thirtieth of a heard second, placed by its age, so it rolls out
+        // smoothly and keeps its seed for its whole life. Gathered newest first, then turned far to near.
         var count = 0
-        for (k in stored downTo 1) {
-            val ring = (newest - (k - 1) + STORE) % STORE
-            if (identity[ring] % stride != 0) continue
-            val slot = k - 1 + roll
-            if (slot > ROWS) continue
-            orderRing[count] = ring
-            orderSlot[count] = slot
-            count++
+        var ring = history.newestRow
+        var lastBucket = Long.MIN_VALUE
+        while (ring >= 0) {
+            val time = history.time(ring)
+            val slot = ((heard - time) * ROWS_PER_SECOND).toFloat()
+            if (slot > ROWS) break
+            val bucket = kotlin.math.floor(time * ROWS_PER_SECOND).toLong()
+            if (bucket != lastBucket) {
+                lastBucket = bucket
+                if (slot > 0f && bucket % stride == 0L && count < ROWS) {
+                    orderRing[count] = ring
+                    orderSlot[count] = slot
+                    count++
+                }
+            }
+            ring = history.older(ring)
         }
+        orderRing.reverse(0, count)
+        orderSlot.reverse(0, count)
         orderRing[count] = LIVE
         orderSlot[count] = 0f
         return count + 1
@@ -677,22 +698,23 @@ internal class OceanMist : Layered(
         w: Float, h: Float, unit: Float,
     ) {
         if (ring == LIVE && stereoOn) {
-            traceY(leftRow, 0, slot, points, ysLeft, whiteLeft, true, 0, w, h, unit)
-            traceY(rightRow, 0, slot, points, ysRight, whiteRight, true, 0, w, h, unit)
+            traceY(leftRow, LIVE, slot, points, ysLeft, whiteLeft, true, 0, w, h, unit)
+            traceY(rightRow, LIVE, slot, points, ysRight, whiteRight, true, 0, w, h, unit)
             for (index in 0 until points) {
                 ys[index] = min(ysLeft[index], ysRight[index])
                 white[index] = max(whiteLeft[index], whiteRight[index])
             }
         } else if (ring == LIVE) {
-            traceY(live, 0, slot, points, ys, white, true, 0, w, h, unit)
+            traceY(live, LIVE, slot, points, ys, white, true, 0, w, h, unit)
         } else {
-            traceY(store, ring * POINTS, slot, points, ys, white, false, identity[ring], w, h, unit)
+            traceY(live, ring, slot, points, ys, white, false, ring, w, h, unit)
         }
     }
 
+    /** One row's line: [data] for the live rows, or the history row [stored] when it is not [LIVE]. */
     private fun traceY(
         data: FloatArray,
-        offset: Int,
+        stored: Int,
         slot: Float,
         points: Int,
         ys: FloatArray,
@@ -714,13 +736,16 @@ internal class OceanMist : Layered(
         val lift = kickLift * KICK_LIFT * unit * exp(-slot / KICK_DEPTH)
         val waveWhite = waveWhite(slot)
         val breakWhite = breakLight * (1f - slot / BREAK_ROWS).coerceIn(0f, 1f)
+        // Fine treble ripples over the swell, fading toward the horizon with the rows.
+        val ripple = RIPPLE * unit * treble * near
         for (index in 0 until points) {
             val across = index.toFloat() / (points - 1)
             var at = repeats * (across - 0.5f) + 0.5f + phase
             at -= kotlin.math.floor(at)
-            val value = periodic(data, offset, at) * flatten
+            val value = (if (stored == LIVE) periodic(data, 0, at) else history.sample(stored, at)) * flatten
             val ridge = 1f + 0.12f * sin(TAU * (1.3f * across + 0.21f))
-            ys[index] = base - amplitude * (value + wave * ridge) - lift
+            val fine = ripple * sin(TAU * (across * RIPPLE_WAVES + slot * 0.37f + shimmer * 0.5f))
+            ys[index] = base - amplitude * (value + wave * ridge) - lift - fine
             var whiteness = crest(value)
             if (front) whiteness = max(whiteness, runnerWhite(across * w, w))
             white[index] = max(max(whiteness, waveWhite), breakWhite).coerceAtMost(1f)
@@ -776,12 +801,12 @@ internal class OceanMist : Layered(
         return LINE_PX * scale * (0.75f + 0.25f * RATIO.pow(slot * AMP_POWER)) * 0.5f
     }
 
-    /** A band of the ground colour from one row's line down past the row in front of it. */
-    private fun addBand(top: FloatArray, bottom: FloatArray, points: Int) {
+    /** A band of dark water in the row's own colour, from its line down past the row in front of it. */
+    private fun addBand(top: FloatArray, bottom: FloatArray, points: Int, argb: Int) {
         val first = sea.vertexCount
         for (index in 0 until points) {
-            sea.vertex(xs[index], top[index], groundArgb)
-            sea.vertex(xs[index], max(top[index], bottom[index]) + BAND_OVERLAP, groundArgb)
+            sea.vertex(xs[index], top[index], argb)
+            sea.vertex(xs[index], max(top[index], bottom[index]) + BAND_OVERLAP, argb)
         }
         for (index in 0 until points - 1) {
             val a = first + index * 2
@@ -823,17 +848,24 @@ internal class OceanMist : Layered(
     }
 
     /**
-     * The moon's path on the water: glints on this row inside a column under the moon, narrow at the
-     * horizon and wider in front, wider still for a wide stereo mix. The hats light more of them.
+     * How wide the moon's path is on row [slot]: narrow at the horizon and wider in front, wider still
+     * for a wide stereo mix, and as wide as the row's band, the bass in front and the treble far out.
      */
-    private fun addGlitter(slot: Float, ring: Int, points: Int, fade: Float, w: Float, unit: Float) {
+    private fun columnWidth(slot: Float, w: Float, unit: Float): Float {
         val near = nearness(slot)
         val spread = sqrt(width.coerceIn(0f, 1f))
         val column = unit * MOON_RADIUS * (0.8f + 1.2f * spread) +
             (w * (COLUMN_MONO + COLUMN_WIDE * spread) - unit * MOON_RADIUS * (0.8f + 1.2f * spread)) * near
+        return column * (COLUMN_BAND_FLOOR + COLUMN_BAND_GAIN * bands.sampleAt(1f - near))
+    }
+
+    /** The moon's path on the water: glints on this row inside its column under the moon. The hats light more of them. */
+    private fun addGlitter(slot: Float, ring: Int, points: Int, fade: Float, w: Float, unit: Float) {
+        val near = nearness(slot)
+        val column = columnWidth(slot, w, unit)
         val centre = moonX * w
         val density = GLITTER_FLOOR + (1f - GLITTER_FLOOR) * min(1f, hats)
-        val seed = if (ring == LIVE) -7 else identity[ring]
+        val seed = if (ring == LIVE) -7 else ring
         val candidates = ((GLITTER_BASE + GLITTER_WIDE * (column / (w * (COLUMN_MONO + COLUMN_WIDE)))) *
             (0.4f + 0.8f * density)).toInt()
         val ys = ysFar
@@ -972,6 +1004,9 @@ internal class OceanMist : Layered(
 
     override fun onReset() {
         calmSea()
+        heard = 0.0
+        treble = 0f
+        bands = FloatArray(0)
         mood = 0.5f
         bass = 0f
         glow = 0f
@@ -1007,23 +1042,21 @@ internal class OceanMist : Layered(
         cachedPalette = null
     }
 
-    /** The sea before any music: a calm, low swell in every row, so the picture is whole from its first frame. */
+    /** The sea before any music: a calm, low swell in every remembered row, so the picture is whole from its first frame. */
     private fun calmSea() {
-        for (row in 0 until STORE) {
-            val first = hash01(row * 13 + 5) * TAU
-            val second = hash01(row * 17 + 3) * TAU
-            val at = row * POINTS
+        history.clear()
+        val row = FloatArray(POINTS)
+        for (index in 0 until CALM_ROWS) {
+            val first = hash01(index * 13 + 5) * TAU
+            val second = hash01(index * 17 + 3) * TAU
             for (point in 0 until POINTS) {
                 val along = point.toFloat() / (POINTS - 1)
-                store[at + point] = CALM_SWELL * (sin(TAU * 2f * along + first) - sin(first)) +
+                row[point] = CALM_SWELL * (sin(TAU * 2f * along + first) - sin(first)) +
                     CALM_SWELL * 0.35f * (sin(TAU * 5f * along + second) - sin(second))
             }
-            identity[row] = row - STORE
+            // Dated before the first frame, a sixtieth apart, so the first real row lands after them.
+            history.push(row, -(CALM_ROWS - index) / 60.0)
         }
-        newest = STORE - 1
-        stored = STORE
-        captures = 0
-        roll = 0f
         for (point in 0 until POINTS) {
             val along = point.toFloat() / (POINTS - 1)
             live[point] = CALM_SWELL * sin(TAU * 2f * along)
@@ -1031,18 +1064,19 @@ internal class OceanMist : Layered(
         live.copyInto(before)
         live.copyInto(leftRow)
         live.copyInto(rightRow)
-        // The first stored rows start as the front row does, so none of them jumps at the first capture.
-        for (row in 0 until 2) live.copyInto(store, ((newest - row + STORE) % STORE) * POINTS)
     }
 
-    private companion object {
+    internal companion object {
         const val LIVE = -1
 
         // The frame. Heights are shares of the picture's height.
         const val HORIZON = 0.38f
         const val FRONT = 0.9f
-        const val ROWS = 80
-        const val STORE = 96
+        /** Rows of the sea, the live one included. */
+        const val ROWS = 96
+        /** Rows of the sea for each heard second: each row is the front row a thirtieth of a second earlier. */
+        const val ROWS_PER_SECOND = 30f
+        const val CALM_ROWS = 200
         const val POINTS = 48
         /** Each row is this much closer to the one behind it than to the one in front. */
         const val RATIO = 0.988f
@@ -1080,9 +1114,17 @@ internal class OceanMist : Layered(
         const val SWELL_BASS = 0.9f
         const val LIVE_SECONDS = 0.07f
         const val CALM_SWELL = 0.22f
-        /** Rows stored a second, from a quiet passage to a loud one. */
-        const val ROWS_CALM = 7f
-        const val ROWS_BUSY = 23f
+        /** The water between two rows, as a share of the row line's light. */
+        const val FILL_LIGHT = 0.35f
+        /** The treble's ripples: their height as a share of the shorter side, and how many cross the width. */
+        const val RIPPLE = 0.012f
+        const val RIPPLE_WAVES = 14f
+        const val TREBLE_SECONDS = 0.2f
+        /** How much larger the moon is at full bass. */
+        const val MOON_BREATH = 0.12f
+        /** The glitter column's width on a silent band, and what a full band adds. */
+        const val COLUMN_BAND_FLOOR = 0.4f
+        const val COLUMN_BAND_GAIN = 1.2f
 
         // The light.
         const val LIGHT_FLOOR = 0.06f

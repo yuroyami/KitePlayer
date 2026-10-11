@@ -158,6 +158,95 @@ class OceanMistTest {
 
     // Helpers.
 
+    @Test
+    fun aRowBehindTheFrontRowIsTheFrontRowThatLongAgo() {
+        val sea = OceanMist()
+        var front = FloatArray(0)
+        var second = Float.MAX_VALUE
+        var third = Float.MAX_VALUE
+        // Thirty rows are one heard second back and ninety rows three seconds back, at sixty frames a second.
+        RenderHarness.forEachFrame(sea, 160, 90, 250, VizPalette.Prism, RenderHarness.Song.Lively) { _, step ->
+            when (step) {
+                60 -> front = sea.rowSamples(0)
+                120 -> second = (29..31).minOf { farthest(sea.rowSamples(it), front) }
+                240 -> third = (89..91).minOf { farthest(sea.rowSamples(it), front) }
+            }
+        }
+        println("a second later the row is off by $second, three seconds later by $third")
+        assertTrue(second < 0.01f, "row 30 a second later should be the front row, was off by $second")
+        assertTrue(third < 0.01f, "row 90 three seconds later should be the front row, was off by $third")
+    }
+
+    @Test
+    fun theSeaHasNinetySixRowsAtAThirtiethOfASecond() {
+        assertTrue(OceanMist.ROWS == 96 && OceanMist.ROWS_PER_SECOND == 30f, "the sea should keep 96 rows, 30 a second")
+        val sea = OceanMist()
+        RenderHarness.forEachFrame(sea, 160, 90, 120, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ -> }
+        // A smaller picture merges the far rows two by two, so count them where every row has room.
+        val visible = sea.visibleRows(1920f, 1080f)
+        println("$visible rows show on a 1920 by 1080 picture")
+        assertTrue(visible >= 60, "most rows should show, $visible did")
+    }
+
+    @Test
+    fun theReflectionColumnIsTheSpectrumBassInFront() {
+        val low = columnWidths(lowBand = true)
+        val high = columnWidths(lowBand = false)
+        println("column in front: low ${low.first}, high ${high.first}; far out: low ${low.second}, high ${high.second}")
+        assertTrue(low.first > high.first, "the bass should widen the column in front: ${low.first} against ${high.first}")
+        assertTrue(high.second > low.second, "the treble should widen the column far out: ${high.second} against ${low.second}")
+    }
+
+    @Test
+    fun theMoonBreathesWithTheBass() {
+        val bass = moonRadius(VizDriver.Bass)
+        val still = moonRadius(null)
+        println("moon radius: bass $bass, none $still")
+        assertTrue(bass >= 1.03f * still, "the bass should grow the moon by at least 3 percent: $bass against $still")
+    }
+
+    @Test
+    fun trebleRipplesTheRows() {
+        val high = ripple(lowBand = false)
+        val low = ripple(lowBand = true)
+        println("ripple: treble $high, bass $low")
+        assertTrue(high > 0.3f, "the treble should ripple the rows, was $high")
+        assertTrue(low < 0.1f, "the bass alone should leave the rows smooth, was $low")
+    }
+
+    private fun farthest(a: FloatArray, b: FloatArray): Float = a.indices.maxOf { abs(a[it] - b[it]) }
+
+    private fun columnWidths(lowBand: Boolean): Pair<Float, Float> {
+        val sea = OceanMist()
+        var widths = 0f to 0f
+        RenderHarness.forEachFrameOf(sea, 160, 90, 120, VizPalette.Prism,
+            source = { step -> InjectedFrames.toneFrame(step, lowBand) }) { _, step ->
+            // Row 60 reads the bands near three quarters of the spectrum, inside the raised group above 2 kHz.
+            if (step == 119) widths = sea.columnWidthAt(2f) to sea.columnWidthAt(60f)
+        }
+        return widths
+    }
+
+    private fun moonRadius(driver: VizDriver?): Float {
+        val sea = OceanMist()
+        var radius = 0f
+        RenderHarness.forEachFrameOf(sea, 160, 90, 100, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(driver, step) }) { _, step ->
+            if (step == 90) radius = sea.moonRadiusValue
+        }
+        return radius
+    }
+
+    private fun ripple(lowBand: Boolean): Float {
+        val sea = OceanMist()
+        var value = 0f
+        RenderHarness.forEachFrameOf(sea, 160, 90, 100, VizPalette.Prism,
+            source = { step -> InjectedFrames.toneFrame(step, lowBand) }) { _, step ->
+            if (step == 90) value = sea.rippleValue
+        }
+        return value
+    }
+
     private fun frames(drop: Boolean, future: VizFuture?): List<IntArray> {
         val out = ArrayList<IntArray>()
         RenderHarness.forEachFrameOf(

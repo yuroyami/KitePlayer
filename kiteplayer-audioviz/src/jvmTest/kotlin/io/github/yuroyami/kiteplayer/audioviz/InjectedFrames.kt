@@ -47,6 +47,8 @@ internal object InjectedFrames {
         step: Int,
         strength: Float = HIT_STRENGTH,
         confidence: Float = HIT_CONFIDENCE,
+        scopeLeft: FloatArray? = null,
+        scopeRight: FloatArray? = null,
     ): SpectrumFrame {
         val pts = step * 1_000_000L / 60L
         // A continuous driver holds the baseline until the step, so the two runs start identical.
@@ -108,8 +110,8 @@ internal object InjectedFrames {
             centroid = if (moved == VizDriver.Timbre) 0.85f else 0.35f,
             flatness = if (moved == VizDriver.Timbre) 0.85f else 0.3f,
             width = if (moved == VizDriver.Width) 0.9f else 0.2f,
-            scopeLeft = if (moved == VizDriver.Waveform) loudScope else baseScope,
-            scopeRight = baseScope,
+            scopeLeft = scopeLeft ?: if (moved == VizDriver.Waveform) loudScope else baseScope,
+            scopeRight = scopeRight ?: baseScope,
             generation = Generation.Initial,
             hasTimestamp = true,
             events = delivery(driver, step, pts, strength, confidence),

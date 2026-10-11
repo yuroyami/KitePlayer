@@ -30,12 +30,14 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
 import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
+import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.glow
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.polygon
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.spark
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Impulses
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import kotlin.math.abs
 import kotlin.math.cos
@@ -49,12 +51,16 @@ import kotlin.math.sqrt
 /**
  * A black frozen lake seen from above, with two wells under the ice that send out rings.
  *
- * A kick sends a cyan ring from one well and a snare an orchid ring from the other. Each ring is the
- * waveform at the moment it was born, bent into a circle and lit round its circle by the spectrum,
- * and it cools to deep blue or deep violet as it spreads. Neighbouring rings sit one beat apart, so a
- * steady kick draws even rings. Where rings of the two wells cross, the crossing points flare white,
- * and a hat makes them glint. The ice shows only as white hairline cracks: an accented kick adds one,
- * cracks creep out of the wells in the last beat before a drop, and a breakdown heals them. On the
+ * The lake is a map of the mix. Across the screen is the stereo balance, and the long side runs from
+ * bass to treble, from the left of a landscape screen and from the bottom of a portrait one. A kick
+ * rings at the bass end, a snare in the middle and a hat at the treble end, and the two wells slew
+ * to the two loudest quarters of the bands. A kick sends a cyan ring and a snare an orchid ring.
+ * Each ring is the waveform at the moment it was born, bent into a circle and lit round its circle
+ * by the spectrum, and it cools to deep blue or deep violet as it spreads. Neighbouring rings sit one
+ * beat apart, so a steady kick draws even rings. Where a cyan ring crosses an orchid ring, the
+ * crossing points flare white, and a hat makes them glint. The ice shows only as white hairline
+ * cracks: an accented kick adds one, cracks creep out of the wells in the last beat before a drop,
+ * and a breakdown heals them. On the
  * drop the ice breaks along the rings and along straight lines out of the wells, and the pieces carry
  * the picture away, shrinking into the water over one bar, while new rings start on fresh water.
  */
@@ -79,8 +85,12 @@ internal class ThinIce : Layered(
         // The spectrum lights every ring round its circle.
         VizDrive(VizDriver.Waveform, VizProperty.Texture),
         VizDrive(VizDriver.Bands, VizProperty.Brightness),
+        // The lake is a map of the mix: the stereo balance moves the wells and the hits across, and
+        // the wells sit on the two loudest quarters of the bands.
+        VizDrive(VizDriver.Waveform, VizProperty.Shape),
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
         VizDrive(VizDriver.Level, VizProperty.Brightness),
-        // A kick rings well A, as thick as the kick is hard; a snare rings well B.
+        // A kick rings low on the long side, a snare in the middle and a hat high, as thick as the hit is hard.
         VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(8f)),
         VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(8f)),
         // A hat glints on the crossings, and rings well B in a song that has no snare.
@@ -90,25 +100,29 @@ internal class ThinIce : Layered(
         // Rings spread one ring spacing a beat.
         VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
-        // A section rings both wells once and glides them to new places.
+        // A section rings both wells once.
         VizDrive(VizDriver.Section, VizProperty.Spawn, VizCurve.Discrete, VizResponse.lifetime(8f)),
-        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f)),
         VizDrive(VizDriver.Key, VizProperty.Colour),
         VizDrive(VizDriver.Breakdown, VizProperty.Brightness, VizCurve.Discrete, VizResponse.envelope(2f)),
         VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.lifetime(2f)),
         silence = VizSilence.Still,
     )
 
-    // The wells, along the screen's long side and across it, in shares of the screen, and where a
-    // section is gliding them to.
+    // The wells, along the screen's long side from its bass end and across it, in shares of the
+    // screen. Each one slews toward the place of a loud band group and the stereo balance.
     private val wellAlong = floatArrayOf(START_ALONG, 1f - START_ALONG)
     private val wellAcross = floatArrayOf(START_ACROSS, 1f - START_ACROSS)
-    private val fromAlong = FloatArray(WELLS)
-    private val fromAcross = FloatArray(WELLS)
-    private val toAlong = FloatArray(WELLS)
-    private val toAcross = FloatArray(WELLS)
-    private var glide = 1f
+    private val alongSlew = Array(WELLS) { Slew(WELL_RATE, wellAlong[it]) }
+    private val acrossSlew = Array(WELLS) { Slew(WELL_RATE, wellAcross[it]) }
     private val wellFlash = FloatArray(WELLS)
+    /** The well that sits on the loudest band group; the other sits on the second loudest. */
+    private var leader = 0
+    private var moves = 0
+
+    // The mix: the stereo balance, -1 all left to 1 all right, and the level of each quarter of the bands.
+    private val balanceSlew = Slew(BALANCE_RATE)
+    private val groupLevel = FloatArray(GROUPS)
+    private var lastSpawned = -1
 
     // Rings: well A's slots first, then well B's. Centres are shares of the screen, sizes are in
     // shorter sides of the screen.
@@ -210,6 +224,32 @@ internal class ThinIce : Layered(
     internal fun ringCentresOf(well: Int): List<Pair<Float, Float>> =
         (0 until PER_WELL).map { well * PER_WELL + it }.filter { alive[it] }.map { centreX[it] to centreY[it] }
 
+    /** The centre of ring [slot], in shares of the screen's width and height, for tests. */
+    internal fun ringCentreX(slot: Int): Float = centreX[slot]
+
+    internal fun ringCentreY(slot: Int): Float = centreY[slot]
+
+    /** The slot of the newest ring, -1 before the first. For tests. */
+    internal val newestRing: Int get() = lastSpawned
+
+    /** How far ring [slot] bends with its waveform now, in shorter sides. For tests. */
+    internal fun amplitudeOf(slot: Int): Float = amplitude(slot)
+
+    /** Times a birth has moved a well to the loudest band group. For tests. */
+    internal val wellMoves: Int get() = moves
+
+    /** Hits in the shared impulse list now. For tests. */
+    internal val impulseCount: Int get() = kit.impulses.count
+
+    /** A birth: the well off the loudest band group takes it over and rings once. */
+    internal fun birth() {
+        leader = 1 - leader
+        spawn(leader, 0.8f, lastFrame ?: return)
+        moves++
+    }
+
+    private var lastFrame: SpectrumFrame? = null
+
     /** Pieces of broken ice still sinking. For tests. */
     internal val sinking: Int get() = if (breakAge < 0f) 0 else pieceCount
 
@@ -232,34 +272,19 @@ internal class ThinIce : Layered(
         if (gestures.breakdown) breakdown = true else if (gestures.turn || gestures.surge) breakdown = false
         calm += ((if (breakdown) 1f else 0f) - calm) * (1f - exp(-step / 0.5f))
 
-        val loud = ((state.lift / state.lightScale.coerceAtLeast(1e-3f) - 0.06f) / 0.94f).coerceIn(0f, 1f)
         allowed = state.lightScale.coerceIn(0f, 1f)
-        light = allowed * (IDLE_LIGHT + (1f - IDLE_LIGHT) * loud) * (1f - 0.4f * calm)
+        light = allowed * max(IDLE_LIGHT * (1f - frame.audible), lightFor(state.energy)) * (1f - 0.4f * calm)
         updateKey(state, step)
+        lastFrame = frame
+        followTheMix(frame, step)
 
-        // A section rings both wells once where they stand, then glides them to new places during its first bar.
+        // A section rings both wells once where they stand.
         if (gestures.turn) {
             kickCracks = 0
             spawn(0, 0.6f, frame)
             spawn(1, 0.6f, frame)
-            for (well in 0 until WELLS) {
-                fromAlong[well] = wellAlong[well]
-                fromAcross[well] = wellAcross[well]
-            }
-            toAlong[0] = 0.2f + 0.2f * random.next()
-            toAlong[1] = 0.6f + 0.2f * random.next()
-            toAcross[0] = 0.3f + 0.4f * random.next()
-            toAcross[1] = 0.3f + 0.4f * random.next()
-            glide = 0f
         }
-        if (glide < 1f) {
-            glide = (glide + step / gestures.cycleSeconds.coerceAtLeast(0.5f)).coerceAtMost(1f)
-            val eased = glide * glide * (3f - 2f * glide)
-            for (well in 0 until WELLS) {
-                wellAlong[well] = fromAlong[well] + (toAlong[well] - fromAlong[well]) * eased
-                wellAcross[well] = fromAcross[well] + (toAcross[well] - fromAcross[well]) * eased
-            }
-        }
+        if (evolution.birth) birth()
 
         // Rings spread one spacing a beat, slower in a breakdown, and not at all in a silence.
         val speed = SPACING / gestures.beatSeconds.coerceAtLeast(0.15f) * (1f - 0.55f * calm)
@@ -283,10 +308,12 @@ internal class ThinIce : Layered(
         sinceFallbackA += step
         sinceFallbackB += step
         val beat = gestures.beatSeconds
+        val kickAcross = 0.5f + BALANCE_REACH * balanceSlew.value
         if (gestures.kick > 0f) {
             val accented = gestures.kick >= max(0.5f, kickAverage * 1.15f)
             kickAverage += (gestures.kick - kickAverage) * 0.2f
-            spawn(0, gestures.kick, frame)
+            spawnAt(0, kickAcross, groupAlong(0), gestures.kick, frame)
+            impulse(Impulses.LOW, gestures.kick)
             sinceKick = 0f
             if (accented && !breakdown && kickCracks < MOST_KICK_CRACKS) {
                 kickCrack()
@@ -300,13 +327,17 @@ internal class ThinIce : Layered(
             }
         }
         if (gestures.snare > 0f) {
-            spawn(1, gestures.snare, frame)
+            spawnAt(1, kickAcross, 0.5f, gestures.snare, frame)
+            impulse(Impulses.BODY, gestures.snare)
             sinceSnare = 0f
         } else if (gestures.hat > 0f && sinceSnare > gestures.cycleSeconds && sinceFallbackB > beat * 0.9f) {
-            spawn(1, gestures.hat * 0.8f, frame)
+            spawnAt(1, kickAcross, groupAlong(GROUPS - 1), gestures.hat * 0.8f, frame)
             sinceFallbackB = 0f
         }
         if (gestures.hat > 0f) {
+            // A hat that rang no ring still lands in the impulse list, at the hats' place.
+            placeAt(kickAcross, groupAlong(GROUPS - 1))
+            impulse(Impulses.HIGH, gestures.hat)
             glint = max(glint, gestures.hat)
             hats++
         }
@@ -347,31 +378,102 @@ internal class ThinIce : Layered(
         }
         if (landscape != wasLandscape) {
             wasLandscape = landscape
+            // The picture turns a quarter, so the bass end of the long side goes from the left to the bottom.
             for (slot in 0 until SLOTS) {
-                val across = centreX[slot]
-                centreX[slot] = centreY[slot]
-                centreY[slot] = across
+                val x = centreX[slot]
+                val y = centreY[slot]
+                centreX[slot] = if (landscape) 1f - y else y
+                centreY[slot] = if (landscape) x else 1f - x
             }
-            // The cracks and the well of the sinking pieces are in shorter sides from the top left, and
-            // the two sides of the screen swap the same way.
+            // The cracks and the well of the sinking pieces are in shorter sides from the top left.
+            val long = max(screenW, screenH)
             for (point in crackX.indices) {
-                val across = crackX[point]
-                crackX[point] = crackY[point]
-                crackY[point] = across
+                val x = crackX[point]
+                val y = crackY[point]
+                crackX[point] = if (landscape) long - y else y
+                crackY[point] = if (landscape) x else long - x
             }
-            val well = pieceWellX
-            pieceWellX = pieceWellY
-            pieceWellY = well
+            val x = pieceWellX
+            val y = pieceWellY
+            pieceWellX = if (landscape) long - y else y
+            pieceWellY = if (landscape) x else long - x
         }
     }
 
     /** Whether the screen was landscape the last time its size was read. */
     private var wasLandscape = true
 
-    /** Where well [well] is, in shares of the screen: along its long side and across it. */
-    private fun wellX(well: Int): Float = if (screenW >= screenH) wellAlong[well] else wellAcross[well]
+    /**
+     * Where well [well] is, in shares of the screen. The bass end of the long side is the left of a
+     * landscape screen and the bottom of a portrait one.
+     */
+    private fun wellX(well: Int): Float = xOf(wellAcross[well], wellAlong[well])
 
-    private fun wellY(well: Int): Float = if (screenW >= screenH) wellAcross[well] else wellAlong[well]
+    private fun wellY(well: Int): Float = yOf(wellAcross[well], wellAlong[well])
+
+    private fun xOf(across: Float, along: Float): Float = if (screenW >= screenH) along else across
+
+    private fun yOf(across: Float, along: Float): Float = if (screenW >= screenH) across else 1f - along
+
+    /** The place of band group [group] along the long side, from its bass end. */
+    private fun groupAlong(group: Int): Float = (group + 0.5f) / GROUPS
+
+    /**
+     * Reads the mix once a frame: the stereo balance, and the level of each quarter of the bands.
+     * The leader well slews to the loudest quarter and the other to the second loudest, both across
+     * to where the balance leans.
+     */
+    private fun followTheMix(frame: SpectrumFrame, step: Float) {
+        val left = energyOf(frame.scopeLeft)
+        val right = energyOf(frame.scopeRight)
+        val leaning = if (left + right > 1e-9f) (right - left) / (right + left) else 0f
+        balanceSlew.advance(leaning, step)
+        val bands = frame.bandsRel
+        val ease = 1f - exp(-step / GROUP_SECONDS)
+        for (group in 0 until GROUPS) {
+            val from = group * bands.size / GROUPS
+            val to = (group + 1) * bands.size / GROUPS
+            var sum = 0f
+            for (band in from until to) sum += bands[band]
+            val level = if (to > from) sum / (to - from) else 0f
+            groupLevel[group] += (level - groupLevel[group]) * ease
+        }
+        var loudest = 0
+        for (group in 1 until GROUPS) if (groupLevel[group] > groupLevel[loudest]) loudest = group
+        var second = if (loudest == 0) 1 else 0
+        for (group in 0 until GROUPS) if (group != loudest && groupLevel[group] > groupLevel[second]) second = group
+        val across = 0.5f + BALANCE_REACH * balanceSlew.value
+        for (well in 0 until WELLS) {
+            wellAlong[well] = alongSlew[well].advance(groupAlong(if (well == leader) loudest else second), step)
+            wellAcross[well] = acrossSlew[well].advance(across, step)
+        }
+    }
+
+    private fun energyOf(wave: FloatArray): Float {
+        var sum = 0f
+        for (sample in wave) sum += sample * sample
+        return if (wave.isEmpty()) 0f else sum / wave.size
+    }
+
+    // The screen place of the last hit, in shares of the width and the height.
+    private var hitX = 0.5f
+    private var hitY = 0.5f
+
+    private fun placeAt(across: Float, along: Float) {
+        hitX = xOf(across, along)
+        hitY = yOf(across, along)
+    }
+
+    /** Adds a hit at the last hit place to the shared impulse list, in centred units with y down. */
+    private fun impulse(kind: Int, strength: Float) {
+        kit.impulses.add(kind, strength, (hitX - 0.5f) * 2f * kit.aspect, (hitY - 0.5f) * 2f, random.next())
+    }
+
+    /** A new ring of [pool]'s at a place of the mix, [across] and [along] in shares of the screen. */
+    private fun spawnAt(pool: Int, across: Float, along: Float, hit: Float, frame: SpectrumFrame) {
+        placeAt(across, along)
+        ring(pool, hitX, hitY, hit, frame)
+    }
 
     /** How far a ring born at this centre spreads before the farthest corner of the screen is inside it. */
     private fun reachFrom(x: Float, y: Float): Float {
@@ -382,11 +484,18 @@ internal class ThinIce : Layered(
 
     /** A new ring from [well]: the waveform and the spectrum as they are now, as thick as [hit] is hard. */
     private fun spawn(well: Int, hit: Float, frame: SpectrumFrame) {
+        ring(well, wellX(well), wellY(well), hit, frame)
+    }
+
+    /** A new ring of [pool]'s centred at [x], [y] in shares of the screen. */
+    private fun ring(pool: Int, x: Float, y: Float, hit: Float, frame: SpectrumFrame) {
+        val well = pool
         val slot = slotFor(well)
+        lastSpawned = slot
         val force = hit.coerceIn(0f, 1f)
         alive[slot] = true
-        centreX[slot] = wellX(well)
-        centreY[slot] = wellY(well)
+        centreX[slot] = x
+        centreY[slot] = y
         radius[slot] = START_RADIUS
         age[slot] = 0f
         travelled[slot] = 0f
@@ -625,7 +734,8 @@ internal class ThinIce : Layered(
         for (point in 0 until POINTS) {
             // Mirrored about the vertical, so the ring closes on itself: the waveform runs down both sides.
             val along = (if (point <= POINTS / 2) point else POINTS - point).toFloat() / (POINTS / 2)
-            val bend = sample(bends, bendFrom, PROFILE, along) * amp
+            // A newborn ring bends further than its own radius, so the bend never folds it through its centre.
+            val bend = max(sample(bends, bendFrom, PROFILE, along) * amp, -0.8f * radius)
             val now = 0.85f + 0.3f * sample(liveLevel, 0, SHADES, along)
             val lit = (sample(lights, lightFrom, SHADES, along) * level * now).coerceIn(0f, 1f)
             val sx = sinTable[point]
@@ -723,7 +833,7 @@ internal class ThinIce : Layered(
             val y = wellY(well) * screenH * unit
             val flash = wellFlash[well]
             val colour = hot[well]
-            bandInto(x, y, WELL_RING * unit, SWING * unit, max(0.6f, WELL_WIDTH * unit * 0.5f),
+            bandInto(x, y, WELL_RING * unit, WELL_SWING * unit, max(0.6f, WELL_WIDTH * unit * 0.5f),
                 colour[0], colour[1], colour[2], (0.45f + 0.55f * light) * allowed, liveProfile, 0, liveShade, 0)
             val glowLight = (0.35f + 0.65f * light) * allowed * (0.5f + 0.8f * flash)
             glows.glow(x, y, unit * (0.05f + 0.07f * flash), argb(colour[0] * glowLight, colour[1] * glowLight, colour[2] * glowLight), 16)
@@ -934,7 +1044,18 @@ internal class ThinIce : Layered(
         wellAlong[1] = 1f - START_ALONG
         wellAcross[0] = START_ACROSS
         wellAcross[1] = 1f - START_ACROSS
-        glide = 1f
+        for (well in 0 until WELLS) {
+            alongSlew[well].reset(wellAlong[well])
+            acrossSlew[well].reset(wellAcross[well])
+        }
+        leader = 0
+        moves = 0
+        balanceSlew.reset()
+        groupLevel.fill(0f)
+        lastSpawned = -1
+        lastFrame = null
+        hitX = 0.5f
+        hitY = 0.5f
         wellFlash.fill(0f)
         liveProfile.fill(0f)
         liveLevel.fill(0f)
@@ -961,7 +1082,7 @@ internal class ThinIce : Layered(
         pieceCount = 0
     }
 
-    private companion object {
+    internal companion object {
         const val WELLS = 2
         const val PER_WELL = 16
         const val SLOTS = WELLS * PER_WELL
@@ -984,11 +1105,20 @@ internal class ThinIce : Layered(
         const val SPACING = 0.075f
         const val THIN = 0.0022f
         const val THICK = 0.0075f
-        const val SWING = 0.045f
+        /** How far a newborn ring bends with its waveform, and how far the small ring at a well trembles. */
+        const val SWING = 0.12f
+        const val WELL_SWING = 0.045f
 
 
         const val START_ALONG = 0.36f
         const val START_ACROSS = 0.55f
+
+        /** The mix: quarters of the bands, how fast their levels ease, how fast the wells slew, and how far the balance moves a place across. */
+        const val GROUPS = 4
+        const val GROUP_SECONDS = 1f
+        const val WELL_RATE = 0.4f
+        const val BALANCE_RATE = 4f
+        const val BALANCE_REACH = 0.3f
 
         const val CRACKS = 24
         const val CRACK_POINTS = 9

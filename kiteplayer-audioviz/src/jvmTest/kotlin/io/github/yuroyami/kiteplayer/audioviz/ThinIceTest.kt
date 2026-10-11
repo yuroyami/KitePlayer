@@ -99,20 +99,24 @@ class ThinIceTest {
         ice.restart()
         repeat(dropAt - 1) { draw(160, 90) }
         val before = ice.crackStarts()
-        val ringsBefore = ice.ringCentresOf(0).size
-        assertTrue(before.isNotEmpty() && ringsBefore > 0, "the fixture needs cracks and rings to turn: ${before.size}, $ringsBefore")
-        // The next frame is drawn on a portrait screen. Cracks that creep out only move their far end.
+        val ringsBefore = ice.ringCentresOf(0)
+        assertTrue(before.isNotEmpty() && ringsBefore.isNotEmpty(), "the fixture needs cracks and rings to turn: ${before.size}, ${ringsBefore.size}")
+        // The next frame is drawn on a portrait screen, which turns the picture a quarter: the left
+        // of the landscape screen becomes the bottom. Cracks that creep out only move their far end.
         draw(90, 160)
         val after = ice.crackStarts()
+        val long = 160f / 90f
         assertTrue(after.size >= before.size)
         for ((index, start) in before.withIndex()) {
             val (x, y) = after[index]
-            assertTrue(abs(x - start.second) < 1e-4f && abs(y - start.first) < 1e-4f,
+            assertTrue(abs(x - start.second) < 1e-4f && abs(y - (long - start.first)) < 1e-4f,
                 "crack $index started at ${start.first}, ${start.second} and stands at $x, $y after the turn")
         }
-        val (wellX, wellY) = ice.wellAt(0)
-        for ((cx, cy) in ice.ringCentresOf(0)) {
-            assertTrue(abs(cx - wellX) < 1e-4f && abs(cy - wellY) < 1e-4f, "a ring left its well: $cx, $cy against $wellX, $wellY")
+        // Ring centres are shares of the screen, so the quarter turn moves them the same way.
+        for ((index, centre) in ice.ringCentresOf(0).withIndex()) {
+            val (x, y) = ringsBefore[index]
+            assertTrue(abs(centre.first - y) < 1e-4f && abs(centre.second - (1f - x)) < 1e-4f,
+                "a ring at $x, $y stands at $centre after the turn")
         }
     }
 
@@ -243,6 +247,101 @@ class ThinIceTest {
         assertTrue(sinking[broke] >= 9, "the break cuts many pieces, had ${sinking[broke]}")
         // The free cycle here runs about three seconds, and the pieces sink within one bar of it.
         assertTrue(gone > broke && gone - broke < 4 * 60 + 30, "the pieces are gone within a bar, took ${gone - broke} steps")
+    }
+
+    @Test
+    fun aNewbornRingBendsByUpToTwelvePercent() {
+        assertTrue(ThinIce.SWING == 0.12f)
+        val ice = ThinIce()
+        var slot = -1
+        var born = 0f
+        var later = 0f
+        RenderHarness.forEachFrameOf(ice, 160, 90, 188, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(if (step <= 70) VizDriver.LowHit else null, step) }) { _, step ->
+            if (step == 67) {
+                slot = ice.newestRing
+                born = ice.amplitudeOf(slot)
+            }
+            if (step == 187) later = ice.amplitudeOf(slot)
+        }
+        println("thin ice: a newborn ring bends by $born, two seconds later by $later")
+        assertTrue(born > 0.1f, "a newborn ring bends by more than a tenth of the short side, had $born")
+        assertTrue(later < born * 0.6f, "the bend settles as the ring spreads, $born became $later")
+    }
+
+    @Test
+    fun hitsLandWhereTheMixPutsThem() {
+        val loud = FloatArray(256) { 0.9f * kotlin.math.sin(it * 0.3f) }
+        val soft = FloatArray(256) { 0.1f * kotlin.math.sin(it * 0.3f) }
+        fun place(driver: VizDriver, left: FloatArray, right: FloatArray): Pair<Float, Float> {
+            val ice = ThinIce()
+            var centre = 0f to 0f
+            RenderHarness.forEachFrameOf(ice, 90, 160, 67, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(driver, step, scopeLeft = left, scopeRight = right) }) { _, step ->
+                if (step == 66) centre = ice.ringCentreX(ice.newestRing) to ice.ringCentreY(ice.newestRing)
+            }
+            return centre
+        }
+        val kick = place(VizDriver.LowHit, loud, soft)
+        val hat = place(VizDriver.HighHit, soft, loud)
+        val snare = place(VizDriver.BodyHit, soft, soft)
+        println("thin ice: a kick mixed left rings at $kick, a hat mixed right at $hat, a centred snare at $snare")
+        assertTrue(kick.first < 0.4f && kick.second > 0.7f, "a kick mixed left rings low on the left, at $kick")
+        assertTrue(hat.first > 0.6f && hat.second < 0.3f, "a hat mixed right rings high on the right, at $hat")
+        assertTrue(abs(snare.first - 0.5f) < 0.1f && abs(snare.second - 0.5f) < 0.15f, "a centred snare rings in the middle, at $snare")
+    }
+
+    @Test
+    fun theWellsSitOnTheTwoLoudestBandGroups() {
+        fun leaderAlong(low: Boolean): Float {
+            val ice = ThinIce()
+            var along = 0f
+            RenderHarness.forEachFrameOf(ice, 90, 160, 180, VizPalette.Prism,
+                source = { step -> InjectedFrames.toneFrame(step, lowBand = low) }) { _, step ->
+                // The long side of a portrait screen runs up from its bass end at the bottom.
+                if (step == 179) along = 1f - ice.wellAt(0).second
+            }
+            return along
+        }
+        val low = leaderAlong(true)
+        val high = leaderAlong(false)
+        println("thin ice: the loudest well sits at $low of the long side under a low tone, at $high under a high one")
+        assertTrue(low < 0.25f, "a low tone puts the loudest well in the bass quarter, at $low")
+        // The high tone lies in the third quarter of the bands, so its well sits above the middle.
+        assertTrue(high > 0.55f, "a high tone puts the loudest well high, at $high")
+    }
+
+    @Test
+    fun aBirthMovesAWellToTheBandGroupThatBecameLoudest() {
+        val ice = ThinIce()
+        var ringsBefore = 0
+        var ringsAfter = 0
+        var cracksBefore = 0
+        var cracksAfter = 0
+        var along = 0f
+        RenderHarness.forEachFrameOf(ice, 90, 160, 271, VizPalette.Prism,
+            source = { step -> InjectedFrames.toneFrame(step, lowBand = false) }) { _, step ->
+            if (step == 80) {
+                ringsBefore = ice.radiiOf(1).size
+                cracksBefore = ice.cracks
+                ice.birth()
+                ringsAfter = ice.radiiOf(1).size
+                cracksAfter = ice.cracks
+            }
+            if (step == 270) along = 1f - ice.wellAt(1).second
+        }
+        println("thin ice: a birth moved well B to $along, rings $ringsBefore to $ringsAfter")
+        assertTrue(ice.wellMoves == 1, "the birth moved a well, counted ${ice.wellMoves}")
+        assertTrue(ringsAfter == ringsBefore + 1 && cracksAfter == cracksBefore, "the birth rings once and cracks nothing")
+        assertTrue(along > 0.55f, "well B slews to the loudest band group, at $along")
+    }
+
+    @Test
+    fun theImpulsesCarryEveryHit() {
+        val ice = ThinIce()
+        RenderHarness.forEachFrameOf(ice, 64, 36, 140, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.LowHit, step) }) { _, _ -> }
+        assertTrue(ice.impulseCount == 3, "three kicks put three hits in the impulse list, had ${ice.impulseCount}")
     }
 
     private fun luma(pixel: Int): Float =

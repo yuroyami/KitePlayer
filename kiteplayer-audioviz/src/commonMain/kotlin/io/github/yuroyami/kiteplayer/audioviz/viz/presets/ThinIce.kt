@@ -97,12 +97,10 @@ internal class ThinIce : Layered(
     override val post: PostSpec get() = PostSpec.Off
 
     override val mapping: VizMapping by mappingOf(
-        // The waveform is the fine bend of each ring, and of the small ring each well trembles with.
         // The spectrum lights every ring round its circle.
-        VizDrive(VizDriver.Waveform, VizProperty.Texture),
         VizDrive(VizDriver.Bands, VizProperty.Brightness),
         // The lake is a map of the mix: the stereo balance moves the wells and the hits across, and
-        // the wells sit on the two loudest quarters of the bands.
+        // the wells sit on the two loudest quarters of the bands. The waveform bends each ring.
         VizDrive(VizDriver.Waveform, VizProperty.Shape),
         VizDrive(VizDriver.Bands, VizProperty.Shape),
         VizDrive(VizDriver.Level, VizProperty.Brightness),
@@ -141,6 +139,8 @@ internal class ThinIce : Layered(
     // The mix: the stereo balance, -1 all left to 1 all right, and the level of each quarter of the bands.
     private val balanceSlew = Slew(BALANCE_RATE)
     private val groupLevel = FloatArray(GROUPS)
+    private val wellGroup = IntArray(WELLS)
+    private val sinceRing = FloatArray(WELLS)
     private var lastSpawned = -1
 
     // Rings: well A's slots first, then well B's. Centres are shares of the screen, sizes are in
@@ -407,6 +407,12 @@ internal class ThinIce : Layered(
             spawnAt(1, kickAcross, groupAlong(GROUPS - 1), gestures.hat * 0.8f, frame)
             sinceFallbackB = 0f
         }
+        // A well that no hit rang for a beat rings by itself, as strong as its band group is loud,
+        // so a held tone still draws the map.
+        for (well in 0 until WELLS) {
+            sinceRing[well] += step
+            if (step > 0f && sinceRing[well] > beat) spawn(well, 0.3f + 0.5f * groupLevel[groupOf(well)], frame)
+        }
         if (gestures.hat > 0f) {
             // A hat that rang no ring still lands in the impulse list, at the hats' place.
             placeAt(kickAcross, groupAlong(GROUPS - 1))
@@ -603,6 +609,9 @@ internal class ThinIce : Layered(
 
     private fun yOf(across: Float, along: Float): Float = if (screenW >= screenH) across else 1f - along
 
+    /** The band group well [well] sits on. */
+    private fun groupOf(well: Int): Int = wellGroup[well]
+
     /** The place of band group [group] along the long side, from its bass end. */
     private fun groupAlong(group: Int): Float = (group + 0.5f) / GROUPS
 
@@ -632,7 +641,8 @@ internal class ThinIce : Layered(
         for (group in 0 until GROUPS) if (group != loudest && groupLevel[group] > groupLevel[second]) second = group
         val across = 0.5f + BALANCE_REACH * balanceSlew.value
         for (well in 0 until WELLS) {
-            wellAlong[well] = alongSlew[well].advance(groupAlong(if (well == leader) loudest else second), step)
+            wellGroup[well] = if (well == leader) loudest else second
+            wellAlong[well] = alongSlew[well].advance(groupAlong(wellGroup[well]), step)
             wellAcross[well] = acrossSlew[well].advance(across, step)
         }
     }
@@ -680,6 +690,7 @@ internal class ThinIce : Layered(
         val well = pool
         val slot = slotFor(well)
         lastSpawned = slot
+        sinceRing[pool] = 0f
         val force = hit.coerceIn(0f, 1f)
         alive[slot] = true
         centreX[slot] = x
@@ -1266,6 +1277,9 @@ internal class ThinIce : Layered(
         moves = 0
         balanceSlew.reset()
         groupLevel.fill(0f)
+        wellGroup[0] = 0
+        wellGroup[1] = 1
+        sinceRing.fill(0f)
         lastSpawned = -1
         lastFrame = null
         hitX = 0.5f

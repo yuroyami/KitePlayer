@@ -1,19 +1,12 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.LayoutDirection
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.AshimaNoise
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Silk
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.SilkStrand
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.hslRgb
-import io.github.yuroyami.kiteplayer.audioviz.viz.restart
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.random.Random
@@ -54,6 +47,12 @@ class SilkTest {
         println("Silk frame-to-frame change: silence $quiet, lively $lively")
         assertTrue(lively > 0.002f, "the strand should move under music, changed $lively a frame")
         assertTrue(quiet <= 0.05f * lively, "silence should hold the strand still: $quiet against $lively")
+
+        val clothQuiet = meanChange(RenderHarness.Song.Silence, Silk.CLOTH)
+        val clothLively = meanChange(RenderHarness.Song.Lively, Silk.CLOTH)
+        println("Silk cloth frame-to-frame change: silence $clothQuiet, lively $clothLively")
+        assertTrue(clothLively > 0.002f, "the cloth should move under music, changed $clothLively a frame")
+        assertTrue(clothQuiet <= 0.05f * clothLively, "silence should hold the cloth still: $clothQuiet against $clothLively")
     }
 
     @Test
@@ -101,41 +100,88 @@ class SilkTest {
 
     @Test
     fun theSpectrumLiesAlongTheStrandBassAtTheLeft() {
-        val strand = SilkStrand()
-        val bytes = IntArray(1024) { it % 256 }
-        strand.listen(bytes)
-        for (i in 0 until SilkStrand.STEPS) {
-            val u = strand.x[i] * 0.5f + 0.5f
-            val bin = floor(u * 1024f).toInt().coerceIn(0, 1023)
-            assertEquals(bytes[bin] / 256f, strand.frequencies[i], "point $i should read bin $bin")
-        }
-        assertEquals(0f, strand.frequencies[0])
-        assertEquals(bytes[1023] / 256f, strand.frequencies[SilkStrand.STEPS - 1])
+        val silk = Silk()
+        RenderHarness.forEachFrameOf(silk, 64, 36, 90, VizPalette.Prism,
+            source = { step -> InjectedFrames.toneFrame(step, lowBand = true) }) { _, _ -> }
+        val frequencies = silk.strand.frequencies
+        val sixth = SilkStrand.STEPS / 6
+        val left = (0 until sixth).map { frequencies[it] }.average()
+        val right = (SilkStrand.STEPS / 2 until SilkStrand.STEPS).map { frequencies[it] }.average()
+        println("silk: a low tone reads $left in the strand's first sixth and $right in its last half")
+        // The base frame keeps about 0.11 in the upper bands, read as its square root.
+        assertTrue(left > 0.8f, "the bass sits at the left of the strand, read $left")
+        assertTrue(right < 0.4f, "the treble half stays near the base frame, read $right")
     }
 
     @Test
-    fun theAnalyserIsReadSixtyTimesASecondOnAFastDisplay() {
-        val silk = Silk()
-        silk.restart()
-        val player = RenderHarness.player(RenderHarness.Song.Lively, 6f)
-        val bitmap = ImageBitmap(64, 36)
-        val scope = CanvasDrawScope()
-        val delta = 1f / 120f
-        var elapsed = 0f
-        var reads = 0
-        var before = silk.strand.frequencies.copyOf()
-        for (step in 0 until 240) {
-            elapsed += delta
-            val state = VizRenderState(player.next(delta), elapsed, delta, VizPalette.Prism, elapsed)
-            scope.draw(Density(1f), LayoutDirection.Ltr, Canvas(bitmap), Size(64f, 36f)) {
-                with(silk) { draw(state) }
+    fun aLowToneRaisesTheLeftRowsToFullHeight() {
+        fun front(lowBand: Boolean): Pair<Double, Double> {
+            val silk = Silk()
+            var low = 0.0
+            var tone = 0.0
+            RenderHarness.forEachFrameOf(silk, 160, 90, 120, VizPalette.Prism,
+                source = { step -> InjectedFrames.toneFrame(step, lowBand) },
+                beforeDraw = { silk.jumpTo(Silk.CLOTH) }) { _, step ->
+                if (step != 100) return@forEachFrameOf
+                low = (0..16).map { silk.rowHeight(0, it / 100f).toDouble() }.average()
+                tone = if (lowBand) (50..100).map { silk.rowHeight(0, it / 100f).toDouble() }.average()
+                    else (64..78).map { silk.rowHeight(0, it / 100f).toDouble() }.average()
             }
-            val now = silk.strand.frequencies
-            if (step >= 120 && !now.contentEquals(before)) reads++
-            before = now.copyOf()
+            return low to tone
         }
-        // One second at 120 Hz: the page read once per 60 Hz frame, so about sixty reads.
-        assertTrue(reads in 55..61, "the analyser should be read about sixty times a second, was $reads")
+        val (lowLeft, lowRest) = front(lowBand = true)
+        val (highLeft, highPlace) = front(lowBand = false)
+        println("silk: a low tone lifts the front row to $lowLeft at the left and $lowRest over the right half; " +
+            "a high tone to $highLeft at the left and $highPlace at its own place")
+        assertTrue(lowLeft > 3.0 * lowRest, "a low tone raises the left of the front row: $lowLeft against $lowRest")
+        assertTrue(highPlace > 2.0 * highLeft, "a high tone raises its own place instead: $highPlace against $highLeft")
+    }
+
+    @Test
+    fun aRowBehindTheFrontRowIsTheFrontRowThatLongAgo() {
+        val silk = Silk()
+        val heights = FloatArray(4)
+        RenderHarness.forEachFrameOf(silk, 160, 90, 260, VizPalette.Prism,
+            source = { step -> InjectedFrames.toneFrame(step, lowBand = step < 230) },
+            beforeDraw = { silk.jumpTo(Silk.CLOTH) }) { _, step ->
+            if (step != 250) return@forEachFrameOf
+            heights[0] = silk.rowHeight(0, 0.08f)
+            heights[1] = silk.rowHeight(40, 0.08f)
+            heights[2] = silk.rowHeight(0, 0.7f)
+            heights[3] = silk.rowHeight(40, 0.7f)
+        }
+        println("silk: at the left the front row is ${heights[0]} and row 40 ${heights[1]}; " +
+            "at 0.7 the front row is ${heights[2]} and row 40 ${heights[3]}")
+        assertTrue(heights[0] < heights[1], "row 40 still holds the low tone of 2.5 seconds ago: ${heights[0]} against ${heights[1]}")
+        assertTrue(heights[2] > heights[3], "the front row holds the high tone now: ${heights[2]} against ${heights[3]}")
+    }
+
+    @Test
+    fun theStageHasAHorizonAndAShadow() {
+        val silk = Silk()
+        var horizon = 0f
+        var below = 0f
+        var paper = 0f
+        RenderHarness.forEachFrame(silk, 320, 180, 60, VizPalette.Prism, RenderHarness.Song.Lively,
+            beforeDraw = { silk.jumpTo(Silk.CLOTH) }) { bitmap, step ->
+            if (step != 59) return@forEachFrame
+            horizon = silk.horizonY()
+            val pixels = pixels(bitmap)
+            val bottom = silk.clothBottomY().toInt().coerceIn(0, 179)
+            var total = 0f
+            var count = 0
+            for (y in bottom + 1..minOf(bottom + 20, 179)) for (x in 0 until 320) {
+                total += luma(pixels[y * 320 + x]); count++
+            }
+            below = total / count.coerceAtLeast(1)
+            var corner = 0f
+            for (y in 0 until 10) for (x in 0 until 10) corner += luma(pixels[y * 320 + x])
+            paper = corner / 100f
+        }
+        println("silk: horizon at $horizon of 180; under the cloth $below, the paper at the corner $paper")
+        // Fluctus's camera puts the horizon about a seventh of the way down.
+        assertTrue(horizon in 0.05f * 180f..0.4f * 180f, "the horizon sits in the upper part, at $horizon")
+        assertTrue(below < paper - 0.03f, "the shadow under the cloth is darker than the paper: $below against $paper")
     }
 
     @Test
@@ -170,12 +216,14 @@ class SilkTest {
         }
     }
 
-    /** The mean luma change between consecutive frames, after the analyser and the strand settle. */
-    private fun meanChange(song: RenderHarness.Song): Float {
+    /** The mean luma change between consecutive frames, after the strand or the [form] settles. */
+    private fun meanChange(song: RenderHarness.Song, form: Int = Silk.STRAND): Float {
         var previous: IntArray? = null
         var sum = 0f
         var count = 0
-        RenderHarness.forEachFrame(Silk(), 160, 90, 150, VizPalette.Prism, song) { bitmap, step ->
+        val silk = Silk()
+        RenderHarness.forEachFrame(silk, 160, 90, 150, VizPalette.Prism, song,
+            beforeDraw = { silk.jumpTo(form) }) { bitmap, step ->
             if (step < 60) return@forEachFrame
             val pixels = pixels(bitmap)
             previous?.let { before ->

@@ -26,6 +26,9 @@ import kotlin.test.assertTrue
 /** Opt-in real-window cadence measurement. Run alone, with the window visible. */
 @OptIn(ExperimentalComposeUiApi::class)
 class DesktopRenderPerformanceTest {
+
+    init { useSkiaGraphics() }
+
     @Test
     fun measureDesktopFrameCadence() {
         for (name in listOf("Alchemy", "Thin Ice", "Fluctus", "Odyssey")) {

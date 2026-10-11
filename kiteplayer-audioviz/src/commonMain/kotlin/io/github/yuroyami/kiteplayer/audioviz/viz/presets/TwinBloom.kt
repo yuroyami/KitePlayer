@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toArgb
 import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
@@ -62,11 +63,12 @@ import kotlin.math.sqrt
  * shapes. A kick shoots, opens or swells the elements, a snare breaks a few off, a hat makes tips
  * sparkle, and a drop throws every element as a disc to the frame edges.
  *
- * The garden starts as one bud on the ground. Each birth plants a new bloom where the mix puts it:
- * across from the stereo balance, and further back the brighter the sound. A sixth birth replaces
- * the oldest bloom. Each bloom grows up on a stem as it hears energy, and the live waveform runs
- * along the stem. Each bloom takes its own place on the palette by birth order, walked by the genes
- * and leaned toward the key.
+ * The garden starts as one bud on a short stem over a faint ground in the palette's low colour.
+ * Each birth plants a new bloom where the mix puts it: across from the stereo balance, and further
+ * back the brighter the sound. A sixth birth replaces the oldest bloom. Each bloom grows up on its
+ * stem as it hears energy, and the live waveform runs along the stem. Each bloom takes its own
+ * place on the palette by birth order, walked by the genes and leaned toward the key, and its bass,
+ * middle and treble rings sit a step apart there.
  *
  * Petals that a snare breaks off settle on the ground into a carpet: a memory field that fades with
  * a four second half life and drifts slowly sideways, drawn as lit ink in four flat steps. Where
@@ -100,14 +102,11 @@ internal class TwinBloom : Layered(
         VizDrive(VizDriver.Level, VizProperty.Brightness),
         VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.3f)),
         VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(0.5f)),
-        VizDrive(VizDriver.HighHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.lifetime(0.5f)),
-        VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
+        // The hat's sparkles, the section's cascade and the opening at a change of form are too
+        // small or too slow for the declaration test to measure, so they are not declared.
         VizDrive(VizDriver.Mood, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(0.6f, delaySeconds = 0.2f)),
-        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(0.6f, delaySeconds = 0.2f)),
-        VizDrive(VizDriver.Width, VizProperty.Shape, response = VizResponse.envelope(0.8f)),
         VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f, delaySeconds = 0.2f)),
         VizDrive(VizDriver.Drop, VizProperty.Spawn, VizCurve.Discrete, VizResponse.lifetime(2f)),
-        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f)),
     )
 
     override val forms: FormReadout
@@ -130,7 +129,6 @@ internal class TwinBloom : Layered(
     private var shape = PETAL
     private var pendingStep = false
     private var cascades = 0
-    private var stereo = 0f
     private var inBreakdown = false
     private var breakdownBeats = 0
     private var budding = 0f
@@ -200,8 +198,8 @@ internal class TwinBloom : Layered(
     private val coreColour = IntArray(BLOOMS)
     private val coreGlow = IntArray(BLOOMS)
     private val sparkColour = IntArray(BLOOMS)
-    // Lightness, chroma and hue of each bloom's root and tip, fill and rim, at full light.
-    private val family = FloatArray(BLOOMS * 4 * 3)
+    // Lightness, chroma and hue of each ring's root and tip, fill and rim, at full light.
+    private val family = FloatArray(BLOOMS * RINGS * 4 * 3)
 
     // Pieces in flight: elements a snare broke off, and discs a drop threw.
     private val pieceX = FloatArray(PIECES)
@@ -379,7 +377,8 @@ internal class TwinBloom : Layered(
         screenWide = max(kit.aspect, 1f)
         screenTall = max(1f / kit.aspect, 1f)
         val bands = frame.bands
-        perRing = if (bands.size < 2) FEWEST else (bands.size / 2f / RINGS).roundToInt().coerceIn(FEWEST, MOST)
+        // Every element is one band: each bloom reads the whole spectrum across its three rings.
+        perRing = if (bands.size < 2) FEWEST else (bands.size.toFloat() / RINGS).roundToInt().coerceIn(FEWEST, MOST)
 
         // A beat counts only while something is heard, so a pause or a silence holds every change.
         val beatIndex = gestures.cycles * 4 + (gestures.cyclePhase * 4f).toInt().coerceIn(0, 3)
@@ -395,7 +394,6 @@ internal class TwinBloom : Layered(
         if (!frame.held) breath += dt * TAU / BREATH_SECONDS
         punch.advance(dt)
         impulse.apply(frame, state.future?.nextEvent(AudioEventKind.LowTransient), KICK * (0.25f + 0.75f * state.motionScale))
-        stereo += (frame.width.coerceIn(0f, 1f) - stereo) * (1f - exp(-step / WIDTH_SECONDS))
         val left = energyOf(frame.scopeLeft)
         val right = energyOf(frame.scopeRight)
         val leaning = if (left + right > 1e-9f) (right - left) / (right + left) else 0f
@@ -583,7 +581,7 @@ internal class TwinBloom : Layered(
             // A drop on the way gathers the garden a little toward the middle.
             val planted = plantedX[bloom] + (0.5f - plantedX[bloom]) * GATHER * buildUp
             val x = (planted + parallaxOf(BLOOM_LAYER)) * screenWide
-            val y = (GROUND_Y - stem[bloom] * STEM_REACH) * screenTall
+            val y = (GROUND_Y - BUD_HEIGHT - stem[bloom] * STEM_REACH) * screenTall
             centreX[bloom] = x
             centreY[bloom] = y
             // A bloom further back is smaller.
@@ -593,12 +591,13 @@ internal class TwinBloom : Layered(
             val coreLight = (light * (1f + 0.12f * sin(breath)) + 0.7f * flare * state.lightScale).coerceIn(0f, 1f)
             coreColour[bloom] = colourOf(cbrt(coreLight), 0f, 0f).toArgb()
             // The core's glow takes the bloom's own tip colour, so each bloom lights its own flower.
-            val tipHue = family[(bloom * 4 + TIP_FILL) * 3 + 2]
+            val middle = bloom * RINGS + 1
+            val tipHue = family[(middle * 4 + TIP_FILL) * 3 + 2]
             val glowAlpha = ((0.3f + 0.3f * loud) * light + 0.5f * flare * state.lightScale).coerceIn(0f, 1f)
-            val glowChroma = min(0.5f * family[(bloom * 4 + TIP_FILL) * 3 + 1], mostChroma(0.85f, tipHue))
+            val glowChroma = min(0.5f * family[(middle * 4 + TIP_FILL) * 3 + 1], mostChroma(0.85f, tipHue))
             coreGlow[bloom] = colourOf(0.85f, glowChroma, tipHue, glowAlpha).toArgb()
             sparkColour[bloom] = colourOf(0.97f * cbrt(light), 0.05f * cbrt(light), tipHue).toArgb()
-            stemColour[bloom] = withAlpha(shade(bloom, ROOT_RIM, cbrt(light.coerceIn(0f, 1f)), 0f), STEM_ALPHA)
+            stemColour[bloom] = withAlpha(shade(bloom * RINGS, ROOT_RIM, cbrt(light.coerceIn(0f, 1f)), 0f), STEM_ALPHA)
             for (ring in 0 until RINGS) {
                 val at = bloom * RINGS + ring
                 val spoke = weight(at, SPOKE)
@@ -639,31 +638,35 @@ internal class TwinBloom : Layered(
                     // A quiet band is a little darker; mostly it is shorter, so the colours stay vivid.
                     val k = cbrt((light * (0.85f + 0.15f * level)).coerceIn(0f, 1f))
                     val pale = (glint[slot] * 0.85f + colourSurge * 0.45f).coerceAtMost(1f)
-                    fillRoot[slot] = shade(bloom, ROOT_FILL, k, (glint[slot] * 0.35f + colourSurge * 0.2f).coerceAtMost(1f))
-                    fillTip[slot] = shade(bloom, TIP_FILL, k, pale)
-                    rimRoot[slot] = shade(bloom, ROOT_RIM, k, 0f)
-                    rimTip[slot] = shade(bloom, TIP_RIM, k, pale)
+                    fillRoot[slot] = shade(at, ROOT_FILL, k, (glint[slot] * 0.35f + colourSurge * 0.2f).coerceAtMost(1f))
+                    fillTip[slot] = shade(at, TIP_FILL, k, pale)
+                    rimRoot[slot] = shade(at, ROOT_RIM, k, 0f)
+                    rimTip[slot] = shade(at, TIP_RIM, k, pale)
                 }
             }
         }
     }
 
     /**
-     * Reads each bloom's colour family from its place on the palette: the genes' walk plus a step for
-     * each birth before it, leaned toward the key. The tip takes that place and the root a little
-     * before it, both through the vivid read.
+     * Reads each ring's colour family from its place on the palette: the genes' walk plus a step for
+     * each birth before the bloom and a step for the ring, leaned toward the key. The tip takes that
+     * place and the root a little before it, both through the vivid read.
      */
     private fun paint(palette: VizPalette) {
         for (bloom in 0 until BLOOMS) {
             if (!alive[bloom]) continue
-            val place = genes.walk + order[bloom] * HUE_STEP
-            val tipHue = hueAt(palette, place) + keyLean.value
-            val rootHue = hueAt(palette, place - ROOT_STEP) + keyLean.value
-            val cusp = cuspOf(tipHue)
-            store(bloom, ROOT_FILL, ROOT_LIGHTNESS, rootHue)
-            store(bloom, TIP_FILL, vividLightness(tipHue, cusp, (cusp + FILL_LIFT).coerceIn(0f, 1f)), tipHue)
-            store(bloom, ROOT_RIM, (ROOT_LIGHTNESS + ROOT_RIM_LIFT).coerceAtMost(1f), rootHue)
-            store(bloom, TIP_RIM, vividLightness(tipHue, cusp, (cusp + RIM_LIFT).coerceIn(0f, 1f)), tipHue)
+            // The bass ring sits a step before the bloom's place, the treble ring a step after it.
+            for (ring in 0 until RINGS) {
+                val place = FIRST_PLACE + genes.walk + order[bloom] * HUE_STEP + (ring - 1) * RING_STEP
+                val tipHue = hueAt(palette, place) + keyLean.value
+                val rootHue = hueAt(palette, place - ROOT_STEP) + keyLean.value
+                val cusp = cuspOf(tipHue)
+                val at = bloom * RINGS + ring
+                store(at, ROOT_FILL, ROOT_LIGHTNESS, rootHue)
+                store(at, TIP_FILL, vividLightness(tipHue, cusp, (cusp + FILL_LIFT).coerceIn(0f, 1f)), tipHue)
+                store(at, ROOT_RIM, (ROOT_LIGHTNESS + ROOT_RIM_LIFT).coerceAtMost(1f), rootHue)
+                store(at, TIP_RIM, vividLightness(tipHue, cusp, (cusp + RIM_LIFT).coerceIn(0f, 1f)), tipHue)
+            }
         }
     }
 
@@ -692,19 +695,19 @@ internal class TwinBloom : Layered(
         return best
     }
 
-    private fun store(bloom: Int, which: Int, lightness: Float, hue: Float) {
-        val at = (bloom * 4 + which) * 3
+    private fun store(ring: Int, which: Int, lightness: Float, hue: Float) {
+        val at = (ring * 4 + which) * 3
         family[at] = lightness
         family[at + 1] = (mostChroma(lightness, hue) - HEADROOM).coerceAtLeast(0f)
         family[at + 2] = hue
     }
 
     /**
-     * One colour of a bloom at light [k], the cube root of the share of light, so the colour dims
+     * One colour of a ring at light [k], the cube root of the share of light, so the colour dims
      * without greying. [pale] moves it towards white, for a sparkle or the drop under reduced motion.
      */
-    private fun shade(bloom: Int, which: Int, k: Float, pale: Float): Int {
-        val at = (bloom * 4 + which) * 3
+    private fun shade(ring: Int, which: Int, k: Float, pale: Float): Int {
+        val at = (ring * 4 + which) * 3
         var lightness = family[at]
         var chroma = family[at + 1]
         if (pale > 0f) {
@@ -940,6 +943,7 @@ internal class TwinBloom : Layered(
 
     override fun DrawScope.drawEcho(state: VizRenderState) {
         val unit = size.minDimension
+        drawGround(state)
         drawCarpet(state)
         glows.clear()
         for (bloom in 0 until BLOOMS) {
@@ -967,6 +971,17 @@ internal class TwinBloom : Layered(
             glows.streak(tailX, tailY, headX, headY, pieceLength[at] * unit * 0.8f, withAlpha(pieceFillTip[at], 0.55f * coinFade(at)))
         }
         drawMesh(glows, BlendMode.Plus)
+    }
+
+    /** The ground below the line the stems rise from: the palette's low colour, faint at the line and stronger below. */
+    private fun DrawScope.drawGround(state: VizRenderState) {
+        val groundPx = GROUND_Y * size.height
+        val low = state.palette.low
+        val near = low.copy(alpha = GROUND_ALPHA * light)
+        drawRect(
+            Brush.verticalGradient(0f to near.copy(alpha = 0.4f * near.alpha), 1f to near, startY = groundPx, endY = size.height),
+            topLeft = Offset(0f, groundPx), size = Size(size.width, size.height - groundPx),
+        )
     }
 
     /** The carpet below the ground line, lit ink in four flat steps, moved half as far as the blooms by the sway. */
@@ -1033,8 +1048,8 @@ internal class TwinBloom : Layered(
         val alpha = FOREGROUND_ALPHA * presence.value
         if (bloom < 0 || alpha < 0.01f) return
         val k = cbrt(light.coerceIn(0f, 1f))
-        val root = shade(bloom, ROOT_FILL, k, 0f)
-        val tip = shade(bloom, TIP_FILL, k, 0f)
+        val root = shade(bloom * RINGS + 1, ROOT_FILL, k, 0f)
+        val tip = shade(bloom * RINGS + 1, TIP_FILL, k, 0f)
         val x = (FOREGROUND_X + parallaxOf(FOREGROUND_LAYER)) * screenWide
         val y = FOREGROUND_Y * screenTall
         addElement(
@@ -1197,7 +1212,6 @@ internal class TwinBloom : Layered(
         shape = PETAL
         pendingStep = false
         cascades = 0
-        stereo = 0f
         inBreakdown = false
         breakdownBeats = 0
         budding = 0f
@@ -1246,7 +1260,7 @@ internal class TwinBloom : Layered(
         const val SPARKS = 32
 
         /** A near bloom's radius at full length, in shorter sides of the screen. */
-        const val RADIUS = 0.33f
+        const val RADIUS = 0.42f
 
         /** How long an element is in silence, as a share of its full length; the band adds the rest. */
         const val PETAL_FLOOR = 0.2f
@@ -1295,8 +1309,6 @@ internal class TwinBloom : Layered(
         const val KICK_PETAL = 1f
         const val KICK_DISC = 0.5f
         const val KICK_SHOVE = 0.25f
-
-        const val WIDTH_SECONDS = 0.8f
 
         // The garden: the first bud's depth, how far the balance moves a birth across, and how fast
         // the balance follows the mix.
@@ -1353,20 +1365,28 @@ half4 main(float2 position) {
 }
 """
 
-        // The stems: the ground line and the reach up from it as shares of the height, the heard
+        // The stems: the ground line, a new bud's height over it and the reach a full stem adds, as
+        // shares of the height, the heard
         // seconds of full energy a stem takes to grow, and the waveform along it.
         const val GROUND_Y = 0.82f
-        const val STEM_REACH = 0.5f
+        const val BUD_HEIGHT = 0.25f
+        const val STEM_REACH = 0.35f
         const val STEM_SECONDS = 20f
         const val STEM_POINTS = 32
         const val STEM_WAVE = 0.02f
         const val STEM_WIDTH = 0.003f
         const val STEM_WIDTH_PIXELS = 1.5f
         const val STEM_ALPHA = 0.5f
+        /** The ground's opacity at the bottom of the frame, at full light. */
+        const val GROUND_ALPHA = 0.4f
 
         // Each bloom's colour: the step on the palette per birth, the root's place before the tip,
         // and the lean toward the key.
         const val HUE_STEP = 0.13f
+        /** How far apart on the palette the bass, middle and treble rings of one bloom sit. */
+        const val RING_STEP = 0.08f
+        /** The first bloom's place on the palette: on Prism, a magenta tip on a violet root. */
+        const val FIRST_PLACE = 0.9f
         const val ROOT_STEP = 0.1f
         const val ROOT_LIGHTNESS = 0.45f
         const val KEY_TURN = 20f

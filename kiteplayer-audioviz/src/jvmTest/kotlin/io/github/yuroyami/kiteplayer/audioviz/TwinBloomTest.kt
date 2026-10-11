@@ -69,8 +69,9 @@ class TwinBloomTest {
             val image = RenderHarness.render(TwinBloom(), width, height, 1, VizPalette.Prism, RenderHarness.Song.Silence)
             val (across, down) = litSpan(image)
             val shorter = minOf(width, height)
-            val span = maxOf(across, down) / shorter.toFloat()
-            println("twin bloom: the first bud spans $across by $down of ${width}x$height, $span of the shorter side")
+            // Across, so the thin stem under the bud does not count.
+            val span = across / shorter.toFloat()
+            println("twin bloom: the first bud spans $across by $down of ${width}x$height, $span of the shorter side across")
             assertTrue(span in 0.05f..0.25f, "the first frame shows one bud, spanning $span of the shorter side")
         }
         val garden = TwinBloom()
@@ -167,8 +168,7 @@ class TwinBloomTest {
         val music = meanChange(RenderHarness.Song.Lively)
         val quiet = meanChange(RenderHarness.Song.Silence)
         println("twin bloom: frames change by $music on the drums and $quiet in silence")
-        // The garden opens as one bud, which covers less of the frame than a full flower.
-        assertTrue(music > 0.003f, "the music render barely moves: $music")
+        assertTrue(music > 0.004f, "the music render barely moves: $music")
         assertTrue(quiet <= 0.2f * music, "silence moves ${quiet / music} as much as the music does")
     }
 
@@ -375,7 +375,8 @@ class TwinBloomTest {
         var right = -1
         var top = image.height
         var bottom = -1
-        for (y in 0 until image.height) {
+        // Above the ground line only, so the ground does not count.
+        for (y in 0 until (image.height * GROUND_LINE).toInt()) {
             for (x in 0 until image.width) {
                 if (distance(image.getRGB(x, y), background) <= 18) continue
                 left = minOf(left, x)
@@ -394,7 +395,8 @@ class TwinBloomTest {
         val bandY = image.height / 30
         var lit = 0
         var seen = 0
-        for (y in 0 until image.height) {
+        // Above the ground line only, so the ground does not count.
+        for (y in 0 until (image.height * GROUND_LINE).toInt()) {
             for (x in 0 until image.width) {
                 val inBand = x < bandX || x >= image.width - bandX || y < bandY || y >= image.height - bandY
                 if (!inBand) continue
@@ -411,6 +413,8 @@ class TwinBloomTest {
 
     private companion object {
         const val SAMPLES = 200
+        /** The share of the height where Twin Bloom's ground starts. */
+        const val GROUND_LINE = 0.8f
         val GROUND: Int = VizPalette.Prism.background.toArgb()
     }
 }

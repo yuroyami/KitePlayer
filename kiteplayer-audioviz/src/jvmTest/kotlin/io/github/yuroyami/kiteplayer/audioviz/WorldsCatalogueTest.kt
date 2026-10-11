@@ -16,7 +16,12 @@ class WorldsCatalogueTest {
 
     init { useSkiaGraphics() }
 
-    private val rebuilt: List<Visualization> get() = VizCatalog.create().filter { it.forms != null }
+    // AUDIOVIZ_SURVEY names the drawings to judge, comma separated, for checking one of them.
+    private val chosen: Set<String>? = System.getenv("AUDIOVIZ_SURVEY")?.split(',')?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }?.toSet()?.takeIf { it.isNotEmpty() }
+
+    private val rebuilt: List<Visualization>
+        get() = VizCatalog.create().filter { it.forms != null && (chosen == null || it.name in chosen) }
 
     private fun forEach(law: String, block: (Visualization) -> String?) {
         val drawings = rebuilt

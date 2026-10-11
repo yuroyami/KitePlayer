@@ -9,12 +9,14 @@ import androidx.compose.ui.unit.LayoutDirection
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fracture
 import io.github.yuroyami.kiteplayer.audioviz.viz.restart
 import java.awt.image.BufferedImage
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** The port of Vissonance's Fracture: it draws, it holds still in silence, and it keeps the page's light and laws. */
@@ -54,21 +56,23 @@ class FractureTest {
     }
 
     @Test
-    fun theClearColourIsWhiteAndStripsBrightenWithDistance() {
+    fun theClearIsADimSpaceAndStripsBrightenWithDistance() {
         // In silence the corridor rests: the floor 20 units below the eye, the hue 250, no roll.
         var last: BufferedImage? = null
         RenderHarness.forEachFrame(Fracture(), 640, 360, 3, VizPalette.Prism, RenderHarness.Song.Silence) { bitmap, step ->
             if (step == 2) last = with(RenderHarness) { bitmap.toBufferedImage() }
         }
         val image = checkNotNull(last)
-        // White beyond the far end of the corridor and beside the strips, at eye level.
-        assertEquals(0xFFFFFF, image.getRGB(320, 180) and 0xFFFFFF, "the void beyond the corridor is the white clear colour")
-        assertEquals(0xFFFFFF, image.getRGB(1, 180) and 0xFFFFFF, "the void beside the strips is the white clear colour")
-        // Straight down the middle of the floor: black at the bottom of the frame, the full hue near the far end.
+        // A dim space beyond the far end of the corridor and beside the strips, at eye level.
+        for (pixel in intArrayOf(image.getRGB(320, 180), image.getRGB(1, 180))) {
+            val luma = (0.2126f * red(pixel) + 0.7152f * green(pixel) + 0.0722f * blue(pixel)) / 255f
+            assertTrue(luma in 0.01f..0.15f, "the clear is a dim space, was ${hex(pixel)} at luma $luma")
+        }
+        // Straight down the middle of the floor: black at the bottom of the frame, the hue near the far end.
         val near = image.getRGB(320, 359)
         assertTrue(blue(near) < 30 && red(near) < 10, "the floor 29 units ahead should be black, was ${hex(near)}")
         val far = image.getRGB(320, 190)
-        assertTrue(blue(far) > 240 && red(far) in 30..60 && green(far) < 5, "the floor 514 units ahead should glow violet-blue, was ${hex(far)}")
+        assertTrue(blue(far) > blue(near) + 20 && blue(far) > red(far) && green(far) < 5, "the floor 514 units ahead should glow violet-blue, was ${hex(far)}")
         var before = -1
         for (y in 359 downTo 190) {
             val value = blue(image.getRGB(320, y))
@@ -155,6 +159,79 @@ class FractureTest {
         RenderHarness.forEachFrame(free, 160, 90, 90, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ -> }
         assertTrue(free.travel > 0.0, "full motion should fly the corridor")
         assertTrue(free.roll < 0.0, "full motion should roll the camera the page's way")
+    }
+
+    @Test
+    fun eachShardShowsItsOwnTimeSlice() {
+        val fracture = Fracture()
+        // The low tone plays from step 60 to 239 and the high one from 240.
+        RenderHarness.forEachFrameOf(fracture, 160, 90, 300, VizPalette.Prism,
+            source = { step -> InjectedFrames.toneFrame(step, lowBand = step < 240) }) { _, _ -> }
+        val lowAt = 4f / 47f
+        val highAt = 34f / 47f
+        val back = 3 * Fracture.NUM_BANDS / 4
+        val nowLow = fracture.sliceLevel(0, lowAt)
+        val nowHigh = fracture.sliceLevel(0, highAt)
+        val thenLow = fracture.sliceLevel(back, lowAt)
+        val thenHigh = fracture.sliceLevel(back, highAt)
+        println("fracture: the nearest shard low $nowLow high $nowHigh; three seconds back low $thenLow high $thenHigh")
+        assertTrue(nowHigh > nowLow, "the nearest shard shows the high tone that plays now")
+        assertTrue(thenLow > thenHigh, "a shard three seconds away shows the low tone that played then")
+    }
+
+    @Test
+    fun theRollAlternatesAndFlipsOnAMorph() {
+        val fracture = Fracture()
+        var last = 0f
+        var rose = false
+        var fell = false
+        var steepest = 0f
+        RenderHarness.forEachFrameOf(fracture, 64, 36, 400, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }) { _, step ->
+            val roll = fracture.rollValue
+            if (step > 0) {
+                val change = roll - last
+                if (change > 1e-6f) rose = true
+                if (change < -1e-6f) fell = true
+                steepest = maxOf(steepest, abs(change))
+            }
+            last = roll
+        }
+        println("fracture: the roll rose $rose fell $fell, steepest $steepest a frame")
+        assertTrue(rose && fell, "the roll turns both ways")
+        assertTrue(steepest <= 0.02f, "the roll never jumps, moved $steepest in a frame")
+        val sign = fracture.rollSignValue
+        fracture.morph()
+        assertEquals(-sign, fracture.rollSignValue)
+    }
+
+    @Test
+    fun theFormIsPublishedAndMorphsOnTheDrumLoop() {
+        val fracture = Fracture()
+        assertEquals("Corridor", assertNotNull(fracture.forms).form)
+        RenderHarness.forEachFrame(fracture, 64, 36, 3600, VizPalette.Prism, RenderHarness.Song.Lively) { _, _ -> }
+        val forms = assertNotNull(fracture.forms)
+        println("fracture: ${forms.morphs} morphs, ${forms.births} births, form ${forms.form}")
+        assertTrue(forms.morphs >= 1, "the drum loop should morph the corridor at least once")
+        assertTrue(forms.form in Fracture.FORMS)
+    }
+
+    @Test
+    fun theLightFollowsTheLevelAndKeepsAQuarterInSilence() {
+        val playing = Fracture()
+        var heard = 0f
+        RenderHarness.forEachFrameOf(playing, 64, 36, 100, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) }, beforeDraw = { it.lightScale = 1f }) { _, step ->
+            if (step == 90) heard = playing.lightValue
+        }
+        val silent = Fracture()
+        var quiet = 0f
+        RenderHarness.forEachFrame(silent, 64, 36, 120, VizPalette.Prism, RenderHarness.Song.Silence) { _, step ->
+            if (step == 119) quiet = silent.lightValue
+        }
+        println("fracture: light $heard while heard, $quiet in silence")
+        assertEquals(lightFor(0.45f), heard, 0.02f)
+        assertEquals(Fracture.IDLE_LIGHT, quiet, 0.02f)
     }
 
     /** The mean colour change between consecutive frames over the last second of three. */

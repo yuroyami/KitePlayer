@@ -4,7 +4,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 import io.github.yuroyami.kiteplayer.audioviz.viz.DisplayStep
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
+import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
@@ -16,8 +18,13 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
 import io.github.yuroyami.kiteplayer.audioviz.viz.WebAudioAnalyser
+import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Evolution
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Genes
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
+import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.ln
@@ -37,25 +44,30 @@ import kotlin.math.tan
  * - Year: 2017. The code was written from 2017-03-11 to 2017-03-17, on three.js r84.
  *
  * Deviations from the original:
- * - [WebAudioAnalyser] rebuilds the page's analyser from the player's spectrum, with the page's settings: an FFT
- *   of 4096 on a 44.1 kHz layout, smoothing 0.8, -100 to -30 dB. The player's bins are about twice as wide as
- *   the page's, so neighbouring bass bins are interpolated.
- * - The page's frame (the analyser read and the loudness average) runs 60 times per second of heard music, not
- *   once per browser frame, and the roll and the flight advance by heard time. So the corridor stands still
- *   while the music is paused or silent.
+ * - The strips hear the engine's bands, read at the page's byte scale, 0 to 255, so the page's laws keep their
+ *   units. [WebAudioAnalyser] still rebuilds the page's analyser from the player's spectrum, with the page's
+ *   settings: an FFT of 4096 on a 44.1 kHz layout, smoothing 0.8, -100 to -30 dB.
+ * - The page's frame (the read and the loudness average) runs 60 times per second of heard music, not once per
+ *   browser frame, and the roll and the flight advance by heard time. So the corridor stands still while the
+ *   music is paused or silent.
+ * - Every strip shows the bands as they were when it was heard: the nearest strip shows now, and each strip
+ *   further away shows further back, four heard seconds across the corridor. Each strip is a shard that tilts
+ *   by its own level, alternate strips the other way.
+ * - The page's camera rolled one way at a rate from the loudness. Here the roll turns one way in the first half
+ *   of each cycle and back in the second, faster when louder, and a morph flips it.
  * - The camera roll and the flight speed are multiplied by the reduced-motion setting.
  * - Each strip keeps its 128 lifted columns, and its 128 flat columns become one flat band under the strip, for
  *   phones at 1080p. The surface is the same, with about half the corners.
  * - The strips are painted far to near with a colour at each corner, where the page used a depth buffer and a
  *   colour per pixel. A ridge is cut where it passes the opposite surface, which is where the depth buffer hid it.
- * - The white clear colour and the strips are multiplied by the flash guard's light scale. It is 1 unless the
- *   picture would flash.
+ * - The page cleared to white. Here the clear is a dim space, the palette's background lifted toward its low
+ *   colour, and every colour follows the level, with a quarter of the light kept in a silence.
  *
- * A flight down an endless corridor on a white void. The floor and the ceiling are 64 thin strips each, and the
- * spectrum lifts the far edge of every strip into a jagged ridge, with the bass at the outer edge. Strips near
- * the camera are black, and far strips glow in one hue that follows the loudness: violet when quiet, green in
- * the middle, orange when loud. Loud music pushes the floor and the ceiling toward eye level, speeds the flight
- * and rolls the camera.
+ * A flight down an endless corridor through a dim space. The floor and the ceiling are 64 thin strips each, and
+ * the spectrum lifts the far edge of every strip into a jagged ridge, with the bass at the outer edge. Strips
+ * near the camera are black, and far strips glow in one hue that follows the loudness: violet when quiet, green
+ * in the middle, orange when loud. Loud music pushes the floor and the ceiling toward eye level and speeds the
+ * flight. The forms are Corridor and Spiral, when the roll runs fast.
  */
 internal class Fracture : Visualization {
 
@@ -70,7 +82,6 @@ internal class Fracture : Visualization {
             VizDrive(VizDriver.Bands, VizProperty.Shape, VizCurve.Range(0.5f, 1f), VizResponse.envelope(ANALYSER_SECONDS)),
             // The loudness is the mean of the page's 2048 bytes. It sets the flight and the roll as rates...
             VizDrive(VizDriver.Level, VizProperty.Speed, VizCurve.Linear, VizResponse.Rate),
-            VizDrive(VizDriver.Level, VizProperty.Camera, VizCurve.Linear, VizResponse.Rate),
             // ...the one hue of every strip...
             VizDrive(VizDriver.Level, VizProperty.Colour, VizCurve.Linear, VizResponse.envelope(ANALYSER_SECONDS)),
             // ...and how far the floor and the ceiling close in, all the way at a mean byte of 125.
@@ -78,6 +89,8 @@ internal class Fracture : Visualization {
                 VizDriver.Level, VizProperty.Size, VizCurve.Range(0f, SQUEEZE_MAX / SQUEEZE_SCALE),
                 VizResponse.envelope(ANALYSER_SECONDS),
             ),
+            // A section is a morph: the roll turns the other way.
+            VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
         ),
         silence = VizSilence.Still,
     )
@@ -90,8 +103,40 @@ internal class Fracture : Visualization {
     /** `spectrum.GetVisualBins(dataArray, 128, -200, 1300)`. */
     internal val bins = VissonanceBins(NUM_BARS, SPECTRUM_START, SPECTRUM_END)
 
-    /** `visualArray` from the last read. Every strip shows it. Before the first read the strips are flat. */
+    /**
+     * The engine's bands at the last read, on the page's byte scale, 0 to 255. The newest strip shows
+     * it, and each strip further away shows it as it was further back. Before the first read the strips
+     * are flat.
+     */
     internal val visual = FloatArray(NUM_BARS)
+
+    // The pacer, and the strips' past: four heard seconds of reads, one row for each strip's age.
+    private val gestures = Gestures()
+    private val evolution = Evolution()
+    private val recipe = Genes(SEED)
+    private val history = History(rows = HISTORY_ROWS)
+    private val sliceRow = IntArray(NUM_BANDS) { -1 }
+    private var heardTime = 0.0
+    private var morphSign = 1f
+    private var rollRate = 0f
+    private var formName = FORMS[CORRIDOR_FORM]
+
+    override val forms: FormReadout get() = FormReadout(formName, evolution.morphs, evolution.births)
+
+    /** The level of strip [slot], counted from the camera, at [position] 0 to 1 across its columns, 0 to 255. */
+    internal fun sliceLevel(slot: Int, position: Float): Float = history.sample(sliceRow[slot], position)
+
+    /** The roll now, in radians, and the sign a morph flips, for tests. */
+    internal val rollValue: Float get() = roll.toFloat()
+    internal val rollSignValue: Float get() = morphSign
+
+    /** The light every colour is multiplied by, for tests. */
+    internal val lightValue: Float get() = light
+
+    /** A morph: the roll turns the other way. */
+    internal fun morph() {
+        morphSign = -morphSign
+    }
 
     /** The smoothed loudness of the last read. */
     internal var loudness = 0f
@@ -147,9 +192,15 @@ internal class Fracture : Visualization {
 
     override fun DrawScope.draw(state: VizRenderState) {
         advance(state)
-        val grey = state.lightScale.coerceIn(0f, 1f)
-        // The renderer clears to `hsl(0, 0%, 100%)` before every frame.
-        drawRect(Color(grey, grey, grey))
+        // A dim lit space: the palette's background lifted toward its low colour as the music gets louder.
+        val background = state.palette.background
+        val low = state.palette.low
+        val lift = CLEAR_LIFT * light
+        drawRect(Color(
+            background.red + (low.red - background.red) * lift,
+            background.green + (low.green - background.green) * lift,
+            background.blue + (low.blue - background.blue) * lift,
+        ))
     }
 
     override fun DrawScope.drawFront(state: VizRenderState) {
@@ -160,9 +211,6 @@ internal class Fracture : Visualization {
         middleX = frameWidth / 2f
         middleY = frameHeight / 2f
         focal = middleY * FOCAL
-        cosRoll = cos(roll).toFloat()
-        sinRoll = sin(roll).toFloat()
-        light = state.lightScale.coerceIn(0f, 1f)
         // group.position.y is -10 plus the squeeze and each strip sits 10 lower; the ceiling is the same turned over.
         floorY = PLANE_Y - GROUP_Y + squeeze
         ceilingY = GROUP_Y - PLANE_Y - squeeze
@@ -171,6 +219,10 @@ internal class Fracture : Visualization {
         // edges come from one expression, so neighbouring strips share their corners exactly.
         val steps = (travel / BAR_GAP).toInt().coerceIn(0, NUM_BANDS - 1)
         val offset = (travel - steps * BAR_GAP).toFloat()
+        // Each strip shows the bands as they were when the music now reaching it was heard, four seconds across the corridor.
+        for (slot in 0 until NUM_BANDS) {
+            sliceRow[slot] = history.row(((slot * BAR_GAP + offset) / CORRIDOR * SLICE_SECONDS).toFloat())
+        }
 
         mesh.clear()
         // The flat ground first: one band per strip on each surface. Nothing on a plane can hide a ridge.
@@ -178,6 +230,7 @@ internal class Fracture : Visualization {
             val far = (BAR_GAP_UNITS * slot - FAR_EDGE).toFloat() - offset
             if (far <= NEAR_CLIP) continue
             val near = max((BAR_GAP_UNITS * slot - NEAR_EDGE).toFloat() - offset, NEAR_CLIP)
+            turn(slot, (steps + slot) % NUM_BANDS % 2 != 0)
             addBand(floorY, near, far)
             addBand(ceilingY, near, far)
         }
@@ -194,16 +247,31 @@ internal class Fracture : Visualization {
                 drawMesh(mesh)
                 mesh.clear()
             }
-            addRidge(floor = true, odd = odd, near = near, far = far, reach = reach)
-            addRidge(floor = false, odd = odd, near = near, far = far, reach = reach)
+            turn(slot, odd)
+            addRidge(slot, floor = true, odd = odd, near = near, far = far, reach = reach)
+            addRidge(slot, floor = false, odd = odd, near = near, far = far, reach = reach)
         }
         drawMesh(mesh)
+    }
+
+    /** Turns the view for strip [slot]: the roll, and the shard's own tilt by its level, alternate strips the other way. */
+    private fun turn(slot: Int, odd: Boolean) {
+        val tilt = TILT * sliceLevel(slot, 0.5f) / 255f * (if (odd) -1f else 1f)
+        val angle = roll + tilt
+        cosRoll = cos(angle).toFloat()
+        sinRoll = sin(angle).toFloat()
     }
 
     /** Runs the page's frames that this display frame owes, then moves the corridor on by heard time. */
     private fun advance(state: VizRenderState) {
         val dt = step.of(state) ?: return
         val heard = dt * state.frame.audible
+        gestures.update(state)
+        evolution.update(state, gestures)
+        // A pause holds the walk; a silence holds everything that moves on heard time.
+        recipe.advance(gestures, if (state.frame.held) 0f else dt, evolution.morph)
+        if (evolution.morph) morph()
+        light = state.lightScale.coerceIn(0f, 1f) * max(IDLE_LIGHT * (1f - state.frame.audible), lightFor(state.energy))
         val reads = if (!started) {
             // The page renders once as soon as the visualiser is made, whatever is playing.
             started = true
@@ -219,15 +287,34 @@ internal class Fracture : Visualization {
             due
         }
         if (reads > 0) read(state.frame, reads)
+        heardTime += heard
+        history.push(visual, heardTime)
         fly(heard * PAGE_RATE * state.motionScale)
+        rollBy(heard, state.motionScale)
+        formName = FORMS[if (rollRate > SPIRAL_SHARE * ROLL_RATE && !gestures.surge) SPIRAL_FORM else CORRIDOR_FORM]
+    }
+
+    /**
+     * The roll is an integral of the music: faster when louder, turning one way in the first half of
+     * each cycle and back in the second, and the other way round after a morph.
+     */
+    private fun rollBy(heard: Float, motionScale: Float) {
+        rollRate = ROLL_RATE * (0.3f + 0.7f * (loudness / 255f).coerceIn(0f, 1f))
+        val sign = -sin(gestures.cyclePhase * TAU) * morphSign
+        roll = (roll + heard * rollRate * sign * motionScale) % FULL_TURN
     }
 
     /** `render()` up to the motion: the analyser, the bars, the loudness, the squeeze and the colour. */
     private fun read(frame: SpectrumFrame, reads: Int) {
         analyser.update(frame)
-        val bytes = analyser.frequencyBytes
-        bins.visualBins(bytes, visual)
-        val mean = VissonanceBins.loudness(bytes)
+        // The strips hear the engine's bands on the page's byte scale, so the page's laws keep their units.
+        val bands = frame.bands
+        var sum = 0f
+        for (column in 0 until NUM_BARS) {
+            visual[column] = bands.sampleAt(column / (NUM_BARS - 1f)) * 255f
+            sum += visual[column]
+        }
+        val mean = sum / NUM_BARS
         // Reads that share one analysis find the same mean, and the page's average still runs once per read.
         repeat(reads) {
             loudness = (mean + lastLoudness) / 2f
@@ -237,10 +324,9 @@ internal class Fracture : Visualization {
         setHue(hueFor(loudness))
     }
 
-    /** The roll and the flight for [frames] page frames, which may be a fraction of one. */
+    /** The flight for [frames] page frames, which may be a fraction of one. */
     private fun fly(frames: Float) {
         if (frames <= 0f || loudness <= 1f) return
-        roll = (roll - rollStep(loudness) * frames) % FULL_TURN
         travel = (travel + flightStep(loudness) * frames) % CORRIDOR
     }
 
@@ -279,7 +365,7 @@ internal class Fracture : Visualization {
      * 0 at the outer edge and the flat column 128 by the middle. Odd strips lift the page's vertices 0 to 127
      * and even strips its vertices 255 down to 128, and the ceiling is the floor turned half a turn.
      */
-    private fun addRidge(floor: Boolean, odd: Boolean, near: Float, far: Float, reach: Float) {
+    private fun addRidge(slot: Int, floor: Boolean, odd: Boolean, near: Float, far: Float, reach: Float) {
         val side = if (floor == odd) 1f else -1f
         val base = if (floor) floorY else ceilingY
         val up = if (floor) 1f else -1f
@@ -288,7 +374,7 @@ internal class Fracture : Visualization {
         val first = mesh.vertexCount
         for (column in 0..NUM_BARS) {
             val x = side * columnX[column]
-            val lift = if (column < NUM_BARS) visual[column] / HEIGHT_DIVISOR else 0f
+            val lift = if (column < NUM_BARS) history.sample(sliceRow[slot], column / (NUM_BARS - 1f)) / HEIGHT_DIVISOR else 0f
             corner(2 * column, x, base + up * reach * lift, near, nearColour)
             corner(2 * column + 1, x, base + up * lift, far, farColour)
         }
@@ -385,9 +471,39 @@ internal class Fracture : Visualization {
         blue = 1f
         owed = 0f
         started = false
+        gestures.reset()
+        evolution.reset()
+        recipe.restart()
+        history.clear()
+        sliceRow.fill(-1)
+        heardTime = 0.0
+        morphSign = 1f
+        rollRate = 0f
+        formName = FORMS[CORRIDOR_FORM]
+        light = 1f
     }
 
     internal companion object {
+        const val SEED = 2_131L
+        val FORMS = listOf("Corridor", "Spiral", "Shatter", "Fuse")
+        const val CORRIDOR_FORM = 0
+        const val SPIRAL_FORM = 1
+        const val SHATTER_FORM = 2
+        const val FUSE_FORM = 3
+
+        /** The light kept in a silence, and how far the clear lifts toward the palette's low colour at full light. */
+        const val IDLE_LIGHT = 0.25f
+        const val CLEAR_LIFT = 0.15f
+
+        /** Radians a heard second the roll turns at full loudness, and the share of that above which the form is Spiral. */
+        const val ROLL_RATE = 0.4f
+        const val SPIRAL_SHARE = 0.6f
+
+        /** Radians a shard tilts at full level, and the heard seconds the corridor's strips reach back. */
+        const val TILT = 0.12f
+        const val SLICE_SECONDS = 4.0
+        const val HISTORY_ROWS = 256
+
         const val FFT_SIZE = 4096
         const val PAGE_SAMPLE_RATE = 44_100
 
@@ -461,7 +577,7 @@ internal class Fracture : Visualization {
         /** `(loudness / 8192 + 1)^2 - 1`, the page's rate for the roll and the flight. Zero at a loudness of 1 or less. */
         fun rate(loudness: Float): Double = if (loudness <= 1f) 0.0 else (loudness / 8192.0 + 1.0).pow(2) - 1.0
 
-        /** Radians the camera turns per page frame. */
+        /** Radians the page's camera turned per page frame. The roll here is [ROLL_RATE] instead, so nothing calls it. */
         fun rollStep(loudness: Float): Double = rate(loudness) / 2.0
 
         /** Units every strip flies toward the camera per page frame: `rate * loudness * 1.7`. */

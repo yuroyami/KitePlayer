@@ -54,6 +54,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   its Day side, Ring plane, Night side and Shadow views instead of cutting, published through
   `Visualization.forms`, and a birth sends a comet across the sky. Its light follows the level,
   and its ring takes the palette's brightest end.
+- Silk is a cloth of sound: fifty rows of the spectrum's past over Fluctus's stage, with Cloth,
+  Tube, Veil and Strand forms at the music's pace, published through `Visualization.forms`. A
+  kick sends a crest through the cloth, a snare pleats it and a hat makes it shimmer. The twist
+  follows the energy, the camera orbits on the slow cycle, and the drawing hears the engine's
+  bands.
 
 ## [0.3.0] - 2026-10-09
 

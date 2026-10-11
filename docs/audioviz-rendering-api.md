@@ -379,6 +379,33 @@ the snare's spray, the hats' glitter, the drop's wave and its break, the mist an
   walks from dusk to night to dawn over the song.
 - The weather, the horizon, the moon and the sky move on heard time, so a silence holds them.
 
+## Silk, a cloth of sound
+
+`Silk` keeps its ribbons on light paper, the catalogue's one bright drawing, with the vignette
+and the grain. A faint wash from the cool half of the palette lies over the paper. The ribbons
+now take one of four forms.
+
+- Cloth: a sheet of fifty rows. Each row is the spectrum one sixteenth of a heard second earlier,
+  so the sheet holds the last three seconds of sound. Across is frequency on the engine's ERB
+  bands, height is level, and the front edge carries the live waveform. The drawing opens on the
+  Cloth.
+- Tube rolls the cloth round the viewer, who looks down its axis. Veil hangs the cloth from above,
+  seen from the side, with time running down.
+- Strand: the port's fine ribbons twisting round one line. The twist follows the energy and
+  turns the other way at each morph. A birth weaves a second strand in.
+- The forms change at the music's pace, and each point of the sheet blends from one form to the
+  next. A drop lays the cloth out, and a breakdown hangs the veil. The form is published through
+  `Visualization.forms`.
+- The sheet floats over Fluctus's stage, which this drawing absorbed: a floor under a soft shadow,
+  seen from twenty degrees up, with a horizon. The camera orbits on the slow cycle and moves
+  closer in a bright mood. It never moves on a beat.
+- A kick sends a crest from the front row to the back. A snare pleats the sheet. A hat makes the
+  threads shimmer. The bass billows the cloth, a drop lifts the billow for a cycle, and a
+  breakdown stills it until the music turns.
+- The rows take the palette from front to back, walked by the genes. The paper follows the
+  allowed light, and the ink follows the level. On this light paper more music means more ink,
+  so a loud frame is darker than a quiet one.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative

@@ -696,8 +696,9 @@ internal class Odyssey : ShaderPreset(
         program.uniform("uFlash", flash[0], flash[1], flash[2], lightning)
         program.uniform("uMoonA", moonA[0], moonA[1], moonA[2], moonA[3])
         program.uniform("uMoonB", moonB[0], moonB[1], moonB[2], moonB[3])
-        // The head moves smoothly between columns, so the clouds glide rather than step each eighth of a second.
-        program.uniform("uLook", light, glint, head + columnCredit, FOCAL)
+        // The head moves smoothly between columns, so the clouds glide rather than step each eighth of a
+        // second. It trails the newest column by one, so "now" never reads past it into the oldest one.
+        program.uniform("uLook", light, glint, head + columnCredit - 1f, FOCAL)
         program.uniform("uTune", ringLight.value, starLight.value)
         // The sun rises over the limb in the direction of the view's own sun.
         val sx = shown[6]; val sy = shown[7]

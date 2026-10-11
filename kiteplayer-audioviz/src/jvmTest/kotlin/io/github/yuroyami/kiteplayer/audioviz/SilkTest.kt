@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import androidx.compose.ui.graphics.ImageBitmap
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.AshimaNoise
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Silk
@@ -185,6 +186,112 @@ class SilkTest {
     }
 
     @Test
+    fun theFormsCycleOnTheDrumLoopAndADropUnrollsTheTube() {
+        val silk = Silk()
+        RenderHarness.forEach(silk, 3600)
+        println("silk: ${silk.forms.morphs} morphs in a minute of drums, now ${silk.forms.form}")
+        assertTrue(silk.forms.morphs >= 1, "the drums change the form")
+        assertTrue(silk.forms.form in Silk.FORMS)
+
+        val dropped = Silk()
+        var started = false
+        var at67 = -1f
+        var at256 = ""
+        var full = -1
+        RenderHarness.forEachFrameOf(dropped, 64, 36, 260, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(VizDriver.Drop, step) },
+            beforeDraw = { if (!started) { dropped.jumpTo(Silk.TUBE); started = true } }) { _, step ->
+            if (step == 67) at67 = dropped.morphValue
+            if (full < 0 && step > 67 && dropped.morphValue >= 1f) full = step
+            if (step == 256) at256 = dropped.forms.form
+        }
+        println("silk: the drop's morph at $at67 a frame after it, whole at step $full; the form at step 256 is $at256")
+        assertTrue(at67 < 0.1f, "the drop starts a morph, at $at67")
+        assertTrue(full in 68..257, "the cloth lies out within one cycle, at step $full")
+        assertEquals("Cloth", at256)
+    }
+
+    @Test
+    fun aMorphBlendsThePositionsWithoutAJump() {
+        val silk = Silk()
+        var started = false
+        val point = FloatArray(3)
+        val last = FloatArray(3)
+        var biggest = 0f
+        RenderHarness.forEachFrameOf(silk, 64, 36, 821, VizPalette.Prism,
+            source = { step -> InjectedFrames.frame(null, step) },
+            beforeDraw = { if (!started) { silk.jumpTo(Silk.CLOTH); started = true } }) { _, step ->
+            if (step == 59) silk.morphTo(Silk.VEIL)
+            silk.vertexWorld(25, 100, point)
+            if (step > 0) biggest = maxOf(biggest, kotlin.math.sqrt((0..2).sumOf { ((point[it] - last[it]) * (point[it] - last[it])).toDouble() }).toFloat())
+            point.copyInto(last)
+        }
+        println("silk: the morph moved a point at most $biggest units a frame, ending at ${point.toList()} as ${silk.forms.form}")
+        assertTrue(biggest < 2f, "a morph blends without a jump, moved $biggest")
+        assertEquals("Veil", silk.forms.form)
+        assertEquals(1f, silk.morphValue)
+    }
+
+    @Test
+    fun theTwistFollowsTheEnergyAndFlipsOnAMorph() {
+        val calm = Silk()
+        RenderHarness.forEach(calm, 200, RenderHarness.Song.Calm)
+        val lively = Silk()
+        RenderHarness.forEach(lively, 200, RenderHarness.Song.Lively)
+        println("silk: the twist reached ${calm.twistValue} on the calm pad and ${lively.twistValue} on the drums")
+        assertTrue(abs(lively.twistValue) > abs(calm.twistValue), "louder music twists faster")
+        val sign = lively.twistSignValue
+        lively.morph()
+        assertEquals(-sign, lively.twistSignValue, "a morph turns the twist the other way")
+    }
+
+    @Test
+    fun aBirthWeavesASecondStrandIn() {
+        fun inkAt150(born: Boolean): Pair<Float, Int> {
+            val silk = Silk()
+            var ink = 0f
+            var count = 0
+            RenderHarness.forEachFrameOf(silk, 160, 90, 151, VizPalette.Prism,
+                source = { step -> InjectedFrames.frame(null, step) }) { bitmap, step ->
+                if (born && step == 70) silk.birth()
+                if (step == 71) count = silk.strandCount
+                // The total colour, so faint ribbons count by how much ink they carry.
+                if (step == 150) ink = pixels(bitmap).sumOf { chroma(it).toLong() }.toFloat()
+            }
+            return ink to count
+        }
+        val (still, _) = inkAt150(born = false)
+        val (born, count) = inkAt150(born = true)
+        println("silk: ink $born with a second strand, $still without; $count strands after the birth")
+        assertEquals(2, count)
+        assertTrue(born > still * 1.2f, "the second strand adds ink: $born against $still")
+    }
+
+    @Test
+    fun theCameraOrbitsOnTheSlowCycleAndNeverCuts() {
+        val silk = Silk()
+        var started = false
+        var last = 0f
+        var biggest = 0f
+        var lowest = 0f
+        var highest = 0f
+        RenderHarness.forEach(silk, 1800, beforeDraw = { if (!started) { silk.jumpTo(Silk.CLOTH); started = true } }) { step ->
+            if (step > 0) biggest = maxOf(biggest, abs(silk.orbitValue - last))
+            last = silk.orbitValue
+            lowest = minOf(lowest, last)
+            highest = maxOf(highest, last)
+        }
+        println("silk: the orbit ran from $lowest to $highest, at most $biggest a frame")
+        assertTrue(lowest < -0.05f && highest > 0.05f, "the orbit swings both ways: $lowest to $highest")
+        assertTrue(biggest <= 0.01f, "the orbit never cuts, moved $biggest in a frame")
+
+        val quiet = Silk()
+        var at60 = Float.NaN
+        RenderHarness.forEach(quiet, 300, RenderHarness.Song.Silence) { step -> if (step == 60) at60 = quiet.orbitValue }
+        assertEquals(at60, quiet.orbitValue, "a silence holds the camera")
+    }
+
+    @Test
     fun theNoiseTablesMatchTheShaderLineByLine() {
         val random = Random(21)
         var worst = 0f
@@ -236,6 +343,13 @@ class SilkTest {
         }
         return sum / count.coerceAtLeast(1)
     }
+
+    /** Renders [frames] of [song] at 64 by 36 and hands each step to [onStep]. */
+    private fun RenderHarness.forEach(
+        silk: Silk, frames: Int, song: RenderHarness.Song = RenderHarness.Song.Lively,
+        beforeDraw: (io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState) -> Unit = {},
+        onStep: (Int) -> Unit = {},
+    ) = forEachFrame(silk, 64, 36, frames, VizPalette.Prism, song, beforeDraw = beforeDraw) { _, step -> onStep(step) }
 
     private fun pixels(bitmap: ImageBitmap): IntArray =
         IntArray(bitmap.width * bitmap.height).also { bitmap.readPixels(it) }

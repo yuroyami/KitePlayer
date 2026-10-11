@@ -459,6 +459,33 @@ drop and the break on a drop.
   cuts, and a pause holds it. Cyan and orchid are the rings on the default palette, and any other
   palette gives its own pair. Light follows the level.
 
+## Fracture, a shattered corridor
+
+`Fracture` keeps its flight down a corridor whose floor and ceiling are the spectrum. It keeps
+the page's loudness laws for the flight, the squeeze and the hue, and the page's clipping. The
+one slit is now a cracked plane of many shards.
+
+- Each of the 64 strips shows its own time slice of the spectrum, four heard seconds across the
+  corridor, so the corridor is a spectrogram you fly into. Each shard tilts by its own level,
+  alternate shards the other way.
+- The roll turns one way in the first half of each cycle and back in the second, faster when
+  louder. A morph turns the roll and every shard's tilt the other way.
+- Tariq Soliman's Silk flies over the corridor as glass dust: one hexagon per band of 512, with
+  its log scale, its thirty unit climb and its four way mirror. Fracture absorbed it.
+- Twelve cracks of light lie on the floor and the ceiling. The main crack runs down the middle of
+  the floor and carries the live waveform. A kick runs four cracks again from their start, a
+  snare flips a pane of four shards, a hat glints the dust, and a birth grows a new crack network.
+- The forms are Corridor, Spiral (the roll at full speed), Shatter (a drop bursts the shards
+  outward for one cycle) and Fuse (a breakdown stops the tilt and the roll, and the cracks heal
+  into one plane until the music turns). They are published through `Visualization.forms`.
+- The flight runs at half the page's speed with no drive and at the page's speed at full drive.
+  Nothing rolls on the level alone.
+- On Prism the strips keep the page's one hue from the loudness. On any other palette each column
+  takes its hue from the palette by band and by the slow colour walk. The hue turns up to 30
+  degrees toward the key.
+- The page's white clear is a dim space now, and the flat ground keeps a faint glow near the
+  camera. Light follows the level, with a quarter kept in a silence.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative

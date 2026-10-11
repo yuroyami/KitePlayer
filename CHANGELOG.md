@@ -66,6 +66,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the wells sit on the loudest quarters of the bands, hats snow into a drifting memory field, and
   Lake, Frost, Shatter and Underwater forms are published through `Visualization.forms`. The
   camera glides and dives.
+- Fracture is a shattered corridor: each strip shows its own time slice of the spectrum, the
+  roll alternates with the beat and flips at each morph, Threads's dust flies over the cracks,
+  and Corridor, Spiral, Shatter and Fuse forms are published through `Visualization.forms`. It
+  hears the engine's bands, and the clear is no longer white.
 
 ## [0.3.0] - 2026-10-09
 

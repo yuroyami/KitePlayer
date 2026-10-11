@@ -369,7 +369,8 @@ internal class Bars : Layered(
         roll.advance(ROLL_REACH * sin(phase + 1f) * reach, live)
     }
 
-    private fun eased(): Float = morph * morph * (3f - 2f * morph)
+    /** The morph starts at full pace, so a section shows on its own frame, and settles slowly into the new form. */
+    private fun eased(): Float = 1f - (1f - morph) * (1f - morph)
 
     /**
      * Fixed bandwidth compensation: pink-noise power in an ERB cell is proportional to ln(high/low).

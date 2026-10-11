@@ -432,6 +432,33 @@ the buds of a breakdown. It is a garden now.
   the palette. A faint ground in the palette's low colour lies under the garden. Light follows
   the level, with a floor in silence.
 
+## Thin Ice, a lake as big as the song
+
+`Thin Ice` keeps one ring per hit, with the waveform and the spectrum frozen at the hit and the
+rings spaced evenly on the beat. It also keeps the white crossings, the cracks, the creep before a
+drop and the break on a drop.
+
+- The lake is a map of the mix. Across the screen is the stereo balance. The long side runs from
+  bass to treble, from the left of a landscape screen and from the bottom of a portrait one.
+- Kicks ring at the bass end, snares in the middle and hats at the treble end. Every hit also goes
+  into the shared impulse list.
+- The two wells slew to the two loudest quarters of the bands. A well that no hit rang for a beat
+  rings by itself, as strong as its quarter is loud, so a held tone still draws the map. A birth
+  hands the loudest quarter to the other well.
+- A newborn ring bends with the waveform by up to 12 percent of the short side and settles as it
+  spreads.
+- Hats lay snow into a drift, a memory field with an eight second half life that creeps slowly.
+  Snow that falls on a young ring front settles along it. On a device without runtime shaders the
+  drift is not drawn.
+- The forms are Lake, Frost, Shatter and Underwater, published through `Visualization.forms`. A
+  breakdown brings Frost, and lace grows inside the rings. A drop breaks the ice (Shatter), and
+  the lake goes under water when the pieces have sunk. Under water the rings are caustic light and
+  hats send up bubbles, until the next section or eight cycles freeze a new lake. Each morph turns
+  the glide and swaps the wells.
+- The camera glides over the lake on the slow cycle and dives over a cycle after a drop. It never
+  cuts, and a pause holds it. Cyan and orchid are the rings on the default palette, and any other
+  palette gives its own pair. Light follows the level.
+
 ## The flash guard
 
 `FlashGuard` counts flashes the way WCAG 2.2 defines them: a pair of opposing changes in relative

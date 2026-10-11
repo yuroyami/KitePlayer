@@ -62,6 +62,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - Twin Bloom is a garden: up to five blooms born where the mix puts them, petals at full range, a
   carpet of fallen petals as a memory field, and Bud, Bloom, Field and Storm forms published
   through `Visualization.forms`. The orbit and the fixed pair are gone.
+- Thin Ice is a map of the mix: hits ring where the stereo balance and the band place put them,
+  the wells sit on the loudest quarters of the bands, hats snow into a drifting memory field, and
+  Lake, Frost, Shatter and Underwater forms are published through `Visualization.forms`. The
+  camera glides and dives.
 
 ## [0.3.0] - 2026-10-09
 

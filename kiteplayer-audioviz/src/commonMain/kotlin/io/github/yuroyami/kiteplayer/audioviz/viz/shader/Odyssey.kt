@@ -18,6 +18,9 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence
 import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flow
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flows
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.MemoryField
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import kotlin.math.PI
@@ -35,9 +38,14 @@ import kotlin.math.sqrt
 /**
  * A ringed giant planet in black space, bigger than the frame, lit from one side.
  *
- * Its cloud stripes are the spectrum: each stripe of latitude is one band's recent past, carried
- * round the planet, and neighbouring stripes stream in opposite directions, faster when the music
- * is loud. A great storm in the south grows and spins with the bass. A ring of 64 ringlets crosses
+ * Its cloud stripes are the spectrum: each stripe of latitude is one band's recent past. The
+ * newest column faces the camera and each stripe streams away from it on both sides, so the oldest
+ * columns meet behind the planet. A great storm in the south grows and spins with the bass.
+ *
+ * The weather lives in a cloud field in the same frame: each kick breeds a storm at the facing
+ * meridian, in the loudest low stripe, and the storm drifts with its stripe and fades over seconds.
+ * Hats light an aurora at the poles on the night side, and the terminator softens as the music
+ * grows loud. A ring of 64 ringlets crosses
  * in front, each lit by its band, and the ring and the planet shadow each other. A kick sends a
  * ripple out through the rings, a snare flickers lightning on the night side, and hats make the
  * stars twinkle and the rings glint. The inner moon crosses the planet once a bar. Each section
@@ -60,7 +68,8 @@ internal class Odyssey : ShaderPreset(
         // Loud music lights the planet and streams its clouds faster. The bass grows and spins the
         // storm and churns the stripes' edges: fine detail, so it is not declared as a whole-picture change.
         VizDrive(VizDriver.Level, VizProperty.Brightness),
-        VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.lifetime(0.8f)),
+        // A kick breeds a storm in the clouds that outlives the ring's ripple.
+        VizDrive(VizDriver.LowHit, VizProperty.Texture, VizCurve.Scaled, VizResponse.lifetime(8f)),
         VizDrive(VizDriver.BodyHit, VizProperty.Brightness, VizCurve.Discrete, VizResponse.lifetime(0.3f)),
         VizDrive(VizDriver.HighHit, VizProperty.Texture, VizCurve.Scaled, VizResponse.lifetime(0.3f)),
         // A new view eases in over a bar, so its first change shows a few frames after the boundary.
@@ -76,6 +85,7 @@ internal class Odyssey : ShaderPreset(
 
     private val planetSize = VizParam("Planet size", 0.8f, 1.2f, 1f)
     private val ringLight = VizParam("Ring light", 0.4f, 1.5f, 1f)
+    /** The churn of the stripes' edges and the eddies' drift; the stripes themselves stream with the history. */
     private val cloudSpeed = VizParam("Cloud speed", 0f, 2f, 1f)
     private val starLight = VizParam("Stars", 0f, 1.5f, 1f)
     override val params: List<VizParam> = listOf(planetSize, ringLight, cloudSpeed, starLight)
@@ -133,6 +143,52 @@ internal class Odyssey : ShaderPreset(
     private val moonB = FloatArray(4)
     private var aspect = 16f / 9f
 
+    // The weather: a cloud field in the view's frame, x the view longitude and y the latitude.
+    private val clouds = MemoryField(rows = FIELD_ROWS).also { it.halfLife = STORM_HALF_LIFE }
+    override val field: MemoryField get() = clouds
+    private val stormX = FloatArray(STORMS)
+    private val stormY = FloatArray(STORMS)
+    private val stormSpeed = FloatArray(STORMS)
+    private val stormAge = FloatArray(STORMS) { LONG_AGO }
+    private val stormDrift = FloatArray(STORMS)
+
+    /** How many storms live now; they sit at the front of the pools. */
+    internal var stormCount = 0
+        private set
+    private val vortices = Flows.Vortices({ stormCount }, stormX, stormY, stormSpeed, core = STORM_CORE)
+    private val spin2 = FloatArray(2)
+
+    /**
+     * The stream away from the facing meridian, the history's own pace, so a storm stays on its
+     * stripe. Near a storm the flow takes the storm's drift, so its ink moves as one piece rather
+     * than tearing along the stripes it spans.
+     */
+    private val cloudFlow = Flow { x, y, a, out ->
+        var nearest = -1
+        var best = Float.MAX_VALUE
+        for (i in 0 until stormCount) {
+            val dx = x - stormX[i]
+            val dy = y - stormY[i]
+            val squared = dx * dx + dy * dy
+            if (squared < best) {
+                best = squared
+                nearest = i
+            }
+        }
+        val stream = if (x < 0f) -STREAM else STREAM
+        var flowX = stream
+        if (nearest >= 0) {
+            val hold = exp(-best / (2f * STORM_HOLD * STORM_HOLD))
+            flowX = stream * (1f - hold) + stormDrift[nearest] * hold
+        }
+        vortices.at(x, y, a, spin2)
+        out[0] = flowX + spin2[0]
+        out[1] = spin2[1]
+    }
+    private var aurora = 0f
+    private var faceLon = 0f
+    private var softness = SOFT_QUIET
+
     init {
         views(0, shown)
         startingClouds()
@@ -163,6 +219,58 @@ internal class Odyssey : ShaderPreset(
 
     /** Each stripe's newest level, 0 to 1, for tests. */
     internal fun newestStripes(): FloatArray = FloatArray(STRIPES) { history[it * COLUMNS + head] }
+
+    /** The aurora's strength, 0 to 1. */
+    internal val auroraValue: Float get() = aurora
+
+    /** Where storm [i] sits in the cloud field, in field units across. */
+    internal fun stormX(i: Int): Float = stormX[i]
+
+    /** The share of the cloud field's cells holding ink above a tenth. */
+    internal fun cloudInkShare(): Float {
+        var lit = 0
+        var count = 0
+        var y = -0.95f
+        while (y < 1f) {
+            var x = -FIELD_ASPECT + 0.05f
+            while (x < FIELD_ASPECT) {
+                count++
+                if (clouds.inkAt(x, y) > 0.1f) lit++
+                x += 0.1f
+            }
+            y += 0.1f
+        }
+        return if (count == 0) 0f else lit.toFloat() / count
+    }
+
+    /** The ink weighted mean of x over the cloud field, 0 when it is empty. */
+    internal fun cloudInkCentroidX(): Float {
+        var total = 0f
+        var weighted = 0f
+        for (row in 0 until clouds.rows) for (column in 0 until clouds.columns) {
+            val x = clouds.xOf(column)
+            val ink = clouds.inkAt(x, clouds.yOf(row))
+            total += ink
+            weighted += ink * x
+        }
+        return if (total <= 0f) 0f else weighted / total
+    }
+
+    /** The disc's nearest point on a [width] by [height] picture, in pixels. */
+    internal fun facingPixel(width: Float, height: Float): Pair<Float, Float> =
+        Pair(width / 2f + shown[0] * aspect * height / 2f, height / 2f - shown[1] * height / 2f)
+
+    /** The disc's radius on a picture [height] pixels tall. */
+    internal fun planetRadiusPixels(height: Float): Float = shown[2] * min(1f, aspect) * planetSize.value * height / 2f
+
+    /** Stands the camera in view [index] at once, with no move. */
+    internal fun jumpTo(index: Int) {
+        viewFrom = index
+        viewTo = index
+        views(index, shown)
+        views(index, from)
+        viewBlend = 1f
+    }
 
     override fun advance(state: VizRenderState) {
         val frame = state.frame
@@ -211,6 +319,8 @@ internal class Odyssey : ShaderPreset(
 
         recordHistory(frame.bands, step)
         readRinglets(frame.bands, step)
+        clouds.size(FIELD_ASPECT)
+        followWeather(state, step)
 
         // A kick sends a bright ripple outward through the rings.
         if (gestures.kick > 0f) {
@@ -229,6 +339,57 @@ internal class Odyssey : ShaderPreset(
         glint *= exp(-step / 0.25f)
 
         placeScene(state)
+    }
+
+    /** The cloud field on heard time: it streams, a kick breeds a storm, and the storms drift, slow and die. */
+    private fun followWeather(state: VizRenderState, step: Float) {
+        val frame = state.frame
+        clouds.advance(cloudFlow, step)
+        if (gestures.kick > 0f && frame.audible > 0f) breedStorm(gestures.kick.coerceIn(0f, 1f))
+        val slowing = 2f.pow(-step / STORM_SLOWING)
+        var i = 0
+        while (i < stormCount) {
+            stormX[i] += stormDrift[i] * step
+            stormAge[i] += step
+            stormSpeed[i] *= slowing
+            if (stormAge[i] > STORM_LIFE || abs(stormX[i]) > FIELD_ASPECT) {
+                // Behind the planet or spent: the last live storm takes this slot.
+                val last = stormCount - 1
+                stormX[i] = stormX[last]; stormY[i] = stormY[last]; stormSpeed[i] = stormSpeed[last]
+                stormAge[i] = stormAge[last]; stormDrift[i] = stormDrift[last]
+                stormAge[last] = LONG_AGO; stormSpeed[last] = 0f
+                stormCount--
+            } else {
+                i++
+            }
+        }
+        if (gestures.hat > 0f) aurora = max(aurora, gestures.hat.coerceIn(0f, 1f))
+        aurora *= exp(-step / AURORA_SECONDS)
+        softness = SOFT_QUIET + SOFT_LOUD * frame.energy.coerceIn(0f, 1f)
+    }
+
+    /** A storm at the facing meridian, in the loudest low stripe, north or south. */
+    private fun breedStorm(kick: Float) {
+        var loudest = 0
+        for (stripe in 1 until STRIPES / 4) if (stripeLevels[stripe] > stripeLevels[loudest]) loudest = stripe
+        val side = if (random.next() < 0.5f) 1f else -1f
+        val y = side * (loudest + 0.5f) / STRIPES
+        // The shader streams even stripes one way and odd ones the other.
+        val way = if (loudest % 2 == 0) 1f else -1f
+        clouds.disc(0f, y, STORM_RADIUS + 0.1f * kick, 0.9f)
+        clouds.markChanged()
+        var slot = stormCount
+        if (slot >= STORMS) {
+            slot = 0
+            for (other in 1 until STORMS) if (stormAge[other] > stormAge[slot]) slot = other
+        } else {
+            stormCount++
+        }
+        stormX[slot] = 0f
+        stormY[slot] = y
+        stormSpeed[slot] = STORM_SPIN * kick
+        stormAge[slot] = 0f
+        stormDrift[slot] = way * STREAM
     }
 
     /** Starts the move to view [index] from wherever the view is now. */
@@ -332,19 +493,16 @@ internal class Odyssey : ShaderPreset(
         planet[2] = -FOCAL / length * DISTANCE
         planet[3] = DISTANCE * rho / sqrt(rho * rho + FOCAL * FOCAL)
         normalizeInto(shown[3], shown[4], shown[5], axis)
-        // The planet's zero longitude, square to its axis and turned by its spin.
+        // The planet's zero longitude, square to its axis. It does not spin: the stripes are time, not surface.
         val refX = 0f; val refY = 0f; val refZ = 1f
         val dot = refX * axis[0] + refY * axis[1] + refZ * axis[2]
         normalizeInto(refX - dot * axis[0], refY - dot * axis[1], refZ - dot * axis[2], east)
-        val bx = axis[1] * east[2] - axis[2] * east[1]
-        val by = axis[2] * east[0] - axis[0] * east[2]
-        val bz = axis[0] * east[1] - axis[1] * east[0]
-        val c = cos(spin); val s = sin(spin)
-        val ex = east[0] * c + bx * s; val ey = east[1] * c + by * s; val ez = east[2] * c + bz * s
-        east[0] = ex; east[1] = ey; east[2] = ez
         north[0] = axis[1] * east[2] - axis[2] * east[1]
         north[1] = axis[2] * east[0] - axis[0] * east[2]
         north[2] = axis[0] * east[1] - axis[1] * east[0]
+        // The longitude that faces the camera, which sits at the origin: there the history is now.
+        val toX = -planet[0] / DISTANCE; val toY = -planet[1] / DISTANCE; val toZ = -planet[2] / DISTANCE
+        faceLon = atan2(toX * north[0] + toY * north[1] + toZ * north[2], toX * east[0] + toY * east[1] + toZ * east[2])
         // The sun: this view's, swung round from behind the planet while it rises after a drop.
         val rise = sunrise * sunrise * (3f - 2f * sunrise)
         val hiddenX = planet[0] / DISTANCE; val hiddenY = planet[1] / DISTANCE; val hiddenZ = planet[2] / DISTANCE
@@ -437,7 +595,9 @@ internal class Odyssey : ShaderPreset(
         program.uniform("uEast", east[0], east[1], east[2])
         program.uniform("uNorth", north[0], north[1], north[2])
         program.uniform("uSun", sun[0], sun[1], sun[2], NIGHT)
-        program.uniform("uFlow", cloudPhase, stormLongitude, stormSize, stormSpin)
+        // The churn's phase, and the great storm, the one thing on the planet that shows its spin.
+        program.uniform("uFlow", cloudPhase, stormLongitude + spin, stormSize, stormSpin)
+        program.uniform("uWeather", aurora, faceLon, softness, 0f)
         val rippleRadius = RING_IN + rippleAge * 1.8f
         program.uniform("uRing", rippleRadius, if (rippleRadius > RING_OUT + 0.3f) 0f else rippleStrength, glint, stir)
         program.uniform("uFlash", flash[0], flash[1], flash[2], lightning)
@@ -471,6 +631,10 @@ internal class Odyssey : ShaderPreset(
         light = IDLE_LIGHT
         keyTurn.reset(); colourFor = null
         columns = 0L
+        clouds.clear()
+        stormCount = 0
+        stormAge.fill(LONG_AGO); stormSpeed.fill(0f)
+        aurora = 0f; faceLon = 0f; softness = SOFT_QUIET
     }
 
     internal companion object {
@@ -487,6 +651,27 @@ internal class Odyssey : ShaderPreset(
         /** The share of full light the planet keeps in a silence, and the night side's lift from ringshine. */
         const val IDLE_LIGHT = 0.35f
         const val NIGHT = 0.045f
+
+        // The cloud field: 96 by 48 cells over the view longitude and the latitude, and how long its ink lasts.
+        const val FIELD_ROWS = 48
+        const val FIELD_ASPECT = 2f
+        const val STORM_HALF_LIFE = 6f
+        /** The stream in field units a heard second: the facing meridian to the back in the history's twelve seconds. */
+        const val STREAM = 2f * COLUMNS_PER_SECOND / COLUMNS
+        const val STORMS = 6
+        const val STORM_CORE = 0.12f
+        /** How far round a storm its drift holds the flow, in field units. */
+        const val STORM_HOLD = 0.3f
+        const val STORM_LIFE = 12f
+        const val STORM_RADIUS = 0.12f
+        const val STORM_SPIN = 0.6f
+        /** Seconds for a storm's spin to halve. */
+        const val STORM_SLOWING = 4f
+        const val LONG_AGO = 99f
+        const val AURORA_SECONDS = 0.6f
+        /** The terminator's softness in quiet music, and what loud music adds. */
+        const val SOFT_QUIET = 0.02f
+        const val SOFT_LOUD = 0.10f
         private const val KEY_TURN = 30f
         private const val CORAL_HUE = 30f
 
@@ -518,10 +703,11 @@ internal class Odyssey : ShaderPreset(
         const val SOURCE: String = """
 uniform float4 uPlanet;   // centre, radius
 uniform float3 uAxis;     // the ring and spin axis
-uniform float3 uEast;     // zero longitude, turned by the spin
+uniform float3 uEast;     // zero longitude
 uniform float3 uNorth;
 uniform float4 uSun;      // direction to the sun, night-side lift
-uniform float4 uFlow;     // cloud flow, storm longitude, storm size, storm spin
+uniform float4 uFlow;     // the churn's phase, storm longitude, storm size, storm spin
+uniform float4 uWeather;  // aurora, the longitude facing the camera, the terminator's softness, comet
 uniform float4 uRing;     // ripple radius, ripple strength, glint, the bass that stirs the clouds
 uniform float4 uFlash;    // where the lightning strikes, as a unit vector from the centre, and its strength
 uniform float4 uMoonA;
@@ -603,16 +789,22 @@ half4 main(float2 position) {
         // The stripes' edges churn, deeper when the bass is strong.
         u += (0.15 + 0.5 * uRing.w) * sin(lon * 9.0 + lat * 23.0 + uFlow.x * 4.0);
         float stripe = clamp(floor(u), 0.0, STRIPES - 1.0);
-        // Neighbouring stripes stream round in opposite directions, carrying the band's past.
         float way = mod(stripe, 2.0) < 1.0 ? 1.0 : -1.0;
-        float along = fract(lon / 6.2831853 + way * uFlow.x * (0.7 + 0.6 * stripe / STRIPES)
-            + 0.035 * sin(lat * 41.0 + lon * 3.0 + uFlow.x * 6.0));
-        float age = abs(along * 2.0 - 1.0);
+        // "Now" is the longitude facing the camera; each stripe streams away from it on both sides.
+        float lonV = wrapAngle(lon - uWeather.y);
+        float age = clamp(abs(lonV) / 3.1415927 + way * 0.035 * sin(lat * 41.0 + lon * 3.0 + uFlow.x * 6.0), 0.0, 1.0);
         float v = uHistory.eval(float2(uLook.z - age * (COLUMNS - 2.0) + 0.5, stripe + 0.5)).r;
         float3 cloud = v < 0.5 ? mix(uCloud0, uCloud1, v * 2.0) : mix(uCloud1, uCloud2, v * 2.0 - 1.0);
         cloud *= 0.45 + 0.7 * v;
         float fu = fract(u);
         cloud *= 0.78 + 0.22 * smoothstep(0.0, 0.1, min(fu, 1.0 - fu));
+        // The cloud field: storms as bright swirls with slope lighting, drifting with the stripes.
+        float2 fc = float2((lonV / 6.2831853 + 0.5) * uFieldSize.x, (lat / 3.1415927 + 0.5) * uFieldSize.y);
+        float ink = uField.eval(fc).r;
+        float2 slope = float2(uField.eval(fc + float2(1.0, 0.0)).r - uField.eval(fc - float2(1.0, 0.0)).r,
+                              uField.eval(fc + float2(0.0, 1.0)).r - uField.eval(fc - float2(0.0, 1.0)).r) * 0.5;
+        float shade = clamp(0.5 + 0.5 * dot(normalize(float3(-slope.x * 6.0, -slope.y * 6.0, 1.0)), normalize(float3(-0.5, -0.6, 0.7))), 0.0, 1.0);
+        cloud = mix(cloud, mix(uCloud2, float3(1.0), 0.5), ink) * (0.7 + 0.6 * shade * ink + 0.3 * (1.0 - ink));
         // The great storm in the south, as big and as fast as the bass.
         float2 st = float2(wrapAngle(lon - uFlow.y) * cos(lat), lat + 0.5);
         float2 e = st / (float2(0.3, 0.17) * uFlow.z);
@@ -623,20 +815,26 @@ half4 main(float2 position) {
             cloud = mix(cloud, storm, 1.0 - smoothstep(0.82, 1.0, sr));
         }
         float ndl = dot(n, L);
-        float lit = smoothstep(-0.015, 0.05, ndl) * (0.2 + 0.8 * max(ndl, 0.0));
-        float warm = smoothstep(-0.01, 0.04, ndl) * (1.0 - smoothstep(0.04, 0.16, ndl));
+        // The terminator softens as the music grows loud.
+        float soft = uWeather.z;
+        float sunlit = smoothstep(-soft, soft * 1.5, ndl) * (0.2 + 0.8 * max(ndl, 0.0));
+        float warm = smoothstep(-soft * 0.5, soft, ndl) * (1.0 - smoothstep(soft, soft * 4.0, ndl));
         // The ring's shadow on the clouds, and the inner moon's.
         float toRing = dot(S - X, N) / dot(L, N);
         // The shadow is the ringlets' average: their fine gaps would only shimmer across the clouds.
-        if (toRing > 0.0) lit *= 1.0 - 0.85 * ringCover(length(X + L * toRing - S) / R, 1.0);
-        if (sphereHit(X, L, uMoonA) > 0.0) lit *= 0.04;
-        float3 surface = cloud * lit + mix(uCloud1, uCloud2, 0.4) * warm * 0.35;
+        if (toRing > 0.0) sunlit *= 1.0 - 0.85 * ringCover(length(X + L * toRing - S) / R, 1.0);
+        if (sphereHit(X, L, uMoonA) > 0.0) sunlit *= 0.04;
+        float3 surface = cloud * sunlit + mix(uCloud1, uCloud2, 0.4) * warm * 0.35;
         // The night side, lifted by light off the rings so the dark disc reads against space.
         surface += (cloud * 0.6 + uIce * 0.4) * uSun.w * (1.0 - smoothstep(-0.05, 0.1, ndl));
         // A snare's lightning, small and local, only where it is night.
         float away = length(n - uFlash.xyz);
         surface += float3(0.85, 0.9, 1.0) * uFlash.w * (exp(-away / 0.05) + 0.35 * exp(-away / 0.18))
             * (1.0 - smoothstep(-0.05, 0.1, ndl));
+        // Aurora at the poles on the hats, on the night side only.
+        float polar = smoothstep(1.1, 1.45, abs(lat));
+        float curtain = 0.5 + 0.5 * sin(lon * 11.0 + uFlow.x * 7.0 + lat * 5.0);
+        surface += mix(uIce, uCloud2, 0.5) * uWeather.x * polar * curtain * 0.9 * (1.0 - smoothstep(-0.05, 0.1, ndl));
         // The atmosphere's rim, on the lit edge only.
         float edgeOn = 1.0 - max(dot(n, -d), 0.0);
         surface += uRim * pow(edgeOn, 4.0) * smoothstep(-0.15, 0.35, ndl) * 0.9;

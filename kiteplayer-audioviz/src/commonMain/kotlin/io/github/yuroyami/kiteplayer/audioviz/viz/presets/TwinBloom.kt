@@ -1,11 +1,14 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toArgb
 import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 import io.github.yuroyami.kiteplayer.audioviz.viz.AnticipatedImpulse
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
+import io.github.yuroyami.kiteplayer.audioviz.viz.FormReadout
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
@@ -22,6 +25,9 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.FieldShader
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.Flows
+import io.github.yuroyami.kiteplayer.audioviz.viz.field.MemoryField
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.glow
@@ -31,6 +37,8 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderProgram
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.canDrawRuntimeShaders
 import io.github.yuroyami.kiteplayer.audioviz.viz.vividLightness
 import kotlin.math.PI
 import kotlin.math.abs
@@ -58,7 +66,18 @@ import kotlin.math.sqrt
  * across from the stereo balance, and further back the brighter the sound. A sixth birth replaces
  * the oldest bloom. Each bloom grows up on a stem as it hears energy, and the live waveform runs
  * along the stem. Each bloom takes its own place on the palette by birth order, walked by the genes
- * and leaned toward the key. The view is fixed: the blooms only sway a little with the cycle.
+ * and leaned toward the key.
+ *
+ * Petals that a snare breaks off settle on the ground into a carpet: a memory field that fades with
+ * a four second half life and drifts slowly sideways, drawn as lit ink in four flat steps. Where
+ * runtime shaders cannot run, the carpet is not drawn.
+ *
+ * The forms are named by what the garden shows: Storm while a drop's discs fly, Bud in a breakdown
+ * or a silence, Field when three or more blooms stand, and Bloom otherwise. At each change of form
+ * the music asks for, the blooms open or wilt with the slow level over two cycles.
+ *
+ * The view is fixed. One sway on the cycle moves three layers by their depth: the carpet half as
+ * far as the blooms, and a large faint petal in the foreground twice as far.
  */
 internal class TwinBloom : Layered(
     name = "Twin Bloom",
@@ -88,7 +107,11 @@ internal class TwinBloom : Layered(
         VizDrive(VizDriver.Width, VizProperty.Shape, response = VizResponse.envelope(0.8f)),
         VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f, delaySeconds = 0.2f)),
         VizDrive(VizDriver.Drop, VizProperty.Spawn, VizCurve.Discrete, VizResponse.lifetime(2f)),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f)),
     )
+
+    override val forms: FormReadout
+        get() = FormReadout(formName, evolution.morphs, evolution.births)
 
     private val stagger = genes.number("Ring stagger", 0.25f, 0.5f, 0.33f)
     private val coreSize = genes.number("Core size", 0.1f, 0.15f, 0.12f)
@@ -144,6 +167,17 @@ internal class TwinBloom : Layered(
     private val stemWave = FloatArray(STEM_POINTS)
     private val stemColour = IntArray(BLOOMS)
     private val chosen = IntArray(BLOOMS)
+
+    // How far each bloom is open, and where the last change of form asked it to go.
+    private val unfold = FloatArray(BLOOMS) { 1f }
+    private val unfoldTarget = FloatArray(BLOOMS) { 1f }
+    private var slowLevel = 0f
+    private var silent = true
+
+    // The carpet of fallen petals.
+    private val carpet = MemoryField(rows = CARPET_ROWS).also { it.halfLife = CARPET_HALF_LIFE }
+    private val drift = Flows.Drift(CARPET_DRIFT_X, 0f)
+    private val carpetProgram: ShaderProgram by lazy { ShaderProgram(CARPET) }
 
     // Every element as it stands this frame, in shorter sides of the screen, and its colours.
     private val regrow = FloatArray(SLOTS) { 1f }
@@ -242,6 +276,56 @@ internal class TwinBloom : Layered(
     /** The light the blooms give this frame. */
     internal val lightValue: Float get() = light
 
+    /** The form the garden shows: Storm, Bud, Field or Bloom. */
+    private val formName: String
+        get() = when {
+            throwAge < 1f -> FORMS[STORM]
+            budding > 0.5f || silent -> FORMS[BUD]
+            bloomCount >= 3 -> FORMS[FIELD]
+            else -> FORMS[BLOOM]
+        }
+
+    /** How far [layer] is moved by the sway, as a share of the screen's width: 0 the ground, 1 the blooms, 2 the foreground. */
+    internal fun parallaxOf(layer: Int): Float = PARALLAX * sway * when (layer) {
+        GROUND_LAYER -> 0.5f
+        BLOOM_LAYER -> 1f
+        else -> 2f
+    }
+
+    /** The share of the carpet's sample points that hold ink. */
+    internal fun carpetInkShare(): Float {
+        var lit = 0
+        var count = 0
+        forEachCarpetPoint { _, ink ->
+            count++
+            if (ink > 0.1f) lit++
+        }
+        return if (count == 0) 0f else lit.toFloat() / count
+    }
+
+    /** The ink-weighted mean x of the carpet, in field units, or 0 when it is empty. */
+    internal fun carpetCentroidX(): Float {
+        var weighted = 0f
+        var total = 0f
+        forEachCarpetPoint { x, ink ->
+            weighted += x * ink
+            total += ink
+        }
+        return if (total <= 0f) 0f else weighted / total
+    }
+
+    private inline fun forEachCarpetPoint(visit: (Float, Float) -> Unit) {
+        var y = -0.99f
+        while (y < 1f) {
+            var x = -carpet.aspect + 0.01f
+            while (x < carpet.aspect) {
+                visit(x, carpet.inkAt(x, y))
+                x += CARPET_SAMPLE
+            }
+            y += CARPET_SAMPLE
+        }
+    }
+
     /**
      * Plants a bloom: in a free slot, or in place of the oldest when all five live. The oldest's
      * elements are thrown off first. It stands where the stereo balance puts it, further back the
@@ -259,6 +343,8 @@ internal class TwinBloom : Layered(
         plantedDepth[slot] = centroid.coerceIn(0f, 1f)
         age[slot] = 0f
         stem[slot] = 0f
+        unfold[slot] = 1f
+        unfoldTarget[slot] = 1f
         order[slot] = ++births
         // A new bloom wears the garden's shape at once.
         for (ring in 0 until RINGS) {
@@ -324,6 +410,11 @@ internal class TwinBloom : Layered(
         for (i in 0 until STEM_POINTS) stemWave[i] = frame.scope.sampleAt(i / (STEM_POINTS - 1f))
         // A pause holds the sway; a silence lets it settle.
         presence.advance(frame.audible, if (frame.held) 0f else dt)
+        silent = frame.audible < 0.5f
+        slowLevel += (frame.level.coerceIn(0f, 1f) - slowLevel) * (1f - exp(-step / SLOW_LEVEL_SECONDS))
+        for (i in 0 until BLOOMS) unfold[i] += (unfoldTarget[i] - unfold[i]) * (1f - exp(-step / (2f * bar)))
+        carpet.size(kit.aspect)
+        carpet.advance(drift, step)
         sway = sin(gestures.cyclePhase * TAU) * presence.value * state.motionScale.coerceIn(0f, 1f)
         leanTowardsKey(frame, state.palette, step)
         light = state.lightScale.coerceIn(0f, 1f) * max(IDLE_LIGHT * (1f - frame.audible), lightFor(state.energy))
@@ -367,6 +458,11 @@ internal class TwinBloom : Layered(
             }
         }
 
+        // The drop's throw and the breakdown's buds come from the gestures above; a plain change of
+        // form opens or wilts the blooms.
+        if (evolution.morph && !evolution.bloom && !evolution.collapse) {
+            for (i in 0 until BLOOMS) if (alive[i]) unfoldTarget[i] = OPEN_LEAST + (1f - OPEN_LEAST) * slowLevel
+        }
         if (evolution.birth) birth()
         twinkle(step)
         layout(state)
@@ -486,7 +582,7 @@ internal class TwinBloom : Layered(
             }
             // A drop on the way gathers the garden a little toward the middle.
             val planted = plantedX[bloom] + (0.5f - plantedX[bloom]) * GATHER * buildUp
-            val x = (planted + SWAY * sway) * screenWide
+            val x = (planted + parallaxOf(BLOOM_LAYER)) * screenWide
             val y = (GROUND_Y - stem[bloom] * STEM_REACH) * screenTall
             centreX[bloom] = x
             centreY[bloom] = y
@@ -524,7 +620,7 @@ internal class TwinBloom : Layered(
                     val slot = at * MOST + element
                     val level = response(bands, ring, element)
                     val grow = regrow[slot]
-                    val body = base * petalLengthFor(level) * grow * swell
+                    val body = base * petalLengthFor(level) * unfold[bloom] * grow * swell
                     val long = body * shoot * (1f - 0.55f * budding)
                     val wide = body * aspect * opening * (1f - 0.3f * budding)
                     val zig = if (element % 2 == 0) 1f else -1f
@@ -782,10 +878,25 @@ internal class TwinBloom : Layered(
             pieceTurn[at] += pieceSpin[at] * step
             pieceFlip[at] += pieceFlipRate[at] * step
             val margin = pieceLength[at]
+            val ground = GROUND_Y * screenTall
+            // A broken-off petal settles on the carpet when it reaches the ground, or below the
+            // place it fades if it fades first.
+            if (!pieceCoin[at] && (pieceY[at] >= ground || pieceAge[at] >= pieceLife[at])) {
+                settle(pieceX[at])
+                pieceAlive[at] = false
+                continue
+            }
             val gone = pieceX[at] < -margin || pieceX[at] > screenWide + margin ||
                 pieceY[at] < -margin || pieceY[at] > screenTall + margin
             if (pieceAge[at] >= pieceLife[at] || gone) pieceAlive[at] = false
         }
+    }
+
+    /** Inks the carpet where a petal at [x] meets the ground. */
+    private fun settle(x: Float) {
+        if (x < 0f || x > screenWide) return
+        val fieldX = (x / screenWide * 2f - 1f) * carpet.aspect
+        carpet.disc(fieldX, GROUND_Y * 2f - 1f + PETAL_INK_RADIUS, PETAL_INK_RADIUS, PETAL_INK)
     }
 
     /** A hat makes a few tips sparkle, the outer ones most often: they flash pale and a small star shines on each. */
@@ -829,6 +940,7 @@ internal class TwinBloom : Layered(
 
     override fun DrawScope.drawEcho(state: VizRenderState) {
         val unit = size.minDimension
+        drawCarpet(state)
         glows.clear()
         for (bloom in 0 until BLOOMS) {
             if (!alive[bloom]) continue
@@ -855,6 +967,20 @@ internal class TwinBloom : Layered(
             glows.streak(tailX, tailY, headX, headY, pieceLength[at] * unit * 0.8f, withAlpha(pieceFillTip[at], 0.55f * coinFade(at)))
         }
         drawMesh(glows, BlendMode.Plus)
+    }
+
+    /** The carpet below the ground line, lit ink in four flat steps, moved half as far as the blooms by the sway. */
+    private fun DrawScope.drawCarpet(state: VizRenderState) {
+        if (!carpetProgram.available || !canDrawRuntimeShaders()) return
+        val groundPx = GROUND_Y * size.height
+        val ink = state.palette.low
+        carpet.bindTo(carpetProgram)
+        carpetProgram.uniform("uResolution", size.width, size.height)
+        carpetProgram.uniform("uLight", light)
+        carpetProgram.uniform("uInk", ink.red, ink.green, ink.blue)
+        carpetProgram.uniform("uShift", parallaxOf(GROUND_LAYER) * size.width)
+        val brush = carpetProgram.brush() ?: return
+        drawRect(brush, topLeft = Offset(0f, groundPx), size = Size(size.width, size.height - groundPx))
     }
 
     override fun DrawScope.drawTop(state: VizRenderState) {
@@ -894,7 +1020,27 @@ internal class TwinBloom : Layered(
             val bloom = slot / (RINGS * MOST)
             front.spark(x, y, arm, max(1f, arm * 0.14f), withAlpha(sparkColour[bloom], left))
         }
+        addForegroundPetal(unit, rim)
         drawMesh(front)
+    }
+
+    /**
+     * One large, faint petal at the lower left, nearest the viewer, moved twice as far as the blooms
+     * by the sway. It comes in with the music and leaves in a silence.
+     */
+    private fun addForegroundPetal(unit: Float, rim: Float) {
+        val bloom = alive.indexOfFirst { it }
+        val alpha = FOREGROUND_ALPHA * presence.value
+        if (bloom < 0 || alpha < 0.01f) return
+        val k = cbrt(light.coerceIn(0f, 1f))
+        val root = shade(bloom, ROOT_FILL, k, 0f)
+        val tip = shade(bloom, TIP_FILL, k, 0f)
+        val x = (FOREGROUND_X + parallaxOf(FOREGROUND_LAYER)) * screenWide
+        val y = FOREGROUND_Y * screenTall
+        addElement(
+            unit, x, y, FOREGROUND_TURN, FOREGROUND_LENGTH, FOREGROUND_LENGTH * ASPECT[PETAL], WIDEST[PETAL],
+            root, tip, root, tip, rim, alpha,
+        )
     }
 
     private fun addPieces(unit: Float, rim: Float, coins: Boolean) {
@@ -1076,6 +1222,11 @@ internal class TwinBloom : Layered(
         sway = 0f
         light = IDLE_LIGHT
         coreRadius.fill(0f)
+        unfold.fill(1f)
+        unfoldTarget.fill(1f)
+        slowLevel = 0f
+        silent = true
+        carpet.clear()
     }
 
     internal companion object {
@@ -1154,8 +1305,53 @@ internal class TwinBloom : Layered(
         const val BALANCE_SECONDS = 0.5f
         /** How far a coming drop gathers the blooms toward the middle. */
         const val GATHER = 0.35f
-        /** The sway across, as a share of the screen's width. */
-        const val SWAY = 0.01f
+        /** How far the sway moves the blooms, as a share of the screen's width; the ground half, the foreground twice. */
+        const val PARALLAX = 0.01f
+        const val GROUND_LAYER = 0
+        const val BLOOM_LAYER = 1
+        const val FOREGROUND_LAYER = 2
+
+        // The foreground petal: where its root stands, its turn, length in shorter sides, and opacity.
+        const val FOREGROUND_X = 0.04f
+        const val FOREGROUND_Y = 1.02f
+        const val FOREGROUND_TURN = -1.1f
+        const val FOREGROUND_LENGTH = 0.45f
+        const val FOREGROUND_ALPHA = 0.15f
+
+        // The forms, and how far a change of form can close a bloom, with the slow level behind it.
+        val FORMS = listOf("Bud", "Bloom", "Field", "Storm")
+        const val BUD = 0
+        const val BLOOM = 1
+        const val FIELD = 2
+        const val STORM = 3
+        const val OPEN_LEAST = 0.4f
+        const val SLOW_LEVEL_SECONDS = 4f
+
+        // The carpet: its grid rows, half life in heard seconds, drift in field units a second, a
+        // fallen petal's ink and radius, and the spacing of the points its tests read.
+        const val CARPET_ROWS = 54
+        const val CARPET_HALF_LIFE = 4f
+        const val CARPET_DRIFT_X = 0.03f
+        const val PETAL_INK = 0.8f
+        const val PETAL_INK_RADIUS = 0.03f
+        const val CARPET_SAMPLE = 0.02f
+
+        /** The carpet: the field's ink held to four flat steps, lit from the upper left, in the palette's low colour. */
+        val CARPET: String = """
+uniform float2 uResolution;
+uniform float uLight;
+uniform float3 uInk;
+uniform float uShift;
+""" + FieldShader.SOURCE + """
+half4 main(float2 position) {
+    float2 at = position - float2(uShift, 0.0);
+    float ink = bands(fieldAt(at).x, 4.0);
+    float shine = lit(fieldSlope(at));
+    float alpha = clamp(ink * uLight, 0.0, 1.0);
+    float3 colour = clamp(uInk * (0.6 + 0.8 * shine), 0.0, 1.0);
+    return half4(half3(colour * alpha), half(alpha));
+}
+"""
 
         // The stems: the ground line and the reach up from it as shares of the height, the heard
         // seconds of full energy a stem takes to grow, and the waveform along it.

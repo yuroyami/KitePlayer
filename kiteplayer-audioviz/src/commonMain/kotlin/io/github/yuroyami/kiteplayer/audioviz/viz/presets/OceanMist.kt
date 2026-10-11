@@ -81,7 +81,6 @@ internal class OceanMist : Layered(
         VizDrive(VizDriver.Level, VizProperty.Speed, response = VizResponse.Rate),
         VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(SPRAY_LIFE)),
         VizDrive(VizDriver.HighHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.envelope(HAT_SECONDS)),
-        VizDrive(VizDriver.Width, VizProperty.Size, response = VizResponse.envelope(WIDTH_SECONDS)),
         VizDrive(VizDriver.Mood, VizProperty.Shape, response = VizResponse.envelope(MOOD_SECONDS)),
         VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
         // The morph: the swell turns and the horizon moves.

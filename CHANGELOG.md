@@ -89,6 +89,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   stereo curve as its petals and the waveform dots as its rings. Both names resolve to Iris.
 - Marble is gone from the audioviz catalogue. Contour carries its ink, its vortices, its drop and
   its lace as the sea of its map, and the name resolves to Contour.
+- Fluctus is gone from the audioviz catalogue. Silk carries its stage, its shadow and its horizon,
+  and the name resolves to Silk.
 
 ## [0.3.0] - 2026-10-09
 

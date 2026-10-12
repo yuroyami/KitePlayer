@@ -2,7 +2,6 @@ package io.github.yuroyami.kiteplayer.audioviz.viz
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Bars
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Contour
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fluctus
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fracture
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Honeycomb
@@ -38,7 +37,6 @@ public object VizCatalog {
         Alchemy(),
         Pipe(),
         ThinIce(),
-        Fluctus(),
         Glitch(),
         Odyssey(),
         NeonLoFi(),
@@ -59,6 +57,7 @@ public object VizCatalog {
         "kaleidoscope" to "Iris",
         "wavy spiral" to "Iris",
         "marble" to "Contour",
+        "fluctus" to "Silk",
     )
 
     /** A former public catalogue name resolves to its replacement. */

@@ -31,7 +31,7 @@ class DesktopRenderPerformanceTest {
 
     @Test
     fun measureDesktopFrameCadence() {
-        for (name in listOf("Alchemy", "Thin Ice", "Fluctus", "Odyssey")) {
+        for (name in listOf("Alchemy", "Thin Ice", "Silk", "Odyssey")) {
             val drawing = VizCatalog.create().first { it.name == name }
             val song = RenderHarness.player(RenderHarness.Song.Lively, 8f)
             val frames = List(180) { song.next(1f / 60f) }

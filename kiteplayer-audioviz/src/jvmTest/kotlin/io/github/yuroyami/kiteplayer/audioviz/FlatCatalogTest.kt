@@ -12,7 +12,7 @@ class FlatCatalogTest {
 
     @Test fun onlyTheRetainedPresetsAreSelectable() {
         assertEquals(listOf("Bars", "Ocean Mist", "Twin Bloom", "Contour", "Alchemy",
-            "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Night Drive",
+            "Pipe", "Thin Ice", "Glitch", "Odyssey", "Night Drive",
             "Silk", "Lines", "Honeycomb", "Fracture", "Threads", "Iris"), VizCatalog.create().map { it.name })
     }
 
@@ -21,7 +21,8 @@ class FlatCatalogTest {
             "Breath", "Tide", "Lantern", "Nebula", "Smoke", "Reactor", "RingFlight", "Mandala",
             "Drift", "Melt", "Lava", "PrismBurst", "OilSlick", "Ink", "LensRain", "Twist",
             "FlowField", "Phosphor", "FractalZoom", "BlobField", "Shatter", "RippleWell", "ReactionDiffusion", "SmokeRise", "SmokeVortices", "Aurora", "AuroraField", "Gemini", "Bloom", "Pulse",
-            "Plasma", "PlasmaMaterialKt", "Stereogram", "Fireworks", "Muser", "Kaleidoscope", "WavySpiral")
+            "Plasma", "PlasmaMaterialKt", "Stereogram", "Fireworks", "Muser", "Kaleidoscope", "WavySpiral",
+            "Fluctus", "FluctusSurface", "FluctusSpectrum")
         val root = "io.github.yuroyami.kiteplayer.audioviz.viz."
         for (name in removed) {
             val area = if (name == "BlobField" || name == "AuroraField") "shader" else "presets"
@@ -50,6 +51,12 @@ class FlatCatalogTest {
     @Test fun theFormerNameOfMarbleResolvesToContour() {
         assertEquals("Contour", VizCatalog.canonicalName("Marble"))
         assertTrue(VizCatalog.matchesSearch("Contour", "marb"))
+    }
+
+    @Test fun theFormerNameOfFluctusResolvesToSilk() {
+        assertEquals("Silk", VizCatalog.canonicalName("Fluctus"))
+        assertEquals("Silk", VizCatalog.canonicalName(" fluctus "))
+        assertTrue(VizCatalog.matchesSearch("Silk", "fluct"))
     }
 
     @Test fun drawingsAndCatalogueExposeNoCategoryContract() {

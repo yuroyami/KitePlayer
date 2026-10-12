@@ -519,7 +519,8 @@ the stall before a drop and the scanlines.
   every cycle with no drop) and Dead air. They are published through `Visualization.forms`. A
   birth wipes the next set in from the top.
 - The key biases which set the next section brings, and the slow colour walk turns the hues a
-  little within a set. The palette does not choose the swatches.
+  little within a set. On Prism the swatches are the drawing's own. Any other palette pulls each
+  swatch's hue about a third of the way toward the palette's colours.
 - There is no camera: it is a screen. Light follows the level. In a silence the blocks keep 30
   percent light and the trace lies flat.
 

@@ -33,7 +33,8 @@ import kotlin.math.roundToInt
  * The drums break it the way damaged video breaks: a kick splits the red, green and blue layers for
  * a moment, a snare tears slices sideways by how much the spectrum changed, and a hat slips one row of
  * blocks. A section changes the channel to the next set, which the key biases, and the walk turns the
- * hues a little within a set. A breakdown collapses the picture into one bright line over a faint
+ * hues a little within a set. A palette other than Prism pulls every swatch's hue part of the way toward
+ * its own colours. A breakdown collapses the picture into one bright line over a faint
  * static, and a drop freezes the frame into a datamosh that smears into the new picture until a clean
  * frame snaps back on the next first beat.
  *
@@ -100,7 +101,7 @@ internal class Glitch : Layered(
         // The frame last shown is still in the batch until it is rebuilt, so it is the one that freezes.
         if (scene.takeMoshStart()) with(fields) { freeze(geometry.picture, scene) }
         scene.layout(size.width, size.height)
-        geometry.build(scene, size.width, size.height)
+        geometry.build(scene, size.width, size.height, state.palette)
         if (scene.moshing) with(fields) { slide(geometry.picture, scene, scene.takeMoshSeconds()) }
         drawRect(Color.Black)
         val light = state.lightScale.coerceIn(0f, 1f)

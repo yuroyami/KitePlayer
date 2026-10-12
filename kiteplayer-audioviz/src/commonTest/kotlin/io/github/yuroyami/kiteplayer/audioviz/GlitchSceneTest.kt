@@ -54,6 +54,29 @@ class GlitchSceneTest {
     }
 
     @Test
+    fun theScanBarRollsOnlyWithASupportedPulse() {
+        // A held tone has no pulse, so the bar fades rather than roll a beat the music does not have.
+        val held = GlitchScene()
+        val run = Run(held)
+        repeat(240) { run.next() }
+        assertTrue(held.scanStrength < 0.01f, "the scan bar rolls on a held tone: ${held.scanStrength}")
+        // A drum loop has one, and the bar shows it.
+        val drums = GlitchScene()
+        val gestures = Gestures()
+        val evolution = Evolution()
+        val random = Rng(5L)
+        val player = SongPlayer(SyntheticSong.drumLoop(14f))
+        repeat(60 * 9) { index ->
+            val state = VizRenderState(player.next(DELTA), index * DELTA, DELTA, VizPalette.Prism)
+            gestures.update(state)
+            evolution.update(state, gestures)
+            drums.advance(state, gestures, evolution, random)
+        }
+        assertTrue(gestures.pulseUsable, "the drum loop should have a usable pulse by now")
+        assertTrue(drums.scanStrength > 0.5f, "the scan bar is gone under a drum loop: ${drums.scanStrength}")
+    }
+
+    @Test
     fun theColumnsScrollAndAColumnIsTheBandsOfItsMoment() {
         val scene = GlitchScene()
         scene.layout(1920f, 1080f)

@@ -26,17 +26,18 @@ import kotlin.math.roundToInt
  * The music's own signal as a broken broadcast: the spectrogram as large blocks. Across is time, four
  * heard seconds scrolling to the left; up is band, with the bass at the bottom. A block takes the first,
  * second or third swatch of the set by its level. The waveform is a thick white trace across a clear band
- * in the middle, and a brighter scan bar rolls down once a bar. Dense music coarsens the blocks into
+ * in the middle, and while the beat is known a brighter scan bar rolls down once a bar. Dense music coarsens the blocks into
  * pairs and fours; that reads the frame's density, which no driver names, so the mapping declares nothing
  * for it. The key biases only which set the next section brings, so it declares nothing either.
  *
  * The drums break it the way damaged video breaks: a kick splits the red, green and blue layers for
  * a moment, a snare tears slices sideways by how much the spectrum changed, and a hat slips one row of
- * blocks. A section changes the channel to the next set, which the key biases, and the walk turns the
- * hues a little within a set. A palette other than Prism pulls every swatch's hue part of the way toward
- * its own colours. A breakdown collapses the picture into one bright line over a faint
- * static, and a drop freezes the frame into a datamosh that smears into the new picture until a clean
- * frame snaps back on the next first beat.
+ * blocks. These faults last from two to seven frames, too short for the mapping's measure across more
+ * than a second, so the mapping declares none of them. A section changes the channel to the next set,
+ * which the key biases, and the walk turns the hues a little within a set. A palette other than Prism
+ * pulls every swatch's hue part of the way toward its own colours. A breakdown collapses the picture into
+ * one bright line over a faint static, and a drop freezes the frame into a datamosh that smears into the
+ * new picture until a clean frame snaps back on the next first beat.
  *
  * The forms are Broadcast, Tracking (the roll reaches twice as far), Mosh (a datamosh every cycle) and
  * Dead air (the breakdown). A birth tears a new set in from the top.
@@ -60,11 +61,7 @@ internal class Glitch : Layered(
         VizDrive(VizDriver.Bands, VizProperty.Shape, response = VizResponse.envelope(GlitchScene.GLOW_RISE)),
         VizDrive(VizDriver.Level, VizProperty.Brightness),
         VizDrive(VizDriver.Waveform, VizProperty.Shape),
-        VizDrive(VizDriver.LowHit, VizProperty.Colour, VizCurve.Scaled, VizResponse.lifetime(GlitchScene.SPLIT_SECONDS)),
-        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.lifetime(4f / 60f)),
-        // A hat slips one row of blocks for two to four frames.
-        VizDrive(VizDriver.HighHit, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(0.07f)),
-        // The pulse, or the mood while no pulse is known, sets how fast the scan bar rolls.
+        // The pulse sets how fast the scan bar rolls; the mood paces the cycle while no pulse is known.
         VizDrive(VizDriver.Pulse, VizProperty.Shape, response = VizResponse.Rate),
         VizDrive(VizDriver.Mood, VizProperty.Shape, response = VizResponse.Rate),
         VizDrive(VizDriver.Section, VizProperty.Colour, VizCurve.Discrete),

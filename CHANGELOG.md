@@ -74,7 +74,7 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the 64 stripes. A hat slips a row of blocks in place of the melt, the flash guard now reaches
   the static and the datamosh, and Broadcast, Tracking, Mosh and Dead air forms are published
   through `Visualization.forms`. A palette other than Prism now pulls its swatch hues toward the
-  palette's colours.
+  palette's colours, and the scan bar rolls only while the beat is known.
 - Neon Lo-Fi's sun is a radial spectrum of 32 stripes, its terraces are the spectrum back in
   time and continuous, its towers are glass with heights from the bands, power lines carry the
   waveform between the lamp posts, the palms are gone, and the sky walks over the song. Its region

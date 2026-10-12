@@ -336,8 +336,11 @@ internal class GlitchScene {
         wrapped = phase < before - 0.5f
         scanPhase = phase
         scanAt = -SCAN_HALF + phase * (1f + 2f * SCAN_HALF)
-        // Presence keeps its level while paused, so a paused picture keeps its scan bar.
-        scanStrength = follow(scanStrength, state.presence, dt, SCAN_RISE, SCAN_FALL)
+        // The bar shows the bar of the music, so without a supported pulse it fades rather than invent one.
+        // A paused picture keeps it as it was.
+        if (!state.frame.held) {
+            scanStrength = follow(scanStrength, if (gestures.pulseUsable) state.presence else 0f, dt, SCAN_RISE, SCAN_FALL)
+        }
     }
 
     /** The tracking roll: a slow offset of the whole picture on the cycle, there only while the music is heard. */

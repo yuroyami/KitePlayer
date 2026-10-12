@@ -24,8 +24,10 @@ class GlitchCatalogTest {
         assertTrue(VizNeed.RuntimeShader !in mapping.needs, "the whole picture draws on every platform")
         assertTrue(VizNeed.ShaderLayers !in mapping.needs, "the datamosh needs no shader, so it runs on software canvases")
         assertEquals(VizSilence.Still, mapping.silence)
-        val named = listOf(VizDriver.Bands, VizDriver.Waveform, VizDriver.LowHit, VizDriver.BodyHit, VizDriver.HighHit,
-            VizDriver.Pulse, VizDriver.Section, VizDriver.Breakdown, VizDriver.Drop)
+        val named = listOf(VizDriver.Bands, VizDriver.Waveform, VizDriver.Pulse, VizDriver.Section, VizDriver.Breakdown, VizDriver.Drop)
         assertTrue(mapping.drivers.containsAll(named), "the declared drivers ${mapping.drivers} miss ${named - mapping.drivers}")
+        // The faults on the hits last a few frames, too short for the mapping's measure; GlitchRenderTest checks them.
+        val hits = listOf(VizDriver.LowHit, VizDriver.BodyHit, VizDriver.HighHit)
+        assertTrue(hits.none { it in mapping.drivers }, "a hit is declared that the survey cannot see")
     }
 }

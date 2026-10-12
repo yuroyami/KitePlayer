@@ -1,7 +1,11 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -16,7 +20,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.SCAN_HALF
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.TRACE_BAND
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.GlitchScene.Companion.TRACE_POINTS
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
@@ -73,9 +76,6 @@ internal class GlitchGeometry {
         val lower = rows / 2
         val fold = 1f - collapse * (1f - LINE_SHARE)
         val roll = scene.trackingY * height * (1f - collapse)
-        val scan = scene.scanStrength * (1f - collapse)
-        val scanY = scene.scanAt * height
-        val scanReach = SCAN_HALF * height
         val slip = (scene.slipShift * width).roundToInt().toFloat()
         for (column in 0 until columns) {
             val left = (column * cellWidth).roundToInt().toFloat()
@@ -88,10 +88,6 @@ internal class GlitchGeometry {
                 val bottom = (middle + (floor - middle) * fold + roll).roundToInt().toFloat() - GAP
                 if (bottom <= top) continue
                 var light = scene.blockLight(column, row)
-                if (scan >= 0.01f) {
-                    val near = (1f - abs((top + bottom) * 0.5f - scanY) / scanReach).coerceIn(0f, 1f)
-                    light += (1f - light) * SCAN_LIFT * scan * near
-                }
                 light += (1f - light) * collapse * LINE_LIGHT
                 var white = scene.white[column * ROWS_MOST + row]
                 white += (1f - white) * collapse * LINE_WHITE
@@ -182,6 +178,29 @@ internal class GlitchGeometry {
         saved.copyInto(picture.colors, 0, 0, count)
     }
 
+    /**
+     * The scan bar: a band of added light that travels down the blocks, at [light]. It brightens by screen
+     * row, not by block, because a block lit whole is a third of a small screen turning on at once. The
+     * band is kept to where the picture is, so the black between the blocks stays black.
+     */
+    fun DrawScope.drawScan(scene: GlitchScene, light: Float) {
+        val glow = SCAN_GLOW * scene.scanStrength * (1f - scene.collapse) * light.coerceIn(0f, 1f)
+        if (glow < 0.004f) return
+        val reach = SCAN_HALF * size.height
+        val centre = scene.scanAt * size.height
+        val lit = Color.White.copy(alpha = glow)
+        drawIntoCanvas { canvas ->
+            canvas.saveLayer(Rect(0f, centre - reach, size.width, centre + reach), adding)
+            drawMesh(picture)
+            drawRect(
+                Brush.verticalGradient(0f to Color.Transparent, 0.5f to lit, 1f to Color.Transparent,
+                    startY = centre - reach, endY = centre + reach),
+                topLeft = Offset(0f, centre - reach), size = Size(size.width, 2f * reach), blendMode = BlendMode.SrcIn,
+            )
+            canvas.restore()
+        }
+    }
+
     /** The waveform as a thick white ribbon across the middle, or along the line of a breakdown. */
     private fun addTrace(scene: GlitchScene, width: Float, height: Float, middle: Float, collapse: Float) {
         val reach = height * 0.5f * (TRACE_REACH + (LINE_REACH - TRACE_REACH) * collapse)
@@ -264,8 +283,8 @@ internal class GlitchGeometry {
         const val LINE_REACH = 0.08f
         const val TRACE_THICKNESS = 0.011f
 
-        /** How much of the way to full light the scan bar lifts a block. */
-        const val SCAN_LIFT = 0.6f
+        /** The light the scan bar adds at its middle, under the 0.1 step that makes half of a flash. */
+        const val SCAN_GLOW = 0.08f
 
         /** Red, green and blue alone, alpha kept. */
         val CHANNELS = intArrayOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt())

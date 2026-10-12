@@ -124,6 +124,7 @@ internal class Glitch : Layered(
                 translate(wrap, 0f) { signal(split, reduced, light) }
             }
         }
+        if (!scene.moshing) with(geometry) { drawScan(scene, light) }
     }
 
     /** The picture, or the datamosh at [light] while one runs. The picture is already lit. */

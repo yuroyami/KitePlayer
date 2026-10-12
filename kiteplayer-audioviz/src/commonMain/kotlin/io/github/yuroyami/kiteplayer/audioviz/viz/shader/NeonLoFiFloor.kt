@@ -118,7 +118,6 @@ internal class NeonLoFiFloor {
                 line(points[0], points[1], points[2], points[3], pixelCore, frontEdge)
             }
             }
-            if (!portable) palms(world, paint, width, height, z0, z1, pixelCore)
         }
         triangles = mesh.indexCount / 3
         copiedBytes = mesh.vertexCount * 12 + mesh.indexCount * 2
@@ -173,34 +172,6 @@ internal class NeonLoFiFloor {
         val v = mesh.vertex(ax + nx, ay + ny, color)
         mesh.vertex(bx + nx, by + ny, color); mesh.vertex(bx - nx, by - ny, color); mesh.vertex(ax - nx, ay - ny, color)
         mesh.quad(v, v + 1, v + 2, v + 3)
-    }
-    private fun palms(world: NeonLoFiWorld, paint: NeonLoFiPaint, w: Float, h: Float, z0: Float, z1: Float, core: Float) {
-        val id = floor(z1 / 19f).toInt(); val z = id * 19f
-        if (z < z0 || z > z1) return
-        val intensity = (world.regions.weights[0] + world.regions.weights[3] * 0.65f).coerceIn(0f, 1f)
-        if (intensity < 0.01f) return
-        for (side in intArrayOf(-1, 1)) {
-            val seed = abs(sin(id * 91.17f + side * 12f))
-            val x = world.flight.road(z) + side * 3.45f
-            val y = (2.5f + seed * 1.7f) * intensity
-            world.flight.project(x, 0f, z, w, h, points, 0)
-            world.flight.project(x + side * 0.3f, y, z, w, h, points, 2)
-            val distanceFade = NeonLoFiHistory.smooth(1.8f, 9f, z - world.flight.travel.toFloat())
-            val color = paint.color(NeonLoFiPaint.FAR, 0.55f * intensity, distanceFade).toArgb()
-            line(points[0], points[1], points[2], points[3], max(core, h / (z - world.flight.travel.toFloat()) * 0.035f), color)
-            val crownX = points[2]; val crownY = points[3]
-            for (frond in 0..5) {
-                var px = crownX; var py = crownY
-                for (step in 1..4) {
-                    val t = step / 4f; val a = frond * 1.05f + seed
-                    val xx = x + side * 0.3f + cos(a) * t * 1.2f * h * NeonLoFiFlight.FOCAL / world.flight.horizontalFocal(w, h)
-                    val yy = y + sin(a) * t * 0.55f + sin(t * PI.toFloat()) * 0.3f - t * t * 0.45f
-                    world.flight.project(xx, yy, z, w, h, points, 4)
-                    line(px, py, points[4], points[5], max(core, h * NeonLoFiFlight.FOCAL /
-                        (z - world.flight.travel.toFloat()) * 0.07f * (1f - t)), color); px = points[4]; py = points[5]
-                }
-            }
-        }
     }
     fun DrawScope.draw() { drawMesh(mesh) }
     companion object {

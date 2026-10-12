@@ -59,6 +59,54 @@ class NeonLoFiRenderTest {
         }
     }
 
+    @Test fun theTowersAreGlassWithHeightsFromTheBands() {
+        // A tower of note n reads lane 2 + n: the low tone fills lanes 0 to 2, the high tone lanes 10 to 12.
+        fun heights(low: Boolean): Pair<Float, Float> {
+            val viz = NeonLoFi()
+            RenderHarness.forEachFrameOf(viz, 320, 180, 240, VizPalette.Prism,
+                source = { InjectedFrames.toneFrame(it, lowBand = low) }) { _, _ -> }
+            return viz.decor.towerHeight(0) to viz.decor.towerHeight(9)
+        }
+        val (lowC, lowA) = heights(true)
+        val (highC, highA) = heights(false)
+        println("neon towers: low tone C (lane 2) $lowC, A (lane 11) $lowA; high tone C $highC, A $highA")
+        assertTrue(lowC > lowA, "the low tone raises the tower on lane 2: $lowC against $lowA")
+        assertTrue(highA > highC, "the high tone raises the tower on lane 11: $highA against $highC")
+    }
+
+    @Test fun thePowerLinesCarryTheWaveform() {
+        fun lines(driver: VizDriver?): NeonLoFi {
+            val viz = NeonLoFi()
+            RenderHarness.forEachFrameOf(viz, 320, 180, 100, VizPalette.Prism,
+                source = { InjectedFrames.frame(driver, it) }) { _, _ -> }
+            return viz
+        }
+        val waved = lines(VizDriver.Waveform).decor
+        val plain = lines(null).decor
+        println("neon power lines: ${waved.lineCount} spans, waveform ${waved.lineAmplitude}, plain ${plain.lineAmplitude}")
+        assertTrue(waved.lineCount >= 2, "only ${waved.lineCount} power line spans")
+        assertTrue(waved.lineAmplitude > 0.5f, "the lines swing by only ${waved.lineAmplitude}")
+        assertTrue(waved.lineAmplitude > plain.lineAmplitude, "the waveform does not swing the lines more")
+    }
+
+    @Test fun theSkyWalksFromDuskToNight() {
+        assertTrue(abs(NeonLoFiPaint.skyTurnFor(0.25f) - NeonLoFiPaint.skyTurnFor(0.75f)) > 10f)
+        assertTrue(abs(NeonLoFiPaint.skyLiftFor(0f) - NeonLoFiPaint.skyLiftFor(0.5f)) > 0.05f)
+        val world = NeonLoFiWorld()
+        fun roles(walk: Float, palette: VizPalette) =
+            NeonLoFiPaint().also { it.prepare(neonState(0, palette = palette), world, walk) }.roles.copyOf()
+        for (palette in listOf(VizPalette.Prism, VizPalette.Vapor)) {
+            val dusk = roles(0f, palette)
+            val night = roles(0.25f, palette)
+            val sky = setOf(NeonLoFiPaint.LOW, NeonLoFiPaint.MID)
+            for (role in 0 until NeonLoFiPaint.ROLES) {
+                val moved = (0..2).maxOf { abs(dusk[role * 3 + it] - night[role * 3 + it]) }
+                if (role in sky) assertTrue(moved > 0.005f, "the walk does not turn sky role $role on ${palette.name}")
+                else assertEquals(0f, moved, "the walk changed role $role on ${palette.name}")
+            }
+        }
+    }
+
     @Test fun theRoadEdgesAreTheWaveformAndTheWetRoadReflectsTheTerraces() {
         fun run(driver: VizDriver?, keep: Int): Pair<NeonLoFi, java.awt.image.BufferedImage?> {
             val viz = NeonLoFi()

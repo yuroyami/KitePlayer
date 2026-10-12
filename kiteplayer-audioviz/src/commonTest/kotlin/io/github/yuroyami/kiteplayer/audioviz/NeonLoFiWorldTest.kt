@@ -80,6 +80,53 @@ class NeonLoFiWorldTest {
         assertTrue(checked >= 6, "only $checked lanes changed between rows")
     }
 
+    /** A world fed a steady rising spectrum, so every lane stands at its own height. */
+    private fun rising(seconds: Float, cycle: Float = 2f, w: NeonLoFiWorld = NeonLoFiWorld(), start: Float = 0f,
+        before: (Int) -> Unit = {}): NeonLoFiWorld {
+        val bands = FloatArray(48) { 0.05f + 0.9f * it / 47f }
+        val settings = w.controls.copyOf().apply { this[6] = 0f }
+        for (i in 1..(seconds * 60).toInt()) {
+            before(i)
+            val t = start + i / 60f
+            w.advance(state(bandsFrame(t, bands), t), settings, 0.37f, cycle = cycle)
+        }
+        return w
+    }
+
+    @Test fun theFormIsTheRegionAndAMorphRelaysTheLanes() {
+        val w = rising(2f)
+        assertTrue(NeonLoFiWorld.FORMS[w.form] in listOf("Highway", "Mountain pass", "City", "Coast"))
+        assertEquals((0 until 4).maxBy { w.regions.weights[it] }, w.form)
+        val z = w.flight.travel.toFloat() + 10f
+        val top = w.floorHeight(15, z)
+        val bottom = w.floorHeight(0, z)
+        assertTrue(top > bottom + 0.2f, "the lanes differ: $top against $bottom")
+        w.morph()
+        var most = 0f
+        rising(2.1f, w = w, start = 2f) { most = max(most, w.laneMix) }
+        assertTrue(most > 0.9f, "the relay eased only to $most")
+        assertTrue(w.laneMirror)
+        assertEquals(0f, w.laneMix)
+        assertEquals(top, w.floorHeight(0, z), 0.02f, "lane 0 now stands where lane 15 stood")
+        assertFalse(w.towerSwap)
+        w.morph()
+        rising(2.1f, w = w, start = 4.1f)
+        assertTrue(w.towerSwap, "the second morph swaps the towers")
+        assertTrue(w.laneMirror, "the second morph leaves the lanes")
+    }
+
+    @Test fun aBirthRaisesATowerClusterAhead() {
+        val w = rising(2f)
+        assertTrue(w.clusterAge < 0f)
+        w.birth()
+        assertEquals(0f, w.clusterAge)
+        rising(2.05f, w = w, start = 2f)
+        assertEquals(1f, w.clusterAge)
+        val paint = NeonLoFiPaint().also { it.prepare(state(bandsFrame(4.1f, FloatArray(48) { 0.5f }), 4.1f), w) }
+        val decor = NeonLoFiDecor().also { it.build(w, paint, 960f, 540f, false) }
+        assertEquals(4, decor.clusterTowers)
+    }
+
     @Test fun heldFreezesEveryActorWhileSilenceRecordsZerosAndSettles() {
         val w = NeonLoFiWorld(); run(w, 5f)
         val before = w.lanes.copyOf(); val profile = w.profile.copyOf(); val travel = w.flight.travel

@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 
 import io.github.yuroyami.kiteplayer.audioviz.*
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Evolution
 import kotlin.math.*
 
 /** The only simulation owner. Both render paths consume this same snapshot. */
@@ -25,6 +26,22 @@ internal class NeonLoFiWorld {
     private var terraceHead = 0
     private var terraceRows = 0
     private var terraceClock = 0f
+    /** The form: the region with the most weight, an index into [FORMS]. */
+    val form: Int get() = (0 until 4).maxBy { regions.weights[it] }
+    /**
+     * A morph relays the lanes or swaps the towers' sides, in turn. [laneMix] and [towerMix] ease from 0
+     * to 1 over a cycle; at 1 the mirror flips and the mix starts again from 0.
+     */
+    var laneMix = 0f; private set
+    var laneMirror = false; private set
+    var towerMix = 0f; private set
+    var towerSwap = false; private set
+    private var lanesEasing = false
+    private var towersEasing = false
+    private var morphCount = 0
+    /** How far the latest birth's cluster of four towers has risen, 0 to 1, or below 0 before any birth. */
+    var clusterAge = -1f; private set
+    private var cycleSeconds = 2f
     /** How strongly each note name, C to B, sounds now: the twelve towers' windows. */
     val notes = FloatArray(12)
     /** The waveform now, 0 to 1 either side of a half: the coast's reflection stripes. */
@@ -74,7 +91,17 @@ internal class NeonLoFiWorld {
         val applied = FloatArray(16)
     }
 
-    fun advance(state: VizRenderState, values: FloatArray, layout: Float, beatSeconds: Float = 0f) {
+    /** A morph: the lanes relay to their mirror, or the towers swap sides, in turn. */
+    fun morph() {
+        if (morphCount % 2 == 0) { lanesEasing = true; laneMix = 0f } else { towersEasing = true; towerMix = 0f }
+        morphCount++
+    }
+
+    /** A birth: a cluster of four towers rises ahead over a cycle. */
+    fun birth() { clusterAge = 0f }
+
+    fun advance(state: VizRenderState, values: FloatArray, layout: Float, beatSeconds: Float = 0f,
+        evolution: Evolution? = null, cycle: Float = 2f) {
         if (state.instant == lastTime && state.frame === lastFrame) return
         val dt = if (state.instant == lastTime) 0f else state.deltaSeconds.coerceIn(0f, 0.25f)
         lastTime = state.instant; lastFrame = state.frame
@@ -87,6 +114,21 @@ internal class NeonLoFiWorld {
             else NeonLoFiFlight.approach(controls[i], values[i], dt, 0.35f)
         settingsInitialized = true
         if (f.held) return
+        cycleSeconds = cycle.coerceIn(0.5f, 8f)
+        // A drop's lift-off and a breakdown's rain are their own moments, so only a plain morph changes the form.
+        if (evolution != null) {
+            if (!evolution.bloom && !evolution.collapse && evolution.morph) morph()
+            if (evolution.birth) birth()
+        }
+        if (lanesEasing) {
+            laneMix += dt / cycleSeconds
+            if (laneMix >= 1f) { laneMirror = !laneMirror; laneMix = 0f; lanesEasing = false }
+        }
+        if (towersEasing) {
+            towerMix += dt / cycleSeconds
+            if (towerMix >= 1f) { towerSwap = !towerSwap; towerMix = 0f; towersEasing = false }
+        }
+        if (clusterAge >= 0f) clusterAge = min(1f, clusterAge + dt / cycleSeconds)
         available = f.availability == AnalysisAvailability.Ready
         val audible = if (available) f.audible else 0f
         if (available) NeonLoFiHistory.resample(f.bands, wanted)
@@ -219,6 +261,8 @@ internal class NeonLoFiWorld {
     }
 
     companion object {
+        /** The forms, the names of the Scene control's regions in the order of their weights. */
+        val FORMS = listOf("Highway", "Mountain pass", "City", "Coast")
         const val GAPS = 32
         const val STAR_SECONDS = 0.9f
 
@@ -244,6 +288,13 @@ internal class NeonLoFiWorld {
      * further back the terrace ring, blended between its rows so the field is continuous.
      */
     fun floorHeight(lane: Int, worldZ: Float, edge: Float = 1f): Float {
+        // A relay mirrors the lanes across the band order, eased over a cycle.
+        val from = if (laneMirror) 15 - lane else lane
+        val here = laneHeight(from, worldZ, edge)
+        return if (laneMix <= 0f) here else here + (laneHeight(15 - from, worldZ, edge) - here) * laneMix
+    }
+
+    private fun laneHeight(lane: Int, worldZ: Float, edge: Float): Float {
         val regional = when { lane < 4 -> bass; lane < 10 -> body; else -> air }
         val local = laneAgo(lane, ((worldZ - flight.travel.toFloat()) / FIELD_DEPTH * FIELD_SECONDS).coerceAtLeast(0f)) * 0.72f +
             slowLanes[lane] * 0.18f + regional * 0.10f
@@ -278,6 +329,8 @@ internal class NeonLoFiWorld {
         gaps.fill(0f); notes.fill(0f); wave.fill(0.5f); kick = 0f; hat = 0f; starAge = -1f; sinceStar = 99f
         profileRevision++; projectedRevision = -1L; lastEvents = null; release = 0f; layoutInitialized = false
         breakdownRain = false
+        laneMix = 0f; laneMirror = false; towerMix = 0f; towerSwap = false
+        lanesEasing = false; towersEasing = false; morphCount = 0; clusterAge = -1f
     }
     fun reset() {
         history.clear(); clearActors(); epoch = history.epoch; lastFrame = null; lastTime = Double.NaN

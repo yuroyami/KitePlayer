@@ -59,18 +59,22 @@ class NeonLoFiLightTest {
         val paint = NeonLoFiPaint(); val world = NeonLoFiWorld()
         val neutral = VizPalette.fromColors("Neutral fixture", listOf(Color.DarkGray, Color.Gray, Color.LightGray))
         var previous = 0f
+        var checked = 0
         for (i in 0..20) {
             val frame = neonFrame(i * 250_000L, i / 20f)
             val state = VizRenderState(frame, i / 4f, 0.25f, neutral)
             world.advance(state, world.controls, 0.37f); paint.prepare(state, world)
             val c = paint.color(1, 0.8f)
-            assertTrue(c.red >= previous)
+            // The silence floor fades as the music becomes audible, so light rises with the level from there.
+            if (frame.audible >= 1f) { assertTrue(c.red >= previous, "light fell at step $i"); checked++ }
+            if (i == 0) assertEquals(world.controls[3] * NeonLoFiPaint.IDLE_LIGHT.pow(NeonLoFiPaint.DISPLAY_GAMMA), paint.exposure, 0.000001f)
             assertEquals(c.red, c.green, 0.015f); assertEquals(c.green, c.blue, 0.015f)
             previous = c.red
             val guarded = VizRenderState(frame, i / 4f, 0.25f, neutral).also { it.lightScale = 0.5f }
             paint.prepare(guarded, world)
-            val loud = frame.energy.coerceIn(0f, 1f).pow(0.6f)
-            assertEquals(world.controls[3] * (NeonLoFiPaint.IDLE_LIGHT + (1f - NeonLoFiPaint.IDLE_LIGHT) * loud) * 0.5f, paint.exposure, 0.000001f)
+            val floor = NeonLoFiPaint.IDLE_LIGHT * (1f - frame.audible.coerceIn(0f, 1f))
+            assertEquals(world.controls[3] * max(floor, lightFor(frame.energy)).pow(NeonLoFiPaint.DISPLAY_GAMMA) * 0.5f, paint.exposure, 0.000001f)
         }
+        assertTrue(checked >= 10, "only $checked audible steps")
     }
 }

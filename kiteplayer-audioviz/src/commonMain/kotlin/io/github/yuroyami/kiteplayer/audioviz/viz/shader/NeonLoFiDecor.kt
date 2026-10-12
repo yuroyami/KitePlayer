@@ -16,6 +16,17 @@ internal class NeonLoFiDecor {
     /** Light added on top: the lamps' heads and the warm pools they throw on the road. */
     val glow = TriangleMesh(1024, 1536)
     private val p = FloatArray(8)
+    private val heights = FloatArray(12)
+    private val postX = FloatArray(2 * MOST_LAMPS)
+    private val postY = FloatArray(2 * MOST_LAMPS)
+    private val posts = IntArray(2)
+    /** How tall the tower of [note] stood in the last build, in pixels. */
+    fun towerHeight(note: Int): Float = heights[note]
+    /** How many towers of a birth's cluster the last build drew. */
+    var clusterTowers = 0; private set
+    /** How many power line spans the last build drew, and the largest waveform swing along them, 0 to 1. */
+    var lineCount = 0; private set
+    var lineAmplitude = 0f; private set
     fun build(world: NeonLoFiWorld, paint: NeonLoFiPaint, width: Float, height: Float, portable: Boolean) {
         city.clear(); sky.clear(); rain.clear(); glow.clear()
         val f = world.flight; val seed = f.layout
@@ -60,6 +71,7 @@ internal class NeonLoFiDecor {
         stars(world, paint, width, height, horizon, portable)
         shootingStar(world, paint, width, height, core)
         lamps(world, paint, width, height, core, portable)
+        powerLines(world, paint, height, core, portable)
         val rainCount = if (portable) 20 else 48
         val density = (world.rain * world.controls[9]).coerceIn(0f, 1f)
         for (i in 0 until rainCount) {
@@ -75,41 +87,103 @@ internal class NeonLoFiDecor {
     }
 
     /**
-     * Twelve black towers on the horizon, one per note name from C on the left to B on the right,
-     * six either side of the sun. A tower's windows light pale gold while its note sounds.
+     * Twelve glass towers on the horizon, one per note name from C on the left to B on the right, six
+     * either side of the sun. A tower stands as tall as its lane of the bands is loud, and its windows
+     * light pale gold while its note sounds. A morph can swap the two sides, eased over a cycle, and a
+     * birth raises a cluster of four towers at the middle.
      */
     private fun towers(world: NeonLoFiWorld, paint: NeonLoFiPaint, width: Float, height: Float, horizon: Float,
         core: Float, portable: Boolean) {
-        val bank = world.flight.bank
-        val c = cos(bank); val s = sin(bank)
-        val body = paint.packed(NeonLoFiPaint.INK, 1f)
-        val columns = 2
         val rows = if (portable) 4 else 7
         val towerWidth = min(width * 0.034f, height * 0.035f)
+        val swap = world.towerMix * world.towerMix * (3f - 2f * world.towerMix)
         for (note in 0..11) {
             val left = note < 6
-            val x = width * (if (left) 0.07f + note * 0.052f else 0.67f + (note - 6) * 0.052f)
-            val tall = height * (0.05f + 0.07f * hash(note.toFloat(), 17f))
-            // In screen space round the horizon, turned with the road's bank.
-            fun corner(dx: Float, dy: Float, at: Int) {
-                val ox = x - width * 0.5f + dx; val oy = dy
-                p[at] = width * 0.5f + ox * c - oy * s
-                p[at + 1] = horizon + ox * s + oy * c
-            }
-            corner(-towerWidth * 0.5f, 0f, 0); corner(towerWidth * 0.5f, 0f, 2)
-            corner(towerWidth * 0.5f, -tall, 4); corner(-towerWidth * 0.5f, -tall, 6)
-            quad(city, body, p)
-            line(city, p[4], p[5], p[6], p[7], core, paint.color(NeonLoFiPaint.FAR, 0.35f).toArgb())
-            val lit = world.notes[note]
-            val window = paint.packed(NeonLoFiPaint.WINDOW, 0.06f + 1.3f * lit)
-            for (row in 0 until rows) for (col in 0 until columns) {
-                val wx = -towerWidth * 0.3f + col * towerWidth * 0.36f
-                val wy = -tall * (row + 1f) / (rows + 1.5f)
-                corner(wx, wy, 0); corner(wx + towerWidth * 0.22f, wy, 2)
-                corner(wx + towerWidth * 0.22f, wy - tall * 0.45f / (rows + 1.5f), 4); corner(wx, wy - tall * 0.45f / (rows + 1.5f), 6)
-                quad(city, window, p)
+            val placed = width * (if (left) 0.07f + note * 0.052f else 0.67f + (note - 6) * 0.052f)
+            val from = if (world.towerSwap) width - placed else placed
+            val x = from + (width - 2f * from) * swap
+            val tall = height * (0.05f + 0.12f * world.slowLanes[2 + note])
+            heights[note] = tall
+            tower(world, paint, width, horizon, x, tall, towerWidth, world.notes[note], rows, core, portable)
+        }
+        // A birth's cluster: four towers rise at the middle over a cycle and stay until the next birth.
+        clusterTowers = 0
+        val age = world.clusterAge
+        if (age >= 0f) {
+            val rise = age * age * (3f - 2f * age)
+            for (k in 0..3) {
+                val tall = height * (0.05f + 0.12f * world.slowLanes[2 + k * 3]) * rise
+                if (tall < 1f) continue
+                tower(world, paint, width, horizon, width * (0.44f + k * 0.03f), tall, towerWidth * 0.8f,
+                    world.notes[(k * 3) % 12], rows / 2, core, portable)
+                clusterTowers++
             }
         }
+    }
+
+    /**
+     * One glass tower at [x] on the horizon, in screen space and turned with the road's bank: a dark side
+     * face, a glass front over the sky, a lit roof line, and a grid of windows at [lit].
+     */
+    private fun tower(world: NeonLoFiWorld, paint: NeonLoFiPaint, width: Float, horizon: Float, x: Float, tall: Float,
+        towerWidth: Float, lit: Float, rows: Int, core: Float, portable: Boolean) {
+        val bank = world.flight.bank
+        val c = cos(bank); val s = sin(bank)
+        fun corner(dx: Float, dy: Float, at: Int) {
+            val ox = x - width * 0.5f + dx; val oy = dy
+            p[at] = width * 0.5f + ox * c - oy * s
+            p[at + 1] = horizon + ox * s + oy * c
+        }
+        val half = towerWidth * 0.5f
+        if (!portable) {
+            // The box: a darker face to the right of the glass.
+            corner(half, 0f, 0); corner(half + towerWidth * 0.3f, 0f, 2)
+            corner(half + towerWidth * 0.3f, -tall + towerWidth * 0.12f, 4); corner(half, -tall, 6)
+            quad(city, paint.packed(NeonLoFiPaint.INK, 0.7f), p)
+        }
+        corner(-half, 0f, 0); corner(half, 0f, 2); corner(half, -tall, 4); corner(-half, -tall, 6)
+        quad(city, paint.color(NeonLoFiPaint.FAR, 1f, GLASS).toArgb(), p)
+        line(city, p[4], p[5], p[6], p[7], core, paint.color(NeonLoFiPaint.FAR, 0.35f).toArgb())
+        val window = paint.packed(NeonLoFiPaint.WINDOW, 0.06f + 1.3f * lit)
+        for (row in 0 until rows) for (col in 0 until 2) {
+            val wx = -towerWidth * 0.3f + col * towerWidth * 0.36f
+            val wy = -tall * (row + 1f) / (rows + 1.5f)
+            corner(wx, wy, 0); corner(wx + towerWidth * 0.22f, wy, 2)
+            corner(wx + towerWidth * 0.22f, wy - tall * 0.45f / (rows + 1.5f), 4); corner(wx, wy - tall * 0.45f / (rows + 1.5f), 6)
+            quad(city, window, p)
+        }
+    }
+
+    /**
+     * Power lines between the tops of the lamp posts on each side, sagging between posts and swung by the
+     * waveform along their length.
+     */
+    private fun powerLines(world: NeonLoFiWorld, paint: NeonLoFiPaint, height: Float, core: Float, portable: Boolean) {
+        lineCount = 0
+        var most = 0f
+        val color = paint.color(NeonLoFiPaint.FAR, 0.5f).toArgb()
+        val wave = world.wave
+        val segments = if (portable) PORTABLE_LINE_SEGMENTS else LINE_SEGMENTS
+        for (side in 0..1) {
+            for (span in 0 until posts[side] - 1) {
+                val ax = postX[side * MOST_LAMPS + span]; val ay = postY[side * MOST_LAMPS + span]
+                val bx = postX[side * MOST_LAMPS + span + 1]; val by = postY[side * MOST_LAMPS + span + 1]
+                var px = ax; var py = ay
+                for (i in 1..segments) {
+                    val t = i / segments.toFloat()
+                    val at = ((span + t) / MOST_LAMPS * (wave.size - 1)).roundToInt().coerceIn(0, wave.size - 1)
+                    val swing = (wave[at] - 0.5f) * 2f
+                    most = max(most, abs(swing))
+                    val sag = LINE_SAG * height * 4f * t * (1f - t)
+                    val x = ax + (bx - ax) * t
+                    val y = ay + (by - ay) * t + sag + swing * LINE_WAVE * height * 4f * t * (1f - t)
+                    line(rain, px, py, x, y, core, color)
+                    px = x; py = y
+                }
+                lineCount++
+            }
+        }
+        lineAmplitude = if (lineCount > 0) most else 0f
     }
 
     /** Stars in the upper sky, which a hat makes twinkle. */
@@ -159,6 +233,7 @@ internal class NeonLoFiDecor {
         val post = paint.packed(NeonLoFiPaint.INK, 1.6f)
         val wet = world.rain.coerceIn(0f, 1f)
         val focal = height * NeonLoFiFlight.FOCAL
+        posts.fill(0)
         for (k in first + count - 1 downTo first) {
             val z = k * spacing
             val distance = z - f.travel.toFloat()
@@ -171,6 +246,11 @@ internal class NeonLoFiDecor {
                 f.project(baseX, LAMP_HEIGHT, z, width, height, p, 2)
                 f.project(baseX - side * 0.9f, LAMP_HEIGHT - 0.1f, z, width, height, p, 4)
                 val thick = max(core, 0.09f * focal / distance)
+                // The post's top, far to near, where the power lines hang.
+                val s = if (side > 0) 1 else 0
+                if (posts[s] < MOST_LAMPS) {
+                    postX[s * MOST_LAMPS + posts[s]] = p[2]; postY[s * MOST_LAMPS + posts[s]] = p[3]; posts[s]++
+                }
                 line(rain, p[0], p[1], p[2], p[3], thick, post)
                 line(rain, p[2], p[3], p[4], p[5], thick * 0.8f, post)
                 // A lamp's head stays a lamp as it passes close, not a flare across the screen.
@@ -194,6 +274,15 @@ internal class NeonLoFiDecor {
 
     companion object {
         const val LAMP_HEIGHT = 4.2f
+        /** The most lamp posts a side keeps for its power lines. */
+        const val MOST_LAMPS = 6
+        /** Segments per power line span, its sag and how far the waveform swings it, as shares of the height. */
+        const val LINE_SEGMENTS = 8
+        const val PORTABLE_LINE_SEGMENTS = 4
+        const val LINE_SAG = 0.03f
+        const val LINE_WAVE = 0.02f
+        /** How much of the sky shows through a glass tower. */
+        const val GLASS = 0.35f
         const val POOL_SIDES = 12
         fun hash(x: Float, y: Float): Float = fract(sin(x * 127.1f + y * 311.7f) * 43758.5453f)
         fun fract(x: Float): Float = x - floor(x)

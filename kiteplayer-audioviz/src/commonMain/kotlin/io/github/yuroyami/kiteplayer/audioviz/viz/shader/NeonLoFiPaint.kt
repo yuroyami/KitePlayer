@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.toArgb
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.colourOf
+import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import kotlin.math.*
@@ -14,7 +15,8 @@ import kotlin.math.*
  *
  * The default palette paints a warm dusk: an indigo sky over a rose horizon, a gold to coral sun,
  * cyan to magenta neon, amber lamps and pale gold windows. A chosen palette paints the same roles
- * with its own colours. The key turns the sky and the sun by twenty degrees at most.
+ * with its own colours. The key turns the sky and the sun by twenty degrees at most, and the slow
+ * colour walk turns the sky by up to thirty degrees and lifts or deepens it, from dusk toward night.
  */
 internal class NeonLoFiPaint {
     val roles = FloatArray(ROLES * 3)
@@ -23,11 +25,15 @@ internal class NeonLoFiPaint {
     private var paletteFor: VizPalette? = null
     private var turnFor = Float.NaN
     private var vividFor = Float.NaN
+    private var walkFor = Float.NaN
+    private var quiet = 1f
 
-    fun prepare(state: VizRenderState, world: NeonLoFiWorld) {
-        // Light follows how loud the music is, from a parked car's forty percent to full.
-        val loud = state.frame.energy.coerceIn(0f, 1f).pow(0.6f)
-        exposure = world.controls[3] * (IDLE_LIGHT + (1f - IDLE_LIGHT) * loud) * state.lightScale
+    fun prepare(state: VizRenderState, world: NeonLoFiWorld, walk: Float = 0f) {
+        // Light follows the level; a parked car's forty percent holds only in silence, and a pause keeps it.
+        if (!state.frame.held) quiet = 1f - state.frame.audible.coerceIn(0f, 1f)
+        // The level is display light and the exposure scales linear light, so it goes through the display gamma.
+        val level = max(IDLE_LIGHT * quiet, lightFor(state.frame.energy))
+        exposure = world.controls[3] * level.pow(DISPLAY_GAMMA) * state.lightScale
         val frame = state.frame
         val sure = ((frame.keyConfidence - 0.6f) / 0.4f).coerceIn(0f, 1f)
         var towards = frame.keyHue * 360f - ROSE_HUE
@@ -37,11 +43,14 @@ internal class NeonLoFiPaint {
         val turn = round(keyTurn.value)
         val vivid = world.controls[12]
         val palette = state.palette
-        if (palette === paletteFor && turn == turnFor && vivid == vividFor) return
-        paletteFor = palette; turnFor = turn; vividFor = vivid
+        val skyTurn = round(skyTurnFor(walk))
+        val skyLift = skyLiftFor(walk)
+        val walked = skyTurn + round(skyLift * 1000f) * 1000f
+        if (palette === paletteFor && turn == turnFor && vivid == vividFor && walked == walkFor) return
+        paletteFor = palette; turnFor = turn; vividFor = vivid; walkFor = walked
         if (palette.name == VizPalette.Prism.name) {
-            put(LOW, swatch(0.20f, 0.11f, 285f + turn), vivid)
-            put(MID, swatch(0.55f, 0.20f, ROSE_HUE + turn), vivid)
+            put(LOW, swatch(0.20f + skyLift, 0.11f, 285f + turn + skyTurn), vivid)
+            put(MID, swatch(0.55f, 0.20f, ROSE_HUE + turn + skyTurn), vivid)
             put(HIGH, swatch(0.84f, 0.17f, 85f + turn), vivid)
             put(CAP, swatch(0.65f, 0.21f, 30f + turn), vivid)
             put(INK, swatch(0.08f, 0.02f, 285f), 1f)
@@ -51,11 +60,26 @@ internal class NeonLoFiPaint {
             put(WINDOW, swatch(0.93f, 0.08f, 88f), vivid)
         } else {
             put(LOW, palette.low, vivid); put(MID, palette.mid, vivid)
+            turnSky(LOW, skyTurn, 1f + skyLift / 0.2f)
+            turnSky(MID, skyTurn, 1f)
             put(HIGH, palette.high, vivid); put(CAP, palette.cap, vivid); put(INK, palette.background, 1f)
             put(NEAR, palette.high, vivid); put(FAR, palette.mid, vivid)
             put(LAMP, palette.cap, vivid); put(WINDOW, palette.high, vivid)
         }
         put(WHITE, Color.White, 1f)
+    }
+
+    /**
+     * Turns [role]'s linear colour by [degrees] round the grey axis and scales its light by [light]: the
+     * walk's turn for a palette's own colours, which have no lightness and hue to start from.
+     */
+    private fun turnSky(role: Int, degrees: Float, light: Float) {
+        val a = degrees * PI.toFloat() / 180f
+        val c = cos(a); val s = sin(a); val k = (1f - c) / 3f; val q = s / sqrt(3f)
+        val r = roles[role * 3]; val g = roles[role * 3 + 1]; val b = roles[role * 3 + 2]
+        roles[role * 3] = max(0f, ((c + k) * r + (k - q) * g + (k + q) * b) * light)
+        roles[role * 3 + 1] = max(0f, ((k + q) * r + (c + k) * g + (k - q) * b) * light)
+        roles[role * 3 + 2] = max(0f, ((k - q) * r + (k + q) * g + (c + k) * b) * light)
     }
 
     /** A swatch at its lightness, at the most chroma the screen shows there, never above [chroma]. */
@@ -79,7 +103,7 @@ internal class NeonLoFiPaint {
         return Color(transfer(r * roll), transfer(g * roll), transfer(bl * roll), alpha.coerceIn(0f, 1f))
     }
     fun packed(role: Int, power: Float): Int = color(role, power).toArgb()
-    fun reset() { keyTurn.reset(); paletteFor = null }
+    fun reset() { keyTurn.reset(); paletteFor = null; walkFor = Float.NaN; quiet = 1f }
     companion object {
         /** The roles: sky overhead, horizon glow, the sun's top and bottom, ground, near and far neon, lamps, windows and white. */
         const val LOW = 0; const val MID = 1; const val HIGH = 2; const val CAP = 3; const val INK = 4
@@ -87,10 +111,20 @@ internal class NeonLoFiPaint {
         const val ROLES = 10
         /** The share of full light a parked car's scene keeps in a silence. */
         const val IDLE_LIGHT = 0.4f
+        const val DISPLAY_GAMMA = 2.2f
         /** Light above this rolls off smoothly to full, scaled on the brightest channel so the hue holds. */
         const val KNEE = 0.75f
         private const val ROSE_HUE = 355f
         private const val KEY_TURN = 20f
+        /** How far the colour walk turns the sky's hue, in degrees, and lifts its lightness. */
+        const val WALK_TURN = 30f
+        const val WALK_LIFT = 0.06f
+
+        /** The walk's turn of the sky at [walk], in degrees. */
+        fun skyTurnFor(walk: Float): Float = WALK_TURN * sin(walk * 2f * PI.toFloat())
+
+        /** The walk's lift of the sky's lightness at [walk]. */
+        fun skyLiftFor(walk: Float): Float = WALK_LIFT * cos(walk * 2f * PI.toFloat())
         fun decode(x: Float): Float = if (x <= 0.04045f) x / 12.92f else ((x + 0.055f) / 1.055f).pow(2.4f)
         /** The factor that rolls a colour whose brightest channel is [peak] under full light, hue kept. */
         fun shoulder(peak: Float): Float {

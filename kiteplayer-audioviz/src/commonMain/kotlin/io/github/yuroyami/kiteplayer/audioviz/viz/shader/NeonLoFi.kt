@@ -10,8 +10,9 @@ import kotlin.math.*
  *
  * The sky runs from indigo overhead to a rose glow, and the gold to coral sun is cut by 32 stripes
  * over the whole disc, the bands with bass at the bottom. The bass swells it, and its light is warmer
- * while the sound is low. Twelve towers stand on the horizon, one per note name, and a tower's
- * windows light while its note sounds. Terraces beside the road have black faces and neon edges, cyan
+ * while the sound is low. Twelve glass towers stand on the horizon, one per note name: each stands
+ * as tall as its lane of the bands is loud, and its windows light while its note sounds. Power lines
+ * hang between the lamp posts and swing with the waveform. Terraces beside the road have black faces and neon edges, cyan
  * near and magenta far, and a face lights while its band is loud. The terraces are the spectrum back
  * in time: the nearest is now, and each row further out is a quarter second earlier, four seconds in
  * all. The road's edges carry the waveform, and on a wet road the terraces nearest it streak their
@@ -20,6 +21,11 @@ import kotlin.math.*
  * twinkle. A section drives on to the next region: highway, mountain pass, city or coast. A breakdown
  * slows the car into rain on a wet road that mirrors the sun, and the sun dims and sinks a little. A
  * drop lifts the view off the road for a bar before it lands again.
+ *
+ * The forms are the regions: Highway, Mountain pass, City and Coast, the one with the most weight. Inside
+ * a region a morph relays the lanes to their mirror or swaps the towers' sides, each eased over a cycle,
+ * and a birth raises a cluster of four towers ahead. The slow colour walk turns the sky from dusk toward
+ * night and back over the song.
  */
 internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEnergy.Mid, 31f, Kit(31_007L, camera = Camera2D(wander = 0f, punch = 0f, roll = 0f,
         shake = 0f, cuts = false, minZoom = 1f, maxZoom = 1f))) {
@@ -63,6 +69,10 @@ internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEner
         // history is the mountains in the pass.
         VizDrive(VizDriver.Bands, VizProperty.Shape),
         VizDrive(VizDriver.Level, VizProperty.Brightness),
+        // The road's edges and the power lines swing with the waveform.
+        VizDrive(VizDriver.Waveform, VizProperty.Shape),
+        // How bright the sound is sets the sun's colour temperature.
+        VizDrive(VizDriver.Timbre, VizProperty.Colour),
         VizDrive(VizDriver.Treble, VizProperty.Brightness), VizDrive(VizDriver.Treble, VizProperty.Texture),
         // The notes light the towers' windows, and the key turns the sky and the sun a little.
         VizDrive(VizDriver.Key, VizProperty.Colour),
@@ -81,6 +91,8 @@ internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEner
         VizDrive(VizDriver.Breakdown, VizProperty.Spawn, VizCurve.Discrete, VizResponse.envelope(8f)),
         // The next region blends in over many seconds, so its first change shows a little after the boundary.
         VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(12f, delaySeconds = 0.5f)),
+        // A section is also a morph: the lanes relay or the towers swap sides over a cycle.
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
         silence = VizSilence.Still, silenceSettleSeconds = 3f,
     )
 
@@ -101,13 +113,16 @@ internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEner
         if (landAt >= 0 && gestures.cycles >= landAt) { liftTarget = 0f; landAt = -1 }
         liftShown = NeonLoFiFlight.approach(liftShown, liftTarget, state.stepSeconds, if (liftTarget > 0f) 0.35f else 0.2f)
         world.flight.lift = liftShown * state.motionScale.coerceIn(0f, 1f)
-        world.advance(state, values, configurationLayout, if (gestures.pulseUsable) gestures.beatSeconds else 0f)
+        world.advance(state, values, configurationLayout, if (gestures.pulseUsable) gestures.beatSeconds else 0f,
+            evolution, gestures.cycleSeconds)
     }
+    override val forms: FormReadout
+        get() = FormReadout(NeonLoFiWorld.FORMS[world.form], evolution.morphs, evolution.births)
     /** How far the lift-off has come, before reduced motion scales the camera's part of it. */
     internal var liftShown = 0f
         private set
     private fun prepare(state: VizRenderState, width: Float, height: Float) {
-        paint.prepare(state, world); view.prepare(width, height, world)
+        paint.prepare(state, world, genes.walk); view.prepare(width, height, world)
     }
 
     /** Every value the shader reads, by name, so the device fixture writes exactly what the screen gets. */

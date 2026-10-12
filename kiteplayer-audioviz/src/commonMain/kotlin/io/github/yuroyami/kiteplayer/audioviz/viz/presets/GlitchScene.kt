@@ -269,6 +269,9 @@ internal class GlitchScene {
     }
 
     fun reset() {
+        // A fresh scene starts at the largest grid, and the next layout fits it again.
+        columns = COLUMNS_MOST
+        rows = ROWS_MOST
         glow.fill(0f)
         level.fill(0f)
         light.fill(IDLE_LIGHT)

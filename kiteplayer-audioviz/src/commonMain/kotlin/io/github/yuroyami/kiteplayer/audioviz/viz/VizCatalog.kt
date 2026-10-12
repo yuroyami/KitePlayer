@@ -7,14 +7,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fracture
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Honeycomb
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Iris
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Kaleidoscope
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Lines
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.OceanMist
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Silk
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ThinIce
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Threads
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.TwinBloom
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.WavySpiral
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Alchemy
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Marble
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NeonLoFi
@@ -39,7 +37,6 @@ public object VizCatalog {
         TwinBloom(),
         Contour(),
         Alchemy(),
-        Kaleidoscope(),
         Pipe(),
         ThinIce(),
         Fluctus(),
@@ -54,7 +51,6 @@ public object VizCatalog {
         Fracture(),
         Threads(),
         Iris(),
-        WavySpiral(),
     ).filter { it.canRunHere() }
 
     /** Former public catalogue names and the drawing each one resolves to now. */
@@ -62,6 +58,8 @@ public object VizCatalog {
         "terrain march" to "Night Drive",
         "neon lo-fi" to "Night Drive",
         "nebula field" to "Alchemy",
+        "kaleidoscope" to "Iris",
+        "wavy spiral" to "Iris",
     )
 
     /** A former public catalogue name resolves to its replacement. */

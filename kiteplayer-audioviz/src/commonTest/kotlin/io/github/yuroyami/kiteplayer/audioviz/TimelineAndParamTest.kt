@@ -204,7 +204,7 @@ class TimelineAndParamTest {
     fun someDrawingsCanBeTuned() {
         val tunable = VizCatalog.create().filter { it.params.isNotEmpty() }
         println("drawings with settings: ${tunable.joinToString { "${it.name} (${it.params.joinToString { p -> p.name }})" }}")
-        assertTrue(tunable.size >= 6, "at least a handful of drawings should expose settings, found ${tunable.size}")
+        assertTrue(tunable.size >= 4, "at least a handful of drawings should expose settings, found ${tunable.size}")
         for (drawing in tunable) {
             val names = drawing.params.map { it.name }
             assertEquals(names.size, names.toSet().size, "${drawing.name} has two settings of one name: $names")

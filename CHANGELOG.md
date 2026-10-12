@@ -85,6 +85,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 - Nebula Field is gone from the audioviz catalogue. Alchemy carries its filament look in the Dots
   plus Drift form, and the name resolves to Alchemy.
+- Kaleidoscope and Wavy Spiral are gone from the audioviz catalogue. Iris carries both: the folded
+  stereo curve as its petals and the waveform dots as its rings. Both names resolve to Iris.
 
 ## [0.3.0] - 2026-10-09
 

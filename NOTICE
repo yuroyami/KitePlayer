@@ -55,7 +55,7 @@ META-INF/licenses/kiteplayer-subtitles/.
 
 Visualiser drawings
 -------------------
-kiteplayer-audioviz ports seven browser visualisers, and it carries shader and
+kiteplayer-audioviz ports six browser visualisers, and it carries shader and
 colour code from other open source projects. The class documentation of each
 drawing credits its original and lists every way it differs. The license
 texts ship inside the JVM and Android artifacts under
@@ -73,8 +73,9 @@ kiteplayer-audioviz/src/jvmMain/resources/META-INF/licenses/kiteplayer-audioviz/
   MIT.
 - Fracture, Threads and Iris port Vissonance, Copyright (c) 2020 Tariq
   Soliman, MIT.
-- Wavy Spiral ports Audible Visuals by Sonia Boller, Apache License 2.0. The
-  original's license file leaves the copyright line unfilled.
+- Iris carries the waveform dots of Audible Visuals by Sonia Boller, Apache
+  License 2.0. The original's license file leaves the copyright line
+  unfilled.
 
 Animation upscaler
 ------------------

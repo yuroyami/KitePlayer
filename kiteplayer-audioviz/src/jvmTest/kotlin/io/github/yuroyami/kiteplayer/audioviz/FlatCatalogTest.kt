@@ -12,8 +12,8 @@ class FlatCatalogTest {
 
     @Test fun onlyTheRetainedPresetsAreSelectable() {
         assertEquals(listOf("Bars", "Ocean Mist", "Twin Bloom", "Contour", "Alchemy",
-            "Kaleidoscope", "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Night Drive", "Marble",
-            "Silk", "Lines", "Honeycomb", "Fracture", "Threads", "Iris", "Wavy Spiral"), VizCatalog.create().map { it.name })
+            "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Night Drive", "Marble",
+            "Silk", "Lines", "Honeycomb", "Fracture", "Threads", "Iris"), VizCatalog.create().map { it.name })
     }
 
     @Test fun removedImplementationsAreNotPackaged() {
@@ -21,7 +21,7 @@ class FlatCatalogTest {
             "Breath", "Tide", "Lantern", "Nebula", "Smoke", "Reactor", "RingFlight", "Mandala",
             "Drift", "Melt", "Lava", "PrismBurst", "OilSlick", "Ink", "LensRain", "Twist",
             "FlowField", "Phosphor", "FractalZoom", "BlobField", "Shatter", "RippleWell", "ReactionDiffusion", "SmokeRise", "SmokeVortices", "Aurora", "AuroraField", "Gemini", "Bloom", "Pulse",
-            "Plasma", "PlasmaMaterialKt", "Stereogram", "Fireworks", "Muser")
+            "Plasma", "PlasmaMaterialKt", "Stereogram", "Fireworks", "Muser", "Kaleidoscope", "WavySpiral")
         val root = "io.github.yuroyami.kiteplayer.audioviz.viz."
         for (name in removed) {
             val area = if (name == "BlobField" || name == "AuroraField") "shader" else "presets"
@@ -39,6 +39,12 @@ class FlatCatalogTest {
     @Test fun theFormerNameOfNebulaFieldResolvesToAlchemy() {
         assertEquals("Alchemy", VizCatalog.canonicalName("Nebula Field"))
         assertTrue(VizCatalog.matchesSearch("Alchemy", "nebula"))
+    }
+
+    @Test fun formerNamesOfTheMergedDrawingsResolveToIris() {
+        assertEquals("Iris", VizCatalog.canonicalName("Kaleidoscope"))
+        assertEquals("Iris", VizCatalog.canonicalName("Wavy Spiral"))
+        assertTrue(VizCatalog.matchesSearch("Iris", "kaleido"))
     }
 
     @Test fun drawingsAndCatalogueExposeNoCategoryContract() {

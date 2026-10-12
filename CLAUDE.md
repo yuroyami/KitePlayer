@@ -395,7 +395,7 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A held frame, which is a paused player, keeps its levels and its pulses. Anything in a drawing
   that runs on wall time or draws random motion must multiply by `frame.audible` or check
   `frame.held`, or the picture moves under a pause. The trail feedback, the camera shake and the
-  cycle clocks each did that (#321). `PausedPictureTest` renders all 24 drawings through a pause.
+  cycle clocks each did that (#321). `PausedPictureTest` renders every drawing through a pause.
 - Every drawing multiplies its light by `VizRenderState.lightScale`, because the flash guard cannot
   dim a finished frame. Bars and Alchemy did not, and the guard could not touch them (#313).
   `FlashGuardReachTest` renders every drawing at half the allowed light.

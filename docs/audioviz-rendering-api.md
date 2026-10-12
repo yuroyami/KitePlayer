@@ -51,11 +51,11 @@ each pixel's line of sight meets the planet, the ring plane, the two moons, or n
 `AudioVizBrowser` shows that same order as a searchable adaptive preview grid. There are no
 preset categories, category headers or grouped-catalogue entry points.
 
-The catalogue has 20 drawings on desktop, iOS and Android 13 and newer. On older Android it has 17,
+The catalogue has 18 drawings on desktop, iOS and Android 13 and newer. On older Android it has 15,
 because Alchemy, Pipe and Odyssey need runtime shaders and have no stand-in. The first
-13 are the library's own: Bars, Ocean Mist, Twin Bloom,
-Contour, Alchemy, Kaleidoscope, Pipe, Thin Ice, Fluctus, Glitch, Odyssey, Night Drive
-and Marble. The last 7 are ports of browser visualisers, each faithful to its original and credited
+12 are the library's own: Bars, Ocean Mist, Twin Bloom,
+Contour, Alchemy, Pipe, Thin Ice, Fluctus, Glitch, Odyssey, Night Drive
+and Marble. The last 6 are ports of browser visualisers, each faithful to its original and credited
 below. Each port's class documentation carries the full credit and a list of every way it differs
 from the original.
 
@@ -66,8 +66,9 @@ from the original.
 | Honeycomb | Soundcloud Visualizer | Michael Bromley | [page](https://www.michaelbromley.co.uk/experiments/soundcloud-vis/), [code](https://github.com/michaelbromley/soundcloud-visualizer) | MIT |
 | Fracture | Vissonance: Fracture | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
 | Threads | Vissonance: Silk | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
-| Iris | Vissonance: Iris | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
-| Wavy Spiral | Audible Visuals: Wavy Spiral and Flower | Sonia Boller | [page](https://soniaboller.github.io/audible-visuals/), [code](https://github.com/soniaboller/soniaboller.github.io) | Apache 2.0 text in the older [audible-visuals](https://github.com/soniaboller/audible-visuals) repository, copyright line left blank |
+| Iris | Vissonance: Iris; the dots of Audible Visuals: Wavy Spiral, in Iris's rings | Tariq Soliman; Sonia Boller | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance); [page](https://soniaboller.github.io/audible-visuals/), [code](https://github.com/soniaboller/soniaboller.github.io) | MIT; Apache 2.0 text in the older [audible-visuals](https://github.com/soniaboller/audible-visuals) repository, copyright line left blank |
+
+Iris also carries Kaleidoscope, this library's own drawing, as its petals.
 
 Tariq Soliman's Silk is named Threads here, because the catalogue's Silk is Matt DesLauriers' piece.
 

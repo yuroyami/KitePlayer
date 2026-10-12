@@ -1,8 +1,22 @@
 # KitePlayer documentation
 
-These guides describe contracts that the code implements today. The API reference is the KDoc, and
-`./gradlew dokkaGenerate` builds it into `build/dokka/html`. The [README](../README.md) covers
-installation and everyday use.
+The [README](../README.md) covers installation and everyday use. The guides under "Using
+KitePlayer" go into more detail, and the other guides describe contracts that the code implements
+today. The API reference is the KDoc, and `./gradlew dokkaGenerate` builds it into
+`build/dokka/html`.
+
+## Using KitePlayer
+
+- [Controlling the player](player-api.md): every call by area, the flows, seeking, audio devices
+  and screen readers.
+- [Opening media](media-sources.md): local files, bytes, picked files, growing files, item
+  settings, and audio that plays beside the media.
+- [Subtitles](subtitles.md): the formats, how the player chooses a track, and how it styles the
+  text.
+- [Network streams](streaming.md): HTTP, HLS, DASH and radio, variant changes, and recovery when
+  the network drops.
+- [Background playback](background-playback.md): the Android media notification, and what each
+  other platform does in the background.
 
 ## Building on KitePlayer
 

@@ -93,37 +93,48 @@ Pipe is one shader, a flight forward through a tube of lit cells. Its forms chan
 see "Pipe, a flight forward" below.
 
 Neon Lo-Fi replaces Terrain March. It is a drive at dusk: an indigo sky over a rose horizon, a gold
-to coral sun, black hills and twelve black towers, and terraces with black faces and cyan to
+to coral sun, black hills and twelve glass towers, and terraces with black faces and cyan to
 magenta neon edges. One analytic shader draws the native-resolution sky, the sun, the prepared ridge
 profiles, the road and the optional coast. Five bounded mesh batches supply the stars and the
-shooting star, the towers and the world-anchored city, the opaque spectrum terraces and palms, the
-lamp posts and rain, and the lamps' added light. There is no terrain height march, rolling terrain
-tile, depth/refinement chain or underwater volume.
+shooting star, the towers and the world-anchored city, the opaque spectrum terraces and the road's
+edges, the lamp posts with their power lines and the rain, and the lamps' added light. There is no
+terrain height march, rolling terrain tile, depth/refinement chain or underwater volume.
 
-- The sun has eight gaps, one per pair of display lanes, bass at the bottom. A gap is as wide as its
-  band is loud; silence leaves thin, even gaps.
-- Each tower belongs to one note name, C to B from left to right, and its windows light while that
-  note sounds.
+- The sun is a radial spectrum of 32 stripes over the whole disc, bass at the bottom. A gap is as
+  wide as its band is loud, and silence leaves thin, even gaps. The bass swells the sun by up to
+  six percent of its radius, a kick pulses it, and the brightness of the sound warms or cools it.
+- The ground is a field of terraces. Across is band and back is time: the rows hold the last four
+  heard seconds of the spectrum, one row each quarter second, blended between rows so the field
+  is continuous. The data flows toward the viewer at the same pace whatever the flight speed.
+- The road's two edges are the live waveform.
+- Each tower belongs to one note name, C to B from left to right. It is a lit glass volume whose
+  height is the energy of its band and whose windows light while that note sounds.
+- The lamp posts carry power lines that swing with the waveform. There are no palms.
 - With a supported pulse the road passes one lane dash a beat, and so one lamp pair a bar. Without
   one, the mood sets the pace.
-- A kick pulses the sun and the road's edges and flashes the nearest terrace edges. A snare sends a
-  shooting star, one a bar at most, and a hat makes the stars twinkle.
-- A breakdown brings rain and a wet road that mirrors the sun and the lamps, until the next section
-  or drop. On the coast, the stripes of light on the sea are the waveform.
+- A kick flashes the nearest terrace edges. A snare sends a shooting star, one a bar at most, and a
+  hat makes the stars twinkle.
+- A breakdown brings rain, and the sun dims and sinks a little. The wet road reflects the terraces
+  as streaks, and mirrors the sun and the lamps, until the next section or drop. On the coast, the
+  stripes of light on the sea are the waveform.
 - A drop lifts the view off the road for one cycle: the horizon drops, the terraces spread out below
   like a lit map, and the sun stands whole. It lands on the first beat after that cycle. Under
   reduced motion the camera rises about 15 percent as far, and the sun closes as usual.
-- The scene keeps 40 percent of its light in a silence, and the display transfer rolls bright light
-  off on its brightest channel, so a bright colour keeps its hue.
+- The forms are the four regions, Highway, Mountain pass, City and Coast, published through
+  `Visualization.forms`. Inside a region a morph mirrors the lane order or swaps the towers' sides,
+  each eased over a cycle, and a birth raises a cluster of four towers ahead.
+- The slow colour walk turns the sky from dusk toward night and back over the song.
+- Light follows the level. In a silence the scene keeps 40 percent of its light. The display
+  transfer rolls bright light off on its brightest channel, so a bright colour keeps its hue.
 
 Each shoulder has sixteen lanes over twelve depth rows and a protected 7.2-unit road corridor.
 The complete input spectrum is area-aggregated into the display lanes with the shared analysis
 gain. High frequencies are closest to the road and bass is outside, preventing tall bass cells
-from concealing quieter lanes. Current levels raise the terraces, local change bends their
-response, and delivered transient records add bounded regional crests and travelling edge marks.
-Opaque tops, front faces and road-facing sides are submitted far to near, outer to inner. A
-bounded anamorphic horizontal projection keeps the shoulders visible in a tall viewport;
-the sun retains its circular angular presentation and explicit screen bounds.
+from concealing quieter lanes. Delivered transient records add bounded regional crests and
+travelling edge marks. Opaque tops, front faces and road-facing sides are submitted far to near,
+outer to inner, and a side face hidden behind its neighbour is left out. A bounded anamorphic
+horizontal projection keeps the shoulders visible in a tall viewport; the sun retains its
+circular angular presentation and explicit screen bounds.
 
 The mountains remember heard music using a 64-band, 360-row ring sampled at 4 Hz of media time.
 Rows carry timestamps and validity. Late attachment creates no invented past; gaps remain unknown,

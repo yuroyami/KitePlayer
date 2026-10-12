@@ -51,11 +51,10 @@ each pixel's line of sight meets the planet, the ring plane, the two moons, or n
 `AudioVizBrowser` shows that same order as a searchable adaptive preview grid. There are no
 preset categories, category headers or grouped-catalogue entry points.
 
-The catalogue has 16 drawings on desktop, iOS and Android 13 and newer. On older Android it has 13,
-because Alchemy, Pipe and Odyssey need runtime shaders and have no stand-in. The first
-10 are the library's own: Bars, Ocean Mist, Twin Bloom,
-Contour, Alchemy, Pipe, Thin Ice, Glitch, Odyssey
-and Night Drive. The last 6 are ports of browser visualisers, each faithful to its original and credited
+The catalogue has 15 drawings on desktop, iOS and Android 13 and newer. On older Android it has 12,
+because Alchemy, Pipe and Odyssey need runtime shaders and have no stand-in. The first 10 are the
+library's own: Bars, Ocean Mist, Twin Bloom, Contour, Alchemy, Pipe, Thin Ice, Glitch, Odyssey and
+Night Drive. The last 5 are ports of browser visualisers, each faithful to its original and credited
 below. Each port's class documentation carries the full credit and a list of every way it differs
 from the original.
 
@@ -64,14 +63,14 @@ from the original.
 | Silk | Silk (codevember, day 21) | Matt DesLauriers | [page](http://mattdesl.github.io/codevember/21.html), [code](https://github.com/mattdesl/codevember) | MIT |
 | Lines | Lines | Silvio Paganini (FLUUUID) | [page](https://labs.fluuu.id/lines/), [code](https://github.com/fluuuid/labs) | ISC, declared in `package.json` |
 | Honeycomb | Soundcloud Visualizer | Michael Bromley | [page](https://www.michaelbromley.co.uk/experiments/soundcloud-vis/), [code](https://github.com/michaelbromley/soundcloud-visualizer) | MIT |
-| Fracture | Vissonance: Fracture | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
-| Threads | Vissonance: Silk | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
+| Fracture | Vissonance: Fracture, and Vissonance: Silk as its dust | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
 | Iris | Vissonance: Iris; the dots of Audible Visuals: Wavy Spiral, in Iris's rings | Tariq Soliman; Sonia Boller | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance); [page](https://soniaboller.github.io/audible-visuals/), [code](https://github.com/soniaboller/soniaboller.github.io) | MIT; Apache 2.0 text in the older [audible-visuals](https://github.com/soniaboller/audible-visuals) repository, copyright line left blank |
 
 Iris also carries Kaleidoscope, this library's own drawing, as its petals. Silk carries the stage of
 Fluctus, another of this library's own drawings.
 
-Tariq Soliman's Silk is named Threads here, because the catalogue's Silk is Matt DesLauriers' piece.
+Tariq Soliman's Silk lives inside Fracture as its dust, because the catalogue's Silk is Matt DesLauriers'
+piece.
 
 The category contract has been removed: custom `Visualization` implementations no longer declare
 `family`; `VizFamily` and `VizCatalog.byFamily()` are no longer exposed. Clients that used those

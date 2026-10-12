@@ -13,7 +13,7 @@ class FlatCatalogTest {
     @Test fun onlyTheRetainedPresetsAreSelectable() {
         assertEquals(listOf("Bars", "Ocean Mist", "Twin Bloom", "Contour", "Alchemy",
             "Pipe", "Thin Ice", "Glitch", "Odyssey", "Night Drive",
-            "Silk", "Lines", "Honeycomb", "Fracture", "Threads", "Iris"), VizCatalog.create().map { it.name })
+            "Silk", "Lines", "Honeycomb", "Fracture", "Iris"), VizCatalog.create().map { it.name })
     }
 
     @Test fun removedImplementationsAreNotPackaged() {
@@ -22,7 +22,7 @@ class FlatCatalogTest {
             "Drift", "Melt", "Lava", "PrismBurst", "OilSlick", "Ink", "LensRain", "Twist",
             "FlowField", "Phosphor", "FractalZoom", "BlobField", "Shatter", "RippleWell", "ReactionDiffusion", "SmokeRise", "SmokeVortices", "Aurora", "AuroraField", "Gemini", "Bloom", "Pulse",
             "Plasma", "PlasmaMaterialKt", "Stereogram", "Fireworks", "Muser", "Kaleidoscope", "WavySpiral",
-            "Fluctus", "FluctusSurface", "FluctusSpectrum")
+            "Fluctus", "FluctusSurface", "FluctusSpectrum", "Threads")
         val root = "io.github.yuroyami.kiteplayer.audioviz.viz."
         for (name in removed) {
             val area = if (name == "BlobField" || name == "AuroraField") "shader" else "presets"
@@ -57,6 +57,11 @@ class FlatCatalogTest {
         assertEquals("Silk", VizCatalog.canonicalName("Fluctus"))
         assertEquals("Silk", VizCatalog.canonicalName(" fluctus "))
         assertTrue(VizCatalog.matchesSearch("Silk", "fluct"))
+    }
+
+    @Test fun theFormerNameOfThreadsResolvesToFracture() {
+        assertEquals("Fracture", VizCatalog.canonicalName("Threads"))
+        assertTrue(VizCatalog.matchesSearch("Fracture", "thread"))
     }
 
     @Test fun drawingsAndCatalogueExposeNoCategoryContract() {

@@ -91,6 +91,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   its lace as the sea of its map, and the name resolves to Contour.
 - Fluctus is gone from the audioviz catalogue. Silk carries its stage, its shadow and its horizon,
   and the name resolves to Silk.
+- Threads is gone from the audioviz catalogue. Fracture carries its dust, and the name resolves to
+  Fracture.
 
 ## [0.3.0] - 2026-10-09
 

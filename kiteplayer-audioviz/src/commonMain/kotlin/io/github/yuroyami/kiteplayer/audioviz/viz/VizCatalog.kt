@@ -10,7 +10,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Lines
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.OceanMist
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Silk
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ThinIce
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Threads
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.TwinBloom
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Alchemy
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NeonLoFi
@@ -45,7 +44,6 @@ public object VizCatalog {
         Lines(),
         Honeycomb(),
         Fracture(),
-        Threads(),
         Iris(),
     ).filter { it.canRunHere() }
 
@@ -58,6 +56,7 @@ public object VizCatalog {
         "wavy spiral" to "Iris",
         "marble" to "Contour",
         "fluctus" to "Silk",
+        "threads" to "Fracture",
     )
 
     /** A former public catalogue name resolves to its replacement. */

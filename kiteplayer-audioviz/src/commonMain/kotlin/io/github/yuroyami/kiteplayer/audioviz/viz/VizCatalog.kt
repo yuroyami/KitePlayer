@@ -14,7 +14,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ThinIce
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Threads
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.TwinBloom
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Alchemy
-import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Marble
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NeonLoFi
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Odyssey
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Pipe
@@ -43,7 +42,6 @@ public object VizCatalog {
         Glitch(),
         Odyssey(),
         NeonLoFi(),
-        Marble(),
         // Ported from browser visualisers, credited in each class and in the docs.
         Silk(),
         Lines(),
@@ -60,6 +58,7 @@ public object VizCatalog {
         "nebula field" to "Alchemy",
         "kaleidoscope" to "Iris",
         "wavy spiral" to "Iris",
+        "marble" to "Contour",
     )
 
     /** A former public catalogue name resolves to its replacement. */

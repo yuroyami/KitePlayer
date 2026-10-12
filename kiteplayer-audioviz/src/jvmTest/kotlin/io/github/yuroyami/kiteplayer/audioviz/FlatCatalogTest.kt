@@ -12,7 +12,7 @@ class FlatCatalogTest {
 
     @Test fun onlyTheRetainedPresetsAreSelectable() {
         assertEquals(listOf("Bars", "Ocean Mist", "Twin Bloom", "Contour", "Alchemy",
-            "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Night Drive", "Marble",
+            "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Night Drive",
             "Silk", "Lines", "Honeycomb", "Fracture", "Threads", "Iris"), VizCatalog.create().map { it.name })
     }
 
@@ -30,7 +30,7 @@ class FlatCatalogTest {
         }
         // Musical Spectrum and the classes its axis and transform files held.
         for (name in listOf("MusicalSpectrum", "NoteAxis", "ConstantQBars", "PeakingBiquad", "BassCutStream",
-            "NebulaField")) {
+            "NebulaField", "Marble")) {
             assertTrue(runCatching { Class.forName("${root}shader.$name") }.exceptionOrNull() is ClassNotFoundException,
                 "$name must be deleted, not merely hidden from the picker")
         }
@@ -45,6 +45,11 @@ class FlatCatalogTest {
         assertEquals("Iris", VizCatalog.canonicalName("Kaleidoscope"))
         assertEquals("Iris", VizCatalog.canonicalName("Wavy Spiral"))
         assertTrue(VizCatalog.matchesSearch("Iris", "kaleido"))
+    }
+
+    @Test fun theFormerNameOfMarbleResolvesToContour() {
+        assertEquals("Contour", VizCatalog.canonicalName("Marble"))
+        assertTrue(VizCatalog.matchesSearch("Contour", "marb"))
     }
 
     @Test fun drawingsAndCatalogueExposeNoCategoryContract() {

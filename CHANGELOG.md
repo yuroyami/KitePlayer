@@ -87,6 +87,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   plus Drift form, and the name resolves to Alchemy.
 - Kaleidoscope and Wavy Spiral are gone from the audioviz catalogue. Iris carries both: the folded
   stereo curve as its petals and the waveform dots as its rings. Both names resolve to Iris.
+- Marble is gone from the audioviz catalogue. Contour carries its ink, its vortices, its drop and
+  its lace as the sea of its map, and the name resolves to Contour.
 
 ## [0.3.0] - 2026-10-09
 

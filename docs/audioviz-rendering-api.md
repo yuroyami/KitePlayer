@@ -51,11 +51,11 @@ each pixel's line of sight meets the planet, the ring plane, the two moons, or n
 `AudioVizBrowser` shows that same order as a searchable adaptive preview grid. There are no
 preset categories, category headers or grouped-catalogue entry points.
 
-The catalogue has 18 drawings on desktop, iOS and Android 13 and newer. On older Android it has 15,
+The catalogue has 17 drawings on desktop, iOS and Android 13 and newer. On older Android it has 14,
 because Alchemy, Pipe and Odyssey need runtime shaders and have no stand-in. The first
-12 are the library's own: Bars, Ocean Mist, Twin Bloom,
-Contour, Alchemy, Pipe, Thin Ice, Fluctus, Glitch, Odyssey, Night Drive
-and Marble. The last 6 are ports of browser visualisers, each faithful to its original and credited
+11 are the library's own: Bars, Ocean Mist, Twin Bloom,
+Contour, Alchemy, Pipe, Thin Ice, Fluctus, Glitch, Odyssey
+and Night Drive. The last 6 are ports of browser visualisers, each faithful to its original and credited
 below. Each port's class documentation carries the full credit and a list of every way it differs
 from the original.
 
@@ -187,32 +187,6 @@ and pushes the exact shader, textures and ordered mesh batches for an explicit o
 run. Its blocking draw/readback duration includes synchronisation and is not isolated GPU scene
 cost or app cadence. Neither that script nor an APK build establishes ten-minute presentation
 performance.
-
-## Marbled ink
-
-`Marble` replaces `Reaction Diffusion` and `Smoke Rise`. It keeps its tray on the processor, in
-grids of 160 by 90 cells: three inks, and the two chemicals of a Gray-Scott reaction that grows
-lace inside the ink.
-
-- The drums drop ink. A drop moves every point outside it outward, so older ink closes into rings
-  round the new drop, as paint does on a marbling tray.
-- Up to five point vortices stir the tray. Their flow has no divergence, so the ink keeps its area
-  as it is combed.
-- The inks and the chemicals are carried along the flow before each reaction step, so the swirls
-  never smear into a blur.
-
-A shader draws the result. It reads the grids smoothly and cuts each ink edge at half strength, one
-pixel wide, from the local slope, so the edges are sharp curves at native resolution although the
-grid is small. The same slope lights the ink from the upper left. Where runtime shaders cannot run,
-the same grids are drawn stretched over the screen. Pause and silence freeze the tray.
-
-Marble has no controls of its own. The music sets everything through its mapping: kicks and snares
-drop ink, the spectrum shapes the vortices, a section changes the recipe of the lace, a breakdown
-stops the vortices while the lace keeps growing, and a drop lands one large gold drop in the middle.
-
-`MarbleTest` covers the lively picture without blown-out white, silence, the orange drop of a
-kick that pushes the old ink outward, the growth of the lace, the breakdown and the gold drop.
-`PausedPictureTest` covers the pause.
 
 ## Contour, a living map
 

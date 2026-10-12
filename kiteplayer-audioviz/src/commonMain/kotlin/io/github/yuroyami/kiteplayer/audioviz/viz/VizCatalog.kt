@@ -60,12 +60,18 @@ public object VizCatalog {
     ).filter { it.canRunHere() }
 
     /** The former public catalogue name resolves to the single replacement. */
-    internal fun canonicalName(name: String): String =
-        if (name.trim().equals("Terrain March", ignoreCase = true)) "Neon Lo-Fi" else name
+    /** Former public catalogue names and the drawing each one resolves to now. */
+    private val FORMER_NAMES: Map<String, String> = mapOf(
+        "terrain march" to "Night Drive",
+        "neon lo-fi" to "Night Drive",
+    )
+
+    /** A former public catalogue name resolves to its replacement. */
+    internal fun canonicalName(name: String): String = FORMER_NAMES[name.trim().lowercase()] ?: name
 
     internal fun matchesSearch(name: String, query: String): Boolean =
         query.isBlank() || name.contains(query, ignoreCase = true) ||
-            (name == "Neon Lo-Fi" && "Terrain March".contains(query, ignoreCase = true))
+            FORMER_NAMES.any { (former, now) -> now == name && former.contains(query.trim().lowercase()) }
 
     private fun Visualization.canRunHere(): Boolean =
         this !is ShaderPreset || runtimeShadersSupported || hasFallback

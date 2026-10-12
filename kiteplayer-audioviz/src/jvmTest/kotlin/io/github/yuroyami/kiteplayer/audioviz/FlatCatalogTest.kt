@@ -12,7 +12,7 @@ class FlatCatalogTest {
 
     @Test fun onlyTheRetainedPresetsAreSelectable() {
         assertEquals(listOf("Bars", "Ocean Mist", "Twin Bloom", "Contour", "Alchemy", "Nebula Field",
-            "Kaleidoscope", "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Neon Lo-Fi", "Marble",
+            "Kaleidoscope", "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Night Drive", "Marble",
             "Silk", "Lines", "Honeycomb", "Fracture", "Threads", "Iris", "Wavy Spiral"), VizCatalog.create().map { it.name })
     }
 

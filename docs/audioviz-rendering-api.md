@@ -54,7 +54,7 @@ preset categories, category headers or grouped-catalogue entry points.
 The catalogue has 21 drawings on desktop, iOS and Android 13 and newer. On older Android it has 17,
 because Alchemy, Nebula Field, Pipe and Odyssey need runtime shaders and have no stand-in. The first
 14 are the library's own: Bars, Ocean Mist, Twin Bloom,
-Contour, Alchemy, Nebula Field, Kaleidoscope, Pipe, Thin Ice, Fluctus, Glitch, Odyssey, Neon Lo-Fi
+Contour, Alchemy, Nebula Field, Kaleidoscope, Pipe, Thin Ice, Fluctus, Glitch, Odyssey, Night Drive
 and Marble. The last 7 are ports of browser visualisers, each faithful to its original and credited
 below. Each port's class documentation carries the full credit and a list of every way it differs
 from the original.
@@ -79,20 +79,20 @@ it is not a picker grouping.
 
 ## Continuous forms and landscape travel
 
-The flat catalogue includes the Neon Lo-Fi musical landscape below. Its internal changes transform
+The flat catalogue includes the Night Drive musical landscape below. Its internal changes transform
 geometry and scene weights without crossfading preset pictures.
 
 | Catalogue entry | Forms inside it |
 | --- | --- |
-| Neon Lo-Fi | Highway, mountain pass, city and coast in one musical night drive |
+| Night Drive | Highway, mountain pass, city and coast in one musical night drive |
 
-The consumed forms have no separate catalogue entries or duplicate implementations. Neon Lo-Fi
+The consumed forms have no separate catalogue entries or duplicate implementations. Night Drive
 uses its own `Scene` control, whose default is `Auto`. Manual choices still transform continuously.
 
 Pipe is one shader, a flight forward through a tube of lit cells. Its forms change with the music;
 see "Pipe, a flight forward" below.
 
-Neon Lo-Fi replaces Terrain March. It is a drive at dusk: an indigo sky over a rose horizon, a gold
+Night Drive replaces Neon Lo-Fi and Terrain March. It is a drive at dusk: an indigo sky over a rose horizon, a gold
 to coral sun, black hills and twelve glass towers, and terraces with black faces and cyan to
 magenta neon edges. One analytic shader draws the native-resolution sky, the sun, the prepared ridge
 profiles, the road and the optional coast. Five bounded mesh batches supply the stars and the
@@ -158,8 +158,8 @@ Journey pace, Flight speed, Sun size, Sky ribbons, Rain, Hit accents, Neon inten
 The Mutate now button (`AudioVizState.mutate()`) changes its one gene, Route variation, which is a
 coherent route and layout choice. Browser instances copy both
 the chosen parameters and this layout configuration, retaining independent histories and actors.
-Searching for Terrain March finds the single Neon Lo-Fi entry; `VizDirector.startWith` resolves
-that former name too. No external app's persisted settings format is assumed.
+Searching for Neon Lo-Fi or Terrain March finds the single Night Drive entry; `VizDirector.startWith`
+resolves both former names too. No external app's persisted settings format is assumed.
 
 The CPU and shader share explicit palette roles and one linear-light exposure/tone transfer.
 Default post is restrained bloom (0.25, radius 0.018, threshold 0.65), vignette 0.18, grain 0.006,

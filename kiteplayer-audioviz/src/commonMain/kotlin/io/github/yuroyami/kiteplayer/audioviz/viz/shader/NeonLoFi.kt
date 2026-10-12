@@ -6,7 +6,8 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
 import kotlin.math.*
 
 /**
- * A night drive at dusk toward a sun on the horizon.
+ * A night drive at dusk toward a sun on the horizon, shown as Night Drive. Its former names, Neon Lo-Fi
+ * and Terrain March, resolve to it.
  *
  * The sky runs from indigo overhead to a rose glow, and the gold to coral sun is cut by 32 stripes
  * over the whole disc, the bands with bass at the bottom. The bass swells it, and its light is warmer
@@ -30,7 +31,7 @@ import kotlin.math.*
  * How bright the sound is warms or cools the sun a little. The mapping does not declare it, because a
  * tint on a small sun is too slight to measure across the frame.
  */
-internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEnergy.Mid, 31f, Kit(31_007L, camera = Camera2D(wander = 0f, punch = 0f, roll = 0f,
+internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Night Drive", VizEnergy.Mid, 31f, Kit(31_007L, camera = Camera2D(wander = 0f, punch = 0f, roll = 0f,
         shake = 0f, cuts = false, minZoom = 1f, maxZoom = 1f))) {
     override val hasFallback: Boolean get() = true
     override val frontParallax: Float get() = 0f

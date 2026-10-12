@@ -55,7 +55,7 @@ and a hard hit still spawns more than a soft one.
 Anything discrete on a visual cycle edge, such as a ring every quarter cycle, needs
 `Gestures.pulseUsable`. The cycles follow a supported pulse when there is one and run free
 otherwise, and a discrete response on a free cycle is a beat train the music does not have. Four
-drawings read `pulseUsable` for this: Pipe, Neon Lo-Fi, Twin Bloom and Glitch. They hold such a
+drawings read `pulseUsable` for this: Pipe, Night Drive, Twin Bloom and Glitch. They hold such a
 response only while the pulse is supported. Under music with no pulse to follow, their continuous
 motion carries them.
 

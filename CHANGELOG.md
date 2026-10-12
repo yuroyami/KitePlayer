@@ -78,6 +78,7 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   time and continuous, its towers are glass with heights from the bands, power lines carry the
   waveform between the lamp posts, the palms are gone, and the sky walks over the song. Its region
   is published through `Visualization.forms`, and its light follows the level.
+- Neon Lo-Fi is shown as Night Drive. The old name and Terrain March resolve to it.
 
 ## [0.3.0] - 2026-10-09
 

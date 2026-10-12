@@ -14,15 +14,20 @@ class NeonLoFiCatalogTest {
     init { useSkiaGraphics() }
     @Test fun oneReplacementResolvesTheOldNameAndSearch() {
         val catalog = VizCatalog.create()
-        assertEquals(1, catalog.count { it.name == "Neon Lo-Fi" })
-        assertFalse(catalog.any { it.name == "Terrain March" })
-        val viz = catalog.single { it.name == "Neon Lo-Fi" } as NeonLoFi
+        assertEquals(1, catalog.count { it.name == "Night Drive" })
+        assertFalse(catalog.any { it.name == "Terrain March" || it.name == "Neon Lo-Fi" })
+        val viz = catalog.single { it.name == "Night Drive" } as NeonLoFi
         assertTrue(viz.hasFallback); assertEquals(13, viz.params.size)
-        val director = VizDirector(catalog, seed = 4)
-        director.startWith("Terrain March")
-        assertSame(viz, director.current)
+        assertEquals("Night Drive", VizCatalog.canonicalName("Neon Lo-Fi"))
+        assertEquals("Night Drive", VizCatalog.canonicalName(" terrain march "))
+        for (former in listOf("Terrain March", "Neon Lo-Fi")) {
+            val director = VizDirector(catalog, seed = 4)
+            director.startWith(former)
+            assertSame(viz, director.current, former)
+        }
         assertTrue(VizCatalog.matchesSearch(viz.name, "terrain"))
         assertTrue(VizCatalog.matchesSearch(viz.name, "neon"))
+        assertTrue(VizCatalog.matchesSearch(viz.name, "night"))
         assertFalse(VizCatalog.matchesSearch(viz.name, "Flux"))
     }
     @Test fun actualVariationActionAndBrowserRecipeTransferCarryTheLayout() {

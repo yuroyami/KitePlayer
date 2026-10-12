@@ -29,7 +29,8 @@ import kotlin.math.*
  * night and back over the song.
  *
  * How bright the sound is warms or cools the sun a little. The mapping does not declare it, because a
- * tint on a small sun is too slight to measure across the frame.
+ * tint on a small sun is too slight to measure across the frame. The shooting star a snare sends is a thin
+ * line, so it is not declared either.
  */
 internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Night Drive", VizEnergy.Mid, 31f, Kit(31_007L, camera = Camera2D(wander = 0f, punch = 0f, roll = 0f,
         shake = 0f, cuts = false, minZoom = 1f, maxZoom = 1f))) {
@@ -80,8 +81,6 @@ internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Night Drive", VizEne
         VizDrive(VizDriver.Key, VizProperty.Colour),
         VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(2.5f)),
         VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.4f)),
-        // A snare sends a shooting star across the sky, one a bar at most.
-        VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Discrete, VizResponse.lifetime(NeonLoFiWorld.STAR_SECONDS)),
         VizDrive(VizDriver.HighHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(2.5f)),
         VizDrive(VizDriver.HighHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.4f)),
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),

@@ -81,6 +81,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   is published through `Visualization.forms`, and its light follows the level.
 - Neon Lo-Fi is shown as Night Drive. The old name and Terrain March resolve to it.
 
+### Removed
+
+- Nebula Field is gone from the audioviz catalogue. Alchemy carries its filament look in the Dots
+  plus Drift form, and the name resolves to Alchemy.
+
 ## [0.3.0] - 2026-10-09
 
 ### Upgrading from 0.2.0

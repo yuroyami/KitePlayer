@@ -11,7 +11,7 @@ class FlatCatalogTest {
     init { useSkiaGraphics() }
 
     @Test fun onlyTheRetainedPresetsAreSelectable() {
-        assertEquals(listOf("Bars", "Ocean Mist", "Twin Bloom", "Contour", "Alchemy", "Nebula Field",
+        assertEquals(listOf("Bars", "Ocean Mist", "Twin Bloom", "Contour", "Alchemy",
             "Kaleidoscope", "Pipe", "Thin Ice", "Fluctus", "Glitch", "Odyssey", "Night Drive", "Marble",
             "Silk", "Lines", "Honeycomb", "Fracture", "Threads", "Iris", "Wavy Spiral"), VizCatalog.create().map { it.name })
     }
@@ -29,10 +29,16 @@ class FlatCatalogTest {
                 "$name must be deleted, not merely hidden from the picker")
         }
         // Musical Spectrum and the classes its axis and transform files held.
-        for (name in listOf("MusicalSpectrum", "NoteAxis", "ConstantQBars", "PeakingBiquad", "BassCutStream")) {
+        for (name in listOf("MusicalSpectrum", "NoteAxis", "ConstantQBars", "PeakingBiquad", "BassCutStream",
+            "NebulaField")) {
             assertTrue(runCatching { Class.forName("${root}shader.$name") }.exceptionOrNull() is ClassNotFoundException,
                 "$name must be deleted, not merely hidden from the picker")
         }
+    }
+
+    @Test fun theFormerNameOfNebulaFieldResolvesToAlchemy() {
+        assertEquals("Alchemy", VizCatalog.canonicalName("Nebula Field"))
+        assertTrue(VizCatalog.matchesSearch("Alchemy", "nebula"))
     }
 
     @Test fun drawingsAndCatalogueExposeNoCategoryContract() {

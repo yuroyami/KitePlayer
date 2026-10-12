@@ -51,10 +51,10 @@ each pixel's line of sight meets the planet, the ring plane, the two moons, or n
 `AudioVizBrowser` shows that same order as a searchable adaptive preview grid. There are no
 preset categories, category headers or grouped-catalogue entry points.
 
-The catalogue has 21 drawings on desktop, iOS and Android 13 and newer. On older Android it has 17,
-because Alchemy, Nebula Field, Pipe and Odyssey need runtime shaders and have no stand-in. The first
-14 are the library's own: Bars, Ocean Mist, Twin Bloom,
-Contour, Alchemy, Nebula Field, Kaleidoscope, Pipe, Thin Ice, Fluctus, Glitch, Odyssey, Night Drive
+The catalogue has 20 drawings on desktop, iOS and Android 13 and newer. On older Android it has 17,
+because Alchemy, Pipe and Odyssey need runtime shaders and have no stand-in. The first
+13 are the library's own: Bars, Ocean Mist, Twin Bloom,
+Contour, Alchemy, Kaleidoscope, Pipe, Thin Ice, Fluctus, Glitch, Odyssey, Night Drive
 and Marble. The last 7 are ports of browser visualisers, each faithful to its original and credited
 below. Each port's class documentation carries the full credit and a list of every way it differs
 from the original.

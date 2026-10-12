@@ -17,7 +17,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.presets.TwinBloom
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.WavySpiral
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Alchemy
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Marble
-import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NebulaField
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NeonLoFi
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Odyssey
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Pipe
@@ -40,7 +39,6 @@ public object VizCatalog {
         TwinBloom(),
         Contour(),
         Alchemy(),
-        NebulaField(),
         Kaleidoscope(),
         Pipe(),
         ThinIce(),
@@ -59,11 +57,11 @@ public object VizCatalog {
         WavySpiral(),
     ).filter { it.canRunHere() }
 
-    /** The former public catalogue name resolves to the single replacement. */
     /** Former public catalogue names and the drawing each one resolves to now. */
     private val FORMER_NAMES: Map<String, String> = mapOf(
         "terrain march" to "Night Drive",
         "neon lo-fi" to "Night Drive",
+        "nebula field" to "Alchemy",
     )
 
     /** A former public catalogue name resolves to its replacement. */

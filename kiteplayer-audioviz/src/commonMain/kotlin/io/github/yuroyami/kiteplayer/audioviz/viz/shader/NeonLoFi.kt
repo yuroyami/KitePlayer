@@ -26,6 +26,9 @@ import kotlin.math.*
  * a region a morph relays the lanes to their mirror or swaps the towers' sides, each eased over a cycle,
  * and a birth raises a cluster of four towers ahead. The slow colour walk turns the sky from dusk toward
  * night and back over the song.
+ *
+ * How bright the sound is warms or cools the sun a little. The mapping does not declare it, because a
+ * tint on a small sun is too slight to measure across the frame.
  */
 internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEnergy.Mid, 31f, Kit(31_007L, camera = Camera2D(wander = 0f, punch = 0f, roll = 0f,
         shake = 0f, cuts = false, minZoom = 1f, maxZoom = 1f))) {
@@ -71,8 +74,6 @@ internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEner
         VizDrive(VizDriver.Level, VizProperty.Brightness),
         // The road's edges and the power lines swing with the waveform.
         VizDrive(VizDriver.Waveform, VizProperty.Shape),
-        // How bright the sound is sets the sun's colour temperature.
-        VizDrive(VizDriver.Timbre, VizProperty.Colour),
         VizDrive(VizDriver.Treble, VizProperty.Brightness), VizDrive(VizDriver.Treble, VizProperty.Texture),
         // The notes light the towers' windows, and the key turns the sky and the sun a little.
         VizDrive(VizDriver.Key, VizProperty.Colour),

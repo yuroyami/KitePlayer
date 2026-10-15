@@ -269,13 +269,14 @@ oracle each renderer's tests compare the drawn view against.
   - On the web, in its WebGL pass (#125), as a second fragment program beside the flat one.
 - **Not yet, in #586**: the Metal renderer on iOS and macOS, and Android's platform view, where
   MediaCodec writes straight to the Surface and no shader of the player's sees the picture.
-- **Flat, by design for now**: the Core Graphics reference, the sample buffer layer, the AWT canvas
-  of the desktop's native view, which paints without a shader, and the web's 2D canvas.
+- **Not yet, in #587**: the AWT canvas of the desktop's native view, which paints without a shader.
+- **Flat, by design for now**: the Core Graphics reference, the sample buffer layer and the web's
+  2D canvas.
 
 `KitePlayerVideo` draws through `KiteVideo` when it runs `KiteRenderPath.ComposeCanvas`, which it
 always does on the web. Its default on Android, iOS and the desktop JVM is the native view, which
-draws a 360 degree video flat, so an application that plays one asks for
-`KiteRenderPath.ComposeCanvas` there.
+draws a 360 degree video flat until #586 and #587 are done, so an application that plays one asks
+for `KiteRenderPath.ComposeCanvas` there.
 
 ## Tests
 
@@ -333,7 +334,8 @@ seen to pass.
 Each of these is a later issue if it is wanted:
 
 - **The Metal renderer and Android's platform view**, which #586 follows.
-- **The desktop's native view**, the AWT canvas, which has no shader to draw a view with.
+- **The desktop's native view**, the AWT canvas, which has no shader to draw a view with and which
+  #587 follows.
 - **Cube maps**, fisheye and the other projections, which `ProjectionKind` already names.
 - **Stereo 3D**, where each eye has half the picture.
 - **A drag and a sensor in the built-in controls**. An application turns the view itself for now.
@@ -346,7 +348,7 @@ Each of these is a later issue if it is wanted:
    fixtures and the script. Nothing drew differently yet.
 2. The Compose canvas path, with the oracle and its tests.
 3. The web's WebGL pass and its browser test.
-4. The user documentation, the changelog and a follow-up issue, #586, for the Metal renderer and
-   Android's platform view.
+4. The user documentation, the changelog and the follow-up issues: #586 for the Metal renderer and
+   Android's platform view, and #587 for the desktop's native view.
 
 Each step regenerates the ABI dumps it changes and carries its own tests.

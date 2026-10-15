@@ -20,9 +20,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   version to 12, so a build older than this one refuses a memento that this one wrote. A renderer
   that cannot draw the view shows the whole picture flat and warns
   `PlaybackWarning.ProjectionUnavailable`. The native views behind `KitePlayerVideo`'s default are
-  such renderers for now; the Metal renderer and Android's platform view follow in #586. A backend
-  reports a stream's projection through the new defaulted `PlayerStreamInfo.projection`, and a
-  renderer draws views through the new defaulted `VideoRenderer.projects` and `setProjection`.
+  such renderers for now; the Metal renderer and Android's platform view follow in #586, and the
+  desktop's native view in #587. A backend reports a stream's projection through the new
+  defaulted `PlayerStreamInfo.projection`, and a renderer draws views through the new defaulted
+  `VideoRenderer.projects` and `setProjection`.
   `TrackInfo`, `PlayerSnapshot`, `PlayerMemento` and `PlayerStreamInfo` each gain a field, which
   changes their generated data-class methods, so recompile.
 - Matroska editions (#501). The snapshot lists a file's editions in `PlayerSnapshot.editions` and

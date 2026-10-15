@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.compose
 
 import io.github.yuroyami.kiteplayer.VideoAdjustments
+import io.github.yuroyami.kiteplayer.spi.SphericalLens
 import kotlin.js.JsAny
 
 /**
@@ -14,6 +15,10 @@ import kotlin.js.JsAny
  * bilinear filtering or by Catmull-Rom in the shader, with the picture controls and the flash
  * guard's dimming as one colour matrix on the picture alone, and then each subtitle image blended
  * over it, premultiplied, as the overlay law asks. The letterbox is cleared to transparent.
+ *
+ * A 360 degree picture whose view is projected is drawn instead as the view into it over the whole
+ * target (#460): each pixel reads the picture where [SphericalLens] says, sampled bilinearly, with
+ * the same colour matrix, and where a tile has no picture the target stays transparent.
  *
  * The picture arrives as one browser array of RGBA that the codec module filled, and goes to the
  * GPU in one `texSubImage2D`, so no pixel of it is ever in Kotlin memory. Every GL call is in the
@@ -70,6 +75,13 @@ internal class WebGlVideoPass(context: JsAny) {
             uploadedOverlay = overlayGeneration
         }
 
+        val sphere = look.sphere
+        if (picture != null && sphere != null) {
+            putSphere(s, SphericalLens(sphere.projection, sphere.view, width.toFloat(), height.toFloat()), picture)
+            putColour(s, look, picture)
+            glvDraw(s, width, height, SPHERE, look.cubic, overlayScaleX(overlay, width), overlayScaleY(overlay, height))
+            return uploadMillis
+        }
         val layout = picture?.let {
             videoLayout(
                 areaWidth = width,
@@ -107,17 +119,61 @@ internal class WebGlVideoPass(context: JsAny) {
                 (picture.size.width - (crop?.right ?: 0) - 0.5f) / imageWidth,
                 (picture.size.height - (crop?.bottom ?: 0) - 0.5f) / imageHeight,
             )
-            val matrix = glColorMatrix(look.adjustments, picture.dim)
-            for (row in 0 until 4) {
-                glvPut4(s, ROWS_AT + row * 4, matrix[row * 5], matrix[row * 5 + 1], matrix[row * 5 + 2], matrix[row * 5 + 3])
-            }
-            glvPut4(s, OFFSET_AT, matrix[4], matrix[9], matrix[14], matrix[19])
+            putColour(s, look, picture)
         }
-        val overlayScaleX = if (overlay != null && overlay.viewportWidth > 0) width.toFloat() / overlay.viewportWidth else 1f
-        val overlayScaleY = if (overlay != null && overlay.viewportHeight > 0) height.toFloat() / overlay.viewportHeight else 1f
-        glvDraw(s, width, height, picture != null && layout != null, look.cubic, overlayScaleX, overlayScaleY)
+        val mode = if (picture != null && layout != null) FLAT else NONE
+        glvDraw(s, width, height, mode, look.cubic, overlayScaleX(overlay, width), overlayScaleY(overlay, height))
         return uploadMillis
     }
+
+    /** The picture controls with the flash guard's dimming, as the colour rows and offsets. */
+    private fun putColour(s: JsAny, look: WebLook, picture: WebStagedPicture) {
+        val matrix = glColorMatrix(look.adjustments, picture.dim)
+        for (row in 0 until 4) {
+            glvPut4(s, ROWS_AT + row * 4, matrix[row * 5], matrix[row * 5 + 1], matrix[row * 5 + 2], matrix[row * 5 + 3])
+        }
+        glvPut4(s, OFFSET_AT, matrix[4], matrix[9], matrix[14], matrix[19])
+    }
+
+    /**
+     * The view's law, as [SphericalLens] gives it once for the draw: the centre, the scale and
+     * whether the picture wraps, the turn's three rows, the picture's bounds on the sphere, and the
+     * part of the texture the picture is, in texels.
+     */
+    private fun putSphere(s: JsAny, lens: SphericalLens, picture: WebStagedPicture) {
+        val m = lens.rotation
+        glvPut4(s, LENS_AT, lens.width / 2f, lens.height / 2f, lens.scale.toFloat(), if (lens.wraps) 1f else 0f)
+        for (row in 0 until 3) {
+            glvPut4(s, TURN_AT + row * 4, m[row * 3].toFloat(), m[row * 3 + 1].toFloat(), m[row * 3 + 2].toFloat(), 0f)
+        }
+        glvPut4(
+            s,
+            BOUNDS_AT,
+            lens.pictureLeft.toFloat(),
+            lens.pictureTop.toFloat(),
+            lens.pictureWidth.toFloat(),
+            lens.pictureHeight.toFloat(),
+        )
+        val crop = picture.crop
+        val left = crop?.left ?: 0
+        val top = crop?.top ?: 0
+        glvPut4(
+            s,
+            SOURCE_AT,
+            left.toFloat(),
+            top.toFloat(),
+            (picture.size.width - left - (crop?.right ?: 0)).toFloat(),
+            (picture.size.height - top - (crop?.bottom ?: 0)).toFloat(),
+        )
+        // Repeated across only where the picture's own edges meet, so a sample at the seam blends them.
+        glvSetJoined(s, lens.wraps && (crop == null || crop.isEmpty))
+    }
+
+    private fun overlayScaleX(overlay: WebOverlay?, width: Int): Float =
+        if (overlay != null && overlay.viewportWidth > 0) width.toFloat() / overlay.viewportWidth else 1f
+
+    private fun overlayScaleY(overlay: WebOverlay?, height: Int): Float =
+        if (overlay != null && overlay.viewportHeight > 0) height.toFloat() / overlay.viewportHeight else 1f
 
     /**
      * Deletes the GL objects. Called when the node leaves composition, outside a render, so the
@@ -133,6 +189,15 @@ internal class WebGlVideoPass(context: JsAny) {
         const val CLAMP_AT = 16
         const val ROWS_AT = 20
         const val OFFSET_AT = 36
+        const val LENS_AT = 40
+        const val TURN_AT = 44
+        const val BOUNDS_AT = 56
+        const val SOURCE_AT = 60
+
+        // What glvDraw draws under the overlay: nothing, the flat picture, or the view into it.
+        const val NONE = 0
+        const val FLAT = 1
+        const val SPHERE = 2
     }
 }
 
@@ -143,6 +208,8 @@ internal class WebLook(
     val adjustments: VideoAdjustments,
     /** 1 for Catmull-Rom, 0 for bilinear. */
     val cubic: Int,
+    /** The 360 degree picture to draw a view into, or null for the flat picture (#460). */
+    val sphere: SphereView? = null,
 )
 
 /**
@@ -165,7 +232,7 @@ internal fun glColorMatrix(adjustments: VideoAdjustments, dim: Float): FloatArra
 @JsFun(
     """(gl) => {
       if (!gl || typeof gl.bindVertexArray !== 'function' || typeof gl.bindSampler !== 'function') return null;
-      const s = { gl: gl, failure: null, u: new Float32Array(40), overlays: [], pw: 0, ph: 0 };
+      const s = { gl: gl, failure: null, u: new Float32Array(64), overlays: [], pw: 0, ph: 0 };
       const vertex = '#version 300 es\n' +
         'uniform vec4 uCorner[4];\n' +
         'out vec2 vUv;\n' +
@@ -202,6 +269,34 @@ internal fun glColorMatrix(adjustments: VideoAdjustments, dim: Float): FloatArra
         '  vec4 o = clamp(vec4(dot(uRow[0], c), dot(uRow[1], c), dot(uRow[2], c), dot(uRow[3], c)) + uOffset, 0.0, 1.0);\n' +
         '  outColor = vec4(o.rgb * o.a, o.a);\n' +
         '}\n';
+      // The view into a 360 degree picture (#460): SphericalLens for each pixel, from the pixel's
+      // centre counted down from the top of the target, with the turn handed in as three rows.
+      const sphere = '#version 300 es\n' +
+        'precision highp float;\n' +
+        'uniform sampler2D uImage;\n' +
+        'uniform vec2 uSize;\n' +
+        'uniform vec2 uTarget;\n' +
+        'uniform vec4 uLens;\n' +
+        'uniform vec4 uTurn[3];\n' +
+        'uniform vec4 uBounds;\n' +
+        'uniform vec4 uSource;\n' +
+        'uniform vec4 uRow[4];\n' +
+        'uniform vec4 uOffset;\n' +
+        'out vec4 outColor;\n' +
+        'void main() {\n' +
+        '  vec2 coord = vec2(gl_FragCoord.x, uTarget.y - gl_FragCoord.y);\n' +
+        '  vec3 ray = vec3(uLens.z * (coord.x - uLens.x), uLens.z * (uLens.y - coord.y), -1.0);\n' +
+        '  vec3 d = vec3(dot(uTurn[0].xyz, ray), dot(uTurn[1].xyz, ray), dot(uTurn[2].xyz, ray));\n' +
+        '  float across = 0.5 + atan(d.x, -d.z) * 0.15915494309;\n' +
+        '  float down = 0.5 - atan(d.y, length(d.xz)) * 0.31830988618;\n' +
+        '  if (uLens.w > 0.5) { across = fract(across); }\n' +
+        '  float u = (across - uBounds.x) / uBounds.z;\n' +
+        '  float v = (down - uBounds.y) / uBounds.w;\n' +
+        '  if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) { outColor = vec4(0.0); return; }\n' +
+        '  vec4 c = clamp(texture(uImage, vec2(uSource.x + u * uSource.z, uSource.y + v * uSource.w) / uSize), 0.0, 1.0);\n' +
+        '  vec4 o = clamp(vec4(dot(uRow[0], c), dot(uRow[1], c), dot(uRow[2], c), dot(uRow[3], c)) + uOffset, 0.0, 1.0);\n' +
+        '  outColor = vec4(o.rgb * o.a, o.a);\n' +
+        '}\n';
       const overlay = '#version 300 es\n' +
         'precision mediump float;\n' +
         'uniform sampler2D uImage;\n' +
@@ -226,6 +321,15 @@ internal fun glColorMatrix(adjustments: VideoAdjustments, dim: Float): FloatArra
       };
       s.pp = link(picture);
       s.op = link(overlay);
+      s.sp = link(sphere);
+      s.spu = {
+        corner: gl.getUniformLocation(s.sp, 'uCorner'), image: gl.getUniformLocation(s.sp, 'uImage'),
+        size: gl.getUniformLocation(s.sp, 'uSize'), target: gl.getUniformLocation(s.sp, 'uTarget'),
+        lens: gl.getUniformLocation(s.sp, 'uLens'), turn: gl.getUniformLocation(s.sp, 'uTurn'),
+        bounds: gl.getUniformLocation(s.sp, 'uBounds'), source: gl.getUniformLocation(s.sp, 'uSource'),
+        row: gl.getUniformLocation(s.sp, 'uRow'), offset: gl.getUniformLocation(s.sp, 'uOffset'),
+      };
+      s.joined = false;
       s.ppu = {
         corner: gl.getUniformLocation(s.pp, 'uCorner'), image: gl.getUniformLocation(s.pp, 'uImage'),
         size: gl.getUniformLocation(s.pp, 'uSize'), clamp: gl.getUniformLocation(s.pp, 'uClamp'),
@@ -314,12 +418,13 @@ private external fun glvBeginOverlay(state: JsAny, count: Int)
 private external fun glvOverlayImage(state: JsAny, index: Int, pixels: JsAny, width: Int, height: Int, x: Int, y: Int)
 
 /**
- * The pass: clear to transparent, the picture from the corners, clamp, colour rows and offsets
- * already put, then every overlay image over it at its own place scaled from the overlay's viewport,
- * rounded as the threaded draw rounds it.
+ * The pass: clear to transparent, then the picture as [mode] says, from what is already put: the
+ * flat picture from the corners, clamp, colour rows and offsets, or the view into it over the whole
+ * target from the lens, the bounds and the same colour rows. Then every overlay image over it at its
+ * own place scaled from the overlay's viewport, rounded as the threaded draw rounds it.
  */
 @JsFun(
-    """(s, w, h, hasPicture, cubic, sx, sy) => {
+    """(s, w, h, mode, cubic, sx, sy) => {
       const gl = s.gl, u = s.u;
       gl.viewport(0, 0, w, h);
       gl.disable(gl.SCISSOR_TEST); gl.disable(gl.DEPTH_TEST); gl.disable(gl.STENCIL_TEST);
@@ -331,7 +436,24 @@ private external fun glvOverlayImage(state: JsAny, index: Int, pixels: JsAny, wi
       gl.bindVertexArray(s.vao);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindSampler(0, null);
-      if (hasPicture && s.pw > 0) {
+      if (mode === 2 && s.pw > 0) {
+        gl.useProgram(s.sp);
+        gl.uniform4fv(s.spu.corner, new Float32Array([-1, 1, 0, 0, 1, 1, 1, 0, -1, -1, 0, 1, 1, -1, 1, 1]));
+        gl.uniform2f(s.spu.size, s.pw, s.ph);
+        gl.uniform2f(s.spu.target, w, h);
+        gl.uniform4fv(s.spu.lens, u.subarray(40, 44));
+        gl.uniform4fv(s.spu.turn, u.subarray(44, 56));
+        gl.uniform4fv(s.spu.bounds, u.subarray(56, 60));
+        gl.uniform4fv(s.spu.source, u.subarray(60, 64));
+        gl.uniform4fv(s.spu.row, u.subarray(20, 36));
+        gl.uniform4fv(s.spu.offset, u.subarray(36, 40));
+        gl.uniform1i(s.spu.image, 0);
+        gl.bindTexture(gl.TEXTURE_2D, s.picture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, s.joined ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      }
+      if (mode === 1 && s.pw > 0) {
         gl.useProgram(s.pp);
         gl.uniform4fv(s.ppu.corner, u.subarray(0, 16));
         gl.uniform4fv(s.ppu.clamp, u.subarray(16, 20));
@@ -366,7 +488,11 @@ private external fun glvOverlayImage(state: JsAny, index: Int, pixels: JsAny, wi
       gl.useProgram(null);
     }""",
 )
-private external fun glvDraw(state: JsAny, width: Int, height: Int, hasPicture: Boolean, cubic: Int, overlayScaleX: Float, overlayScaleY: Float)
+private external fun glvDraw(state: JsAny, width: Int, height: Int, mode: Int, cubic: Int, overlayScaleX: Float, overlayScaleY: Float)
+
+/** Whether the next view samples the picture repeated across, where its own left and right edges meet (#460). */
+@JsFun("(s, joined) => { s.joined = joined; }")
+private external fun glvSetJoined(state: JsAny, joined: Boolean)
 
 @JsFun(
     """(s) => {
@@ -377,7 +503,8 @@ private external fun glvDraw(state: JsAny, width: Int, height: Int, hasPicture: 
       if (s.vao) gl.deleteVertexArray(s.vao);
       if (s.pp) gl.deleteProgram(s.pp);
       if (s.op) gl.deleteProgram(s.op);
-      s.picture = null; s.vao = null; s.pp = null; s.op = null; s.pw = 0; s.ph = 0;
+      if (s.sp) gl.deleteProgram(s.sp);
+      s.picture = null; s.vao = null; s.pp = null; s.op = null; s.sp = null; s.pw = 0; s.ph = 0;
     }""",
 )
 private external fun glvRelease(state: JsAny)

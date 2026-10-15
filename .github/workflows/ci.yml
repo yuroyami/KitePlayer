@@ -1266,6 +1266,10 @@ jobs:
       # `:kiteplayer-web-worker` has only a browser half. It starts a real worker player and plays a
       # clip by its address while the page's frame loop is timed (#100); karma.config.d/worker.js
       # serves the worker binary, the codec module and the clips.
+      #
+      # `:kiteplayer-compose-video` has only a browser half too. It draws views into a 360 degree
+      # picture through KiteVideo's WebGL pass and holds them to the law the desktop's are held to
+      # (#460); karma.config.d/webgl.js asks Chrome for the WebGL a runner without a GPU can give.
       - name: wasmJs tests, node and browser
         run: |
           ./gradlew --stacktrace \
@@ -1275,7 +1279,8 @@ jobs:
             :kiteplayer-ffmpeg:wasmJsTest \
             :kiteplayer:wasmJsTest \
             :kiteplayer-libass:wasmJsTest \
-            :kiteplayer-web-worker:wasmJsTest
+            :kiteplayer-web-worker:wasmJsTest \
+            :kiteplayer-compose-video:wasmJsTest
 
       # This was NODE ONLY until 2026-08-30, because the browser half used to abort inside webpack
       # with "RangeError: Invalid array length" while it timestamped a context directory. It no

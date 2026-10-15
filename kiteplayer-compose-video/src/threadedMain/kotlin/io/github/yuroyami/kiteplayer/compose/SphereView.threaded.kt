@@ -8,16 +8,7 @@ import androidx.compose.ui.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.PictureCrop
-import io.github.yuroyami.kiteplayer.SphericalView
-import io.github.yuroyami.kiteplayer.VideoProjection
 import io.github.yuroyami.kiteplayer.spi.SphericalLens
-
-/**
- * The 360 degree picture the draw phase draws a view into (#460): the picture's projection and the
- * viewer's view. [KiteVideoRenderer] publishes one only when this platform draws the view, so none
- * means the flat picture.
- */
-internal data class SphereView(val projection: VideoProjection, val view: SphericalView)
 
 /** True where this platform draws a view into a 360 degree picture: Skia's always, Android's from version 13. */
 internal expect val sphereViewsDrawable: Boolean

@@ -121,10 +121,10 @@ tasks.matching { it.name == "copyAndroidDeviceTestComposeResourcesToAndroidAsset
     enabled = false
 }
 
-// No web test runs here yet: the WebGL pass needs a browser with a GPU context and a Compose
-// window, and the geometry it draws is proven against the JVM draw path instead. Compose still
-// wires a check into the wasmJs browser test task that fails when a test compilation depends on
-// Skiko and no executable binary bundles it, so it is switched off until a web test exists.
+// The web test draws through the WebGL pass in the browser's own WebGL2 (#460) and needs no Compose
+// window; Compose puts Skia's web module beside the test's bundle itself. Its check that a test
+// compilation depending on Skia has an executable binary to bundle it fails a library outright, so
+// it stays off.
 tasks.matching { it.name.startsWith("checkComposeUiTestConfigurationFor") }.configureEach {
     enabled = false
 }

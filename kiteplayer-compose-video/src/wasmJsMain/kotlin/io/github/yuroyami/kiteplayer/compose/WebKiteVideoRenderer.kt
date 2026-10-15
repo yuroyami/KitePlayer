@@ -4,8 +4,11 @@ package io.github.yuroyami.kiteplayer.compose
 
 import io.github.yuroyami.kiteplayer.FlashGuard
 import io.github.yuroyami.kiteplayer.PictureCrop
+import io.github.yuroyami.kiteplayer.ProjectionKind
 import io.github.yuroyami.kiteplayer.RenderQuality
+import io.github.yuroyami.kiteplayer.SphericalView
 import io.github.yuroyami.kiteplayer.VideoAdjustments
+import io.github.yuroyami.kiteplayer.VideoProjection
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoScaler
 import io.github.yuroyami.kiteplayer.VideoSize
@@ -14,6 +17,7 @@ import io.github.yuroyami.kiteplayer.spi.FrameShape
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
+import io.github.yuroyami.kiteplayer.spi.SphericalLens
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFlashGuard
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
@@ -112,9 +116,10 @@ internal class WebKiteVideoRenderer(
     private var transform: VideoTransform = VideoTransform.Identity
     private var adjustments: VideoAdjustments = VideoAdjustments.Identity
     private var cubic = 0
+    private var sphere: SphereView? = null
 
     /** How the picture is drawn now, for the pass. */
-    val look: WebLook get() = WebLook(scaleMode, transform, adjustments, cubic)
+    val look: WebLook get() = WebLook(scaleMode, transform, adjustments, cubic, sphere)
 
     /**
      * Moves on whenever the next draw would differ: a frame accepted, the picture taken off, a cue,
@@ -320,6 +325,15 @@ internal class WebKiteVideoRenderer(
 
     override fun setAdjustments(adjustments: VideoAdjustments) {
         this.adjustments = adjustments
+        changed()
+    }
+
+    /** The whole sphere and a tile of it, which [WebGlVideoPass] draws a view into (#460). */
+    override fun projects(kind: ProjectionKind): Boolean = SphericalLens.draws(kind)
+
+    /** The pass draws the view while it is projected, and the flat picture otherwise (#460). */
+    override fun setProjection(projection: VideoProjection?, view: SphericalView) {
+        sphere = projection?.takeIf { view.projected && projects(it.kind) }?.let { SphereView(it, view) }
         changed()
     }
 

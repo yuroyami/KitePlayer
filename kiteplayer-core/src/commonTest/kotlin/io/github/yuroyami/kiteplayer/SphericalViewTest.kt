@@ -178,6 +178,47 @@ class SphericalViewTest {
     }
 
     @Test
+    fun `turning the view while it plays never seeks and drops no frame`() = runTest {
+        val renderer = projecting()
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 20_000_000, videoProjection = sphere),
+            config = PlayerConfig(statsInterval = 100.milliseconds),
+            renderer = renderer,
+        )
+        val player = KitePlayer(harness.core)
+        harness.openWithRenderer()
+        player.play()
+        harness.run(1.seconds)
+        val before = harness.core.stats.value
+        val seeksBefore = harness.source.seeks
+        // Once round in three seconds, a step every 25 milliseconds, as a drag would turn it. In
+        // virtual time, so a late frame here is the engine's doing and never a busy machine's.
+        for (step in 0 until 120) {
+            player.setSphericalView(SphericalView(yaw = step * 3f))
+            harness.run(25.milliseconds)
+            assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status, "the turn left Playing at step $step")
+        }
+        harness.run(200.milliseconds)
+        // A view is drawn from the picture the renderer has, so turning it never moves the reader.
+        assertEquals(seeksBefore, harness.source.seeks, "the turn sought")
+        val after = harness.core.stats.value
+        assertEquals(
+            listOf(0L, 0L, 0L, 0L),
+            listOf(
+                after.droppedFramesLate - before.droppedFramesLate,
+                after.droppedFramesDecode - before.droppedFramesDecode,
+                after.refusedFrames - before.refusedFrames,
+                after.rebuffers - before.rebuffers,
+            ),
+            "late, undecoded and refused frames and rebuffers while the view turned",
+        )
+        assertTrue(after.submittedFrames - before.submittedFrames > 60, "too few frames played to mean anything")
+        assertEquals(SphericalView(yaw = 357f), renderer.projectionsTold.last().second, "the last view reached the renderer")
+        harness.close()
+    }
+
+    @Test
     fun `a paused player redraws a turned view only where the renderer draws the view`() = runTest {
         // Neither renderer keeps a copy of its picture, as Android's do not while MediaCodec draws.
         suspend fun redrawsAfterTurn(renderer: RecordingRenderer): Boolean {

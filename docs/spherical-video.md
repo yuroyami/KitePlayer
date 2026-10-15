@@ -305,9 +305,10 @@ The tests:
   lists its projection, the view is published and a value out of range is refused, the renderer is
   told on attach, at an open and on a change, a picture that moves to a flat stream is told as flat,
   a renderer that draws only flat pictures is warned about once for the item, one that projects is
-  not, the warning for one that projects a sphere and not a cube map names the cube map, and a
-  paused player redraws a turned view only where the renderer draws the view. `MementoTest` checks that the
-  memento keeps the view.
+  not, the warning for one that projects a sphere and not a cube map names the cube map, a view
+  turned a whole circle in three seconds while the player plays keeps it playing, never seeks and
+  costs no frame, late or otherwise, in virtual time, and a paused player redraws a turned view
+  only where the renderer draws the view. `MementoTest` checks that the memento keeps the view.
 - `SphericalVideoTest` in `kiteplayer-ffmpeg` checks that the FFmpeg backend reports each fixture's
   projection and pose and a flat clip none, and that the whole player lists the projection on the
   video track and warns a renderer of flat pictures once.
@@ -320,8 +321,10 @@ The tests:
   does, in every scale mode, and the renderer hands the draw a view only when the view is projected
   and the projection is one it draws.
 - `SphereViewPlaybackTest` plays `equirect.mkv` through the whole player and `KiteVideo`'s renderer
-  on the JVM while the yaw turns a whole circle in three seconds, and no frame is late, undecoded or
-  refused. The pose of `equirect-yaw30.mkv` and the tile of `equirect-tile.mkv` reach the draw.
+  on the JVM while the yaw turns a whole circle in three seconds: it keeps playing, and no frame is
+  thrown away before decoding or refused, and nothing rebuffers. Late frames are left to the
+  virtual-time test, because on a busy machine they answer the load. The pose of
+  `equirect-yaw30.mkv` and the tile of `equirect-tile.mkv` reach the draw.
 - `WebSphereViewTest` draws the same views through the WebGL pass in headless Chromium.
 - An Android host test checks that the GPU tier keeps the picture's own size, up to 4096 pixels,
   while Compose draws a view.

@@ -285,6 +285,8 @@ ten-band equalizer and ReplayGain, follow an external clock for watching togethe
 frame, take screenshots, and record what plays into a Matroska file with no re-encode. It plays a
 Matroska file's editions, ordered ones included, with the opening and the ending that a season's
 episodes link to from other files ([Editions and linked files](docs/media-sources.md#editions-and-linked-files)).
+It shows a 360 degree video as a view that your app turns with a drag or the phone's motion
+([360 degree video](docs/spherical-video.md)).
 [Controlling the player](docs/player-api.md) lists every call by area.
 
 ### Open local and picked files
@@ -498,6 +500,9 @@ case in detail.
 - KitePlayer composes Dolby Vision profile 5 and 10.0 on the processor. The processor keeps up at
   1080p, but not at 4K.
 - No one has played sound with the desktop JVM build on a real Linux or Windows computer.
+- A 360 degree video turns only where `KiteVideo` draws it. The native views that `KitePlayerVideo`
+  uses by default on Android, iOS and the desktop JVM show the whole picture flat, so pass
+  `path = KiteRenderPath.ComposeCanvas` there. On Android the view needs Android 13 or later.
 
 Missing features and known bugs are [open issues](https://github.com/yuroyami/KitePlayer/issues).
 

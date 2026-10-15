@@ -1,8 +1,8 @@
 # 360 degree video
 
-This document is the design for issue #460. Nothing in it is implemented yet. It states the public
-API, what the player does with a 360 degree video, and how the renderers draw one, so that all
-three can be agreed before the code is written.
+This document is the design for issue #460, and the player now does what it says. It states the
+public API, what the player does with a 360 degree video, how the renderers draw one, and which of
+them do. Where building it changed a detail, the detail here is the one that was built.
 
 ## What a 360 degree file says
 
@@ -18,25 +18,23 @@ boxes or Apple's video extension box, and a Matroska file in its track's `Projec
   the picture is not where a player should start looking.
 
 A player that knows this draws only the part of the sphere the viewer looks at, and lets them turn
-the view by dragging or by moving the phone. The player today draws the whole picture flat, which
-looks like a stretched panorama.
+the view by dragging or by moving the phone. Drawn flat, the whole picture looks like a stretched
+panorama, which is still what a renderer that cannot draw a view shows.
 
-## What KiteFFmpeg already gives
+## What KiteFFmpeg gives
 
-KiteFFmpeg 0.5.1, which this repository pins, reports each stream's mapping as
-`StreamInfo.spherical`, a `SphericalMapping` (KiteFFmpeg #139): the projection, with what that
-projection carries, and the pose in degrees. Its projections are equirectangular, a tile of an
-equirectangular picture with its four bounds, a cube map with its padding, half equirectangular,
-rectilinear, fisheye and Apple's parametric immersive. It also reports a stream's stereo layout as
-`StreamInfo.stereo3d`, which this design does not use.
+KiteFFmpeg 0.5.1, which this repository pins, reports each video stream's mapping as `spherical`, a
+`SphericalMapping` (KiteFFmpeg #139): the projection, with what that projection carries, and the
+pose in degrees. Its projections are equirectangular, a tile of an equirectangular picture with its
+four bounds, a cube map with its padding, half equirectangular, rectilinear, fisheye and Apple's
+parametric immersive. It also reports a stream's stereo layout as `stereo3d`, which the player does
+not use.
 
-FFmpeg reads the mapping from MP4, MOV and Matroska and applies none of it. So the player needs no
-FFmpeg change. What is left is all in this repository: carry the mapping to the item's tracks and
-to the renderer, keep the view's state, and draw the view.
+FFmpeg reads the mapping from MP4, MOV and Matroska and applies none of it, so the player needed no
+FFmpeg change. It carries the mapping to the item's tracks and to the renderer, keeps the view's
+state, and draws the view.
 
 ## Public API
-
-Every name below is new. Nothing that exists changes its meaning for a flat video.
 
 ```kotlin
 /** How a 360 degree video's pictures cover the sphere around the viewer, as its file states it (#460). */
@@ -48,9 +46,9 @@ public data class VideoProjection(
      * file asks. A positive yaw puts the picture's front to the right of where the view starts,
      * a positive pitch above it, and a positive roll tilts it clockwise.
      */
-    val yaw: Double,
-    val pitch: Double,
-    val roll: Double,
+    val yaw: Double = 0.0,
+    val pitch: Double = 0.0,
+    val roll: Double = 0.0,
 )
 
 public sealed interface ProjectionKind {
@@ -111,9 +109,9 @@ public data class PlayerSnapshot(
 
 public sealed class PlaybackWarning {
     /**
-     * The video that plays is a 360 degree video, and the renderer that draws it shows the flat
-     * picture, because it cannot draw a view into a sphere or into this [kind] of projection
-     * (#460). Told once for each item and renderer.
+     * The video that plays is a 360 degree video, and the attached renderer shows its whole
+     * picture flat, because it cannot draw a view into a sphere or into this [kind] of projection
+     * (#460). [detail] says which. Told once for each item and renderer.
      */
     public data class ProjectionUnavailable(val kind: ProjectionKind, val detail: String) : PlaybackWarning()
 }
@@ -121,19 +119,44 @@ public sealed class PlaybackWarning {
 
 An application reads whether the video that plays is a 360 degree one from
 `state.tracks.selectedTrack(TrackKind.Video)?.projection`, and offers its drag and its sensor only
-then.
+then. The player has no drag of its own, so an application turns the view itself, for example:
+
+```kotlin
+var view by remember { mutableStateOf(SphericalView()) }
+KitePlayerVideo(
+    player,
+    Modifier.fillMaxSize().pointerInput(player) {
+        // Drag the picture: a tenth of a degree for each pixel the finger moves.
+        detectDragGestures { _, drag ->
+            view = view.copy(
+                yaw = view.yaw - drag.x * 0.1f,
+                pitch = (view.pitch + drag.y * 0.1f).coerceIn(-90f, 90f),
+            )
+            player.setSphericalView(view)
+        }
+    },
+    // The native views draw a 360 degree video flat; see "Which renderers draw the view".
+    path = KiteRenderPath.ComposeCanvas,
+)
+```
+
+The view is kept in the application's own state rather than read back from the snapshot, which is
+published after the player has handled the call and so can be a step behind a fast drag.
 
 `PlayerMemento` keeps the view, as it keeps `VideoTransform`, so a restore looks where the viewer
-looked.
+looked. A memento saved before the view existed restores the default view.
+
+Java code calls `getPlayer().setSphericalView(...)`. The call neither suspends nor takes a
+`Duration`, so `KitePlayerJava` needs nothing of its own for it.
 
 ## What the player does
 
 ### Which videos it projects
 
 A video is drawn as a view into the sphere when its track has a projection the renderer draws,
-and the view is `projected`. This design draws `Equirectangular` and `EquirectangularTile`. Every
-other video is drawn exactly as now, including a 360 degree video whose projection the renderer
-does not draw, which `ProjectionUnavailable` reports.
+and the view is `projected`. The renderers that draw a view draw `Equirectangular` and
+`EquirectangularTile`. Every other video is drawn exactly as before, including a 360 degree video
+whose projection the renderer does not draw, which `ProjectionUnavailable` reports.
 
 A rectilinear projection is a flat picture by definition, so the player reports it as no
 projection at all.
@@ -148,8 +171,8 @@ the same view shows the same width of the world in either.
 
 So with no pose and the default view, the centre of the view shows the centre of the picture. A
 yaw of 90 shows the point three quarters of the way across the picture, and a pitch of 90 the top
-row. A tile shows its part of the sphere and draws the renderer's background where it has no
-picture.
+row. A tile shows its part of the sphere and leaves the view transparent where it has no picture,
+so whatever lies behind the video shows there.
 
 ### What applies and what does not
 
@@ -159,14 +182,14 @@ picture.
 - The scale mode and every field of `VideoTransform` do not apply while the view is projected: the
   aspect, the zoom, the pan, the turn and the mirrors are a flat picture's. The field of view is
   the view's zoom. They apply again when the view is switched to the flat picture.
-- `captureFrame` returns the decoded picture, flat, as now. A capture of the view is not in this
-  design.
+- `captureFrame` returns the decoded picture, flat. It does not capture the view.
 
 ### Turning the view
 
-A change of the view reaches the renderer at once, through the renderer interface below, and is
-drawn with the next display refresh. It costs no decoding, so turning the view while playing drops
-no frame, and a paused player shows the turned view of the picture it holds.
+A change of the view reaches the renderer at once and is drawn with the next display refresh. It
+costs no decoding, so turning the view while playing drops no frame, and a paused player shows the
+turned view of the picture it holds. Calls that arrive faster than the player handles them are
+merged into the newest, so a fast drag never queues behind itself.
 
 ## The backend interface
 
@@ -181,7 +204,7 @@ public data class PlayerStreamInfo(
 )
 ```
 
-The FFmpeg backend fills it from `StreamInfo.spherical`, on every platform including the web.
+The FFmpeg backend fills it from the stream's `spherical`, on every platform including the web.
 
 ## The renderer interface
 
@@ -205,8 +228,10 @@ public interface VideoRenderer {
 
 The engine tells the renderer the projection of the selected video track and the player's view.
 When the track has a projection that `projects` answers false for, the engine warns
-`ProjectionUnavailable` once for that item and renderer. A renderer that draws a view keeps the
-picture it holds and draws it again for a new view, so `redrawsHeldPicture` stays true for it.
+`ProjectionUnavailable` once for that item and renderer, and its detail says whether the renderer
+draws no view at all or draws views but not this kind of projection, such as a cube map. A renderer
+that draws a view keeps the picture it holds and draws it again for a new view, so a paused player
+is asked to redraw only when the attached renderer draws the view.
 
 ## How the renderers draw it
 
@@ -219,78 +244,96 @@ file's pose, and reads the picture at that direction's longitude and latitude:
   OpenGL's: x to the right, y up and z toward the viewer.
 - The view's roll, pitch and yaw turn that direction, in that order, into the direction in the
   world, and undoing the file's pose turns that into the direction on the picture's sphere.
-- The longitude is `atan2(x, -z)` and the latitude is `asin(y)` of the turned direction. The
-  picture is read at `0.5 + longitude / 360°` across and `0.5 - latitude / 180°` down, wrapping
-  across the width so the left and right edges join without a seam.
+- The longitude is `atan2(x, -z)` and the latitude `atan2(y, sqrt(x * x + z * z))` of the turned
+  direction, which needs no normalising. The picture is read at `0.5 + longitude / 360°` across and
+  `0.5 - latitude / 180°` down, wrapping across the width so the left and right edges join without
+  a seam. A tile maps those shares onto its own bounds and has no picture outside them.
 
 The turns are computed once per draw on the processor, from the view and the pose, and reach the
 shader as one 3 by 3 matrix, so the shader takes no sine or cosine of its own; only the longitude
-and the latitude need trigonometry per pixel. The same law in plain Kotlin, in common code, is the
-oracle that each renderer's output is compared against.
+and the latitude need trigonometry per pixel. `SphericalLens`, in the core's `spi` package and
+behind `KitePlayerInternalApi`, is that law in plain Kotlin: a renderer builds one for each draw
+and hands its `rotation`, `scale`, centre and bounds to its shader, and its `pictureAt` is the
+oracle each renderer's tests compare the drawn view against.
 
-The renderers are taken in this order:
+### Which renderers draw the view
 
-1. **The Compose canvas path**, `KiteVideo` in `kiteplayer-compose-video`. On the platforms where
-   Compose draws through Skiko (the desktop JVM, iOS and macOS) the pass is a Skia runtime shader
-   over the converted picture. On Android the same shader runs as an Android runtime shader, which
-   needs Android 13; below it, the path draws flat and warns. This is the one path that can be
-   checked against the oracle in this repository's JVM tests, where Skia draws without a display.
-2. **The web's WebGL pass**, the one `KiteVideo` draws through on `wasmJs` (#125). The pass already
-   reads one texture and draws one quad, and its fragment shader gains the view. It is checked in
-   headless Chromium, where the browser tests already run.
-3. **The platform-view defaults**: the Metal renderer on Apple and the Android GPU image renderer.
-   Their shaders gain the same pass, but they can only be checked on a Mac and on an Android
-   device, so they are a follow-up issue rather than part of this one.
+- **`KiteVideo`**, the Compose canvas path in `kiteplayer-compose-video`:
+  - On the desktop JVM and iOS, where Compose draws through Skia, as a Skia runtime shader over the
+    converted picture.
+  - On Android 13 and later, as the same program in an Android runtime shader. Below Android 13 it
+    draws flat and warns. On Android the GPU tier that converts MediaCodec's frames for Compose
+    cannot draw the view in its own blit, so while Compose draws a view it hands Compose the whole
+    picture at its own size, up to 4096 pixels on its longer side, instead of one fitted to the
+    viewport.
+  - On the web, in its WebGL pass (#125), as a second fragment program beside the flat one.
+- **Not yet, in #586**: the Metal renderer on iOS and macOS, and Android's platform view, where
+  MediaCodec writes straight to the Surface and no shader of the player's sees the picture.
+- **Flat, by design for now**: the Core Graphics reference, the sample buffer layer, the AWT canvas
+  of the desktop's native view, which paints without a shader, and the web's 2D canvas.
 
-Every other renderer draws flat and is told so by `projects`: the Core Graphics reference, the
-sample buffer layer, the AWT canvas on the desktop, the web's 2D canvas, and a MediaCodec frame
-that goes straight to Android's Surface, which no shader of the player's sees.
-
-So once this issue is done, a 360 degree video turns in `KiteVideo` on the desktop, iOS, macOS, the
-web and Android 13 and later, and in `KitePlayerVideo` wherever that draws through `KiteVideo`.
-On Android, where `KitePlayerVideo` defaults to the platform view, an application asks for the
-Compose path (`KiteRenderPath.ComposeCanvas`) until the follow-up lands.
+`KitePlayerVideo` draws through `KiteVideo` when it runs `KiteRenderPath.ComposeCanvas`, which it
+always does on the web. Its default on Android, iOS and the desktop JVM is the native view, which
+draws a 360 degree video flat, so an application that plays one asks for
+`KiteRenderPath.ComposeCanvas` there.
 
 ## Tests
 
-`ffmpeg` cannot write a projection into a file. `scripts/mkv-editions.py` already rewrites a
-Matroska file that `ffmpeg` made, and becomes `scripts/mkv-rewrite.py`, gaining a `--projection`
-option that writes the track's `Projection` element: its type, its pose, and for a tile its bounds.
-FFmpeg reads that element back as the stream's spherical mapping, which was checked by hand while
-writing this design.
+`ffmpeg` cannot write a projection into a file. `scripts/mkv-rewrite.py` (first named
+`mkv-editions.py`) rewrites a Matroska file that `ffmpeg` made, and its `--projection` option writes
+the track's `Projection` element: its type, its pose, and for a tile its bounds or for a cube map
+its padding. FFmpeg reads that element back as the stream's spherical mapping.
 
-The fixtures, in `testmedia/spherical/`, all 2:1 equirectangular pictures of eight vertical bands
-of distinct colours, each 45 degrees of longitude wide, with a darker band along the top and the
-bottom:
+The fixtures, which `scripts/testmedia.sh` makes in `testmedia/spherical/`, show a 512 by 256
+equirectangular picture of eight vertical bands, each 45 degrees of longitude wide and centred on a
+multiple of 45 degrees, so the band behind the viewer is split between the left and the right edge.
+From the left: blue (180 degrees), magenta (-135), white (-90), orange (-45), red (0, the centre),
+yellow (45), green (90), cyan (135) and blue again. A dark grey band runs along the top and a brown
+one along the bottom, 22.5 degrees of latitude each.
 
 - `equirect.mkv`, with no pose;
 - `equirect-yaw30.mkv`, with a pose of 30 degrees of yaw;
-- `equirect-tile.mkv`, the middle half of the same picture as a tile.
+- `equirect-tile.mkv`, the middle half of the picture's width, from -90 to 90 degrees, as a tile.
 
 The tests:
 
-- The FFmpeg backend reports each fixture's projection and pose, and a flat clip reports none.
-- The snapshot lists the projection on the video track, `setSphericalView` publishes the view and
-  refuses a value out of range, the memento keeps it, and the renderer is told on attach, at an
-  open and on a change, through a scripted renderer in `kiteplayer-core`.
-- On the JVM, the Compose path draws views of a known picture: the default view shows the centre
-  band, a yaw of 90 the band three quarters across, a yaw of -90 the band one quarter across, a
-  pitch of 90 the top band, the tile its part and the background beyond it, and the fixture with
-  a pose its centre band at a yaw of 30. Each view is compared with the oracle's picture within a
-  small difference, and the band checks do not rely on the oracle at all. A flat video, and a
-  360 degree one with `projected = false`, draw exactly the pixels they draw today.
-- The whole player plays `equirect.mkv` through the Compose path on the JVM while the yaw turns
-  through a full circle, and drops no frame.
-- A renderer that cannot project warns `ProjectionUnavailable` once and draws the flat picture.
-- In headless Chromium, the web pass draws the same views as the Compose path.
+- `SphericalLensTest` in `kiteplayer-core` reads the law at the centre and the edges of views, where
+  each turn's direction can be worked out by hand: the yaw and the pitch, a clockwise roll, the
+  field of view across the shorter side, the file's pose and a tile.
+- `SphericalViewTest` in `kiteplayer-core`, through a scripted backend and renderer: the video track
+  lists its projection, the view is published and a value out of range is refused, the renderer is
+  told on attach, at an open and on a change, a picture that moves to a flat stream is told as flat,
+  a renderer that draws only flat pictures is warned about once for the item, one that projects is
+  not, the warning for one that projects a sphere and not a cube map names the cube map, and a
+  paused player redraws a turned view only where the renderer draws the view. `MementoTest` checks that the
+  memento keeps the view.
+- `SphericalVideoTest` in `kiteplayer-ffmpeg` checks that the FFmpeg backend reports each fixture's
+  projection and pose and a flat clip none, and that the whole player lists the projection on the
+  video track and warns a renderer of flat pictures once.
+- `SphereViewDrawTest` in `kiteplayer-compose-video` draws views of the same picture through Skia on
+  the JVM. Each matches `SphericalLens` wherever the picture is one colour, and the band checks do
+  not use the lens at all: the default view's centre shows the red band, a yaw of 90 the green
+  band, a yaw of -90 the white band, half a turn the blue band where the edges join, a pitch of 90
+  the top, a clockwise roll puts the bottom on the right, and the pose and the tile show what they
+  should, with nothing beyond the tile. A video with no view draws exactly the pixels a flat one
+  does, in every scale mode, and the renderer hands the draw a view only when the view is projected
+  and the projection is one it draws.
+- `SphereViewPlaybackTest` plays `equirect.mkv` through the whole player and `KiteVideo`'s renderer
+  on the JVM while the yaw turns a whole circle in three seconds, and no frame is late, undecoded or
+  refused. The pose of `equirect-yaw30.mkv` and the tile of `equirect-tile.mkv` reach the draw.
+- `WebSphereViewTest` draws the same views through the WebGL pass in headless Chromium.
+- An Android host test checks that the GPU tier keeps the picture's own size, up to 4096 pixels,
+  while Compose draws a view.
 
-Each test is seen to fail with the projection taken out, before it is seen to pass.
+Each test was seen to fail with the projection taken out, or a turn's sign flipped, before it was
+seen to pass.
 
 ## Not in this design
 
 Each of these is a later issue if it is wanted:
 
-- **Metal and the Android GPU renderer**, as step 3 above says.
+- **The Metal renderer and Android's platform view**, which #586 follows.
+- **The desktop's native view**, the AWT canvas, which has no shader to draw a view with.
 - **Cube maps**, fisheye and the other projections, which `ProjectionKind` already names.
 - **Stereo 3D**, where each eye has half the picture.
 - **A drag and a sensor in the built-in controls**. An application turns the view itself for now.
@@ -299,11 +342,11 @@ Each of these is a later issue if it is wanted:
 ## The order of the work
 
 1. The projection on `PlayerStreamInfo` and `TrackInfo`, `SphericalView`, `setSphericalView`, the
-   snapshot, the memento, the web worker's messages and the Java wrapper, the renderer interface
-   and the warning, the fixtures and the script. Nothing draws differently yet.
+   snapshot, the memento, the web worker's messages, the renderer interface and the warning, the
+   fixtures and the script. Nothing drew differently yet.
 2. The Compose canvas path, with the oracle and its tests.
 3. The web's WebGL pass and its browser test.
-4. The user documentation, the changelog and a follow-up issue for Metal and the Android GPU
-   renderer.
+4. The user documentation, the changelog and a follow-up issue, #586, for the Metal renderer and
+   Android's platform view.
 
 Each step regenerates the ABI dumps it changes and carries its own tests.

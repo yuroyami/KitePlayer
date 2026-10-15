@@ -980,9 +980,10 @@ echo "360 degree video in spherical/: one whole sphere, one with a pose and one 
 # where the picture wraps. A darker band runs along the top and another along the bottom, 22.5
 # degrees of latitude each. From the left: blue (180 degrees), magenta (-135), white (-90), orange
 # (-45), red (0, the centre), yellow (45), green (90), cyan (135) and blue again; the top is dark
-# grey and the bottom brown.
+# grey and the bottom brown. Ten seconds long, so a test that turns the view for three seconds
+# while it plays still has a clip under it on a slow runner.
 mkdir -p spherical
-sphere_bands="color=c=0x0000FF:s=512x256:r=30:d=4"
+sphere_bands="color=c=0x0000FF:s=512x256:r=30:d=10"
 sphere_bands="$sphere_bands,drawbox=x=32:y=0:w=64:h=256:color=0xFF00FF:t=fill"
 sphere_bands="$sphere_bands,drawbox=x=96:y=0:w=64:h=256:color=0xFFFFFF:t=fill"
 sphere_bands="$sphere_bands,drawbox=x=160:y=0:w=64:h=256:color=0xFF8000:t=fill"

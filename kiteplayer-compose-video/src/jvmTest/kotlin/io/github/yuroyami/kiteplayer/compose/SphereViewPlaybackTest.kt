@@ -31,6 +31,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * The whole player drawing a 360 degree video through the Compose canvas path (#460), on the
@@ -102,9 +103,14 @@ class SphereViewPlaybackTest {
             withTimeout(30.seconds) { player.open(MediaItem(fixture("spherical/equirect.mkv").absolutePath)) }
             awaitCentre(state, SpherePicture.RED and 0xFFFFFF, "the view starts at the picture's front")
             player.play()
-            // Once round in three seconds, a step every 25 milliseconds, as a drag would turn it.
-            for (step in 0..120) {
-                player.setSphericalView(SphericalView(yaw = step * 3f))
+            // Once round in three seconds, a step every 25 milliseconds, as a drag would turn it. The
+            // yaw follows the clock rather than a count of steps: each delay overshoots on a loaded
+            // machine, and 121 steps outlasted the clip on the macOS runner.
+            val turn = TimeSource.Monotonic.markNow()
+            while (true) {
+                val elapsed = turn.elapsedNow()
+                if (elapsed >= 3.seconds) break
+                player.setSphericalView(SphericalView(yaw = (360.0 * (elapsed / 3.seconds)).toFloat()))
                 delay(25.milliseconds)
             }
             assertEquals(PlaybackStatus.Playing, player.state.value.status, "the clip ended before the turn did")

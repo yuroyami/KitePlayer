@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
@@ -176,14 +177,14 @@ class MatroskaEditionsTest {
             // Four seconds into the timeline is one second into its second part, at 6 s of the file.
             pictures.shown.clear()
             player.seek(4.seconds, SeekMode.Precise)
-            delay(300)
-            assertEquals(6_000_000L, pictures.times.firstOrNull(), "the seek showed ${pictures.times.firstOrNull()}")
+            val seen = firstPicture(pictures)
+            assertEquals(6_000_000L, seen, "the seek showed $seen")
             assertNear(4.seconds, player.position())
             // And back into the first part.
             pictures.shown.clear()
             player.seek(1.seconds, SeekMode.Precise)
-            delay(300)
-            assertEquals(1_000_000L, pictures.times.firstOrNull(), "the seek back showed ${pictures.times.firstOrNull()}")
+            val back = firstPicture(pictures)
+            assertEquals(1_000_000L, back, "the seek back showed $back")
             assertNear(1.seconds, player.position())
         } finally {
             player.closeAndAwait()
@@ -196,8 +197,8 @@ class MatroskaEditionsTest {
             withTimeout(30.seconds) {
                 again.open(MediaItem(fixture("film.mkv").absolutePath, startPosition = 4_500.milliseconds))
             }
-            delay(300)
-            assertEquals(6_500_000L, started.times.firstOrNull(), "the open showed ${started.times.firstOrNull()}")
+            val opened = firstPicture(started)
+            assertEquals(6_500_000L, opened, "the open showed $opened")
             assertNear(4_500.milliseconds, again.position())
         } finally {
             again.closeAndAwait()
@@ -334,7 +335,6 @@ class MatroskaEditionsTest {
             player.seek(4.seconds, SeekMode.Precise)
             pictures.shown.clear()
             withTimeout(30.seconds) { player.selectEdition(1) }
-            delay(300)
             val extended = player.state.value
             assertEquals(1, extended.edition)
             assertEquals(1, extended.media?.demux?.edition)
@@ -342,16 +342,19 @@ class MatroskaEditionsTest {
             assertEquals(listOf("Act one", "Deleted scene", "Act three"), extended.chapters.map { it.title })
             assertEquals(PlaybackStatus.Paused, extended.status)
             assertNear(6.seconds, player.position())
-            assertEquals(6_000_000L, pictures.times.firstOrNull(), "the switch showed ${pictures.times.firstOrNull()}")
+            // The switch lands with a precise seek after selectEdition returns, so its picture comes
+            // later, by as long as the machine takes: a loaded runner took more than 300 ms.
+            val switched = firstPicture(pictures)
+            assertEquals(6_000_000L, switched, "the switch showed $switched")
             // The deleted scene is not in the theatrical cut, which then starts from its beginning.
             player.seek(4.seconds, SeekMode.Precise)
             pictures.shown.clear()
             withTimeout(30.seconds) { player.selectEdition(0) }
-            delay(300)
             assertEquals(0, player.state.value.edition)
             assertEquals(6.seconds, player.state.value.duration)
             assertNear(0.seconds, player.position())
-            assertEquals(0L, pictures.times.firstOrNull(), "the switch showed ${pictures.times.firstOrNull()}")
+            val restarted = firstPicture(pictures)
+            assertEquals(0L, restarted, "the switch showed $restarted")
             // A player that plays keeps playing.
             player.play()
             withTimeout(10.seconds) { while (player.position() < 500.milliseconds) delay(10) }
@@ -470,6 +473,16 @@ class MatroskaEditionsTest {
     }
 
     /** A position as the sound lands it, within a millisecond of [expected]. */
+    /**
+     * The time of the first picture [pictures] is handed after its list was last cleared, waiting up
+     * to five seconds for it, or null when none comes.
+     */
+    private suspend fun firstPicture(pictures: PictureTimes): Long? =
+        withTimeoutOrNull(5.seconds) {
+            while (pictures.shown.isEmpty()) delay(10)
+            pictures.times.first()
+        }
+
     private fun assertNear(expected: Duration, actual: Duration, within: Duration = 1.milliseconds) {
         assertTrue((actual - expected).absoluteValue <= within, "expected $expected, the position is $actual")
     }

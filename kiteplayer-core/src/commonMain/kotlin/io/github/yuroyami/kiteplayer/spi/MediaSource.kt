@@ -84,6 +84,28 @@ public interface PlayerMediaSource : AutoCloseable {
     public val chapters: List<Chapter>
 
     /**
+     * This file's segment UID, 32 lowercase hexadecimal digits, or null when it states none (#501).
+     * An ordered edition names the files it plays ranges of by this, not by their names, so the
+     * engine reads it from each file it considers. Defaulted, so an existing source keeps compiling.
+     */
+    public val segmentUid: String? get() = null
+
+    /**
+     * The file's editions of its chapters, in stored order, or empty for a container with none
+     * (#501). The engine plays an ordered one as a timeline; see [SourceEdition]. [chapters] stays
+     * what a player that ignores editions shows. Defaulted, so an existing source keeps compiling.
+     */
+    public val editions: List<SourceEdition> get() = emptyList()
+
+    /**
+     * A time of this file's segment as the file states it, such as an edition's
+     * [SourceEditionPart.start], in the engine's time: the time a packet read there carries (#501).
+     * The default is the time unchanged, which is right for a source whose timestamps already start
+     * where its segment does.
+     */
+    public fun fromSegmentTime(time: Pts): Pts = time
+
+    /**
      * Files the container carries beside its streams, Matroska attachments above all. Fonts are
      * the ones that matter: a typeset ASS track ships the faces it was authored with, and the
      * subtitle typesetter loads every [MediaAttachment.isFont] entry before it draws. Empty for a

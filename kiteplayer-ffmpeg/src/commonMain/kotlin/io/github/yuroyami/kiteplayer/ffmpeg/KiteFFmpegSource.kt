@@ -36,6 +36,8 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.MediaAttachment
 import io.github.yuroyami.kiteplayer.spi.FieldOrder
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
+import io.github.yuroyami.kiteplayer.spi.SourceEdition
+import io.github.yuroyami.kiteplayer.spi.SourceEditionPart
 import io.github.yuroyami.kiteplayer.spi.RecordingCapable
 import io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
@@ -55,6 +57,7 @@ import io.github.yuroyami.kiteffmpeg.DolbyVisionMetadata
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 import io.github.yuroyami.kiteffmpeg.dsl.DecoderOptions
 import io.github.yuroyami.kiteffmpeg.dsl.DecoderSkip
+import io.github.yuroyami.kiteffmpeg.MatroskaSegment
 import io.github.yuroyami.kiteffmpeg.MediaSource
 import io.github.yuroyami.kiteffmpeg.FFmpegError
 import io.github.yuroyami.kiteffmpeg.FFmpegException
@@ -303,6 +306,49 @@ public class KiteFFmpegSource internal constructor(
             title = chapter.title,
         )
     }
+
+    /** What a Matroska file says about its own segment and its editions (#501), or null. */
+    private val matroska: MatroskaSegment? = source.matroska
+
+    override val segmentUid: String? = matroska?.uid
+
+    /**
+     * The file's editions as it states them (#501). An ordered edition's ranges stay in the
+     * segment's own time, which [fromSegmentTime] maps, because a range in another file is mapped by
+     * that file's source; its marks are mapped here, as [chapters] are.
+     */
+    override val editions: List<SourceEdition> = matroska?.editions.orEmpty().map { edition ->
+        SourceEdition(
+            uid = edition.uid,
+            title = edition.names.firstOrNull()?.text,
+            isDefault = edition.isDefault,
+            isHidden = edition.isHidden,
+            isOrdered = edition.isOrdered,
+            chapters = edition.chapters
+                .filter { it.isEnabled && !it.isHidden }
+                .mapIndexed { index, chapter ->
+                    Chapter(
+                        index = index,
+                        start = (mapper.mapTimestamp(chapter.startNanos / 1_000L) ?: Pts(0)).coerceAtLeast(Pts(0)).asDuration,
+                        end = chapter.endNanos?.let { mapper.mapTimestamp(it / 1_000L) }?.coerceAtLeast(Pts(0))?.asDuration,
+                        title = chapter.names.firstOrNull()?.text,
+                    )
+                },
+            parts = edition.playlist?.map { chapter ->
+                SourceEditionPart(
+                    start = Pts(chapter.startNanos / 1_000L),
+                    // The playlist is only answered when every chapter it plays states its end.
+                    end = Pts(checkNotNull(chapter.endNanos) / 1_000L),
+                    title = chapter.names.firstOrNull()?.text,
+                    isHidden = chapter.isHidden,
+                    segmentUid = chapter.segmentUid,
+                    segmentEditionUid = chapter.segmentEditionUid,
+                )
+            },
+        )
+    }
+
+    override fun fromSegmentTime(time: Pts): Pts = mapper.mapTimestamp(time.micros) ?: time
 
     /**
      * MPEG-TS and friends declare that their timestamps may jump. The engine uses this to pick a

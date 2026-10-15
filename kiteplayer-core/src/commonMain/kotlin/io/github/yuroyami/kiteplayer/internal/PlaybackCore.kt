@@ -20,6 +20,7 @@ import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MasterClock
 import io.github.yuroyami.kiteplayer.MatchingAudioSubtitles
 import io.github.yuroyami.kiteplayer.MediaClip
+import io.github.yuroyami.kiteplayer.MediaEdition
 import io.github.yuroyami.kiteplayer.MediaInspection
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -4209,6 +4210,7 @@ internal class PlaybackCore(
                 networkIo = suppliedIo,
             ).also { built ->
                 built.applyClip(item)
+                built.edition = chosenEdition(source.editions, null)
                 built.wantedCaptions = wantedCaptions
                 built.startUs = readFromUs
                 // What the device was opened for, which a gapless handoff compares the next item against.
@@ -12148,6 +12150,8 @@ internal class PlaybackCore(
             tracks = itemThumbnails?.file?.takeIf { itemThumbnails?.source == media?.thumbnails }
                 ?.let { tracks.copy(thumbnails = it.set) } ?: tracks,
             chapters = session?.chapters ?: emptyList(),
+            editions = session?.mediaEditions ?: emptyList(),
+            edition = session?.edition,
             metadata = session?.shownTags ?: emptyMap(),
             lyrics = if (session != null) tagLyricsText else null,
             speed = speed,
@@ -14407,6 +14411,12 @@ internal class PlaybackCore(
         private var clippedChapters: List<Chapter>? = null
         private var clippedFrom: List<Chapter>? = null
         private var clippedAt: Pair<Long, Long>? = null
+
+        /** The media's editions as the caller sees them (#501). Empty for media with none. */
+        val mediaEditions: List<MediaEdition> by lazy { mediaEditionsOf(source) }
+
+        /** The [MediaEdition.index] of the edition that plays, or null (#501). Actor only. */
+        var edition: Int? = null
 
         /**
          * Where the item ends in its file, in microseconds (#456): its clip's end, or the media's

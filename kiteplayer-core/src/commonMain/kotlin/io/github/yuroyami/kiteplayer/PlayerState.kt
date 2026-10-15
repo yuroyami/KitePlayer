@@ -204,6 +204,14 @@ public data class PlayerSnapshot(
     val reconnecting: Boolean = false,
     /** Whether flashing video is dimmed (#500). See [KitePlayer.setFlashGuard]. */
     val flashGuard: FlashGuard = FlashGuard.FollowSystem,
+    /**
+     * The editions of the current media's chapters, such as a theatrical and an extended cut, in the
+     * order the file stores them (#501). Empty for media with none, which is all media but Matroska.
+     * `KitePlayer.selectEdition` plays another.
+     */
+    val editions: List<MediaEdition> = emptyList(),
+    /** The [MediaEdition.index] of the edition that plays, or null for media with no editions (#501). */
+    val edition: Int? = null,
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

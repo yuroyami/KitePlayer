@@ -251,8 +251,11 @@ stays paused.
 
 ## The backend interface
 
-Two members join `PlayerMediaSource` in the `spi` package, both defaulted so that every existing
-backend keeps compiling and plays as before:
+Three members join `PlayerMediaSource` in the `spi` package, all defaulted so that every existing
+backend keeps compiling and plays as before. The third was found while building the first step: a
+part's range is stated in its own file's segment time, and only the source that opens that file
+knows how its times map to the engine's, so a part's times stay as the file states them and each
+source maps its own:
 
 ```kotlin
 public interface PlayerMediaSource {
@@ -262,6 +265,9 @@ public interface PlayerMediaSource {
 
     /** The file's editions, in stored order. Empty for a container with none. */
     public val editions: List<SourceEdition> get() = emptyList()
+
+    /** A time of this file's segment as the file states it, in the engine's time. */
+    public fun fromSegmentTime(time: Pts): Pts = time
 }
 
 public data class SourceEdition(
@@ -288,10 +294,10 @@ public data class SourceEditionPart(
 )
 ```
 
-The FFmpeg backend fills both from `MediaSource.matroska`. A backend only reports what a file says:
-it never searches for or opens a linked file. The engine does that through the same
-`MediaSourceFactory.open` it opens every item with, so a custom backend gets linked files for free
-by reporting these two members.
+The FFmpeg backend fills them from `MediaSource.matroska` and its own timestamp mapper. A backend
+only reports what a file says: it never searches for or opens a linked file. The engine does that
+through the same `MediaSourceFactory.open` it opens every item with, so a custom backend gets linked
+files for free by reporting these three members.
 
 ## How the engine plays it
 

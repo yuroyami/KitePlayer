@@ -903,6 +903,76 @@ if ! ffmpeg -v error -y -i dash/subs.srt -c:s ttml -frag_duration 2000000 \
 fi
 rm -f "$stpp_log"
 
+echo "Matroska editions in editions/: a season with a linked opening and ending, two cuts of a film, links"
+# ffmpeg writes no ordered edition and no chapter that plays another file, so each file is made with
+# ffmpeg and then given its segment UID and its editions by scripts/mkv-editions.py (#501). Every
+# file differs from the one it joins in its picture size and its sound, so a join changes decoders
+# and a test can tell from a picture's size which file it came from. Every sound is 48 kHz stereo,
+# so the joins stay gapless. Keyframes fall each second, so a range that starts at half a second
+# starts between two of them.
+mkdir -p editions/season editions/season-no-op
+# This script runs inside testmedia at the root of the repository, so the tool is one level up.
+editions_tool=../scripts/mkv-editions.py
+mkv_part() { # <out> <seconds> <size> <hertz> <audio codec args...>
+    local out=$1 seconds=$2 size=$3 hertz=$4
+    shift 4
+    ffmpeg -v error -y \
+      -f lavfi -i "testsrc2=size=$size:rate=30:duration=$seconds" \
+      -f lavfi -i "sine=frequency=$hertz:sample_rate=48000:duration=$seconds" \
+      -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 30 -keyint_min 30 -sc_threshold 0 \
+      "$@" -ac 2 -shortest -write_crc32 0 "$out"
+}
+uid_episode=e9150de0000000000000000000000001
+uid_op=0e0e0e00000000000000000000000002
+uid_ed=ed0ed000000000000000000000000003
+uid_film=f11f0000000000000000000000000004
+uid_recap=4eca9000000000000000000000000005
+uid_loop_a=a0000000000000000000000000000006
+uid_loop_b=b0000000000000000000000000000007
+mkv_part editions/op.raw.mkv 4 256x144 440 -c:a libopus -b:a 64k
+mkv_part editions/episode.raw.mkv 5 320x180 660 -c:a aac -b:a 96k
+mkv_part editions/ed.raw.mkv 4 384x216 880 -c:a aac -b:a 96k
+mkv_part editions/film.raw.mkv 8 320x180 550 -c:a aac -b:a 96k
+mkv_part editions/recap.raw.mkv 2 288x162 330 -c:a aac -b:a 96k
+mkv_part editions/loop.raw.mkv 2 320x180 770 -c:a aac -b:a 96k
+# The episode plays 0.5 s to 3.5 s of the opening, 0 s to 4 s of itself, and 1 s to 3 s of the
+# ending: nine seconds, whose joins sit at 3 s and 7 s.
+python3 "$editions_tool" editions/op.raw.mkv editions/season/op.mkv --uid $uid_op
+python3 "$editions_tool" editions/ed.raw.mkv editions/season/ed.mkv --uid $uid_ed
+python3 "$editions_tool" editions/episode.raw.mkv editions/season/episode.mkv --uid $uid_episode --editions "[
+  {\"uid\": 100, \"name\": \"Episode\", \"default\": true, \"ordered\": true, \"chapters\": [
+    {\"uid\": 101, \"name\": \"Opening\", \"start\": 0.5, \"end\": 3.5, \"segment\": \"$uid_op\"},
+    {\"uid\": 102, \"name\": \"Part A\", \"start\": 0, \"end\": 4},
+    {\"uid\": 103, \"name\": \"Ending\", \"start\": 1, \"end\": 3, \"segment\": \"$uid_ed\"}]}]"
+cp editions/season/episode.mkv editions/season/ed.mkv editions/season-no-op/
+# The film's theatrical cut plays 0 s to 3 s and 5 s to 8 s, past a disabled chapter, and its last
+# chapter is hidden, so it plays and is not listed. The extended cut plays the scene between.
+python3 "$editions_tool" editions/film.raw.mkv editions/film.mkv --uid $uid_film --editions "[
+  {\"uid\": 200, \"name\": \"Theatrical\", \"default\": true, \"ordered\": true, \"chapters\": [
+    {\"uid\": 201, \"name\": \"Act one\", \"start\": 0, \"end\": 3},
+    {\"uid\": 203, \"name\": \"Outtakes\", \"start\": 3, \"end\": 5, \"enabled\": false},
+    {\"uid\": 202, \"name\": \"Act three\", \"start\": 5, \"end\": 8, \"hidden\": true}]},
+  {\"uid\": 210, \"name\": \"Extended\", \"ordered\": true, \"chapters\": [
+    {\"uid\": 211, \"name\": \"Act one\", \"start\": 0, \"end\": 3},
+    {\"uid\": 212, \"name\": \"Deleted scene\", \"start\": 3, \"end\": 5},
+    {\"uid\": 213, \"name\": \"Act three\", \"start\": 5, \"end\": 8}]}]"
+# The recap plays its own two seconds and then the film's theatrical cut whole: eight seconds.
+python3 "$editions_tool" editions/recap.raw.mkv editions/recap.mkv --uid $uid_recap --editions "[
+  {\"uid\": 300, \"name\": \"Recap\", \"default\": true, \"ordered\": true, \"chapters\": [
+    {\"uid\": 301, \"name\": \"Previously\", \"start\": 0, \"end\": 2},
+    {\"uid\": 302, \"name\": \"The film\", \"start\": 0, \"end\": 6, \"segment\": \"$uid_film\", \"edition\": 200}]}]"
+# Two files whose editions play each other whole: A plays itself and then B, and B plays one second
+# of itself and then A again, a loop the player refuses after B's second.
+python3 "$editions_tool" editions/loop.raw.mkv editions/loop-a.mkv --uid $uid_loop_a --editions "[
+  {\"uid\": 400, \"name\": \"A\", \"default\": true, \"ordered\": true, \"chapters\": [
+    {\"uid\": 401, \"name\": \"A\", \"start\": 0, \"end\": 2},
+    {\"uid\": 402, \"name\": \"B\", \"start\": 0, \"end\": 1, \"segment\": \"$uid_loop_b\", \"edition\": 500}]}]"
+python3 "$editions_tool" editions/loop.raw.mkv editions/loop-b.mkv --uid $uid_loop_b --editions "[
+  {\"uid\": 500, \"name\": \"B\", \"default\": true, \"ordered\": true, \"chapters\": [
+    {\"uid\": 501, \"name\": \"B\", \"start\": 0, \"end\": 1},
+    {\"uid\": 502, \"name\": \"Back to A\", \"start\": 0, \"end\": 2, \"segment\": \"$uid_loop_a\", \"edition\": 400}]}]"
+rm -f editions/*.raw.mkv
+
 # ---------------------------------------------------------------------------------------------
 # Provenance.
 #

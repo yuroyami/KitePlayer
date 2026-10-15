@@ -25,11 +25,13 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegResampler : io
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/github/yuroyami/kiteplayer/spi/PlayerMediaSource, io/github/yuroyami/kiteplayer/spi/RecordingCapable {
 	public final fun audioDecoderFactories ()Ljava/util/List;
 	public fun close ()V
+	public fun fromSegmentTime-tjdgUQw (J)J
 	public fun getAttachments ()Ljava/util/List;
 	public fun getChapters ()Ljava/util/List;
 	public fun getContainerBitrateBps ()Ljava/lang/Long;
 	public fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public fun getDurationIsEstimate ()Z
+	public fun getEditions ()Ljava/util/List;
 	public final fun getFirstAudio ()Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
 	public final fun getFirstVideo ()Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
 	public fun getMetadata ()Ljava/util/Map;
@@ -38,6 +40,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public fun getRealTime ()Z
 	public fun getRecordingPath ()Ljava/lang/String;
 	public fun getSeekable ()Z
+	public fun getSegmentUid ()Ljava/lang/String;
 	public fun getSelectedVariant ()Ljava/lang/Integer;
 	public fun getSeparateAudioRenditions ()Z
 	public fun getStreamDivergences ()Ljava/util/List;

@@ -2014,6 +2014,22 @@ final class io.github.yuroyami.kiteplayer.spi/OverlayImage { // io.github.yuroya
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/OverlayImage.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.spi/PicturePoint { // io.github.yuroyami.kiteplayer.spi/PicturePoint|null[0]
+    constructor <init>(kotlin/Double, kotlin/Double) // io.github.yuroyami.kiteplayer.spi/PicturePoint.<init>|<init>(kotlin.Double;kotlin.Double){}[0]
+
+    final val across // io.github.yuroyami.kiteplayer.spi/PicturePoint.across|{}across[0]
+        final fun <get-across>(): kotlin/Double // io.github.yuroyami.kiteplayer.spi/PicturePoint.across.<get-across>|<get-across>(){}[0]
+    final val down // io.github.yuroyami.kiteplayer.spi/PicturePoint.down|{}down[0]
+        final fun <get-down>(): kotlin/Double // io.github.yuroyami.kiteplayer.spi/PicturePoint.down.<get-down>|<get-down>(){}[0]
+
+    final fun component1(): kotlin/Double // io.github.yuroyami.kiteplayer.spi/PicturePoint.component1|component1(){}[0]
+    final fun component2(): kotlin/Double // io.github.yuroyami.kiteplayer.spi/PicturePoint.component2|component2(){}[0]
+    final fun copy(kotlin/Double = ..., kotlin/Double = ...): io.github.yuroyami.kiteplayer.spi/PicturePoint // io.github.yuroyami.kiteplayer.spi/PicturePoint.copy|copy(kotlin.Double;kotlin.Double){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PicturePoint.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PicturePoint.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PicturePoint.toString|toString(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo|null[0]
     constructor <init>(kotlin/Int, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.spi/FieldOrder = ..., io.github.yuroyami.kiteplayer.spi/HdrStaticMetadata? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DolbyVisionInfo? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/PictureCrop? = ..., io.github.yuroyami.kiteplayer/VideoProjection? = ...) // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.<init>|<init>(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.spi.FieldOrder;io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata?;kotlin.Boolean;io.github.yuroyami.kiteplayer.DolbyVisionInfo?;kotlin.Boolean;io.github.yuroyami.kiteplayer.PictureCrop?;io.github.yuroyami.kiteplayer.VideoProjection?){}[0]
 
@@ -2167,6 +2183,35 @@ final class io.github.yuroyami.kiteplayer.spi/SourceEditionPart { // io.github.y
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/SourceEditionPart.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SourceEditionPart.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/SourceEditionPart.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.spi/SphericalLens { // io.github.yuroyami.kiteplayer.spi/SphericalLens|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/VideoProjection, io.github.yuroyami.kiteplayer/SphericalView, kotlin/Float, kotlin/Float) // io.github.yuroyami.kiteplayer.spi/SphericalLens.<init>|<init>(io.github.yuroyami.kiteplayer.VideoProjection;io.github.yuroyami.kiteplayer.SphericalView;kotlin.Float;kotlin.Float){}[0]
+
+    final val height // io.github.yuroyami.kiteplayer.spi/SphericalLens.height|{}height[0]
+        final fun <get-height>(): kotlin/Float // io.github.yuroyami.kiteplayer.spi/SphericalLens.height.<get-height>|<get-height>(){}[0]
+    final val pictureHeight // io.github.yuroyami.kiteplayer.spi/SphericalLens.pictureHeight|{}pictureHeight[0]
+        final fun <get-pictureHeight>(): kotlin/Double // io.github.yuroyami.kiteplayer.spi/SphericalLens.pictureHeight.<get-pictureHeight>|<get-pictureHeight>(){}[0]
+    final val pictureLeft // io.github.yuroyami.kiteplayer.spi/SphericalLens.pictureLeft|{}pictureLeft[0]
+        final fun <get-pictureLeft>(): kotlin/Double // io.github.yuroyami.kiteplayer.spi/SphericalLens.pictureLeft.<get-pictureLeft>|<get-pictureLeft>(){}[0]
+    final val pictureTop // io.github.yuroyami.kiteplayer.spi/SphericalLens.pictureTop|{}pictureTop[0]
+        final fun <get-pictureTop>(): kotlin/Double // io.github.yuroyami.kiteplayer.spi/SphericalLens.pictureTop.<get-pictureTop>|<get-pictureTop>(){}[0]
+    final val pictureWidth // io.github.yuroyami.kiteplayer.spi/SphericalLens.pictureWidth|{}pictureWidth[0]
+        final fun <get-pictureWidth>(): kotlin/Double // io.github.yuroyami.kiteplayer.spi/SphericalLens.pictureWidth.<get-pictureWidth>|<get-pictureWidth>(){}[0]
+    final val rotation // io.github.yuroyami.kiteplayer.spi/SphericalLens.rotation|{}rotation[0]
+        final fun <get-rotation>(): kotlin/DoubleArray // io.github.yuroyami.kiteplayer.spi/SphericalLens.rotation.<get-rotation>|<get-rotation>(){}[0]
+    final val scale // io.github.yuroyami.kiteplayer.spi/SphericalLens.scale|{}scale[0]
+        final fun <get-scale>(): kotlin/Double // io.github.yuroyami.kiteplayer.spi/SphericalLens.scale.<get-scale>|<get-scale>(){}[0]
+    final val width // io.github.yuroyami.kiteplayer.spi/SphericalLens.width|{}width[0]
+        final fun <get-width>(): kotlin/Float // io.github.yuroyami.kiteplayer.spi/SphericalLens.width.<get-width>|<get-width>(){}[0]
+    final val wraps // io.github.yuroyami.kiteplayer.spi/SphericalLens.wraps|{}wraps[0]
+        final fun <get-wraps>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/SphericalLens.wraps.<get-wraps>|<get-wraps>(){}[0]
+
+    final fun pictureAt(kotlin/Double, kotlin/Double): io.github.yuroyami.kiteplayer.spi/PicturePoint? // io.github.yuroyami.kiteplayer.spi/SphericalLens.pictureAt|pictureAt(kotlin.Double;kotlin.Double){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.spi/SphericalLens.Companion|null[0]
+        final fun draws(io.github.yuroyami.kiteplayer/ProjectionKind): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/SphericalLens.Companion.draws|draws(io.github.yuroyami.kiteplayer.ProjectionKind){}[0]
+    }
 }
 
 final class io.github.yuroyami.kiteplayer.spi/StreamDivergence { // io.github.yuroyami.kiteplayer.spi/StreamDivergence|null[0]

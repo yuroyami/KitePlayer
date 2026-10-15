@@ -73,6 +73,13 @@ public actual class KiteVideoState internal constructor(
         mutableStateOf(io.github.yuroyami.kiteplayer.VideoTransform.Identity)
 
     /**
+     * The 360 degree picture to draw a view into, or null for the flat picture (#460), under the
+     * same draw-phase law as [transform]. It changes with every step of a drag that turns the view,
+     * and each change redraws the picture on screen and nothing else.
+     */
+    internal val sphere: MutableState<SphereView?> = mutableStateOf(null)
+
+    /**
      * The engine's picture controls, pre-baked into the one [androidx.compose.ui.graphics.ColorFilter]
      * the draw phase applies to the video image (never to subtitles). Null is neutral, and the
      * usual case, so normal playback pays nothing. Baked HERE, on the publishing thread, because
@@ -166,6 +173,7 @@ public actual class KiteVideoState internal constructor(
         publishOverlay = { newest -> overlay.value = newest },
         publishScaleMode = { mode -> scaleMode.value = mode },
         publishTransform = { newest -> transform.value = newest },
+        publishSphere = { newest -> sphere.value = newest },
         publishAdjustments = { adjustments ->
             pictureAdjustments = adjustments
             videoColorFilter.value = if (adjustments.isIdentity) {

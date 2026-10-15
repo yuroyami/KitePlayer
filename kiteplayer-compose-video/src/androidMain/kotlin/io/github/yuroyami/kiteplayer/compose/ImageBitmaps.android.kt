@@ -181,6 +181,12 @@ private class AndroidKiteVideoHardwareRenderer(
     override fun vsyncIntervalNanos() = delegate.vsyncIntervalNanos()
     override fun setViewport(width: Int, height: Int, scale: Float) = delegate.setViewport(width, height, scale)
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) = delegate.setTransform(transform)
+
+    // Told only while Compose draws a view into the picture, so the blit hands it over whole (#460).
+    override fun setProjection(
+        projection: io.github.yuroyami.kiteplayer.VideoProjection?,
+        view: io.github.yuroyami.kiteplayer.SphericalView,
+    ) = delegate.setProjection(projection, view)
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) = delegate.setScaleMode(mode)
 
     // The blit under this wrapper is the only shader on this path, so these two must reach it. Left

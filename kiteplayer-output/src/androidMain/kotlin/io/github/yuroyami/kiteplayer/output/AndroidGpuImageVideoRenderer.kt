@@ -238,6 +238,24 @@ public class AndroidGpuImageVideoRenderer(
         if (!closed.value) bridge.setQuarterTurned(transform.rotationDegrees == 90 || transform.rotationDegrees == 270)
     }
 
+    /**
+     * Hands a 360 degree picture to the client whole while its view is projected (#460), because
+     * the client then draws a view into it, which enlarges a part of it: fitting the picture to the
+     * viewport first would throw away the detail the view shows. The picture keeps its own size,
+     * up to 4096 pixels on its longer side, and no kernel or upscaler enlarges it.
+     *
+     * That is paid for in memory: the queue holds six buffers, so a 4K picture holds about 180 MB
+     * where a fitted one on a 1080p phone holds about 15 MB. Any other picture, and one whose view
+     * is switched to the flat picture, is fitted to the viewport as before. This renderer draws no
+     * view itself, so [projects] answers false.
+     */
+    override fun setProjection(
+        projection: io.github.yuroyami.kiteplayer.VideoProjection?,
+        view: io.github.yuroyami.kiteplayer.SphericalView,
+    ) {
+        if (!closed.value) bridge.setWholePicture(projection != null && view.projected)
+    }
+
     override suspend fun setOverlay(overlay: SubtitleOverlay?): Unit = Unit
 
     /**
@@ -577,11 +595,13 @@ private class OesRgbaBridge(
         runOnGlThread(GlState::clearPictures)
     }
 
-    // The view as it was last given, and whether the viewer turns the picture a quarter (#428).
+    // The view as it was last given, whether the viewer turns the picture a quarter (#428), and
+    // whether the client draws a view into a 360 degree picture, which takes it whole (#460).
     private var viewWidth = 0
     private var viewHeight = 0
     private var viewScale = 1f
     private var quarterTurned = false
+    private var wholePicture = false
 
     fun setViewport(width: Int, height: Int, scale: Float) {
         viewWidth = width
@@ -601,13 +621,20 @@ private class OesRgbaBridge(
         requestViewport()
     }
 
+    /** Takes whether the client draws a view into the picture, so the buffer holds it whole (#460). */
+    fun setWholePicture(whole: Boolean) {
+        if (wholePicture == whole) return
+        wholePicture = whole
+        requestViewport()
+    }
+
     private fun requestViewport() {
         if (closed) return
         val viewport = if (quarterTurned) {
             physicalGpuViewport(viewHeight, viewWidth, viewScale)
         } else {
             physicalGpuViewport(viewWidth, viewHeight, viewScale)
-        }
+        }?.copy(whole = wholePicture)
         if (requestedViewport.getAndSet(viewport) == viewport) return
         if (!handler.post {
                 runCatching(state::viewportChanged).onFailure(reportFailure)
@@ -778,11 +805,16 @@ internal class GlState private constructor(
     ) {
         if (closed || size.width <= 0 || size.height <= 0) return
         val rotation = normalizedGpuQuarterTurn(rotationDegrees)
+        val viewport = requestedViewport.get()
         val enlarge = bicubic.get() ||
             animationUpscaler.get() != io.github.yuroyami.kiteplayer.AnimationUpscaler.Off
         val applied = crop?.takeIf { !it.isEmpty && it.fits(size.width, size.height) }
         val visible = size.cropped(applied)
-        val outputSize = fittedGpuOutputSize(visible, rotation, requestedViewport.get(), enlarge)
+        val outputSize = if (viewport?.whole == true) {
+            wholeGpuOutputSize(visible)
+        } else {
+            fittedGpuOutputSize(visible, rotation, viewport, enlarge)
+        }
         // A crop that moves without changing what is left needs no new output, only the next lookup.
         configuredCrop = applied
         val bufferChanged = size != configuredBufferSize
@@ -2003,7 +2035,27 @@ internal fun cropTextureTransform(transform: FloatArray, crop: PictureCrop, buff
 internal data class GpuViewport(
     val width: Int,
     val height: Int,
+    /** True while the client draws a view into a 360 degree picture, which then goes whole (#460). */
+    val whole: Boolean = false,
 )
+
+/** The longest side of a 360 degree picture handed over whole (#460), which bounds its six buffers. */
+internal const val WHOLE_PICTURE_MAX_SIDE: Int = 4096
+
+/**
+ * The buffer for a 360 degree picture handed over whole (#460): the picture's own size, or that
+ * size scaled down until its longer side is [WHOLE_PICTURE_MAX_SIDE].
+ */
+internal fun wholeGpuOutputSize(sourceSize: VideoSize): VideoSize? {
+    if (sourceSize.width <= 0 || sourceSize.height <= 0) return null
+    val longer = maxOf(sourceSize.width, sourceSize.height)
+    if (longer <= WHOLE_PICTURE_MAX_SIDE) return VideoSize(sourceSize.width, sourceSize.height)
+    val share = WHOLE_PICTURE_MAX_SIDE.toDouble() / longer
+    return VideoSize(
+        width = (sourceSize.width * share).toInt().coerceAtLeast(1),
+        height = (sourceSize.height * share).toInt().coerceAtLeast(1),
+    )
+}
 
 /** Converts the renderer contract's logical extent into a safe physical-pixel bound. */
 internal fun physicalGpuViewport(width: Int, height: Int, scale: Float): GpuViewport? {

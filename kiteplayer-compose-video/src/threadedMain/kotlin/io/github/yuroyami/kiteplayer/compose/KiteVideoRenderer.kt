@@ -133,6 +133,8 @@ internal class KiteVideoRenderer(
     private val publishTransform: (io.github.yuroyami.kiteplayer.VideoTransform) -> Unit = {},
     /** Publishes the sampling the draw phase should scale the picture with. */
     private val publishFilterQuality: (androidx.compose.ui.graphics.FilterQuality) -> Unit = {},
+    /** Publishes the 360 degree picture to draw a view into, or null for the flat picture (#460). */
+    private val publishSphere: (SphereView?) -> Unit = {},
     /** Optional platform GPU tier. Software frames still use this renderer's worker. */
     private val hardwareRenderer: KiteVideoHardwareRenderer? = null,
     /** The flash guard's clock, in nanoseconds: when each converted picture is about to show. */
@@ -185,6 +187,25 @@ internal class KiteVideoRenderer(
         publishTransform(transform)
         // The hardware tier sizes its images for the turned picture (#428); the draw turns it.
         if (!closed.value) hardwareRenderer?.setTransform(transform)
+    }
+
+    /** The whole sphere and a tile of it, where this platform runs the program that draws views (#460). */
+    override fun projects(kind: io.github.yuroyami.kiteplayer.ProjectionKind): Boolean =
+        sphereViewsDrawable && io.github.yuroyami.kiteplayer.spi.SphericalLens.draws(kind)
+
+    /**
+     * The draw phase draws the view into a 360 degree picture that this renderer [projects], while
+     * the view is projected (#460), and the flat picture otherwise. The hardware tier is told the
+     * projection only when the view is drawn, so that it hands over the whole picture rather than
+     * one fitted to the area, whose detail the view would enlarge away.
+     */
+    override fun setProjection(
+        projection: io.github.yuroyami.kiteplayer.VideoProjection?,
+        view: io.github.yuroyami.kiteplayer.SphericalView,
+    ) {
+        val drawn = projection?.takeIf { view.projected && projects(it.kind) }
+        publishSphere(drawn?.let { SphereView(it, view) })
+        if (!closed.value) hardwareRenderer?.setProjection(drawn, view)
     }
 
     /**

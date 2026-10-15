@@ -24,6 +24,10 @@ plugins {
  * it builds. The web has no thread to give a worker, and an image built from Kotlin bytes there
  * costs more than a frame's whole budget (#125), so wasmJs has its own state and draws through
  * Compose's WebGL render target instead. Only the public surface and the pure geometry are common.
+ *
+ * The desktop and iOS draw through Skia, so the program that draws a view into a 360 degree video
+ * runs through Skia's runtime shaders once, in skikoMain; Android runs the same program through its
+ * own runtime shader (#460).
  */
 kotlin {
     explicitApi()
@@ -64,6 +68,13 @@ kotlin {
         getByName("androidMain").dependsOn(threadedMain)
         getByName("iosMain").dependsOn(threadedMain)
         getByName("jvmMain").dependsOn(threadedMain)
+        val skikoMain = maybeCreate("skikoMain").apply {
+            dependsOn(threadedMain)
+        }
+        getByName("iosMain").dependsOn(skikoMain)
+        getByName("jvmMain").dependsOn(skikoMain)
+        // The lens every renderer draws a 360 degree view by is shared with the core (#460).
+        all { languageSettings.optIn("io.github.yuroyami.kiteplayer.KitePlayerInternalApi") }
 
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
@@ -122,4 +133,9 @@ tasks.matching { it.name.startsWith("checkComposeUiTestConfigurationFor") }.conf
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
     environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
     environment("SIMCTL_CHILD_KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+}
+
+// The same for the JVM, whose test runs in the module's directory rather than the repository's.
+tasks.withType<Test>().configureEach {
+    environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
 }

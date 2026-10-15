@@ -59,36 +59,20 @@ internal actual fun PlatformKiteVideo(state: KiteVideoState, modifier: Modifier)
                 }
                 var recorded = false
                 try {
-                    // The mode, the picture-control filter and the framing are the remaining
-                    // sanctioned draw-phase reads: all change on a user's setting, so their
-                    // invalidations are rarer than the overlay's.
-                    val mode = state.scaleMode.value
-                    val videoFilter = state.pictureFilterFor(frame)
-                    val framing = state.transform.value
-                    val sampling = state.filterQuality.value
-                    val layout = videoLayout(
-                        areaWidth = size.width.toInt(),
-                        areaHeight = size.height.toInt(),
-                        size = frame.shownSize,
-                        rotationDegrees = frame.rotationDegrees,
-                        mode = mode,
-                        transform = framing,
-                        mirrored = frame.mirrored,
-                    ) ?: return@drawBehind
-                    // Fill overhangs the component by design; the clip keeps the crop inside it.
-                    // Fit and Stretch never overhang, so they keep the unclipped fast path.
-                    val draw: DrawScope.() -> Unit = {
+                    // The mode, the picture-control filter, the framing and the view into a 360
+                    // degree picture are the remaining sanctioned draw-phase reads: all change on a
+                    // user's setting or gesture, so their invalidations are rarer than the frame's.
+                    val drawn = drawFramePicture(
+                        frame = frame,
+                        mode = state.scaleMode.value,
+                        framing = state.transform.value,
+                        sampling = state.filterQuality.value,
                         // The picture controls, on the VIDEO image only: subtitles below
                         // composite unfiltered, exactly like every platform renderer.
-                        drawVideoPicture(frame.image, layout, layout.mirrored, sampling, videoFilter, frame.crop)
-                    }
-                    // Fill overhangs by design; zoom and pan can overhang under ANY mode. Both
-                    // clip; the unzoomed Fit and Stretch keep the unclipped fast path.
-                    if (mode == io.github.yuroyami.kiteplayer.VideoScale.Fill || !framing.isIdentity) {
-                        clipRect { draw() }
-                    } else {
-                        draw()
-                    }
+                        videoFilter = state.pictureFilterFor(frame),
+                        sphere = state.sphere.value,
+                    )
+                    if (!drawn) return@drawBehind
                     recorded = true
                 } finally {
                     state.frameDrawFinished(frame, recorded)
@@ -103,6 +87,48 @@ internal actual fun PlatformKiteVideo(state: KiteVideoState, modifier: Modifier)
                 drawOverlayItems(state)
             },
     )
+}
+
+/**
+ * Draws [frame]'s picture as the draw phase does. With [sphere] set and a canvas that runs the
+ * program, that is the view into the 360 degree picture over the whole area, with no bars, and
+ * neither [mode] nor [framing] applies: the view's field of view is its zoom (#460). Otherwise it is
+ * the flat picture, where [mode] and [framing] put it. False when the area is empty and nothing was
+ * drawn. A function of its own so a test can draw it into a bitmap.
+ */
+internal fun DrawScope.drawFramePicture(
+    frame: KiteVideoFrame,
+    mode: io.github.yuroyami.kiteplayer.VideoScale,
+    framing: io.github.yuroyami.kiteplayer.VideoTransform,
+    sampling: FilterQuality,
+    videoFilter: ColorFilter?,
+    sphere: SphereView?,
+): Boolean {
+    if (sphere != null && size.width >= 1f && size.height >= 1f) {
+        val lens = io.github.yuroyami.kiteplayer.spi.SphericalLens(sphere.projection, sphere.view, size.width, size.height)
+        if (drawSphereView(frame.image, frame.crop, lens, sampling, videoFilter)) return true
+    }
+    val layout = videoLayout(
+        areaWidth = size.width.toInt(),
+        areaHeight = size.height.toInt(),
+        size = frame.shownSize,
+        rotationDegrees = frame.rotationDegrees,
+        mode = mode,
+        transform = framing,
+        mirrored = frame.mirrored,
+    ) ?: return false
+    val draw: DrawScope.() -> Unit = {
+        drawVideoPicture(frame.image, layout, layout.mirrored, sampling, videoFilter, frame.crop)
+    }
+    // Fill overhangs the component by design, and zoom and pan can overhang under any mode: both
+    // clip, which keeps the crop inside it. The unzoomed Fit and Stretch never overhang, so they
+    // keep the unclipped fast path.
+    if (mode == io.github.yuroyami.kiteplayer.VideoScale.Fill || !framing.isIdentity) {
+        clipRect { draw() }
+    } else {
+        draw()
+    }
+    return true
 }
 
 /** The overlay pass, shared by the with-picture and no-picture draws. */

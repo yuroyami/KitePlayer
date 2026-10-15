@@ -284,6 +284,25 @@ class OutputGenerationLeaseBookTest {
     }
 
     /**
+     * A 360 degree picture that Compose draws a view into goes whole (#460): fitted to the viewport,
+     * a 4K sphere on a portrait phone would be 1080 pixels wide, and the view enlarges 80 degrees of
+     * it, which is 240 of those pixels, to the whole screen. Its longer side stops at 4096.
+     */
+    @Test
+    fun aSphereDrawnAsAViewKeepsItsOwnSizeUpTo4096() {
+        assertEquals(VideoSize(3840, 1920), wholeGpuOutputSize(VideoSize(3840, 1920)))
+        assertEquals(VideoSize(512, 256), wholeGpuOutputSize(VideoSize(512, 256)), "nor does it grow")
+        assertEquals(VideoSize(4096, 2048), wholeGpuOutputSize(VideoSize(7680, 3840)))
+        assertEquals(VideoSize(2048, 4096), wholeGpuOutputSize(VideoSize(3840, 7680)))
+        assertEquals(null, wholeGpuOutputSize(VideoSize(0, 0)))
+        assertEquals(
+            VideoSize(1080, 540),
+            fittedGpuOutputSize(VideoSize(3840, 1920), 0, GpuViewport(1080, 2400)),
+            "a sphere drawn flat is fitted as before",
+        )
+    }
+
+    /**
      * A requested kernel is the ONE thing that lets the blit enlarge.
      *
      * The buffer normally stops at the source's own size, because the drawing step can enlarge

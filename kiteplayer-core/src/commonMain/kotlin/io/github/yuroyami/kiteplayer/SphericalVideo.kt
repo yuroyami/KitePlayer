@@ -30,9 +30,10 @@ public sealed interface ProjectionKind {
     public data object Equirectangular : ProjectionKind
 
     /**
-     * A part of an [Equirectangular] picture. Each bound is the share of the whole picture that
-     * lies beyond this part's edge on that side, from 0 to 1, so a tile of the middle half of the
-     * width and the whole height has a [left] and a [right] of 0.25 and a [top] and a [bottom] of 0.
+     * A part of an [ProjectionKind.Equirectangular] picture. Each bound is the share of the whole
+     * picture that lies beyond this part's edge on that side, from 0 to 1, so a tile of the middle
+     * half of the width and the whole height has a [left] and a [right] of 0.25 and a [top] and a
+     * [bottom] of 0.
      */
     public data class EquirectangularTile(
         val left: Double,

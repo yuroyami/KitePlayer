@@ -4076,6 +4076,19 @@ public final class io/github/yuroyami/kiteplayer/spi/OverlayImage {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/spi/PicturePoint {
+	public fun <init> (DD)V
+	public final fun component1 ()D
+	public final fun component2 ()D
+	public final fun copy (DD)Lio/github/yuroyami/kiteplayer/spi/PicturePoint;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/spi/PicturePoint;DDILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/spi/PicturePoint;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAcross ()D
+	public final fun getDown ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerMediaSource : java/lang/AutoCloseable {
 	public fun fromSegmentTime-tjdgUQw (J)J
 	public fun getAttachments ()Ljava/util/List;
@@ -4422,6 +4435,25 @@ public final class io/github/yuroyami/kiteplayer/spi/SourceEditionPart {
 	public fun hashCode ()I
 	public final fun isHidden ()Z
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/SphericalLens {
+	public static final field Companion Lio/github/yuroyami/kiteplayer/spi/SphericalLens$Companion;
+	public fun <init> (Lio/github/yuroyami/kiteplayer/VideoProjection;Lio/github/yuroyami/kiteplayer/SphericalView;FF)V
+	public final fun getHeight ()F
+	public final fun getPictureHeight ()D
+	public final fun getPictureLeft ()D
+	public final fun getPictureTop ()D
+	public final fun getPictureWidth ()D
+	public final fun getRotation ()[D
+	public final fun getScale ()D
+	public final fun getWidth ()F
+	public final fun getWraps ()Z
+	public final fun pictureAt (DD)Lio/github/yuroyami/kiteplayer/spi/PicturePoint;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/SphericalLens$Companion {
+	public final fun draws (Lio/github/yuroyami/kiteplayer/ProjectionKind;)Z
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/StreamDivergence {

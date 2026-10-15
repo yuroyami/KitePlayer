@@ -282,7 +282,9 @@ the player cannot honor a call, it fails the call with a typed error rather than
 
 The player can also run a gapless queue (or crossfade between songs), shuffle and loop, apply a
 ten-band equalizer and ReplayGain, follow an external clock for watching together, step frame by
-frame, take screenshots, and record what plays into a Matroska file with no re-encode.
+frame, take screenshots, and record what plays into a Matroska file with no re-encode. It plays a
+Matroska file's editions, ordered ones included, with the opening and the ending that a season's
+episodes link to from other files ([Editions and linked files](docs/media-sources.md#editions-and-linked-files)).
 [Controlling the player](docs/player-api.md) lists every call by area.
 
 ### Open local and picked files

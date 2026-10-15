@@ -12,6 +12,16 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Added
 
+- Matroska editions (#501). The snapshot lists a file's editions in `PlayerSnapshot.editions` and
+  names the one that plays in `edition`; `selectEdition` plays another, keeping the scene when the
+  new edition plays it, and `DemuxPolicy.edition` chooses one at open. An ordered edition plays as
+  one timeline: its parts join with no gap in the sound, and the position, the length, the
+  chapters, seeks and the start position all count along it. Its parts in other files, such as the
+  opening and the ending a season shares, are found beside a local file or in the item's new
+  `linkedFiles`, and a part whose file is missing is left out with the new warning
+  `PlaybackWarning.EditionPartLeftOut`. `DemuxPolicy.orderedEditions = false` plays every edition
+  plainly, as FFmpeg does. A backend reports editions through three new defaulted members of
+  `PlayerMediaSource`: `segmentUid`, `editions` and `fromSegmentTime`.
 - Compose video on the web: `kiteplayer-compose-video`, `kiteplayer-compose-ui` and
   `kiteplayer-compose` publish a `wasmJs` variant, so a Compose Multiplatform app can keep them in
   `commonMain` (#125). `KiteVideo` draws the picture inside Compose's own WebGL2 context through

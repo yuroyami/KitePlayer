@@ -1,8 +1,9 @@
 # Matroska editions and linked files
 
-This document is the design for issue #501. Nothing in it is implemented yet. It states the public
-API, what the player does with an ordered edition, and how the engine plays one, so that all three
-can be agreed before the code is written.
+This document is the design for issue #501, and the player now does what it says. It states the
+public API, what the player does with an ordered edition, and how the engine plays one. Where
+building it changed a detail, the detail here is the one that was built. The user's account is in
+`docs/media-sources.md`, under "Editions and linked files".
 
 ## What a Matroska file can say
 
@@ -76,13 +77,14 @@ public data class PlayerSnapshot(
 public class KitePlayer {
     /**
      * Plays edition [index] of [PlayerSnapshot.editions]. The media opens again on that edition,
-     * through the same rebuild as a programme change, and the choice is kept on the item as
-     * [DemuxPolicy.edition], so a later rebuild keeps it too. The player keeps playing or stays
-     * paused. See "Switching editions" for where the new edition starts.
+     * and the choice is kept on the item as [DemuxPolicy.edition], so a later rebuild keeps it too.
+     * The player keeps playing or stays paused. See "Switching editions" for where the new edition
+     * starts.
      *
      * @throws IllegalStateException when nothing is open, or when a stop, a close, a new open or a
      *         later call ended the change first.
      * @throws IllegalArgumentException when the media has no edition at [index].
+     * @throws UnsupportedOperationException when the source cannot seek, as a pipe cannot.
      * @throws PlaybackException when the reopen itself failed.
      */
     public suspend fun selectEdition(index: Int)
@@ -196,8 +198,14 @@ The item's tracks are those of the main file, and track choices name them, as fo
 part of a linked file plays, each selected track plays the linked file's track of the same kind that
 matches it: the same language first, then the same title, then the same position among the tracks
 of that kind. A kind the linked file does not have is silent while its part plays: no sound, no
-picture, or no subtitles. A kind the main file lacks, as a file that only links can, takes its tracks
-from the first part that has one.
+picture, or no subtitles. A kind the main file lacks, as a file that only links can, takes the linked
+file's own choice while its part plays.
+
+The item's tags and its editions stay the main file's too, whichever file plays. A track choice made
+while a part of another file plays names a track of the main file, as always, and opens that file
+again with the track that matches it. An external subtitle file is timed by the file that plays, as
+the main file's own subtitles are, so it lines up with the parts of the main file and not with those
+of another file.
 
 ### Finding linked files
 
@@ -208,9 +216,10 @@ one is found:
 2. for a main file named by a local path, with no `io`, the Matroska files beside it (`.mkv`,
    `.mka`, `.mks` and `.mk3d`), in the order of their names, at most 256 of them.
 
-Each candidate is opened once, with the shallowest probe, to read its segment UID, and is closed
-again unless a part plays from it. That open costs what any open costs, so a large folder costs
-time, which the bound of 256 limits. An item's headers reach a linked address only when it has the scheme, host and port of
+Each candidate is opened once, with the shallowest probe, to read its segment UID, its editions and
+its times, and every one is closed again once the timeline is made; a part's file opens again when
+the part plays. That open costs what any open costs, so a large folder costs time, which the bound
+of 256 limits. An item's headers reach a linked address only when it has the scheme, host and port of
 the item's own address, the rule external subtitles already follow.
 
 The folder is listed on the JVM, Android and native targets. A page has no folder, so on the web a
@@ -226,12 +235,13 @@ warning's `detail`.
 ### Playing and seeking
 
 Parts join with no gap and no seam in the sound, and the picture keeps its schedule across a join,
-as two items of a gapless queue do. Two parts that are adjacent ranges of the same file read on
-without opening it again.
+as two items of a gapless queue do: a part's last picture, when it runs late, goes with its part, as
+at any gapless join. Two parts that are adjacent ranges of the same file read on without opening it
+again.
 
-A seek to a position lands in the part that holds it. Inside the part that plays, it is an ordinary
-seek. In another part, that part opens at the position, as `next` opens an item at a start position,
-and the picture holds for a moment while it does.
+A seek to a position lands in the part that holds it. Inside the part that plays, or in another part
+of the same file, it is an ordinary seek. In a part of another file, that file opens at the position,
+as `next` opens an item at a start position, and the picture holds for a moment while it does.
 
 The queue preloads its next item as the timeline's last part nears its end. An A-B loop whose two
 points lie in different parts wraps by a seek to A rather than by the gapless pass a loop inside one
@@ -240,15 +250,16 @@ part makes. `SleepTimer.EndOfItem` ends at the end of the timeline.
 No part join emits an item change, touches the queue or shows in `preloadedIndex`. A join that
 the handoff refuses, because the next part's sound has another sample rate or channel count than
 the device was opened for, or one part has sound and the other none, joins the old way instead,
-with the short silence that brings. It is logged rather than warned, because
-`PlaybackWarning.GaplessFallback` names a queue item.
+with the short silence that brings: a seek within the same file, or an open of the next part's
+file. It is logged rather than warned, because `PlaybackWarning.GaplessFallback` names a queue item.
 
 ### Switching editions
 
 `selectEdition` opens the media again on the new edition. The new edition starts at the moment of
 the main file that plays now, when it plays that moment too, so a switch from a theatrical to an
-extended cut keeps the scene. Otherwise it starts from its beginning. The player keeps playing or
-stays paused.
+extended cut keeps the scene. Otherwise, as while a part of another file plays, it starts from its
+beginning. The player keeps playing or stays paused. A source that cannot seek refuses the switch,
+as it refuses a programme change, because it may not be readable twice.
 
 ## The backend interface
 

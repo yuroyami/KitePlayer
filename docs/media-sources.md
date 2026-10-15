@@ -63,6 +63,64 @@ once the file has not grown for `FileGrowth.endsAfter` (two seconds by default).
 with the file, and a seek reaches any part already written. A plain path needs `kiteplayer-io` for
 this, while an item with its own `io` needs nothing more.
 
+## Editions and linked files
+
+A Matroska file can carry several editions of its chapters, such as a theatrical and an extended
+cut of a film. The player lists them in `state.value.editions`, and `state.value.edition` names the
+one that plays: the one the file marks as the default, unless the item asks for another with
+`DemuxPolicy(edition = index)`. `selectEdition(index)` plays another while the media is open. The
+new edition starts at the same moment of the file when it plays that moment too, so a switch between
+two cuts keeps the scene, and starts from its beginning otherwise. The player keeps playing or stays
+paused.
+
+An ordered edition is a timeline: it plays its chapters in order, each one a range of time, and
+skips everything else. The player plays it that way:
+
+- The position, the length, the chapters, seeks, the start position, the A-B loop, the markers
+  and the seek bar pictures all count along the timeline. The chapters are the edition's, at their
+  places on it, and a hidden chapter plays without being listed.
+- The parts join with no gap in the sound, and no part starts or ends the item.
+- The times of the frames and the sound, such as those an audio tap or a captured frame carry, stay
+  the times of the file that plays them, so two parts can repeat a time. Use the position to tell
+  two moments of the timeline apart.
+
+A chapter of an ordered edition can play a range of another file, which it names by that file's
+segment UID rather than by its name. Releases of a season often keep one opening and one ending
+file and link them from every episode. The player looks for those files in this order:
+
+1. the files in `MediaItem.linkedFiles`;
+2. for a local file with no `io`, the Matroska files beside it (`.mkv`, `.mka`, `.mks` and
+   `.mk3d`), in the order of their names, at most 256 of them.
+
+```kotlin
+import io.github.yuroyami.kiteplayer.LinkedFile
+import io.github.yuroyami.kiteplayer.mediaItem
+
+val episode = mediaItem("https://cdn.example.com/s1/e03.mkv") {
+    linkedFile(LinkedFile("https://cdn.example.com/s1/opening.mkv"))
+    linkedFile(LinkedFile("https://cdn.example.com/s1/ending.mkv"))
+}
+```
+
+- An application needs `linkedFiles` only when the player cannot list the folder: for an address,
+  a content URI, a file read through `io`, and anything on the web, which has no folders.
+- The player opens each candidate once to read its segment UID. The item's headers go to a linked
+  address only when it has the scheme, host and port of the item's own address. Give a file its
+  own `io` to read it any other way.
+- A part whose file is not found is left out, the timeline closes up around it, and the warning
+  `EditionPartLeftOut` names its segment once. When no part can play, the file plays plainly.
+- The item's tracks, tags and editions stay those of the main file. While a part of another file
+  plays, each selected track plays that file's track of the same kind and language, then title,
+  then place. A track choice made then names the main file's track, as always.
+- A chapter can play another file's whole edition. The player follows such links four deep, and
+  leaves out a link that leads back to a file already on the way.
+- An external subtitle file is timed by the file that plays, so it lines up with the parts of the
+  main file and not with those of another file.
+
+An edition plays plainly, as FFmpeg plays it, when the item has a `clip`, when the file is still
+growing, when the source cannot seek, and when the item asks with
+`DemuxPolicy(orderedEditions = false)`, which suits a release whose links point at the wrong files.
+
 ## Several settings on one item
 
 Build the item in a block. An empty block gives the same item as `MediaItem(uri)`.
@@ -83,8 +141,8 @@ val item = mediaItem("https://cdn.example.com/live/channel.ts") {
 `probe`, `corruptPackets`, `lowLatency` and the other demux settings say how the container opens,
 and they fill the item's `demux` field. Raw FFmpeg options still go in `openOptions`, but an option
 that a typed field also sets refuses the open with a typed error. `MediaItem` also carries
-`startPosition`, `externalSubtitles`, `externalAudio`, `videoFilter` for an FFmpeg filter chain,
-and `formatHint` when a container needs naming.
+`startPosition`, `externalSubtitles`, `externalAudio`, `linkedFiles`, `videoFilter` for an FFmpeg
+filter chain, and `formatHint` when a container needs naming.
 
 ## Audio beside the media
 

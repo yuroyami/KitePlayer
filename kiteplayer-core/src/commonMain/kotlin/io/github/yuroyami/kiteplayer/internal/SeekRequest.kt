@@ -94,7 +94,12 @@ internal enum class SeekLanding {
 }
 
 internal sealed interface SeekTarget {
-    data class Absolute(val position: Pts) : SeekTarget
+    /**
+     * A time of the file, [position]. [itemUs] is the position the caller asked for when it is a
+     * caller's, which on an ordered edition's timeline names the run as well as the time (#501); null
+     * for the engine's own targets, which are times of the run that plays.
+     */
+    data class Absolute(val position: Pts, val itemUs: Long? = null) : SeekTarget
     data class Relative(val offset: Duration) : SeekTarget
     /** A fraction of the total duration, from 0.0 to 1.0. What a seek bar produces. */
     data class Factor(val fraction: Double) : SeekTarget

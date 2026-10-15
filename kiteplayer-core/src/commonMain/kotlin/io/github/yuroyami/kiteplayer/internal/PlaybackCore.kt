@@ -1108,7 +1108,15 @@ internal class PlaybackCore(
         refreshTypesetting()
         publishSnapshot()
     }
+    /**
+     * The session that plays. Each one it becomes moves [itemOriginMicros] to where the item's time
+     * starts in that session's file, which for an ordered edition is the run it plays (#501).
+     */
     private var session: OpenSession? = null
+        set(value) {
+            field = value
+            if (value != null) itemOriginMicros.value = value.originUs
+        }
     private var tracks: Tracks = Tracks.Empty
     private var lastError: PlaybackError? = null
     private var playRequested = false
@@ -1443,9 +1451,11 @@ internal class PlaybackCore(
     private val publishedPositionMicros = atomic(0L)
 
     /**
-     * Where the current item starts in its file, in microseconds: its clip's start, or zero (#456).
-     * The engine works in the file's time, and every position the caller reads or hands in counts
-     * from here, so this is taken away on the way out and added on the way in. Follows [media].
+     * Where the current item starts in its file, in microseconds: its clip's start, or zero (#456),
+     * or for an ordered edition, where the timeline's time starts in the run that plays (#501). The
+     * engine works in the file's time, and every position the caller reads or hands in counts from
+     * here, so this is taken away on the way out and added on the way in. Follows [media], and then
+     * [session] and the run it plays.
      */
     private val itemOriginMicros = atomic(0L)
 
@@ -1756,13 +1766,15 @@ internal class PlaybackCore(
         val reply = CompletableDeferred<ThumbnailTarget?>()
         send(CoreCommand.ThumbnailQuery(reply))
         val target = reply.await() ?: return null
-        val atUs = target.clipStartUs + position.inWholeMicroseconds.coerceAtLeast(0L)
-        if (target.itemEndUs != null && atUs >= target.itemEndUs) return null
+        val positionUs = position.inWholeMicroseconds.coerceAtLeast(0L)
+        // The span that plays the position: the item's, or a run of its ordered edition (#501).
+        val span = target.spans.lastOrNull { it.atUs <= positionUs } ?: return null
+        val atUs = span.startUs + (positionUs - span.atUs)
+        if (span.endUs != null && atUs >= span.endUs) return null
         val picture = target.thumbnails.at(Pts(atUs)) ?: return null
-        val lengthUs = target.itemEndUs?.let { it - target.clipStartUs }
         fun itemTime(fileTime: Duration): Duration {
-            val us = (fileTime.inWholeMicroseconds - target.clipStartUs).coerceAtLeast(0L)
-            return (if (lengthUs != null) us.coerceAtMost(lengthUs) else us).microseconds
+            val us = fileTime.inWholeMicroseconds.coerceAtLeast(span.startUs).let { if (span.endUs != null) it.coerceAtMost(span.endUs) else it }
+            return (us - span.startUs + span.atUs).microseconds
         }
         return io.github.yuroyami.kiteplayer.StreamThumbnail(
             image = picture.image,
@@ -1781,7 +1793,11 @@ internal class PlaybackCore(
         val session = session ?: return null
         val file = itemThumbnails?.takeIf { it.source == media?.thumbnails }?.file
         val thumbnails = file ?: session.source.thumbnails ?: return null
-        return ThumbnailTarget(thumbnails, session.clipStartUs, session.itemEndUs)
+        val spans = session.timeline?.runs
+            ?.filter { it.segmentUid == null }
+            ?.map { ThumbnailSpan(it.startUs, it.endUs, it.atUs) }
+            ?: listOf(ThumbnailSpan(session.clipStartUs, session.itemEndUs, 0L))
+        return ThumbnailTarget(thumbnails, spans)
     }
 
     /**
@@ -1952,7 +1968,7 @@ internal class PlaybackCore(
         maskedSeekTargetMicros.value = maskFor(to)
         // The caller names a position of the item, and the engine seeks in its file (#456).
         val target = Pts(fileTime(to.micros))
-        send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(target), mode, keyframe = keyframeChoice.value), reply))
+        send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(target, itemUs = to.micros), mode, keyframe = keyframeChoice.value), reply))
         return awaitReply(reply)
     }
 
@@ -1978,7 +1994,7 @@ internal class PlaybackCore(
         // needs no session state to name it. A request the drain drops withdraws the mask there.
         maskedSeekTargetMicros.value = maskFor(to)
         val target = Pts(fileTime(to.micros))
-        post(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(target), mode, keyframe = keyframeChoice.value)))
+        post(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(target, itemUs = to.micros), mode, keyframe = keyframeChoice.value)))
     }
 
     /**
@@ -3571,18 +3587,26 @@ internal class PlaybackCore(
     // ---------------------------------------------------------------------------------------------
 
     /**
-     * Where the item asks to start, in microseconds of its file, or null when the open starts where
-     * the container does: its clip's start, moved on by its start position (#456). An unhonourable
-     * start position (unseekable source, position past the end) is warned typed here rather than
-     * ignored silently or failed loudly: the item still plays, from its own start, and the caller
-     * is told why. A clip's start is always honoured, on a source that cannot seek by decoding
-     * forward to it.
+     * Where an item starts (#456, #501): the run of its ordered edition's [timeline] that plays
+     * first, zero for media that plays plainly, and the time of its file to read from, or null when
+     * the open starts where the container does.
      */
-    private fun startPositionTargetUs(
+    private class ItemStart(val run: Int, val fileUs: Long?)
+
+    /**
+     * Where the item asks to start: its clip's start, moved on by its start position (#456), or the
+     * place on its edition's [timeline] that the start position names, in the run that plays it
+     * (#501). An unhonourable start position (unseekable source, position past the end) is warned
+     * typed here rather than ignored silently or failed loudly: the item still plays, from its own
+     * start, and the caller is told why. A clip's start is always honoured, on a source that cannot
+     * seek by decoding forward to it.
+     */
+    private fun itemStart(
         media: MediaItem,
         source: PlayerMediaSource,
+        timeline: EditionTimeline?,
         report: (PlaybackWarning) -> Unit = ::warn,
-    ): Long? {
+    ): ItemStart {
         val requested = media.startPosition?.takeIf { it > Duration.ZERO }
         val clipStartUs = media.clip.startUs
         val ceilingUs = itemSeekCeilingUs(media.clip.endUs, source)
@@ -3592,13 +3616,19 @@ internal class PlaybackCore(
                 report(PlaybackWarning.StartPositionIgnored(requested, "this source is not seekable"))
                 null
             }
-            ceilingUs != null && clipStartUs + requested.inWholeMicroseconds >= ceilingUs -> {
+            timeline != null && requested.inWholeMicroseconds >= timeline.lengthUs ||
+                timeline == null && ceilingUs != null && clipStartUs + requested.inWholeMicroseconds >= ceilingUs -> {
                 report(PlaybackWarning.StartPositionIgnored(requested, "past the end of the media"))
                 null
             }
             else -> requested.inWholeMicroseconds
         }
-        return (clipStartUs + (honoured ?: 0L)).takeIf { it > 0L }
+        if (timeline != null) {
+            val itemUs = honoured ?: 0L
+            val run = timeline.runAt(itemUs)
+            return ItemStart(run, timeline.runs[run].fileUsAt(itemUs).takeIf { it > 0L })
+        }
+        return ItemStart(0, (clipStartUs + (honoured ?: 0L)).takeIf { it > 0L })
     }
 
     /**
@@ -3713,7 +3743,9 @@ internal class PlaybackCore(
             // keyframe at or before the target and nothing from the beginning of the media is
             // decoded, presented or heard. The exact landing is the second half below, made
             // cheap by this half: the refine walks forward within one group of pictures.
-            val startTargetUs = startPositionTargetUs(command.media, built.source)
+            val start = itemStart(command.media, built.source, built.timeline)
+            if (built.timeline != null && start.run != built.run) moveToRun(built, start.run)
+            val startTargetUs = start.fileUs
             // A loop armed before this open survives it, but cannot jump back on this source.
             if (abLoopA != null && !built.source.seekable) {
                 warn(
@@ -3875,6 +3907,12 @@ internal class PlaybackCore(
          * its start position (#456), in place of [startUs]. Moved like a pass's A.
          */
         startAtItem: Boolean = false,
+        /**
+         * The run of the item's ordered edition the session plays (#501), which [startUs] is a time
+         * of: the next run for a pass that joins it, or the run that played for a rebuild. Ignored
+         * with [startAtItem], and for media that plays plainly.
+         */
+        run: Int = 0,
     ): OpenSession {
         val report: (PlaybackWarning) -> Unit = pending?.report ?: ::warn
         fun stage(next: OpenStage) {
@@ -4134,7 +4172,11 @@ internal class PlaybackCore(
                 cachedAudioStreams.forEach { if (it.index !in unreadSounds) add(it.index) }
                 cachedSubtitleStreams.forEach { add(it.index) }
             }
-            val readFromUs = if (startAtItem) startPositionTargetUs(item, source, report) ?: 0L else startUs
+            // The ordered edition the item plays as a timeline, which decides where it starts (#501).
+            val edition = chosenEdition(source.editions, null)
+            val timeline = editionTimelineOf(item, source, edition)
+            val start = if (startAtItem) itemStart(item, source, timeline, report) else null
+            val readFromUs = if (start != null) start.fileUs ?: 0L else startUs
             withContext(dispatchers.demux) {
                 source.selectStreams(readStreams)
                 if (readFromUs > 0L && source.seekable) source.seekToKeyframe(Pts(readFromUs))
@@ -4210,7 +4252,9 @@ internal class PlaybackCore(
                 networkIo = suppliedIo,
             ).also { built ->
                 built.applyClip(item)
-                built.edition = chosenEdition(source.editions, null)
+                built.edition = edition
+                built.timeline = timeline
+                if (timeline != null) built.applyRun((start?.run ?: run).coerceIn(timeline.runs.indices))
                 built.wantedCaptions = wantedCaptions
                 built.startUs = readFromUs
                 // What the device was opened for, which a gapless handoff compares the next item against.
@@ -5598,6 +5642,10 @@ internal class PlaybackCore(
         val audio: StreamChoice,
         val subtitle: StreamChoice,
         val secondary: TrackId?,
+        /** The ordered edition the item played as a timeline, or null (#501). */
+        val timeline: EditionTimeline?,
+        /** The run of [timeline] that [atUs] is a time of. */
+        var run: Int,
     ) {
         var attempts = 0
         var nextAttemptNanos = 0L
@@ -5625,6 +5673,8 @@ internal class PlaybackCore(
             audio = choice(session.audioStream?.index),
             subtitle = choice(session.selectedSubtitleStream?.index),
             secondary = tracks.selectedSecondarySubtitle,
+            timeline = session.timeline,
+            run = session.run,
         )
         teardownSession()
         resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
@@ -5698,7 +5748,7 @@ internal class PlaybackCore(
         wait.attempts++
         try {
             requestedEpoch = requestedEpoch.next()
-            val rebuilt = buildSession(item, wait.video, wait.audio, wait.subtitle)
+            val rebuilt = buildSession(item, wait.video, wait.audio, wait.subtitle, run = wait.run)
             session = rebuilt
             // As a rebuild: fresh decoders stamp the first epoch, and the reposition aligns them.
             flushDecoders(rebuilt, requestedEpoch)
@@ -5752,6 +5802,20 @@ internal class PlaybackCore(
     private fun seekWhileReconnecting(wait: Reconnect, request: SeekRequest, reply: CompletableDeferred<SeekResult>?) {
         val from = wait.atUs ?: 0L
         val origin = itemOriginMicros.value
+        wait.timeline?.let { timeline ->
+            // The position on the edition's timeline, and the run that plays it (#501).
+            val itemUs = timelineTarget(timeline, request, origin, from)
+            val run = timeline.runAt(itemUs)
+            val at = timeline.runs[run].fileUsAt(itemUs)
+            wait.run = run
+            wait.atUs = at
+            itemOriginMicros.value = timeline.runs[run].originUs
+            publishedPositionMicros.value = at
+            maskedSeekTargetMicros.value = NO_SEEK_MASK
+            progressState.value = progressState.value.copy(position = itemUs.microseconds)
+            reply?.complete(SeekResult.Applied(Pts(at)))
+            return
+        }
         val target = when (val to = request.target) {
             is SeekTarget.Absolute -> to.position.micros
             is SeekTarget.Relative -> from + to.offset.inWholeMicroseconds
@@ -6586,7 +6650,7 @@ internal class PlaybackCore(
         try {
             teardownSession()
             requestedEpoch = requestedEpoch.next()
-            var rebuilt = buildSession(item, video, audio, subtitle)
+            var rebuilt = buildSession(item, video, audio, subtitle, run = current.run)
             session = rebuilt
             // Fresh decoders stamp Generation.Initial, and the reposition seek below that would
             // align them runs only above zero. At zero every frame was dropped as stale (#277).
@@ -6789,6 +6853,8 @@ internal class PlaybackCore(
         val codec: String,
         val subtitleSelectionAvailable: Boolean,
         val failure: VideoDecoderRuntimeFailure,
+        /** The run of the item's ordered edition that [position] is a time of, or null for media that plays plainly (#501). */
+        val run: Int? = null,
     )
 
     private data class VideoRecoveryResult(
@@ -6833,6 +6899,7 @@ internal class PlaybackCore(
             codec = stream.codec,
             subtitleSelectionAvailable = active.backendSession.subtitleDecoders.isNotEmpty(),
             failure = decoderFailure,
+            run = active.run.takeIf { active.timeline != null },
         )
     }
 
@@ -6851,7 +6918,9 @@ internal class PlaybackCore(
                 subtitle = choiceFor(requested, TrackKind.Subtitle, recovery.subtitle.selectedIndex()),
             )
         }
-        val userSeek = pendingSeek
+        // A seek on an ordered edition's timeline can name another run, so it waits for the
+        // recovery and runs after it as any seek does (#501).
+        val userSeek = pendingSeek?.takeIf { recovery.run == null }
         val target = userSeek?.resolve(requestedRecovery.position, requestedRecovery.duration, requestedRecovery.duration, requestedRecovery.start)
             ?: requestedRecovery.position
         if (userSeek != null) {
@@ -6919,6 +6988,7 @@ internal class PlaybackCore(
                 audioChoice = recovery.audio,
                 subtitleChoice = recovery.subtitle,
                 videoSelection = VideoDecoderSelection.BackendSoftwareOnly,
+                run = recovery.run ?: 0,
             )
         } catch (preempted: OpenPreempted) {
             return null
@@ -7381,8 +7451,9 @@ internal class PlaybackCore(
         session.coverArt.value.let { cover -> if (coverArtState.value != cover) coverArtState.value = cover }
         // Chapter crossings: compared on the published reading, so a seek and ordinary
         // playback announce a boundary the same way. Media with no table emits nothing.
-        // In the item's time, as the chapters and the markers are (#456).
-        val itemPositionUs = (publishedPositionMicros.value - session.clipStartUs).coerceAtLeast(0L)
+        // In the item's time, as the chapters and the markers are (#456), which on an ordered
+        // edition's timeline counts across its runs (#501).
+        val itemPositionUs = (publishedPositionMicros.value - session.originUs).coerceAtLeast(0L)
         val chapters = session.chapters
         if (chapters.isNotEmpty()) {
             val positionUs = itemPositionUs
@@ -7440,10 +7511,15 @@ internal class PlaybackCore(
             status == PlaybackStatus.Playing && session.source.seekable
         ) {
             val positionUs = publishedPositionMicros.value
-            val bUs = session.clipStartUs + loopB.inWholeMicroseconds
+            // Times of the run that plays, so a B in a later run of an ordered edition is not
+            // reached in this one, and an A in another run is found by the seek (#501).
+            val bUs = session.originUs + loopB.inWholeMicroseconds
             if (positionUs >= bUs) {
                 queueSeek(
-                    SeekRequest(SeekTarget.Absolute(Pts(session.clipStartUs + loopA.inWholeMicroseconds)), SeekMode.Precise),
+                    SeekRequest(
+                        SeekTarget.Absolute(Pts(session.originUs + loopA.inWholeMicroseconds), itemUs = loopA.inWholeMicroseconds),
+                        SeekMode.Precise,
+                    ),
                     null,
                 )
             } else {
@@ -8660,6 +8736,8 @@ internal class PlaybackCore(
         // the media for a viewer who asked for a still picture.
         if (!playRequested) return
         if (status == PlaybackStatus.Ended) return
+        // The end of a run of an ordered edition that another follows is not the item's (#501).
+        if (continueTimeline(session)) return
 
         // The subtitle lane's own end. Every other lane has said "no more data"; this one finishes
         // when its last cue stops being shown, which is later than the last frame whenever a
@@ -8711,8 +8789,10 @@ internal class PlaybackCore(
         // end and restart every pass for ever, so such an A is treated as unarmed rather than
         // spun on; an unseekable source cannot make the jump at all.
         val loopA = abLoopA
-        // Where the item starts in its file, which A and a repeat count from (#456).
-        val originUs = session?.clipStartUs ?: 0L
+        // Where the item starts in its file, which A and a repeat count from (#456). For an ordered
+        // edition, where its timeline's time starts in the last run, so A and the start are found
+        // in whichever run holds them (#501).
+        val originUs = session?.originUs ?: 0L
         // The item just ended, so how far it played is its real length, whatever it declared.
         val endUs = session?.let { endedAtUs(it) }
         if (loopA != null && session?.source?.seekable == true &&
@@ -8802,7 +8882,7 @@ internal class PlaybackCore(
             null
         }
         // The clock answers in the item's time, which starts at its clip's start (#456).
-        val answerUs = answer?.inWholeMicroseconds?.let { it + active.clipStartUs }
+        val answerUs = answer?.inWholeMicroseconds?.let { it + active.originUs }
         // Only an answer that moved since the last question is followed. A clock that stopped
         // would otherwise pull playback back with a seek before anything could tell it stopped.
         val moved = answerUs != null && externalLastAnswerUs != NO_POSITION &&
@@ -8833,7 +8913,7 @@ internal class PlaybackCore(
                     externalSeekAtNanos = now
                     externalSeekInFlight = true
                     applyExternalTrim(1.0)
-                    val targetUs = (answerUs + externalSeekLatencyNanos / 1_000L).coerceAtLeast(active.clipStartUs)
+                    val targetUs = (answerUs + externalSeekLatencyNanos / 1_000L).coerceAtLeast(active.originUs)
                     queueSeek(SeekRequest(SeekTarget.Absolute(Pts(targetUs)), SeekMode.Precise), null)
                 }
             }
@@ -9038,6 +9118,12 @@ internal class PlaybackCore(
          * an A-B loop whose B is inside the item, or null when the pass follows the item's end.
          */
         val wrapUs: Long? = null,
+        /**
+         * True when this pass is the next run of the ordered edition the item plays (#501), which
+         * follows the run before on the timeline and is no turn of a repeat or a loop. [repeat] is
+         * true with it, because the item stays.
+         */
+        val nextRun: Boolean = false,
     ) {
         /** Set once the build has finished; the item's workers then run. */
         var prepared: PreparedNext? = null
@@ -9507,9 +9593,12 @@ internal class PlaybackCore(
      * the turn that plays, or null when it follows the end of the item or no loop is armed.
      */
     private fun loopWrapUs(active: OpenSession): Long? {
-        if (abLoopA == null) return null
-        val bUs = active.clipStartUs + (abLoopB?.inWholeMicroseconds ?: return null)
+        val aUs = active.originUs + (abLoopA?.inWholeMicroseconds ?: return null)
+        val bUs = active.originUs + (abLoopB?.inWholeMicroseconds ?: return null)
         val durationUs = active.itemEndUs ?: return null
+        // On an ordered edition's timeline, a pass from A follows B only when both are in the run
+        // that plays; otherwise the crossing of B seeks to A (#501).
+        if (active.timeline != null && (aUs < active.clipStartUs || bUs <= active.clipStartUs)) return null
         return bUs.takeIf { it < durationUs }
     }
 
@@ -9539,7 +9628,7 @@ internal class PlaybackCore(
         val bUs = loopEndFor(active)
         active.turnDecided = true
         active.turnEndUs = bUs
-        val aUs = active.clipStartUs + (abLoopA?.inWholeMicroseconds ?: 0L)
+        val aUs = active.originUs + (abLoopA?.inWholeMicroseconds ?: 0L)
         val late = bUs != null && bUs - fromUs < minOf(MIN_PASS_LEAD.inWholeMicroseconds, bUs - aUs)
         active.passEnd.value = if (bUs != null && !late) PassEnd(bUs) else null
     }
@@ -9556,6 +9645,107 @@ internal class PlaybackCore(
         startTurn(active, publishedPositionMicros.value)
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Ordered editions: the runs of a timeline (#501). See docs/matroska-editions.md.
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * The session and the run whose pass fell back, so that run follows by a seek without the pass
+     * being tried again (#501).
+     */
+    private var runPassRefused: Pair<Long, Int>? = null
+
+    /** Moves [target] to run [run] of its timeline, and the item's time with it when [target] plays (#501). */
+    private fun moveToRun(target: OpenSession, run: Int) {
+        target.applyRun(run)
+        if (target === session) itemOriginMicros.value = target.originUs
+    }
+
+    /**
+     * The position on [timeline] that [request] names, cut to the timeline (#501): an absolute
+     * target's own position when the caller gave one, or else its time less [originUs], which is
+     * where the timeline's time starts in the run that plays; a relative one from [basisUs], a time
+     * of that run; and a fraction of the timeline's length.
+     */
+    private fun timelineTarget(timeline: EditionTimeline, request: SeekRequest, originUs: Long, basisUs: Long): Long {
+        val itemUs = when (val target = request.target) {
+            is SeekTarget.Absolute -> target.itemUs ?: (target.position.micros - originUs)
+            is SeekTarget.Relative -> basisUs - originUs + target.offset.inWholeMicroseconds
+            is SeekTarget.Factor -> (timeline.lengthUs * target.fraction).toLong()
+        }
+        return itemUs.coerceIn(0L, timeline.lengthUs)
+    }
+
+    /**
+     * Where [request] lands for [active], resolved against [basis], and the run of its ordered
+     * edition that plays there, or null for media that plays plainly (#501). The time is one of
+     * that run.
+     */
+    private fun seekTargetOf(active: OpenSession, request: SeekRequest, basis: Pts): Pair<Pts, Int?> {
+        val timeline = active.timeline ?: return request.resolve(
+            basis,
+            active.itemEndUs?.let(::Pts),
+            active.seekCeilingUs?.let(::Pts),
+            Pts(active.clipStartUs),
+        ) to null
+        val itemUs = timelineTarget(timeline, request, active.originUs, basis.micros)
+        val run = timeline.runAt(itemUs)
+        return Pts(timeline.runs[run].fileUsAt(itemUs)) to run
+    }
+
+    /**
+     * Moves on to the next run of the ordered edition [active] plays, at the end of a run that no
+     * pass joined (#501): by a precise seek to where that run starts, as a repeat went back before
+     * passes, with the short silence that brings. False when no run follows, and the item ends.
+     */
+    private fun continueTimeline(active: OpenSession): Boolean {
+        val timeline = active.timeline ?: return false
+        val next = timeline.runs.getOrNull(active.run + 1) ?: return false
+        pendingSeek = SeekRequest(SeekTarget.Absolute(Pts(next.startUs), itemUs = next.atUs), SeekMode.Precise)
+        return true
+    }
+
+    /**
+     * Opens the next run of the ordered edition [active] plays as a pass of the item, once the run
+     * that plays is within `QueueConfig.preloadNext` of its end, or [RUN_PASS_LEAD] when the queue
+     * preloads nothing (#501). The pass joins the run before through the handoff, whatever the
+     * queue's gapless switch says, because the runs are one item. An A-B loop inside the run owns
+     * its end instead.
+     *
+     * @return true while a run follows the one that plays, so that nothing after the item opens yet.
+     */
+    private fun maybeStartRunPass(active: OpenSession): Boolean {
+        val timeline = active.timeline ?: return false
+        val run = active.run + 1
+        val next = timeline.runs.getOrNull(run) ?: return false
+        if (loopWrapUs(active) != null) return false
+        if (runPassRefused == (active.token to run) || active.isStillImage) return true
+        val endUs = active.itemEndUs ?: return true
+        val leadUs = config.queue.preloadNext.takeIf { it > Duration.ZERO }?.inWholeMicroseconds
+            ?: RUN_PASS_LEAD.inWholeMicroseconds
+        if (!passAtEndDue(active, endUs, leadUs)) return true
+        val refusal = when {
+            active.audioLane == null && (active.video == null || active.videoParked.value) ->
+                "the item has no selected audio track and no picture"
+            active.audioLane != null && active.audio == null -> "the item has no audio device open"
+            else -> null
+        }
+        if (refusal != null) {
+            runPassRefused = active.token to run
+            io.github.yuroyami.kiteplayer.KiteLog.log("kiteplayer", "the edition's next part follows by a seek: $refusal")
+            return true
+        }
+        val item = media ?: return true
+        val build = PendingBuild(nextSessionToken++)
+        val job = startRepeatBuild(active, item, build, next.startUs, wrapUs = null, run = run)
+        pendingNext = PendingNext(
+            queueIndex, item, active.token, build, job,
+            repeat = true, startUs = next.startUs, nextRun = true,
+        )
+        wakeIn(WORKER_POLL)
+        return true
+    }
+
     /**
      * Starts the preload once the current item is within `QueueConfig.preloadNext` of its end: of
      * the next queue item, or under a repeat of the current item's next pass (#467). An armed A-B
@@ -9566,6 +9756,8 @@ internal class PlaybackCore(
         if (status != PlaybackStatus.Playing && status != PlaybackStatus.Paused) return
         if (pendingSeek != null || seekPhase.isRunning || pendingVideoRecovery != null) return
         if (pendingSelections.isNotEmpty()) return
+        // The next run of an ordered edition comes before anything that follows the item (#501).
+        if (maybeStartRunPass(active)) return
         val loopA = abLoopA?.inWholeMicroseconds
         // The cases handleLoop repeats: the whole queue is the current item under LoopMode.All.
         val repeat = loopA != null || loop == LoopMode.One || (loop == LoopMode.All && queueItems.size <= 1)
@@ -9586,7 +9778,7 @@ internal class PlaybackCore(
         }
         // An A at or past the end would start the pass on the end itself, which handleLoop treats
         // as an A that is not armed.
-        if (wrapUs == null && loopA != null && active.clipStartUs + loopA >= durationUs) return
+        if (wrapUs == null && loopA != null && active.originUs + loopA >= durationUs) return
         val item = if (repeat) media ?: return else queueItems[index]
         val refusal = when {
             // A silent item's join is timed by its picture (#524), so it needs one.
@@ -9603,9 +9795,11 @@ internal class PlaybackCore(
         val build = PendingBuild(nextSessionToken++)
         if (repeat) {
             // A repeat starts again from the item's start, as the seek it replaces does, and an A-B
-            // loop's pass from A.
-            val startUs = active.clipStartUs + (loopA ?: 0L)
-            val job = startRepeatBuild(active, item, build, startUs, wrapUs)
+            // loop's pass from A, in whichever run of an ordered edition holds it (#501).
+            val timeline = active.timeline
+            val run = timeline?.runAt(loopA ?: 0L) ?: 0
+            val startUs = timeline?.runs?.get(run)?.fileUsAt(loopA ?: 0L) ?: (active.clipStartUs + (loopA ?: 0L))
+            val job = startRepeatBuild(active, item, build, startUs, wrapUs, run)
             pendingNext = PendingNext(index, item, active.token, build, job, repeat = true, startUs = startUs, wrapUs = wrapUs)
             wakeIn(WORKER_POLL)
             return
@@ -9691,7 +9885,8 @@ internal class PlaybackCore(
      * now, with the decoder selection the item has come to, and reads no external subtitle file:
      * the player keeps the ones it read, and the swap puts them back on the new pass. A pass of an
      * A-B loop starts at A as a precise seek lands there, from the keyframe before it with the
-     * lanes dropping what comes before A, and stops at [wrapUs] in its turn.
+     * lanes dropping what comes before A, and stops at [wrapUs] in its turn. On an ordered
+     * edition's timeline, the pass plays [run], which [startUs] is a time of (#501).
      */
     private fun startRepeatBuild(
         active: OpenSession,
@@ -9699,6 +9894,7 @@ internal class PlaybackCore(
         build: PendingBuild,
         startUs: Long,
         wrapUs: Long?,
+        run: Int = 0,
     ): Deferred<Result<PreparedNext>> {
         val videoChoice = active.videoStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
         val audioChoice = active.audioStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
@@ -9722,6 +9918,7 @@ internal class PlaybackCore(
                     videoSelection = videoSelection,
                     pending = build,
                     startUs = startUs,
+                    run = run,
                 )
                 // Left in place for the whole pass, where it drops nothing: a video decoder made at
                 // the swap still has the frames between the keyframe and A to throw away.
@@ -9882,6 +10079,8 @@ internal class PlaybackCore(
      * ended at, which is the real length however wrong the estimate was.
      */
     private fun publishedDuration(active: OpenSession): Duration? {
+        // An ordered edition is as long as its parts (#501).
+        active.timeline?.let { return it.lengthUs.microseconds }
         val endUs = active.itemEndUs ?: return null
         val lengthEndUs = when {
             !active.itemEndIsEstimate -> endUs
@@ -9894,7 +10093,7 @@ internal class PlaybackCore(
 
     /** Whether [publishedDuration] is still FFmpeg's guess rather than the length really played. */
     private fun durationStillEstimated(active: OpenSession): Boolean {
-        if (!active.itemEndIsEstimate) return false
+        if (!active.itemEndIsEstimate || active.timeline != null) return false
         if (status == PlaybackStatus.Ended) return false
         return active.furthestPositionUs <= (active.itemEndUs ?: 0L)
     }
@@ -10230,7 +10429,8 @@ internal class PlaybackCore(
     private suspend fun swapToRepeat(next: PendingNext, prepared: PreparedNext) {
         val incoming = prepared.session
         pendingNext = null
-        if (next.wrapUs == null) emitEvent(PlayerEvent.Ended)
+        // The next run of an ordered edition goes on with the item, so nothing ended (#501).
+        if (next.wrapUs == null && !next.nextRun) emitEvent(PlayerEvent.Ended)
         // Read before the new pass's table replaces the one they live in.
         val secondaryBefore = tracks.selectedSecondarySubtitle
         // The real length of an item whose length was a guess is how far it played, which a new
@@ -10239,17 +10439,21 @@ internal class PlaybackCore(
             incoming.furthestPositionUs = maxOf(incoming.furthestPositionUs, ending.furthestPositionUs)
             // A recording ends where the media jumps back, as it did at the seek a repeat used to be.
             if (ending.recordingEnd != null) {
-                ending.recordingEnd = if (next.wrapUs != null || next.startUs > incoming.clipStartUs) {
-                    "the A-B loop went back to A"
-                } else {
-                    "the item repeated from its start"
+                ending.recordingEnd = when {
+                    next.nextRun -> "the edition went on to a part in another place of the file"
+                    next.wrapUs != null || next.startUs > incoming.clipStartUs -> "the A-B loop went back to A"
+                    else -> "the item repeated from its start"
                 }
             }
         }
         detachSession(forHandoff = true)?.let { releaseSession(it) }
-        // The markers behind the start are armed again, as the seek back to it armed them.
-        markerCursorUs = NO_POSITION
-        markerCursorEpoch = null
+        // The markers behind the start are armed again, as the seek back to it armed them. The
+        // next run of an ordered edition goes on along the timeline, so its markers are crossed
+        // as the position reaches them (#501).
+        if (!next.nextRun) {
+            markerCursorUs = NO_POSITION
+            markerCursorEpoch = null
+        }
         endOfStream.reset()
         demuxUnderrunSeen = false
         tracks = next.build.tracks
@@ -10344,7 +10548,12 @@ internal class PlaybackCore(
         snapshotDirty = true
         next.build.warnings.discard()
         val active = session
-        if (reason != null) {
+        if (reason != null && next.nextRun) {
+            // A run of an ordered edition is no queue item for the warning to name, so the run
+            // after it follows by a seek, and the log says why (#501).
+            if (active != null) runPassRefused = active.token to active.run + 1
+            io.github.yuroyami.kiteplayer.KiteLog.log("kiteplayer", "the edition's next part follows by a seek: $reason")
+        } else if (reason != null) {
             if (active != null) gaplessRefused = active.token to next.index
             warn(PlaybackWarning.GaplessFallback(next.index, reason))
         }
@@ -10880,9 +11089,7 @@ internal class PlaybackCore(
         seekPhase = SeekPhase.Idle
         pendingSeek = null
         val activeBeforeSeek = session
-        val requestedTarget = activeBeforeSeek?.let {
-            request.resolve(currentPosition(), it.itemEndUs?.let(::Pts), it.seekCeilingUs?.let(::Pts), Pts(it.clipStartUs))
-        }
+        val requestedTarget = activeBeforeSeek?.let { seekTargetOf(it, request, currentPosition()).first }
         try {
             runSeek(request)
         } catch (cancellation: CancellationException) {
@@ -10963,8 +11170,12 @@ internal class PlaybackCore(
         if (active != null && accepted != null) {
             val basis = maskedSeekTargetMicros.value.takeIf { it != NO_SEEK_MASK }
                 ?: publishedPositionMicros.value
-            maskedSeekTargetMicros.value =
-                accepted.resolve(Pts(basis), active.itemEndUs?.let(::Pts), active.seekCeilingUs?.let(::Pts), Pts(active.clipStartUs)).micros
+            // On an ordered edition's timeline, the position masked is the one the request names
+            // in whichever run, as a time of the run that plays now, which is how the position is
+            // read back (#501).
+            maskedSeekTargetMicros.value = active.timeline
+                ?.let { active.originUs + timelineTarget(it, accepted, active.originUs, basis) }
+                ?: accepted.resolve(Pts(basis), active.itemEndUs?.let(::Pts), active.seekCeilingUs?.let(::Pts), Pts(active.clipStartUs)).micros
         }
     }
 
@@ -11003,7 +11214,7 @@ internal class PlaybackCore(
         val tracing = KiteTrace.enabled
         var phaseBegin = if (tracing) clock.nanos() else 0L
         val origin = currentPosition()
-        val target = request.resolve(origin, session.itemEndUs?.let(::Pts), session.seekCeilingUs?.let(::Pts), Pts(session.clipStartUs))
+        val (target, targetRun) = seekTargetOf(session, request, origin)
         val landsBefore = request.landing == SeekLanding.Before
         // Only a plain keyframe seek takes the choice (#496). The precise modes decode forward from
         // the keyframe before the target, and a backward landing needs the frame before the one on
@@ -11061,6 +11272,9 @@ internal class PlaybackCore(
             if (!playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Paused)
             return
         }
+        // A target in another run of the ordered edition: the session plays that run from here on,
+        // with every lane parked, and the reads stop at its end (#501).
+        if (targetRun != null && targetRun != session.run) moveToRun(session, targetRun)
         // After the quiesce, so an aborted seek keeps the recording, and before the container seek,
         // so no packet from the new position reaches the file.
         endRecording(session, reason = "a seek moved the playback position")
@@ -12203,7 +12417,8 @@ internal class PlaybackCore(
             failedQueueItems = failedQueueIndices,
             markers = markers,
             playRequested = publishedPlayIntent(),
-            preloadedIndex = pendingNext?.takeIf { it.prepared != null && it.index >= 0 }?.index,
+            // The next run of an ordered edition is the same item, and no queue position (#501).
+            preloadedIndex = pendingNext?.takeIf { it.prepared != null && it.index >= 0 && !it.nextRun }?.index,
             reconnecting = reconnect != null,
         )
         publishProgressAndStats()
@@ -12356,11 +12571,12 @@ internal class PlaybackCore(
         val end = window.end.coerceAtMost(sizeBytes)
         if (end <= start) return emptyList()
         fun toFileUs(byte: Long): Long = (byte.toDouble() / sizeBytes * durationUs).toLong()
-        // Cut to the item and counted from its start (#456).
+        // Cut to the item and counted from its start (#456), and for an ordered edition to the run
+        // that plays, at its place on the timeline (#501).
         val fromUs = maxOf(toFileUs(start), session.clipStartUs)
         val untilUs = minOf(toFileUs(end), session.itemEndUs ?: Long.MAX_VALUE)
         if (untilUs <= fromUs) return emptyList()
-        return listOf((fromUs - session.clipStartUs).microseconds..(untilUs - session.clipStartUs).microseconds)
+        return listOf((fromUs - session.originUs).microseconds..(untilUs - session.originUs).microseconds)
     }
 
     private fun bufferedAhead(session: OpenSession?): Duration {
@@ -14399,6 +14615,8 @@ internal class PlaybackCore(
          */
         val chapters: List<Chapter>
             get() {
+                // An ordered edition's are its parts, on its timeline (#501).
+                timeline?.let { return it.chapters }
                 val file = source.chapters
                 if (clipStartUs == 0L && clipEndUs == NO_CLIP_END) return file
                 clippedChapters?.takeIf { clippedFrom === file && clippedAt == clipStartUs to clipEndUs }?.let { return it }
@@ -14417,6 +14635,32 @@ internal class PlaybackCore(
 
         /** The [MediaEdition.index] of the edition that plays, or null (#501). Actor only. */
         var edition: Int? = null
+
+        /**
+         * The ordered edition this session plays as a timeline, or null when the media plays plainly
+         * (#501). The session plays one of its runs at a time, as it plays a clip: [clipStartUs] and
+         * [clipEndUs] are the run's, and the next run follows as a pass of its own. Actor only.
+         */
+        var timeline: EditionTimeline? = null
+
+        /** The index in [timeline]'s runs of the run this session plays. Actor only. */
+        var run: Int = 0
+
+        /**
+         * Where the item's time starts in the file, in microseconds: [clipStartUs], or for a
+         * timeline, the start of the run less its place on the timeline (#501). A time of the file
+         * less this is a position the caller sees.
+         */
+        val originUs: Long get() = timeline?.runs?.getOrNull(run)?.originUs ?: clipStartUs
+
+        /** Plays run [index] of [timeline] from here on: the run's range is this session's clip (#501). */
+        fun applyRun(index: Int) {
+            val target = checkNotNull(timeline).runs[index]
+            run = index
+            clipStartUs = target.startUs
+            clipEndUs = target.endUs
+            lanesEndUs.value = target.endUs
+        }
 
         /**
          * Where the item ends in its file, in microseconds (#456): its clip's end, or the media's
@@ -15136,6 +15380,11 @@ internal class PlaybackCore(
          */
         val MIN_PASS_LEAD: Duration = 1.seconds
 
+        /**
+         * How long before the end of a run of an ordered edition the next run opens when the queue
+         * preloads nothing (#501): the default of `QueueConfig.preloadNext`.
+         */
+        val RUN_PASS_LEAD: Duration = 5.seconds
 
         /** How far playback runs past an estimated length before the snapshot's length follows it (#422). */
         const val DURATION_FOLLOW_STEP_US: Long = 1_000_000L

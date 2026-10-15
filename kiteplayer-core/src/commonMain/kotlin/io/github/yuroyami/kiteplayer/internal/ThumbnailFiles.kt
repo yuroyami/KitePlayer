@@ -147,6 +147,13 @@ internal fun thumbnailMimeType(uri: String, bytes: ByteArray): String? {
 
 /**
  * Where the seek bar pictures of the item that plays come from, [thumbnails], and the item's place
- * in its file: its clip's start and its end, in microseconds of the file, or null when not known.
+ * in its file: one span for its clip, or the item's whole file, and one for each run of an ordered
+ * edition in the main file (#501), in the order they play.
  */
-internal class ThumbnailTarget(val thumbnails: PlayerThumbnails, val clipStartUs: Long, val itemEndUs: Long?)
+internal class ThumbnailTarget(val thumbnails: PlayerThumbnails, val spans: List<ThumbnailSpan>)
+
+/**
+ * A range of the file, from [startUs] to [endUs], or to its end when that is null, in microseconds
+ * of the file, that plays from [atUs] of the item.
+ */
+internal class ThumbnailSpan(val startUs: Long, val endUs: Long?, val atUs: Long)

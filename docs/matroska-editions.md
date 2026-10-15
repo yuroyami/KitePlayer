@@ -150,11 +150,12 @@ way, and is listed with `isHidden` so that an application can leave it out of a 
 
 An edition plays as a timeline when it is ordered, `DemuxPolicy.orderedEditions` is true, every
 chapter it plays states its end (the file is broken otherwise, and RFC 9559 requires it), the item
-has no clip, and the file is not growing. Otherwise the main file plays plainly, with the chosen
-edition's chapters as its chapters.
+has no clip, the file is not growing, and its source can seek. Otherwise the main file plays
+plainly, with the chosen edition's chapters as its chapters.
 
-An item with a `MediaClip` plays its file plainly because a clip names a range of the file, and a
-growing file plays plainly because its timeline is not known yet.
+An item with a `MediaClip` plays its file plainly because a clip names a range of the file, a
+growing file because its timeline is not known yet, and a source that cannot seek because it cannot
+skip what the edition leaves out, or go back to a part another file interrupted.
 
 ### The timeline
 

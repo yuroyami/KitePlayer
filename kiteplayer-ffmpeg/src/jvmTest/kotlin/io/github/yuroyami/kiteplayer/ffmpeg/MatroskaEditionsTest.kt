@@ -3,12 +3,17 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.AudioTap
 import io.github.yuroyami.kiteplayer.Backends
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.LinkedFile
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.PlayerEvent
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.SeekMode
+import io.github.yuroyami.kiteplayer.TrackChange
+import io.github.yuroyami.kiteplayer.TrackId
+import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
@@ -167,13 +172,13 @@ class MatroskaEditionsTest {
             player.attachRendererAndAwait(pictures)
             withTimeout(30.seconds) { player.open(MediaItem(fixture("film.mkv").absolutePath)) }
             // Four seconds into the timeline is one second into its second part, at 6 s of the file.
-            pictures.times.clear()
+            pictures.shown.clear()
             player.seek(4.seconds, SeekMode.Precise)
             delay(300)
             assertEquals(6_000_000L, pictures.times.firstOrNull(), "the seek showed ${pictures.times.firstOrNull()}")
             assertNear(4.seconds, player.position())
             // And back into the first part.
-            pictures.times.clear()
+            pictures.shown.clear()
             player.seek(1.seconds, SeekMode.Precise)
             delay(300)
             assertEquals(1_000_000L, pictures.times.firstOrNull(), "the seek back showed ${pictures.times.firstOrNull()}")
@@ -197,21 +202,215 @@ class MatroskaEditionsTest {
         }
     }
 
-    /** A position as the sound lands it, within a millisecond of [expected]. */
-    private fun assertNear(expected: Duration, actual: Duration) {
-        assertTrue((actual - expected).absoluteValue <= 1.milliseconds, "expected $expected, the position is $actual")
+    @Test
+    fun theEpisodePlaysTheSeasonsOpeningItselfAndTheSeasonsEnding() = runBlocking {
+        val pictures = PictureTimes()
+        val sound = SoundTimes()
+        val player = KitePlayer.create(
+            PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), PacedOutput()), progressInterval = 50.milliseconds),
+        )
+        try {
+            player.attachRendererAndAwait(pictures)
+            player.attachAudioTap(sound)
+            withTimeout(30.seconds) { player.open(MediaItem(fixture("season/episode.mkv").absolutePath)) }
+            val opened = player.state.value
+            // 0.5 s to 3.5 s of the opening, the episode's own 4 s, and 1 s to 3 s of the ending.
+            assertEquals(9.seconds, opened.duration)
+            assertEquals(
+                listOf(Triple("Opening", 0.seconds, 3.seconds), Triple("Part A", 3.seconds, 7.seconds), Triple("Ending", 7.seconds, 9.seconds)),
+                opened.chapters.map { Triple(it.title, it.start, it.end) },
+            )
+            // The episode's own tracks are the item's, whichever file plays.
+            assertEquals(listOf(0, 1), opened.tracks.all.map { it.id.value })
+            assertTrue(player.warningHistory().none { it.warning is PlaybackWarning.EditionPartLeftOut })
+            val events = CopyOnWriteArrayList<PlayerEvent>()
+            val listener = launch(start = CoroutineStart.UNDISPATCHED) { player.events.collect { events += it } }
+            val seen = CopyOnWriteArrayList<PlaybackStatus>()
+            player.play()
+            withTimeout(25.seconds) {
+                while (player.state.value.status != PlaybackStatus.Ended) {
+                    seen += player.state.value.status
+                    delay(10)
+                }
+            }
+            delay(200)
+            listener.cancel()
+            val between = seen.dropWhile { it != PlaybackStatus.Playing }.toSet()
+            assertEquals(setOf(PlaybackStatus.Playing), between, "the player left Playing between the files")
+            assertEquals(1, events.count { it is PlayerEvent.Ended })
+            assertEquals(0, events.count { it is PlayerEvent.Opened })
+            assertNear(9.seconds, player.position(), within = 100.milliseconds)
+
+            // Each file's pictures, in its order: the opening's, the episode's, then the ending's,
+            // each from its own range and each after the one before it.
+            val shown = pictures.shown.toList()
+            val runs = shown.fold(mutableListOf<MutableList<Pair<Long, VideoSize>>>()) { acc, picture ->
+                if (acc.isEmpty() || acc.last().last().second != picture.second) acc += mutableListOf(picture) else acc.last() += picture
+                acc
+            }
+            assertEquals(listOf(256 to 144, 320 to 180, 384 to 216), runs.map { it.first().second.width to it.first().second.height })
+            val ranges = listOf(500_000L until 3_500_000L, 0L until 4_000_000L, 1_000_000L until 3_000_000L)
+            runs.zip(ranges).forEach { (run, range) ->
+                val times = run.map { it.first }
+                assertTrue(times.all { it in range }, "a picture outside $range: ${times.filter { it !in range }}")
+                assertEquals(times.sorted(), times, "the pictures of one file went back")
+                assertTrue(times.first() - range.first < 50_000L && range.last - times.last() < 50_000L, "the pictures span ${times.first()} to ${times.last()} of $range")
+            }
+            // The sound follows the same three ranges, and adds up to the timeline.
+            val heard = sound.blocks.toList()
+            val pieces = heard.fold(mutableListOf<MutableList<Pair<Pts, Duration>>>()) { acc, block ->
+                if (acc.isEmpty() || block.first < acc.last().last().first) acc += mutableListOf(block) else acc.last() += block
+                acc
+            }
+            assertEquals(3, pieces.size, "the sound went back ${pieces.size - 1} times")
+            pieces.zip(ranges).forEach { (piece, range) ->
+                val start = piece.first().first.micros
+                val end = piece.last().let { it.first.micros + it.second.inWholeMicroseconds }
+                assertTrue(kotlin.math.abs(start - range.first) < 30_000L, "the sound of $range started at $start")
+                assertTrue(kotlin.math.abs(end - (range.last + 1)) < 30_000L, "the sound of $range ended at $end")
+            }
+            val total = heard.sumOf { it.second.inWholeMicroseconds }
+            assertTrue(total in 8_900_000L..9_100_000L, "the sound heard lasts $total us")
+
+            // A seek into the ending shows a picture of the ending's file. The play intent outlives
+            // the end, so the player pauses first to keep the position where the seek put it.
+            player.pause()
+            pictures.shown.clear()
+            player.seek(8.seconds, SeekMode.Precise)
+            delay(500)
+            val landed = pictures.shown.firstOrNull()
+            assertEquals(2_000_000L to VideoSize(384, 216), landed?.let { it.first to VideoSize(it.second.width, it.second.height) })
+            assertNear(8.seconds, player.position())
+        } finally {
+            player.closeAndAwait()
+        }
     }
 
-    /** A screen with no window that keeps the time of each picture it is handed. */
+    @Test
+    fun aTrackChangeWhileALinkedFilePlaysNamesTheMainFilesTrack() = runBlocking {
+        val sound = SoundTimes()
+        val player = KitePlayer.create(
+            PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), PacedOutput()), progressInterval = 50.milliseconds),
+        )
+        try {
+            player.attachAudioTap(sound)
+            withTimeout(30.seconds) { player.open(MediaItem(fixture("season/episode.mkv").absolutePath)) }
+            player.play()
+            withTimeout(10.seconds) { while (player.position() < 1.seconds) delay(10) }
+            // In the opening, which is another file: the sound goes, and the main file's table says so.
+            assertEquals(TrackChange.Applied(TrackKind.Audio, null), player.selectTrack(TrackKind.Audio, null))
+            assertEquals(null, player.state.value.tracks.selectedAudio)
+            assertEquals(listOf(0, 1), player.state.value.tracks.all.map { it.id.value })
+            sound.blocks.clear()
+            delay(500)
+            assertTrue(sound.blocks.isEmpty(), "sound was heard with no audio track: ${sound.blocks.size} blocks")
+            // And comes back as the opening's own sound, matched to the episode's track.
+            assertEquals(TrackChange.Applied(TrackKind.Audio, TrackId(1)), player.selectTrack(TrackKind.Audio, TrackId(1)))
+            assertEquals(TrackId(1), player.state.value.tracks.selectedAudio)
+            withTimeout(5.seconds) { while (sound.blocks.isEmpty()) delay(10) }
+            val back = sound.blocks.first().first.micros
+            assertTrue(back in 500_000L until 3_500_000L, "the sound came back at $back us, outside the opening's range")
+            withTimeout(20.seconds) { while (player.state.value.status != PlaybackStatus.Ended) delay(20) }
+            assertEquals(9.seconds, player.state.value.duration)
+        } finally {
+            player.closeAndAwait()
+        }
+    }
+
+    @Test
+    fun aPartWhoseFileIsMissingIsLeftOut() = runBlocking {
+        val player = KitePlayer.create(PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), PacedOutput())))
+        try {
+            withTimeout(30.seconds) { player.open(MediaItem(fixture("season-no-op/episode.mkv").absolutePath)) }
+            val opened = player.state.value
+            assertEquals(6.seconds, opened.duration)
+            assertEquals(listOf("Part A", "Ending"), opened.chapters.map { it.title })
+            val leftOut = player.warningHistory().map { it.warning }.filterIsInstance<PlaybackWarning.EditionPartLeftOut>()
+            assertEquals(listOf("0e0e0e00000000000000000000000002" to "Opening"), leftOut.map { it.segmentUid to it.chapter })
+        } finally {
+            player.closeAndAwait()
+        }
+    }
+
+    @Test
+    fun theItemsLinkedFilesAreFoundWhereTheFolderIsNot() = runBlocking {
+        val alone = java.nio.file.Files.createTempDirectory("kiteplayer-editions").toFile()
+        try {
+            val episode = fixture("season/episode.mkv").copyTo(File(alone, "episode.mkv"))
+            val linked = listOf("op.mkv", "ed.mkv").map { LinkedFile(fixture("season/$it").absolutePath) }
+            val player = KitePlayer.create(PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), PacedOutput())))
+            try {
+                // Alone in its folder, the episode finds neither the opening nor the ending.
+                withTimeout(30.seconds) { player.open(MediaItem(episode.absolutePath)) }
+                assertEquals(4.seconds, player.state.value.duration)
+                assertEquals(2, player.warningHistory().count { it.warning is PlaybackWarning.EditionPartLeftOut })
+                player.stop()
+                withTimeout(30.seconds) { player.open(MediaItem(episode.absolutePath, linkedFiles = linked)) }
+                assertEquals(9.seconds, player.state.value.duration)
+            } finally {
+                player.closeAndAwait()
+            }
+        } finally {
+            alone.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun aChapterPlaysAnotherFilesEditionWhole() = runBlocking {
+        val pictures = PictureTimes()
+        val player = KitePlayer.create(PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), PacedOutput())))
+        try {
+            player.attachRendererAndAwait(pictures)
+            withTimeout(30.seconds) { player.open(MediaItem(fixture("recap.mkv").absolutePath)) }
+            val opened = player.state.value
+            // The recap's own two seconds, then the film's theatrical cut, six seconds, as one chapter.
+            assertEquals(8.seconds, opened.duration)
+            assertEquals(
+                listOf(Triple("Previously", 0.seconds, 2.seconds), Triple("The film", 2.seconds, 8.seconds)),
+                opened.chapters.map { Triple(it.title, it.start, it.end) },
+            )
+            // Six seconds in is one second into the film's second part, at 6 s of the film.
+            pictures.shown.clear()
+            player.seek(6.seconds, SeekMode.Precise)
+            delay(500)
+            assertEquals(6_000_000L to VideoSize(320, 180), pictures.shown.firstOrNull()?.let { it.first to VideoSize(it.second.width, it.second.height) })
+        } finally {
+            player.closeAndAwait()
+        }
+    }
+
+    @Test
+    fun aLoopOfLinksIsCutWhereItComesBack() = runBlocking {
+        val player = KitePlayer.create(PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), PacedOutput())))
+        try {
+            withTimeout(30.seconds) { player.open(MediaItem(fixture("loop-a.mkv").absolutePath)) }
+            val opened = player.state.value
+            // A's two seconds, then B's edition: one second of B, and its link back to A left out.
+            assertEquals(3.seconds, opened.duration)
+            assertEquals(listOf("A", "B"), opened.chapters.map { it.title })
+            val leftOut = player.warningHistory().map { it.warning }.filterIsInstance<PlaybackWarning.EditionPartLeftOut>()
+            assertEquals(listOf("a0000000000000000000000000000006" to "Back to A"), leftOut.map { it.segmentUid to it.chapter })
+        } finally {
+            player.closeAndAwait()
+        }
+    }
+
+    /** A position as the sound lands it, within a millisecond of [expected]. */
+    private fun assertNear(expected: Duration, actual: Duration, within: Duration = 1.milliseconds) {
+        assertTrue((actual - expected).absoluteValue <= within, "expected $expected, the position is $actual")
+    }
+
+    /** A screen with no window that keeps the time and the size of each picture it is handed. */
     private class PictureTimes : VideoRenderer {
-        val times: MutableList<Long> = CopyOnWriteArrayList()
+        val shown: MutableList<Pair<Long, VideoSize>> = CopyOnWriteArrayList()
+        val times: List<Long> get() = shown.map { it.first }
 
         override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 
         override fun supports(format: PlayerPixelFormat): Boolean = true
 
         override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean = frame.use {
-            times += frame.pts.micros
+            shown += frame.pts.micros to frame.size
             true
         }
 

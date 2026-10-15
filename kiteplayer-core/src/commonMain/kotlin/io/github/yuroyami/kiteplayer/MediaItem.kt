@@ -183,6 +183,14 @@ public data class MediaItem(
      * [KitePlayer.selectTrack] plays one in step with the picture. See [AudioSource].
      */
     val externalAudio: List<AudioSource> = emptyList(),
+    /**
+     * Files that may hold the segments an ordered edition of the media links to (#501), such as the
+     * opening and the ending a season of episodes shares. The player reads each one's segment UID
+     * and plays the ranges the edition names from the file that holds them. A local file is also
+     * looked for beside the media, so an application needs this only for media whose folder the
+     * player cannot list: an address, a content URI, or a file read through [io]. See [LinkedFile].
+     */
+    val linkedFiles: List<LinkedFile> = emptyList(),
 ) {
     public companion object {}
 
@@ -598,6 +606,24 @@ public data class AudioSource(
     val title: String? = null,
     /** The language of this input's tracks, in place of what the file says. */
     val language: String? = null,
+    /** Reads the bytes through your own code, as [MediaItem.io] does. A factory: each open asks for a fresh reader. */
+    val io: MediaIoFactory? = null,
+)
+
+/**
+ * A file that may hold a segment an ordered edition of the media links to (#501), such as a
+ * season's shared opening. See [MediaItem.linkedFiles].
+ *
+ * The player opens it once to read its segment UID, and again when a range of it plays. Its bytes
+ * come from [io] when set, and otherwise from [uri], through the network resolver for an address as
+ * for the item. The resolver gets the item's [MediaItem.headers] only when [uri] has the same scheme,
+ * host and port as the item's own URI. To send headers to another server, give the file its own
+ * [io]. The item's [MediaItem.openOptions], [MediaItem.formatHint] and [MediaItem.demux] do not
+ * apply to it.
+ */
+public data class LinkedFile(
+    /** Where the file is: a file path, or an address, as [MediaItem.uri] is. */
+    val uri: String,
     /** Reads the bytes through your own code, as [MediaItem.io] does. A factory: each open asks for a fresh reader. */
     val io: MediaIoFactory? = null,
 )

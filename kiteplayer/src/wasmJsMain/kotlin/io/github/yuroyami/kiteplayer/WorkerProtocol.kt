@@ -213,6 +213,7 @@ internal fun crossingRefusal(item: MediaItem): PlaybackException? = refusal(
         "a reader of its own".takeIf { item.io != null },
         "an external subtitle with a reader of its own".takeIf { item.externalSubtitles.any { it.io != null } },
         "an external audio input with a reader of its own".takeIf { item.externalAudio.any { it.io != null } },
+        "a linked file with a reader of its own".takeIf { item.linkedFiles.any { it.io != null } },
         "a thumbnail file with a reader of its own".takeIf { item.thumbnails?.io != null },
     ),
 )
@@ -478,6 +479,7 @@ private fun encodeItem(item: MediaItem): JsAny = record {
     item.thumbnails?.let { put("thumbnails", it.uri) }
     if (item.runsIntoNext) put("runsIntoNext", true)
     put("audio", item.externalAudio.encodeEach(::encodeAudio))
+    put("linked", item.linkedFiles.encodeEach { file -> record { put("uri", file.uri) } })
 }
 
 private fun encodeAudio(source: AudioSource): JsAny = record {
@@ -528,6 +530,8 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("videoSize", snapshot.videoSize?.let(::encodeVideoSize))
     put("tracks", encodeTracks(snapshot.tracks))
     put("chapters", snapshot.chapters.encodeEach(::encodeChapter))
+    put("editions", snapshot.editions.encodeEach(::encodeEdition))
+    put("edition", snapshot.edition)
     put("markers", snapshot.markers.encodeEach(::encodeMarker))
     put("metadata", snapshot.metadata.toJsObject())
     put("speed", snapshot.speed)
@@ -650,6 +654,17 @@ private fun encodeChapter(chapter: Chapter): JsAny = record {
     put("start", chapter.start)
     put("end", chapter.end)
     put("title", chapter.title)
+}
+
+private fun encodeEdition(edition: MediaEdition): JsAny = record {
+    put("index", edition.index)
+    put("title", edition.title)
+    // An edition's UID is any 64-bit number, which a JavaScript number does not hold exactly.
+    put("uid", edition.uid?.toString())
+    put("isDefault", edition.isDefault)
+    put("isHidden", edition.isHidden)
+    put("isOrdered", edition.isOrdered)
+    put("duration", edition.duration)
 }
 
 private fun encodeMarker(marker: Marker): JsAny = record {
@@ -1049,6 +1064,12 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             put("uri", warning.uri)
             put("reason", warning.reason)
         }
+        is PlaybackWarning.EditionPartLeftOut -> {
+            kind("EditionPartLeftOut")
+            put("segmentUid", warning.segmentUid)
+            put("chapter", warning.chapter)
+            put("detail", warning.detail)
+        }
         is PlaybackWarning.SubtitleCharsetGuessed -> {
             kind("SubtitleCharsetGuessed")
             put("uri", warning.uri)
@@ -1317,6 +1338,7 @@ private fun decodeItem(o: JsAny): MediaItem = MediaItem(
     thumbnails = o.str("thumbnails")?.let { ThumbnailSource(it) },
     runsIntoNext = o.flag("runsIntoNext"),
     externalAudio = o.list("audio", ::decodeAudio).orEmpty(),
+    linkedFiles = o.list("linked") { LinkedFile(it.str("uri") ?: missing("uri")) }.orEmpty(),
 )
 
 private fun decodeAudio(o: JsAny): AudioSource = AudioSource(
@@ -1363,6 +1385,8 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         videoSize = o.child("videoSize")?.let(::decodeVideoSize),
         tracks = o.child("tracks")?.let(::decodeTracks) ?: default.tracks,
         chapters = o.list("chapters", ::decodeChapter) ?: default.chapters,
+        editions = o.list("editions", ::decodeEdition) ?: default.editions,
+        edition = o.int("edition"),
         markers = o.list("markers", ::decodeMarker) ?: default.markers,
         metadata = o.map("metadata"),
         speed = o.num("speed") ?: default.speed,
@@ -1480,6 +1504,16 @@ private fun decodeChapter(o: JsAny): Chapter = Chapter(
     start = o.micros("start") ?: missing("start"),
     end = o.micros("end"),
     title = o.str("title"),
+)
+
+private fun decodeEdition(o: JsAny): MediaEdition = MediaEdition(
+    index = o.int("index") ?: missing("index"),
+    title = o.str("title"),
+    uid = o.str("uid")?.toLongOrNull(),
+    isDefault = o.flag("isDefault"),
+    isHidden = o.flag("isHidden"),
+    isOrdered = o.flag("isOrdered"),
+    duration = o.micros("duration"),
 )
 
 private fun decodeMarker(o: JsAny): Marker = Marker(o.micros("position") ?: missing("position"), o.str("id") ?: missing("id"))
@@ -1706,6 +1740,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "SubtitleSourceUnreadable" -> PlaybackWarning.SubtitleSourceUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "ThumbnailsUnreadable" -> PlaybackWarning.ThumbnailsUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "AudioSourceUnreadable" -> PlaybackWarning.AudioSourceUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
+        "EditionPartLeftOut" -> PlaybackWarning.EditionPartLeftOut(o.str("segmentUid").orEmpty(), o.str("chapter"), o.str("detail").orEmpty())
         "SubtitleCharsetGuessed" -> PlaybackWarning.SubtitleCharsetGuessed(
             o.str("uri").orEmpty(),
             o.str("charset").orEmpty(),

@@ -66,6 +66,7 @@ class WorkerProtocolTest {
             AudioSource("https://example.com/dub.m4a", title = "Dub", language = "fr"),
             AudioSource("https://example.com/commentary.opus"),
         ),
+        linkedFiles = listOf(LinkedFile("https://example.com/op.mkv"), LinkedFile("https://example.com/ed.mkv")),
     )
 
     private val tracks = Tracks(
@@ -119,6 +120,11 @@ class WorkerProtocolTest {
         videoSize = VideoSize(1920, 1080, 4, 3),
         tracks = tracks,
         chapters = listOf(Chapter(0, Duration.ZERO, 60.seconds, "Opening"), Chapter(1, 60.seconds, null, null)),
+        editions = listOf(
+            MediaEdition(0, "Theatrical", uid = -7_215_344_861_243_197_441L, isDefault = true, isHidden = false, isOrdered = true, duration = 95.minutes),
+            MediaEdition(1, null, uid = null, isDefault = false, isHidden = true, isOrdered = false, duration = null),
+        ),
+        edition = 1,
         markers = listOf(Marker(30.seconds, "intro-end")),
         metadata = mapOf("title" to "Ünïcødé ✓"),
         speed = 1.5,
@@ -206,6 +212,8 @@ class WorkerProtocolTest {
         PlaybackWarning.SubtitleSourceUnreadable("https://example.com/a.srt", "404"),
         PlaybackWarning.ThumbnailsUnreadable("https://example.com/thumbs.vtt", "404"),
         PlaybackWarning.AudioSourceUnreadable("https://example.com/dub.m4a", "404"),
+        PlaybackWarning.EditionPartLeftOut("0e0e0e00000000000000000000000002", "Opening", "no file holds this segment"),
+        PlaybackWarning.EditionPartLeftOut("ed0ed000000000000000000000000003", null, "loop"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/a.srt", "windows-1252", "Shift_JIS"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/b.srt", "windows-1252"),
         PlaybackWarning.TypesetterUnavailable("libass", "no module"),
@@ -411,7 +419,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(44, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(45, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test

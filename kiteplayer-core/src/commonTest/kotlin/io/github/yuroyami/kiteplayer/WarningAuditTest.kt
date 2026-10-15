@@ -42,6 +42,7 @@ class WarningAuditTest {
         PlaybackWarning.SubtitleSourceUnreadable("subs.srt", "x"),
         PlaybackWarning.ThumbnailsUnreadable("thumbs.vtt", "x"),
         PlaybackWarning.AudioSourceUnreadable("dub.m4a", "x"),
+        PlaybackWarning.EditionPartLeftOut("0e0e0e00000000000000000000000002", "Opening", "x"),
         PlaybackWarning.ContainerDeclarationDiverged(0, "Width", "1920", "1440"),
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
         PlaybackWarning.SubtitlesNotDrawn("x"),
@@ -137,6 +138,10 @@ class WarningAuditTest {
             "openWithExternalAudio, at an open or a rebuild, when an external audio input of the item " +
                 "could not be opened or holds no audio track; ExternalAudioSession hands it to the sink " +
                 "PlaybackCore.buildSession installs",
+        )
+        is PlaybackWarning.EditionPartLeftOut -> listOf(
+            "PlaybackCore.buildSession, at an open, when editionTimelineOf leaves a part of the ordered " +
+                "edition out because no file holds its segment, or its link loops or nests too deep",
         )
         is PlaybackWarning.ThumbnailsUnreadable -> listOf(
             "PlaybackCore.readItemThumbnails, after an open, when the item's thumbnail file could not " +

@@ -23,6 +23,7 @@ public class MediaItemBuilder(private val uri: String) {
     private var thumbnails: ThumbnailSource? = null
     private val externalSubtitles = ArrayList<SubtitleSource>()
     private val externalAudio = ArrayList<AudioSource>()
+    private val linkedFiles = ArrayList<LinkedFile>()
     private var videoFilter: String? = null
     private var audioFilter: String? = null
     private var startPosition: Duration? = null
@@ -70,6 +71,16 @@ public class MediaItemBuilder(private val uri: String) {
     /** Adds audio files or streams that play beside the media. See [AudioSource]. */
     public fun externalAudio(sources: List<AudioSource>): MediaItemBuilder = apply {
         externalAudio += sources
+    }
+
+    /** Adds a file that may hold a segment an ordered edition links to. See [LinkedFile]. */
+    public fun linkedFile(file: LinkedFile): MediaItemBuilder = apply {
+        linkedFiles += file
+    }
+
+    /** Adds files that may hold the segments an ordered edition links to. See [LinkedFile]. */
+    public fun linkedFiles(files: List<LinkedFile>): MediaItemBuilder = apply {
+        linkedFiles += files
     }
 
     /** See [MediaItem.videoFilter]. */
@@ -208,6 +219,7 @@ public class MediaItemBuilder(private val uri: String) {
         thumbnails = thumbnails,
         runsIntoNext = runsIntoNext,
         externalAudio = externalAudio.toList(),
+        linkedFiles = linkedFiles.toList(),
     )
 }
 

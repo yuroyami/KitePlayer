@@ -523,6 +523,25 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * A part of the ordered edition that plays could not be played, so the timeline leaves it out
+     * and closes up around it (#501): no file holds the segment [segmentUid] it names, or its link
+     * leads back to a segment already on the way, or nests deeper than four links. [chapter] is the
+     * part's chapter name, or null when it has none, and [detail] says which it was. Told once for
+     * each segment at each open. See [MediaItem.linkedFiles].
+     */
+    public data class EditionPartLeftOut(
+        val segmentUid: String,
+        val chapter: String?,
+        val detail: String,
+    ) : PlaybackWarning() {
+        override val message: String
+            get() = "a part of the edition${chapter?.let { " ($it)" }.orEmpty()} was left out: segment $segmentUid, $detail"
+
+        override val fields: Map<String, String>
+            get() = super.fields + ("segmentUid" to segmentUid)
+    }
+
+    /**
      * The item's WebVTT thumbnail file at [uri] could not be read or held no picture, so the seek
      * bar has none of its pictures (#433). The item plays on, and the stream's own pictures, when
      * it has any, stand in.

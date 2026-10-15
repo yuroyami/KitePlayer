@@ -43,6 +43,7 @@ import io.github.yuroyami.kiteplayer.PlayerEvent
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import io.github.yuroyami.kiteplayer.Progress
 import io.github.yuroyami.kiteplayer.DemuxPolicy
+import io.github.yuroyami.kiteplayer.ProbeDepth
 import io.github.yuroyami.kiteplayer.EqualizerSettings
 import io.github.yuroyami.kiteplayer.ReplayGainMode
 import io.github.yuroyami.kiteplayer.SleepTimer
@@ -3744,7 +3745,14 @@ internal class PlaybackCore(
             // decoded, presented or heard. The exact landing is the second half below, made
             // cheap by this half: the refine walks forward within one group of pictures.
             val start = itemStart(command.media, built.source, built.timeline)
-            if (built.timeline != null && start.run != built.run) moveToRun(built, start.run)
+            val timeline = built.timeline
+            if (timeline != null && timeline.isLinked(start.run)) {
+                // The part the item starts in is in another file, which the open plays it from (#501).
+                built = sessionOfRun(built, timeline, start.run, start.fileUs ?: 0L, command.media, tracks, null)
+                session = built
+            } else if (timeline != null && start.run != built.run) {
+                moveToRun(built, start.run)
+            }
             val startTargetUs = start.fileUs
             // A loop armed before this open survives it, but cannot jump back on this source.
             if (abLoopA != null && !built.source.seekable) {
@@ -3913,6 +3921,17 @@ internal class PlaybackCore(
          * with [startAtItem], and for media that plays plainly.
          */
         run: Int = 0,
+        /**
+         * The ordered edition the session plays, carried from the session it follows (#501), in
+         * which case [item] is the file of [run], which may be a linked one. Null on an open, which
+         * reads the edition from the source and searches for its linked files.
+         */
+        timeline: EditionTimeline? = null,
+        /**
+         * True for a session that follows one that plays its media plainly (#501), so that the
+         * open's search for linked files is not made again.
+         */
+        plain: Boolean = false,
     ): OpenSession {
         val report: (PlaybackWarning) -> Unit = pending?.report ?: ::warn
         fun stage(next: OpenStage) {
@@ -3986,7 +4005,10 @@ internal class PlaybackCore(
             val program = chooseProgram(source.programs, source.streams, item.demux.program)
             val candidates = programCandidates(source.streams, source.programs, program)
             var builtTracks = source.toTracks().copy(selectedProgram = program?.number)
-            if (pending == null) tracks = builtTracks
+            // A linked file of an ordered edition plays under the main file's tracks, which the
+            // player keeps listing (#501).
+            val playsLinked = timeline?.isLinked(run) == true
+            if (pending == null && !playsLinked) tracks = builtTracks
 
             val videoCandidate =
                 resolveStreamChoice(videoChoice, source.streams, TrackKind.Video, report) {
@@ -4173,9 +4195,13 @@ internal class PlaybackCore(
                 cachedSubtitleStreams.forEach { add(it.index) }
             }
             // The ordered edition the item plays as a timeline, which decides where it starts (#501).
-            val edition = chosenEdition(source.editions, null)
-            val timeline = editionTimelineOf(item, source, edition)
-            val start = if (startAtItem) itemStart(item, source, timeline, report) else null
+            val edition = timeline?.edition ?: chosenEdition(source.editions, null)
+            val played = when {
+                timeline != null -> timeline
+                plain -> null
+                else -> editionTimelineWithLinks(item, source, edition, report, preemptible = pending == null)
+            }
+            val start = if (startAtItem) itemStart(item, source, played, report) else null
             val readFromUs = if (start != null) start.fileUs ?: 0L else startUs
             withContext(dispatchers.demux) {
                 source.selectStreams(readStreams)
@@ -4186,7 +4212,10 @@ internal class PlaybackCore(
                 .withSelection(TrackKind.Video, videoStream?.let { TrackId(it.index) })
                 .withSelection(TrackKind.Audio, audioStream?.let { TrackId(it.index) })
                 .withSelection(TrackKind.Subtitle, subtitleStream?.let { TrackId(it.index) })
-            if (pending == null) tracks = builtTracks else pending.tracks = builtTracks
+            // A linked file's own tracks are listed nowhere: the main file's stay (#501).
+            if (!playsLinked) {
+                if (pending == null) tracks = builtTracks else pending.tracks = builtTracks
+            }
             videoStream?.visibleVideoSize?.let { size ->
                 val event = PlayerEvent.VideoSizeChanged(size)
                 if (pending == null) emitEvent(event) else pending.events += event
@@ -4253,8 +4282,11 @@ internal class PlaybackCore(
             ).also { built ->
                 built.applyClip(item)
                 built.edition = edition
-                built.timeline = timeline
-                if (timeline != null) built.applyRun((start?.run ?: run).coerceIn(timeline.runs.indices))
+                built.mediaEditions = played?.editions ?: mediaEditionsOf(source)
+                // The item's tags are the main file's, whichever file of its edition plays (#501).
+                if (playsLinked && played != null) built.shownTags = played.metadata
+                built.timeline = played
+                if (played != null) built.applyRun((start?.run ?: run).coerceIn(played.runs.indices))
                 built.wantedCaptions = wantedCaptions
                 built.startUs = readFromUs
                 // What the device was opened for, which a gapless handoff compares the next item against.
@@ -5748,7 +5780,15 @@ internal class PlaybackCore(
         wait.attempts++
         try {
             requestedEpoch = requestedEpoch.next()
-            val rebuilt = buildSession(item, wait.video, wait.audio, wait.subtitle, run = wait.run)
+            val rebuilt = buildSession(
+                wait.timeline?.itemFor(wait.run, item) ?: item,
+                wait.video,
+                wait.audio,
+                wait.subtitle,
+                run = wait.run,
+                timeline = wait.timeline,
+                plain = wait.timeline == null,
+            )
             session = rebuilt
             // As a rebuild: fresh decoders stamp the first epoch, and the reposition aligns them.
             flushDecoders(rebuilt, requestedEpoch)
@@ -6550,17 +6590,20 @@ internal class PlaybackCore(
         // A renderer failure has already torn the old graph down. The recovery reopen folds these
         // choices into its one replacement graph so nothing is lost and no second open happens.
         if (pendingVideoRecovery != null) return
-        if (!reopenPending) session?.let { askForReturnedSound(it) }
+        // A linked file of an ordered edition plays under the main file's tracks, whose numbers
+        // name none of its own, so every change there rebuilds it with the streams that match (#501).
+        val linked = session?.let { it.timeline?.isLinked(it.run) } == true
+        if (!reopenPending && !linked) session?.let { askForReturnedSound(it) }
         if (pendingSelections.isEmpty() && !reopenPending) return
         // A picture the demux lane reads into a cache plays in place, as a sound does (#527).
-        if (!reopenPending) session?.let { inPlacePictureChange(it) }
+        if (!reopenPending && !linked) session?.let { inPlacePictureChange(it) }
         // Owner report 2026-08-26: a subtitle-only change must not ride the full
         // reopen below, which was built for video and audio switches and visibly interrupts
         // playback. Container subtitle tracks get the same in-place treatment external subtitles
         // always had. A refusal (demux would not park, stale id, external target) discards the
         // pending entry instead: the rebuild below runs for the kinds this branch does not take,
         // which is video, and for an audio or subtitle change it never reached.
-        if (TrackKind.Video !in pendingSelections && !reopenPending) {
+        if (TrackKind.Video !in pendingSelections && !reopenPending && !linked) {
             val active = session
             if (active != null) {
                 if (TrackKind.Subtitle in pendingSelections) inPlaceContainerSubtitleChange(active)
@@ -6637,21 +6680,51 @@ internal class PlaybackCore(
             index == null -> StreamChoice.None
             else -> StreamChoice.Auto
         }
-        val video = keptOrChosen(TrackKind.Video, current.videoStream?.index)
-        val audio = keptOrChosen(TrackKind.Audio, current.audioStream?.index)
+        // A request names a track of the main file, which in a linked file of an ordered edition is
+        // the stream that matches it; what was not asked for keeps its stream of that file (#501).
+        val linkedTimeline = current.timeline?.takeIf { it.isLinked(current.run) }
+        fun linkedChoice(kind: TrackKind, kept: Int?): StreamChoice {
+            val request = requested.firstOrNull { it.kind == kind } ?: return kept?.let { StreamChoice.At(it) } ?: StreamChoice.None
+            val ofKind = linkedTimeline!!.mainStreams.filter { it.kind == kind }
+            val stream = request.track?.let { id -> ofKind.firstOrNull { it.index == id.value } } ?: return StreamChoice.None
+            return StreamChoice.Like(stream, ofKind.indexOf(stream))
+        }
+        val video = if (linkedTimeline != null) {
+            linkedChoice(TrackKind.Video, current.videoStream?.index)
+        } else {
+            keptOrChosen(TrackKind.Video, current.videoStream?.index)
+        }
+        val audio = if (linkedTimeline != null) {
+            linkedChoice(TrackKind.Audio, current.audioStream?.index)
+        } else {
+            keptOrChosen(TrackKind.Audio, current.audioStream?.index)
+        }
         // An external subtitle target means NO container stream: the rebuild deselects
         // whatever container track was timing cues, and the external table applies afterwards.
         val subtitleRequest = requested.firstOrNull { it.kind == TrackKind.Subtitle }
-        val subtitle = if (subtitleRequest != null && isExternalSubtitle(subtitleRequest.track)) {
-            StreamChoice.None
-        } else {
-            keptOrChosen(TrackKind.Subtitle, current.selectedSubtitleStream?.index)
+        val subtitle = when {
+            subtitleRequest != null && isExternalSubtitle(subtitleRequest.track) -> StreamChoice.None
+            linkedTimeline != null -> linkedChoice(TrackKind.Subtitle, current.selectedSubtitleStream?.index)
+            else -> keptOrChosen(TrackKind.Subtitle, current.selectedSubtitleStream?.index)
         }
         try {
             teardownSession()
             requestedEpoch = requestedEpoch.next()
-            var rebuilt = buildSession(item, video, audio, subtitle, run = current.run)
+            var rebuilt = buildSession(
+                current.timeline?.itemFor(current.run, item) ?: item,
+                video,
+                audio,
+                subtitle,
+                // A part of an ordered edition reads on from where it plays, rather than from the
+                // start of its file, which may be another part's or none of the edition's (#501).
+                startUs = if (current.timeline != null && seekBack) at.micros else 0L,
+                run = current.run,
+                timeline = current.timeline,
+                plain = current.timeline == null,
+            )
             session = rebuilt
+            // The main file's tracks name what was asked for (#501).
+            if (linkedTimeline != null) requested.forEach { tracks = tracks.withSelection(it.kind, it.track) }
             // Fresh decoders stamp Generation.Initial, and the reposition seek below that would
             // align them runs only above zero. At zero every frame was dropped as stale (#277).
             flushDecoders(rebuilt, requestedEpoch)
@@ -6704,7 +6777,7 @@ internal class PlaybackCore(
             refreshTypesetting()
             // An audio change that rode the rebuild, beside a video change or on another variant,
             // takes the subtitle that goes with it as the in-place one does (#506).
-            if (reopening || rebuilt.audioStream?.index != audioBefore) chooseSubtitleForAudio(rebuilt)
+            if (linkedTimeline == null && (reopening || rebuilt.audioStream?.index != audioBefore)) chooseSubtitleForAudio(rebuilt)
             // A variant or a programme with no picture, or a picture no decoder took (#530).
             if (rebuilt.videoStream == null) clearRendererPicture()
             setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
@@ -6855,6 +6928,8 @@ internal class PlaybackCore(
         val failure: VideoDecoderRuntimeFailure,
         /** The run of the item's ordered edition that [position] is a time of, or null for media that plays plainly (#501). */
         val run: Int? = null,
+        /** The ordered edition the item plays, which [run] is a run of, or null (#501). */
+        val timeline: EditionTimeline? = null,
     )
 
     private data class VideoRecoveryResult(
@@ -6886,7 +6961,7 @@ internal class PlaybackCore(
         // current position. Gating this on the renderer origin turned every backend hardware
         // failure into a dead player.
         if (!active.source.seekable) return null
-        val item = media ?: return null
+        val item = active.timeline?.itemFor(active.run, media ?: return null) ?: media ?: return null
         val stream = active.videoStream ?: return null
         return VideoRecovery(
             item = item,
@@ -6900,6 +6975,7 @@ internal class PlaybackCore(
             subtitleSelectionAvailable = active.backendSession.subtitleDecoders.isNotEmpty(),
             failure = decoderFailure,
             run = active.run.takeIf { active.timeline != null },
+            timeline = active.timeline,
         )
     }
 
@@ -6989,6 +7065,8 @@ internal class PlaybackCore(
                 subtitleChoice = recovery.subtitle,
                 videoSelection = VideoDecoderSelection.BackendSoftwareOnly,
                 run = recovery.run ?: 0,
+                timeline = recovery.timeline,
+                plain = recovery.timeline == null,
             )
         } catch (preempted: OpenPreempted) {
             return null
@@ -7070,6 +7148,8 @@ internal class PlaybackCore(
             StreamChoice.Auto -> true
             StreamChoice.None -> index == null
             is StreamChoice.At -> choice.index == index
+            // A recovery keeps the streams of the file it plays, which a match never names.
+            is StreamChoice.Like -> true
         }
         check(restored(recovery.video, rebuilt.videoStream?.index)) { "the software decoder refused the selected video track" }
         check(restored(recovery.audio, rebuilt.audioStream?.index)) { "the recovered session lost the selected audio track" }
@@ -9655,6 +9735,89 @@ internal class PlaybackCore(
      */
     private var runPassRefused: Pair<Long, Int>? = null
 
+    /**
+     * The timeline of the ordered edition [edition] of [item], with the parts in other files found
+     * among the item's linked files and the files beside it (#501), or null when it plays plainly.
+     * It runs inside the open, on its lane and under its bounds and its cancellation. Each candidate
+     * opens with the shallowest probe, and every one closes again once the timeline is made.
+     */
+    private suspend fun editionTimelineWithLinks(
+        item: MediaItem,
+        source: PlayerMediaSource,
+        edition: Int?,
+        report: (PlaybackWarning) -> Unit,
+        preemptible: Boolean,
+    ): EditionTimeline? {
+        val parts = edition?.let { source.editions.getOrNull(it) }?.takeIf { it.isOrdered }?.parts
+        if (parts?.any { it.segmentUid != null && it.segmentUid != source.segmentUid } != true) {
+            return editionTimelineOf(item, source, edition)
+        }
+        val readers = HashMap<BackendSession, MediaIo>()
+        val search = LinkedFileSearch(
+            candidates = linkedCandidates(item),
+            open = { candidate ->
+                val probing = candidate.copy(demux = DemuxPolicy(probe = ProbeDepth.Fast))
+                val reader = resolveReader(probing, preemptible)
+                val opened = try {
+                    openBackendSession(
+                        if (reader == null) probing else probing.copy(io = { reader }),
+                        StallWatch(clock),
+                        if (reader != null) config.buffer.stallTimeout else Duration.INFINITE,
+                        report = {},
+                        preemptible = preemptible,
+                    )
+                } catch (failure: Throwable) {
+                    reader?.let { runCatching { it.close() } }
+                    throw failure
+                }
+                reader?.let { readers[opened] = it }
+                opened
+            },
+            closeSession = { opened ->
+                withContext(NonCancellable + dispatchers.demux) { runCatching { opened.close() } }
+                readers.remove(opened)?.let { runCatching { it.close() } }
+            },
+            ends = { it is OpenPreempted },
+        )
+        try {
+            return editionTimelineOf(
+                item = item,
+                source = source,
+                edition = edition,
+                find = search::find,
+                leftOut = report,
+                missingDetail = {
+                    val unread = search.unreadable
+                    "no file the player could read holds this segment" +
+                        if (unread > 0) ", and $unread ${if (unread == 1) "file" else "files"} could not be opened" else ""
+                },
+            )
+        } finally {
+            withContext(NonCancellable) { search.close() }
+        }
+    }
+
+    /**
+     * What a session of run [run] of [timeline] plays of [kind] (#501): the main file's stream that
+     * [selection] names, which in a linked file is the stream that matches it. A kind the main file
+     * has none of takes the linked file's own choice, as a file that only links can.
+     */
+    private fun runChoice(timeline: EditionTimeline, run: Int, kind: TrackKind, selection: Tracks): StreamChoice {
+        val selected = when (kind) {
+            TrackKind.Video -> selection.selectedVideo
+            TrackKind.Audio -> selection.selectedAudio
+            else -> selection.selectedSubtitle
+        }
+        val ofKind = timeline.mainStreams.filter { it.kind == kind }
+        val stream = selected?.let { id -> ofKind.firstOrNull { it.index == id.value } }
+        if (!timeline.isLinked(run)) return stream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
+        return when {
+            stream != null -> StreamChoice.Like(stream, ofKind.indexOf(stream))
+            ofKind.isEmpty() -> StreamChoice.Auto
+            else -> StreamChoice.None
+        }
+    }
+
     /** Moves [target] to run [run] of its timeline, and the item's time with it when [target] plays (#501). */
     private fun moveToRun(target: OpenSession, run: Int) {
         target.applyRun(run)
@@ -9696,13 +9859,111 @@ internal class PlaybackCore(
     /**
      * Moves on to the next run of the ordered edition [active] plays, at the end of a run that no
      * pass joined (#501): by a precise seek to where that run starts, as a repeat went back before
-     * passes, with the short silence that brings. False when no run follows, and the item ends.
+     * passes, or, in another file, by opening that file there, with the short silence either brings.
+     * False when no run follows, and the item ends.
      */
-    private fun continueTimeline(active: OpenSession): Boolean {
+    private suspend fun continueTimeline(active: OpenSession): Boolean {
         val timeline = active.timeline ?: return false
-        val next = timeline.runs.getOrNull(active.run + 1) ?: return false
-        pendingSeek = SeekRequest(SeekTarget.Absolute(Pts(next.startUs), itemUs = next.atUs), SeekMode.Precise)
+        val run = active.run + 1
+        val next = timeline.runs.getOrNull(run) ?: return false
+        if (next.segmentUid != timeline.runs[active.run].segmentUid) {
+            reopenOnRun(run, next.atUs, SeekMode.Precise)
+        } else {
+            pendingSeek = SeekRequest(SeekTarget.Absolute(Pts(next.startUs), itemUs = next.atUs), SeekMode.Precise)
+        }
         return true
+    }
+
+    /**
+     * A session of run [run] of [timeline] in place of [main], a session of the main file that no
+     * worker reads yet, for an item whose first part is in another file (#501): [main] closes, and
+     * the run's file opens at [fileUs] with the streams that match the ones [selection] names. For
+     * a preload, [pending] is its build.
+     */
+    private suspend fun sessionOfRun(
+        main: OpenSession,
+        timeline: EditionTimeline,
+        run: Int,
+        fileUs: Long,
+        item: MediaItem,
+        selection: Tracks,
+        pending: PendingBuild?,
+    ): OpenSession {
+        if (pending == null) teardownSession() else releaseSession(main)
+        return buildSession(
+            item = timeline.itemFor(run, item),
+            videoChoice = runChoice(timeline, run, TrackKind.Video, selection),
+            audioChoice = runChoice(timeline, run, TrackKind.Audio, selection),
+            subtitleChoice = runChoice(timeline, run, TrackKind.Subtitle, selection),
+            pending = pending,
+            startUs = fileUs,
+            run = run,
+            timeline = timeline,
+        )
+    }
+
+    /**
+     * Plays run [run] of the ordered edition the session plays from [itemUs], when that run is in
+     * another file than the session's (#501), as `next` opens an item at a start position: the
+     * session closes, the run's file opens with the streams that match the selected ones, and a
+     * seek in [mode] lands on [itemUs]. The picture holds meanwhile, the play intent carries on, and
+     * a seek that waits is answered by the landing.
+     */
+    private suspend fun reopenOnRun(run: Int, itemUs: Long, mode: SeekMode) {
+        val current = session ?: return
+        val timeline = current.timeline ?: return
+        val main = media ?: return
+        val fileUs = timeline.runs[run].fileUsAt(itemUs)
+        val wasPlaying = playRequested
+        val secondaryBefore = tracks.selectedSecondarySubtitle
+        try {
+            teardownSession()
+            requestedEpoch = requestedEpoch.next()
+            val rebuilt = buildSession(
+                item = timeline.itemFor(run, main),
+                videoChoice = runChoice(timeline, run, TrackKind.Video, tracks),
+                audioChoice = runChoice(timeline, run, TrackKind.Audio, tracks),
+                subtitleChoice = runChoice(timeline, run, TrackKind.Subtitle, tracks),
+                startUs = fileUs,
+                run = run,
+                timeline = timeline,
+            )
+            session = rebuilt
+            // Where the position is from now on, in the time of the run's file.
+            publishedPositionMicros.value = fileUs
+            if (maskedSeekTargetMicros.value != NO_SEEK_MASK) maskedSeekTargetMicros.value = fileUs
+            flushDecoders(rebuilt, requestedEpoch)
+            clearBuffers(rebuilt, requestedEpoch)
+            rebuilt.videoParked.value = !videoEnabled
+            startWorkers(rebuilt)
+            when (awaitInitialFill(rebuilt)) {
+                FillOutcome.WorkerFinished -> throw workerOutcomeException(rebuilt, "before the next part of the edition could fill")
+                FillOutcome.TimedOut -> warn(
+                    PlaybackWarning.StartupIncomplete("no stream reached readiness within $OPEN_FILL_DEADLINE after the edition moved to another file"),
+                )
+                FillOutcome.Ready -> Unit
+                FillOutcome.Preempted -> {
+                    teardownSession()
+                    return
+                }
+            }
+            if (pendingSeek == null) pendingSeek = SeekRequest(SeekTarget.Absolute(Pts(fileUs), itemUs = itemUs), mode)
+            playRequested = wasPlaying
+            restoreSubtitleState(secondaryBefore)
+            refreshTypesetting()
+            if (rebuilt.videoStream == null) clearRendererPicture()
+            setStatus(if (playRequested) PlaybackStatus.Buffering else PlaybackStatus.Paused)
+            snapshotDirty = true
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (preempted: OpenPreempted) {
+            teardownSession()
+        } catch (failure: Throwable) {
+            val error = classify(failure, timeline.itemFor(run, main))
+            teardownSession()
+            resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
+            fail(error)
+        }
     }
 
     /**
@@ -9735,7 +9996,7 @@ internal class PlaybackCore(
             io.github.yuroyami.kiteplayer.KiteLog.log("kiteplayer", "the edition's next part follows by a seek: $refusal")
             return true
         }
-        val item = media ?: return true
+        val item = timeline.itemFor(run, media ?: return true)
         val build = PendingBuild(nextSessionToken++)
         val job = startRepeatBuild(active, item, build, next.startUs, wrapUs = null, run = run)
         pendingNext = PendingNext(
@@ -9780,6 +10041,8 @@ internal class PlaybackCore(
         // as an A that is not armed.
         if (wrapUs == null && loopA != null && active.originUs + loopA >= durationUs) return
         val item = if (repeat) media ?: return else queueItems[index]
+        // A repeat starts in whichever file of an ordered edition plays the start or A (#501).
+        val passItem = active.timeline?.let { it.itemFor(it.runAt(loopA ?: 0L), item) } ?: item
         val refusal = when {
             // A silent item's join is timed by its picture (#524), so it needs one.
             active.audioLane == null && (active.video == null || active.videoParked.value) ->
@@ -9799,7 +10062,7 @@ internal class PlaybackCore(
             val timeline = active.timeline
             val run = timeline?.runAt(loopA ?: 0L) ?: 0
             val startUs = timeline?.runs?.get(run)?.fileUsAt(loopA ?: 0L) ?: (active.clipStartUs + (loopA ?: 0L))
-            val job = startRepeatBuild(active, item, build, startUs, wrapUs, run)
+            val job = startRepeatBuild(active, passItem, build, startUs, wrapUs, run)
             pendingNext = PendingNext(index, item, active.token, build, job, repeat = true, startUs = startUs, wrapUs = wrapUs)
             wakeIn(WORKER_POLL)
             return
@@ -9812,7 +10075,7 @@ internal class PlaybackCore(
                 val immediate = externals.any { track ->
                     item.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true
                 }
-                val built = buildSession(
+                var built = buildSession(
                     item = item,
                     videoChoice = StreamChoice.Auto,
                     audioChoice = StreamChoice.Auto,
@@ -9822,6 +10085,11 @@ internal class PlaybackCore(
                     externalSubtitles = externals.map { it.info },
                     startAtItem = true,
                 )
+                // An item whose first part is in another file opens that file for it (#501).
+                val timeline = built.timeline
+                if (timeline != null && timeline.isLinked(built.run)) {
+                    built = sessionOfRun(built, timeline, built.run, built.startUs, item, build.tracks, build)
+                }
                 // Where the item asks to start, as a pass starts at A: the lanes drop what comes
                 // before it, so its first sample and picture are the ones there (#456).
                 if (built.startUs > 0L) built.discardBeforeUs.value = built.startUs
@@ -9896,13 +10164,29 @@ internal class PlaybackCore(
         wrapUs: Long?,
         run: Int = 0,
     ): Deferred<Result<PreparedNext>> {
-        val videoChoice = active.videoStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
-        val audioChoice = active.audioStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
+        // A pass that plays another file of an ordered edition, or follows one, plays the streams
+        // that match the main file's selected ones (#501).
+        val timeline = active.timeline
+        val acrossFiles = timeline != null && (timeline.isLinked(active.run) || timeline.isLinked(run))
+        val videoChoice = if (acrossFiles) {
+            runChoice(timeline, run, TrackKind.Video, tracks)
+        } else {
+            active.videoStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
+        }
+        val audioChoice = if (acrossFiles) {
+            runChoice(timeline, run, TrackKind.Audio, tracks)
+        } else {
+            active.audioStream?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
+        }
         // An external file timing the cues means no container stream, as in a rebuild.
-        val subtitleChoice = active.selectedSubtitleStream
-            ?.takeIf { selectedExternalSubtitle == null }
-            ?.let { StreamChoice.At(it.index) }
-            ?: StreamChoice.None
+        val subtitleChoice = if (acrossFiles) {
+            runChoice(timeline, run, TrackKind.Subtitle, tracks)
+        } else {
+            active.selectedSubtitleStream
+                ?.takeIf { selectedExternalSubtitle == null }
+                ?.let { StreamChoice.At(it.index) }
+                ?: StreamChoice.None
+        }
         val videoSelection = if (forceBackendSoftwareForMedia) {
             VideoDecoderSelection.BackendSoftwareOnly
         } else {
@@ -9919,6 +10203,8 @@ internal class PlaybackCore(
                     pending = build,
                     startUs = startUs,
                     run = run,
+                    timeline = timeline,
+                    plain = timeline == null,
                 )
                 // Left in place for the whole pass, where it drops nothing: a video decoder made at
                 // the swap still has the frames between the keyframe and A to throw away.
@@ -10446,6 +10732,9 @@ internal class PlaybackCore(
                 }
             }
         }
+        // The pass plays another file of an ordered edition than the one before it (#501).
+        val fileChanged = session?.let { it.timeline?.runs?.getOrNull(it.run)?.segmentUid } !=
+            incoming.timeline?.runs?.getOrNull(incoming.run)?.segmentUid
         detachSession(forHandoff = true)?.let { releaseSession(it) }
         // The markers behind the start are armed again, as the seek back to it armed them. The
         // next run of an ordered edition goes on along the timeline, so its markers are crossed
@@ -10456,7 +10745,8 @@ internal class PlaybackCore(
         }
         endOfStream.reset()
         demuxUnderrunSeen = false
-        tracks = next.build.tracks
+        // A pass of a linked file of an ordered edition plays under the main file's tracks (#501).
+        if (incoming.timeline?.isLinked(incoming.run) != true) tracks = next.build.tracks
         session = incoming
         incoming.preloading.value = false
         incoming.videoParked.value = !videoEnabled
@@ -10465,8 +10755,10 @@ internal class PlaybackCore(
         // pass starts (#524).
         publishedPositionMicros.value = if (incoming.audioLane == null) incoming.startUs else currentPosition().micros
         progressState.value = Progress(position = itemTime(publishedPositionMicros.value).microseconds, bufferedAhead = Duration.ZERO)
-        // The pass's own warnings are news; its events, the picture size, are what the item said.
+        // The pass's own warnings are news; its events, the picture size, are what the item said,
+        // unless the pass plays another file of an ordered edition (#501).
         next.build.warnings.release()
+        if (fileChanged) next.build.events.forEach(::emitEvent)
         restoreSubtitleState(secondaryBefore)
         refreshTypesetting()
         startAudioEventCollector(incoming)
@@ -11215,6 +11507,12 @@ internal class PlaybackCore(
         var phaseBegin = if (tracing) clock.nanos() else 0L
         val origin = currentPosition()
         val (target, targetRun) = seekTargetOf(session, request, origin)
+        // A target in a run of another file of the ordered edition opens that file there (#501).
+        val timeline = session.timeline
+        if (timeline != null && targetRun != null && timeline.runs[targetRun].segmentUid != timeline.runs[session.run].segmentUid) {
+            reopenOnRun(targetRun, target.micros - timeline.runs[targetRun].originUs, request.mode)
+            return
+        }
         val landsBefore = request.landing == SeekLanding.Before
         // Only a plain keyframe seek takes the choice (#496). The precise modes decode forward from
         // the keyframe before the target, and a backward landing needs the frame before the one on
@@ -14630,8 +14928,11 @@ internal class PlaybackCore(
         private var clippedFrom: List<Chapter>? = null
         private var clippedAt: Pair<Long, Long>? = null
 
-        /** The media's editions as the caller sees them (#501). Empty for media with none. */
-        val mediaEditions: List<MediaEdition> by lazy { mediaEditionsOf(source) }
+        /**
+         * The media's editions as the caller sees them (#501), empty for media with none: the main
+         * file's, also while a linked file of its ordered edition plays. Actor only.
+         */
+        var mediaEditions: List<MediaEdition> = emptyList()
 
         /** The [MediaEdition.index] of the edition that plays, or null (#501). Actor only. */
         var edition: Int? = null
@@ -15566,6 +15867,7 @@ internal fun resolveStreamChoice(
 ): PlayerStreamInfo? = when (choice) {
     StreamChoice.None -> null
     StreamChoice.Auto -> auto()
+    is StreamChoice.Like -> matchingStream(choice, streams)
     is StreamChoice.At -> streams.firstOrNull { it.index == choice.index }
         ?: run {
             warn(
@@ -15587,6 +15889,29 @@ internal sealed interface StreamChoice {
     data object None : StreamChoice
 
     data class At(val index: Int) : StreamChoice
+
+    /**
+     * The stream of a linked file of an ordered edition that plays for [stream] of the main file,
+     * which is at [position] among the main file's streams of its kind (#501). See [matchingStream].
+     */
+    data class Like(val stream: PlayerStreamInfo, val position: Int) : StreamChoice
+}
+
+/**
+ * The stream of [streams] that plays for [like] (#501): of its kind, the ones in its language,
+ * then of those the ones with its title, and of those the one at its place among the streams of
+ * its kind, or else the first. Null when [streams] has none of its kind, which is silent.
+ */
+internal fun matchingStream(like: StreamChoice.Like, streams: List<PlayerStreamInfo>): PlayerStreamInfo? {
+    val wanted = like.stream
+    val ofKind = streams.filter { it.kind == wanted.kind }
+    val candidates = ofKind.filter { it.isCoverArt == wanted.isCoverArt }.ifEmpty { ofKind }
+    if (candidates.isEmpty()) return null
+    var pool = candidates
+    wanted.language?.let { language -> pool.filter { it.language == language }.takeIf { it.isNotEmpty() }?.let { pool = it } }
+    wanted.title?.let { title -> pool.filter { it.title == title }.takeIf { it.isNotEmpty() }?.let { pool = it } }
+    val atPlace = candidates.getOrNull(like.position)
+    return if (atPlace != null && atPlace in pool) atPlace else pool.first()
 }
 
 /** Per stream, so the start rendezvous and the end of stream are decided per stream and not globally. */

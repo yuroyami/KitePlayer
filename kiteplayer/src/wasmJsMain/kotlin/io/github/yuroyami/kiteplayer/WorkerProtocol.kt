@@ -82,6 +82,7 @@ internal sealed class Command(val member: String) {
     data class SelectSecondarySubtitle(val track: TrackId?) : Command("selectSecondarySubtitle")
     data class SelectVariant(val index: Int?) : Command("selectVariant")
     data class SelectProgram(val number: Int?) : Command("selectProgram")
+    data class SelectEdition(val index: Int) : Command("selectEdition")
     data class AddExternalSubtitle(val source: SubtitleSource) : Command("addExternalSubtitle")
     data class ReloadExternalSubtitle(val track: TrackId, val encoding: String?) : Command("reloadExternalSubtitle")
     data object DiagnosticsDump : Command("diagnosticsDump")
@@ -327,6 +328,7 @@ private fun encodeCommand(command: Command): JsAny = record {
         is Command.SelectSecondarySubtitle -> put("track", command.track?.value)
         is Command.SelectVariant -> put("index", command.index)
         is Command.SelectProgram -> put("number", command.number)
+        is Command.SelectEdition -> put("index", command.index)
         is Command.AddExternalSubtitle -> put("source", encodeSubtitle(command.source))
         is Command.ReloadExternalSubtitle -> {
             put("track", command.track.value)
@@ -520,6 +522,8 @@ private fun encodeDemux(demux: DemuxPolicy): JsAny = record {
     put("maxVideoHeight", demux.maxVideoHeight)
     put("variant", demux.variant)
     put("program", demux.program)
+    put("edition", demux.edition)
+    if (!demux.orderedEditions) put("orderedEditions", false)
 }
 
 private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
@@ -1243,6 +1247,7 @@ private fun decodeCommand(o: JsAny): Command? = when (o.str("t")) {
     "selectSecondarySubtitle" -> Command.SelectSecondarySubtitle(o.int("track")?.let(::TrackId))
     "selectVariant" -> Command.SelectVariant(o.int("index"))
     "selectProgram" -> Command.SelectProgram(o.int("number"))
+    "selectEdition" -> Command.SelectEdition(o.int("index") ?: missing("index"))
     "addExternalSubtitle" -> Command.AddExternalSubtitle(decodeSubtitle(o.child("source") ?: missing("source")))
     "reloadExternalSubtitle" -> Command.ReloadExternalSubtitle(TrackId(o.int("track") ?: missing("track")), o.str("encoding"))
     "diagnosticsDump" -> Command.DiagnosticsDump
@@ -1365,6 +1370,8 @@ private fun decodeDemux(o: JsAny): DemuxPolicy = DemuxPolicy(
     maxVideoHeight = o.int("maxVideoHeight"),
     variant = o.int("variant"),
     program = o.int("program"),
+    edition = o.int("edition"),
+    orderedEditions = o.bool("orderedEditions") ?: true,
 )
 
 private fun decodeProbe(o: JsAny): ProbeDepth = when (o.str("t")) {

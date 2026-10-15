@@ -207,7 +207,7 @@ public data class PlayerSnapshot(
     /**
      * The editions of the current media's chapters, such as a theatrical and an extended cut, in the
      * order the file stores them (#501). Empty for media with none, which is all media but Matroska.
-     * `KitePlayer.selectEdition` plays another.
+     * [KitePlayer.selectEdition] plays another.
      */
     val editions: List<MediaEdition> = emptyList(),
     /** The [MediaEdition.index] of the edition that plays, or null for media with no editions (#501). */

@@ -169,7 +169,8 @@ internal class EditionTimeline(
 
 /**
  * The timeline [item] plays from [source], or null when it plays the file plainly (#501): the
- * chosen edition is not ordered or cannot be played as one, the item has a clip, which names a
+ * item's [io.github.yuroyami.kiteplayer.DemuxPolicy.orderedEditions] is false, the chosen edition
+ * is not ordered or cannot be played as one, the item has a clip, which names a
  * range of the file, the file is still growing, so its timeline is not known yet, the source cannot
  * seek, so it cannot skip what the edition leaves out, or no part of the edition is in a file the
  * player has.
@@ -187,7 +188,7 @@ internal suspend fun editionTimelineOf(
     leftOut: (PlaybackWarning.EditionPartLeftOut) -> Unit = {},
     missingDetail: () -> String = { "no file the player could read holds this segment" },
 ): EditionTimeline? {
-    if (item.clip != null || item.growth != null || !source.seekable) return null
+    if (!item.demux.orderedEditions || item.clip != null || item.growth != null || !source.seekable) return null
     val index = edition ?: return null
     val chosen = source.editions.getOrNull(index) ?: return null
     if (!chosen.isOrdered) return null

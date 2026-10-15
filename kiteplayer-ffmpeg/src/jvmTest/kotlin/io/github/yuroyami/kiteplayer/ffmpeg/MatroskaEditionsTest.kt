@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.AudioTap
 import io.github.yuroyami.kiteplayer.Backends
+import io.github.yuroyami.kiteplayer.DemuxPolicy
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.LinkedFile
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -33,6 +34,7 @@ import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -254,7 +256,9 @@ class MatroskaEditionsTest {
                 val times = run.map { it.first }
                 assertTrue(times.all { it in range }, "a picture outside $range: ${times.filter { it !in range }}")
                 assertEquals(times.sorted(), times, "the pictures of one file went back")
-                assertTrue(times.first() - range.first < 50_000L && range.last - times.last() < 50_000L, "the pictures span ${times.first()} to ${times.last()} of $range")
+                // A part's last picture, when it runs late, goes with its part at the join, as at
+                // any gapless join, so up to two pictures of 30 a second may be missing at an edge.
+                assertTrue(times.first() - range.first < 70_000L && range.last - times.last() < 100_000L, "the pictures span ${times.first()} to ${times.last()} of $range")
             }
             // The sound follows the same three ranges, and adds up to the timeline.
             val heard = sound.blocks.toList()
@@ -312,6 +316,76 @@ class MatroskaEditionsTest {
             assertTrue(back in 500_000L until 3_500_000L, "the sound came back at $back us, outside the opening's range")
             withTimeout(20.seconds) { while (player.state.value.status != PlaybackStatus.Ended) delay(20) }
             assertEquals(9.seconds, player.state.value.duration)
+        } finally {
+            player.closeAndAwait()
+        }
+    }
+
+    @Test
+    fun anotherCutOfTheFilmPlaysFromTheSameScene() = runBlocking<Unit> {
+        val pictures = PictureTimes()
+        val player = KitePlayer.create(
+            PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), PacedOutput()), progressInterval = 50.milliseconds),
+        )
+        try {
+            player.attachRendererAndAwait(pictures)
+            withTimeout(30.seconds) { player.open(MediaItem(fixture("film.mkv").absolutePath)) }
+            // Four seconds into the theatrical cut is 6 s of the film, which the extended cut plays at 6 s.
+            player.seek(4.seconds, SeekMode.Precise)
+            pictures.shown.clear()
+            withTimeout(30.seconds) { player.selectEdition(1) }
+            delay(300)
+            val extended = player.state.value
+            assertEquals(1, extended.edition)
+            assertEquals(1, extended.media?.demux?.edition)
+            assertEquals(8.seconds, extended.duration)
+            assertEquals(listOf("Act one", "Deleted scene", "Act three"), extended.chapters.map { it.title })
+            assertEquals(PlaybackStatus.Paused, extended.status)
+            assertNear(6.seconds, player.position())
+            assertEquals(6_000_000L, pictures.times.firstOrNull(), "the switch showed ${pictures.times.firstOrNull()}")
+            // The deleted scene is not in the theatrical cut, which then starts from its beginning.
+            player.seek(4.seconds, SeekMode.Precise)
+            pictures.shown.clear()
+            withTimeout(30.seconds) { player.selectEdition(0) }
+            delay(300)
+            assertEquals(0, player.state.value.edition)
+            assertEquals(6.seconds, player.state.value.duration)
+            assertNear(0.seconds, player.position())
+            assertEquals(0L, pictures.times.firstOrNull(), "the switch showed ${pictures.times.firstOrNull()}")
+            // A player that plays keeps playing.
+            player.play()
+            withTimeout(10.seconds) { while (player.position() < 500.milliseconds) delay(10) }
+            withTimeout(30.seconds) { player.selectEdition(1) }
+            withTimeout(10.seconds) { while (player.state.value.status != PlaybackStatus.Playing) delay(10) }
+            assertEquals(1, player.state.value.edition)
+            // An edition the media does not have is refused.
+            assertFailsWith<IllegalArgumentException> { player.selectEdition(2) }
+        } finally {
+            player.closeAndAwait()
+        }
+    }
+
+    @Test
+    fun theItemCanAskForAnEditionAndForNoTimelineAtAll() = runBlocking<Unit> {
+        val player = KitePlayer.create(PlayerConfig(backends = Backends(KiteFFmpegMediaBackend(), PacedOutput())))
+        try {
+            withTimeout(30.seconds) { player.open(MediaItem(fixture("film.mkv").absolutePath, demux = DemuxPolicy(edition = 1))) }
+            assertEquals(1, player.state.value.edition)
+            assertEquals(8.seconds, player.state.value.duration)
+            player.stop()
+            // With no timeline, the episode is its own file, five seconds long, and nothing is looked for.
+            val plain = MediaItem(fixture("season/episode.mkv").absolutePath, demux = DemuxPolicy(orderedEditions = false))
+            withTimeout(30.seconds) { player.open(plain) }
+            val opened = player.state.value
+            assertNear(5.seconds, opened.duration ?: Duration.ZERO, within = 50.milliseconds)
+            assertEquals(listOf("Episode"), opened.editions.map { it.title })
+            assertEquals(0, opened.edition)
+            assertTrue(player.warningHistory().none { it.warning is PlaybackWarning.EditionPartLeftOut })
+            player.stop()
+            // Media with no editions has none to select.
+            val dir = formatMatrixMediaDir() ?: error("no testmedia directory")
+            withTimeout(30.seconds) { player.open(MediaItem(File(dir, "sync1080p30.mp4").absolutePath)) }
+            assertFailsWith<IllegalArgumentException> { player.selectEdition(0) }
         } finally {
             player.closeAndAwait()
         }

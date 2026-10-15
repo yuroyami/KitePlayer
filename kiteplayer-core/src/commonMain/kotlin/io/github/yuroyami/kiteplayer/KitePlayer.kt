@@ -1617,6 +1617,28 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Plays edition [index] of [PlayerSnapshot.editions], such as the extended cut of a film
+     * (#501). The media opens again on that edition, and the choice is kept on the item as
+     * [DemuxPolicy.edition], so a later rebuild keeps it too. The player keeps playing or stays
+     * paused.
+     *
+     * The new edition starts at the moment of the main file that plays now, when it plays that
+     * moment too, so a switch from a theatrical to an extended cut keeps the scene. Otherwise, as
+     * while a part of another file plays, it starts from its beginning.
+     *
+     * @throws IllegalStateException when nothing is open, or when a stop, a close, a new open or a
+     *         later call ended the change first.
+     * @throws IllegalArgumentException when the media has no edition at [index].
+     * @throws UnsupportedOperationException when the source cannot seek, as a pipe cannot, which can
+     *         only be read once. Open the item again with [DemuxPolicy.edition] instead.
+     * @throws PlaybackException when the reopen itself failed.
+     */
+    @Throws(Exception::class)
+    public suspend fun selectEdition(index: Int) {
+        core.selectEdition(index)
+    }
+
+    /**
      * Attaches a renderer, or replaces the one attached. Legal at any time, including while playing.
      *
      * Video decoding never depends on a renderer existing. With none attached the schedule still paces

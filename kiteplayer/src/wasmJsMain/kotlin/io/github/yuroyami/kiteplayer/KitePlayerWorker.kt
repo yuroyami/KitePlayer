@@ -258,6 +258,11 @@ public class KitePlayerWorker private constructor(
         call(Command.SelectProgram(number))
     }
 
+    /** Plays edition [index] of the snapshot's editions, such as another cut of a film (#501). */
+    public suspend fun selectEdition(index: Int) {
+        call(Command.SelectEdition(index))
+    }
+
     /**
      * Loads a subtitle file, selects it, and returns its id once it is showing. [source] needs an
      * address: one with its own reader is refused with [PlaybackError.ConfigurationInvalid].

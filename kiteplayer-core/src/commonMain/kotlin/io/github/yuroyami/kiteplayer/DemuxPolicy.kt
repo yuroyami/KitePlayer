@@ -129,6 +129,19 @@ public data class DemuxPolicy(
      * cap and prefers SDR.
      */
     val fit: VariantFit? = null,
+    /**
+     * The [MediaEdition.index] of the edition of a Matroska file's chapters to play, such as an
+     * extended cut, or null for the one the file marks as the default (#501). An index the media
+     * does not have is ignored, and the default plays. [KitePlayer.selectEdition] sets it on the
+     * item that plays.
+     */
+    val edition: Int? = null,
+    /**
+     * True, the default, plays an ordered edition as the timeline its chapters make, with the parts
+     * of other files it names (#501). False plays every edition as marks on the main file, as FFmpeg
+     * does, for a release whose links point at the wrong files.
+     */
+    val orderedEditions: Boolean = true,
 ) {
     init {
         require(skipInitialBytes >= 0) { "skipInitialBytes must not be negative, was $skipInitialBytes" }

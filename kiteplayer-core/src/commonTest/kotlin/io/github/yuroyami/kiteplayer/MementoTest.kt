@@ -463,6 +463,8 @@ class MementoTest {
                         maxBitrate = 3_000_000,
                         maxVideoHeight = 720,
                         program = 202,
+                        edition = 1,
+                        orderedEditions = false,
                     ),
                 ),
                 MediaItem("fast.mp4", demux = DemuxPolicy(probe = ProbeDepth.Fast)),
@@ -486,6 +488,41 @@ class MementoTest {
             subtitlesOff = false,
         )
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
+    }
+
+    @Test
+    fun `the text form carries an items linked files without their readers`() {
+        val memento = PlayerMemento(
+            queue = listOf(
+                MediaItem(
+                    "https://example.test/episode.mkv",
+                    linkedFiles = listOf(
+                        LinkedFile("https://example.test/opening.mkv"),
+                        LinkedFile("ending.mkv", io = MediaIoFactory { error("never opened") }),
+                    ),
+                ),
+                MediaItem("plain.mkv"),
+            ),
+            queueIndex = 0,
+            position = 0.seconds,
+            speed = 1.0,
+            preservePitch = true,
+            volume = 1f,
+            muted = false,
+            loop = LoopMode.Off,
+            shuffle = false,
+            subtitleDelay = 0.seconds,
+            audioDelay = 0.seconds,
+            audioLanguage = null,
+            subtitleLanguage = null,
+            subtitlesOff = false,
+        )
+        val back = PlayerMemento.fromProperties(memento.asProperties())
+        assertEquals(
+            listOf(listOf("https://example.test/opening.mkv", "ending.mkv"), emptyList()),
+            back.queue.map { item -> item.linkedFiles.map { it.uri } },
+        )
+        assertTrue(back.queue.flatMap { it.linkedFiles }.all { it.io == null }, "a reader travelled")
     }
 
     @Test

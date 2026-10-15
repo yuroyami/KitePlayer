@@ -149,6 +149,9 @@ public class KitePlayerJava(
     /** `KitePlayer.selectProgram`: the channel numbered [number], or the automatic choice for null. */
     public fun selectProgramAsync(number: Int?): CompletableFuture<Void?> = launchCall { player.selectProgram(number) }
 
+    /** `KitePlayer.selectEdition`: edition [index] of the snapshot's editions, such as another cut of a film. */
+    public fun selectEditionAsync(index: Int): CompletableFuture<Void?> = launchCall { player.selectEdition(index) }
+
     /**
      * `KitePlayer.addExternalSubtitle`. Completes once the file's track shows, selected; it is then
      * the subtitle track of `Tracks.selectedTrack`.

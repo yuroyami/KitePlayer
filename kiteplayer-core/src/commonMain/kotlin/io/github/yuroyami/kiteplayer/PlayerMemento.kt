@@ -15,7 +15,8 @@ import kotlin.time.Duration.Companion.microseconds
  * [KitePlayer.restore]. Headers, raw
  * open options, the format hint, the demux settings, the start position, the clip, the title,
  * artist and album, and whether an item runs into the next are strings and travel. So do the
- * address, title and language of each [MediaItem.externalAudio] input, but not its [AudioSource.io].
+ * address, title and language of each [MediaItem.externalAudio] input, but not its [AudioSource.io],
+ * and the address of each [MediaItem.linkedFiles] file, but not its [LinkedFile.io].
  *
  * Tracks are remembered by LANGUAGE rather than by id, because ids belong to one open of one
  * container and a memento outlives both.
@@ -80,8 +81,9 @@ public data class PlayerMemento(
      * `queue.N.clipStart` and `queue.N.clipEnd` (microseconds) for a clipped item,
      * `queue.N.title`, `queue.N.artist`, `queue.N.album`, `queue.N.audioContent` when it is not
      * automatic, `queue.N.header.<name>`,
-     * `queue.N.option.<key>`, `queue.N.demux.<field>`, and for each external audio input
-     * `queue.N.externalAudio.M.uri`, `.title` and `.language`; then `queueOrder` as space-separated
+     * `queue.N.option.<key>`, `queue.N.demux.<field>`, for each external audio input
+     * `queue.N.externalAudio.M.uri`, `.title` and `.language`, and for each linked file
+     * `queue.N.linkedFile.M.uri`; then `queueOrder` as space-separated
      * positions when there is one, one key per setting, durations in microseconds, and
      * `audioLanguage` and `subtitleLanguage` only when known.
      */
@@ -110,6 +112,7 @@ public data class PlayerMemento(
                 audio.title?.let { put("queue.$n.externalAudio.$m.title", it) }
                 audio.language?.let { put("queue.$n.externalAudio.$m.language", it) }
             }
+            item.linkedFiles.forEachIndexed { m, file -> put("queue.$n.linkedFile.$m.uri", file.uri) }
         }
         put("queueIndex", queueIndex.toString())
         if (queueOrder.isNotEmpty()) put("queueOrder", queueOrder.joinToString(" "))
@@ -178,7 +181,7 @@ public data class PlayerMemento(
 
     public companion object {
         /** The version [asProperties] stamps. [fromProperties] also reads every older one. */
-        public const val FORMAT_VERSION: Int = 10
+        public const val FORMAT_VERSION: Int = 11
 
         /**
          * Reads what [asProperties] wrote.
@@ -193,8 +196,9 @@ public data class PlayerMemento(
             // item titles or the shuffle order, version 4 nothing about the variant limits or the
             // HDR policy, version 5 nothing about an item's audio content, version 6 nothing
             // about the programme an item plays, version 7 nothing about an item's clip,
-            // version 8 nothing about an item that runs into the next, and version 9 nothing
-            // about an item's external audio.
+            // version 8 nothing about an item that runs into the next, version 9 nothing
+            // about an item's external audio, and version 10 nothing about an item's linked files
+            // or the edition it plays.
             // Each reads back with the defaults for those, which is what a player that had never
             // been told about them would have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
@@ -237,6 +241,11 @@ public data class PlayerMemento(
                                 language = properties["${prefix}language"],
                             )
                         }
+                        .toList(),
+                    linkedFiles = generateSequence(0) { it + 1 }
+                        .map { m -> "queue.$n.linkedFile.$m.uri" }
+                        .takeWhile { it in properties }
+                        .map { LinkedFile(properties.getValue(it)) }
                         .toList(),
                 )
             }
@@ -351,6 +360,8 @@ private fun MutableMap<String, String>.putDemux(prefix: String, demux: DemuxPoli
     demux.maxVideoHeight?.let { put("${prefix}maxVideoHeight", it.toString()) }
     demux.variant?.let { put("${prefix}variant", it.toString()) }
     demux.program?.let { put("${prefix}program", it.toString()) }
+    demux.edition?.let { put("${prefix}edition", it.toString()) }
+    if (!demux.orderedEditions) put("${prefix}orderedEditions", "false")
 }
 
 /** Reads what [putDemux] wrote. A missing key is the default for its field. */
@@ -373,5 +384,7 @@ private fun demuxFrom(properties: Map<String, String>, prefix: String): DemuxPol
         maxVideoHeight = properties["${prefix}maxVideoHeight"]?.toInt(),
         variant = properties["${prefix}variant"]?.toInt(),
         program = properties["${prefix}program"]?.toInt(),
+        edition = properties["${prefix}edition"]?.toInt(),
+        orderedEditions = properties["${prefix}orderedEditions"]?.toBooleanStrict() ?: true,
     )
 }

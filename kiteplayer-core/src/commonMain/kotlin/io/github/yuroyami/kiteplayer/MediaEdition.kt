@@ -6,12 +6,12 @@ import kotlin.time.Duration
  * One edition of the media's chapters, such as one cut of a film (#501). A Matroska file can carry
  * several, and an ordered one is a timeline: it plays its chapters in their order, each a range of
  * this file or of a linked one, and leaves out the rest. [PlayerSnapshot.editions] lists them,
- * [PlayerSnapshot.edition] names the one that plays, and `KitePlayer.selectEdition` plays another.
+ * [PlayerSnapshot.edition] names the one that plays, and [KitePlayer.selectEdition] plays another.
  */
 public data class MediaEdition(
     /**
-     * Its position in [PlayerSnapshot.editions], which `KitePlayer.selectEdition` and
-     * `DemuxPolicy.edition` take.
+     * Its position in [PlayerSnapshot.editions], which [KitePlayer.selectEdition] and
+     * [DemuxPolicy.edition] take.
      */
     val index: Int,
     /** The edition's first name in the file, or null when it names none. */

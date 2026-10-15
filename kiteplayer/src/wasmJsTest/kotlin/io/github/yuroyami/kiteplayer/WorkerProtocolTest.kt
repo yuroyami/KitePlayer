@@ -52,6 +52,8 @@ class WorkerProtocolTest {
             maxVideoHeight = 720,
             variant = 2,
             program = 202,
+            edition = 1,
+            orderedEditions = false,
         ),
         title = "Title",
         artist = "Artist",
@@ -275,6 +277,7 @@ class WorkerProtocolTest {
             Command.ClearQueue,
             Command.StepFrame(StepDirection.Backward),
             Command.SeekToChapter(4),
+            Command.SelectEdition(1),
             Command.NextChapter,
             Command.PreviousChapter,
             Command.SelectTrack(TrackKind.Subtitle, TrackId(-1)),
@@ -297,7 +300,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Call(id, command)
             assertEquals(message, message.roundTrip(), "the call ${command.member} changed on the way")
         }
-        assertEquals(23, commands.map { it.member }.distinct().size, "every command is here")
+        assertEquals(24, commands.map { it.member }.distinct().size, "every command is here")
     }
 
     @Test

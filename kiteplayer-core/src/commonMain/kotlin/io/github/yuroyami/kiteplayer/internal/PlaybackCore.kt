@@ -1337,6 +1337,11 @@ internal class PlaybackCore(
     /** A programme choice waiting for the rebuild that reopens the item on it, or null (#505). */
     private var pendingProgram: ProgramRequest? = null
 
+    /** An edition choice waiting for the open that plays it, or null (#501). */
+    private var pendingEdition: EditionRequest? = null
+
+    private class EditionRequest(val index: Int, val reply: CompletableDeferred<Unit>)
+
     private class ProgramRequest(val number: Int?, val reply: CompletableDeferred<Unit>)
 
     /**
@@ -2061,6 +2066,12 @@ internal class PlaybackCore(
         awaitReply(reply)
     }
 
+    suspend fun selectEdition(index: Int) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.SelectEdition(index, reply))
+        awaitReply(reply)
+    }
+
     suspend fun selectSecondarySubtitle(track: TrackId?): TrackChange {
         val reply = CompletableDeferred<TrackChange>()
         send(CoreCommand.SelectSecondarySubtitle(track, reply))
@@ -2662,6 +2673,16 @@ internal class PlaybackCore(
                 )
                 else -> null
             }
+            is CoreCommand.SelectEdition -> when {
+                session == null -> IllegalStateException("selectEdition needs an open media item")
+                command.index !in session!!.mediaEditions.indices ->
+                    IllegalArgumentException("the media has no edition ${command.index}")
+                session?.source?.seekable != true -> UnsupportedOperationException(
+                    "this source cannot seek, so an edition change cannot open it again; " +
+                        "open the item again with DemuxPolicy.edition instead",
+                )
+                else -> null
+            }
             is CoreCommand.SelectTrack -> when {
                 command.kind == TrackKind.Subtitle && command.track != null &&
                     command.track == tracks.selectedSecondarySubtitle ->
@@ -2901,6 +2922,16 @@ internal class PlaybackCore(
                         IllegalStateException("a later selectVariant replaced this one before it applied"),
                     )
                     pendingVariant = VariantRequest(command.index, command.reply)
+                }
+            }
+            is CoreCommand.SelectEdition -> {
+                if (command.index == session?.edition && pendingEdition == null) {
+                    command.reply.complete(Unit)
+                } else {
+                    pendingEdition?.reply?.completeExceptionally(
+                        IllegalStateException("a later selectEdition replaced this one before it applied"),
+                    )
+                    pendingEdition = EditionRequest(command.index, command.reply)
                 }
             }
             is CoreCommand.SelectProgram -> {
@@ -4195,7 +4226,7 @@ internal class PlaybackCore(
                 cachedSubtitleStreams.forEach { add(it.index) }
             }
             // The ordered edition the item plays as a timeline, which decides where it starts (#501).
-            val edition = timeline?.edition ?: chosenEdition(source.editions, null)
+            val edition = timeline?.edition ?: chosenEdition(source.editions, item.demux.edition)
             val played = when {
                 timeline != null -> timeline
                 plain -> null
@@ -4283,6 +4314,10 @@ internal class PlaybackCore(
                 built.applyClip(item)
                 built.edition = edition
                 built.mediaEditions = played?.editions ?: mediaEditionsOf(source)
+                // An edition the item asks for plays its own chapters as marks when it plays plainly.
+                if (played == null && item.demux.edition != null && edition != null) {
+                    built.editionChapters = source.editions[edition].chapters
+                }
                 // The item's tags are the main file's, whichever file of its edition plays (#501).
                 if (playsLinked && played != null) built.shownTags = played.metadata
                 built.timeline = played
@@ -6079,6 +6114,8 @@ internal class PlaybackCore(
         pendingVariant = null
         pendingProgram?.reply?.completeExceptionally(IllegalStateException("selectProgram did not apply: $reason"))
         pendingProgram = null
+        pendingEdition?.reply?.completeExceptionally(IllegalStateException("selectEdition did not apply: $reason"))
+        pendingEdition = null
     }
 
     /**
@@ -6590,6 +6627,12 @@ internal class PlaybackCore(
         // A renderer failure has already torn the old graph down. The recovery reopen folds these
         // choices into its one replacement graph so nothing is lost and no second open happens.
         if (pendingVideoRecovery != null) return
+        // An edition change opens the item again on its own, and selections wait for the pass after (#501).
+        pendingEdition?.let { request ->
+            pendingEdition = null
+            changeEdition(request)
+            return
+        }
         // A linked file of an ordered edition plays under the main file's tracks, whose numbers
         // name none of its own, so every change there rebuilds it with the streams that match (#501).
         val linked = session?.let { it.timeline?.isLinked(it.run) } == true
@@ -9872,6 +9915,101 @@ internal class PlaybackCore(
             pendingSeek = SeekRequest(SeekTarget.Absolute(Pts(next.startUs), itemUs = next.atUs), SeekMode.Precise)
         }
         return true
+    }
+
+    /**
+     * Opens the item again on the edition [request] names (#501), which [DemuxPolicy.edition] keeps
+     * on the item, through the same steps as a rebuild. The new edition starts at the moment of the
+     * main file that plays now when it plays that moment too, so a switch between two cuts of a
+     * film keeps the scene, and otherwise from its beginning. The streams that play stay the main
+     * file's same ones, and the play intent carries on.
+     */
+    private suspend fun changeEdition(request: EditionRequest) {
+        val current = session
+        val main = media
+        if (current == null || main == null) {
+            request.reply.completeExceptionally(IllegalStateException("selectEdition needs an open media item"))
+            return
+        }
+        val old = current.timeline
+        // The moment of the main file the viewer is at, or none while a part of another file plays.
+        // The published reading, which is the picture on screen while paused.
+        val mainFileUs = if (old != null && old.isLinked(current.run)) null else publishedPositionMicros.value
+        val streams = old?.mainStreams ?: current.source.streams
+        fun choice(selected: TrackId?): StreamChoice =
+            selected?.let { id -> streams.firstOrNull { it.index == id.value } }?.let { StreamChoice.At(it.index) } ?: StreamChoice.None
+        val video = choice(tracks.selectedVideo)
+        val audio = choice(tracks.selectedAudio)
+        val subtitle = choice(tracks.selectedSubtitle)
+        val item = main.copy(demux = main.demux.copy(edition = request.index))
+        val wasPlaying = playRequested
+        val secondaryBefore = tracks.selectedSecondarySubtitle
+        media = item
+        try {
+            teardownSession()
+            requestedEpoch = requestedEpoch.next()
+            var rebuilt = buildSession(item, video, audio, subtitle)
+            session = rebuilt
+            val timeline = rebuilt.timeline
+            val itemUs = when {
+                mainFileUs == null -> 0L
+                timeline == null -> (mainFileUs - rebuilt.originUs).coerceAtLeast(0L)
+                else -> timeline.parts
+                    .firstOrNull { it.segmentUid == null && mainFileUs >= it.startUs && mainFileUs < it.endUs }
+                    ?.let { it.atUs + (mainFileUs - it.startUs) }
+                    ?: 0L
+            }
+            var fileUs = itemUs + rebuilt.originUs
+            if (timeline != null) {
+                val run = timeline.runAt(itemUs)
+                fileUs = timeline.runs[run].fileUsAt(itemUs)
+                if (timeline.isLinked(run)) {
+                    rebuilt = sessionOfRun(rebuilt, timeline, run, fileUs, item, tracks, null)
+                    session = rebuilt
+                } else if (run != rebuilt.run) {
+                    moveToRun(rebuilt, run)
+                }
+            }
+            publishedPositionMicros.value = fileUs
+            flushDecoders(rebuilt, requestedEpoch)
+            clearBuffers(rebuilt, requestedEpoch)
+            rebuilt.videoParked.value = !videoEnabled
+            startWorkers(rebuilt)
+            when (awaitInitialFill(rebuilt)) {
+                FillOutcome.WorkerFinished -> throw workerOutcomeException(rebuilt, "before the new edition could fill")
+                FillOutcome.TimedOut -> warn(
+                    PlaybackWarning.StartupIncomplete("no stream reached readiness within $OPEN_FILL_DEADLINE after the edition changed"),
+                )
+                FillOutcome.Ready -> Unit
+                FillOutcome.Preempted -> {
+                    teardownSession()
+                    request.reply.completeExceptionally(IllegalStateException(PREEMPTED_SELECTION))
+                    return
+                }
+            }
+            // A paused player lands too, so the new edition's picture is the one on screen.
+            if (pendingSeek == null) pendingSeek = SeekRequest(SeekTarget.Absolute(Pts(fileUs), itemUs = itemUs), SeekMode.Precise)
+            playRequested = wasPlaying
+            restoreSubtitleState(secondaryBefore)
+            refreshTypesetting()
+            if (rebuilt.videoStream == null) clearRendererPicture()
+            setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
+            publishSnapshot()
+            request.reply.complete(Unit)
+        } catch (cancellation: CancellationException) {
+            request.reply.completeExceptionally(
+                if (closedNow.value) IllegalStateException("the player was closed before selectEdition could finish") else cancellation,
+            )
+            throw cancellation
+        } catch (preempted: OpenPreempted) {
+            teardownSession()
+            request.reply.completeExceptionally(IllegalStateException(PREEMPTED_SELECTION))
+        } catch (failure: Throwable) {
+            val error = classify(failure, item)
+            teardownSession()
+            fail(error)
+            request.reply.completeExceptionally(PlaybackException(error))
+        }
     }
 
     /**
@@ -14915,7 +15053,7 @@ internal class PlaybackCore(
             get() {
                 // An ordered edition's are its parts, on its timeline (#501).
                 timeline?.let { return it.chapters }
-                val file = source.chapters
+                val file = editionChapters ?: source.chapters
                 if (clipStartUs == 0L && clipEndUs == NO_CLIP_END) return file
                 clippedChapters?.takeIf { clippedFrom === file && clippedAt == clipStartUs to clipEndUs }?.let { return it }
                 return file.inClip(clipStartUs, clipEndUs.takeIf { it != NO_CLIP_END }).also {
@@ -14936,6 +15074,12 @@ internal class PlaybackCore(
 
         /** The [MediaEdition.index] of the edition that plays, or null (#501). Actor only. */
         var edition: Int? = null
+
+        /**
+         * The chapters of the edition the item asks for, when it plays plainly with an edition other
+         * than the one the backend reads its chapters from, or null (#501). Actor only.
+         */
+        var editionChapters: List<Chapter>? = null
 
         /**
          * The ordered edition this session plays as a timeline, or null when the media plays plainly
@@ -16341,6 +16485,11 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         val number: Int?,
         val reply: CompletableDeferred<Unit>,
     ) : CoreCommand("selectProgram", reply)
+
+    class SelectEdition(
+        val index: Int,
+        val reply: CompletableDeferred<Unit>,
+    ) : CoreCommand("selectEdition", reply)
 
     class AttachRenderer(
         val renderer: VideoRenderer,

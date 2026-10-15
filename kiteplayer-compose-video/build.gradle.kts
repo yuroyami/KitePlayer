@@ -18,12 +18,19 @@ plugins {
  * qualified mobile paths, and the JVM target carries the measured software path (KiteFFmpeg's
  * CPU converter into Skia rasters) so the module resolves from a consumer's commonMain even
  * when that consumer also compiles a desktop target. A GPU desktop path is future work.
+ *
+ * Those three share threadedMain: a worker thread converts each frame and Compose draws the image
+ * it builds. The web has no thread to give a worker, and an image built from Kotlin bytes there
+ * costs more than a frame's whole budget (#125), so a web target needs a state of its own. Only
+ * the public surface is common.
  */
 kotlin {
     explicitApi()
     jvmToolchain(21)
     // FrameImagePool is an expect class; the flag only silences the beta note the compiler prints for that shape.
     compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
+    // Applied by name so iosMain exists when threadedMain is wired below.
+    applyDefaultHierarchyTemplate()
 
     @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
     abiValidation {}
@@ -45,6 +52,13 @@ kotlin {
     }
 
     sourceSets {
+        val threadedMain = maybeCreate("threadedMain").apply {
+            dependsOn(getByName("commonMain"))
+        }
+        getByName("androidMain").dependsOn(threadedMain)
+        getByName("iosMain").dependsOn(threadedMain)
+        getByName("jvmMain").dependsOn(threadedMain)
+
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
             api(compose.runtime)

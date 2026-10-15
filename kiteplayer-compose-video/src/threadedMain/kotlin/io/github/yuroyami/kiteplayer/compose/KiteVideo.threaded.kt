@@ -1,0 +1,167 @@
+package io.github.yuroyami.kiteplayer.compose
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import io.github.yuroyami.kiteplayer.PictureCrop
+import kotlin.math.roundToInt
+
+/**
+ * [KiteVideo] wherever a thread can convert: one worker per state turns each frame into an image,
+ * and the draw phase below draws that image with Compose's own drawImage.
+ *
+ * Android API 31+ can use the explicit-Window state overload to keep decoded pixels on the GPU:
+ * MediaCodec to external-OES, one RGBA shader blit, then a HardwareBuffer-backed Compose image.
+ * Other states and platforms convert in software.
+ *
+ * Per frame, the UI tree does nothing: the frame state is read only inside the draw phase, so a
+ * new frame invalidates drawing alone, never composition or layout.
+ */
+@Composable
+internal actual fun PlatformKiteVideo(state: KiteVideoState, modifier: Modifier) {
+    val frameCommitter = rememberKiteVideoFrameCommitter(state)
+    val viewportOwner = remember(state) { Any() }
+    DisposableEffect(state, viewportOwner) {
+        onDispose { state.removeViewport(viewportOwner) }
+    }
+    Box(
+        modifier
+            .onSizeChanged { measuredSize ->
+                // Compose reports layout size in physical pixels. Pass scale 1 rather than applying
+                // density a second time. This callback mutates no Compose state, so the renderer's
+                // output-size update cannot feed back into composition or layout.
+                state.updateViewport(viewportOwner, measuredSize.width, measuredSize.height)
+            }
+            .drawBehind {
+                // The two sanctioned draw-phase reads (law 1): the frame, and the overlay whose
+                // writes arrive only on cue edges. Do not add another.
+                val frame = state.acquireFrameForDraw(frameCommitter.canDrawCommitFencedFrames)
+                if (frame == null) {
+                    frameCommitter.frameRecorded(null)
+                    // Audio-only media and the moment before the first frame still show
+                    // their subtitles; the picture's absence is not the text's.
+                    drawOverlayItems(state)
+                    return@drawBehind
+                }
+                var recorded = false
+                try {
+                    // The mode, the picture-control filter and the framing are the remaining
+                    // sanctioned draw-phase reads: all change on a user's setting, so their
+                    // invalidations are rarer than the overlay's.
+                    val mode = state.scaleMode.value
+                    val videoFilter = state.pictureFilterFor(frame)
+                    val framing = state.transform.value
+                    val sampling = state.filterQuality.value
+                    val layout = videoLayout(
+                        areaWidth = size.width.toInt(),
+                        areaHeight = size.height.toInt(),
+                        size = frame.shownSize,
+                        rotationDegrees = frame.rotationDegrees,
+                        mode = mode,
+                        transform = framing,
+                        mirrored = frame.mirrored,
+                    ) ?: return@drawBehind
+                    // Fill overhangs the component by design; the clip keeps the crop inside it.
+                    // Fit and Stretch never overhang, so they keep the unclipped fast path.
+                    val draw: DrawScope.() -> Unit = {
+                        // The picture controls, on the VIDEO image only: subtitles below
+                        // composite unfiltered, exactly like every platform renderer.
+                        drawVideoPicture(frame.image, layout, layout.mirrored, sampling, videoFilter, frame.crop)
+                    }
+                    // Fill overhangs by design; zoom and pan can overhang under ANY mode. Both
+                    // clip; the unzoomed Fit and Stretch keep the unclipped fast path.
+                    if (mode == io.github.yuroyami.kiteplayer.VideoScale.Fill || !framing.isIdentity) {
+                        clipRect { draw() }
+                    } else {
+                        draw()
+                    }
+                    recorded = true
+                } finally {
+                    state.frameDrawFinished(frame, recorded)
+                    if (recorded) {
+                        // A software image carries no ImageReader lease, but its committed display
+                        // list is still the proof that an older hardware image is no longer sampled.
+                        frameCommitter.frameRecorded(frame.takeIf(KiteVideoFrame::requiresCommitFence))
+                    }
+                }
+                // Subtitles composite above the picture in OUTPUT space, unrotated: overlays are
+                // laid out for the output size, the same law the platform renderers obey.
+                drawOverlayItems(state)
+            },
+    )
+}
+
+/** The overlay pass, shared by the with-picture and no-picture draws. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOverlayItems(state: KiteVideoState) {
+    val overlay = state.overlay.value ?: return
+    val scaleX = size.width / overlay.viewportWidth.coerceAtLeast(1)
+    val scaleY = size.height / overlay.viewportHeight.coerceAtLeast(1)
+    overlay.items.forEach { item ->
+        drawImage(
+            image = item.image,
+            dstOffset = IntOffset(
+                (item.x * scaleX).roundToInt(),
+                (item.y * scaleY).roundToInt(),
+            ),
+            dstSize = IntSize(
+                (item.width * scaleX).roundToInt().coerceAtLeast(1),
+                (item.height * scaleY).roundToInt().coerceAtLeast(1),
+            ),
+            filterQuality = FilterQuality.Low,
+        )
+    }
+}
+
+/**
+ * Draws [image] where [layout] says: only the part [crop] leaves of it, mirrored left to right
+ * first when [mirrored], then turned about the footprint's centre. A function of its own so a test
+ * can draw it into a bitmap.
+ */
+internal fun DrawScope.drawVideoPicture(
+    image: ImageBitmap,
+    layout: VideoLayout,
+    mirrored: Boolean,
+    filterQuality: FilterQuality,
+    colorFilter: ColorFilter?,
+    crop: PictureCrop? = null,
+) {
+    val pivot = Offset(layout.centerX, layout.centerY)
+    val sourceOffset = if (crop == null) IntOffset.Zero else IntOffset(crop.left, crop.top)
+    val sourceSize = if (crop == null) {
+        IntSize(image.width, image.height)
+    } else {
+        IntSize(image.width - crop.left - crop.right, image.height - crop.top - crop.bottom)
+    }
+    val paint: DrawScope.() -> Unit = {
+        drawImage(
+            image = image,
+            srcOffset = sourceOffset,
+            srcSize = sourceSize,
+            dstOffset = IntOffset(layout.drawLeft.roundToInt(), layout.drawTop.roundToInt()),
+            dstSize = IntSize(
+                layout.drawWidth.roundToInt().coerceAtLeast(1),
+                layout.drawHeight.roundToInt().coerceAtLeast(1),
+            ),
+            filterQuality = filterQuality,
+            colorFilter = colorFilter,
+        )
+    }
+    rotate(degrees = layout.rotationDegrees.toFloat(), pivot = pivot) {
+        // Inside the turn, so the mirror applies to the stored picture before the turn does.
+        if (mirrored) scale(scaleX = -1f, scaleY = 1f, pivot = pivot) { paint() } else paint()
+    }
+}

@@ -36,6 +36,10 @@ today. The API reference is the KDoc, and `./gradlew dokkaGenerate` builds it in
   lifetimes, what is stored, and when a stored segment is used.
 - [Dimming flashing video](video-flash-guard.md): the flash guard, the rule it counts flashes by,
   and which renderers carry it so far.
+- [Matroska editions and linked files](matroska-editions.md): how an ordered edition plays as one
+  timeline, and how its parts in other files are found.
+- [360 degree video](spherical-video.md): the design for drawing a view into a 360 degree video,
+  and which renderers draw it.
 
 ## Audio visualiser
 

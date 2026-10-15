@@ -31,7 +31,9 @@ import kotlin.time.Duration
  * KitePlayer.attachRenderer). [onEffectivePath] reports what actually runs, which differs from
  * [path] where a platform cannot honour it. On desktop both paths are real, but a native view
  * cannot have clickable Compose content drawn over it, because macOS routes a click to the
- * topmost native view; put such controls in an owned overlay window. The player is never
+ * topmost native view; put such controls in an owned overlay window. On the web (wasmJs) there is
+ * no native view, so every request resolves to [KiteRenderPath.ComposeCanvas], which draws the
+ * picture through `KiteVideo` in Compose's own WebGL context and needs WebGL2. The player is never
  * owned here: opening media, playing, seeking and closing stay the caller's, exactly like
  * [KitePlayerSurface].
  *

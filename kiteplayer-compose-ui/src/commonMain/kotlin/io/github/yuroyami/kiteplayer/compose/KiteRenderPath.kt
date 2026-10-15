@@ -4,7 +4,8 @@ package io.github.yuroyami.kiteplayer.compose
  * Which rendering product [KitePlayerVideo] hosts.
  *
  * [Auto] picks the platform's sustained-playback default, which is the native view on Android,
- * iOS and, since 2026-08-30, JVM desktop. [NativeView] is the platform-compositor path from
+ * iOS and, since 2026-08-30, JVM desktop. The web has no native view, so there every request,
+ * [NativeView] included, runs [ComposeCanvas]. [NativeView] is the platform-compositor path from
  * kiteplayer-compose-interop; [ComposeCanvas] is the true Compose primitive from
  * kiteplayer-compose-video. A platform that cannot honour a request coerces it and reports what
  * actually runs through KitePlayerVideo's onEffectivePath.

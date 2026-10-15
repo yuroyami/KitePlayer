@@ -92,7 +92,7 @@ private suspend fun reportPlayerWiring(report: (String) -> Unit) {
 
 @OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
 @JsFun("() => globalThis.__kite ?? null")
-private external fun loadedCodecModule(): JsAny?
+internal external fun loadedCodecModule(): JsAny?
 
 /** The shape a browser actually has: the whole clip already in memory. */
 private class ArrayByteSource(private val bytes: ByteArray) : MediaByteSource {

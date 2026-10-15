@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
@@ -23,6 +25,13 @@ kotlin {
     iosSimulatorArm64()
     jvm()
 
+    // The web resolves too (#125). rememberKitePlayer needs the codec module loaded first there, as
+    // KitePlayer() does, and KitePlayerVideo draws through KiteVideo's WebGL path.
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+    }
+
     android {
         namespace = "io.github.yuroyami.kiteplayer.compose"
         compileSdk { version = release(37) { minorApiLevel = 2 } }
@@ -44,4 +53,11 @@ kotlin {
             implementation(compose.desktop.currentOs)
         }
     }
+}
+
+// No web test runs here yet. Compose wires a check into the wasmJs browser test task that fails when
+// a test compilation depends on Skiko and no executable binary bundles it; with nothing to bundle, it
+// only fails the task. Remove this when a web test is added here.
+tasks.matching { it.name.startsWith("checkComposeUiTestConfigurationFor") }.configureEach {
+    enabled = false
 }

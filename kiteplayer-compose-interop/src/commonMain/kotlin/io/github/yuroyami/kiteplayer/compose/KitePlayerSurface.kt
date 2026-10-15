@@ -31,7 +31,8 @@ import kotlin.time.Duration
  *
  * [accessibilityVideoLabel] and [accessibilityStateFormat] are what a screen reader says about the
  * video, as the platform view's properties of those names. Null keeps the view's English default.
- * On the web, where this is an empty placeholder, both do nothing.
+ * On the web, where this is an empty placeholder, both do nothing; the web's Compose video is
+ * `KiteVideo`, in Compose's own WebGL context.
  */
 @Composable
 public fun KitePlayerSurface(

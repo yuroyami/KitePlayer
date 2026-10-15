@@ -17,6 +17,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.platform.webgl.WebGLRenderTarget
+import androidx.compose.ui.platform.webgl.rememberWebGLRenderTarget
 import androidx.compose.ui.window.ComposeViewport
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
@@ -25,11 +27,13 @@ import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.Surface
 
 /**
- * The web stop gate.
+ * The web stop gate, opened with `?probe`.
  *
  * Answers one question with a number: what does a 1080p frame cost on wasm, with ONE thread,
  * from planar YUV to pixels on the glass. Nothing here decodes; a synthetic frame is honest for
  * this measurement because the conversion cost does not depend on pixel values.
+ *
+ * Without `?probe` the page is the player, [VideoPage].
  */
 private const val WIDTH = 1920
 private const val HEIGHT = 1080
@@ -143,12 +147,15 @@ private suspend fun measureFrames(count: Int, perFrame: (Int) -> Unit): DoubleAr
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    ComposeViewport { Probe() }
+    ComposeViewport { if (pageAsks("probe")) Probe() else VideoPage() }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun Probe() {
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
+    // The drawable KiteVideo uploads into on the web (#125): a texture in Compose's own WebGL context.
+    val uploadTarget = rememberWebGLRenderTarget(IntSize(WIDTH, HEIGHT))
     // Read by the Canvas below purely so every measured frame really invalidates the draw.
     var tick by remember { mutableStateOf(0) }
 
@@ -201,6 +208,13 @@ private fun Probe() {
             report.add(stat.format("raster build ${w}x$h") + " perByte=${perByte.round2()} ns")
         }
 
+        // Phase 2b, the same ladder over the path KiteVideo takes on the web (#125): RGBA already in
+        // a browser array, as the codec module leaves it, uploaded into a texture of Compose's WebGL
+        // context with one texSubImage2D. Frame-driven, because the context exists only once
+        // Compose has drawn, and bounded for the same reason as phase 4.
+        val upload = withTimeoutOrNull(20_000) { measureUploads(uploadTarget, report) }
+        if (upload == null) report.add("webgl upload: NOT MEASURED, the frame clock never ticked or there is no WebGL2")
+
         val resident = rasterImage(rgba, WIDTH, HEIGHT)
         image = resident
 
@@ -245,6 +259,71 @@ private fun Probe() {
         if (tick >= 0) image?.let { drawProbeImage(it) }
     }
 }
+
+/**
+ * The upload ladder: for each size, a browser array of that many RGBA bytes uploaded into one
+ * texture of [target]'s context, timed around the GL call alone on the page's clock. Null when
+ * there is no target, which is a browser without WebGL2.
+ */
+@OptIn(ExperimentalComposeUiApi::class, kotlin.js.ExperimentalWasmJsInterop::class)
+private suspend fun measureUploads(target: WebGLRenderTarget?, report: Report): Unit? {
+    if (target == null) return null
+    val uploader = webUploader(target.webGLContext)
+    for (scale in listOf(4, 2, 1)) {
+        val w = WIDTH / scale
+        val h = HEIGHT / scale
+        val pixels = webRgbaPattern(w, h)
+        val samples = DoubleArray(15)
+        var index = -3 // negative is warmup, the first being the allocation
+        while (index < samples.size) {
+            var millis = Double.NaN
+            val rendered = withFrameNanos { target.render { millis = webUpload(uploader, pixels, w, h) } }
+            if (!rendered) continue
+            if (index >= 0) samples[index] = millis
+            index++
+        }
+        val stat = Stat(samples)
+        val perByte = stat.mean * 1_000_000.0 / (w * h * 4)
+        report.add(stat.format("webgl upload ${w}x$h") + " perByte=${perByte.round2()} ns")
+    }
+    webReleaseUploader(uploader)
+    target.markGLStateStale()
+    return Unit
+}
+
+@OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@JsFun("(w, h) => { const d = new Uint8Array(w * h * 4); for (let i = 0; i < d.length; i++) d[i] = i & 0xff; return d; }")
+private external fun webRgbaPattern(width: Int, height: Int): kotlin.js.JsAny
+
+@OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@JsFun("(gl) => ({ gl: gl, t: gl.createTexture(), w: 0, h: 0 })")
+private external fun webUploader(context: kotlin.js.JsAny): kotlin.js.JsAny
+
+/** The same unpack state and the same calls as KiteVideo's pass: allocate on a new size, then texSubImage2D. */
+@OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@JsFun(
+    """(s, pixels, w, h) => {
+      const gl = s.gl;
+      gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, s.t);
+      const started = performance.now();
+      if (s.w !== w || s.h !== h) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels); s.w = w; s.h = h; }
+      else { gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels); }
+      const took = performance.now() - started;
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      return took;
+    }""",
+)
+private external fun webUpload(uploader: kotlin.js.JsAny, pixels: kotlin.js.JsAny, width: Int, height: Int): Double
+
+@OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@JsFun("(s) => { s.gl.deleteTexture(s.t); }")
+private external fun webReleaseUploader(uploader: kotlin.js.JsAny)
 
 /** Draws the frame scaled to fit, so a 1080p image is visible in any viewport. */
 private fun DrawScope.drawProbeImage(bitmap: ImageBitmap) {

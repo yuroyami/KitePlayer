@@ -10,8 +10,10 @@ Run it with:
 ./gradlew :kiteplayer-sample-web:wasmJsBrowserDistribution
 ```
 
-then serve `kiteplayer-sample-web/build/dist/wasmJs/productionExecutable` and open it. The numbers
-go to the browser console.
+then serve `kiteplayer-sample-web/build/dist/wasmJs/productionExecutable` and open it with
+`?probe`; without it the page is the player of the last section. The numbers go to the browser
+console. The build copies the codec module beside the page, and the 1080p house clip as
+`clip.mp4` when `scripts/testmedia.sh` has made it.
 
 ## The result
 
@@ -81,3 +83,70 @@ The stage continues, but two pieces of work are now constrained rather than open
 - **The web renderer** cannot build a Skia raster from a Kotlin `ByteArray` per frame. The pixels must reach
   the drawable without crossing the Kotlin GC heap, and proving such a path exists is the first
   thing the renderer work does, before any renderer is written.
+
+## The Compose path, measured (#125)
+
+Compose 1.13.0-alpha02 lets a page draw WebGL content inside Compose's own WebGL2 context, through
+its experimental `rememberWebGLRenderTarget`. `KiteVideo` uses it: the codec module converts each
+frame to RGBA in C and copies it into one browser `Uint8Array`, one `texSubImage2D` uploads that
+array into a texture of the context, and one shader pass places and scales the picture into a render
+target the size of the node, which Compose draws as ordinary content. No `ByteArray` holds a frame
+anywhere on that path.
+
+Measured in a cloud container, not on the laptop of the tables above: 4 cores of an Intel Xeon at
+2.8 GHz, headless Chromium 1194 driven by Playwright, and no GPU, so WebGL2 ran on SwiftShader, which
+does in software what a GPU does. Treat every number here as this machine's, and the ratios as the
+finding.
+
+Open the page plain to play `./clip.mp4`, the 1080p house clip, with the library's controls over
+the picture; open it with `?probe` for the stop gate, now with the upload ladder beside the raster
+one; add `?shape` to clip the playing picture to a rounded rectangle at 70 percent alpha.
+
+### Playing the 1080p house clip
+
+About ten seconds of `sync1080p30.mp4` through `KiteVideo`, play pressed through the controls:
+
+| step, per frame shown | mean | p95 |
+|---|---|---|
+| onto the drawable: the `texSubImage2D` of 8.3 MB | 1.89 ms | 2.50 ms |
+| the same, read inside the renderer in a second run | 1.60 ms | 2.10 ms |
+| convert to RGBA in the codec module, with the copy out | 7.75 ms | 10.40 ms |
+| both together, `KiteVideoState.frameCost` | 9.37 to 10.04 ms | |
+
+The first frame costs more: 41 ms to convert and 14 ms to upload, while the texture is allocated
+and the wasm tiers up. The upload's worst single frame was 38.5 ms in one run. The page reports the
+first row itself by timing every large `texSubImage2D` the browser runs; the second row came from a
+log inside the renderer that is not in the tree.
+
+So the cost of getting a frame onto the drawable went from 107 to 153 ms on the laptop, and 287 to
+353 ms on this machine, to about 2 ms here. The conversion before it is the one the web canvas
+already pays.
+
+### The probe's ladder
+
+`?probe` uploads a synthetic frame on every display frame, three warmups and fifteen samples per
+size, beside the raster build it replaces. Three runs, the 1080p rows:
+
+| step | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| raster build from a Kotlin `ByteArray` | 286.91 ms | 353.27 ms | 314.13 ms |
+| WebGL upload from a browser array | 20.78 ms | 19.17 ms | 20.87 ms |
+
+Two earlier runs, taken while a Gradle build ran beside them, read 6.2 and 7.4 ms for the upload.
+Back to back at the display's rate, 8.3 MB a frame is more than SwiftShader converts before the next
+upload, so the call waits on the software GPU, and this row measures SwiftShader's throughput as
+much as the call. During playback the uploads come at the clip's 30 a second with a conversion
+between them, and the same call measured 1.89 ms. A machine with a GPU is where the probe's row
+means what it says.
+
+### What this does NOT say
+
+- **Not measured on a GPU.** The numbers that count are taken on real hardware, the laptop above
+  first. SwiftShader makes uploads and draws slower than a GPU does, not faster.
+- **Not a frame rate.** In both playback runs more than half of the decoded frames were superseded
+  before a display frame took them. On one thread with SwiftShader drawing a 1280 by 720 page, the
+  page did not keep up with 30 frames a second, and nothing here says how much of that is decoding,
+  the conversion, or the software GPU.
+- **The conversion is still the larger cost.** About 7.8 ms of a 33.3 ms frame here. Uploading the
+  YUV planes and converting in the shader would remove it, and needs KiteFFmpeg to expose a decoded
+  frame's planes on the web, which its public API does not do today.

@@ -10,6 +10,16 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
+### Added
+
+- Compose video on the web: `kiteplayer-compose-video`, `kiteplayer-compose-ui` and
+  `kiteplayer-compose` publish a `wasmJs` variant, so a Compose Multiplatform app can keep them in
+  `commonMain` (#125). `KiteVideo` draws the picture inside Compose's own WebGL2 context through
+  the experimental WebGL render target of Compose 1.13, so Compose content sits over the picture
+  and clipping and alpha apply to it. Each frame is converted to RGBA in the codec module and
+  uploaded as one texture; its pixels never enter Kotlin memory. `KitePlayerVideo` runs that path
+  for every request on the web, because the web has no native view.
+
 ### Changed
 
 - Iris is rebuilt as an eye with petals and rings: Kaleidoscope's folded stereo curve grows round

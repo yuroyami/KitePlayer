@@ -22,6 +22,9 @@ import kotlinx.atomicfu.locks.synchronized
  * automatically when it leaves composition. Closing is always safe while the player still holds
  * the renderer: a closed renderer refuses frames and the engine counts them, exactly like every
  * other renderer in this library.
+ *
+ * On the web the renderer converts a frame only when a [KiteVideo] is about to draw it, so a state
+ * that no [KiteVideo] draws keeps the newest frame and lets the rest go as superseded.
  */
 public expect class KiteVideoState {
     public constructor()

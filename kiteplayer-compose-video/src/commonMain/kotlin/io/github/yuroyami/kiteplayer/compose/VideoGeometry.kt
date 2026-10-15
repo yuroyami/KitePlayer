@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.compose
 
+import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.VideoTransform
@@ -127,4 +128,64 @@ internal fun videoLayout(
 internal fun quarterTurn(rotationDegrees: Int): Int {
     val normalised = ((rotationDegrees % 360) + 360) % 360
     return if (normalised == 90 || normalised == 180 || normalised == 270) normalised else 0
+}
+
+/**
+ * The picture of [layout] as one textured quad: where each corner of the draw rectangle lands once
+ * the picture is mirrored and turned, in the draw area's pixels, and which point of the image it
+ * shows, as a fraction of the image's width and height from its top left.
+ *
+ * The corners are in triangle-strip order: the draw rectangle's top left, top right, bottom left
+ * and bottom right, before the mirror and the turn move them. This is the law `drawVideoPicture`
+ * draws with, the only part of [crop] the image keeps, mirrored about the layout's centre and then
+ * turned about it, restated for a renderer that has no canvas transform to lean on, which is the
+ * web's WebGL pass. The draw rectangle is rounded as `drawVideoPicture` rounds it, so the two put
+ * every edge on the same pixel.
+ */
+internal class VideoQuad(
+    val x: FloatArray,
+    val y: FloatArray,
+    val u: FloatArray,
+    val v: FloatArray,
+)
+
+/** [VideoQuad] for [layout] over an image of [imageWidth] by [imageHeight], less [crop]. */
+internal fun videoQuad(layout: VideoLayout, imageWidth: Int, imageHeight: Int, crop: PictureCrop? = null): VideoQuad {
+    val left = layout.drawLeft.roundToInt().toFloat()
+    val top = layout.drawTop.roundToInt().toFloat()
+    val right = left + layout.drawWidth.roundToInt().coerceAtLeast(1)
+    val bottom = top + layout.drawHeight.roundToInt().coerceAtLeast(1)
+    val width = imageWidth.coerceAtLeast(1).toFloat()
+    val height = imageHeight.coerceAtLeast(1).toFloat()
+    val u0 = (crop?.left ?: 0) / width
+    val u1 = (imageWidth - (crop?.right ?: 0)) / width
+    val v0 = (crop?.top ?: 0) / height
+    val v1 = (imageHeight - (crop?.bottom ?: 0)) / height
+
+    val x = floatArrayOf(left, right, left, right)
+    val y = floatArrayOf(top, top, bottom, bottom)
+    val centerX = layout.centerX
+    val centerY = layout.centerY
+    // Exact quarter turns, so no corner lands a rounding error away from where the canvas puts it.
+    val (cos, sin) = when (quarterTurn(layout.rotationDegrees)) {
+        90 -> 0f to 1f
+        180 -> -1f to 0f
+        270 -> 0f to -1f
+        else -> 1f to 0f
+    }
+    for (corner in 0 until 4) {
+        // The mirror first, about the centre, then the turn about the same centre, the order the
+        // canvas applies them in.
+        val mirroredX = if (layout.mirrored) 2f * centerX - x[corner] else x[corner]
+        val dx = mirroredX - centerX
+        val dy = y[corner] - centerY
+        x[corner] = centerX + dx * cos - dy * sin
+        y[corner] = centerY + dx * sin + dy * cos
+    }
+    return VideoQuad(
+        x = x,
+        y = y,
+        u = floatArrayOf(u0, u1, u0, u1),
+        v = floatArrayOf(v0, v0, v1, v1),
+    )
 }

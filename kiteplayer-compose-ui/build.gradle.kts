@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
@@ -12,7 +14,9 @@ plugins {
  * either the native-view path (compose-interop) or the true Compose path (compose-video), and
  * able to swap between them while a caller-owned player runs. It selects no player factory or
  * network transport. The complete entry point is :kiteplayer-compose; consumers wanting exactly
- * one path can keep depending on that path's module directly. Web surfaces remain separate.
+ * one path can keep depending on that path's module directly. On the web the Compose canvas is the
+ * one real path (#125): KitePlayerSurface is an empty placeholder there, so every request resolves
+ * to KiteVideo, and the display is held through the page's wake lock in kiteplayer-output.
  */
 kotlin {
     explicitApi()
@@ -24,6 +28,11 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
     jvm()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+    }
 
     android {
         namespace = "io.github.yuroyami.kiteplayer.compose.ui"
@@ -47,6 +56,9 @@ kotlin {
             // The screen reader wording, shared with the platform views.
             implementation(project(":kiteplayer-view"))
         }
+        wasmJsMain.dependencies {
+            implementation(project(":kiteplayer-output"))
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
@@ -58,4 +70,11 @@ kotlin {
             implementation(compose.uiTest)
         }
     }
+}
+
+// No web test runs here yet. Compose wires a check into the wasmJs browser test task that fails when
+// a test compilation depends on Skiko and no executable binary bundles it; with nothing to bundle, it
+// only fails the task. Remove this when a web test is added here.
+tasks.matching { it.name.startsWith("checkComposeUiTestConfigurationFor") }.configureEach {
+    enabled = false
 }

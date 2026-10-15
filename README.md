@@ -218,8 +218,8 @@ view.showsControls = true
 ```
 
 A native macOS app draws into an `AppKitWindow` through `MetalVideoRenderer` instead (the macOS
-sample in `kiteplayer-sample` shows the setup), and a web page draws on a `<canvas>`, as the
-[web setup](#web-setup) describes.
+sample in `kiteplayer-sample` shows the setup), and a web page without Compose draws on a
+`<canvas>`, as the [web setup](#web-setup) describes.
 
 <details>
 <summary><b>From Java</b></summary>
@@ -441,7 +441,7 @@ live grid.
 | **iOS** | ✓ | ✓ | ✓ |
 | **Desktop JVM** | ✓ | ✓ | ✓ |
 | **macOS** (native) | ✓ | | |
-| **Web** (`wasmJs`) | ✓ | | |
+| **Web** (`wasmJs`) | ✓ | ✓ | |
 | **Linux and Windows** (native) | No audio output | | |
 
 - On iOS, the artifacts target `iosArm64` and `iosSimulatorArm64`, with no `iosX64`.
@@ -450,6 +450,10 @@ live grid.
 - On Linux and Windows native, KitePlayer has no audio output and no HTTPS. `KitePlayer()` throws
   there, and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own
   `OutputBackend` to `KitePlayer.create`.
+- On the web, `kiteplayer-compose` draws the picture inside Compose's own WebGL context, so it
+  needs a browser with WebGL2, and Compose content, clipping and alpha apply to it as on the other
+  platforms. It draws the player on the page's own thread; the worker player draws on its own
+  canvas.
 - `kiteplayer` also compiles for `js`, where `KitePlayer()` reports that the target is not
   available.
 - The engine modules (`kiteplayer-core`, `kiteplayer-io` and `kiteplayer-subtitles`) also build
@@ -511,8 +515,8 @@ The desktop, Android and iOS sample apps open on the audio visualizer with five 
 For iOS, open `kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj`, which builds the Kotlin
 framework itself. The same module also links a native macOS app
 (`./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64`, then run `kiteplayer.kexe` with a
-media file and `--window`), while `kiteplayer-sample-web` is the measurement harness of the web
-build rather than a demo. To work on KitePlayer itself, start with
+media file and `--window`), while `kiteplayer-sample-web` plays a clip through `KiteVideo` on a
+Compose web page and, opened with `?probe`, measures what a frame costs there. To work on KitePlayer itself, start with
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License

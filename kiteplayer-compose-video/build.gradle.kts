@@ -1,4 +1,5 @@
 import java.io.File
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -21,8 +22,8 @@ plugins {
  *
  * Those three share threadedMain: a worker thread converts each frame and Compose draws the image
  * it builds. The web has no thread to give a worker, and an image built from Kotlin bytes there
- * costs more than a frame's whole budget (#125), so a web target needs a state of its own. Only
- * the public surface is common.
+ * costs more than a frame's whole budget (#125), so wasmJs has its own state and draws through
+ * Compose's WebGL render target instead. Only the public surface and the pure geometry are common.
  */
 kotlin {
     explicitApi()
@@ -38,6 +39,11 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
     jvm()
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+    }
 
     android {
         namespace = "io.github.yuroyami.kiteplayer.compose.video"
@@ -77,6 +83,9 @@ kotlin {
         jvmMain.dependencies {
             implementation(project(":kiteplayer-ffmpeg"))
         }
+        wasmJsMain.dependencies {
+            implementation(project(":kiteplayer-ffmpeg"))
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
@@ -98,6 +107,14 @@ kotlin {
 }
 
 tasks.matching { it.name == "copyAndroidDeviceTestComposeResourcesToAndroidAssets" }.configureEach {
+    enabled = false
+}
+
+// No web test runs here yet: the WebGL pass needs a browser with a GPU context and a Compose
+// window, and the geometry it draws is proven against the JVM draw path instead. Compose still
+// wires a check into the wasmJs browser test task that fails when a test compilation depends on
+// Skiko and no executable binary bundles it, so it is switched off until a web test exists.
+tasks.matching { it.name.startsWith("checkComposeUiTestConfigurationFor") }.configureEach {
     enabled = false
 }
 

@@ -48,10 +48,17 @@
 # cluster's track numbers. The worker measured 723,596 bytes with it, 2,810 more, and 79 over the
 # budget before.
 #
-# The worker budget is now 0.71 MiB. Kotlin 2.4.21 grew the worker from 731,855 bytes to 735,258,
+# The worker budget was then 0.71 MiB. Kotlin 2.4.21 grew the worker from 731,855 bytes to 735,258,
 # 3,403 more and 1,255 over the budget before, with no player change between the two runs. The
 # growth is all in the wasm binary; the three JavaScript files beside it kept their exact bytes.
 # The codec module measured the same 1,537,134 bytes in both runs.
+#
+# The worker budget is now 0.73 MiB. Matroska editions (#501) grew the worker from 737,229 bytes to
+# 754,187, 16,958 more and 9,698 over the budget before: an ordered edition's timeline, its parts
+# in other files, the edition switch, and the worker's messages that carry them. 360 degree video
+# (#460) then added 3,361, to 757,548: the projection on a track, the view and its warning, in the
+# engine and in the worker's messages. The growth is all in the wasm binary; the three JavaScript
+# files beside it kept their exact bytes, and the codec module measured 1,538,723 bytes throughout.
 #
 # Both budgets are ratchets: a new KiteFFmpeg pin, or player code, that grows a module past its
 # budget fails here, and raising a budget is a decision made in the same commit, with both numbers
@@ -67,8 +74,8 @@ cd "$ROOT"
 
 # 1.47 MiB.
 BUDGET_BYTES=1541407
-# 0.71 MiB.
-WORKER_BUDGET_BYTES=744489
+# 0.73 MiB.
+WORKER_BUDGET_BYTES=765460
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...

@@ -542,6 +542,19 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The video that plays is a 360 degree video, and the attached renderer shows its whole
+     * picture flat, because it cannot draw a view into a sphere or into this [kind] of projection
+     * (#460). [detail] says which. Told once for each item and renderer. See
+     * [KitePlayer.setSphericalView].
+     */
+    public data class ProjectionUnavailable(
+        val kind: ProjectionKind,
+        val detail: String,
+    ) : PlaybackWarning() {
+        override val message: String get() = "the 360 degree video is drawn flat: $detail"
+    }
+
+    /**
      * The item's WebVTT thumbnail file at [uri] could not be read or held no picture, so the seek
      * bar has none of its pictures (#433). The item plays on, and the stream's own pictures, when
      * it has any, stand in.

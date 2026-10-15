@@ -349,6 +349,13 @@ public class KitePlayerWorker private constructor(
     /** Sets the framing controls. */
     public fun setVideoTransform(value: VideoTransform): Unit = send(Control.SetVideoTransform(value))
 
+    /**
+     * Turns the view into a 360 degree video. See `KitePlayer.setSphericalView`. The worker's
+     * canvas draws only flat pictures, so it changes nothing drawn, and a 360 degree video warns
+     * [PlaybackWarning.ProjectionUnavailable].
+     */
+    public fun setSphericalView(view: SphericalView): Unit = send(Control.SetSphericalView(view))
+
     /** Sets how HDR video reaches the screen. */
     public fun setHdrPolicy(value: HdrPolicy): Unit = send(Control.SetHdrPolicy(value))
 

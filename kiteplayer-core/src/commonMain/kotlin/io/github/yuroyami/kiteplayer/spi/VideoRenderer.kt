@@ -118,6 +118,27 @@ public interface VideoRenderer : AutoCloseable {
      */
     public fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {}
 
+    /**
+     * True when this renderer draws a picture of [kind] as a view into the sphere (#460), rather
+     * than flat. The engine warns `PlaybackWarning.ProjectionUnavailable` when a 360 degree video
+     * plays on a renderer that answers false. Defaulted to false, for a renderer that draws only
+     * flat pictures.
+     */
+    public fun projects(kind: io.github.yuroyami.kiteplayer.ProjectionKind): Boolean = false
+
+    /**
+     * The projection of the video this renderer draws, or null for a flat one, and the viewer's
+     * view into it (#460). Told on attach, at every open, at every change of the video track and
+     * on every change of the view, like [setTransform]. A renderer that projects draws the view
+     * when [projection]'s kind is one [projects] answers true for and the view is
+     * [io.github.yuroyami.kiteplayer.SphericalView.projected], and the flat picture otherwise.
+     * Defaulted, so a renderer that draws only flat pictures keeps compiling and keeps drawing them.
+     */
+    public fun setProjection(
+        projection: io.github.yuroyami.kiteplayer.VideoProjection?,
+        view: io.github.yuroyami.kiteplayer.SphericalView,
+    ) {}
+
     /** Composited above the video. Replaced wholesale rather than diffed. */
     public suspend fun setOverlay(overlay: SubtitleOverlay?)
 
@@ -183,9 +204,10 @@ public interface VideoRenderer : AutoCloseable {
 
     /**
      * True when this renderer draws the picture it holds again by itself after a change of its
-     * look: scale mode, adjustments, framing, render quality or the subtitle overlay. False makes
-     * the engine decode the held picture once more after such a change while the player is paused
-     * or ended, so the change shows at once rather than with the next frame (#463). Read at each
+     * look: scale mode, adjustments, framing, the view into a 360 degree video, render quality or
+     * the subtitle overlay. False makes the engine decode the held picture once more after such a
+     * change while the player is paused or ended, so the change shows at once rather than with the
+     * next frame (#463). Read at each
      * change, so the answer may follow the picture: Android's renderers answer false while a
      * MediaCodec frame shows, because it goes to the Surface and leaves no copy, and the surface
      * renderer answers true while a software picture it keeps shows (#541). Defaulted to true, for

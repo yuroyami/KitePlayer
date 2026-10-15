@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
-"""Gives a Matroska file that ffmpeg made a segment UID and the editions a test needs (#501).
+"""Writes what ffmpeg cannot into a Matroska file that ffmpeg made: a segment UID, editions (#501)
+and a video track's 360 degree projection (#460).
 
 ffmpeg writes chapters but never an ordered edition, a hidden or disabled chapter, or a chapter that
-plays a range of another file, so the fixtures of ordered editions and linked files cannot be made
-with it alone. This rewrites the file: it sets the SegmentUUID in Info, replaces the Chapters element
-with the editions it is given, and moves the seek head and every cue position to match.
+plays a range of another file, and it writes no projection at all, so the fixtures of ordered
+editions, linked files and 360 degree video cannot be made with it alone. This rewrites the file: it
+sets the SegmentUUID in Info, replaces the Chapters element with the editions it is given, writes
+the Projection element into each video track, and moves the seek head and every cue position to
+match.
 
-    mkv-editions.py IN OUT --uid HEX32 [--editions JSON]
+    mkv-rewrite.py IN OUT [--uid HEX32] [--editions JSON] [--projection JSON]
 
-JSON is a list of editions, each with "uid", "name", "default", "hidden", "ordered" and "chapters";
-each chapter has "uid", "name", "start" and "end" in seconds, and may have "segment" (the HEX32 UID
-of the file it plays), "edition" (the edition UID of that file to play whole), "hidden" and
-"enabled". The input must be written without CRC elements (ffmpeg's -write_crc32 0), because a
-rewritten element would no longer match its checksum.
+Editions JSON is a list of editions, each with "uid", "name", "default", "hidden", "ordered" and
+"chapters"; each chapter has "uid", "name", "start" and "end" in seconds, and may have "segment"
+(the HEX32 UID of the file it plays), "edition" (the edition UID of that file to play whole),
+"hidden" and "enabled". Without --editions the file keeps no chapters.
+
+Projection JSON has "type", "equirectangular" or "cubemap", and may have "yaw", "pitch" and "roll"
+in degrees, the pose. An equirectangular picture that is a tile of the whole one has "left", "top",
+"right" and "bottom", each the share of the whole picture beyond the tile's edge on that side, and
+a cube map has "padding" in pixels. FFmpeg reads each back as the stream's spherical mapping.
+
+The input must be written without CRC elements (ffmpeg's -write_crc32 0), because a rewritten
+element would no longer match its checksum.
 """
 
 import argparse
 import json
+import struct
 import sys
 
 EBML_HEADER = 0x1A45DFA3
@@ -38,6 +49,14 @@ CUE_TRACK_POSITIONS = 0xB7
 CUE_CLUSTER_POSITION = 0xF1
 TAGS = 0x1254C367
 ATTACHMENTS = 0x1941A469
+TRACK_ENTRY = 0xAE
+VIDEO = 0xE0
+PROJECTION = 0x7670
+PROJECTION_TYPE = 0x7671
+PROJECTION_PRIVATE = 0x7672
+PROJECTION_POSE_YAW = 0x7673
+PROJECTION_POSE_PITCH = 0x7674
+PROJECTION_POSE_ROLL = 0x7675
 
 EDITION_ENTRY = 0x45B9
 EDITION_UID = 0x45BC
@@ -123,6 +142,10 @@ def text(element_id, value):
     return element(element_id, value.encode("utf-8"))
 
 
+def double(element_id, value):
+    return element(element_id, struct.pack(">d", value))
+
+
 def chapters_element(editions):
     entries = b""
     for edition in editions:
@@ -151,12 +174,66 @@ def chapters_element(editions):
 
 
 def info_with_uid(data, start, end, uid):
+    """Info with its SegmentUUID set to [uid], or kept as it is when [uid] is None."""
     body = b""
     for child, at, _, child_end in children(data, start, end):
-        if child in (SEGMENT_UUID, CRC32, VOID):
+        if child in (CRC32, VOID) or (child == SEGMENT_UUID and uid is not None):
             continue
         body += data[at:child_end]
-    return element(INFO, element(SEGMENT_UUID, uid) + body)
+    head = element(SEGMENT_UUID, uid) if uid is not None else b""
+    return element(INFO, head + body)
+
+
+def fixed_share(value):
+    """A share from 0 to 1 as the 0.32 fixed point the equirectangular projection box holds."""
+    return min(round(value * (1 << 32)), (1 << 32) - 1).to_bytes(4, "big")
+
+
+def projection_element(projection):
+    """The Projection element, whose private data is what an MP4 file's own box for it holds."""
+    kind = projection["type"]
+    if kind == "equirectangular":
+        bounds = [projection.get(side, 0) for side in ("top", "bottom", "left", "right")]
+        # Version and flags, then the bounds in the box's order: top, bottom, left, right.
+        private = bytes(4) + b"".join(fixed_share(bound) for bound in bounds) if any(bounds) else None
+        body = uint(PROJECTION_TYPE, 1)
+    elif kind == "cubemap":
+        # Version and flags, the layout, which is the only one there is, and the padding.
+        private = bytes(4) + bytes(4) + projection.get("padding", 0).to_bytes(4, "big")
+        body = uint(PROJECTION_TYPE, 2)
+    else:
+        raise ValueError(f"unknown projection type {kind}")
+    if private is not None:
+        body += element(PROJECTION_PRIVATE, private)
+    body += double(PROJECTION_POSE_YAW, projection.get("yaw", 0))
+    body += double(PROJECTION_POSE_PITCH, projection.get("pitch", 0))
+    body += double(PROJECTION_POSE_ROLL, projection.get("roll", 0))
+    return element(PROJECTION, body)
+
+
+def tracks_with_projection(data, start, end, projection):
+    """Tracks with [projection] written into the Video element of every track that has one."""
+
+    def video(region_start, region_end):
+        body = b""
+        for child, at, _, child_end in children(data, region_start, region_end):
+            if child not in (PROJECTION, CRC32, VOID):
+                body += data[at:child_end]
+        return element(VIDEO, body + projection_element(projection))
+
+    entries = b""
+    for child, at, body, child_end in children(data, start, end):
+        if child == TRACK_ENTRY:
+            fields = b""
+            for field, field_at, field_body, field_end in children(data, body, child_end):
+                if field == VIDEO:
+                    fields += video(field_body, field_end)
+                elif field not in (CRC32, VOID):
+                    fields += data[field_at:field_end]
+            entries += element(TRACK_ENTRY, fields)
+        elif child not in (CRC32, VOID):
+            entries += data[at:child_end]
+    return element(TRACKS, entries)
 
 
 def cues_moved(data, start, end, moved):
@@ -189,7 +266,7 @@ def seek_head(positions):
     return element(SEEK_HEAD, body)
 
 
-def rewrite(data, uid, editions):
+def rewrite(data, uid, editions, projection=None):
     out = b""
     segment = None
     for top, at, body, end in children(data, 0, len(data)):
@@ -208,6 +285,8 @@ def rewrite(data, uid, editions):
             continue
         if child == INFO:
             parts.append((INFO, info_with_uid(data, body, end, uid), None))
+        elif child == TRACKS and projection is not None:
+            parts.append((TRACKS, tracks_with_projection(data, body, end, projection), None))
         elif child == CUES:
             parts.append((CUES, None, (body, end)))
         else:
@@ -253,16 +332,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("source")
     parser.add_argument("target")
-    parser.add_argument("--uid", required=True, help="the segment UID, 32 hexadecimal digits")
+    parser.add_argument("--uid", help="the segment UID, 32 hexadecimal digits; the file keeps its own when absent")
     parser.add_argument("--editions", help="the editions as JSON; the file keeps no chapters when absent")
+    parser.add_argument("--projection", help="the projection of every video track as JSON")
     args = parser.parse_args()
-    uid = bytes.fromhex(args.uid)
-    if len(uid) != 16:
-        sys.exit("--uid must be 32 hexadecimal digits")
+    uid = None
+    if args.uid is not None:
+        uid = bytes.fromhex(args.uid)
+        if len(uid) != 16:
+            sys.exit("--uid must be 32 hexadecimal digits")
     editions = json.loads(args.editions) if args.editions else None
+    projection = json.loads(args.projection) if args.projection else None
     with open(args.source, "rb") as source:
         data = source.read()
-    result = rewrite(data, uid, editions)
+    result = rewrite(data, uid, editions, projection)
     with open(args.target, "wb") as target:
         target.write(result)
 

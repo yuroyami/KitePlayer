@@ -160,6 +160,7 @@ class MementoTest {
         val player = KitePlayer(harness.core)
         harness.attachRenderer()
         assertFailsWith<IllegalArgumentException> { player.restore(memento(balance = 2f)) }
+        assertFailsWith<IllegalArgumentException> { player.restore(memento().copy(sphericalView = SphericalView(fieldOfView = 10f))) }
         harness.run(100.milliseconds)
         assertEquals(PlaybackStatus.Idle, player.state.value.status, "a refused restore opened the queue anyway")
         assertEquals(0, harness.backend.openCalls, "a refused restore reached the backend")
@@ -375,6 +376,7 @@ class MementoTest {
         original.open(MediaItem("scripted://one"))
         original.setVideoScale(VideoScale.Fill)
         original.setVideoTransform(VideoTransform(aspectOverride = 1.85f, zoom = 1.2f, panX = 0.1f, panY = -0.1f))
+        original.setSphericalView(SphericalView(yaw = 120f, pitch = -30f, fieldOfView = 60f))
         original.setVideoAdjustments(VideoAdjustments(brightness = 0.2f, contrast = 1.1f))
         original.setRenderQuality(RenderQuality(dither = true, deband = true))
         original.setSubtitleScale(1.4f)
@@ -394,6 +396,7 @@ class MementoTest {
         assertEquals(VideoScale.Fill, snapshot.videoScale)
         assertEquals(1.85f, snapshot.videoTransform.aspectOverride)
         assertEquals(1.2f, snapshot.videoTransform.zoom)
+        assertEquals(SphericalView(yaw = 120f, pitch = -30f, fieldOfView = 60f), snapshot.sphericalView)
         assertEquals(0.2f, snapshot.videoAdjustments.brightness)
         assertTrue(snapshot.renderQuality.dither && snapshot.renderQuality.deband)
         assertEquals(1.4f, snapshot.subtitleScale)
@@ -444,6 +447,7 @@ class MementoTest {
             dialogueLevelDb = 6f,
             pitchSemitones = -3.0,
             skipSilence = true,
+            sphericalView = SphericalView(yaw = -45.5f, pitch = 12.25f, roll = 3f, fieldOfView = 95f, projected = false),
         )
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
     }
@@ -572,5 +576,6 @@ class MementoTest {
         assertEquals(RenderQuality.Off, memento.renderQuality)
         assertEquals(1f, memento.subtitleScale)
         assertTrue(memento.videoEnabled)
+        assertEquals(SphericalView(), memento.sphericalView)
     }
 }

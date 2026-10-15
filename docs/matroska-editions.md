@@ -355,9 +355,10 @@ Each of these is a later issue if it is wanted:
 ## Tests
 
 `ffmpeg` cannot write an ordered edition or a chapter that links to another file. A short Python
-script of our own, `scripts/mkv-editions.py`, which `scripts/testmedia.sh` already has the language
-for, rewrites a Matroska file that `ffmpeg` made: it sets the segment UID and replaces the Chapters
-element, and moves the seek head and the cue positions to match. It adds no dependency.
+script of our own, `scripts/mkv-rewrite.py` (first named `mkv-editions.py`), which
+`scripts/testmedia.sh` already has the language for, rewrites a Matroska file that `ffmpeg` made: it
+sets the segment UID and replaces the Chapters element, and moves the seek head and the cue
+positions to match. It adds no dependency.
 
 The fixtures, in `testmedia/editions/`:
 

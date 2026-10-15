@@ -775,6 +775,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun setSleepTimer-HG0u8IE (Lio/github/yuroyami/kiteplayer/SleepTimer;J)V
 	public static synthetic fun setSleepTimer-HG0u8IE$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/SleepTimer;JILjava/lang/Object;)V
 	public final fun setSpeed (D)V
+	public final fun setSphericalView (Lio/github/yuroyami/kiteplayer/SphericalView;)V
 	public final fun setStereoMode (Lio/github/yuroyami/kiteplayer/StereoMode;)V
 	public final fun setSubtitleDelay-LRDsOJo (J)V
 	public final fun setSubtitlePosition (F)V
@@ -1838,6 +1839,19 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$PathologicalInt
 	public fun hashCode ()I
 }
 
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ProjectionUnavailable : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (Lio/github/yuroyami/kiteplayer/ProjectionKind;Ljava/lang/String;)V
+	public final fun component1 ()Lio/github/yuroyami/kiteplayer/ProjectionKind;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Lio/github/yuroyami/kiteplayer/ProjectionKind;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$ProjectionUnavailable;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$ProjectionUnavailable;Lio/github/yuroyami/kiteplayer/ProjectionKind;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$ProjectionUnavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public final fun getKind ()Lio/github/yuroyami/kiteplayer/ProjectionKind;
+	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+}
+
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$QueueItemSkipped : io/github/yuroyami/kiteplayer/PlaybackWarning {
 	public fun <init> (ILjava/lang/String;Lio/github/yuroyami/kiteplayer/PlaybackError;)V
 	public final fun component1 ()I
@@ -2363,8 +2377,8 @@ public final class io/github/yuroyami/kiteplayer/PlayerEvent$Warning : io/github
 public final class io/github/yuroyami/kiteplayer/PlayerMemento {
 	public static final field Companion Lio/github/yuroyami/kiteplayer/PlayerMemento$Companion;
 	public static final field FORMAT_VERSION I
-	public synthetic fun <init> (Ljava/util/List;IJDZFZLio/github/yuroyami/kiteplayer/LoopMode;ZJJLjava/lang/String;Ljava/lang/String;ZLjava/lang/String;FLio/github/yuroyami/kiteplayer/EqualizerSettings;FFZLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoTransform;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/StereoMode;ZFDZIILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ljava/util/List;IJDZFZLio/github/yuroyami/kiteplayer/LoopMode;ZJJLjava/lang/String;Ljava/lang/String;ZLjava/lang/String;FLio/github/yuroyami/kiteplayer/EqualizerSettings;FFZLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoTransform;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/StereoMode;ZFDZLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/List;IJDZFZLio/github/yuroyami/kiteplayer/LoopMode;ZJJLjava/lang/String;Ljava/lang/String;ZLjava/lang/String;FLio/github/yuroyami/kiteplayer/EqualizerSettings;FFZLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoTransform;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/StereoMode;ZFDZLio/github/yuroyami/kiteplayer/SphericalView;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/List;IJDZFZLio/github/yuroyami/kiteplayer/LoopMode;ZJJLjava/lang/String;Ljava/lang/String;ZLjava/lang/String;FLio/github/yuroyami/kiteplayer/EqualizerSettings;FFZLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoTransform;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/StereoMode;ZFDZLio/github/yuroyami/kiteplayer/SphericalView;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun asProperties ()Ljava/util/Map;
 	public final fun component1 ()Ljava/util/List;
 	public final fun component10-UwyO8pc ()J
@@ -2393,14 +2407,15 @@ public final class io/github/yuroyami/kiteplayer/PlayerMemento {
 	public final fun component31 ()F
 	public final fun component32 ()D
 	public final fun component33 ()Z
+	public final fun component34 ()Lio/github/yuroyami/kiteplayer/SphericalView;
 	public final fun component4 ()D
 	public final fun component5 ()Z
 	public final fun component6 ()F
 	public final fun component7 ()Z
 	public final fun component8 ()Lio/github/yuroyami/kiteplayer/LoopMode;
 	public final fun component9 ()Z
-	public final fun copy-2ag-8z0 (Ljava/util/List;IJDZFZLio/github/yuroyami/kiteplayer/LoopMode;ZJJLjava/lang/String;Ljava/lang/String;ZLjava/lang/String;FLio/github/yuroyami/kiteplayer/EqualizerSettings;FFZLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoTransform;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/StereoMode;ZFDZ)Lio/github/yuroyami/kiteplayer/PlayerMemento;
-	public static synthetic fun copy-2ag-8z0$default (Lio/github/yuroyami/kiteplayer/PlayerMemento;Ljava/util/List;IJDZFZLio/github/yuroyami/kiteplayer/LoopMode;ZJJLjava/lang/String;Ljava/lang/String;ZLjava/lang/String;FLio/github/yuroyami/kiteplayer/EqualizerSettings;FFZLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoTransform;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/StereoMode;ZFDZIILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlayerMemento;
+	public final fun copy-p0NZQIA (Ljava/util/List;IJDZFZLio/github/yuroyami/kiteplayer/LoopMode;ZJJLjava/lang/String;Ljava/lang/String;ZLjava/lang/String;FLio/github/yuroyami/kiteplayer/EqualizerSettings;FFZLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoTransform;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/StereoMode;ZFDZLio/github/yuroyami/kiteplayer/SphericalView;)Lio/github/yuroyami/kiteplayer/PlayerMemento;
+	public static synthetic fun copy-p0NZQIA$default (Lio/github/yuroyami/kiteplayer/PlayerMemento;Ljava/util/List;IJDZFZLio/github/yuroyami/kiteplayer/LoopMode;ZJJLjava/lang/String;Ljava/lang/String;ZLjava/lang/String;FLio/github/yuroyami/kiteplayer/EqualizerSettings;FFZLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoTransform;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;ZLjava/util/List;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/StereoMode;ZFDZLio/github/yuroyami/kiteplayer/SphericalView;IILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlayerMemento;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAudioDelay-UwyO8pc ()J
 	public final fun getAudioLanguage ()Ljava/lang/String;
@@ -2423,6 +2438,7 @@ public final class io/github/yuroyami/kiteplayer/PlayerMemento {
 	public final fun getShuffle ()Z
 	public final fun getSkipSilence ()Z
 	public final fun getSpeed ()D
+	public final fun getSphericalView ()Lio/github/yuroyami/kiteplayer/SphericalView;
 	public final fun getStereoMode ()Lio/github/yuroyami/kiteplayer/StereoMode;
 	public final fun getSubtitleDelay-UwyO8pc ()J
 	public final fun getSubtitleLanguage ()Ljava/lang/String;
@@ -2445,8 +2461,8 @@ public final class io/github/yuroyami/kiteplayer/PlayerMemento$Companion {
 
 public final class io/github/yuroyami/kiteplayer/PlayerSnapshot {
 	public fun <init> ()V
-	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/PlaybackStatus;Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/List;Ljava/util/List;Ljava/util/Map;DFZLio/github/yuroyami/kiteplayer/LoopMode;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;Lio/github/yuroyami/kiteplayer/VideoTransform;JFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;FZLjava/lang/String;JLkotlin/time/Duration;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/PlaybackError;JLjava/util/List;ILjava/lang/Integer;Ljava/lang/Float;FZLio/github/yuroyami/kiteplayer/SleepTimer;Lio/github/yuroyami/kiteplayer/EqualizerSettings;ZLjava/util/List;Ljava/util/Set;ZLjava/lang/Integer;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/VideoDynamicRange;ZLio/github/yuroyami/kiteplayer/StereoMode;Ljava/lang/String;ZFDZZLio/github/yuroyami/kiteplayer/FlashGuard;Ljava/util/List;Ljava/lang/Integer;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/PlaybackStatus;Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/List;Ljava/util/List;Ljava/util/Map;DFZLio/github/yuroyami/kiteplayer/LoopMode;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;Lio/github/yuroyami/kiteplayer/VideoTransform;JFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;FZLjava/lang/String;JLkotlin/time/Duration;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/PlaybackError;JLjava/util/List;ILjava/lang/Integer;Ljava/lang/Float;FZLio/github/yuroyami/kiteplayer/SleepTimer;Lio/github/yuroyami/kiteplayer/EqualizerSettings;ZLjava/util/List;Ljava/util/Set;ZLjava/lang/Integer;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/VideoDynamicRange;ZLio/github/yuroyami/kiteplayer/StereoMode;Ljava/lang/String;ZFDZZLio/github/yuroyami/kiteplayer/FlashGuard;Ljava/util/List;Ljava/lang/Integer;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/PlaybackStatus;Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/List;Ljava/util/List;Ljava/util/Map;DFZLio/github/yuroyami/kiteplayer/LoopMode;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;Lio/github/yuroyami/kiteplayer/VideoTransform;JFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;FZLjava/lang/String;JLkotlin/time/Duration;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/PlaybackError;JLjava/util/List;ILjava/lang/Integer;Ljava/lang/Float;FZLio/github/yuroyami/kiteplayer/SleepTimer;Lio/github/yuroyami/kiteplayer/EqualizerSettings;ZLjava/util/List;Ljava/util/Set;ZLjava/lang/Integer;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/VideoDynamicRange;ZLio/github/yuroyami/kiteplayer/StereoMode;Ljava/lang/String;ZFDZZLio/github/yuroyami/kiteplayer/FlashGuard;Ljava/util/List;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/SphericalView;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/PlaybackStatus;Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/List;Ljava/util/List;Ljava/util/Map;DFZLio/github/yuroyami/kiteplayer/LoopMode;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;Lio/github/yuroyami/kiteplayer/VideoTransform;JFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;FZLjava/lang/String;JLkotlin/time/Duration;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/PlaybackError;JLjava/util/List;ILjava/lang/Integer;Ljava/lang/Float;FZLio/github/yuroyami/kiteplayer/SleepTimer;Lio/github/yuroyami/kiteplayer/EqualizerSettings;ZLjava/util/List;Ljava/util/Set;ZLjava/lang/Integer;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/VideoDynamicRange;ZLio/github/yuroyami/kiteplayer/StereoMode;Ljava/lang/String;ZFDZZLio/github/yuroyami/kiteplayer/FlashGuard;Ljava/util/List;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/SphericalView;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Lio/github/yuroyami/kiteplayer/PlaybackStatus;
 	public final fun component10 ()D
 	public final fun component11 ()F
@@ -2498,12 +2514,13 @@ public final class io/github/yuroyami/kiteplayer/PlayerSnapshot {
 	public final fun component53 ()Lio/github/yuroyami/kiteplayer/FlashGuard;
 	public final fun component54 ()Ljava/util/List;
 	public final fun component55 ()Ljava/lang/Integer;
+	public final fun component56 ()Lio/github/yuroyami/kiteplayer/SphericalView;
 	public final fun component6 ()Lio/github/yuroyami/kiteplayer/Tracks;
 	public final fun component7 ()Ljava/util/List;
 	public final fun component8 ()Ljava/util/List;
 	public final fun component9 ()Ljava/util/Map;
-	public final fun copy-N6o_Y2A (Lio/github/yuroyami/kiteplayer/PlaybackStatus;Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/List;Ljava/util/List;Ljava/util/Map;DFZLio/github/yuroyami/kiteplayer/LoopMode;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;Lio/github/yuroyami/kiteplayer/VideoTransform;JFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;FZLjava/lang/String;JLkotlin/time/Duration;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/PlaybackError;JLjava/util/List;ILjava/lang/Integer;Ljava/lang/Float;FZLio/github/yuroyami/kiteplayer/SleepTimer;Lio/github/yuroyami/kiteplayer/EqualizerSettings;ZLjava/util/List;Ljava/util/Set;ZLjava/lang/Integer;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/VideoDynamicRange;ZLio/github/yuroyami/kiteplayer/StereoMode;Ljava/lang/String;ZFDZZLio/github/yuroyami/kiteplayer/FlashGuard;Ljava/util/List;Ljava/lang/Integer;)Lio/github/yuroyami/kiteplayer/PlayerSnapshot;
-	public static synthetic fun copy-N6o_Y2A$default (Lio/github/yuroyami/kiteplayer/PlayerSnapshot;Lio/github/yuroyami/kiteplayer/PlaybackStatus;Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/List;Ljava/util/List;Ljava/util/Map;DFZLio/github/yuroyami/kiteplayer/LoopMode;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;Lio/github/yuroyami/kiteplayer/VideoTransform;JFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;FZLjava/lang/String;JLkotlin/time/Duration;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/PlaybackError;JLjava/util/List;ILjava/lang/Integer;Ljava/lang/Float;FZLio/github/yuroyami/kiteplayer/SleepTimer;Lio/github/yuroyami/kiteplayer/EqualizerSettings;ZLjava/util/List;Ljava/util/Set;ZLjava/lang/Integer;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/VideoDynamicRange;ZLio/github/yuroyami/kiteplayer/StereoMode;Ljava/lang/String;ZFDZZLio/github/yuroyami/kiteplayer/FlashGuard;Ljava/util/List;Ljava/lang/Integer;IILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlayerSnapshot;
+	public final fun copy-oz-EAHY (Lio/github/yuroyami/kiteplayer/PlaybackStatus;Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/List;Ljava/util/List;Ljava/util/Map;DFZLio/github/yuroyami/kiteplayer/LoopMode;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;Lio/github/yuroyami/kiteplayer/VideoTransform;JFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;FZLjava/lang/String;JLkotlin/time/Duration;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/PlaybackError;JLjava/util/List;ILjava/lang/Integer;Ljava/lang/Float;FZLio/github/yuroyami/kiteplayer/SleepTimer;Lio/github/yuroyami/kiteplayer/EqualizerSettings;ZLjava/util/List;Ljava/util/Set;ZLjava/lang/Integer;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/VideoDynamicRange;ZLio/github/yuroyami/kiteplayer/StereoMode;Ljava/lang/String;ZFDZZLio/github/yuroyami/kiteplayer/FlashGuard;Ljava/util/List;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/SphericalView;)Lio/github/yuroyami/kiteplayer/PlayerSnapshot;
+	public static synthetic fun copy-oz-EAHY$default (Lio/github/yuroyami/kiteplayer/PlayerSnapshot;Lio/github/yuroyami/kiteplayer/PlaybackStatus;Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/List;Ljava/util/List;Ljava/util/Map;DFZLio/github/yuroyami/kiteplayer/LoopMode;Lio/github/yuroyami/kiteplayer/VideoScale;Lio/github/yuroyami/kiteplayer/VideoAdjustments;Lio/github/yuroyami/kiteplayer/RenderQuality;Lio/github/yuroyami/kiteplayer/VideoTransform;JFLio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;FZLjava/lang/String;JLkotlin/time/Duration;Lkotlin/time/Duration;ZLio/github/yuroyami/kiteplayer/PlaybackError;JLjava/util/List;ILjava/lang/Integer;Ljava/lang/Float;FZLio/github/yuroyami/kiteplayer/SleepTimer;Lio/github/yuroyami/kiteplayer/EqualizerSettings;ZLjava/util/List;Ljava/util/Set;ZLjava/lang/Integer;Lio/github/yuroyami/kiteplayer/HdrPolicy;Lio/github/yuroyami/kiteplayer/VideoDynamicRange;ZLio/github/yuroyami/kiteplayer/StereoMode;Ljava/lang/String;ZFDZZLio/github/yuroyami/kiteplayer/FlashGuard;Ljava/util/List;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/SphericalView;IILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlayerSnapshot;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAbLoopA-FghU774 ()Lkotlin/time/Duration;
 	public final fun getAbLoopB-FghU774 ()Lkotlin/time/Duration;
@@ -2547,6 +2564,7 @@ public final class io/github/yuroyami/kiteplayer/PlayerSnapshot {
 	public final fun getSkipSilence ()Z
 	public final fun getSleepTimer ()Lio/github/yuroyami/kiteplayer/SleepTimer;
 	public final fun getSpeed ()D
+	public final fun getSphericalView ()Lio/github/yuroyami/kiteplayer/SphericalView;
 	public final fun getStatus ()Lio/github/yuroyami/kiteplayer/PlaybackStatus;
 	public final fun getStereoMode ()Lio/github/yuroyami/kiteplayer/StereoMode;
 	public final fun getSubtitleDelay-UwyO8pc ()J
@@ -2635,6 +2653,55 @@ public final class io/github/yuroyami/kiteplayer/Progress {
 	public final fun getPosition-UwyO8pc ()J
 	public final fun getPositionMillis ()J
 	public final fun getTimeOfDayMillis ()Ljava/lang/Long;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/ProjectionKind {
+}
+
+public final class io/github/yuroyami/kiteplayer/ProjectionKind$Cubemap : io/github/yuroyami/kiteplayer/ProjectionKind {
+	public fun <init> (I)V
+	public final fun component1 ()I
+	public final fun copy (I)Lio/github/yuroyami/kiteplayer/ProjectionKind$Cubemap;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/ProjectionKind$Cubemap;IILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/ProjectionKind$Cubemap;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPadding ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/ProjectionKind$Equirectangular : io/github/yuroyami/kiteplayer/ProjectionKind {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ProjectionKind$Equirectangular;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/ProjectionKind$EquirectangularTile : io/github/yuroyami/kiteplayer/ProjectionKind {
+	public fun <init> (DDDD)V
+	public final fun component1 ()D
+	public final fun component2 ()D
+	public final fun component3 ()D
+	public final fun component4 ()D
+	public final fun copy (DDDD)Lio/github/yuroyami/kiteplayer/ProjectionKind$EquirectangularTile;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/ProjectionKind$EquirectangularTile;DDDDILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/ProjectionKind$EquirectangularTile;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBottom ()D
+	public final fun getLeft ()D
+	public final fun getRight ()D
+	public final fun getTop ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/ProjectionKind$Other : io/github/yuroyami/kiteplayer/ProjectionKind {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/ProjectionKind$Other;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/ProjectionKind$Other;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/ProjectionKind$Other;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getName ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -2845,6 +2912,27 @@ public final class io/github/yuroyami/kiteplayer/SourceRefusal {
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getStatus ()I
 	public final fun getUri ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/SphericalView {
+	public fun <init> ()V
+	public fun <init> (FFFFZ)V
+	public synthetic fun <init> (FFFFZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()F
+	public final fun component2 ()F
+	public final fun component3 ()F
+	public final fun component4 ()F
+	public final fun component5 ()Z
+	public final fun copy (FFFFZ)Lio/github/yuroyami/kiteplayer/SphericalView;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/SphericalView;FFFFZILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/SphericalView;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFieldOfView ()F
+	public final fun getPitch ()F
+	public final fun getProjected ()Z
+	public final fun getRoll ()F
+	public final fun getYaw ()F
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -3135,8 +3223,8 @@ public final class io/github/yuroyami/kiteplayer/TrackId {
 }
 
 public final class io/github/yuroyami/kiteplayer/TrackInfo {
-	public synthetic fun <init> (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/VideoSize;Ljava/lang/Double;Ljava/lang/Integer;Ljava/lang/Integer;ZLjava/util/Map;Lio/github/yuroyami/kiteplayer/DolbyVisionInfo;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/VideoSize;Ljava/lang/Double;Ljava/lang/Integer;Ljava/lang/Integer;ZLjava/util/Map;Lio/github/yuroyami/kiteplayer/DolbyVisionInfo;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/VideoSize;Ljava/lang/Double;Ljava/lang/Integer;Ljava/lang/Integer;ZLjava/util/Map;Lio/github/yuroyami/kiteplayer/DolbyVisionInfo;Lio/github/yuroyami/kiteplayer/VideoProjection;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/VideoSize;Ljava/lang/Double;Ljava/lang/Integer;Ljava/lang/Integer;ZLjava/util/Map;Lio/github/yuroyami/kiteplayer/DolbyVisionInfo;Lio/github/yuroyami/kiteplayer/VideoProjection;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1-fQpssaM ()I
 	public final fun component10 ()Lio/github/yuroyami/kiteplayer/VideoSize;
 	public final fun component11 ()Ljava/lang/Double;
@@ -3145,6 +3233,7 @@ public final class io/github/yuroyami/kiteplayer/TrackInfo {
 	public final fun component14 ()Z
 	public final fun component15 ()Ljava/util/Map;
 	public final fun component16 ()Lio/github/yuroyami/kiteplayer/DolbyVisionInfo;
+	public final fun component17 ()Lio/github/yuroyami/kiteplayer/VideoProjection;
 	public final fun component2 ()Lio/github/yuroyami/kiteplayer/TrackKind;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/lang/String;
@@ -3153,8 +3242,8 @@ public final class io/github/yuroyami/kiteplayer/TrackInfo {
 	public final fun component7 ()Z
 	public final fun component8 ()Z
 	public final fun component9 ()Ljava/lang/Long;
-	public final fun copy-yRLIs7w (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/VideoSize;Ljava/lang/Double;Ljava/lang/Integer;Ljava/lang/Integer;ZLjava/util/Map;Lio/github/yuroyami/kiteplayer/DolbyVisionInfo;)Lio/github/yuroyami/kiteplayer/TrackInfo;
-	public static synthetic fun copy-yRLIs7w$default (Lio/github/yuroyami/kiteplayer/TrackInfo;ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/VideoSize;Ljava/lang/Double;Ljava/lang/Integer;Ljava/lang/Integer;ZLjava/util/Map;Lio/github/yuroyami/kiteplayer/DolbyVisionInfo;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/TrackInfo;
+	public final fun copy-soCxdPg (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/VideoSize;Ljava/lang/Double;Ljava/lang/Integer;Ljava/lang/Integer;ZLjava/util/Map;Lio/github/yuroyami/kiteplayer/DolbyVisionInfo;Lio/github/yuroyami/kiteplayer/VideoProjection;)Lio/github/yuroyami/kiteplayer/TrackInfo;
+	public static synthetic fun copy-soCxdPg$default (Lio/github/yuroyami/kiteplayer/TrackInfo;ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/VideoSize;Ljava/lang/Double;Ljava/lang/Integer;Ljava/lang/Integer;ZLjava/util/Map;Lio/github/yuroyami/kiteplayer/DolbyVisionInfo;Lio/github/yuroyami/kiteplayer/VideoProjection;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/TrackInfo;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getBitrate ()Ljava/lang/Long;
 	public final fun getChannels ()Ljava/lang/Integer;
@@ -3166,6 +3255,7 @@ public final class io/github/yuroyami/kiteplayer/TrackInfo {
 	public final fun getLabel ()Ljava/lang/String;
 	public final fun getLanguage ()Ljava/lang/String;
 	public final fun getMetadata ()Ljava/util/Map;
+	public final fun getProjection ()Lio/github/yuroyami/kiteplayer/VideoProjection;
 	public final fun getSampleRate ()Ljava/lang/Integer;
 	public final fun getTitle ()Ljava/lang/String;
 	public final fun getVideoSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
@@ -3312,6 +3402,24 @@ public final class io/github/yuroyami/kiteplayer/VideoPlayback : java/lang/AutoC
 	public final fun submit (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun tick-r9XNKT0 (Lio/github/yuroyami/kiteplayer/Pts;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun trySubmit (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Z
+}
+
+public final class io/github/yuroyami/kiteplayer/VideoProjection {
+	public fun <init> (Lio/github/yuroyami/kiteplayer/ProjectionKind;DDD)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/ProjectionKind;DDDILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lio/github/yuroyami/kiteplayer/ProjectionKind;
+	public final fun component2 ()D
+	public final fun component3 ()D
+	public final fun component4 ()D
+	public final fun copy (Lio/github/yuroyami/kiteplayer/ProjectionKind;DDD)Lio/github/yuroyami/kiteplayer/VideoProjection;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/VideoProjection;Lio/github/yuroyami/kiteplayer/ProjectionKind;DDDILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/VideoProjection;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getKind ()Lio/github/yuroyami/kiteplayer/ProjectionKind;
+	public final fun getPitch ()D
+	public final fun getRoll ()D
+	public final fun getYaw ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/VideoScale : java/lang/Enum {
@@ -4067,8 +4175,8 @@ public final class io/github/yuroyami/kiteplayer/spi/PlayerPixelFormat : java/la
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/PlayerStreamInfo {
-	public synthetic fun <init> (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/Pts;Lio/github/yuroyami/kiteplayer/VideoSize;ILjava/lang/Double;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;ZZLjava/lang/Integer;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/spi/Vp9CodecConfiguration;[BLjava/util/Map;Lio/github/yuroyami/kiteplayer/spi/FieldOrder;Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ZLio/github/yuroyami/kiteplayer/DolbyVisionInfo;ZLio/github/yuroyami/kiteplayer/PictureCrop;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/Pts;Lio/github/yuroyami/kiteplayer/VideoSize;ILjava/lang/Double;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;ZZLjava/lang/Integer;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/spi/Vp9CodecConfiguration;[BLjava/util/Map;Lio/github/yuroyami/kiteplayer/spi/FieldOrder;Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ZLio/github/yuroyami/kiteplayer/DolbyVisionInfo;ZLio/github/yuroyami/kiteplayer/PictureCrop;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/Pts;Lio/github/yuroyami/kiteplayer/VideoSize;ILjava/lang/Double;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;ZZLjava/lang/Integer;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/spi/Vp9CodecConfiguration;[BLjava/util/Map;Lio/github/yuroyami/kiteplayer/spi/FieldOrder;Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ZLio/github/yuroyami/kiteplayer/DolbyVisionInfo;ZLio/github/yuroyami/kiteplayer/PictureCrop;Lio/github/yuroyami/kiteplayer/VideoProjection;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/Pts;Lio/github/yuroyami/kiteplayer/VideoSize;ILjava/lang/Double;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;ZZLjava/lang/Integer;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/spi/Vp9CodecConfiguration;[BLjava/util/Map;Lio/github/yuroyami/kiteplayer/spi/FieldOrder;Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ZLio/github/yuroyami/kiteplayer/DolbyVisionInfo;ZLio/github/yuroyami/kiteplayer/PictureCrop;Lio/github/yuroyami/kiteplayer/VideoProjection;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()I
 	public final fun component10-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public final fun component11 ()Lio/github/yuroyami/kiteplayer/VideoSize;
@@ -4089,6 +4197,7 @@ public final class io/github/yuroyami/kiteplayer/spi/PlayerStreamInfo {
 	public final fun component25 ()Lio/github/yuroyami/kiteplayer/DolbyVisionInfo;
 	public final fun component26 ()Z
 	public final fun component27 ()Lio/github/yuroyami/kiteplayer/PictureCrop;
+	public final fun component28 ()Lio/github/yuroyami/kiteplayer/VideoProjection;
 	public final fun component3 ()Ljava/lang/String;
 	public final fun component4 ()Ljava/lang/String;
 	public final fun component5 ()Ljava/lang/String;
@@ -4096,8 +4205,8 @@ public final class io/github/yuroyami/kiteplayer/spi/PlayerStreamInfo {
 	public final fun component7 ()Z
 	public final fun component8 ()Z
 	public final fun component9 ()Ljava/lang/Long;
-	public final fun copy-4jo9Eng (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/Pts;Lio/github/yuroyami/kiteplayer/VideoSize;ILjava/lang/Double;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;ZZLjava/lang/Integer;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/spi/Vp9CodecConfiguration;[BLjava/util/Map;Lio/github/yuroyami/kiteplayer/spi/FieldOrder;Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ZLio/github/yuroyami/kiteplayer/DolbyVisionInfo;ZLio/github/yuroyami/kiteplayer/PictureCrop;)Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
-	public static synthetic fun copy-4jo9Eng$default (Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/Pts;Lio/github/yuroyami/kiteplayer/VideoSize;ILjava/lang/Double;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;ZZLjava/lang/Integer;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/spi/Vp9CodecConfiguration;[BLjava/util/Map;Lio/github/yuroyami/kiteplayer/spi/FieldOrder;Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ZLio/github/yuroyami/kiteplayer/DolbyVisionInfo;ZLio/github/yuroyami/kiteplayer/PictureCrop;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
+	public final fun copy-T4e4jks (ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/Pts;Lio/github/yuroyami/kiteplayer/VideoSize;ILjava/lang/Double;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;ZZLjava/lang/Integer;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/spi/Vp9CodecConfiguration;[BLjava/util/Map;Lio/github/yuroyami/kiteplayer/spi/FieldOrder;Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ZLio/github/yuroyami/kiteplayer/DolbyVisionInfo;ZLio/github/yuroyami/kiteplayer/PictureCrop;Lio/github/yuroyami/kiteplayer/VideoProjection;)Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
+	public static synthetic fun copy-T4e4jks$default (Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;ILio/github/yuroyami/kiteplayer/TrackKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/Long;Lio/github/yuroyami/kiteplayer/Pts;Lio/github/yuroyami/kiteplayer/VideoSize;ILjava/lang/Double;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;ZZLjava/lang/Integer;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/spi/Vp9CodecConfiguration;[BLjava/util/Map;Lio/github/yuroyami/kiteplayer/spi/FieldOrder;Lio/github/yuroyami/kiteplayer/spi/HdrStaticMetadata;ZLio/github/yuroyami/kiteplayer/DolbyVisionInfo;ZLio/github/yuroyami/kiteplayer/PictureCrop;Lio/github/yuroyami/kiteplayer/VideoProjection;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getBitrate ()Ljava/lang/Long;
 	public final fun getChannels ()Ljava/lang/Integer;
@@ -4114,6 +4223,7 @@ public final class io/github/yuroyami/kiteplayer/spi/PlayerStreamInfo {
 	public final fun getLanguage ()Ljava/lang/String;
 	public final fun getMetadata ()Ljava/util/Map;
 	public final fun getMirrored ()Z
+	public final fun getProjection ()Lio/github/yuroyami/kiteplayer/VideoProjection;
 	public final fun getRotationDegrees ()I
 	public final fun getSampleRate ()Ljava/lang/Integer;
 	public final fun getStartTime-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
@@ -4547,10 +4657,12 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoRenderer 
 	public fun getRedrawsHeldPicture ()Z
 	public fun getShowsHdr ()Z
 	public abstract fun present (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun projects (Lio/github/yuroyami/kiteplayer/ProjectionKind;)Z
 	public fun setAdjustments (Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public fun setFlashGuard (Lio/github/yuroyami/kiteplayer/FlashGuard;)V
 	public fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
 	public abstract fun setOverlay (Lio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun setProjection (Lio/github/yuroyami/kiteplayer/VideoProjection;Lio/github/yuroyami/kiteplayer/SphericalView;)V
 	public fun setRenderQuality (Lio/github/yuroyami/kiteplayer/RenderQuality;)V
 	public fun setScaleMode (Lio/github/yuroyami/kiteplayer/VideoScale;)V
 	public fun setTransform (Lio/github/yuroyami/kiteplayer/VideoTransform;)V
@@ -4567,9 +4679,11 @@ public final class io/github/yuroyami/kiteplayer/spi/VideoRenderer$DefaultImpls 
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun getRedrawsHeldPicture (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Z
 	public static fun getShowsHdr (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Z
+	public static fun projects (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/ProjectionKind;)Z
 	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public static fun setFlashGuard (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/FlashGuard;)V
 	public static fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
+	public static fun setProjection (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/VideoProjection;Lio/github/yuroyami/kiteplayer/SphericalView;)V
 	public static fun setRenderQuality (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/RenderQuality;)V
 	public static fun setScaleMode (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/VideoScale;)V
 	public static fun setTransform (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/VideoTransform;)V

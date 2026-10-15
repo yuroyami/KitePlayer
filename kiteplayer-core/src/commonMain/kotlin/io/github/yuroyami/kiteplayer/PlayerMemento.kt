@@ -73,6 +73,8 @@ public data class PlayerMemento(
     val pitchSemitones: Double = 0.0,
     /** Whether the silent stretches were shortened (#429). A listening setting, so it travels. */
     val skipSilence: Boolean = false,
+    /** Where the viewer looked into a 360 degree video (#460), so a restore looks there again. */
+    val sphericalView: SphericalView = SphericalView(),
 ) {
 
     /**
@@ -149,6 +151,11 @@ public data class PlayerMemento(
         put("transform.rotation", videoTransform.rotationDegrees.toString())
         put("transform.mirrorHorizontal", videoTransform.mirrorHorizontal.toString())
         put("transform.mirrorVertical", videoTransform.mirrorVertical.toString())
+        put("view.yaw", sphericalView.yaw.toString())
+        put("view.pitch", sphericalView.pitch.toString())
+        put("view.roll", sphericalView.roll.toString())
+        put("view.fieldOfView", sphericalView.fieldOfView.toString())
+        put("view.projected", sphericalView.projected.toString())
         put("adjust.brightness", videoAdjustments.brightness.toString())
         put("adjust.contrast", videoAdjustments.contrast.toString())
         put("adjust.saturation", videoAdjustments.saturation.toString())
@@ -181,7 +188,7 @@ public data class PlayerMemento(
 
     public companion object {
         /** The version [asProperties] stamps. [fromProperties] also reads every older one. */
-        public const val FORMAT_VERSION: Int = 11
+        public const val FORMAT_VERSION: Int = 12
 
         /**
          * Reads what [asProperties] wrote.
@@ -197,8 +204,9 @@ public data class PlayerMemento(
             // HDR policy, version 5 nothing about an item's audio content, version 6 nothing
             // about the programme an item plays, version 7 nothing about an item's clip,
             // version 8 nothing about an item that runs into the next, version 9 nothing
-            // about an item's external audio, and version 10 nothing about an item's linked files
-            // or the edition it plays.
+            // about an item's external audio, version 10 nothing about an item's linked files
+            // or the edition it plays, and version 11 nothing about the view into a 360 degree
+            // video.
             // Each reads back with the defaults for those, which is what a player that had never
             // been told about them would have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
@@ -290,6 +298,13 @@ public data class PlayerMemento(
                     rotationDegrees = properties["transform.rotation"]?.toInt() ?: 0,
                     mirrorHorizontal = properties["transform.mirrorHorizontal"]?.toBooleanStrict() ?: false,
                     mirrorVertical = properties["transform.mirrorVertical"]?.toBooleanStrict() ?: false,
+                ),
+                sphericalView = SphericalView(
+                    yaw = properties["view.yaw"]?.toFloat() ?: 0f,
+                    pitch = properties["view.pitch"]?.toFloat() ?: 0f,
+                    roll = properties["view.roll"]?.toFloat() ?: 0f,
+                    fieldOfView = properties["view.fieldOfView"]?.toFloat() ?: 80f,
+                    projected = properties["view.projected"]?.toBooleanStrict() ?: true,
                 ),
                 videoAdjustments = VideoAdjustments(
                     brightness = properties["adjust.brightness"]?.toFloat() ?: 0f,

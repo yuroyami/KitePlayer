@@ -17,9 +17,11 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.MediaProgram
 import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.PlaybackWarning
+import io.github.yuroyami.kiteplayer.ProjectionKind
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackId
 import io.github.yuroyami.kiteplayer.TrackKind
+import io.github.yuroyami.kiteplayer.VideoProjection
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.AudioBuffer
 import io.github.yuroyami.kiteplayer.spi.AudioDecoder
@@ -66,6 +68,8 @@ import io.github.yuroyami.kiteffmpeg.Packet
 import io.github.yuroyami.kiteffmpeg.PacketReader
 import io.github.yuroyami.kiteffmpeg.Program
 import io.github.yuroyami.kiteffmpeg.SeekDirection
+import io.github.yuroyami.kiteffmpeg.SphericalMapping
+import io.github.yuroyami.kiteffmpeg.SphericalProjection
 import io.github.yuroyami.kiteffmpeg.StreamDecoder
 import io.github.yuroyami.kiteffmpeg.StreamInfo
 import io.github.yuroyami.kiteffmpeg.durationMicros
@@ -962,7 +966,27 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper, renditionNames: 
         // size can differ from the one declared here (#497).
         crop = video?.crop?.let { PictureCrop(top = it.top, bottom = it.bottom, left = it.left, right = it.right) }
             ?.takeUnless { it.isEmpty },
+        // FFmpeg reads the mapping and applies none of it, so the renderer draws the view (#460).
+        projection = video?.spherical?.toProjection(),
     )
+}
+
+/**
+ * The player's reading of a stream's spherical mapping (#460), or null for a rectilinear one,
+ * which is a flat picture. The pose is FFmpeg's, in the same degrees and the same sense.
+ */
+private fun SphericalMapping.toProjection(): VideoProjection? {
+    val kind = when (val shape = projection) {
+        SphericalProjection.Equirectangular -> ProjectionKind.Equirectangular
+        is SphericalProjection.EquirectangularTile ->
+            ProjectionKind.EquirectangularTile(left = shape.left, top = shape.top, right = shape.right, bottom = shape.bottom)
+        is SphericalProjection.Cubemap -> ProjectionKind.Cubemap(shape.padding.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt())
+        SphericalProjection.HalfEquirectangular -> ProjectionKind.Other("half equirectangular")
+        SphericalProjection.Rectilinear -> return null
+        SphericalProjection.Fisheye -> ProjectionKind.Other("fisheye")
+        SphericalProjection.ParametricImmersive -> ProjectionKind.Other("parametric immersive")
+    }
+    return VideoProjection(kind, yaw = yaw, pitch = pitch, roll = roll)
 }
 
 /**

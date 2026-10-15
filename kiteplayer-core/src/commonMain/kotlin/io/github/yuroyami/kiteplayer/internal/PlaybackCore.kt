@@ -64,6 +64,8 @@ import io.github.yuroyami.kiteplayer.VideoPlayback
 import io.github.yuroyami.kiteplayer.VideoAdjustments
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoTransform
+import io.github.yuroyami.kiteplayer.ProjectionKind
+import io.github.yuroyami.kiteplayer.SphericalView
 import io.github.yuroyami.kiteplayer.StereoMode
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.VariantFit
@@ -1116,7 +1118,12 @@ internal class PlaybackCore(
     private var session: OpenSession? = null
         set(value) {
             field = value
-            if (value != null) itemOriginMicros.value = value.originUs
+            if (value != null) {
+                itemOriginMicros.value = value.originUs
+                // Before the session's first frame, so its picture is drawn as its projection asks
+                // (#460). Not when a session ends: the picture it leaves on screen keeps its view.
+                tellProjection()
+            }
         }
     private var tracks: Tracks = Tracks.Empty
     private var lastError: PlaybackError? = null
@@ -1240,6 +1247,12 @@ internal class PlaybackCore(
     private var videoDynamicRange: io.github.yuroyami.kiteplayer.VideoDynamicRange =
         io.github.yuroyami.kiteplayer.VideoDynamicRange.Standard
     private var videoTransform: VideoTransform = VideoTransform.Identity
+
+    /** The viewer's view into a 360 degree video (#460), told to every renderer with the picture's projection. */
+    private var sphericalView: SphericalView = SphericalView()
+
+    /** The renderers already warned that they draw this item's 360 degree video flat (#460). */
+    private val projectionWarned = mutableListOf<VideoRenderer>()
 
     /** Runtime subtitle timing shift, seeded from config. Positive shows cues later. */
     private var subtitleDelay: Duration = config.subtitles.delay
@@ -3210,6 +3223,14 @@ internal class PlaybackCore(
                 requestRedraw(forced = false)
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetSphericalView -> {
+                sphericalView = command.value
+                tellProjection()
+                // A held picture shows the new view now, when the renderer draws one (#463).
+                val projection = session?.videoStream?.projection
+                if (projection != null && pendingRenderer?.projects(projection.kind) == true) requestRedraw(forced = false)
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetSubtitleDelay -> {
                 subtitleDelay = command.value
                 // Retimed on the very next pass: dropping the published key forces the selector
@@ -3316,6 +3337,7 @@ internal class PlaybackCore(
         val session = this.session
         if (session == null) {
             pendingRenderer = renderer
+            tellProjection()
             watchRendererEvents(renderer)
             // Nothing plays, so whatever its surface still holds from before is not this player's.
             if (renderer != null) clearRendererPicture()
@@ -3335,6 +3357,7 @@ internal class PlaybackCore(
         // The display this renderer draws into, handed to the schedule while it is attached.
         session.video?.vsyncIntervalNanos = renderer?.vsyncIntervalNanos()
         pendingRenderer = renderer
+        tellProjection()
         watchRendererEvents(renderer)
         if (renderer != null && session.videoStream == null) clearRendererPicture()
         return true
@@ -3441,6 +3464,28 @@ internal class PlaybackCore(
      * reason, such as a seek, redraws nothing.
      */
     private var redrawOnOverlay = false
+
+    /**
+     * Tells the attached renderer the projection of the picture that plays, or null for a flat one
+     * or none, and the viewer's view into it (#460). Called at every change of either: when a
+     * session is installed, when the picture changes in place, when a renderer is attached and when
+     * the view changes. A 360 degree picture that the renderer draws flat is warned about once for
+     * each item and renderer.
+     */
+    private fun tellProjection() {
+        val renderer = pendingRenderer ?: return
+        val projection = session?.videoStream?.projection
+        renderer.setProjection(projection, sphericalView)
+        if (projection == null || renderer.projects(projection.kind)) return
+        if (projectionWarned.any { it === renderer }) return
+        projectionWarned += renderer
+        val detail = if (renderer.projects(ProjectionKind.Equirectangular)) {
+            "the renderer draws a view into an equirectangular picture, and this one is ${projection.kind.described()}"
+        } else {
+            "the renderer draws only flat pictures"
+        }
+        warn(PlaybackWarning.ProjectionUnavailable(projection.kind, detail))
+    }
 
     /**
      * Tells the attached renderer that no picture plays, so the last one leaves the screen rather
@@ -3695,6 +3740,7 @@ internal class PlaybackCore(
         toneMapWarned = false
         videoDynamicRange = io.github.yuroyami.kiteplayer.VideoDynamicRange.Standard
         colorLimitsWarned.clear()
+        projectionWarned.clear()
         pendingVideoRecovery = null
         videoRecoveryAttempted = false
         forceBackendSoftwareForMedia = false
@@ -5427,6 +5473,7 @@ internal class PlaybackCore(
         // The frames go before their decoder, because a hardware frame holds one of its slots.
         playback?.flush(requestedEpoch)
         session.removePicture()
+        tellProjection()
         session.videoDecoder = null
         session.videoDecoderOrigin = null
         session.coupledRenderer = null
@@ -5596,6 +5643,7 @@ internal class PlaybackCore(
         playback.flush(requestedEpoch)
         val retired = session.videoDecoder
         session.installPicture(stream, queue, playback)
+        tellProjection()
         session.videoDecoder = decoder
         session.videoDecoderOrigin = selected.origin
         session.coupledRenderer = if (selected.origin == VideoDecoderOrigin.Renderer) pendingRenderer else null
@@ -10803,6 +10851,7 @@ internal class PlaybackCore(
         toneMapWarned = false
         videoDynamicRange = io.github.yuroyami.kiteplayer.VideoDynamicRange.Standard
         colorLimitsWarned.clear()
+        projectionWarned.clear()
         videoRecoveryAttempted = false
         forceBackendSoftwareForMedia = false
         firstFrameSeen = false
@@ -12427,6 +12476,7 @@ internal class PlaybackCore(
             flashGuard = flashGuard,
             videoDynamicRange = videoDynamicRange,
             videoTransform = videoTransform,
+            sphericalView = sphericalView,
             subtitleDelay = subtitleDelay,
             subtitleScale = subtitleScale,
             subtitleStyle = subtitleStyle,
@@ -12834,6 +12884,7 @@ internal class PlaybackCore(
             flashGuard = flashGuard,
             videoDynamicRange = videoDynamicRange,
             videoTransform = videoTransform,
+            sphericalView = sphericalView,
             subtitleDelay = subtitleDelay,
             subtitleScale = subtitleScale,
             subtitleStyle = subtitleStyle,
@@ -16410,6 +16461,8 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         CoreCommand("setVideoAdjustments", reply)
     class SetVideoTransform(val value: VideoTransform, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setVideoTransform", reply)
+    class SetSphericalView(val value: SphericalView, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setSphericalView", reply), LatestValueSetting
     class SetSubtitleDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleDelay", reply), LatestValueSetting
 
     /**
@@ -16598,6 +16651,14 @@ internal fun programCandidates(
     return streams.filter { it.index in inside || (it.kind !in kindsInside && it.index !in placed) }
 }
 
+/** A projection's shape in words, for a warning (#460). */
+private fun ProjectionKind.described(): String = when (this) {
+    ProjectionKind.Equirectangular -> "an equirectangular picture"
+    is ProjectionKind.EquirectangularTile -> "a tile of an equirectangular picture"
+    is ProjectionKind.Cubemap -> "a cube map"
+    is ProjectionKind.Other -> "a $name picture"
+}
+
 private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
     all = map { stream ->
         TrackInfo(
@@ -16617,6 +16678,7 @@ private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
             isCoverArt = stream.isCoverArt,
             metadata = stream.metadata,
             dolbyVision = stream.dolbyVision,
+            projection = stream.projection,
         )
     },
 )

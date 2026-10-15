@@ -905,14 +905,14 @@ rm -f "$stpp_log"
 
 echo "Matroska editions in editions/: a season with a linked opening and ending, two cuts of a film, links"
 # ffmpeg writes no ordered edition and no chapter that plays another file, so each file is made with
-# ffmpeg and then given its segment UID and its editions by scripts/mkv-editions.py (#501). Every
+# ffmpeg and then given its segment UID and its editions by scripts/mkv-rewrite.py (#501). Every
 # file differs from the one it joins in its picture size and its sound, so a join changes decoders
 # and a test can tell from a picture's size which file it came from. Every sound is 48 kHz stereo,
 # so the joins stay gapless. Keyframes fall each second, so a range that starts at half a second
 # starts between two of them.
 mkdir -p editions/season editions/season-no-op
 # This script runs inside testmedia at the root of the repository, so the tool is one level up.
-editions_tool=../scripts/mkv-editions.py
+rewrite_tool=../scripts/mkv-rewrite.py
 mkv_part() { # <out> <seconds> <size> <hertz> <audio codec args...>
     local out=$1 seconds=$2 size=$3 hertz=$4
     shift 4
@@ -937,9 +937,9 @@ mkv_part editions/recap.raw.mkv 2 288x162 330 -c:a aac -b:a 96k
 mkv_part editions/loop.raw.mkv 2 320x180 770 -c:a aac -b:a 96k
 # The episode plays 0.5 s to 3.5 s of the opening, 0 s to 4 s of itself, and 1 s to 3 s of the
 # ending: nine seconds, whose joins sit at 3 s and 7 s.
-python3 "$editions_tool" editions/op.raw.mkv editions/season/op.mkv --uid $uid_op
-python3 "$editions_tool" editions/ed.raw.mkv editions/season/ed.mkv --uid $uid_ed
-python3 "$editions_tool" editions/episode.raw.mkv editions/season/episode.mkv --uid $uid_episode --editions "[
+python3 "$rewrite_tool" editions/op.raw.mkv editions/season/op.mkv --uid $uid_op
+python3 "$rewrite_tool" editions/ed.raw.mkv editions/season/ed.mkv --uid $uid_ed
+python3 "$rewrite_tool" editions/episode.raw.mkv editions/season/episode.mkv --uid $uid_episode --editions "[
   {\"uid\": 100, \"name\": \"Episode\", \"default\": true, \"ordered\": true, \"chapters\": [
     {\"uid\": 101, \"name\": \"Opening\", \"start\": 0.5, \"end\": 3.5, \"segment\": \"$uid_op\"},
     {\"uid\": 102, \"name\": \"Part A\", \"start\": 0, \"end\": 4},
@@ -947,7 +947,7 @@ python3 "$editions_tool" editions/episode.raw.mkv editions/season/episode.mkv --
 cp editions/season/episode.mkv editions/season/ed.mkv editions/season-no-op/
 # The film's theatrical cut plays 0 s to 3 s and 5 s to 8 s, past a disabled chapter, and its last
 # chapter is hidden, so it plays and is not listed. The extended cut plays the scene between.
-python3 "$editions_tool" editions/film.raw.mkv editions/film.mkv --uid $uid_film --editions "[
+python3 "$rewrite_tool" editions/film.raw.mkv editions/film.mkv --uid $uid_film --editions "[
   {\"uid\": 200, \"name\": \"Theatrical\", \"default\": true, \"ordered\": true, \"chapters\": [
     {\"uid\": 201, \"name\": \"Act one\", \"start\": 0, \"end\": 3},
     {\"uid\": 203, \"name\": \"Outtakes\", \"start\": 3, \"end\": 5, \"enabled\": false},
@@ -957,21 +957,51 @@ python3 "$editions_tool" editions/film.raw.mkv editions/film.mkv --uid $uid_film
     {\"uid\": 212, \"name\": \"Deleted scene\", \"start\": 3, \"end\": 5},
     {\"uid\": 213, \"name\": \"Act three\", \"start\": 5, \"end\": 8}]}]"
 # The recap plays its own two seconds and then the film's theatrical cut whole: eight seconds.
-python3 "$editions_tool" editions/recap.raw.mkv editions/recap.mkv --uid $uid_recap --editions "[
+python3 "$rewrite_tool" editions/recap.raw.mkv editions/recap.mkv --uid $uid_recap --editions "[
   {\"uid\": 300, \"name\": \"Recap\", \"default\": true, \"ordered\": true, \"chapters\": [
     {\"uid\": 301, \"name\": \"Previously\", \"start\": 0, \"end\": 2},
     {\"uid\": 302, \"name\": \"The film\", \"start\": 0, \"end\": 6, \"segment\": \"$uid_film\", \"edition\": 200}]}]"
 # Two files whose editions play each other whole: A plays itself and then B, and B plays one second
 # of itself and then A again, a loop the player refuses after B's second.
-python3 "$editions_tool" editions/loop.raw.mkv editions/loop-a.mkv --uid $uid_loop_a --editions "[
+python3 "$rewrite_tool" editions/loop.raw.mkv editions/loop-a.mkv --uid $uid_loop_a --editions "[
   {\"uid\": 400, \"name\": \"A\", \"default\": true, \"ordered\": true, \"chapters\": [
     {\"uid\": 401, \"name\": \"A\", \"start\": 0, \"end\": 2},
     {\"uid\": 402, \"name\": \"B\", \"start\": 0, \"end\": 1, \"segment\": \"$uid_loop_b\", \"edition\": 500}]}]"
-python3 "$editions_tool" editions/loop.raw.mkv editions/loop-b.mkv --uid $uid_loop_b --editions "[
+python3 "$rewrite_tool" editions/loop.raw.mkv editions/loop-b.mkv --uid $uid_loop_b --editions "[
   {\"uid\": 500, \"name\": \"B\", \"default\": true, \"ordered\": true, \"chapters\": [
     {\"uid\": 501, \"name\": \"B\", \"start\": 0, \"end\": 1},
     {\"uid\": 502, \"name\": \"Back to A\", \"start\": 0, \"end\": 2, \"segment\": \"$uid_loop_a\", \"edition\": 400}]}]"
 rm -f editions/*.raw.mkv
+
+echo "360 degree video in spherical/: one whole sphere, one with a pose and one tile of it"
+# ffmpeg writes no projection, so scripts/mkv-rewrite.py writes each file's (#460). The picture is
+# equirectangular, 512 by 256, in eight vertical bands of 45 degrees of longitude each, centred on
+# 0, 45, 90 and so on, so the band behind the viewer is split between the left and the right edge,
+# where the picture wraps. A darker band runs along the top and another along the bottom, 22.5
+# degrees of latitude each. From the left: blue (180 degrees), magenta (-135), white (-90), orange
+# (-45), red (0, the centre), yellow (45), green (90), cyan (135) and blue again; the top is dark
+# grey and the bottom brown.
+mkdir -p spherical
+sphere_bands="color=c=0x0000FF:s=512x256:r=30:d=4"
+sphere_bands="$sphere_bands,drawbox=x=32:y=0:w=64:h=256:color=0xFF00FF:t=fill"
+sphere_bands="$sphere_bands,drawbox=x=96:y=0:w=64:h=256:color=0xFFFFFF:t=fill"
+sphere_bands="$sphere_bands,drawbox=x=160:y=0:w=64:h=256:color=0xFF8000:t=fill"
+sphere_bands="$sphere_bands,drawbox=x=224:y=0:w=64:h=256:color=0xFF0000:t=fill"
+sphere_bands="$sphere_bands,drawbox=x=288:y=0:w=64:h=256:color=0xFFFF00:t=fill"
+sphere_bands="$sphere_bands,drawbox=x=352:y=0:w=64:h=256:color=0x00FF00:t=fill"
+sphere_bands="$sphere_bands,drawbox=x=416:y=0:w=64:h=256:color=0x00FFFF:t=fill"
+sphere_bands="$sphere_bands,drawbox=x=0:y=0:w=512:h=32:color=0x303030:t=fill"
+sphere_bands="$sphere_bands,drawbox=x=0:y=224:w=512:h=32:color=0x603000:t=fill"
+sphere_video=(-c:v libx264 -preset ultrafast -pix_fmt yuv420p -crf 12 -g 30 -write_crc32 0)
+ffmpeg -v error -y -f lavfi -i "$sphere_bands" "${sphere_video[@]}" spherical/equirect.raw.mkv
+# The tile is the middle half of the width, from -90 to 90 degrees, and the whole height.
+ffmpeg -v error -y -f lavfi -i "$sphere_bands,crop=256:256:128:0" "${sphere_video[@]}" spherical/equirect-tile.raw.mkv
+python3 "$rewrite_tool" spherical/equirect.raw.mkv spherical/equirect.mkv --projection '{"type": "equirectangular"}'
+python3 "$rewrite_tool" spherical/equirect.raw.mkv spherical/equirect-yaw30.mkv \
+  --projection '{"type": "equirectangular", "yaw": 30}'
+python3 "$rewrite_tool" spherical/equirect-tile.raw.mkv spherical/equirect-tile.mkv \
+  --projection '{"type": "equirectangular", "left": 0.25, "right": 0.25}'
+rm -f spherical/*.raw.mkv
 
 # ---------------------------------------------------------------------------------------------
 # Provenance.

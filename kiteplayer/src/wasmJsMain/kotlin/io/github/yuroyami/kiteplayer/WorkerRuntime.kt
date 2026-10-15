@@ -169,6 +169,7 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
             is Control.SetVideoAdjustments -> setVideoAdjustments(control.value)
             is Control.SetRenderQuality -> setRenderQuality(control.value)
             is Control.SetVideoTransform -> setVideoTransform(control.value)
+            is Control.SetSphericalView -> setSphericalView(control.value)
             is Control.SetHdrPolicy -> setHdrPolicy(control.value)
             is Control.SetFlashGuard -> setFlashGuard(control.value)
             is Control.SetSubtitleDelay -> setSubtitleDelay(control.value)

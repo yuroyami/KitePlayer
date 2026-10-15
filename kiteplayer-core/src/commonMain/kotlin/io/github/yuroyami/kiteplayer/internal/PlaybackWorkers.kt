@@ -348,6 +348,15 @@ internal class AttachableRenderer : VideoRenderer {
         delegate?.setTransform(transform)
     }
 
+    override fun projects(kind: io.github.yuroyami.kiteplayer.ProjectionKind): Boolean = delegate?.projects(kind) ?: false
+
+    override fun setProjection(
+        projection: io.github.yuroyami.kiteplayer.VideoProjection?,
+        view: io.github.yuroyami.kiteplayer.SphericalView,
+    ) {
+        delegate?.setProjection(projection, view)
+    }
+
     override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
         delegate?.setRenderQuality(quality)
     }

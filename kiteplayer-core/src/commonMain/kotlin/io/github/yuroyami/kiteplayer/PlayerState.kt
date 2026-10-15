@@ -212,6 +212,8 @@ public data class PlayerSnapshot(
     val editions: List<MediaEdition> = emptyList(),
     /** The [MediaEdition.index] of the edition that plays, or null for media with no editions (#501). */
     val edition: Int? = null,
+    /** The view into a 360 degree video (#460). See [KitePlayer.setSphericalView]. */
+    val sphericalView: SphericalView = SphericalView(),
 ) {
     /**
      * [duration] in milliseconds, or null when it is unknown. For Java, which cannot read a

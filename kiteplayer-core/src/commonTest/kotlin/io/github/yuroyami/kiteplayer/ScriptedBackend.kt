@@ -176,6 +176,8 @@ internal class MediaScript(
     val videoRotationDegrees: Int = 0,
     /** The video stream's colour as the container states it, or null for none stated (#499). */
     val videoColor: io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo? = null,
+    /** How the video stream's pictures cover the sphere, for a 360 degree video, or null for a flat one (#460). */
+    val videoProjection: io.github.yuroyami.kiteplayer.VideoProjection? = null,
     val seekable: Boolean = true,
     /** Extra container tags, for the suites that read them. Merged over the harness's own three. */
     val containerTags: Map<String, String> = emptyMap(),
@@ -339,6 +341,8 @@ internal class MediaScript(
      * same keyframes from there on. Null is no second picture.
      */
     val movedVideoIndex: Int? = null,
+    /** The projection of the picture at [movedVideoIndex], or null for a flat one (#460). */
+    val movedVideoProjection: io.github.yuroyami.kiteplayer.VideoProjection? = null,
 ) {
     /** Whether the picture at [ptsUs] is one nothing is built on, under [alternateFramesAreNonReference]. */
     fun isNonReferenceVideo(ptsUs: Long, isKeyframe: Boolean): Boolean {
@@ -1176,6 +1180,7 @@ internal class ScriptedSource(
                     isCoverArt = script.videoIsCoverArt,
                     rotationDegrees = script.videoRotationDegrees,
                     colorSpace = script.videoColor,
+                    projection = script.videoProjection,
                     // A key with no TrackInfo field of its own, so a test can prove the raw tags
                     // travel and not just the two the type happens to parse.
                     metadata = mapOf("handler_name" to "scripted video handler"),
@@ -1191,6 +1196,7 @@ internal class ScriptedSource(
                     startTime = Pts.Zero,
                     videoSize = VideoSize(1920, 1080),
                     frameRate = 1_000_000.0 / script.videoFrameDurationUs,
+                    projection = script.movedVideoProjection,
                 ),
             )
         }

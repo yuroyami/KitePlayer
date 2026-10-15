@@ -121,6 +121,7 @@ internal sealed class Control(val member: String) {
     data class SetVideoAdjustments(val value: VideoAdjustments) : Control("setVideoAdjustments")
     data class SetRenderQuality(val value: RenderQuality) : Control("setRenderQuality")
     data class SetVideoTransform(val value: VideoTransform) : Control("setVideoTransform")
+    data class SetSphericalView(val value: SphericalView) : Control("setSphericalView")
     data class SetHdrPolicy(val value: HdrPolicy) : Control("setHdrPolicy")
     data class SetFlashGuard(val value: FlashGuard) : Control("setFlashGuard")
     data class SetSubtitleDelay(val value: Duration) : Control("setSubtitleDelay")
@@ -379,6 +380,7 @@ private fun encodeControl(control: Control): JsAny = record {
         is Control.SetVideoAdjustments -> put("value", encodeAdjustments(control.value))
         is Control.SetRenderQuality -> put("value", encodeRenderQuality(control.value))
         is Control.SetVideoTransform -> put("value", encodeTransform(control.value))
+        is Control.SetSphericalView -> put("value", encodeView(control.value))
         is Control.SetHdrPolicy -> put("value", control.value)
         is Control.SetFlashGuard -> put("value", control.value)
         is Control.SetSubtitleDelay -> put("value", control.value)
@@ -546,6 +548,7 @@ private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
     put("videoAdjustments", encodeAdjustments(snapshot.videoAdjustments))
     put("renderQuality", encodeRenderQuality(snapshot.renderQuality))
     put("videoTransform", encodeTransform(snapshot.videoTransform))
+    put("sphericalView", encodeView(snapshot.sphericalView))
     put("subtitleDelay", snapshot.subtitleDelay)
     put("subtitleScale", snapshot.subtitleScale)
     put("subtitleStyle", snapshot.subtitleStyle?.let(::encodeStyle))
@@ -627,6 +630,35 @@ private fun encodeTrack(track: TrackInfo): JsAny = record {
     put("isCoverArt", track.isCoverArt)
     put("metadata", track.metadata.toJsObject())
     put("dolbyVision", track.dolbyVision?.let(::encodeDolbyVision))
+    put("projection", track.projection?.let(::encodeProjection))
+}
+
+private fun encodeProjection(value: VideoProjection): JsAny = record {
+    put("kind", encodeProjectionKind(value.kind))
+    put("yaw", value.yaw)
+    put("pitch", value.pitch)
+    put("roll", value.roll)
+}
+
+private fun encodeProjectionKind(shape: ProjectionKind): JsAny = record {
+    when (shape) {
+        ProjectionKind.Equirectangular -> kind("Equirectangular")
+        is ProjectionKind.EquirectangularTile -> {
+            kind("EquirectangularTile")
+            put("left", shape.left)
+            put("top", shape.top)
+            put("right", shape.right)
+            put("bottom", shape.bottom)
+        }
+        is ProjectionKind.Cubemap -> {
+            kind("Cubemap")
+            put("padding", shape.padding)
+        }
+        is ProjectionKind.Other -> {
+            kind("Other")
+            put("name", shape.name)
+        }
+    }
 }
 
 private fun encodeDolbyVision(info: DolbyVisionInfo): JsAny = record {
@@ -703,6 +735,14 @@ private fun encodeTransform(value: VideoTransform): JsAny = record {
     put("rotation", value.rotationDegrees)
     put("mirrorHorizontal", value.mirrorHorizontal)
     put("mirrorVertical", value.mirrorVertical)
+}
+
+private fun encodeView(value: SphericalView): JsAny = record {
+    put("yaw", value.yaw)
+    put("pitch", value.pitch)
+    put("roll", value.roll)
+    put("fieldOfView", value.fieldOfView)
+    put("projected", value.projected)
 }
 
 private fun encodeStyle(value: SubtitleStyleOverride): JsAny = record {
@@ -1074,6 +1114,11 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             put("chapter", warning.chapter)
             put("detail", warning.detail)
         }
+        is PlaybackWarning.ProjectionUnavailable -> {
+            kind("ProjectionUnavailable")
+            put("kind", encodeProjectionKind(warning.kind))
+            put("detail", warning.detail)
+        }
         is PlaybackWarning.SubtitleCharsetGuessed -> {
             kind("SubtitleCharsetGuessed")
             put("uri", warning.uri)
@@ -1285,6 +1330,7 @@ private fun decodeControl(o: JsAny): Control? = when (o.str("t")) {
     "setVideoAdjustments" -> Control.SetVideoAdjustments(decodeAdjustments(o.child("value") ?: missing("value")))
     "setRenderQuality" -> Control.SetRenderQuality(decodeRenderQuality(o.child("value") ?: missing("value")))
     "setVideoTransform" -> Control.SetVideoTransform(decodeTransform(o.child("value") ?: missing("value")))
+    "setSphericalView" -> Control.SetSphericalView(decodeView(o.child("value") ?: missing("value")))
     "setHdrPolicy" -> Control.SetHdrPolicy(o.enum<HdrPolicy>("value") ?: missing("value"))
     "setFlashGuard" -> Control.SetFlashGuard(o.enum<FlashGuard>("value") ?: missing("value"))
     "setSubtitleDelay" -> Control.SetSubtitleDelay(o.micros("value") ?: missing("value"))
@@ -1404,6 +1450,7 @@ private fun decodeSnapshot(o: JsAny): PlayerSnapshot {
         videoAdjustments = o.child("videoAdjustments")?.let(::decodeAdjustments) ?: default.videoAdjustments,
         renderQuality = o.child("renderQuality")?.let(::decodeRenderQuality) ?: default.renderQuality,
         videoTransform = o.child("videoTransform")?.let(::decodeTransform) ?: default.videoTransform,
+        sphericalView = o.child("sphericalView")?.let(::decodeView) ?: default.sphericalView,
         subtitleDelay = o.micros("subtitleDelay") ?: default.subtitleDelay,
         subtitleScale = o.float("subtitleScale") ?: default.subtitleScale,
         subtitleStyle = o.child("subtitleStyle")?.let(::decodeStyle),
@@ -1480,7 +1527,28 @@ private fun decodeTrack(o: JsAny): TrackInfo = TrackInfo(
     isCoverArt = o.flag("isCoverArt"),
     metadata = o.map("metadata"),
     dolbyVision = o.child("dolbyVision")?.let(::decodeDolbyVision),
+    projection = o.child("projection")?.let(::decodeProjection),
 )
+
+private fun decodeProjection(o: JsAny): VideoProjection = VideoProjection(
+    kind = o.child("kind")?.let(::decodeProjectionKind) ?: missing("kind"),
+    yaw = o.num("yaw") ?: 0.0,
+    pitch = o.num("pitch") ?: 0.0,
+    roll = o.num("roll") ?: 0.0,
+)
+
+/** A shape this side does not know reads as one it names and draws flat. */
+private fun decodeProjectionKind(o: JsAny): ProjectionKind = when (val shape = o.str("t")) {
+    "Equirectangular" -> ProjectionKind.Equirectangular
+    "EquirectangularTile" -> ProjectionKind.EquirectangularTile(
+        left = o.num("left") ?: 0.0,
+        top = o.num("top") ?: 0.0,
+        right = o.num("right") ?: 0.0,
+        bottom = o.num("bottom") ?: 0.0,
+    )
+    "Cubemap" -> ProjectionKind.Cubemap(o.int("padding") ?: 0)
+    else -> ProjectionKind.Other(o.str("name") ?: shape ?: missing("t"))
+}
 
 private fun decodeDolbyVision(o: JsAny): DolbyVisionInfo = DolbyVisionInfo(
     profile = o.int("profile") ?: missing("profile"),
@@ -1555,6 +1623,14 @@ private fun decodeTransform(o: JsAny): VideoTransform = VideoTransform(
     rotationDegrees = o.int("rotation") ?: 0,
     mirrorHorizontal = o.flag("mirrorHorizontal"),
     mirrorVertical = o.flag("mirrorVertical"),
+)
+
+private fun decodeView(o: JsAny): SphericalView = SphericalView(
+    yaw = o.float("yaw") ?: 0f,
+    pitch = o.float("pitch") ?: 0f,
+    roll = o.float("roll") ?: 0f,
+    fieldOfView = o.float("fieldOfView") ?: 80f,
+    projected = o.bool("projected") ?: true,
 )
 
 private fun decodeStyle(o: JsAny): SubtitleStyleOverride = SubtitleStyleOverride(
@@ -1748,6 +1824,10 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "ThumbnailsUnreadable" -> PlaybackWarning.ThumbnailsUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "AudioSourceUnreadable" -> PlaybackWarning.AudioSourceUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "EditionPartLeftOut" -> PlaybackWarning.EditionPartLeftOut(o.str("segmentUid").orEmpty(), o.str("chapter"), o.str("detail").orEmpty())
+        "ProjectionUnavailable" -> PlaybackWarning.ProjectionUnavailable(
+            o.child("kind")?.let(::decodeProjectionKind) ?: missing("kind"),
+            detail,
+        )
         "SubtitleCharsetGuessed" -> PlaybackWarning.SubtitleCharsetGuessed(
             o.str("uri").orEmpty(),
             o.str("charset").orEmpty(),

@@ -211,6 +211,18 @@ internal class RecordingRenderer(
         this.transform = transform
     }
 
+    /** The kinds of 360 degree picture this renderer draws as a view (#460). Empty draws every picture flat. */
+    var projectedKinds: Set<ProjectionKind> = emptySet()
+
+    override fun projects(kind: ProjectionKind): Boolean = kind in projectedKinds
+
+    /** Every projection and view the engine told this renderer, in order (#460). */
+    val projectionsTold: MutableList<Pair<VideoProjection?, SphericalView>> = mutableListOf()
+
+    override fun setProjection(projection: VideoProjection?, view: SphericalView) {
+        projectionsTold += projection to view
+    }
+
     /** The last render quality the engine told this renderer, or null when it never did. */
     var renderQuality: RenderQuality? = null
         private set

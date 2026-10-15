@@ -15,11 +15,13 @@ public final class io/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer$
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun getRedrawsHeldPicture (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;)Z
 	public static fun getShowsHdr (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;)Z
+	public static fun projects (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/ProjectionKind;)Z
 	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public static fun setDisplayHdr (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;[IF)V
 	public static fun setDisplayRefreshRate (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;F)V
 	public static fun setFlashGuard (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/FlashGuard;)V
 	public static fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
+	public static fun setProjection (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoProjection;Lio/github/yuroyami/kiteplayer/SphericalView;)V
 	public static fun setRenderQuality (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/RenderQuality;)V
 	public static fun setScaleMode (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoScale;)V
 	public static fun setTransform (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoTransform;)V
@@ -251,9 +253,11 @@ public final class io/github/yuroyami/kiteplayer/view/PlayerViewRenderer$Default
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun getRedrawsHeldPicture (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Z
 	public static fun getShowsHdr (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Z
+	public static fun projects (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/ProjectionKind;)Z
 	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public static fun setFlashGuard (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/FlashGuard;)V
 	public static fun setHdrPolicy (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/HdrPolicy;)V
+	public static fun setProjection (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoProjection;Lio/github/yuroyami/kiteplayer/SphericalView;)V
 	public static fun setRenderQuality (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/RenderQuality;)V
 	public static fun setScaleMode (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoScale;)V
 	public static fun setTransform (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoTransform;)V

@@ -63,6 +63,12 @@ public data class TrackInfo(
      * [DolbyVisionInfo.baseLayerPlaysAlone] for what playing it costs.
      */
     val dolbyVision: DolbyVisionInfo? = null,
+    /**
+     * How the track's pictures cover the sphere, for a 360 degree video, or null for a flat one
+     * (#460). An application offers its view controls only when the selected video track has one.
+     * See [KitePlayer.setSphericalView].
+     */
+    val projection: VideoProjection? = null,
 ) {
     /** A label suitable for a track menu, built from whatever the container actually provided. */
     public val label: String

@@ -43,6 +43,7 @@ class WarningAuditTest {
         PlaybackWarning.ThumbnailsUnreadable("thumbs.vtt", "x"),
         PlaybackWarning.AudioSourceUnreadable("dub.m4a", "x"),
         PlaybackWarning.EditionPartLeftOut("0e0e0e00000000000000000000000002", "Opening", "x"),
+        PlaybackWarning.ProjectionUnavailable(ProjectionKind.Equirectangular, "x"),
         PlaybackWarning.ContainerDeclarationDiverged(0, "Width", "1920", "1440"),
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
         PlaybackWarning.SubtitlesNotDrawn("x"),
@@ -142,6 +143,10 @@ class WarningAuditTest {
         is PlaybackWarning.EditionPartLeftOut -> listOf(
             "PlaybackCore.buildSession, at an open, when editionTimelineOf leaves a part of the ordered " +
                 "edition out because no file holds its segment, or its link loops or nests too deep",
+        )
+        is PlaybackWarning.ProjectionUnavailable -> listOf(
+            "PlaybackCore.tellProjection, when the selected video track has a projection and the " +
+                "attached renderer's projects answers false for its kind, once for each item and renderer",
         )
         is PlaybackWarning.ThumbnailsUnreadable -> listOf(
             "PlaybackCore.readItemThumbnails, after an open, when the item's thumbnail file could not " +

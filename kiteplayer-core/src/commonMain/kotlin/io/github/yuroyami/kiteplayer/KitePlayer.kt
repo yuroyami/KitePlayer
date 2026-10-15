@@ -822,6 +822,36 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Turns the view into a 360 degree video, or switches it to the flat picture (#460), for
+     * example from a drag gesture or the device's rotation sensor. It applies to every item from
+     * now on and changes nothing for a flat video. Published as [PlayerSnapshot.sphericalView].
+     *
+     * A video is 360 degree when its track has a [TrackInfo.projection]. A renderer that draws a
+     * view into it draws the new view with the next display refresh, so turning it costs no
+     * decoding and drops no frame, and a paused player shows it at once. While the view is
+     * projected the scale mode and [VideoTransform] do not apply, and the field of view is the
+     * view's zoom. A renderer that cannot draw a view shows the flat picture and warns
+     * [PlaybackWarning.ProjectionUnavailable].
+     *
+     * @throws IllegalArgumentException when a value is not finite, the pitch is outside -90 to 90,
+     *         or the field of view is outside 30 to 120.
+     */
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
+    public fun setSphericalView(view: SphericalView) {
+        checkSphericalView(view)
+        core.post(CoreCommand.SetSphericalView(view, CompletableDeferred()))
+    }
+
+    private fun checkSphericalView(view: SphericalView) {
+        require(view.yaw.isFinite()) { "yaw must be finite, was ${view.yaw}" }
+        require(view.pitch.isFinite() && view.pitch in -90f..90f) { "pitch must be within -90..90, was ${view.pitch}" }
+        require(view.roll.isFinite()) { "roll must be finite, was ${view.roll}" }
+        require(view.fieldOfView.isFinite() && view.fieldOfView in 30f..120f) {
+            "fieldOfView must be within 30..120, was ${view.fieldOfView}"
+        }
+    }
+
+    /**
      * Shifts subtitle timing by [value]. Positive shows cues later. Applies to the cues already
      * on screen at the next pass, no reopen and no reselection.
      *
@@ -1357,6 +1387,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             subtitleStyle = snapshot.subtitleStyle,
             videoScale = snapshot.videoScale,
             videoTransform = snapshot.videoTransform,
+            sphericalView = snapshot.sphericalView,
             videoAdjustments = snapshot.videoAdjustments,
             renderQuality = snapshot.renderQuality,
             hdrPolicy = snapshot.hdrPolicy,
@@ -1399,6 +1430,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         checkSubtitleScale(memento.subtitleScale)
         checkSubtitlePosition(memento.subtitlePosition)
         checkVideoTransform(memento.videoTransform)
+        checkSphericalView(memento.sphericalView)
         checkVideoAdjustments(memento.videoAdjustments)
         checkRenderQuality(memento.renderQuality)
         require(memento.queueOrder.isEmpty() || memento.queueOrder.sorted() == memento.queue.indices.toList()) {
@@ -1427,6 +1459,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setSubtitleStyle(memento.subtitleStyle)
         setVideoScale(memento.videoScale)
         setVideoTransform(memento.videoTransform)
+        setSphericalView(memento.sphericalView)
         setVideoAdjustments(memento.videoAdjustments)
         setRenderQuality(memento.renderQuality)
         setHdrPolicy(memento.hdrPolicy)

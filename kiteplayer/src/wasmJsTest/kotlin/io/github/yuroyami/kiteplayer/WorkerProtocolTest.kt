@@ -78,12 +78,21 @@ class WorkerProtocolTest {
                 bitrate = 4_000_000L, videoSize = VideoSize(1920, 1080, 4, 3), frameRate = 23.976,
                 metadata = mapOf("handler" to "VideoHandler"),
                 dolbyVision = DolbyVisionInfo(profile = 7, level = 6, baseLayerCompatibility = 6, hasEnhancementLayer = true),
+                projection = VideoProjection(
+                    ProjectionKind.EquirectangularTile(left = 0.25, top = 0.125, right = 0.25, bottom = 0.0625),
+                    yaw = 30.5,
+                    pitch = -12.25,
+                    roll = 7.0,
+                ),
             ),
             TrackInfo(
                 TrackId(1), TrackKind.Audio, "aac", language = "jpn", isForced = true, isAccessibility = true,
                 sampleRate = 48_000, channels = 6,
             ),
-            TrackInfo(TrackId(2), TrackKind.Subtitle, "ass", language = "eng", isCoverArt = true),
+            TrackInfo(
+                TrackId(2), TrackKind.Subtitle, "ass", language = "eng", isCoverArt = true,
+                projection = VideoProjection(ProjectionKind.Other("parametric immersive")),
+            ),
             TrackInfo(TrackId(-1), TrackKind.Subtitle, "subrip", title = "External"),
         ),
         selectedVideo = TrackId(0),
@@ -137,6 +146,7 @@ class WorkerProtocolTest {
         videoAdjustments = VideoAdjustments(0.1f, 1.2f, 0.8f, -30f, 1.5f),
         renderQuality = RenderQuality(true, true, 32f, 8f, 16f, VideoScaler.CatmullRom, true, AnimationUpscaler.Fast),
         videoTransform = VideoTransform(2.39f, 1.5f, -0.25f, 0.5f, rotationDegrees = 270, mirrorHorizontal = true, mirrorVertical = true),
+        sphericalView = SphericalView(yaw = -135.5f, pitch = 45.25f, roll = 10f, fieldOfView = 100f, projected = false),
         subtitleDelay = (-1500).milliseconds,
         subtitleScale = 1.25f,
         subtitleStyle = style,
@@ -216,6 +226,8 @@ class WorkerProtocolTest {
         PlaybackWarning.AudioSourceUnreadable("https://example.com/dub.m4a", "404"),
         PlaybackWarning.EditionPartLeftOut("0e0e0e00000000000000000000000002", "Opening", "no file holds this segment"),
         PlaybackWarning.EditionPartLeftOut("ed0ed000000000000000000000000003", null, "loop"),
+        PlaybackWarning.ProjectionUnavailable(ProjectionKind.Cubemap(16), "the renderer draws a view into an equirectangular picture"),
+        PlaybackWarning.ProjectionUnavailable(ProjectionKind.Equirectangular, "the renderer draws only flat pictures"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/a.srt", "windows-1252", "Shift_JIS"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/b.srt", "windows-1252"),
         PlaybackWarning.TypesetterUnavailable("libass", "no module"),
@@ -335,6 +347,8 @@ class WorkerProtocolTest {
             Control.SetRenderQuality(snapshot.renderQuality),
             Control.SetVideoTransform(snapshot.videoTransform),
             Control.SetVideoTransform(VideoTransform.Identity),
+            Control.SetSphericalView(snapshot.sphericalView),
+            Control.SetSphericalView(SphericalView()),
             Control.SetHdrPolicy(HdrPolicy.ToneMap),
             Control.SetFlashGuard(FlashGuard.On),
             Control.SetSubtitleDelay((-250).milliseconds),
@@ -359,7 +373,7 @@ class WorkerProtocolTest {
             val message = PageMessage.Send(control)
             assertEquals(message, message.roundTrip(), "the control ${control.member} changed on the way")
         }
-        assertEquals(36, controls.map { it.member }.distinct().size, "every control is here")
+        assertEquals(37, controls.map { it.member }.distinct().size, "every control is here")
     }
 
     @Test
@@ -422,7 +436,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(45, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(46, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test

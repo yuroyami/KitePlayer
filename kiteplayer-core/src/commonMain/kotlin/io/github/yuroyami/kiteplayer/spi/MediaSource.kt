@@ -7,6 +7,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PictureCrop
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
+import io.github.yuroyami.kiteplayer.VideoProjection
 import io.github.yuroyami.kiteplayer.VideoSize
 
 /**
@@ -386,6 +387,11 @@ public data class PlayerStreamInfo(
      * shown. See [PictureCrop].
      */
     val crop: PictureCrop? = null,
+    /**
+     * How the stream's pictures cover the sphere, for a 360 degree video, or null for a flat one
+     * (#460). A rectilinear projection is a flat picture, and a backend reports it as null.
+     */
+    val projection: VideoProjection? = null,
 ) {
     /**
      * The size of the picture as it is shown: [videoSize] with [crop]'s edges taken away, or
@@ -430,6 +436,7 @@ public data class PlayerStreamInfo(
             dolbyVision == other.dolbyVision &&
             isCommentary == other.isCommentary &&
             crop == other.crop &&
+            projection == other.projection &&
             (codecExtradata?.contentEquals(other.codecExtradata) ?: (other.codecExtradata == null))
     }
 
@@ -460,6 +467,7 @@ public data class PlayerStreamInfo(
         result = 31 * result + (dolbyVision?.hashCode() ?: 0)
         result = 31 * result + isCommentary.hashCode()
         result = 31 * result + (crop?.hashCode() ?: 0)
+        result = 31 * result + (projection?.hashCode() ?: 0)
         result = 31 * result + (codecExtradata?.contentHashCode() ?: 0)
         return result
     }

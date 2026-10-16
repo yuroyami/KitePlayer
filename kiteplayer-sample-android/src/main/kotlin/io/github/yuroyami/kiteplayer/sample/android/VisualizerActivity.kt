@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.availability
 import io.github.yuroyami.kiteplayer.isAvailable
 import io.github.yuroyami.kiteplayer.audioviz.SongMapStore
@@ -20,6 +21,12 @@ import io.github.yuroyami.kiteplayer.sample.shared.SampleScreen
 import io.github.yuroyami.kiteplayer.session.MediaNotificationOptions
 import io.github.yuroyami.kiteplayer.session.attachMediaSession
 import java.io.File
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /**
  * The app's front screen: the song built into the APK, drawn by the audio visualiser, or the
@@ -32,14 +39,24 @@ import java.io.File
  */
 internal class VisualizerActivity : ComponentActivity() {
     private var player: KitePlayer? = null
+    private val scope = MainScope()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Keep the display awake while this sample is visible, including between tracks.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // A song the resume card started gives way to this screen's own player.
+        ResumedPlayer.close()
         val player = if (KitePlayer.isAvailable) KitePlayer() else null
         this.player = player
         player?.attachMediaSession(this, MediaNotificationOptions(smallIcon = android.R.drawable.ic_media_play))
+        // Each pause saves the song and its place for Android's media resume card.
+        player?.let { p ->
+            scope.launch {
+                p.state.map { it.status }.distinctUntilChanged().filter { it == PlaybackStatus.Paused }
+                    .collect { saveForResumeCard(this@VisualizerActivity, p) }
+            }
+        }
         // A scanned song map outlives the process here, so a song played before is mapped at once.
         val songMaps = SongMapStore.inDirectory(File(cacheDir, "songmaps").absolutePath)
         // Every song in the APK, copied out once each. The player opens a path, so they all have
@@ -76,6 +93,8 @@ internal class VisualizerActivity : ComponentActivity() {
         try {
             super.onDestroy()
         } finally {
+            scope.cancel()
+            player?.let { saveForResumeCard(this, it) }
             // The media session closes itself with the player.
             player?.close()
         }

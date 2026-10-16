@@ -57,5 +57,14 @@
             android:name="io.github.yuroyami.kiteplayer.session.KitePlayerMediaService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+        <!-- Android's media resume card plays the last song again through this service after the
+             app was closed. Exported, because the system's media controls connect to it. -->
+        <service
+            android:name=".SampleResumptionService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

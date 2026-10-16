@@ -19,9 +19,11 @@ what reading the code or running the gate would not teach you.
   pushes, publishes and cuts every release.
 - Commit subject is one imperative sentence about the outcome. Short prose body. No trailers.
 - Every commit is authored and committed as `yuroyami <youcefsidena@gmail.com>`, whatever git
-  identity the machine came with. A cloud container can arrive set to Claude, so check
-  `git config user.name` before the first commit. Never name Claude in a commit: not as author,
-  not as committer, and no `Co-Authored-By` or session line.
+  identity the machine came with. A cloud container can arrive with Claude as its git user, so
+  check `git config user.name` before the first commit.
+- AI use is stated once, in the README. AI tools, Claude among them, helped build this project,
+  and the owner directs and reviews all of the work. A commit does not repeat that statement in
+  a `Co-Authored-By` or session line.
 - Every change starts with an issue, and the commit that closes one says `Fixes #n` in its body.
 - Talk to the owner in plain words. No internal codes, no jargon walls. Say what a thing means,
   not what it is. A question must be answerable by someone who has read nothing.

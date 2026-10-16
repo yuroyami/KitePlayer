@@ -298,7 +298,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
   written cannot reach audio that is already buffered, so a change stays inaudible for the ring's
   whole depth: at least 200 ms, and twice the AudioTrack buffer on Android (240 ms on the ASUS; it
   was 960 ms before #375). Measured at 174 ms of lag on a 171 ms ring. Moving the gain back into the
-  pipeline would be a regression that looks like a simplification.
+  pipeline would be a regression that looks like a simplification. The same holds one stage further
+  on Android: the AudioTrack's own 120 ms buffer plays a ring gain late too, and the ASUS heard
+  about 170 ms. So a sink that answers `setDeviceGain` takes the volume up to unity after its
+  buffer, and the ring keeps only a boost (#14).
 - **Three things stop a paused player aging: the freeze at pause, the re-anchor at resume, and
   the anchor floor at resume.** The ring keeps its last anchor through a pause. Applied after play,
   that anchor counts the whole pause as played time: on real macOS output a two second pause read

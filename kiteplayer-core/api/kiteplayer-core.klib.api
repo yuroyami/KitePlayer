@@ -777,6 +777,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/AudioSink : kotlin/AutoClos
     abstract suspend fun start() // io.github.yuroyami.kiteplayer.spi/AudioSink.start|start(){}[0]
     abstract suspend fun stop() // io.github.yuroyami.kiteplayer.spi/AudioSink.stop|stop(){}[0]
     open fun setContent(io.github.yuroyami.kiteplayer/AudioContent) // io.github.yuroyami.kiteplayer.spi/AudioSink.setContent|setContent(io.github.yuroyami.kiteplayer.AudioContent){}[0]
+    open fun setDeviceGain(kotlin/Float): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/AudioSink.setDeviceGain|setDeviceGain(kotlin.Float){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/AudioSinkBuffer { // io.github.yuroyami.kiteplayer.spi/AudioSinkBuffer|null[0]

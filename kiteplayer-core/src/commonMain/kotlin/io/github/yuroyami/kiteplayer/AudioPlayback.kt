@@ -1109,10 +1109,18 @@ public class AudioPlayback(
      * The target is computed inside too, so the last change to take the lock is the one the ring
      * keeps. With no path open the value is simply stored, and [open] pushes it into the fresh
      * ring.
+     *
+     * A sink that applies a gain after its own buffer takes the part up to unity, and the ring keeps
+     * only a boost, because the ring's gain is heard only after that buffer (#14).
      */
     private fun pushGain(): Unit = synchronized(lock) {
         val target = if (wantedMute.value) 0f else wantedVolume.value * fadeLevel.value * duckLevel.value
-        ring?.setGain(target)
+        val ringGain = if (sink.setDeviceGain(if (target < 1f) target else 1f)) {
+            if (target > 1f) target else 1f
+        } else {
+            target
+        }
+        ring?.setGain(ringGain)
     }
 
     /**

@@ -90,6 +90,16 @@ private class FakeAudioTrackDriver(
         released = true
     }
 
+    /** Every volume the sink set, in order. Kept out of [calls], whose order the lifecycle cases pin. */
+    val volumes = mutableListOf<Float>()
+
+    override fun setVolume(gain: Float) {
+        synchronized(calls) {
+            if (released) postReleaseCalls += "setVolume"
+            volumes += gain
+        }
+    }
+
     override fun write(source: FloatArray, offsetFloats: Int, sizeFloats: Int): Int {
         record("write")
         writeEntered.countDown()
@@ -344,6 +354,27 @@ class AudioTrackSinkTest {
         next.open(stereo48k, FullBlockCallback())
         next.close()
         assertEquals(listOf(AudioContent.Speech, AudioContent.Speech, AudioContent.Music), declared)
+    }
+
+    @Test
+    fun `the device gain reaches the open track and every track opened after it`() = runBlocking {
+        val drivers = mutableListOf<FakeAudioTrackDriver>()
+        val s = AudioTrackSink({ _, _ -> FakeAudioTrackDriver().also { drivers += it } }, FixedClock())
+        assertTrue(s.setDeviceGain(0.25f), "this sink applies the gain after the track's buffer")
+        s.open(stereo48k, FullBlockCallback())
+        s.setDeviceGain(0.5f)
+        drivers.single().writeResults.add(0) /* first block dies, so the next start reopens */
+        val lost = async { s.events.first { it is AudioSinkEvent.DeviceLost } }
+        yield()
+        s.start()
+        withTimeout(5_000) { lost.await() }
+        s.start()
+        assertFailsWith<IllegalArgumentException> { s.setDeviceGain(1.5f) }
+        s.close()
+
+        assertEquals(listOf(0.25f, 0.5f), drivers[0].volumes, "a gain set before open applies at open, a later one at once")
+        assertEquals(listOf(0.5f), drivers[1].volumes, "a recovered track starts at the last gain")
+        assertTrue(drivers.all { it.postReleaseCalls.isEmpty() }, "no gain reaches a released track")
     }
 
     @Test

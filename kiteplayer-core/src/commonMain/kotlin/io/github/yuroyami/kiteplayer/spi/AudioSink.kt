@@ -83,6 +83,20 @@ public interface AudioSink : AutoCloseable {
      */
     public val cutsSoundOnStop: Boolean get() = false
 
+    /**
+     * Turns the sound down after the device's own buffer, from silence at 0 to unity at 1, and
+     * answers whether this sink does that (#14).
+     *
+     * The engine applies the volume as the device takes audio from its ring, so the ring adds no
+     * lag. A device that keeps its own buffer of written audio still plays that buffer at the old
+     * volume, which on Android is 120 ms or more. A sink that answers true takes the volume up to
+     * unity here, and the ring keeps only a boost above unity. Mute is 0.
+     *
+     * Called from any thread, before or after [open]. The sink keeps the last gain and applies it
+     * to every device it opens. False by default, which leaves the whole volume in the ring.
+     */
+    public fun setDeviceGain(gain: Float): Boolean = false
+
     /** The device's own buffer size in sample frames. Sizes the engine's ring. */
     public val deviceBufferFrames: Int
 

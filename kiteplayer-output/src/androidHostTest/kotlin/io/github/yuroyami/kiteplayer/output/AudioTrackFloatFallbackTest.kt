@@ -27,6 +27,7 @@ class AudioTrackFloatFallbackTest {
         override fun stop() = Unit
         override fun flush() = Unit
         override fun release() = Unit
+        override fun setVolume(gain: Float) = Unit
         override fun write(source: FloatArray, offsetFloats: Int, sizeFloats: Int): Int {
             Thread.sleep(1)
             return sizeFloats

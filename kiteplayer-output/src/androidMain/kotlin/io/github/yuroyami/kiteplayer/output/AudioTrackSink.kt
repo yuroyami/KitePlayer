@@ -132,6 +132,19 @@ public class AudioTrackSink internal constructor(
         this.content = content
     }
 
+    /* The volume the mixer applies after the track's buffer (#14). Written under [lifecycle], and
+     * given to every track this sink opens, a recovery's included. */
+    private var deviceGain = 1f
+
+    override fun setDeviceGain(gain: Float): Boolean {
+        require(gain.isFinite() && gain in 0f..1f) { "a device gain must be between 0 and 1, was $gain" }
+        synchronized(lifecycle) {
+            deviceGain = gain
+            driver?.setVolume(gain)
+        }
+        return true
+    }
+
     override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
         synchronized(lifecycle) {
             check(!closed) { "AudioTrackSink is closed" }
@@ -173,6 +186,7 @@ public class AudioTrackSink internal constructor(
                     "AudioTrack reported a ${opened.bufferSizeInFrames}-frame buffer; the device open failed",
                 )
             }
+            opened.setVolume(deviceGain)
             driver = opened
             accepted = format
             this.render = render
@@ -217,7 +231,7 @@ public class AudioTrackSink internal constructor(
             if (!writerFailed) return
             val format = accepted ?: return
             dead?.release()
-            driver = driverFactory.open(format, content)
+            driver = driverFactory.open(format, content).also { it.setVolume(deviceGain) }
             submittedFrames = 0L
             resetTimestampState()
             writerFailed = false

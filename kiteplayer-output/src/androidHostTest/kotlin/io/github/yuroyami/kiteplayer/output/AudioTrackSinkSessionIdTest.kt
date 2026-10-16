@@ -39,6 +39,7 @@ class AudioTrackSinkSessionIdTest {
         override fun stop() = Unit
         override fun flush() = Unit
         override fun release() { releaseCount++ }
+        override fun setVolume(gain: Float) = Unit
         override fun write(source: FloatArray, offsetFloats: Int, sizeFloats: Int): Int = sizeFloats
         override fun timestamp(): DriverTimestamp? = null
         override fun playbackHeadPosition(): Int = 0

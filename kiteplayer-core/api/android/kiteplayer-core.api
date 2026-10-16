@@ -3675,6 +3675,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioSink : ja
 	public abstract fun latencyNanos ()J
 	public abstract fun open (Lio/github/yuroyami/kiteplayer/spi/AudioFormat;Lio/github/yuroyami/kiteplayer/spi/AudioRenderCallback;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setContent (Lio/github/yuroyami/kiteplayer/AudioContent;)V
+	public fun setDeviceGain (F)Z
 	public abstract fun setPaused (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun start (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun stop (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -3684,6 +3685,7 @@ public final class io/github/yuroyami/kiteplayer/spi/AudioSink$DefaultImpls {
 	public static fun getCutsSoundOnStop (Lio/github/yuroyami/kiteplayer/spi/AudioSink;)Z
 	public static fun getPlatformSessionId (Lio/github/yuroyami/kiteplayer/spi/AudioSink;)Ljava/lang/Integer;
 	public static fun setContent (Lio/github/yuroyami/kiteplayer/spi/AudioSink;Lio/github/yuroyami/kiteplayer/AudioContent;)V
+	public static fun setDeviceGain (Lio/github/yuroyami/kiteplayer/spi/AudioSink;F)Z
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioSinkBuffer {

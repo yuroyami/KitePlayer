@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.math.abs
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
@@ -90,11 +91,25 @@ class VolumeLatencyTest {
         }
     }
 
-    /** A device the test pumps by hand, so the ring drains exactly when a case says to. */
-    private class PullableSink(override val deviceBufferFrames: Int = 512) : AudioSink {
+    /**
+     * A device the test pumps by hand, so the ring drains exactly when a case says to. With
+     * [takesGain] it also applies a gain after its own buffer, as Android's track does.
+     */
+    private class PullableSink(
+        override val deviceBufferFrames: Int = 512,
+        private val takesGain: Boolean = false,
+    ) : AudioSink {
         private var render: AudioRenderCallback? = null
         var buffer: CapturingBuffer? = null
             private set
+
+        /** Every gain the engine handed this device, in order. */
+        val deviceGains: MutableList<Float> = mutableListOf()
+
+        override fun setDeviceGain(gain: Float): Boolean {
+            if (takesGain) deviceGains += gain
+            return takesGain
+        }
 
         override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
             this.render = render
@@ -259,6 +274,39 @@ class VolumeLatencyTest {
             peak < 0.1f,
             "a muted path rebuilt mid-stream must stay silent, but the device was handed $peak",
         )
+        audio.close()
+    }
+
+    /**
+     * A device that turns the sound down after its own buffer takes the volume up to unity, and
+     * the ring keeps only a boost (#14). Without the split, a ring gain is heard only after that
+     * buffer, which on Android is 120 ms or more.
+     */
+    @Test
+    fun `a sink that applies a gain after its buffer takes the volume up to unity`() = runTest {
+        val sink = PullableSink(takesGain = true)
+        val audio = AudioPlayback(sink, TestClock())
+        audio.volume = QUIET
+        audio.open(format)
+        audio.play()
+        val block = FloatArray(1_024 * format.channels) { QUIET }
+        val heard = sink.buffer!!.heard
+
+        audio.submitDecoded(pts = null, interleaved = block, frames = 1_024, sourceFormat = format) { false }
+        sink.pumpOnce()
+        assertEquals(QUIET, sink.deviceGains.last())
+        assertTrue(abs(heard.last() - QUIET) < TOLERANCE, "the ring must hand the device the audio as it came, was ${heard.last()}")
+
+        audio.volume = 2f
+        sink.pumpOnce()
+        assertEquals(1f, sink.deviceGains.last())
+        assertTrue(abs(heard.last() - 2f * QUIET) < TOLERANCE, "the ring must keep the boost, was ${heard.last()}")
+
+        audio.muted = true
+        audio.submitDecoded(pts = null, interleaved = block, frames = 1_024, sourceFormat = format) { false }
+        sink.pumpOnce()
+        assertEquals(0f, sink.deviceGains.last())
+        assertTrue(abs(heard.last() - QUIET) < TOLERANCE, "mute belongs to the device here, so the ring plays on, was ${heard.last()}")
         audio.close()
     }
 

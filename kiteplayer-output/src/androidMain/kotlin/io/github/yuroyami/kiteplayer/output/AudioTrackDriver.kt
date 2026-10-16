@@ -51,6 +51,9 @@ internal interface AudioTrackDriver {
     /** Releases the device. After this every other call is a caller bug the fake records. */
     fun release()
 
+    /** The track's volume, from 0 to 1, which the platform's mixer applies after the track's buffer. */
+    fun setVolume(gain: Float)
+
     /**
      * Blocking interleaved float write. Returns the number of FLOATS written, which the platform
      * may make smaller than requested when it is interrupted by pause or stop. Zero or negative
@@ -228,6 +231,10 @@ internal class PlatformAudioTrackDriver(
     override fun stop() = track.stop()
     override fun flush() = track.flush()
     override fun release() = track.release()
+
+    override fun setVolume(gain: Float) {
+        track.setVolume(gain)
+    }
 
     override fun write(source: FloatArray, offsetFloats: Int, sizeFloats: Int): Int {
         if (encoding == DriverEncoding.Float) return track.write(source, offsetFloats, sizeFloats, AudioTrack.WRITE_BLOCKING)

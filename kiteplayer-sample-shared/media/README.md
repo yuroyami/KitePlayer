@@ -11,9 +11,9 @@ The sample apps step through them in this order, and the visualiser draws each o
 | `hurry-up-2021.mp3` | Hurry Up 2021 | 4:23 | [998087](https://www.newgrounds.com/audio/listen/998087) |
 | `what-a-horrible-night.mp3` | What A Horrible Night To Have A Curse | 4:22 | [843752](https://www.newgrounds.com/audio/listen/843752) |
 
-They cover different genres on purpose, because the visualiser answers each one differently: a
-quiet ambient piece, a chiptune with sharp attacks, a steady techno track, a dance track long
-enough to use every scan worker, and the original hip hop beat.
+They cover different genres on purpose, because the visualiser reacts to each one differently: a
+quiet ambient piece, a chiptune with sharp attacks, a steady techno track, a long dance track, and
+the original hip hop beat.
 
 ## Licence
 
@@ -24,12 +24,12 @@ may share and adapt them, including commercially, with credit, under the same li
 - KitePlayer's Apache-2.0 licence does not cover them.
 - Only the sample apps use them. No published artifact contains them.
 
-The audio is each original file. Only the tags were rewritten, so the sample can show the title,
-the artist and the licence on screen. The licence is in each file's copyright tag, and the sample
-prints that tag under the picture.
+The audio of each file is unchanged from the original. Only the tags were rewritten, so the sample
+can show the title, the artist and the licence on screen. The licence is in each file's copyright
+tag, and the sample prints that tag under the picture.
 
-A previous version of this file said `bad-cat.mp3` was CC BY-NC-SA 3.0. Its page states CC BY-SA
-3.0, with no non-commercial term, so the file and this table now say that.
+Earlier versions of this file listed `bad-cat.mp3` as CC BY-NC-SA 3.0. That was wrong. Its page
+states CC BY-SA 3.0, with no non-commercial term.
 
 ## Adding or replacing a song
 

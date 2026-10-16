@@ -1,28 +1,54 @@
-# Automatic network transport distribution probe
+# Network transport check
 
-This standalone consumer resolves the checkout's staged Maven artifacts. It shares no project or
-composite-build dependencies with KitePlayer, and its Kotlin sources refer only to core APIs.
-`withNetwork` changes the dependency declaration only. The runner builds the same source twice:
-without the optional network artifact, then with it, in separate output directories.
+This project checks that adding `kiteplayer-network` as a dependency is enough to turn on network
+playback, with no code changes, on every target.
 
-Prerequisites: JDK 21, the repository's normal Kotlin/Native prerequisites for Apple targets, a
-compatible Node for Wasm, and an HTTP or HTTPS endpoint that returns nonempty bytes. Android also
-needs the configured Android SDK and an explicitly selected running device. The runner reuses
-`sdk.dir` from the repository's `local.properties`. iOS needs an explicitly selected simulator UDID.
-The script does not start a server or Android emulator. It boots only the explicitly selected
-iOS simulator.
+It is a standalone consumer project. It shares no project or composite build with KitePlayer, and
+its Kotlin sources only use the core API. It resolves the KitePlayer artifacts that the script
+stages from this checkout. The script builds the same sources twice, in separate output
+directories: once without `kiteplayer-network`, and once with it. The `withNetwork` switch only
+changes the dependency list.
 
-Stage only the core, network, and required native ring publications:
+## What a pass means
+
+The project uses a fake media backend. It reads the response bytes through the `MediaIo` that the
+player gives it, and then refuses to decode on purpose. No real decoder or audio device is
+involved. A run passes when:
+
+- without the dependency, the backend receives no network reader
+- with the dependency, the backend receives the bytes, and the failed open closes the reader
+
+The script checks completion markers as well as the exit status. The refused decode is part of
+the check, not a test failure.
+
+## Requirements
+
+- JDK 21
+- the usual Kotlin/Native requirements of this repository, for the Apple targets
+- a compatible Node, for Wasm
+- an HTTP or HTTPS address that returns some bytes
+- for Android: the Android SDK from `sdk.dir` in the repository's `local.properties`, and a running
+  device that you name
+- for iOS: a simulator UDID that you name
+
+The script does not start a server or an Android emulator. It only boots the iOS simulator that you
+name.
+
+## Stage the artifacts
+
+Stage only the core, network and native audio ring publications:
 
 ```bash
 scripts/verify-network-distribution.sh --stage
 ```
 
-This writes to `build/verification-maven`. It does not publish to Maven Local or Maven Central.
-The consumer resolves the Kite group exclusively from that directory, preventing a released
-artifact with the same version from silently replacing the bytes under test.
+This writes to `build/verification-maven`, not to Maven Local or Maven Central. The consumer
+resolves the KitePlayer group only from that directory. A released artifact with the same version
+therefore cannot replace the bytes under test.
 
-Run the selected target against a server on the host:
+## Run a target
+
+Start a server on the host first, then run one target:
 
 ```bash
 scripts/verify-network-distribution.sh --run --target jvm --url http://localhost:8765/media
@@ -32,24 +58,23 @@ scripts/verify-network-distribution.sh --run --target wasm --node /path/to/node 
 scripts/verify-network-distribution.sh --run --target android --android-serial emulator-5554 --url http://10.0.2.2:8765/media
 ```
 
-`10.0.2.2` is the Android emulator's host alias. A physical Android device needs a reachable server
-address. To exercise TLS, use an HTTPS URL with a valid trusted certificate and a nonempty response.
-`--target all` requires an iOS simulator; Android joins that run only when `--android-serial` is set.
+- `10.0.2.2` is how the Android emulator reaches the host. A physical device needs an address that
+  it can reach.
+- To test TLS, use an HTTPS address with a valid, trusted certificate.
+- `--target all` needs an iOS simulator. Android joins that run only when you pass
+  `--android-serial`.
+- `--reuse-staged-cache` skips refreshing unrelated external dependencies when you retry against
+  the same staged artifacts. Do not use it after you stage again.
 
-The fake media backend reads response bytes through the supplied IO, then deliberately refuses to
-decode. Success means the backend receives no automatic IO without the dependency, receives bytes
-with it, and the failed open closes that reader. No media decoder or audio device is involved.
-The runner checks completion markers as well as exit status; the deliberate decoder refusal is
-part of the proof, not a test failure.
+## How each target is built
 
-Native probes use release executables and Wasm uses the optimised production executable. Android
-uses a non-debuggable release with R8 enabled and requires its mapping file. Its local installation
-signature does not disable optimisation. The app adds no provider references or custom keep rules;
-any discovery rules must arrive from the published dependency itself.
+The native targets use release executables, and Wasm uses the optimised production build. Android
+uses a release build that is not debuggable, with R8 on, and the script requires its mapping file.
 
-Outputs and logs stay under `verification/network-consumer/build/{without-network,with-network}`.
-These fixtures describe checks to run; their presence alone does not claim a passing distribution.
+The Android app adds no references to the network provider and no keep rules of its own, so any
+rules R8 needs must come from the published dependency. The app also declares no INTERNET
+permission. The network artifact has to supply it.
 
-The Android app declares no INTERNET permission itself; its network artifact must supply it.
-For fixture-only retries against unchanged staged bytes, `--reuse-staged-cache` avoids refreshing
-unrelated external dependencies. Do not use that option after restaging artifacts.
+Outputs and logs go to `verification/network-consumer/build/without-network` and
+`verification/network-consumer/build/with-network`. This folder only describes the check. Its
+presence does not mean that a run has passed.

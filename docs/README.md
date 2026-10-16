@@ -9,8 +9,8 @@ today. The API reference is the KDoc, and `./gradlew dokkaGenerate` builds it in
 
 - [Controlling the player](player-api.md): every call by area, the flows, seeking, audio devices
   and screen readers.
-- [Opening media](media-sources.md): local files, bytes, picked files, growing files, item
-  settings, and audio that plays beside the media.
+- [Opening media](media-sources.md): local files, bytes, picked files, files that are still
+  growing, item settings, and a separate audio file that plays with the video.
 - [Subtitles](subtitles.md): the formats, how the player chooses a track, and how it styles the
   text.
 - [Network streams](streaming.md): HTTP, HLS, DASH and radio, variant changes, and recovery when
@@ -44,12 +44,12 @@ today. The API reference is the KDoc, and `./gradlew dokkaGenerate` builds it in
 ## Audio visualiser
 
 `kiteplayer-audioviz` draws pictures from the music of a file that has no video. The standard
-states the goals, and each contract below implements a part of it.
+states the goals, and each contract below covers one part of it.
 
 - [Audio visualiser standard](audioviz-standard.md): the goals and the requirements.
 - [Timing and ownership](audioviz-timing-api.md): the clocks and the workers.
 - [Calibrated audio features](audioviz-feature-api.md): the spectrum and the level measurements.
-- [Onset method](audioviz-onset-method.md): the detector mathematics.
+- [Onset method](audioviz-onset-method.md): the maths of the onset detector.
 - [Audio events](audioviz-events-api.md): how detected events reach the drawings.
 - [Rhythm evidence and motion](audioviz-rhythm-api.md): the pulse tracker and what it does not
   claim.

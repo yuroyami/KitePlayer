@@ -5,7 +5,7 @@
 <p align="center">
   A media player for Kotlin Multiplatform, with its own engine written in Kotlin and FFmpeg already inside.<br>
   It plays video, audio and subtitles on Android, iOS, macOS, the desktop JVM and the web, with one API in <code>commonMain</code>.<br>
-  It takes mpv and VLC as its models, and aims for their performance and range of features.
+  It is modeled on mpv and VLC, and aims to match their performance and features.
 </p>
 
 <p align="center">
@@ -28,8 +28,8 @@
 ## Why KitePlayer
 
 A Kotlin Multiplatform player is usually a common API over ExoPlayer on Android and AVPlayer on
-Apple, which leaves your app with two engines that open different files and behave differently
-around them. KitePlayer doesn't wrap any platform player. It is one engine written in Kotlin with
+Apple. Your app then has two engines that support different files and behave differently.
+KitePlayer doesn't wrap any platform player. It is one engine written in Kotlin with
 FFmpeg underneath, which is why an MKV file with ASS subtitles plays the same way on a phone, on a
 desktop and in a browser.
 
@@ -83,7 +83,7 @@ On Android, every artifact needs `minSdk` 26. To build a smaller stack of your o
 | --- | --- |
 | An iOS app with a static framework (`isStatic = true`) | Linker flags in Xcode ([iOS setup](#ios-setup)) |
 | Any iOS app | Two entries in the privacy manifest ([iOS setup](#ios-setup)) |
-| A web app (`wasmJs`) | The WebAssembly modules of FFmpeg and libass beside the page, and a third one for the worker player ([Web setup](#web-setup)) |
+| A web app (`wasmJs`) | FFmpeg and libass as WebAssembly modules next to the page, plus a third module for the worker player ([Web setup](#web-setup)) |
 | An Android app that plays in the background | A service and three permissions in the manifest ([Background playback](#background-playback)) |
 
 <a name="ios-setup"></a>
@@ -130,27 +130,27 @@ inside the app container, and `3B52.1` is files that the user picked.
 <summary><b>Web setup</b>: the modules that a page serves</summary>
 <br>
 
-A browser cannot link FFmpeg or libass into the Kotlin binary, which is why the page serves them as
-WebAssembly modules (each one comes as a `web` zip beside its artifact on Maven Central):
+A browser cannot link FFmpeg or libass into the Kotlin binary, so the page serves them as separate
+WebAssembly modules. Each one is published as a `web` zip next to its artifact on Maven Central:
 
-1. Unpack `kiteffmpeg-wasm-js-<version>-web.zip` beside `index.html`. Use the KiteFFmpeg version
+1. Unpack `kiteffmpeg-wasm-js-<version>-web.zip` next to `index.html`. Use the KiteFFmpeg version
    that KitePlayer depends on (0.5.1 for KitePlayer 0.3.0).
-2. Unpack `kiteplayer-libass-wasm-js-<version>-web.zip` beside it. Without this module, KitePlayer
-   draws ASS with its built-in styling.
+2. Unpack `kiteplayer-libass-wasm-js-<version>-web.zip` next to it. Without this module, KitePlayer
+   draws ASS subtitles with its built-in styling.
 3. Call `KiteFFmpegWeb.load()` before you create a player. Under a bundler, instantiate the module
    from a plain `<script type="module">` and pass it to `KiteFFmpegWeb.attach()` instead.
 
 Serve `.mjs` as `text/javascript` and `.wasm` as `application/wasm`. Both modules are
-single-threaded, which means the page needs no cross-origin isolation headers. A browser starts
-audio only after the user interacts with the page, and the position stays at zero until then.
+single-threaded, so the page needs no cross-origin isolation headers. A browser starts audio only
+after the user interacts with the page, and the position stays at zero until then.
 
-A player on the page's own thread cannot play network media, because a read cannot wait there (it
-can still play bytes that the page has fetched). `KitePlayerWorker.start(canvas)` runs the player in
-a web worker instead, which plays `http`, `https` and `blob` addresses (HLS and DASH included) and
-draws on your canvas while the page's thread stays free. The worker needs a third module from
-`kiteplayer-wasm-js-<version>-web.zip`, which goes beside `index.html` as well. It has the calls
-and flows of `KitePlayer` apart from the few that its KDoc lists (such as recording), and it takes
-an address rather than an item with a reader of its own.
+A player on the page's main thread cannot play network media, because it cannot block while it
+waits for a read. It can still play bytes that the page has already fetched. For network media,
+`KitePlayerWorker.start(canvas)` runs the player in a web worker. The worker plays `http`, `https`
+and `blob` addresses, including HLS and DASH, and draws on your canvas while the main thread stays
+free. It needs a third module from `kiteplayer-wasm-js-<version>-web.zip`, which also goes next to
+`index.html`. The worker has the same calls and flows as `KitePlayer`, except for a few that its
+KDoc lists, such as recording. It takes an address, not an item with its own reader.
 
 </details>
 
@@ -158,7 +158,7 @@ an address rather than an item with a reader of its own.
 
 ### Play a video in Compose
 
-`rememberKitePlayer()` creates a player that closes when the composable leaves, and
+`rememberKitePlayer()` creates a player that closes when the composable leaves the composition.
 `KitePlayerVideo` shows its video, here with the default controls on top:
 
 ```kotlin
@@ -188,23 +188,22 @@ fun MovieScreen() {
 }
 ```
 
-`KitePlayerVideo` hosts the platform's own video view by default, which leaves the frames to the
-system compositor and keeps the GPU idle during long playback. Pass
-`path = KiteRenderPath.ComposeCanvas` when the video has to clip, fade or join a shared element
-transition, since that path draws the frames inside Compose (you can switch paths while the video
-plays).
+By default, `KitePlayerVideo` hosts the platform's own video view. The system compositor then shows
+the frames, and the GPU stays idle during long playback. Pass `path = KiteRenderPath.ComposeCanvas`
+when the video has to clip, fade or take part in a shared element transition. That path draws the
+frames inside Compose. You can switch paths while the video plays.
 
 > [!WARNING]
 > On the desktop JVM, the native view takes every click. Controls that you draw over it do not
 > receive clicks. Use `KiteRenderPath.ComposeCanvas` there, or put the controls beside the video.
 
 On Android, a rotation recreates the activity, which closes a player that `rememberKitePlayer()`
-holds. To play on through a rotation, keep the player in a `ViewModel` instead and close it in
-`onCleared`.
+holds. To keep playing through a rotation, keep the player in a `ViewModel` instead, and close it
+in `onCleared`.
 
-The parts of `KitePlayerControls` are public too, which lets you build controls of your own from
-the same state holders (`rememberSeekBarState`, `rememberTrackMenuState` and the others). The
-default controls speak English unless you pass your own `KitePlayerControlsLabels`.
+The building blocks of `KitePlayerControls` are public too. You can build your own controls from
+the same state holders, such as `rememberSeekBarState` and `rememberTrackMenuState`. The default
+controls are in English unless you pass your own `KitePlayerControlsLabels`.
 
 ### Without Compose
 
@@ -217,17 +216,17 @@ view.player = player
 view.showsControls = true
 ```
 
-A native macOS app draws into an `AppKitWindow` through `MetalVideoRenderer` instead (the macOS
-sample in `kiteplayer-sample` shows the setup), and a web page without Compose draws on a
-`<canvas>`, as the [web setup](#web-setup) describes.
+A native macOS app draws into an `AppKitWindow` through `MetalVideoRenderer` instead. The macOS
+sample in `kiteplayer-sample` shows the setup. A web page without Compose draws on a `<canvas>`, as
+the [web setup](#web-setup) describes.
 
 <details>
 <summary><b>From Java</b></summary>
 <br>
 
-On Android and the desktop JVM, `KitePlayerJava` wraps the player for Java code, with listeners on
-an executor that you name, a `CompletableFuture` for every call that suspends, and milliseconds
-wherever Kotlin takes a `Duration`:
+On Android and the desktop JVM, `KitePlayerJava` wraps the player for Java code. Listeners run on
+an executor that you choose, every suspending call returns a `CompletableFuture`, and times are in
+milliseconds where Kotlin takes a `Duration`:
 
 ```java
 KitePlayerJava player = KitePlayerJava.create();
@@ -251,9 +250,9 @@ player.seekAsync(90_000);
 player.close();
 ```
 
-Canceling a future cancels its call. The other calls (such as `play()`, `pause()` and
-`setVolume(float)`) are on `getPlayer()`, and a listener hears only the events that happen after
-you add it.
+Canceling a future cancels its call. The other calls, such as `play()`, `pause()` and
+`setVolume(float)`, are on `getPlayer()`. A listener only receives the events that happen after you
+add it.
 
 </details>
 
@@ -277,23 +276,29 @@ player.selectTrack(TrackKind.Audio, french.id)
 ```
 
 Collect `player.state` for the status, the tracks and every setting, and `player.progress` for the
-position and the buffer. `player.events` reports what happens, warnings and errors included. When
-the player cannot honor a call, it fails the call with a typed error rather than ignoring it.
+position and the buffer. `player.events` reports what happens, including warnings and errors. When
+the player cannot do what a call asks, the call fails with a typed error. It is never silently
+ignored.
 
-The player can also run a gapless queue (or crossfade between songs), shuffle and loop, apply a
-ten-band equalizer and ReplayGain, follow an external clock for watching together, step frame by
-frame, take screenshots, and record what plays into a Matroska file with no re-encode. It plays a
-Matroska file's editions, ordered ones included, with the opening and the ending that a season's
-episodes link to from other files ([Editions and linked files](docs/media-sources.md#editions-and-linked-files)).
-It shows a 360 degree video as a view that your app turns with a drag or the phone's motion
-([360 degree video](docs/spherical-video.md)).
+The player can also:
+
+- play a gapless queue, or crossfade between songs, with shuffle and loop
+- apply a ten-band equalizer and ReplayGain
+- follow an external clock, for watching together
+- step frame by frame and take screenshots
+- record what plays into a Matroska file, without re-encoding
+- play Matroska editions, including ordered chapters that take a season's opening and ending from
+  other files ([Editions and linked files](docs/media-sources.md#editions-and-linked-files))
+- show a 360 degree video as a view that your app turns with a drag or with the phone's motion
+  ([360 degree video](docs/spherical-video.md))
+
 [Controlling the player](docs/player-api.md) lists every call by area.
 
 ### Open local and picked files
 
-A file path or an address goes straight to FFmpeg, and so does the `Res.getUri` address of a
-Compose resource on Android, iOS and the desktop JVM. Anything else reaches the player through a
-`MediaIo`, which is how an Android app plays a file that the user picked:
+A file path or a URL goes straight to FFmpeg. So does the `Res.getUri` address of a Compose
+resource on Android, iOS and the desktop JVM. Anything else reaches the player through a `MediaIo`.
+This is how an Android app plays a file that the user picked:
 
 ```kotlin
 import io.github.yuroyami.kiteplayer.MediaIo
@@ -306,16 +311,22 @@ player.open(MediaItem.from(io, label = "picked.mkv"))
 ```
 
 `MediaIo` can also read a `ByteArray`, a `File`, an `InputStream`, an Android asset or an Apple
-file URL, and [Opening media](docs/media-sources.md) lists each one with the platforms it works on.
-The same guide covers request headers, files that are still being written, and an audio file that
-plays beside a video (such as a dub).
+file URL. [Opening media](docs/media-sources.md) lists each one and the platforms it works on. The
+same guide covers request headers, files that are still being written, and a separate audio file
+that plays with a video, such as a dub.
 
 ### Subtitles
 
-KitePlayer reads ASS and SSA (which libass draws exactly as authored, signs and karaoke included),
-SubRip, WebVTT and TTML, the image subtitles of Blu-ray, DVD and DVB, DVB teletext, the closed
-captions inside broadcast video, and synced lyrics. Each one is a track of the item, and a subtitle
-file that you add while the video plays becomes one too:
+KitePlayer reads these subtitle formats:
+
+- ASS and SSA, drawn by libass exactly as authored, including signs and karaoke
+- SubRip, WebVTT and TTML
+- image subtitles from Blu-ray, DVD and DVB, and DVB teletext
+- closed captions inside broadcast video
+- synced lyrics
+
+Each subtitle is a track of the item. A subtitle file that you add during playback becomes a track
+too:
 
 ```kotlin
 import io.github.yuroyami.kiteplayer.SubtitleSource
@@ -327,21 +338,22 @@ val id = player.addExternalSubtitle(
 player.selectTrack(TrackKind.Subtitle, id)
 ```
 
-A second track can show at the same time as the first. Delay, scale, position and style each have
-their own call, and a safe area keeps the text clear of a camera cutout or your controls.
+A second subtitle track can show at the same time as the first. Delay, scale, position and style
+each have their own call. A safe area keeps the text clear of a camera cutout or your controls.
 [Subtitles](docs/subtitles.md) covers the rest, from hearing-impaired notes to forced tracks and
 fonts.
 
 ### Streams
 
-An HTTP, HTTPS, HLS or DASH address plays as it is, because every standard entry point includes
+HTTP, HTTPS, HLS and DASH URLs play directly, because every standard entry point includes
 `kiteplayer-network` (OkHttp on Android and the JVM, NSURLSession on Apple). An adaptive stream
-picks the variant that fits the screen, steps down when the network slows and back up when it
-recovers, and downloads only the audio language that you hear. A radio station's PLS or M3U link
-plays as it is too, with each song's title as the station announces it.
+picks the quality that fits the screen. It steps down when the network slows, steps back up when
+the network recovers, and only downloads the audio language that you are listening to. A radio
+station's PLS or M3U link also plays directly, and shows each song's title as the station
+announces it.
 
-Each open downloads the segments of an HLS or DASH presentation again, unless the player has a
-segment store that keeps them on disk for the next session:
+By default, every open downloads the segments of an HLS or DASH stream again. A segment store keeps
+them on disk for the next time:
 
 ```kotlin
 import io.github.yuroyami.kiteplayer.KitePlayer
@@ -359,15 +371,15 @@ val player = KitePlayer(
 ```
 
 [Segment store](docs/segment-cache.md) explains what the store keeps, and
-[Network streams](docs/streaming.md) covers headers, live streams, DASH Periods, radio and the
-recovery after a network drop. In a browser, network media plays through the worker player of the
-[web setup](#web-setup).
+[Network streams](docs/streaming.md) covers headers, live streams, DASH Periods, radio and recovery
+after a network drop. In a browser, network media plays through the worker player that the
+[web setup](#web-setup) describes.
 
 ### Background playback
 
-Android can stop an app that plays in the background unless a foreground service keeps it running.
-KitePlayer ships that service (`KitePlayerMediaService`), which your manifest declares with its
-permissions:
+Android can stop an app that plays in the background, unless a foreground service keeps it
+running. KitePlayer ships that service, `KitePlayerMediaService`. Declare it in your manifest
+together with its permissions:
 
 ```xml
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -382,8 +394,8 @@ permissions:
 </application>
 ```
 
-Attaching a media session with notification options then shows the media notification and keeps
-the app playing in the background. The session also takes audio focus, and it closes with the
+Then attach a media session with notification options. The session shows the media notification
+and keeps the app playing in the background. It also takes audio focus, and it closes with the
 player:
 
 ```kotlin
@@ -396,15 +408,15 @@ player.attachMediaSession(context, options)
 ```
 
 On iOS, add `audio` to `UIBackgroundModes` in `Info.plist`, then call
-`player.attachMediaSession()` for the lock screen. A native Mac app calls it too, which puts the
-player in Now Playing and on the media keys. [Background playback](docs/background-playback.md)
+`player.attachMediaSession()` for the lock screen. A native Mac app calls it too, to show the
+player in Now Playing and connect it to the media keys. [Background playback](docs/background-playback.md)
 covers the notification's buttons, artwork, wake locks and timeouts.
 
 <a name="audio-visualiser"></a>
 ### Music and the visualizer
 
-`kiteplayer-audioviz` draws the music when the media has no picture, and `isAudioOnly` tells you
-when to show it in place of the video (a song with cover art counts as audio only):
+`kiteplayer-audioviz` draws a visualizer for media without video. `isAudioOnly` tells you when to
+show it instead of the video. A song with cover art counts as audio only:
 
 ```kotlin
 import androidx.compose.foundation.layout.fillMaxSize
@@ -431,10 +443,10 @@ fun NowPlaying(player: KitePlayer) {
 }
 ```
 
-Create the state next to the player rather than inside the audio-only branch, which keeps it
-listening from the first note of a song. `viz.drawing` and `viz.palette` choose the picture,
-`viz.directed = true` lets it change with the music, and `AudioVizBrowser` shows every drawing in a
-live grid.
+Create the state next to the player, not inside the audio-only branch, so that it listens from the
+first note of a song. `viz.drawing` and `viz.palette` choose what it draws, and
+`viz.directed = true` lets the drawing change with the music. `AudioVizBrowser` shows every drawing
+in a live grid.
 
 <a name="modules"></a>
 ## Platforms
@@ -454,10 +466,10 @@ live grid.
 - On Linux and Windows native, KitePlayer has no audio output and no HTTPS. `KitePlayer()` throws
   there, and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own
   `OutputBackend` to `KitePlayer.create`.
-- On the web, `kiteplayer-compose` draws the picture inside Compose's own WebGL context, so it
-  needs a browser with WebGL2, and Compose content, clipping and alpha apply to it as on the other
-  platforms. It draws the player on the page's own thread; the worker player draws on its own
-  canvas.
+- On the web, `kiteplayer-compose` draws the video inside Compose's own WebGL context, so it needs
+  a browser with WebGL2. Clipping, alpha and other Compose content apply to it as on the other
+  platforms. It runs the player on the page's main thread. The worker player draws on a canvas of
+  its own.
 - `kiteplayer` also compiles for `js`, where `KitePlayer()` reports that the target is not
   available.
 - The engine modules (`kiteplayer-core`, `kiteplayer-io` and `kiteplayer-subtitles`) also build
@@ -480,8 +492,8 @@ LGPL: FFmpeg and FriBidi (LGPL-2.1-or-later), and GNU libiconv in the Windows JV
 
 | Duty | How to meet it |
 | --- | --- |
-| Say that the app uses them, under the LGPL | Ship a notice with the license texts. The JVM and Android artifacts carry the texts under `META-INF/licenses/`. For a native app, take the texts from the places that [NOTICE](NOTICE) names. |
-| Make their source available to your users | Point at the source that KiteFFmpeg's `NOTICE` and this repository's [NOTICE](NOTICE) name. |
+| Say that the app uses them, under the LGPL | Ship a notice with the license texts. The JVM and Android artifacts carry the texts under `META-INF/licenses/`. For a native app, take the texts from the sources listed in [NOTICE](NOTICE). |
+| Make their source available to your users | Point to the source listed in KiteFFmpeg's `NOTICE` and in this repository's [NOTICE](NOTICE). |
 | Let users relink against a modified copy | Publish your object files, or give a written offer for them. |
 
 The other components (dav1d, libass, HarfBuzz and FreeType) use permissive licenses that only ask
@@ -492,17 +504,18 @@ case in detail.
 <a name="limits"></a>
 ## A few limitations to know about
 
-- KitePlayer does not play media that has DRM (digital rights management). The player leaves out a
-  DASH set that has encryption. It refuses a DASH manifest in which every picture and sound set
-  has encryption, with `DashUnsupportedException`.
+- KitePlayer does not play media protected by DRM (digital rights management). It skips encrypted
+  DASH adaptation sets. When every audio and video set of a DASH manifest is encrypted, it refuses
+  the manifest with `DashUnsupportedException`.
 - The web build has no software AV1 decoder. The AV1 decoder (dav1d) needs threads, and the web
   build runs on one thread.
-- KitePlayer composes Dolby Vision profile 5 and 10.0 on the processor. The processor keeps up at
-  1080p, but not at 4K.
-- No one has played sound with the desktop JVM build on a real Linux or Windows computer.
-- A 360 degree video turns only where `KiteVideo` draws it. The native views that `KitePlayerVideo`
-  uses by default on Android, iOS and the desktop JVM show the whole picture flat, so pass
-  `path = KiteRenderPath.ComposeCanvas` there. On Android the view needs Android 13 or later.
+- KitePlayer converts Dolby Vision profile 5 and 10.0 to HDR10 on the CPU. That keeps up at 1080p,
+  but not at 4K.
+- Nobody has played sound with the desktop JVM build on a real Linux or Windows computer yet.
+- You can only look around in a 360 degree video where `KiteVideo` draws it. The native views that
+  `KitePlayerVideo` uses by default on Android, iOS and the desktop JVM show the whole frame flat,
+  so pass `path = KiteRenderPath.ComposeCanvas` there. On Android, the 360 degree view needs
+  Android 13 or later.
 
 Missing features and known bugs are [open issues](https://github.com/yuroyami/KitePlayer/issues).
 
@@ -520,11 +533,12 @@ The desktop, Android and iOS sample apps open on the audio visualizer with five 
 ```
 
 For iOS, open `kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj`, which builds the Kotlin
-framework itself. The same module also links a native macOS app
-(`./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64`, then run `kiteplayer.kexe` with a
-media file and `--window`), while `kiteplayer-sample-web` plays a clip through `KiteVideo` on a
-Compose web page and, opened with `?probe`, measures what a frame costs there. To work on KitePlayer itself, start with
-[CONTRIBUTING.md](CONTRIBUTING.md).
+framework itself. The same module also builds a native macOS app: run
+`./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64`, then start `kiteplayer.kexe` with a
+media file and `--window`. `kiteplayer-sample-web` plays a clip through `KiteVideo` on a Compose
+web page. Open it with `?probe` to measure what a frame costs there.
+
+To work on KitePlayer itself, start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

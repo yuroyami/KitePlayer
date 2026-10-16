@@ -1,32 +1,53 @@
 # kiteplayer-sample-android
 
-One comparison APK. It opens on `VisualizerActivity`: the shared visualiser screen, playing the
-sample song, or the song set as `kiteplayer.sample.song` in the root `local.properties`. The song is
-copied into the APK's assets at build time. Its Other samples button opens a small launcher with
-four deliberately separate playback Activities:
+An Android app that shows each way to put KitePlayer video on screen, side by side.
 
-- `MainActivity`: direct native View, inflating
-  `io.github.yuroyami.kiteplayer.view.KitePlayerView` from `activity_main.xml`.
-- `ComposeInteropActivity`: `KitePlayerSurface`, which hosts that same native View through
-  `AndroidView` and installs the mobile renderer adapter.
-- `ComposeVideoActivity`: `rememberKiteVideoState(window)` plus `KiteVideo`, with the picture drawn
-  as Compose content and the API 31+ Window-bound GPU path available.
-- `ComposeSwapActivity`: `KitePlayerVideo`, with a button that swaps between the native view and
-  the Compose drawn path while it plays.
+## The screens
 
-Two more buttons open `MainActivity` on other input. Play a file you pick opens the system file
-picker and plays the content URI it returns through `MediaIo.ofUri`. Play the bundled clip from
-assets reads the clip inside the APK through `MediaIo.ofAsset`.
+The app opens on `VisualizerActivity`, the shared visualiser screen. It plays the songs in
+`kiteplayer-sample-shared/media`, which the build copies into the APK's assets. To use one song of
+your own instead, set `kiteplayer.sample.song` in the root `local.properties`, or pass
+`-Pkiteplayer.sample.song=<path>`.
 
-Each Activity owns a separate player but shares the sample-only controls and media preparation.
-That keeps renderer attachment and teardown visible instead of hiding three different ownership
-models behind one generic sample abstraction.
+The **Other samples** button opens a launcher with four playback screens. Each one shows a
+different way to present video:
 
-The direct-XML Activity remains the measured assembly/smoke proof. Its view owns the whole Surface
-lifecycle; the Activity owns no `SurfaceHolder`, renderer, or `Surface`. Explicitly launching
-`.MainActivity --ez s1c_smoke true` still writes the same eleven-key JSON oracle. Debug-signed
-release exists solely so the local `run-as` oracle can read that result, and it does not run R8.
+| Screen | What it uses |
+| --- | --- |
+| `MainActivity` | The native view, `KitePlayerView`, inflated from `activity_main.xml` |
+| `ComposeInteropActivity` | `KitePlayerSurface`, which hosts the same native view in Compose through `AndroidView` |
+| `ComposeVideoActivity` | `KiteVideo` with `rememberKiteVideoState(window)`, which draws the video as Compose content. The GPU path bound to the window is available from API 31. |
+| `ComposeSwapActivity` | `KitePlayerVideo`, with a button that switches between the native view and the Compose path during playback |
 
-The app depends on `:kiteplayer-compose`, which carries both presentation paths, and on
-`:kiteplayer-sample-shared` for the front screen. Demonstrating the product split is its purpose;
-it is sample glue, not a recommendation that ordinary applications need every presentation artifact.
+Two more buttons open `MainActivity` with other input:
+
+- **Play a file you pick** opens the system file picker and plays the result through
+  `MediaIo.ofUri`.
+- **Play the bundled clip from assets** plays a clip from the APK's assets through
+  `MediaIo.ofAsset`. The build copies it from `testmedia/sync1080p30.mp4`, so run
+  `scripts/testmedia.sh` first.
+
+Each screen owns its own player. The view screen uses the view's default controls, and the Compose
+screens use `KitePlayerControls`. Keeping the screens separate shows how each one attaches and
+releases its renderer.
+
+## Smoke test
+
+Launch `MainActivity` with `--ez s1c_smoke true` to run a short smoke test. It writes its result as
+a JSON object with eleven keys to `files/s1c-smoke.json` in the app's private storage.
+
+## Release builds
+
+Without a release keystore, the release build is signed with the debug key and stays debuggable.
+That is on purpose: reading the smoke result through `run-as` needs both. Because the build is
+debuggable, R8 does not shrink it.
+
+To build a real release, set the four `kiteplayer.release.*` properties in
+`~/.gradle/gradle.properties`. The same build type is then signed with your key and is not
+debuggable.
+
+## Dependencies
+
+The app depends on `:kiteplayer-compose`, which carries both ways to show video, and on
+`:kiteplayer-sample-shared` for the visualiser screen. An ordinary app does not need every one of
+these presentation paths. This sample uses them all only to compare them.

@@ -1,57 +1,54 @@
 # kiteplayer-rt
 
-The real-time audio core, in C. One allocation at create, no lock anywhere, and no managed code on
-the device's thread.
+The real-time audio core of the Apple audio output, written in C. It allocates once, when it is
+created. It takes no lock, and no managed code ever runs on the audio device's thread.
 
-This module exists for one reason. The macOS
-render callback was a Kotlin lambda whose first instruction was
-`refCon.asStableRef<CoreAudioSink>().get()`. That made the device's real-time thread a Kotlin mutator
-that the garbage collector has to stop at a safepoint. Thirteen long-lived objects, fourteen atomic
-wrappers, two virtual interface calls, a scalar copy loop and up to five transient cinterop views were
-on that path. The honest statement was never that audio glitched; it was that the deadline depended on
-a pause nobody had bounded. So the callback, the AudioUnit and the sample ring moved here, and
-`kiteplayer-output`'s `CoreAudioSink` became a thin owner of two opaque handles.
+## Why it is in C
+
+On macOS, the audio render callback used to be a Kotlin lambda. Its first step was
+`refCon.asStableRef<CoreAudioSink>().get()`, which made the device's real-time thread a Kotlin
+thread that the garbage collector may have to pause. Many objects, atomic wrappers, virtual calls
+and temporary cinterop views sat on that path. Nobody had heard a glitch, but the audio deadline
+depended on a pause that nothing bounded.
+
+So the callback, the AudioUnit and the sample ring moved into this module. `CoreAudioSink` in
+`kiteplayer-output` now only owns two opaque handles to it.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| `native/include/kite_rt.h` | The whole public surface: 31 `KPRT_API` functions and the constants. This is what cinterop reads. |
-| `native/src/kite_rt_ring.c` | The ring's producer side and its lifecycle. The only file here that allocates. |
-| `native/src/kite_rt_render.c` | The ring renderer and anchor translation unit called by the device callback; no lifecycle code or allocator. |
-| `native/src/kite_rt_coreaudio.c` | The device glue and the common `static` callback: DefaultOutput on macOS, RemoteIO on iOS, and explicit refusal elsewhere. |
-| `native/src/kite_rt_ring_internal.h`, `kite_rt_sink_internal.h` | The private layouts. Not in `include/`, so Kotlin gets opaque pointers with no field and no size. |
-| `native/tests/*.c` | Ten suites, 149 cases, table driven, one line per case. |
-| `native/tests/interpose_alloc.c` | The allocation interposer, through the Mach-O `__DATA,__interpose` section. |
-| `native/scripts/build-host.sh` | Builds the host test binaries for one variant. No make, no cmake, no ninja. |
-| `native/scripts/run-c-tests.sh` | Runs the ten suites in one of four modes. |
-| `native/scripts/render-audit.sh` | The symbol and instruction audit of both real-time objects in the macOS and two gated iOS archives. The first of the four real-time assertions. |
-| `native/scripts/source-discipline.sh` | The eighteen ordering decisions no runtime instrument fully covers. Level 4, and it says so. |
-| `src/nativeInterop/cinterop/kitert.def` | The cinterop def. Names the archive and links AudioToolbox on macOS and iOS. |
-| `build.gradle.kts` | Registers the seventeen native targets and their C compile tasks. |
-| `../buildSrc/src/main/kotlin/CompileKiteRtTask.kt` | Compiles and archives the C per konan target, driving konan's own clang and `llvm-ar` directly. |
+| `native/include/kite_rt.h` | The whole public API: the `KPRT_API` functions and the constants. This is what cinterop reads. |
+| `native/src/kite_rt_ring.c` | The writing side of the ring, and its create and destroy code. The only file here that allocates. |
+| `native/src/kite_rt_render.c` | The code the device callback calls: it reads the ring and records the clock anchor. No create or destroy code and no allocator. |
+| `native/src/kite_rt_coreaudio.c` | The device code and the shared `static` callback: DefaultOutput on macOS, RemoteIO on iOS, and an explicit refusal on other platforms. |
+| `native/src/kite_rt_ring_internal.h`, `kite_rt_sink_internal.h` | The private struct layouts. They are not in `include/`, so Kotlin only sees opaque pointers. |
+| `native/tests/*.c` | Thirteen table-driven test suites, one line per case. |
+| `native/tests/interpose_alloc.c` | The allocation counter, installed through the Mach-O `__DATA,__interpose` section. |
+| `native/scripts/build-host.sh` | Builds the host test binaries for one variant. It needs no make, cmake or ninja. |
+| `native/scripts/run-c-tests.sh` | Runs the test suites in one of four modes. |
+| `native/scripts/render-audit.sh` | Checks the symbols and instructions of both real-time objects, in the macOS archive and in the two iOS archives. |
+| `native/scripts/source-discipline.sh` | Checks that each memory-ordering decision is still written where the design put it. |
+| `src/nativeInterop/cinterop/kitert.def` | The cinterop definition. It names the archive and links AudioToolbox on macOS and iOS. |
+| `build.gradle.kts` | Registers the Kotlin/Native targets and their C compile tasks. |
+| `../buildSrc/src/main/kotlin/CompileKiteRtTask.kt` | Compiles and archives the C code for each Kotlin/Native target, with Kotlin/Native's own clang and `llvm-ar`. |
 
-## Building and running it
+## Build and test
 
 ```bash
 cd native
 ./scripts/build-host.sh plain && ./scripts/run-c-tests.sh plain
 ./scripts/build-host.sh asan  && ./scripts/run-c-tests.sh asan
 ./scripts/build-host.sh tsan  && ./scripts/run-c-tests.sh tsan
-./scripts/run-c-tests.sh interpose      # the plain binaries, with allocation accounting required
-./scripts/render-audit.sh               # add --prove-it-can-fail for the seven negative controls
-./scripts/source-discipline.sh          # add --prove-it-can-fail for the sixteen planted defects
+./scripts/run-c-tests.sh interpose      # the plain binaries, with allocation counting required
+./scripts/render-audit.sh               # add --prove-it-can-fail to run its negative controls
+./scripts/source-discipline.sh          # add --prove-it-can-fail to run its planted defects
 ```
 
-The harness and the interposer exist twice, here and in KiteFFmpeg's `native/kitecodec-c/tests/`,
-and the two are a pair: the same mechanism under two prefixes (`KPRT_REQUIRE_ALLOC_ACCOUNTING`
-here, `KC_REQUIRE_ALLOC_ACCOUNTING` there), and a fix to either lands in both in the same change.
-This tree's require mechanism was ported to KiteFFmpeg after measuring what the
-fork had already cost: a one-word blinding of KiteFFmpeg's interposer left its whole ownership gate
-green while observing nothing.
+`run-c-tests.sh` never builds anything. Run the matching `build-host.sh` first after every change.
 
-From the repository root, the shipped per-target archives are built by Gradle, one directory per
-konan target, never shared:
+From the repository root, Gradle builds the archives that ship, in one directory per Kotlin/Native
+target:
 
 ```bash
 ./gradlew :kiteplayer-rt:compileKiteRtCForMacosArm64 \
@@ -61,57 +58,56 @@ konan target, never shared:
 ./gradlew :kiteplayer-rt:iosSimulatorArm64Test --device "Test iPhone 17"
 ```
 
-## The three variants, and one run mode
+KiteFFmpeg's `native/kitecodec-c/tests/` has a copy of the same test harness and allocation
+counter, under another prefix (`KC_REQUIRE_ALLOC_ACCOUNTING` there, `KPRT_REQUIRE_ALLOC_ACCOUNTING`
+here). Change both in the same change.
 
-| Variant | Flags | What it is for |
+## Build variants
+
+| Variant | Flags | What it catches |
 |---|---|---|
-| `plain` | `-O2 -Wall -Wextra -Werror -Werror=vla` | Compile fidelity and correctness. Also the only variant in which the allocation interposer works. |
-| `asan` | `-fsanitize=address,undefined -fno-omit-frame-pointer -O1` | An out-of-bounds ring index, a wrap arithmetic mistake, or a signed overflow, named at the byte and the line where it happens. |
-| `tsan` | `-fsanitize=thread -O1` | The two seqlocks. A seqlock written with plain or `volatile` fields instead of C11 atomics is a real data race and this variant says so. |
+| `plain` | `-O2 -Wall -Wextra -Werror -Werror=vla` | Compile errors and wrong results. This is the only variant in which the allocation counter works. |
+| `asan` | `-fsanitize=address,undefined -fno-omit-frame-pointer -O1` | An out-of-bounds ring index, a wrap-around mistake or a signed overflow, reported at the exact byte and line. |
+| `tsan` | `-fsanitize=thread -O1` | Data races in the two seqlocks. A seqlock written with plain or `volatile` fields instead of C11 atomics is a real data race, and this variant reports it. |
 
-`interpose` is not a fourth build. It runs the `plain` binaries with
-`KPRT_REQUIRE_ALLOC_ACCOUNTING=1`, which turns "the interposer was not effective" into a hard failure.
-That distinction is the whole point: without it, "the instrument was dead" and "nothing allocated" read
-identically. ASan and TSan replace the allocator before dyld reaches the interpose section, so under
-those two the interposer is inert and the cases that depend on it report a partial rather than a pass.
+`interpose` is a run mode, not a fourth build. It runs the `plain` binaries with
+`KPRT_REQUIRE_ALLOC_ACCOUNTING=1`, which fails the run when the allocation counter was not active.
+Without it, "the counter did not run" and "nothing allocated" look the same. ASan and TSan replace
+the allocator before the interpose section loads, so under them the counter is inactive, and the
+cases that depend on it report a partial result instead of a pass.
 
-## What each instrument can and cannot prove
+## How the "no allocation" claim is checked
 
-Four assertions stand behind the claim that the callback does not allocate, in a fixed order of
-authority, because the obvious instrument does not exist here. There is
-no allocation hook in Kotlin/Native, LeakSanitizer is unsupported on macOS arm64, and a malloc
-interposer is a false negative for managed allocation: measured, 229 mallocs before and 230 after one
-million Kotlin objects, because the runtime takes pages by `mmap` and hands objects out of them. No
-report may present a weaker instrument here as a stronger one.
+Kotlin/Native has no allocation hook, and LeakSanitizer does not run on macOS arm64. A malloc
+counter cannot see Kotlin allocations either: one million Kotlin objects moved it from 229 to 230
+mallocs, because the runtime takes whole pages with `mmap`. So the claim rests on several checks,
+each with its own limits.
 
-Level is how strong the evidence is: 1 is the strongest, and 7 means the code only compiled.
+| Check | What it shows | What it cannot show |
+|---|---|---|
+| `render-audit.sh` | The shipped render and callback objects call no allocator, lock, logger or forbidden framework on the real-time path. It pins DefaultOutput on macOS, RemoteIO on both iOS archives, and the set of calls the callback makes. It also compiles the ring header for 32-bit ARMv7, where the 64-bit counters must be lock-free, and for ARMv5, where the header must refuse to build. | An allocation that the optimiser removed, or any target whose archive was not built. The iOS check builds all three archives and allows no skip. |
+| `run-c-tests.sh interpose` | No `malloc`, `calloc`, `realloc`, `free` or `mmap` across five million synthetic callbacks through the shipped render code. | Anything about Kotlin allocation, as explained above. |
+| A supervised run on one device | The slowest callback against half the device period, while the garbage collector runs thousands of times. This was observed by hand on one machine with a debug build. | A release build, or any other device. It relies on the two checks above. |
+| The Kotlin heap drift check | A large leak would show up. | Where an allocation comes from. A flat heap fits both a callback that allocates nothing and one whose allocations are collected. |
+| `source-discipline.sh` | Every memory-ordering decision, including teardown, ring publication and each release and acquire, is still written where the design put it. It rejects a set of planted defects. | That the ordering is correct. It only reads source text. It exists because broken orderings passed the runtime checks, TSan included. TSan detects races, not orderings that are too weak. |
 
-| Instrument | Level | Proves | Cannot prove |
-|---|---|---|---|
-| `render-audit.sh` | 2 | The shipped render and device-callback objects have no allocator, lock, log or forbidden framework symbol to call on the real-time path. It pins DefaultOutput on macOS, RemoteIO on both iOS archives and the callback call set, and rejects its seven negative controls. It compiles the ring header for 32-bit ARMv7, where the 64-bit counters must be lock free, and for ARMv5, where the header's lock-free assertion must refuse to build. | Anything about an allocation the optimiser deleted, and anything about an optional target whose archive was never built. The iOS gate builds all three named archives and permits no skip. |
-| `run-c-tests.sh interpose` | 2 | Zero `malloc`, `calloc`, `realloc`, `free` and `mmap` across five million synthetic callbacks driving the shipped render body. | Anything at all about Kotlin allocation. See above. |
-| The supervised device run | 6, a manual observation with saved metrics (one machine, one debug binary, one operator; corrected from a wrongly claimed 1) | The worst callback body against half the device period, with the collector running thousands of times, on a named device. Its negative control fails. | Release-mode qualification, which needs benchmarks of a release build on named devices, and any platform other than this one. Its authority rests on the two level 2 rows above. |
-| The Kotlin heap drift check | 5 | A gross leak would show. | Attribution. A flat heap is equally consistent with a callback that allocates nothing and one that allocates and is collected. |
-| `source-discipline.sh` | 4 | That all eighteen ordering decisions are still written where the design put them, including teardown, ring publication and every release/acquire edge. Its sixteen planted defects are rejected. | That the ordering is correct. It reads source text. It exists because mutants on these decisions passed runtime instruments in the gate, including TSan, which grades atomicity and not ordering strength. |
+## Two implementations of one ring
 
-## The two implementations of one ring, permanently
+`KotlinAudioRing` in `kiteplayer-core` stays. `commonMain` also targets js and wasmJs, which can
+never contain C, and the Kotlin ring is the reference that the C ring is checked against.
 
-`KotlinAudioRing` in `kiteplayer-core` is not going away.
-`commonMain` targets js and wasmJs, which can never contain C, and the Kotlin ring is the only oracle
-the C ring can be checked against. So on macOS the eighteen `AudioRingTest` cases no longer cover the
-shipped path. What covers it is the ten C suites plus the differential oracle at
-`kiteplayer-core/src/nativeTest/.../AudioRingDifferentialTest.kt`, which drives one scripted sequence
-through both rings at four sample rates and at one, two, six and eight channels and compares the
-samples bit for bit, the published anchor to the microsecond, and the counters exactly.
+On macOS, the `AudioRingTest` cases no longer cover the shipped path. The C suites cover it,
+together with `AudioRingDifferentialTest` in `kiteplayer-core/src/nativeTest`. That test drives one
+scripted sequence through both rings at four sample rates and at one, two, six and eight channels.
+It compares the samples bit for bit, the published anchor to the microsecond, and the counters
+exactly.
 
 ## What is not here
 
-No tvOS or watchOS device implementation. Their entry points answer
-`KPRT_SINK_UNSUPPORTED_PLATFORM`, which is a loud refusal rather than a link error. iOS now uses the
-same pure-C callback and lifecycle through RemoteIO; `kiteplayer-output`, not this module, makes
-`AVAudioSession` ownership explicit. That result is limited to the named simulator plus an iosArm64
-link. It is not a physical-device result, an iosX64 qualification, a runnable player or a support-tier
-claim.
-
-No claim about any target whose archive was only compiled. Seventeen targets build an
-architecture-verified archive here; compilation is level 7 evidence and says nothing about behaviour.
+- **tvOS and watchOS.** There is no device code for them. Their entry points return
+  `KPRT_SINK_UNSUPPORTED_PLATFORM`, an explicit refusal instead of a link error.
+- **The iOS audio session.** iOS uses the same C callback through RemoteIO, but
+  `kiteplayer-output` owns the `AVAudioSession`, not this module. The iOS path has run on a
+  simulator and links for `iosArm64`. It has not run on a physical iPhone from this module's tests.
+- **Targets that only compile.** Every Kotlin/Native target builds an archive here. A target that
+  only compiles says nothing about how it behaves.

@@ -1,52 +1,63 @@
-# Local iOS sample host
+# iOS sample app
 
-This Xcode app is a local, private proof host for the static `KitePlayerSample` Kotlin framework. It
-contains no decoder or platform media path of its own. Swift creates the controller exported as
-`SampleViewControllerKt.sampleViewController()` and UIKit hosts it. The Xcode target uses the separate
-Swift module name `KitePlayerSampleHost`, so importing the framework module named `KitePlayerSample`
-is unambiguous.
+A small Xcode app that hosts the `KitePlayerSample` Kotlin framework. It has no media code of its
+own. Swift creates the view controller that `SampleViewControllerKt.sampleViewController()`
+exports, and UIKit shows it. The Xcode target's Swift module is named `KitePlayerSampleHost`, so
+that `import KitePlayerSample` always means the Kotlin framework.
 
-The app opens on the shared Compose screen from `kiteplayer-sample-shared`: the audio visualiser,
-playing the songs in `kiteplayer-sample-shared/media`, or only the song named by
+This app is for local testing only. It is not published, and it is not a way to install
+KitePlayer: there is no CocoaPods setup and no downloadable framework. The framework is linked
+statically, not embedded.
+
+## What it shows
+
+The app opens on the shared Compose screen from `kiteplayer-sample-shared`, the audio visualiser.
+It plays the songs in `kiteplayer-sample-shared/media`, or only the song set as
 `kiteplayer.sample.song` in the root `local.properties`. The build phase copies up to nine songs
-into the bundle, as `sample-song` and then `sample-song-2` up to `sample-song-9`.
-`--s1b-smoke`, `--scenario` and `--uikit` start the
-UIKit host instead, which presents through the `KitePlayerUIView` owned by `kiteplayer-view` with
-no Compose involved.
+into the app bundle, named `sample-song`, then `sample-song-2` up to `sample-song-9`.
+
+These launch arguments start a UIKit screen instead, which shows video through `KitePlayerUIView`
+from `kiteplayer-view` without Compose:
+
+- `--s1b-smoke` runs the smoke test described below.
+- `--scenario a.mkv b.mp4` plays clips from the app's Documents folder, in order.
+- `--uikit` opens the UIKit screen.
+
 `Info.plist` sets `CADisableMinimumFrameDurationOnPhone`, which Compose's view controller needs.
 
-Nothing here is an installation or distribution path. The app itself is not published. There is no
-CocoaPods or downloaded framework, and the framework is linked statically and is not embedded. A
-simulator run does not prove the app works on a physical iPhone. The unsigned device build below
-proves linking only; it does not install or run.
+## Before you build
 
-Run every command from the KitePlayer repository root. The Xcode build phase runs Gradle offline,
-links the debug simulator framework for `iphonesimulator` and the arm64 framework of the build's
-configuration for `iphoneos`, rejects every other platform, and copies in the song.
+- Run every command from the KitePlayer repository root.
+- Run `./scripts/testmedia.sh` once. The project copies the generated `testmedia/sync1080p30.mp4`
+  into the app bundle.
+- The Xcode build phase runs Gradle with `--offline`, so the Gradle cache must already be full. The
+  smoke script and the device build below each run a Gradle build first.
 
-KiteFFmpeg resolves from Maven Central with its FFmpeg inside, so no local FFmpeg tree and no
-local publication step are needed. The Xcode build phase runs Gradle with `--offline`, so run one
-Gradle build first to fill the Gradle cache. The smoke script and the device build below both do.
+KiteFFmpeg comes from Maven Central with FFmpeg inside, so you need no local FFmpeg build. The
+build phase links the debug simulator framework for `iphonesimulator`, and the arm64 framework of
+the current configuration for `iphoneos`. It refuses any other platform.
 
-## Build and run the smoke on a simulator
+## Run the smoke test on a simulator
 
 ```bash
 ./scripts/testmedia.sh
 ./scripts/ios-sample-smoke.sh
 ```
 
-The script picks the newest available iPhone simulator; pass `--simulator UDID` to name one. It
-links the framework, builds the app, installs it, launches it with `--s1b-smoke` and waits for
-`Documents/s1b-smoke.json`. The smoke opens the bundled clip, makes a precise seek, plays to the end
-and closes the player. CI runs the same script in its iOS job.
+The script picks the newest iPhone simulator. Pass `--simulator UDID` to choose one. It links the
+framework, builds and installs the app, launches it with `--s1b-smoke`, and waits for
+`Documents/s1b-smoke.json`. CI runs the same script in its iOS job.
 
-The result must contain exactly nine keys, and the script checks each one: the seek landed,
-playback ended, frames were decoded, submitted and presented, and the layer held a picture.
-`teardownCompleted` is true only after the awaited player teardown, final healthy Idle state and
-synchronous renderer close have all completed. The app writes a temporary file, flushes and closes
-it, and atomically replaces `s1b-smoke.json`, so the check never accepts a partial record.
+The smoke test opens the bundled clip, makes a precise seek, plays to the end and closes the
+player. Its result has exactly nine keys, and the script checks each one: the seek landed,
+playback ended, frames were decoded, submitted and presented, and the layer showed a picture.
+`teardownCompleted` is true only after the player has closed, reached a healthy Idle state, and
+closed its renderer. The app writes the result to a temporary file and then renames it, so the
+script never reads half a result.
 
-## Link the unsigned device app
+A simulator run does not show that the app works on a real iPhone.
+
+## Link the app for a device, without signing
 
 ```bash
 ./gradlew :kiteplayer-sample:linkReleaseFrameworkIosArm64 --rerun-tasks
@@ -58,5 +69,5 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
 ```
 
-The bundle identifier is `io.github.yuroyami.kiteplayer.sample.ios`. The project copies the generated
-`testmedia/sync1080p30.mp4` into the app bundle. Generate that fixture before either build.
+This only checks that the app links for a device. It does not install or run anything. The bundle
+identifier is `io.github.yuroyami.kiteplayer.sample.ios`.

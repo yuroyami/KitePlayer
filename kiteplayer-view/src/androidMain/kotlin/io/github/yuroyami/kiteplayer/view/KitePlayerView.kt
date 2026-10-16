@@ -443,6 +443,9 @@ public open class KitePlayerView @JvmOverloads constructor(
         // decoration and stay out of the reader's way.
         contentDescription = accessibilityVideoLabel
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+        // TalkBack skips a view that is neither focusable nor clickable, so the controls layer over
+        // the picture hid this one (#18). This makes it a stop for screen readers only, from API 28.
+        if (android.os.Build.VERSION.SDK_INT >= 28) isScreenReaderFocusable = true
         // Fill lays the surface out larger than this view; the crop is what makes it Fill and
         // not an overflow onto whatever sits next to the video.
         clipChildren = true

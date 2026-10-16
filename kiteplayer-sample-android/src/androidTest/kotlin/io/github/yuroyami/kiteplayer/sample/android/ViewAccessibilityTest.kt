@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.sample.android
 import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.yuroyami.kiteplayer.view.KitePlayerView
 import org.junit.Assert.assertEquals
@@ -39,6 +40,21 @@ class ViewAccessibilityTest {
             }
             assertEquals("Video", label?.toString())
             assertTrue("the state a screen reader hears: $heard", heard?.startsWith("Paused, 0:00 of ") == true)
+        }
+    }
+
+    @Test
+    @SdkSuppress(minSdkVersion = 28)
+    fun aScreenReaderCanStopOnTheVideoUnderTheControls() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            var reachable = false
+            scenario.onActivity { activity ->
+                val view = activity.findViewById<KitePlayerView>(R.id.player_view)
+                reachable = view.createAccessibilityNodeInfo().isScreenReaderFocusable
+            }
+            // TalkBack skips a node that is neither focusable nor clickable, and the controls layer
+            // covers the whole picture, so without this the label above is never spoken (#18).
+            assertTrue("the video view is not a screen reader stop", reachable)
         }
     }
 

@@ -3,14 +3,16 @@
 </p>
 
 <p align="center">
-  A media player for Kotlin Multiplatform, with its own engine written in Kotlin and FFmpeg already inside.<br>
-  It plays video, audio and subtitles on Android, iOS, macOS, the desktop JVM and the web, with one API in <code>commonMain</code>.<br>
-  It is modeled on mpv and VLC, and aims to match their performance and features.
+  A native media player for Kotlin Multiplatform. Its engine is written in Kotlin and built on FFmpeg.<br>
+  It plays the video and audio formats that FFmpeg supports (through KiteFFmpeg) and every common subtitle format (with <code>libass</code> for ASS and SSA).<br>
+  It runs on Android, iOS, macOS, the desktop JVM and the web, with one API in <code>commonMain</code>.<br>
+  It gives you native video views on Android, iOS and the desktop, and a renderer that draws the video inside Compose for Compose Multiplatform apps.<br>
+  It aims to match or beat mpv and VLC in performance and features.
 </p>
 
 <p align="center">
-  <sub>AI tools wrote much of the code, tests and documentation in this project, under the direction
-  and review of its author.</sub>
+  <sub>AI tools helped a great deal in building this project, which would not have been possible
+  without them. Its author directed and reviewed all of the work.</sub>
 </p>
 
 <p align="center">
